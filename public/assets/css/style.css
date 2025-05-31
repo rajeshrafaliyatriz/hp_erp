@@ -1,0 +1,27 @@
+.page-wrapper,
+.container-fluid{
+    padding:20px;
+}
+.row,
+.other{
+    padding:10px;
+}
+.alert{
+    margin:10px;
+}
+.close{
+    background-color: transparent;
+    color: red;
+    border : 1px solid red;
+    border-radius:50%;
+}
+.table{
+    width:100%;
+    border:1px solid #ddd;
+    border-radius:20px;
+    margin-top:6px;
+}
+
+i, .btn{
+    color:#fff !important;
+}
