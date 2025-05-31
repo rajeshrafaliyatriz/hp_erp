@@ -1,8 +1,8 @@
-# hp_erp Skill Solution Corporate
+# Skill Solution - Empowering Workforce Through Smart Skill Management
 
 ## Overview
 
-**hp_erp Skill Solution Corporate** is a modular ERP system designed to manage skill development, employee management, corporate training, and reporting for organizations. It enables companies to streamline their internal training workflows, maintain records of employee skills, and monitor performance.
+**Skill Solution** is a comprehensive, modular ERP platform tailored for all environments to efficiently manage skill development, employee performance, and internal training programs. Designed with scalability and automation in mind, it enables HR and operations teams to streamline departmental processes, track skill matrices, assign roles and responsibilities, and generate insightful performance reports helping organizations build a future-ready workforce.
 
 ## Features
 
@@ -18,10 +18,10 @@
 ## Tech Stack
 
 - **Backend:** PHP (Laravel / Custom MVC)
-- **Frontend:** Blade / Bootstrap / Vue.js (if used)
-- **Database:** MySQL / MariaDB
+- **Frontend:** Next.js
+- **Database:** MariaDB
 - **Authentication:** JWT / Laravel Auth
-- **Deployment:** Apache / NGINX with Ubuntu
+- **Deployment:** Apache
 
 ## Installation
 
@@ -32,7 +32,7 @@
 
 2. Navigate to the project directory:
     ```bash
-    cd hp_erp-skill-solution-corporate
+    cd hp_erp
     ```
 
 3. Install dependencies:
@@ -60,7 +60,7 @@
 
 - `app/` – Core application logic
 - `routes/` – Web and API routes
-- `resources/views/` – Blade templates (UI)
+- `frontend/` – Next.js (UI)
 - `public/` – Public assets
 - `database/` – Migrations and seeders
 
