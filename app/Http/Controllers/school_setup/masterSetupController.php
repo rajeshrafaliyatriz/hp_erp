@@ -37,33 +37,34 @@ class masterSetupController extends Controller
             $validator = Validator::make($request->all(), [
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
-                'searchWord' => 'required',
+                'user_id' => 'required',
             ]);
 
             if($validator->fails()){
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
         }
-        $data = $this->getData($request,$sub_institute_id);               
-
-        $grade = academic_sectionModel::where('sub_institute_id',$sub_institute_id)->get();
+        $res = $this->getData($request,$sub_institute_id);               
         $res['status_code'] = 1;
         $res['message'] = "SUCCESS";
-        $res['grade'] = $grade;
-        $res['data'] = $data;        
+        // $res['grade'] = $grade;
+        // $res['data'] = $data;        
         return is_mobile($type,'school_setup/show_subject',$res,"view");  
     }
 
     public function getData($request,$sub_institute_id){
         // $sub_institute_id = $request->session()->get('sub_institute_id');
-        $subject_data =  subjectModel::where(['sub_institute_id'=>$sub_institute_id])->get();        
-        return $subject_data;
+        $res['subject_data'] =  subjectModel::where(['sub_institute_id'=>$sub_institute_id])->orderBy('subject_name')->get();      
+        $res['grade'] = academic_sectionModel::where('sub_institute_id',$sub_institute_id)->orderBy('sort_order')->get();
+        $res['standard'] = standardModel::where('sub_institute_id',$sub_institute_id)->orderBy('sort_order')->get();
+        return $res;
     }
 
     public function create(){
         return view('school_setup/add_subject');
     }
     public function store(Request $request){
+        // echo "<pre>";print_r($request->all());exit;
         $sub_institute_id = $request->session()->get('sub_institute_id'); 
         $marking_period_id = $request->session()->get('term_id');
         
@@ -157,10 +158,37 @@ class masterSetupController extends Controller
 
 
     public function insert_data(Request $request){
+        $type=$request->type;
         $master = $request->Slsection;
-        $marking_period_id = $request->session()->get('term_id');                
+        $marking_period_id = 0;                
 
-        $sub_institute_id = $request->session()->get('sub_institute_id');
+        $sub_institute_id = session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
+
+         if($type=='API'){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'org_type' => 'required',
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            if($validator->fails()){
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+        }
 
         // for acadmey 
         if($master == 1){
@@ -182,7 +210,9 @@ class masterSetupController extends Controller
                         "short_name"=>$ac_short_name, 
                         "sort_order"=>$ac_sort_order, 
                         "shift"=>$ac_shift, 
-                        "medium"=>$ac_medium
+                        "medium"=>$ac_medium,
+                        "created_by"=>$user_id,
+                        'created_at'=>now(),
                     ]);
                     // return $data;
                     if($data == true){
@@ -214,16 +244,18 @@ class masterSetupController extends Controller
 
             if(!empty($st_name)){
             $data = standardModel::insert([
-                "grade_id"=>$st_grade_id,
-                "name"=>$st_name,
-                "short_name"=>$st_short_name,
-                "sort_order"=>$st_sort_order,
-                "medium" => $st_medium,
-                "sub_institute_id"=>$sub_institute_id,
-                "course_duration"=>$st_course_duration,
-                "next_grade_id"=>$st_next_grade_id ?? null,
-                "next_standard_id"=>$st_next_standard_id ?? null,
-                "marking_period_id"=> $marking_period_id ?? null,
+                    "grade_id"=>$st_grade_id,
+                    "name"=>$st_name,
+                    "short_name"=>$st_short_name,
+                    "sort_order"=>$st_sort_order,
+                    "medium" => $st_medium,
+                    "sub_institute_id"=>$sub_institute_id,
+                    "course_duration"=>$st_course_duration,
+                    "next_grade_id"=>$st_next_grade_id ?? null,
+                    "next_standard_id"=>$st_next_standard_id ?? null,
+                    "marking_period_id"=> $marking_period_id ?? null,
+                    "created_by"=>$user_id,
+                    'created_at'=>now(),
                 ]);
                 if($data== true){
                     return redirect()->back()->with('success','Standard Added Successfully !');
@@ -249,17 +281,19 @@ class masterSetupController extends Controller
             $exist = $this->check_exist($request->get('subject_name'),$sub_institute_id);       
         if($exist == 0)
         {       
-            $sub = new subjectModel([
+            $sub = subjectModel::insert([
                 'subject_name' => $request->get('subject_name'),
                 'subject_type' => $request->get('subject_type') != '' ? $request->get('subject_type') : "",
                 'subject_code' => $request->get('subject_code'),
                 'short_name' => $request->get('short_name'),
                 'sub_institute_id' => $sub_institute_id,
                 'marking_period_id'=>$marking_period_id ?? null,
-                'status' => "1",            
+                'status' => "1",     
+                "created_by"=>$user_id,
+                'created_at'=>now(),       
             ]);
                  
-            $sub->save();
+            // $sub->save();    
             return redirect()->back()->with('success','Subject Added Successfully');
         }
         else

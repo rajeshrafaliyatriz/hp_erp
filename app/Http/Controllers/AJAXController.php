@@ -103,7 +103,7 @@ class AJAXController extends Controller
 
     public function collectsct(Request $req)
     {
-        $option = '<option>Select</option>';
+        $option = '<option value="">Select</option>';
         if ($req->sectionId == 1) {
             $academy = academic_sectionModel::where('sub_institute_id', $req->session()->get('sub_institute_id'))->get(['id', 'title', 'short_name', 'sort_order', 'shift', 'medium']);
             foreach ($academy as $row) {
