@@ -5,6 +5,7 @@ use App\Http\Controllers\auth\authController;
 use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\libraries\skillLibraryController;
 use App\Http\Controllers\custom_module\CustomModuleController;
+use App\Http\Controllers\school_setup\masterSetupController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -24,6 +25,15 @@ Route::middleware(['auth','session','menu'])->group(function () {
     Route::resource('knowledge_ability', skillLibraryController::class);
     Route::resource('application', skillLibraryController::class);
 });
+
+// Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']]), function () {
+
+
+Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']], function () {
+    Route::resource('master_setup', masterSetupController::class);
+});
+Route::post('insert_data', [masterSetupController::class, 'insert_data'])->name('insert_data');
+Route::post('collectsct', [AJAXController::class, 'collectsct'])->name('collectsct');
 
 Route::get('table_data',[AJAXController::class, 'GetTableData'])->name('table_data');
 

@@ -47,6 +47,7 @@ const Login: React.FC = () => {
         `http://127.0.0.1:8000/login?email=${email}&password=${password}&type=API`,
         {
           method: "GET",
+           credentials: 'include', 
           headers: {
             "Content-Type": "application/json",
           },
