@@ -32,6 +32,7 @@ Route::middleware(['auth','session','menu'])->group(function () {
 Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']], function () {
     Route::resource('master_setup', masterSetupController::class);
     Route::post('insert_data', [masterSetupController::class, 'insert_data'])->name('insert_data');
+    Route::resource('sub_std_map', sub_std_mapController::class);
 });
 Route::post('collectsct', [AJAXController::class, 'collectsct'])->name('collectsct');
 
