@@ -159,17 +159,17 @@
 </div>
 </div>
 
-<div class="card">
+<div class="card m-3">
    <div class="row">
     <center>
         <ul class="nav nav-tabs" id="myTab" role="tablist">
-            <li class="nav-item" role="presentation">
+            <li class="nav-item" role="presentation" onclick="datatableCall('academicSectionTable')">
                 <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#1-tab-pane" type="button" role="tab" aria-controls="1-tab-pane" aria-selected="true">Academic Sections</button>
             </li>
-            <li class="nav-item" role="presentation">
+            <li class="nav-item" role="presentation" onclick="datatableCall('standardTable')">
                 <button class="nav-link" id="home-tab" data-bs-toggle="tab" data-bs-target="#2-tab-pane" type="button" role="tab" aria-controls="2-tab-pane" aria-selected="true">Standards</button>
             </li>
-            <li class="nav-item" role="presentation">
+            <li class="nav-item" role="presentation" onclick="datatableCall('subjectTable')">
                 <button class="nav-link" id="home-tab" data-bs-toggle="tab" data-bs-target="#3-tab-pane" type="button" role="tab" aria-controls="3-tab-pane" aria-selected="true">Subjects</button>
             </li>
         </ul>
@@ -177,7 +177,8 @@
     <div class="tab-content" id="myTabContent">
         {{-- tab 1 --}}
         <div class="tab-pane fade show active" id="1-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
-            <table class="table table-bordered">
+         <div class="table-responsive">
+            <table class="table table-bordered" id="academicSectionTable">
                 <thead>
                     <tr>
                         <th>sr no</th>
@@ -197,10 +198,11 @@
                     @endforeach
                 </tbody>
             </table>
+            </div>
         </div>
         {{-- tab 2 --}}
         <div class="tab-pane fade show" id="2-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
-            <table class="table table-bordered">
+            <table class="table table-bordered" id="standardTable">
                 <thead>
                     <tr>
                         <th>sr no</th>
@@ -224,7 +226,7 @@
         {{-- tab 3 --}}
 
         <div class="tab-pane fade show" id="3-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
-             <table class="table table-bordered">
+             <table class="table table-bordered" id="subjectTable">
                 <thead>
                     <tr>
                         <th>sr no</th>
@@ -256,6 +258,9 @@
 <script src="https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.10.19/js/dataTables.bootstrap.min.js"></script>
 <script>
+   $(document).ready(function(){
+      datatableCall('academicSectionTable');
+   })
    $('#hiddenRow').hide();
    $('body').on('change', '#Slsection', function(){
        $('#hiddenRow').show();
@@ -297,5 +302,54 @@
            }
        });
    });
+
+   function datatableCall(tableId) {
+    // Check if DataTable already exists and destroy it
+    if ($.fn.DataTable.isDataTable('#' + tableId)) {
+        $('#' + tableId).DataTable().destroy();
+        // Remove cloned header row if it exists
+        $('#' + tableId + ' thead tr:eq(1)').remove();
+    }
+
+    var table = $('#' + tableId).DataTable({
+        select: true,
+        lengthMenu: [
+            [100, 500, 1000, -1],
+            ['100', '500', '1000', 'Show All']
+        ],
+        dom: 'Bfrtip',
+        buttons: [
+            {
+                extend: 'pdfHtml5',
+                title: 'Data Report',
+                orientation: 'landscape',
+                pageSize: 'A0',
+                exportOptions: {
+                    columns: ':visible'
+                },
+            },
+            {extend: 'csv', text: ' CSV', title: 'Data Report'},
+            {extend: 'excel', text: ' EXCEL', title: 'Data Report'},
+            {extend: 'print', text: ' PRINT', title: 'Data Report'},
+            'pageLength'
+        ],
+    });
+
+    $('#' + tableId + ' thead tr').clone(true).appendTo('#' + tableId + ' thead');
+    $('#' + tableId + ' thead tr:eq(1) th').each(function (i) {
+        var title = $(this).text();
+        $(this).html('<input type="text" placeholder="Search ' + title + '" />');
+
+        $('input', this).on('keyup change', function () {
+            if (table.column(i).search() !== this.value) {
+                table
+                    .column(i)
+                    .search(this.value)
+                    .draw();
+            }
+        });
+    });
+}
+
 </script>
 @endsection
