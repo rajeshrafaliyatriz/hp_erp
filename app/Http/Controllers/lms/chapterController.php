@@ -19,7 +19,7 @@ class chapterController extends Controller
     public function index(Request $request)
     {
         $data = $this->getData($request);
-        // echo "<pre>";print_r($data);exit;
+        // echo "<pre>";print_r(session()->all());exit;
         $type = $request->input('type');
         $res['sub_institute_id'] = session()->get('sub_institute_id');
         // 28-02-2025 starts     

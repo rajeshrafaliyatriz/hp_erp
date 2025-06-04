@@ -6,7 +6,7 @@ use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\libraries\skillLibraryController;
 use App\Http\Controllers\custom_module\CustomModuleController;
 use App\Http\Controllers\school_setup\masterSetupController;
-
+use App\Http\Controllers\school_setup\sub_std_mapController;
 Route::get('/', function () {
     return view('welcome');
 });

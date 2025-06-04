@@ -169,8 +169,8 @@
                                        href="{{ route('create_content_master', ['chapter_id' => $chdata->id]) }}"
                                        class="btn btn-outline-dark mx-1 my-1">Add Content</a>
                                         {{-- <div class="col-md-2 chapter-img-box"> --}}
-                                <a href="{{ route('lms_flashcard.index',['chapter_id' =>$chdata->id,$preload_lms ?? '' ])}}" target="_blank"
-                                   class="btn btn-outline-warning btn-sm mx-1" data-toggle="tooltip" title="" data-original-title="Add Flash Card"><i class="mdi mdi-cards-playing-outline"></i></a>
+                                    <a href="{{ route('lms_flashcard.index',['chapter_id' =>$chdata->id,$preload_lms ?? '' ])}}" target="_blank"
+                                    class="btn btn-outline-warning btn-sm mx-1" data-toggle="tooltip" title="" data-original-title="Add Flash Card"><i class="mdi mdi-cards-playing-outline"></i></a>
                             {{-- </div> --}}
                                 @endif
                             @endif
@@ -200,7 +200,7 @@
                                     $booklist_data = [];
                                 @endphp
                     @if(!empty($booklist_data))
-                                    <span class="submenu-box pr-1 mr-1 border-right">
+                    <span class="submenu-box pr-1 mr-1 border-right mt-2">
                         <i class="mdi mdi-dots-vertical-circle-outline"></i>
                         <ul>
                             @foreach($booklist_data as $k => $book_data)
@@ -271,7 +271,7 @@
                         // echo "<pre>"; print_r($data['content_data'][$chdata->id]); exit;
                     @endphp
                     @if(!empty($content))
-                        <div class="mb-2 mt-2 chapter-content-single p-3 d-flex align-items-center" data-collapse_id="{{ $chdata->id }}-{{ $subColapse }}" onclick="tarCollapse(this)" >
+                        <div class="mb-2 mt-4 chapter-content-single p-3 d-flex align-items-center" data-collapse_id="{{ $chdata->id }}-{{ $subColapse }}" onclick="tarCollapse(this)" >
                             <div class="content-category">{{ $con_key }}</div>
                             <!-- main heading that will be used for seperate flashcard div -->
                             <div class="help-arraw">

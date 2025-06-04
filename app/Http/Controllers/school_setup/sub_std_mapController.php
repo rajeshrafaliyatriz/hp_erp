@@ -11,7 +11,7 @@ use App\Models\school_setup\sub_std_mapModel;
 use App\Models\school_setup\subjectModel;
 use Illuminate\Support\Facades\DB;
 use function App\Helpers\is_mobile;
-use function App\Helpers\ValidateInsertData;
+// use function App\Helpers\ValidateInsertData;
 use Illuminate\Support\Facades\Storage;
 
 class sub_std_mapController extends Controller
@@ -140,12 +140,13 @@ class sub_std_mapController extends Controller
                     'sub_institute_id'=>$sub_institute_id
                 ];
                 // check subject and standard already exists in table or not
-                $checkExists = DB::table('subject_optional_type')->where($dataArr)->first();
+                // $checkExists = DB::table('subject_optional_type')->where($dataArr)->first();
+                $checkExists = [];
 
                 if(empty($checkExists) && !isset($checkExists->optional_type)){
                     $dataArr['created_by'] = $user_id;
                     $dataArr['created_at'] = now();
-                    DB::table('subject_optional_type')->insert($dataArr);
+                    // DB::table('subject_optional_type')->insert($dataArr);
                 }
             }
             // 15-03-2025 end 
@@ -191,7 +192,8 @@ class sub_std_mapController extends Controller
             'optional_type'=>4,
             'sub_institute_id'=>$sub_institute_id
         ];
-        $getOptionalSubejct = DB::table('subject_optional_type')->where($dataArr)->first();
+        // $getOptionalSubejct = DB::table('subject_optional_type')->where($dataArr)->first();
+        $getOptionalSubejct = [];
 
         $data['std_data'] = $std_data;
         $data['sub_data'] = $sub_data;
@@ -204,7 +206,7 @@ class sub_std_mapController extends Controller
 
     public function update(Request $request, $id)
     {
-        ValidateInsertData('sub_std_map', 'update');
+        // ValidateInsertData('sub_std_map', 'update');
 
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear'); // added on 15-03-2025
@@ -271,7 +273,8 @@ class sub_std_mapController extends Controller
                 'sub_institute_id'=>$sub_institute_id
             ];
             // check subject and standard already exists in table or not
-            $checkExists = DB::table('subject_optional_type')->where($dataArr)->first();
+            // $checkExists = DB::table('subject_optional_type')->where($dataArr)->first();
+            $checkExists=[];
 
             if(!empty($checkExists) && isset($checkExists->optional_type)){
                 $updatedData['optional_type'] = ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? $request->get('optional_type') : 0;
@@ -289,7 +292,7 @@ class sub_std_mapController extends Controller
                     'created_by'=>$user_id,
                     'created_at'=>now()
                 ];
-                DB::table('subject_optional_type')->insert($insertData);
+                // DB::table('subject_optional_type')->insert($insertData);
             }
         // }
         // 15-03-2025 end 
