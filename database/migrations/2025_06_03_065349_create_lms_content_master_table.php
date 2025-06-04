@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('lms_content_master', function (Blueprint $table) {
+        Schema::create('content_master', function (Blueprint $table) {
             $table->bigIncrements('id');
 
             $table->unsignedBigInteger('grade_id')->nullable()->index();
@@ -21,6 +21,7 @@ return new class extends Migration
             $table->unsignedBigInteger('topic_id')->nullable()->index();
             $table->unsignedBigInteger('sub_topic_id')->nullable()->index();
             $table->string('lo_master_ids', 250)->nullable();
+            $table->longText('cross_curriculum_grade_topic')->nullable();
             $table->string('lo_indicator_ids', 250)->nullable();
             $table->unsignedBigInteger('lo_category_id')->nullable()->index();
             $table->string('title', 250)->index()->nullable();
@@ -33,12 +34,12 @@ return new class extends Migration
             $table->integer('sort_order')->nullable();
             $table->integer('show_hide')->nullable();
             $table->string('meta_tags', 250)->nullable();
-            $table->unsignedBigInteger('content_category')->nullable()->index();
+            $table->string('content_category')->nullable()->index();
             $table->string('syear', 50)->index()->nullable();
             $table->date('restrict_date')->nullable();
             $table->string('pre_grade_topic', 250)->nullable();
             $table->string('post_grade_topic', 250)->nullable();
-
+            $table->longText('basic_advance')->nullable();
             $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
 
             $table->unsignedBigInteger('created_by')->index()->nullable();
@@ -93,6 +94,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('lms_content_master');
+        Schema::dropIfExists('content_master');
     }
 };

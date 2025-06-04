@@ -57,8 +57,15 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::get('/create-view/{id}/update/{recordId}',[CustomModuleController::class,'crudCreate']);
     Route::post('/create-view-store/{id}',[CustomModuleController::class,'crudStore'])->name('custom_module_crud.store');
     Route::delete('/view-delete/{id}',[CustomModuleController::class,'viewDelete'])->name('custom_module_crud.delete');
-
+    Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
 });
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 
 Route::get('menuLevel2', [CustomModuleController::class, 'menuLevel2'])->name('menuLevel2.index');
+
+Route::get('api/get-standard-list', [AJAXController::class, 'getStandardList']);
+Route::get('api/get-subject-list', [AJAXController::class, 'getSubjectList']);
+Route::get('api/get-all-subject-list', [AJAXController::class, 'getAllSubjectList']);
+/** get exam list */
+Route::get('api/get-exam-name-list', [AJAXController::class, 'getExamsList']);
+Route::get('api/get-exam-master-list', [AJAXController::class, 'getExamsMasterList']);

@@ -2,11 +2,13 @@
 @section('content')
 <div id="page-wrapper">
    <div class="container-fluid">
+
       <div class="row bg-title">
          <div class="col-lg-3 col-md-4 col-sm-4 col-xs-12">
             <h4 class="page-title">Add Masters</h4>
          </div>
       </div>
+
       <div class="card">
          @if ($sessionData = Session::get('success'))
          <div class="alert alert-success alert-block alert">
@@ -156,11 +158,11 @@
          </div>
       </div>
    </div>
-</div>
-</div>
+
 
 <div class="card m-3">
    <div class="row">
+      <div class="col-md-12">
     <center>
         <ul class="nav nav-tabs" id="myTab" role="tablist">
             <li class="nav-item" role="presentation" onclick="datatableCall('academicSectionTable')">
@@ -174,35 +176,36 @@
             </li>
         </ul>
     </center>
+    </div>
     <div class="tab-content" id="myTabContent">
         {{-- tab 1 --}}
         <div class="tab-pane fade show active" id="1-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
-         <div class="table-responsive">
-            <table class="table table-bordered" id="academicSectionTable">
-                <thead>
-                    <tr>
-                        <th>sr no</th>
-                        <th>Title</th>
-                        <th>Short Name</th>
-                        <th>Sort Order</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($data['grade'] as $k=>$val)
+            <div class="table-responsive">
+               <table class="table table-striped" id="academicSectionTable">
+                     <thead>
                         <tr>
-                            <td>{{$k+1}}</td>
-                            <td>{{$val['title']}}</td>
-                            <td>{{$val['short_name']}}</td>
-                            <td>{{$val['sort_order']}}</td>
-                        </tr> 
-                    @endforeach
-                </tbody>
-            </table>
+                              <th>sr no</th>
+                              <th>Title</th>
+                              <th>Short Name</th>
+                              <th>Sort Order</th>
+                        </tr>
+                     </thead>
+                     <tbody>
+                        @foreach ($data['grade'] as $k=>$val)
+                              <tr>
+                                 <td>{{$k+1}}</td>
+                                 <td>{{$val['title']}}</td>
+                                 <td>{{$val['short_name']}}</td>
+                                 <td>{{$val['sort_order']}}</td>
+                              </tr> 
+                        @endforeach
+                     </tbody>
+                  </table>
             </div>
         </div>
         {{-- tab 2 --}}
         <div class="tab-pane fade show" id="2-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
-            <table class="table table-bordered" id="standardTable">
+            <table class="table  table-striped" id="standardTable">
                 <thead>
                     <tr>
                         <th>sr no</th>
@@ -226,7 +229,7 @@
         {{-- tab 3 --}}
 
         <div class="tab-pane fade show" id="3-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
-             <table class="table table-bordered" id="subjectTable">
+             <table class="table  table-striped" id="subjectTable">
                 <thead>
                     <tr>
                         <th>sr no</th>

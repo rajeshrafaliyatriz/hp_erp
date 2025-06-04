@@ -56,7 +56,7 @@ return new class extends Migration
                 ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
             $table->foreign('content_id')
-                ->references('id')->on('lms_content_master')
+                ->references('id')->on('content_master')
                 ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
             $table->foreign('created_by')

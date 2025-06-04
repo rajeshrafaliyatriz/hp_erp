@@ -19,7 +19,7 @@ return new class extends Migration
             $table->timestamps();
 
            $table->foreign('content_id')
-                ->references('id')->on('lms_content_master')
+                ->references('id')->on('content_master')
                 ->onDelete('NO ACTION')->onUpdate('NO ACTION');
         });
     }

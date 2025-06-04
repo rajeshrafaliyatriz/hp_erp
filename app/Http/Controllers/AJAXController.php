@@ -124,4 +124,150 @@ class AJAXController extends Controller
         }
         return $option;
     }
+    public function getStandardList(Request $request)
+    {
+        $path = $_SERVER['HTTP_REFERER'] ?? URL::current();
+
+        if ($path) {
+            $parsedUrl = parse_url($path);
+            
+            if (isset($parsedUrl['path'])) {
+                $pathParts = pathinfo($parsedUrl['path']);
+                
+                if (isset($pathParts['filename'])) {
+                    $module_name = $pathParts['filename'];
+                }
+                if($parsedUrl['path'] == '/lms/question_paper/create' || $parsedUrl['path'] == '/lms/question_paper/search'){
+                    $module_name = 'question_paper';
+                }
+               
+                $path2 = "/student/student_homework/create";
+                $keyword2 = "create";
+              
+                if (strpos($path2, $keyword2) !== false) {
+                    $module_name = "student_homework";
+                }
+            }
+        }
+
+        $module_array = [
+            '1' => 'student_homework',
+            '2' => 'marks_entry',
+            '3' => 'dicipline',
+            '4' => 'lmsExamwise_progress_report',
+            '5' => 'questionReport',
+            '6' => 'parent_communication',
+            '7' => 'question_paper',
+            '8' => 'co_scholastic_marks_entry',                        
+        ];
+
+        $explode = explode(',', $request->grade_id);
+        // menu_ids to get class teacher class only
+        // menu_ids to get class teacher class only
+        if(session()->get('sub_institute_id')==195){
+            $menu_ids = [80,102];
+        }else{
+            // $menu_ids = [80,102,156];
+            $menu_ids=[];
+
+        }
+        // added on 07-03-2025 for standalone modules end 
+
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+        $syear = session()->get('syear');
+        $user_id = session()->get('user_id');
+        if($type=='webForm'){
+            $sub_institute_id = $request->sub_institute_id ?? 0;
+            $syear = $request->syear ?? 0;
+            $user_id = $request->user_id ?? 0;
+        }
+        // added on 07-03-2025 for standalone modules end 
+        
+        $studentData = [];
+        
+        $getClass=[];
+
+        $query = DB::table('standard');
+        // $query->where("grade_id", $request->grade_id);
+
+        if (count($explode) > 1) {
+            $query->whereIn("grade_id", $explode);
+            //START Check for class teacher assigned standards
+            $classTeacherStdArr = session()->get('classTeacherStdArr');
+
+            if (is_array($classTeacherStdArr)) {
+                $checkstd = count($classTeacherStdArr) > 0;
+            } else {
+                $checkstd = '1=1';
+            }
+            if ($checkstd && $classTeacherStdArr != "" && !in_array($module_name, $module_array)) {
+                if(in_array(session()->get('right_menu_id'),$menu_ids) && session()->get('user_profile_name')=="Teacher"){
+                    $query->where('id', $getClass->standard_id);
+                }else{
+                    $query->whereIn('id', $classTeacherStdArr);
+                }
+            }
+            //END Check for class teacher assigned standards
+
+            //START Check for subject teacher assigned
+            $subjectTeacherStdArr = session()->get('subjectTeacherStdArr');
+            if ($subjectTeacherStdArr != "" && ($classTeacherStdArr == "" || in_array($module_name, $module_array))) {
+                if(in_array(session()->get('right_menu_id'),$menu_ids) && session()->get('user_profile_name')=="Teacher"){
+                    $query->where('id', $getClass->standard_id);
+                }else{
+                $query->whereIn('id', $subjectTeacherStdArr);
+                }
+            }
+            //END Check for subject teacher assigned
+               // for student 01-01-2025 start
+              
+                if(session()->get('user_profile_name')=="Student"){
+                    $query->where('id', [$studentData->standard_id ?? 0 ]);
+                }
+                // for student 01-01-2025 end
+
+        } else {
+
+            $query->where("grade_id", $request->grade_id);
+            //START Check for class teacher assigned standards
+            $classTeacherStdArr = session()->get('classTeacherStdArr');
+            if (is_array($classTeacherStdArr)) {
+                $checkstd = count($classTeacherStdArr) > 0;
+            } else {
+                $checkstd = '1=1';
+            }
+            if ($checkstd && $classTeacherStdArr != "" && !in_array($module_name, $module_array)) {
+                if(in_array(session()->get('right_menu_id'),$menu_ids) && session()->get('user_profile_name')=="Teacher"){
+                    $query->where('id', $getClass->standard_id);
+                }else{
+                $query->whereIn('id', $classTeacherStdArr);
+                }
+            }
+            //END Check for class teacher assigned standards
+
+            //START Check for subject teacher assigned
+            $subjectTeacherStdArr = session()->get('subjectTeacherStdArr');
+            if ($subjectTeacherStdArr != "" && ($classTeacherStdArr == "" || in_array($module_name, $module_array))) {
+                if(in_array(session()->get('right_menu_id'),$menu_ids) && session()->get('user_profile_name')=="Teacher" && isset($getClass->standard_id)){
+                    $query->where('id', $getClass->standard_id);
+                }else{
+                $query->whereIn('id', $subjectTeacherStdArr);
+                }
+            }
+
+            // for student 01-01-2025 start
+              
+            if(session()->get('user_profile_name')=="Student"){
+                $query->where('id', [$studentData->standard_id ?? 0 ]);
+            }
+            // for student 01-01-2025 end
+            //END Check for subject teacher assigned
+        }
+        $standard = $query->pluck("name", "id");
+
+        // echo session()->get('right_menu_id')
+        return response()->json($standard);
+        // return $classTeacherStdArr;
+    }
 }
