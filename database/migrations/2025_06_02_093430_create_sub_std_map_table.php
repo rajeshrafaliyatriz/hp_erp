@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('display_name')->index()->nullable();
             $table->string('load',20)->nullable();
             $table->string('optional_type',20)->nullable();
-            $table->string('add_content',255)->default(1);
+            $table->string('add_content',191)->default(1);
             $table->string('allow_content',20)->default(1);
             $table->string('subject_category')->nullable();
             $table->string('display_image')->nullable();
