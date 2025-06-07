@@ -18,7 +18,7 @@ return new class extends Migration
                     ->onUpdate('NO ACTION')
                     ->onDelete('NO ACTION');
             $table->string('proficiency_level')->index()->nullable();
-            $table->tinyText('description')->index()->nullable();
+            $table->tinyText('description')->nullable();
             $table->unsignedBigInteger('sub_institute_id')->nullable()->index();
             $table->foreign('sub_institute_id')
                     ->references('id')

@@ -19,7 +19,7 @@ return new class extends Migration
                     ->onDelete('NO ACTION');
             $table->string('proficiency_level')->index()->nullable();
             $table->string('classification')->index()->nullable();
-            $table->tinyText('classification_item')->index()->nullable();
+            $table->tinyText('classification_item')->nullable();
             $table->unsignedBigInteger('sub_institute_id')->nullable()->index();
             $table->foreign('sub_institute_id')
                     ->references('id')

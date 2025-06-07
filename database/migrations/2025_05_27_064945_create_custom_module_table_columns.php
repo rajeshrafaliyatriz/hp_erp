@@ -24,7 +24,7 @@ return new class extends Migration
             $table->unsignedBigInteger('table_id')->nullable();
             $table->foreign('table_id')->references('id')->on('custom_module_tables')->onDelete('cascade');
             $table->string('field_type');
-            $table->json('field_value');
+            $table->text('field_value');
             $table->timestamps();
         });
     }
