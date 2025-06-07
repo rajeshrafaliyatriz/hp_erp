@@ -1,0 +1,50 @@
+.page-wrapper,
+.container-fluid{
+    padding:20px;
+}
+.row,
+.other{
+    padding:10px;
+}
+.alert{
+    margin:10px;
+}
+.close{
+    background-color: transparent;
+    color: red;
+    border : 1px solid red;
+    border-radius:50%;
+}
+.table{
+    width:100%;
+    border:1px solid #ddd;
+    border-radius:20px;
+    margin-top:6px;
+}
+
+i, .btn{
+    color:#fff !important;
+}
+
+.dataTables_wrapper{
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+}
+.dt-buttons, .dataTables_filter, .dataTables_info, .dataTables_paginate {
+    width: 50%;
+    padding:10px;
+}
+
+.dt-buttons button{
+    background-color: #51a2ff;
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    padding:8px 6px;
+}
+
+.dataTables_paginate ul li{
+    padding:0px 10px;
+    border:1px solid #ddd;
+}

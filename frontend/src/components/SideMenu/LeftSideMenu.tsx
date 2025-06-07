@@ -17,14 +17,37 @@ const LeftSideMenu: React.FC<LeftSideMenuProps> = ({ activeMenuId }) => {
     const [menuItemArr, setMenuItemArr] = useState<{ id: number; menu_name: string; icon: string; access_link: string; menu_type: string }[]>([]);
     const [submenuItemArr, setsubmenuItemArr] = useState<{ id: number; menu_name: string; icon: string; page_type : string; access_link: string; menu_type: string,parent_id : number }[]>([]);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [sessionData, setSessionData] = useState({
+      url: "",
+      token: "",
+      orgType: "",
+      subInstituteId: "",
+      userId: "",
+      userProfile: "",
+    });
+
+    useEffect(() => {
+        const userData = localStorage.getItem("userData");
+        if (userData) {
+          const {APP_URL,token,org_type,sub_institute_id,user_id,user_profile_name,} = JSON.parse(userData);
+          setSessionData({
+            url: APP_URL,
+            token,
+            orgType: org_type,
+            subInstituteId: sub_institute_id,
+            userId: user_id,
+            userProfile: user_profile_name,
+          });
+        }
+      }, []);
 
   useEffect(() => {
     let userData: any = null;
     const item = localStorage.getItem('userData');
-    setUserData(userData);
 
     if (item !== null) {
       userData = JSON.parse(item);
+      setUserData(userData);
     }
 
     const getStoredId = async () => {
@@ -220,13 +243,19 @@ const LeftSideMenu: React.FC<LeftSideMenuProps> = ({ activeMenuId }) => {
             .map((subMenuItem) => (
               <li key={subMenuItem.id}>
                 {/* <span className={subMenuItem.icon} style={{ fontSize: "20px"}}></span> */}
-                {subMenuItem.page_type === "link" ? (
+               {subMenuItem.page_type === "link" ? (
                   <a href={subMenuItem.access_link} target="_blank" rel="noopener noreferrer">
+                    {subMenuItem.menu_name}
+                  </a>
+                ) : subMenuItem.page_type === "blade" ? (
+                  <a href={`${sessionData.url}/${subMenuItem.access_link}?type=web&user_id=${sessionData.userId}`} target="_blank">
                     {subMenuItem.menu_name}
                   </a>
                 ) : (
                   <span
-                    onClick={() => handleMenuClick(subMenuItem.menu_name, subMenuItem.page_type, subMenuItem.access_link)}
+                    onClick={() =>
+                      handleMenuClick(subMenuItem.menu_name, subMenuItem.page_type, subMenuItem.access_link)
+                    }
                     style={{
                       marginBottom: "10px",
                       color: activeMenu === subMenuItem.menu_name ? "#4B9CD3" : "inherit",
@@ -236,6 +265,7 @@ const LeftSideMenu: React.FC<LeftSideMenuProps> = ({ activeMenuId }) => {
                     {subMenuItem.menu_name}
                   </span>
                 )}
+
               </li>
             ))}
             </ul>
