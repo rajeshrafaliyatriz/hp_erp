@@ -47,7 +47,7 @@ use App\Http\Controllers\lms\virtualclassroomController;
 use App\Http\Controllers\school_setup\sub_std_mapController;
 use App\Http\Controllers\lms\lmsDashboardController;
 use App\Http\Controllers\lms\lmsCurriculumController;
-use App\Http\Controllers\lms\lmsSyllabusController;
+use App\Http\Controllers\front_desk\syllabus\syllabusController;
 use App\Http\Controllers\lms\content_library\contentLibraryController;
 use App\Http\Controllers\lms\curriculum\curriculumLessonplanController;
 use App\Http\Controllers\lms\library\skillLibraryController;
@@ -67,7 +67,8 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
     Route::get('career_counselling_education',[\App\Http\Controllers\lms\ONetOnlineDataController::class,'career_counselling_education'])->name('career_counselling_education');
     Route::get('career_counselling_knowing-yourself',[\App\Http\Controllers\lms\ONetOnlineDataController::class,'career_counselling_ky'])->name('career_counselling_knowing-yourself');
     Route::get('career_report',[\App\Http\Controllers\lms\ONetOnlineDataController::class,'career_report'])->name('career_report');
-
+    Route::resource('syllabus', syllabusController::class);
+	Route::get('generateSyllabus', [syllabusController::class, 'GenrateAISyllabus'])->name("generateSyllabus");
     Route::resource('chapter_master', chapterController::class);
     Route::resource('course_master', courseController::class);
     Route::resource('topic_master', topicController::class);

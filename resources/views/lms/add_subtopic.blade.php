@@ -67,7 +67,6 @@
     </div>
 </div>
 
-@include('includes.footerJs')
 <script>
 
 function addNewRow(){
@@ -86,5 +85,4 @@ function removeNewRow() {
     $(".addButtonCheckbox:last" ).remove();
 }
 </script>
-@include('includes.footer')
 @endsection

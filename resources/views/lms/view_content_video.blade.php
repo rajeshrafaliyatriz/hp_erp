@@ -1,8 +1,5 @@
-{{--@include('includes.headcss')
-@include('includes.header')
-@include('includes.sideNavigation') --}}
 @extends('layout')
-@section('container')
+@section('content')
 <!-- Content main Section -->
 
 <div class="content-main flex-fill">
@@ -33,7 +30,6 @@
 </div>
 
 
-@include('includes.lmsfooterJs')
 <script>
 $(document).bind("contextmenu",function(e){
   return false;
@@ -57,5 +53,4 @@ document.onkeydown = function (e) {
     // return false;
 }
 </script>
-@include('includes.footer')
 @endsection

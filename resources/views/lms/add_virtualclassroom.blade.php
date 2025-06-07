@@ -1,6 +1,5 @@
-{{--@include('includes.lmsheadcss')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <link href="/plugins/bower_components/clockpicker/dist/jquery-clockpicker.min.css" rel="stylesheet">
 {{--@include('includes.header')
 @include('includes.sideNavigation')--}}
@@ -160,7 +159,6 @@
         </div>
     </div>
 </div>
-@include('includes.lmsfooterJs')
 
 <script type="text/javascript">
     $(function() {
@@ -205,5 +203,4 @@
         }
     }
 </script>
-@include('includes.footer')
 @endsection

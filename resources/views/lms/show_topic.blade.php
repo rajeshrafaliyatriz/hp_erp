@@ -1,14 +1,12 @@
-{{--@include('includes.lmsheadcss')
-@include('includes.header')
-@include('includes.sideNavigation')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
+
 <!-- Content main Section -->
-<div class="content-main flex-fill">
+<div class="content-main">
     <div class="row">
         <div class="col-md-6">
-            <h1 class="h4 mb-3">Topic List</h1>
-            <nav aria-label="breadcrumb">
+            <h1 class="h4">Topic List</h1>
+            {{-- <nav aria-label="breadcrumb" style="position: absolute;">
                 <ol class="breadcrumb bg-transparent p-0">
                     <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                     <li class="breadcrumb-item"><a
@@ -17,15 +15,18 @@
                     <li class="breadcrumb-item active"
                         aria-current="page">{{$data['breadcrum_data']->chapter_name ?? ''}}</li>
                 </ol>
-            </nav>
+            </nav> --}}
         </div>
 
         <div class="col-md-6 text-right">
             @php
 
                 $user_profile = Session::get('user_profile_name');
+
+                // $gridview_active = "show active";
+                // echo $user_profile.'user_profile';
                 $show_block = 'NO';
-                if(strtoupper($user_profile) == 'LMS TEACHER' || strtoupper($user_profile) == 'TEACHER')
+                if(strtoupper($user_profile) == 'ADMIN' || strtoupper($user_profile) == 'ADMIN')
                 {
                     $show_block = 'YES';
                 }
@@ -33,20 +34,15 @@
                     $_REQUEST['perm'] = session()->get('sub_institute_id');
                 } 
             @endphp
-
             <div class="course-select-grid">
-                <!--  <select class="cust-select form-control mb-0">
-                     <option>Semester-2</option>
-                     <option>Semester-1</option>
-                 </select> -->
-
-                <div class="course-lg-tab d-table mb-4">
+                
+                <div class="course-lg-tab d-table">
                     <ul class="nav nav-tabs border-0" id="lgTab" role="tablist">
                         @php
                             $user_profile = Session::get('user_profile_name');
                             $listview_active = $gridview_active = "";
                         @endphp
-                        @if(strtoupper($user_profile) == 'LMS TEACHER' || strtoupper($user_profile) == 'TEACHER')
+                        @if(strtoupper($user_profile) == 'ADMIN' || strtoupper($user_profile) == 'ADMIN')
                             @php
                                 $listview_active = "show active";
                             @endphp
@@ -75,6 +71,7 @@
                                         onclick="javascript:add_data();"><i class="fa fa-plus"></i> Add New Topic
                                 </button>
                             @endif
+                            
                         </li>
                     </ul>
                 </div>
@@ -194,7 +191,7 @@
             </div>
             <!--Grid view Display -->
             <!--List view Display -->
-            @if(strtoupper($user_profile) == 'STUDENT' && strtoupper($user_profile) != 'TEACHER' && strtoupper($user_profile) != 'LMS TEACHER')
+            @if(strtoupper($user_profile) == 'STUDENT' && strtoupper($user_profile) != 'ADMIN' && strtoupper($user_profile) != 'ADMIN')
                 <div class="tab-pane fade {{$listview_active}}" id="list" role="tabpanel" aria-labelledby="list-tab">
                     @php
                         $k = 1;
@@ -314,6 +311,7 @@
         <!--List view Display -->
 
             @if(isset($data['topic_data']))
+            {{-- <h1>yaha ha</h1> --}}
                 @foreach($data['topic_data'] as $topickey1 => $topicvalue1)
                     @if(isset($data['content_data'][$topicvalue1->id]))
                         @php
@@ -459,7 +457,7 @@
                             }
                             $j++;
                         @endphp
-                        @if(strtoupper($user_profile) == 'LMS TEACHER' || strtoupper($user_profile) == 'TEACHER')
+                        @if(strtoupper($user_profile) == 'ADMIN' || strtoupper($user_profile) == 'ADMIN')
                             <div class="accordion-card collapsed card py-3 px-3 border-0 course-box"
                                  data-toggle="collapse" href="#collapseExample{{$k}}" role="button"
                                  aria-expanded="false" aria-controls="collapseExample">
@@ -512,7 +510,7 @@
                                             </div>
                                         @endif
 
-                                        @if($data['sub_institute_id']==$list_topicvalue->sub_institute_id)
+                                        {{-- @if($data['sub_institute_id']==$list_topicvalue->sub_institute_id) --}}
                                         <a target="_blank"
                                            href="{{ route('subjectwise_graph.show',['subjectwise_graph'=>$list_topicvalue->subject_id,'topic_id'=> $list_topicvalue->id,'topic_name'=>$list_topicvalue->name,'action'=>'topicwise']) }}">
                                             <img src="../../../admin_dep/images/graph_icon.png"
@@ -538,7 +536,7 @@
                                            class="btn btn-outline-dark  mx-1 my-1">Virtual Classroom</a>
                                            
                                         <!-- <a target="_blank" class="btn btn-outline-dark mx-1 my-1">Flash Card</a> -->
-                                        @if(strtoupper($user_profile) == 'LMS TEACHER' || strtoupper($user_profile) == 'TEACHER')
+                                        {{-- @if(strtoupper($user_profile) == 'ADMIN' || strtoupper($user_profile) == 'ADMIN') --}}
                                             <a href="javascript:edit_data('{{route('topic_master.update',$list_topicvalue->id)}}','{{$list_topicvalue->id}}','{{$list_topicvalue->name}}','{{$list_topicvalue->description}}','{{$list_topicvalue->topic_sort_order}}','{{$list_topicvalue->topic_show_hide}}');"
                                                class="btn btn-outline-success btn-sm mx-1 my-1"><i
                                                     class="mdi mdi-pencil-outline"></i></a>
@@ -553,8 +551,8 @@
                                                     <i class="mdi mdi-delete-outline"></i></button>
                                                 <!-- <a href="#" onclick="document.myform.submit()" class="d-block mx-2"><i class="mdi mdi-delete-outline"></i></a> -->
                                             </form>
-                                        @endif
-                                        @endif
+                                        {{-- @endif --}}
+                                        {{-- @endif --}}
                                         
                                     </div>
                                 </div>
@@ -611,7 +609,7 @@
                                                         <a class="video-title">{{$cval['title']}}</a>
                                                         <div class="video-des">{{$cval['description']}}</div>
                                                     </div>
-                                                    @if((strtoupper($user_profile) == 'LMS TEACHER' || strtoupper($user_profile) == 'TEACHER') && $data['sub_institute_id']===$cval['sub_institute_id'])
+                                                    @if((strtoupper($user_profile) == 'ADMIN' || strtoupper($user_profile) == 'ADMIN') && $data['sub_institute_id']===$cval['sub_institute_id'])
                                                 
                                                         <div class="time text-secondary d-flex" style="font-size: 20px;">
                                                             <a href="{{ route('lms_flashcard.index',['content_id'=>$cval['id']])}}" target="_blank" class="btn btn-outline-warning btn-sm mx-1" data-toggle="tooltip" title="Add Flash Card"><i class="mdi mdi-cards-playing-outline"></i></a>
@@ -730,7 +728,6 @@
     </div>
 </div>
 
-@include('includes.lmsfooterJs')
 <script src="https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.10.19/js/dataTables.bootstrap.min.js"></script>
 <script>
@@ -803,5 +800,4 @@
     });
 </script>
 
-@include('includes.footer')
 @endsection

@@ -19,7 +19,6 @@ use Illuminate\Support\Facades\Storage;
 
 class virtualclassroomController extends Controller
 {
-    use GetsJwtToken;
 
     public function index(Request $request)
     {
@@ -149,7 +148,7 @@ class virtualclassroomController extends Controller
         $type = $request->input('type');
 
         //return is_mobile($type, "content_master.index", $res, "redirect");
-        return redirect()->route('topic_master.index', ['id' => $request->get('hid_chapter_id')]);
+        return redirect()->route('topic_master.index', ['id' => $request->get('hid_chapter_id'),'standard_id'=>$chapter_data['standard_id'],'perm'=>1]);
     }
 
     public function edit(Request $request, $id)

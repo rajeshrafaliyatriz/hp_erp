@@ -45,7 +45,9 @@
                     <strong>{{ $sessionData['message'] }}</strong>
                 </div>
             @endif
-
+                @php 
+                // echo "<pre>";print_r($data['data']);exit;
+                @endphp
             <div class="col-lg-12 col-sm-12 col-xs-12" style="overflow:auto;">
                 <div class="card">
                     <div class="card-body">
@@ -66,9 +68,9 @@
 
                                     <tr>
                                         <td>@php echo $i++;@endphp</td>
-                                        <td><h4>{{$lmsdata['name']}}</h4></td>
+                                        <td><h4>{{$lmsdata['name'] ?? ''}}</h4></td>
                                         <td>
-                                            <a href="{{ route('lmsmapping.edit',[$lmsdata['id'],$preload_lms ?? '' ])}}"
+                                            <a href="{{ route('lmsmapping.edit',[$lmsdata['id'] ?? 0 ,$preload_lms ?? '' ])}}"
                                                class="btn btn-outline-success btn-sm"><i class="ti-pencil-alt"></i></a>
 
                                             @if( !isset($lmsdata['CHILD_ARR']) )

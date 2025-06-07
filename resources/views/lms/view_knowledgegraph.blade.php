@@ -1,8 +1,5 @@
-{{--@include('includes.headcss')
-@include('includes.header')
-@include('includes.sideNavigation')--}}
 @extends('layout')
-@section('container')
+@section('content')
 <style>
 .highcharts-figure,
 .highcharts-data-table table {
@@ -229,6 +226,4 @@ Highcharts.chart('container', {
 
 </script>
 
-@include('includes.lmsfooterJs')
-@include('includes.footer')
 @endsection

@@ -16,6 +16,7 @@ class topicController extends Controller
     public function index(Request $request)
     {
         $data = $this->getData($request);
+        // echo "<pre>";print_r($data);exit;
         $type = $request->input('type');
         $res['status_code'] = 1;
         $res['message'] = "SUCCESS";
@@ -169,7 +170,7 @@ class topicController extends Controller
 
             $topic = [
                 'chapter_id'       => $request->get('hidchapter_id'),
-                'main_topic_id'    => 0,
+                // 'main_topic_id'    => 0,
                 'name'             => $val,
                 'description'      => $topic_desc_val,
                 'topic_sort_order' => $sort_order_val,

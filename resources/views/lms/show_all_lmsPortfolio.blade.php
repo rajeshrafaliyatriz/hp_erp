@@ -1,8 +1,5 @@
-{{--@include('includes.lmsheadcss')
-@include('includes.header')
-@include('includes.sideNavigation')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <div id="page-wrapper">
     <div class="container-fluid">
         <div class="row bg-title align-items-center justify-content-between">
@@ -95,7 +92,6 @@
         </div>
     </div>
 </div>
-@include('includes.lmsfooterJs')
 <script>
     $(document).ready(function () {
         $('[data-toggle="popover"]').popover({title: "", html: true});
@@ -104,5 +100,4 @@
         });
     });
 </script>
-@include('includes.footer')
 @endsection

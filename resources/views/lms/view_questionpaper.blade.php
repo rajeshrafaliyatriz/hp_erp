@@ -1,9 +1,5 @@
-{{--@include('includes.headcss')
-@include('includes.header')
-@include('includes.sideNavigation')--}}
-
 @extends('layout')
-@section('container')
+@section('content')
 <style>
 .dot {
     height: 13px;

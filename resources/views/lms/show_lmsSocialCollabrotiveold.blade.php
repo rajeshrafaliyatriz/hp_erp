@@ -1,12 +1,9 @@
-{{--@include('includes.lmsheadcss')
-@include('includes.header')
-@include('includes.sideNavigation')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <div class="content-main flex-fill">
     <div class="container-fluid mb-5">
 		<div class="course-grid-tab tab-pane fade show active" id="grid" role="tabpanel" aria-labelledby="grid-tab">
-			<ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
+			{{-- <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
 				<!-- <li class="nav-item">
 				  <a class="nav-link" id="message-tab" data-toggle="pill" href="#message" role="tab" aria-controls="pills-profile" aria-selected="false">Latest File</a>
 				</li>
@@ -19,7 +16,7 @@
 				<!-- <li class="nav-item">
 					<a class="nav-link" id="groupchat-tab" data-toggle="pill" href="#groupchat" role="tab" aria-controls="groupchat-tab" aria-selected="false">Group Chat</a>
 				</li> -->
-			</ul>
+			</ul> --}}
 			<div class="tab-content" id="pills-tabContent">
 				<div class="tab-pane fade show active" id="notification" role="tabpanel" aria-labelledby="notification-tab">
 
@@ -125,7 +122,6 @@
 </div>
 <!--Modal: Add Comment Modal-->
 
-@include('includes.lmsfooterJs')
 <script type="text/javascript">
 function add_data(id)
 {
@@ -133,5 +129,4 @@ function add_data(id)
     $('#CommentModal').modal('show');
 }
 </script>
-@include('includes.footer')
 @endsection

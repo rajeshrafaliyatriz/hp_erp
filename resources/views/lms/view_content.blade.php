@@ -1,8 +1,6 @@
-{{--@include('includes.headcss')
-@include('includes.header')
-@include('includes.sideNavigation') --}}
 @extends('layout')
-@section('container')
+@section('content')
+<h2>Content</h2>
 <!-- Content main Section -->
 <div class="content-main flex-fill">
     <div id="pdf-viewer"></div>
@@ -37,7 +35,6 @@
 </div>
  -->
 
-@include('includes.lmsfooterJs')
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.3.200/pdf.js"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 <script>
@@ -104,5 +101,4 @@ window.onload = function() {
   }
 });
 </script>
-@include('includes.footer')
 @endsection

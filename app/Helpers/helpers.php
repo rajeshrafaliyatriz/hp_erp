@@ -609,3 +609,128 @@ if (!function_exists('is_mobile')) {
         }
     }
 }
+
+
+if (!function_exists('sendNotification')) {
+    function sendNotification($notification_arr)
+    {
+        // appNotificationModel::insert($notification_arr);
+    }
+}
+
+
+if (!function_exists('SearchChainSubject')) {
+
+    function SearchChainSubject($col, $multiple, $listed_drop, $grade_val = "", $std_val = "", $sub_val = "")
+    {
+
+        $explod_list = explode(',', $listed_drop);
+        $grade_name = 'grade';
+        $std_name = 'standard';
+        $sub_name = 'subject';
+
+        if ($multiple == 'multiple') {
+            $multiple = 'multiple="multiple"';
+            $grade_name = 'grade[]';
+            $std_name = 'standard[]';
+            $sub_name = 'subject[]';
+        } else {
+            if ($multiple == 'single') {
+                $multiple = '';
+            } else {
+                echo "Chain Option Error : Must Provide First Prameter As Single Dropdown Or Multiple.";
+            }
+        }
+
+        $option = "<option value=''>--Select Grade--</option>";
+
+        $academic_section = DB::table("academic_section")
+            ->where("sub_institute_id", session()->get('sub_institute_id'))
+            ->pluck("title", "id");
+
+        foreach ($academic_section as $id => $val) {
+            $selected = '';
+            if ($grade_val == $id) {
+                $selected = 'selected="selected"';
+            }
+
+            $option .= "<option $selected value=$id>$val</option>";
+        }
+
+        $std_option = "";
+        if ($grade_val != "") {
+            $standard = DB::table("standard")
+                ->where("grade_id", $grade_val)
+                ->pluck("name", "id");
+            foreach ($standard as $id => $val) {
+                $selected = '';
+                if ($std_val == $id) {
+                    $selected = 'selected="selected"';
+                }
+
+                $std_option .= "<option $selected value=$id>$val</option>";
+            }
+        }
+
+        $div_option = "";
+        $sub_option = "";
+
+        if ($std_val != "") {
+            $subjects = DB::table('sub_std_map')
+                ->join('subject', 'subject.id', '=', 'sub_std_map.subject_id')
+                ->where("sub_std_map.standard_id", $std_val)
+                ->pluck('subject.subject_name', 'subject.id');
+
+            foreach ($subjects as $id => $val) {
+                $selected = '';
+                if ($sub_val == $id) {
+                    $selected = 'selected="selected"';
+                }
+
+                $sub_option .= "<option $selected value=$id>$val</option>";
+            }
+        }
+
+        $grade = '<div class="col-md-' . $col . '">
+                    <div class="form-group">
+                        <label for="title">Select Grade:</label>
+                        <select name="' . $grade_name . '" id="gradeS" class="form-control" ' . $multiple . '>
+                            ' . $option . '
+                        </select>
+                    </div>
+                </div>';
+
+        $std = '<div class="col-md-' . $col . '">
+                    <div class="form-group">
+                        <label for="title">Select Standard:</label>
+                        <select name="' . $std_name . '" id="standardS" class="form-control" ' . $multiple . '>
+                            ' . $std_option . '
+                        </select>
+                    </div>
+                </div>';
+
+        $sub = ' <div class="col-md-' . $col . '">
+                    <div class="form-group">
+                        <label for="title">Select Subject:</label>
+                        <select name="' . $sub_name . '" id="subject" class="form-control" ' . $multiple . '>
+                            ' . $sub_option . '
+                        </select>
+                    </div>
+                </div>';
+        $html = '<div class="row">';
+
+        if (in_array('grade', $explod_list)) {
+            $html .= $grade;
+        }
+
+        if (in_array('std', $explod_list)) {
+            $html .= $std;
+        }
+
+        if (in_array('sub', $explod_list)) {
+            $html .= $sub;
+        }
+        $html .= '</div>';
+        echo $html;
+    }
+}

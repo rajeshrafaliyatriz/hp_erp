@@ -1,6 +1,5 @@
-{{--@include('includes.lmsheadcss')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <link href="/plugins/bower_components/clockpicker/dist/jquery-clockpicker.min.css" rel="stylesheet">
 <!-- <link href="{{ asset('/plugins/bower_components/summernote/dist/summernote.css') }}" rel="stylesheet" /> -->
 <style>
@@ -223,7 +222,6 @@ br {
         </div>
     </div>
 </div>
-@include('includes.lmsfooterJs')
 <script>
     $(document).on("focusout","#cke_1_contents .cke_wysiwyg_div, #cke_1_contents .cke_enable_context_menu",function(){
 
@@ -428,16 +426,6 @@ function removeNewRowAjax(id) {
     }
 }
 
-function getStandardwiseDivision(std_id){
-    var path = "{{ route('ajax_StandardwiseDivision') }}";
-    $('#division_id').find('option').remove().end().append('<option value="">Select Division</option>').val('');
-    $.ajax({url: path,data:'standard_id='+std_id, success: function(result){
-        for(var i=0;i < result.length;i++){
-            $("#division_id").append($("<option></option>").val(result[i]['division_id']).html(result[i]['name']));
-        }
-    }
-    });
-}
 
 $( document ).ready(function() {
    question_prompt();
@@ -453,44 +441,7 @@ $( document ).ready(function() {
         });
     })
 });
-function question_prompt(){
-    $('#question_title').empty();
-    var editor = CKEDITOR.instances['question_title'];
-    if (editor) {
-        editor.setData('');
-    }
-    var subject = $("#subject_id").val();
-    var standard = $("#standard_id").val();
-    var chapter = "{{$_REQUEST['chapter_id']}}";
-    var topic = "{{$data['breadcrum_data']->topic_id ?? ''}}";
-    var question_prompt = $('#question_prompt').val();
-    
-    var search="question";
-    var path = "{{ route('chat') }}";
-    $.ajax({
-        url:path,
-        data: {standard:standard,subject_id:subject,chapter_id:chapter,topic_id:topic,question_prompt:question_prompt,search:search},
-        success:function(result){
-            if (editor) {
-                editor.setData('');
-            }
-            console.log('question-'+result);
-            if(Array.isArray(result)){
-              var data =result[0].substring(1, result[0].length - 1);
-            }else{
-              var data = result;
-            }
-            // Append the new content
-            $('#question_title').append(data);
-            check_input(data);
-            // Optionally, you can set the new content directly to CKEditor
-            if (editor) {
-                editor.setData(data);
-            }
-        }
 
-    })
-}
 //START Bind chapters
 $("#subject").change(function(){
     var subject = $("#subject").val();
@@ -586,101 +537,5 @@ function load_map_value(data_new, selectedValue,map_val) {
     });
 }
 
-// map type
-function check_input(inputElement) {
-
-    var inputValue = inputElement.value;
-    var editor = CKEDITOR.instances['question_title'];
-   
-// Get the content from the CKEditor instance
-   var inputValue = $('#question_title').val();
-    var std = "{{$data['breadcrum_data']->standard_name}}";
-
-      var data = {
-        "question": inputValue,
-        "standard": std,
-        "type_depth":9,
-        "type_bloom":82,
-        "type_learning":"learn",
-    };
-
-    var path = "{{ route('chat') }}";
-    $.ajax({
-        url:path,
-        data: data,
-        success:function(result){
-            console.log(result);
-            var selectElement_type = document.getElementById("mapping_type");
-
-            $('select[name="mapping_type[]"]').each(function() {
-                data_new =  parseInt($(this).attr('data-new'));
-                html = $(this).html();
-            });
-
-            data_new = parseInt(data_new) + 1;
-
-           var parsedResult = JSON.parse(result);
-
-       if (parsedResult[0]) {
-            var answer_depth = parsedResult[0].question_depth;
-            var reason_depth = parsedResult[0].reason_depth;
-            // console.log(reason_depth);
-            var answer_bloom = parsedResult[0].question_bloom;
-            var reason_bloom = parsedResult[0].reason_bloom;
-
-            var answer_learning = parsedResult[0].question_learning;
-        }else{
-            var answer_depth = parsedResult.question_depth;
-            var reason_depth = parsedResult.reason_depth;
-            var answer_bloom = parsedResult.question_bloom;
-            var reason_bloom = parsedResult.reason_bloom;
-            var answer_learning = parsedResult.question_learning;
-        }
-
-        var SelectElement_type1 = $('select[name="mapping_type[]"][data-new=1]');
-        SelectElement_type1.val(9);
-        load_map_value(1,9,answer_depth);
-        $('textarea[name="reasons[]"][data-reason=1]').val(reason_depth);
-        $('textarea[name="learning_outcome"]').val(answer_learning);
-
-        var mappingTypeValues = [9, 82];
-        var selbox = [2];
-                var mapping_type_data = html;
-                if(data_new <= 2){
-                var htmlcontent = '';
-                    selbox.forEach(i => {
-
-                htmlcontent += '<div class="clearfix"></div><div class="addButtonCheckbox1"><div class="row align-items-center">';
-                htmlcontent += '<div class="col-md-3"><div class="form-group"><label for="topicType">Mapping Type</label><select class="load_map_value cust-select form-control mb-0" name="mapping_type[]" data-new=' + i + '>' + mapping_type_data + '</select></div></div>';
-                htmlcontent += '<div class="col-md-3"><div class="form-group"><label for="topicType2">Mapping Value</label><select class="cust-select form-control mb-0" name="mapping_value[]" data-new=' + i + '><option value="">Select Mapping Value</option></select></div></div>';
-                htmlcontent += '<div class="col-md-3"><div class="form-group"><label for="topicType2">Reasons</label> <textarea name="reasons[]" data-reason='+i+' id="" rows="2" class="form-control"></textarea></div></div>';
-
-                htmlcontent += '<div class="col-md-3"><a href="javascript:void(0);" onclick="removeNewRow1();" class="btn btn-danger btn-sm"><i class="mdi mdi-minus"></i></a></div></div></div>';
-            });
-                $('.addButtonCheckbox1:last').after(htmlcontent);
-
-        var SelectElement_type2 = $('select[name="mapping_type[]"][data-new=2]');
-        SelectElement_type2.val(82);
-        load_map_value(2,82,answer_bloom);
-
-        // $('textarea[name="reason_2"]').val(reason_bloom);
-        $('textarea[name="reasons[]"][data-reason=2]').val(reason_bloom);
-
-        $('textarea[name="learning"]').val(answer_learning);
-
-        // SelectElement_type3.val(1693);
-        // load_map_value(3,1693,answer_learning);
-
-            }
-
-        },
-        error: function(xhr, status, error) {
-            // Handle error
-            console.error('Error occurred:', error);
-        }
-    });
-
-}
 </script>
-@include('includes.footer')
 @endsection

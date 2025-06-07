@@ -1,20 +1,17 @@
-{{--@include('includes.lmsheadcss')
-@include('includes.header')
-@include('includes.sideNavigation')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <div class="content-main flex-fill">
     <div class="container-fluid mb-5">
     	<div class="row">
 			<div class="col-lg-12 col-md-12 col-sm-12 col-xs-12 mb-4">
 	            <h1 class="h4 mb-3">Social Collabrative</h1>
-	             <nav aria-label="breadcrumb">
+	             {{-- <nav aria-label="breadcrumb">
 	                <ol class="breadcrumb bg-transparent p-0">
 	                    <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
 	                    <li class="breadcrumb-item">Engagement</li>
 	                    <li class="breadcrumb-item">Show Social Collabrative</li>
 	                </ol>
-	            </nav>
+	            </nav> --}}
 	        </div>
         </div>
 		<div class="course-grid-tab tab-pane fade show active" id="grid" role="tabpanel" aria-labelledby="grid-tab">
@@ -232,7 +229,6 @@ a {
 }
 </style>
 
-@include('includes.lmsfooterJs')
 <script type="text/javascript">
 function add_data(id)
 {
@@ -240,5 +236,4 @@ function add_data(id)
     $('#CommentModal').modal('show');
 }
 </script>
-@include('includes.footer')
 @endsection

@@ -16,10 +16,10 @@ return new class extends Migration
             $table->string('user_name')->index();
             $table->string('password');
             $table->string('name_suffix')->nullable();
-            $table->string('first_name')->index();
+            $table->string('first_name')->index()->nullable();
             $table->string('middle_name')->nullable();
-            $table->string('last_name')->index();
-            $table->string('email')->unique();
+            $table->string('last_name')->index()->nullable();
+            $table->string('email')->index()->unique();
             $table->string('mobile')->nullable()->index();
             $table->string('gender', 1)->nullable();
             $table->date('birthdate')->nullable();

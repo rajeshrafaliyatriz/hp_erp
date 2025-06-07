@@ -1,17 +1,11 @@
-{{--@include('includes.lmsheadcss')
-@include('includes.header')
-@include('includes.sideNavigation')--}}
-@extends('lmslayout')
-@section('container')
-{{--
-@include('includes.sideNavigation')
---}}
+@extends('layout')
+@section('content')
 <div id="page-wrapper">
     <div class="container-fluid">
         <div class="row bg-title align-items-center justify-content-between">
             <div class="col-lg-6 col-md-4 col-sm-4 col-xs-12 mb-4">
                 <h1 class="h4 mb-3">Create Question Bank</h1>
-                <nav aria-label="breadcrumb">
+                {{-- <nav aria-label="breadcrumb">
                     <ol class="breadcrumb bg-transparent p-0">
                         <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                         <li class="breadcrumb-item"><a
@@ -25,7 +19,7 @@
                         </li>
                         <li class="breadcrumb-item active" aria-current="page">Create Question Bank</li>
                     </ol>
-                </nav>
+                </nav> --}}
             </div>
             <div class="col-md-3 mb-4 text-md-right">
                 <a href="{{ route('question_master.create',['chapter_id' => $_REQUEST['chapter_id'],'topic_id' => $_REQUEST['topic_id'],'standard_id'=>$_REQUEST['standard_id']]) }}"
@@ -162,8 +156,6 @@
     </div>
 </div>
 
-@include('includes.lmsfooterJs')
-
 <script src="//cdn.mathjax.org/mathjax/latest/MathJax.js">
     MathJax.Hub.Config({
         extensions: ["mml2jax.js"],
@@ -221,5 +213,4 @@
     }
 
 </script>
-@include('includes.footer')
 @endsection

@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\lms\chapterModel;
 use App\Models\lms\portfolioModel;
 use App\Models\lms\topicModel;
-use GenTux\Jwt\GetsJwtToken;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +17,6 @@ use Illuminate\Support\Facades\Storage;
 
 class lmsPortfolioController extends Controller
 {
-    use GetsJwtToken;
 
     /**
      * Display a listing of the resource.
@@ -39,7 +37,7 @@ class lmsPortfolioController extends Controller
         if (strtoupper(session()->get('user_profile_name')) == "STUDENT") {
             return is_mobile($type, 'lms/show_student_lmsPortfolio', $res, "view");
         } else {
-            if (strtoupper(session()->get('user_profile_name')) == "LMS TEACHER" || strtoupper(session()->get('user_profile_name')) == "TEACHER") {
+            if (strtoupper(session()->get('user_profile_name')) == "ADMIN" || strtoupper(session()->get('user_profile_name')) == "ADMIN") {
                 return is_mobile($type, 'lms/show_all_lmsPortfolio', $res, "view");
             }
         }

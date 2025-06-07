@@ -7,6 +7,9 @@ use App\Http\Controllers\libraries\skillLibraryController;
 use App\Http\Controllers\custom_module\CustomModuleController;
 use App\Http\Controllers\school_setup\masterSetupController;
 use App\Http\Controllers\school_setup\sub_std_mapController;
+use App\Http\Controllers\CkeditorFileUploadController;
+use App\Http\Controllers\front_desk\syllabus\syllabusController;
+
 Route::get('/', function () {
     return view('welcome');
 });
@@ -69,3 +72,6 @@ Route::get('api/get-all-subject-list', [AJAXController::class, 'getAllSubjectLis
 /** get exam list */
 Route::get('api/get-exam-name-list', [AJAXController::class, 'getExamsList']);
 Route::get('api/get-exam-master-list', [AJAXController::class, 'getExamsMasterList']);
+
+Route::get('ckeditor/create', [CkeditorFileUploadController::class, 'create'])->name('ckeditor.create');
+Route::post('ckeditor', [CkeditorFileUploadController::class, 'store'])->name('uploadimage');

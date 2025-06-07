@@ -1,5 +1,5 @@
 @extends('layout')
-@section('container')
+@section('content')
 <div id="page-wrapper">
    <div class="container-fluid">
       <div class="row bg-title">
@@ -102,7 +102,6 @@
       </div>
    </div>
 </div>
-@include('includes.footerJs')
 <script>
     $(document).ready(function(){
         $('#standardS').change(function () {
@@ -134,5 +133,4 @@
     });
     })
 </script>
-@include('includes.footer')
 @endsection

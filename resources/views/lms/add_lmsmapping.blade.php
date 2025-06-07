@@ -40,13 +40,13 @@
                                         <label for="title">Mapping Type</label>
                                         @if(isset($data['chapter_topic_data']['action']) && $data['chapter_topic_data']['action'] == "chapter")
                                             <input type="hidden" name="hid_chapter_id" id="hid_chapter_id" value="{{$data['chapter_topic_data']['chapter_topic_id']}}">
-                                            <select name="mapping_type" id="mapping_type" required class="cust-select form-control mb-0 border-0">
+                                            <select name="mapping_type" id="mapping_type" required class="cust-select form-control mb-0 border-1">
                                                 <option value="Learning Outcome - {{$data['chapter_topic_data']['chapter_topic_name']}}">Learning Outcome - {{$data['chapter_topic_data']['chapter_topic_name']}}</option>
                                                 <option value="Learning Indicator - {{$data['chapter_topic_data']['chapter_topic_name']}}">Learning Indicator - {{$data['chapter_topic_data']['chapter_topic_name']}}</option>
                                             </select>
                                         @elseif(isset($data['chapter_topic_data']['action']) && $data['chapter_topic_data']['action'] == "topic")
                                             <input type="hidden" name="hid_topic_id" id="hid_topic_id" value="{{$data['chapter_topic_data']['chapter_topic_id']}}">
-                                            <select name="mapping_type" id="mapping_type" required class="cust-select form-control mb-0 border-0">
+                                            <select name="mapping_type" id="mapping_type" required class="cust-select form-control mb-0 border-1">
                                                 <option value="Learning Outcome - {{$data['chapter_topic_data']['chapter_topic_name']}}">Learning Outcome - {{$data['chapter_topic_data']['chapter_topic_name']}}</option>
                                                 <option value="Learning Indicator - {{$data['chapter_topic_data']['chapter_topic_name']}}">Learning Indicator - {{$data['chapter_topic_data']['chapter_topic_name']}}</option>
                                             </select>

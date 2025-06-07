@@ -1,5 +1,5 @@
 @extends('layout')
-@section('container')
+@section('content')
 <div id="page-wrapper">
    <div class="container-fluid">
 
@@ -112,7 +112,6 @@
     </div>
     @endif
 </div>
-@include('includes.lmsfooterJs')
 <script>
     $(function () {
         $(".checkedValue").on("click", function () {
@@ -277,5 +276,4 @@
             });
         });
     </script>
-@include('includes.footer')
 @endsection

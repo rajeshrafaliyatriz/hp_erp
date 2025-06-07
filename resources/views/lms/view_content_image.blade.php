@@ -1,9 +1,5 @@
-{{--@include('includes.headcss')
-@include('includes.header')
-@include('includes.sideNavigation') --}}
 @extends('layout')
-@section('container')
-<!-- Content main Section -->
+@section('content')
 
 <div class="content-main flex-fill">
     <h1 class="h4 mb-3">LMS</h1>
@@ -32,7 +28,6 @@
 </div>
 
 
-@include('includes.lmsfooterJs')
 <script type="text/javascript">
 $(document).bind("contextmenu",function(e){
   return false;
@@ -63,5 +58,4 @@ function injectJS(){
 }
 
 </script>
-@include('includes.footer')
 @endsection

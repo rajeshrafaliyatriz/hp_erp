@@ -1,6 +1,5 @@
-{{--@include('includes.lmsheadcss')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <link href="/plugins/bower_components/clockpicker/dist/jquery-clockpicker.min.css" rel="stylesheet">
 <!-- <link href="{{ asset('/plugins/bower_components/summernote/dist/summernote.css') }}" rel="stylesheet" /> -->
 <style>
@@ -381,7 +380,6 @@ br {
     </div>
 
 </div>
-@include('includes.lmsfooterJs')
 <!-- <script src="{{asset('/plugins/bower_components/summernote/dist/summernote.min.js')}}"></script> -->
 <script src="{{ asset("/ckeditor_wiris/ckeditor4/ckeditor.js") }}"></script>
 <script>
@@ -542,17 +540,6 @@ function removeOldRow(j) {
     $("#old_data_"+j ).remove();
 }
 
-function getStandardwiseDivision(std_id){
-    var path = "{{ route('ajax_StandardwiseDivision') }}";
-    $('#division_id').find('option').remove().end().append('<option value="">Select Division</option>').val('');
-    $.ajax({url: path,data:'standard_id='+std_id, success: function(result){
-        for(var i=0;i < result.length;i++){
-            $("#division_id").append($("<option></option>").val(result[i]['division_id']).html(result[i]['name']));
-        }
-    }
-    });
-}
-
 $( document ).ready(function() {
     $("#standard").change(function(){
         var std_id = $("#standard").val();
@@ -668,73 +655,5 @@ function load_map_value(data_new, selectedValue,map_val) {
     });
 }
 
-// map type
-function check_input(inputElement) {
-    var inputValue = inputElement.value;
-    var editor = CKEDITOR.instances['question_title'];
-
-// Get the content from the CKEditor instance
-var inputValue = editor.getData() ?? inputElement.value;
-    var std ="{!!$std_name->name!!}";
-
-      var data = {
-        "question": inputValue,
-        "standard": std,
-        "type_depth":9,
-        "type_bloom":82,
-        "type_learning":"learn",
-    };
-
-    var path = "{{ route('chat') }}";
-    $.ajax({
-        url:path,
-        data: data,
-        success:function(result){
-            console.log(result);
-            var selectElement_type = document.getElementById("mapping_type");
-
-            $('select[name="mapping_type[]"]').each(function() {
-                data_new =  parseInt($(this).attr('data-new'));
-                html = $(this).html();
-            });
-
-            data_new = parseInt(data_new) + 1;
-
-           var parsedResult = JSON.parse(result);
-
-        // Extract the values for answer_depth and answer_bloom
-        var answer_depth = parsedResult[0].question_depth;
-        var reason_depth = parsedResult[0].reason_depth;
-        // console.log(reason_depth);
-        var answer_bloom = parsedResult[0].question_bloom;
-        var reason_bloom = parsedResult[0].reason_bloom;
-
-        var answer_learning = parsedResult[0].question_learning;
-
-        var SelectElement_type1 = $('select[name="mapping_type[]"][data-new=1]');
-        SelectElement_type1.val(9);
-        load_map_value(1,9,answer_depth);
-        $('textarea[name="reasons[]"][data-reason=1]').val(reason_depth);
-        $('textarea[name="learning_outcome"]').val(answer_learning);
-
-        var mappingTypeValues = [9, 82];
-        var selbox = [2];
-
-        var SelectElement_type2 = $('select[name="mapping_type[]"][data-new=2]');
-        SelectElement_type2.val(82);
-        load_map_value(2,82,answer_bloom);
-
-        // $('textarea[name="reason_2"]').val(reason_bloom);
-        $('textarea[name="reasons[]"][data-reason=2]').val(reason_bloom);
-
-        $('textarea[name="learning"]').val(answer_learning);
-
-
-
-        }
-    });
-
-}
 </script>
-@include('includes.footer')
 @endsection

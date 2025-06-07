@@ -270,4 +270,62 @@ class AJAXController extends Controller
         return response()->json($standard);
         // return $classTeacherStdArr;
     }
+
+     public function getSubjectList(Request $request)
+    {
+        $standard_id = $request->standard_id;
+        $explode = explode(',', $request->standard_id);
+
+        $arr = $request->server;
+        $HTTP_REFERER = "";
+        foreach ($arr as $id => $val) {
+            if ($id == 'HTTP_REFERER') {
+                $HTTP_REFERER = $val;
+            }
+        }
+        $refer_arr = explode('/', $HTTP_REFERER);
+        $requestUri = $request->server->get('REQUEST_URI');
+
+        // echo "<pre>";print_r($standard_id);exit;
+        if (strpos($requestUri, 'lms/pal') !== false || (isset($refer_arr[count($refer_arr) - 2]) || $refer_arr[count($refer_arr) - 2] == 'exam_creation') || in_array('marks_entry', $refer_arr)) {
+            $where = array(
+                "sub_std_map.sub_institute_id" => session()->get('sub_institute_id'),
+                "sub_std_map.allow_grades" => "Yes",
+            );
+        } else {
+            $where = array(
+                "sub_std_map.sub_institute_id" => session()->get('sub_institute_id'),
+            );
+        }
+        if (count($explode) > 1) {
+            $std_sub_map = DB::table('subject')
+                ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
+                ->whereIn("sub_std_map.standard_id", $explode)
+                ->where($where)
+                ->orderBy('sub_std_map.sort_order')
+                ->pluck('sub_std_map.display_name', 'subject.id');
+        } else {
+            if (session()->get('user_profile_name') == 'Teacher') {
+                # Get subjects by teacher, standard and division
+                $std_sub_map = DB::table('subject as sub')
+                    ->whereIn('sub.id', function ($sub_query) use ($request) {
+                        $sub_query->select('subject_id')
+                            ->from('timetable')
+                            ->where('teacher_id', session()->get('user_id'))
+                            ->where('standard_id', $request->standard_id)
+                            ->where('division_id', $request->division_id);
+                    })
+                    ->pluck('sub.subject_name as display_name', 'sub.id');
+            } else {
+                $where['sub_std_map.standard_id'] = $request->standard_id;
+                $std_sub_map = DB::table('subject')
+                    ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
+                    ->where($where)
+                    ->orderBy('sub_std_map.sort_order')
+                    ->pluck('sub_std_map.display_name', 'subject.id');
+            }
+        }
+
+        return response()->json($std_sub_map);
+    }
 }
