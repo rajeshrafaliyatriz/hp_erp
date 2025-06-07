@@ -1,0 +1,157 @@
+.part1 {
+    width: 40%;
+}
+
+.part2 {
+    width: 60%;
+}
+
+.hills_logo {
+    height: 100px;
+}
+
+.Hills_Birdie {
+    width: 50px;
+    height: 50px;
+}
+
+.curricular_table {
+    width: 100%;
+    border: none !important;
+    border-collapse: separate;
+    border-spacing: 0 8px;
+}
+tr:first-child td:first-child,tr:first-child th:first-child { border-top-left-radius: 10px; }
+tr:first-child td:last-child,tr:first-child th:last-child { border-top-right-radius: 10px; }
+
+tr:last-child td:first-child,tr:last-child th:first-child { border-bottom-left-radius: 10px; }
+tr:last-child td:last-child,tr:last-child th:last-child { border-bottom-right-radius: 10px; }
+
+.curricular_thead_tr .curricular_th:first-child,
+.curricular_tbody_tr .curricular_td:first-child {
+    flex: 0 0 56%; /* 24-02-2025 removed 60 added 54 */
+    text-align: left;
+}
+
+.curricular_thead_tr .curricular_th:not(:first-child),
+.curricular_tbody_tr .curricular_td:not(:first-child) {
+    flex: 1;
+    text-align: center;
+}
+
+.curricular_table tr th,
+.curricular_table tr td {
+    background: transparent;
+    padding:5px 10px;
+}
+
+.curricular_th {
+    color: #fff !important;
+    border: none;
+}
+
+.curricular_td {
+    border: none;
+    color:#000;
+}
+
+.curricular_thead_tr_main {
+    background-color: #1D78B0;
+}
+
+.curricular_thead_tr {
+    background-color: #6ABAEC;
+}
+
+.curricular_tbody_tr {
+    background-color: #F2F3F4;
+}
+.curricular_thead_tr_main,
+    .curricular_thead_tr,
+    .curricular_tbody_tr {
+        width:100%;
+        color: white;
+        border-radius: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        /* padding: 10px; */
+        margin-bottom: 4px;
+        /* box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); */
+        font-weight: bold;
+    }
+.curricular_thead_tr th,
+.curricular_tbody_tr td {
+    /* padding: 10px 15px; */
+    border: none;
+    font-size: 14px;
+    text-align: left;
+    font-weight: bold;
+}
+
+.span_0 {
+    background-color: #ef9c9a;
+}
+
+.span_1 {
+    background-color: #e7c825;
+}
+
+.span_2 {
+    background-color: #0cbf0c;
+}
+
+.span_3 {
+    background-color: #72d172;
+}
+
+.span_4 {
+    background-color: #d7a735;
+}
+
+.span_5 {
+    background-color: #ea4994;
+}
+
+.span_0,
+.span_1,
+.span_2,
+.span_3,
+.span_4,
+.span_5 {
+    padding: 5px 10px;
+    border-radius: 15px;
+    color: #fff;
+    font-weight: bold;
+}
+
+
+.dash {
+    background-color: #ac96ef;
+    padding: 5px 13px;
+    border-radius: 15px;
+    color: #fff;
+    font-weight: bold;
+}
+
+.main-table-hpc {
+    background: #fff !important;
+    padding : 10px;
+}
+
+.head_td {
+    font-size: 17px !important;
+}
+
+/* .span_tag{
+font-weight:bold;
+} */
+.span_title{
+background: #88a2ed;
+color: #fff;
+padding: 4px 70px;
+border-radius: 20px;
+}
+.lastRow{
+width:33%;
+}

@@ -31,7 +31,7 @@ class MenuMiddleware
 
         if ($type == "API"  ||  $request->get('type') == "JSON") {
             return $next($request);
-        }
+        } 
 
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $client_id = session()->get('client_id');
@@ -97,15 +97,15 @@ class MenuMiddleware
                 $i = 0;
                 foreach ($subMenuData as $key => $value) {
                     $finalSubMenu[$value['parent_id']][$i] = $subMenuData[$key];
-                    if ($value['quick_menu'] != '') {
-                        $quick_menu_data = DB::table('tblmenumaster')->whereRaw("find_in_set(id,(select quick_menu from
-                            tblmenumaster where id = '" . $value['id'] . "'))")->get()->toArray();
+                    // if ($value['quick_menu'] != '') {
+                    //     $quick_menu_data = DB::table('tblmenumaster')->whereRaw("find_in_set(id,(select quick_menu from
+                    //         tblmenumaster where id = '" . $value['id'] . "'))")->get()->toArray();
 
-                        $quick_menu_data = array_map(function ($value) {
-                            return (array) $value;
-                        }, $quick_menu_data);
-                        $finalQuickMenu[$value['id']] = $quick_menu_data;
-                    }
+                    //     $quick_menu_data = array_map(function ($value) {
+                    //         return (array) $value;
+                    //     }, $quick_menu_data);
+                    //     $finalQuickMenu[$value['id']] = $quick_menu_data;
+                    // }
                     $i++;
                 }
 
@@ -131,15 +131,15 @@ class MenuMiddleware
                 $i = 0;
                 foreach ($subMenuData as $key => $value) {
                     $finalSubMenu[$value['parent_id']][$i] = $subMenuData[$key];
-                    if ($value['quick_menu'] != '') {
-                        $quick_menu_data = DB::table('tblmenumaster')->whereRaw("find_in_set(id,(select quick_menu from
-                            tblmenumaster where id = '" . $value['id'] . "'))")->get()->toArray();
+                    // if ($value['quick_menu'] != '') {
+                    //     $quick_menu_data = DB::table('tblmenumaster')->whereRaw("find_in_set(id,(select quick_menu from
+                    //         tblmenumaster where id = '" . $value['id'] . "'))")->get()->toArray();
 
-                        $quick_menu_data = array_map(function ($value) {
-                            return (array) $value;
-                        }, $quick_menu_data);
-                        $finalQuickMenu[$value['id']] = $quick_menu_data;
-                    }
+                    //     $quick_menu_data = array_map(function ($value) {
+                    //         return (array) $value;
+                    //     }, $quick_menu_data);
+                    //     $finalQuickMenu[$value['id']] = $quick_menu_data;
+                    // }
                     $i++;
                 }
 

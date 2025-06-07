@@ -5,6 +5,10 @@ use App\Http\Controllers\auth\authController;
 use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\libraries\skillLibraryController;
 use App\Http\Controllers\custom_module\CustomModuleController;
+use App\Http\Controllers\school_setup\masterSetupController;
+use App\Http\Controllers\school_setup\sub_std_mapController;
+use App\Http\Controllers\CkeditorFileUploadController;
+use App\Http\Controllers\front_desk\syllabus\syllabusController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -24,6 +28,16 @@ Route::middleware(['auth','session','menu'])->group(function () {
     Route::resource('knowledge_ability', skillLibraryController::class);
     Route::resource('application', skillLibraryController::class);
 });
+
+// Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']]), function () {
+
+
+Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']], function () {
+    Route::resource('master_setup', masterSetupController::class);
+    Route::post('insert_data', [masterSetupController::class, 'insert_data'])->name('insert_data');
+    Route::resource('sub_std_map', sub_std_mapController::class);
+});
+Route::post('collectsct', [AJAXController::class, 'collectsct'])->name('collectsct');
 
 Route::get('table_data',[AJAXController::class, 'GetTableData'])->name('table_data');
 
@@ -46,8 +60,18 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::get('/create-view/{id}/update/{recordId}',[CustomModuleController::class,'crudCreate']);
     Route::post('/create-view-store/{id}',[CustomModuleController::class,'crudStore'])->name('custom_module_crud.store');
     Route::delete('/view-delete/{id}',[CustomModuleController::class,'viewDelete'])->name('custom_module_crud.delete');
-
+    Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
 });
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 
 Route::get('menuLevel2', [CustomModuleController::class, 'menuLevel2'])->name('menuLevel2.index');
+
+Route::get('api/get-standard-list', [AJAXController::class, 'getStandardList']);
+Route::get('api/get-subject-list', [AJAXController::class, 'getSubjectList']);
+Route::get('api/get-all-subject-list', [AJAXController::class, 'getAllSubjectList']);
+/** get exam list */
+Route::get('api/get-exam-name-list', [AJAXController::class, 'getExamsList']);
+Route::get('api/get-exam-master-list', [AJAXController::class, 'getExamsMasterList']);
+
+Route::get('ckeditor/create', [CkeditorFileUploadController::class, 'create'])->name('ckeditor.create');
+Route::post('ckeditor', [CkeditorFileUploadController::class, 'store'])->name('uploadimage');
