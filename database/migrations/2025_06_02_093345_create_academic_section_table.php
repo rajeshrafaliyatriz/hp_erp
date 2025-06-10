@@ -19,7 +19,11 @@ return new class extends Migration
             $table->integer('sort_order')->index()->nullable();
             $table->string('shift', 100)->nullable();
             $table->string('medium', 100)->nullable();
+<<<<<<< HEAD
             $table->string('payment_link', 191)->nullable();
+=======
+            $table->string('payment_link', 255)->nullable();
+>>>>>>> 6f19e08357e780412f8b0213c1ad5ee1fa2922c4
             $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
             $table->unsignedBigInteger('created_by')->index()->nullable();
             $table->unsignedBigInteger('updated_by')->index()->nullable();
