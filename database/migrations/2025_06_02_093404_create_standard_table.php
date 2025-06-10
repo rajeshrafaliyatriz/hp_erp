@@ -15,14 +15,14 @@ return new class extends Migration
             $table->bigIncrements('id');
 
             $table->unsignedBigInteger('grade_id')->index();
-            $table->string('name', 255)->index();
-            $table->string('short_name', 255)->index()->nullable();
+            $table->string('name', 191)->index();
+            $table->string('short_name', 191)->index()->nullable();
             $table->integer('sort_order')->nullable();
-            $table->string('medium', 255)->nullable();
-            $table->string('course_duration', 255)->nullable();
+            $table->string('medium', 191)->nullable();
+            $table->string('course_duration', 191)->nullable();
             $table->unsignedBigInteger('next_grade_id')->index()->nullable();
             $table->unsignedBigInteger('next_standard_id')->index()->nullable();
-            $table->string('school_stream', 255)->nullable();
+            $table->string('school_stream', 191)->nullable();
             $table->unsignedBigInteger('marking_period_id')->nullable();
             $table->unsignedBigInteger('sub_institute_id')->nullable();
 

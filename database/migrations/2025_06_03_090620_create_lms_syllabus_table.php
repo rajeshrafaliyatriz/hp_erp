@@ -20,7 +20,7 @@ return new class extends Migration
             $table->unsignedBigInteger('subject_id')->index()->nullable();
             $table->unsignedBigInteger('curriculum_id')->index()->nullable();
 
-            $table->string('title', 255)->index()->nullable();
+            $table->string('title', 191)->index()->nullable();
             $table->mediumText('objectives')->nullable();
             $table->mediumText('learning_outcomes')->nullable();
             $table->mediumText('suggested_materials')->nullable();

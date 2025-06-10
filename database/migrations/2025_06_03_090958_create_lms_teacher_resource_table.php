@@ -21,13 +21,13 @@ return new class extends Migration
 
             $table->string('syear', 50)->index()->nullable();
 
-            $table->string('title', 255)->index()->nullable();
+            $table->string('title', 191)->index()->nullable();
             $table->mediumText('description')->nullable();
             $table->mediumText('activity')->nullable();
             $table->string('file_folder', 500)->nullable();
-            $table->string('file_name', 250)->nullable();
-            $table->string('file_type', 250)->nullable();
-            $table->string('file_size', 250)->nullable();
+            $table->string('file_name', 191)->nullable();
+            $table->string('file_type', 191)->nullable();
+            $table->string('file_size', 191)->nullable();
             $table->text('mapping_value')->nullable();
             $table->string('status', 5)->nullable();
 

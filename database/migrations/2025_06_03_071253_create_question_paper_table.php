@@ -16,15 +16,15 @@ return new class extends Migration
             $table->unsignedBigInteger('grade_id')->index()->nullable();
             $table->unsignedBigInteger('standard_id')->index()->nullable();
             $table->unsignedBigInteger('subject_id')->index()->nullable();
-            $table->string('paper_name', 250)->index()->nullable();
-            $table->string('paper_desc', 250)->nullable();
+            $table->string('paper_name', 191)->index()->nullable();
+            $table->string('paper_desc', 191)->nullable();
             $table->dateTime('open_date')->index()->nullable();
             $table->dateTime('close_date')->index()->nullable();
             $table->integer('timelimit_enable')->default(0);
             $table->integer('time_allowed')->nullable();
             $table->integer('total_marks')->index()->nullable();
             $table->integer('total_ques')->index()->nullable();
-            $table->text('question_ids')->index()->nullable();
+            $table->text('question_ids')->nullable();
             $table->integer('shuffle_question')->default(0);
             $table->integer('attempt_allowed')->default(1);
             $table->integer('show_feedback')->default(0);
@@ -35,7 +35,7 @@ return new class extends Migration
             $table->unsignedBigInteger('created_by')->index()->nullable();
             $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
             $table->string('syear', 50)->index()->nullable();
-            $table->string('exam_type', 250)->nullable();
+            $table->string('exam_type', 191)->nullable();
 
             $table->unsignedBigInteger('updated_by')->index()->nullable();
             $table->unsignedBigInteger('deleted_by')->index()->nullable();

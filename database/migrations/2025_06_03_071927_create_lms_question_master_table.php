@@ -21,16 +21,16 @@ return new class extends Migration
             $table->unsignedBigInteger('chapter_id')->index()->nullable();
             $table->unsignedBigInteger('topic_id')->index()->nullable();
 
-            $table->text('question_title')->index()->nullable();
+            $table->text('question_title')->nullable();
             $table->text('description')->nullable();
             $table->integer('points')->default(0);
             $table->integer('multiple_answer')->index()->default(0);
 
-            $table->string('concept', 250)->nullable();
-            $table->string('subconcept', 250)->nullable();
-            $table->string('pre_grade_topic', 250)->nullable();
-            $table->string('post_grade_topic', 250)->nullable();
-            $table->string('cross_curriculum_grade_topic', 250)->nullable();
+            $table->string('concept', 191)->nullable();
+            $table->string('subconcept', 191)->nullable();
+            $table->string('pre_grade_topic', 191)->nullable();
+            $table->string('post_grade_topic', 191)->nullable();
+            $table->string('cross_curriculum_grade_topic', 191)->nullable();
 
             $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
             $table->integer('status')->index()->default(1);

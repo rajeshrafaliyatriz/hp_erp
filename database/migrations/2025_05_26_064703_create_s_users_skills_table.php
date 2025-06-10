@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('title')->index();
             $table->text('description')->nullable();
             $table->tinyText('related_skills')->nullable();
-            $table->string('bussiness_links',255)->nullable();
+            $table->string('bussiness_links',191)->nullable();
             $table->tinyText('custom_tags')->nullable();
             $table->tinyText('proficiency_level')->nullable();
             $table->tinyText('job_titles')->nullable();

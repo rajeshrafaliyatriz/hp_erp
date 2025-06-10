@@ -14,12 +14,12 @@ return new class extends Migration
         Schema::create('academic_section', function (Blueprint $table) {
             $table->bigIncrements('id');
 
-            $table->string('title', 255)->index();
+            $table->string('title', 191)->index();
             $table->string('short_name', 100);
             $table->integer('sort_order')->index()->nullable();
             $table->string('shift', 100)->nullable();
             $table->string('medium', 100)->nullable();
-            $table->string('payment_link', 255)->nullable();
+            $table->string('payment_link', 191)->nullable();
             $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
             $table->unsignedBigInteger('created_by')->index()->nullable();
             $table->unsignedBigInteger('updated_by')->index()->nullable();

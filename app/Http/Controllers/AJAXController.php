@@ -136,7 +136,7 @@ class AJAXController extends Controller
         }
         if($request->has('searchType') && $request->searchType=="jobrole"){
             // echo "here";exit;
-            $res['searchData'] = jobroleModel::where('jobrole', 'like', '%'.$request->searchWord.'%')->where('industries','like','%'.$request->org_type.'%') ->pluck('jobrole')
+            $res['searchData'] = jobroleModel::where('jobrole', 'like', '%'.$request->searchWord.'%')->pluck('jobrole')
             ->values();
         }else{
             // echo "else here";exit;

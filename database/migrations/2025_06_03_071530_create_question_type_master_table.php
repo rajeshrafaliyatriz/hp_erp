@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('question_type_master', function (Blueprint $table) {
             $table->bigIncrements('id');
 
-            $table->string('question_type', 250)->index();
+            $table->string('question_type', 191)->index();
             $table->integer('status')->index()->default(1);
 
             $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
