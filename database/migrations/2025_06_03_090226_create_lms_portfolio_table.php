@@ -19,10 +19,17 @@ return new class extends Migration
             $table->string('syear', 50)->index()->nullable(); // syear as string
             $table->unsignedBigInteger('user_profile_id')->index()->nullable();
 
+<<<<<<< HEAD
+            $table->string('title', 191)->nullable();
+            $table->text('description')->nullable();
+            $table->string('file_name', 191)->nullable();
+            $table->string('type', 191)->nullable();
+=======
             $table->string('title', 250)->nullable();
             $table->text('description')->nullable();
             $table->string('file_name', 250)->nullable();
             $table->string('type', 250)->nullable();
+>>>>>>> 6f19e08357e780412f8b0213c1ad5ee1fa2922c4
             $table->text('feedback')->nullable();
 
             $table->unsignedBigInteger('feedback_by')->nullable();

@@ -18,7 +18,7 @@ return new class extends Migration
             $table->unsignedBigInteger('standard_id')->index()->nullable();
             $table->unsignedBigInteger('subject_id')->index()->nullable();
 
-            $table->string('chapter_name', 250)->index();
+            $table->string('chapter_name', 191)->index();
             $table->text('chapter_desc')->nullable();
             $table->integer('availability')->index()->nullable();
             $table->integer('show_hide')->index()->nullable();

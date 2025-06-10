@@ -20,7 +20,7 @@ return new class extends Migration
             $table->unsignedBigInteger('topic_id')->index()->nullable();
             $table->unsignedBigInteger('content_id')->index()->nullable();
 
-            $table->string('title', 250)->index()->nullable();
+            $table->string('title', 191)->index()->nullable();
             $table->longText('front_text')->nullable();
             $table->longText('back_text')->nullable();
             $table->string('status', 5)->nullable();

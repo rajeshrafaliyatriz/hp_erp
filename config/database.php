@@ -58,18 +58,30 @@ return [
             'strict' => false,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::ATTR_EMULATE_PREPARES => true,
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET GLOBAL innodb_file_format=Barracuda;
+                                        SET GLOBAL innodb_file_per_table=ON;
+                                        SET GLOBAL innodb_large_prefix=ON;',
             ]) : [],
+            'modes' => [
+                'STRICT_TRANS_TABLES',
+                'NO_ZERO_IN_DATE',
+                'NO_ZERO_DATE',
+                'ERROR_FOR_DIVISION_BY_ZERO',
+                'NO_ENGINE_SUBSTITUTION'
+            ],
+            'strict' => false,
         ],
 
         'mysql_Dev' => [
             'driver' => 'mysql',
             'url' => env('DB2_URL'),
-            'host' => env('DB2_HOST', '127.0.0.1'),
+            'host' => env('DB2_HOST', '192.168.0.2'),
             'port' => env('DB2_PORT', '3306'),
-            'database' => env('DB2_DATABASE', 'laravel'),
-            'username' => env('DB2_USERNAME', 'root'),
-            'password' => env('DB2_PASSWORD', ''),
+            'database' => env('DB2_DATABASE', 'triz_erp_21'),
+            'username' => env('DB2_USERNAME', 'dev_db'),
+            'password' => env('DB2_PASSWORD', 'dev@sql'),
         ],
 
         'mariadb' => [

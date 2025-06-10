@@ -15,7 +15,7 @@ return new class extends Migration
             $table->bigIncrements('id');
 
             $table->unsignedBigInteger('chapter_id')->index()->nullable();
-            $table->string('name', 250)->index();
+            $table->string('name', 191)->index();
             $table->text('description')->nullable();
             $table->boolean('topic_show_hide')->index()->default(true);
             $table->integer('topic_sort_order')->index()->nullable();

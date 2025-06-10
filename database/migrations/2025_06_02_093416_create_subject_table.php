@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('subject', function (Blueprint $table) {
             $table->bigIncrements('id');
 
-            $table->string('subject_name', 255)->index();
+            $table->string('subject_name', 191)->index();
             $table->string('subject_code', 100)->index()->nullable();
             $table->string('subject_type', 100)->index()->nullable();
             $table->string('short_name', 100)->index()->nullable();

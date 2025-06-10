@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('lms_content_category', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('category_name', 250)->index()->nullable();
+            $table->string('category_name', 191)->index()->nullable();
             $table->unsignedBigInteger('chapter_id')->nullable()->index();
             $table->integer('status')->index()->nullable();
             $table->integer('sort_order')->nullable();

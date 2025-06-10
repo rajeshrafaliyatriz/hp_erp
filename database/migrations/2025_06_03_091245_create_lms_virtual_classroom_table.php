@@ -20,7 +20,7 @@ return new class extends Migration
             $table->unsignedBigInteger('chapter_id')->index()->nullable();
             $table->unsignedBigInteger('topic_id')->index()->nullable();
 
-            $table->string('room_name', 255)->index()->nullable();
+            $table->string('room_name', 191)->index()->nullable();
             $table->mediumText('description')->nullable();
 
             $table->date('event_date')->nullable();

@@ -118,7 +118,7 @@ class skillLibraryController extends Controller
         
         $res['jobroleSkill'] = $getSectore->get()->toArray();
         $res['allSkillData'] = $treeData;
-        $res['tableData'] = $skillData;
+        $res['tableData'] = $userSkills;
         $res['userSkills'] = $userSkills;
         $res['userTree'] = $userTree;
         // echo "<pre>";print_r($userSkills);exit;
@@ -1118,6 +1118,13 @@ class skillLibraryController extends Controller
         // userApplication
          if($request->has('formType') && $request->formType=="application"){
             $delete = userApplication::where('id',$id)->update(['deleted_at'=>now(),'deleted_by'=>$request->user_id]);
+            if($delete){
+                $i++;
+            }
+        }
+
+        if($request->has('formType') && $request->formType=="user"){
+            $delete = userSkills::where('id',$id)->update(['deleted_at'=>now(),'deleted_by'=>$request->user_id]);
             if($delete){
                 $i++;
             }

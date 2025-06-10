@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('lms_mapping_type', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->tinyText('name')->index();
+            $table->tinyText('name')->nullable();
             $table->bigInteger('parent_id')->index()->nullable();
             $table->integer('globally')->index()->nullable();
             $table->unsignedBigInteger('chapter_id')->nullable();

@@ -22,7 +22,7 @@ return new class extends Migration
             $table->tinyText('related_skills')->nullable();
             $table->string('bussiness_links',191)->nullable();
             $table->tinyText('custom_tags')->nullable();
-            $table->tinyText('proficiency_level')->index()->nullable();
+            $table->tinyText('proficiency_level')->nullable();
             $table->tinyText('job_titles')->nullable();
             $table->tinyText('learning_resources')->nullable();
             $table->tinyText('assesment_method')->nullable();
