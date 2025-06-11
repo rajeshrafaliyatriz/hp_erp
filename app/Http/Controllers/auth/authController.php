@@ -247,7 +247,7 @@ class authController extends Controller
                 }
                 session()->put($sessionData);
                 // return session()->all();
-                $sessionData['APP_URL'] = 'https://hp.triz.co.in'; // env('APP_URL');
+                $sessionData['APP_URL'] = env('APP_URL');
                 $token = $user->createToken('api-token')->plainTextToken;
                 $sessionData['token'] = $token;
 

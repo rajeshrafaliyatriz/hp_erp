@@ -379,4 +379,20 @@ class AJAXController extends Controller
 
         return response()->json($std_sub_map);
     }
+
+    public function ajax_checkEmailExist(Request $request)
+	{
+		// $email = $request->input("email");
+		
+        // $check_user_sql =DB::table('tbluser')
+        //         ->select('id', 'email', DB::raw("'user' as user_type"))
+        //         ->where('email', $email)
+        //         ->get();
+
+		// if (count($check_user_sql) == 0) {
+		// 	return 0;
+		// } else {
+		// 	return 1;
+		// }
+	}
 }

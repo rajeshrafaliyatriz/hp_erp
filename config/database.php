@@ -60,9 +60,9 @@ return [
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::ATTR_EMULATE_PREPARES => true,
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET GLOBAL innodb_file_format=Barracuda;
-                                        SET GLOBAL innodb_file_per_table=ON;
-                                        SET GLOBAL innodb_large_prefix=ON;',
+                // PDO::MYSQL_ATTR_INIT_COMMAND => 'SET GLOBAL innodb_file_format=Barracuda;
+                //                         SET GLOBAL innodb_file_per_table=ON;
+                //                         SET GLOBAL innodb_large_prefix=ON;',
             ]) : [],
             'modes' => [
                 'STRICT_TRANS_TABLES',

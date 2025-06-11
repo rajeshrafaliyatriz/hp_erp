@@ -13,6 +13,8 @@ return Application::configure(basePath: dirname(__DIR__))
         then: function () {
             Route::middleware(['web','auth','session','menu'])
                 ->group(base_path('routes/lms.php'));
+            Route::middleware(['web','auth','session','menu'])
+                ->group(base_path('routes/user.php'));
         }
     )
     // ... rest of configuration
