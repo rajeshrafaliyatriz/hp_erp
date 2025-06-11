@@ -441,7 +441,72 @@ class skillLibraryController extends Controller
                     $insertArray['experience_project'] = $value['experience_project'];
                     $insertArray['skill_maps'] = $value['skill_maps'];
 
-                    $insert = userSkills::insert($insertArray);
+                    $lastInsertedId  = userSkills::insertGetId($insertArray);
+
+                    if($lastInsertedId && $lastInsertedId!=0){
+                        $getAllJobrolesSkill = DB::table('s_jobrole_skills')->where('skill',$skillName)->get()->toArray();
+                        if(!empty($getAllJobrolesSkill)){
+                            foreach($getAllJobrolesSkill as $jk=>$jv){
+                                $insertArray = [
+                                        'skill_id'=>$lastInsertedId,
+                                        'jobrole'=>$jv->jobrole,
+                                        'description'=>null,
+                                        'sub_institute_id'=>$request->sub_institute_id,
+                                        'created_by'=> $request->user_id,
+                                        'created_at'=>now(),
+                                    ];
+                                $insert = userJobroleModel::insert($insertArray);
+                            }
+
+                            $proficiencyLevelArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title',$skillName)->groupBy('proficiency_level')->get()->toArray();
+                            if(!empty($proficiencyLevelArr)){
+                                foreach($proficiencyLevelArr as $jk=>$jv){
+                                    $insertArray = [
+                                            'skill_id'=>$lastInsertedId,
+                                            'proficiency_level'=>$jv->proficiency_level,
+                                            'description'=>$jv->proficiency_description,
+                                            'sub_institute_id'=>$request->sub_institute_id,
+                                            'created_by'=> $request->user_id,
+                                            'created_at'=>now(),
+                                        ];
+                                    $insert = userProfeceincyLevel::insert($insertArray);
+                                }
+                            }
+
+                            $knowledgeArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title',$skillName)->where('knowledge_ability_classification','knowledge')->groupBy('knowledge_ability_items')->get()->toArray();
+                            if(!empty($knowledgeArr)){
+                                foreach($knowledgeArr as $jk=>$jv){
+                                    $insertArray = [
+                                            'skill_id'=>$lastInsertedId,
+                                            'proficiency_level'=>$jv->proficiency_level,
+                                            'classification'=>'knowledge',
+                                            'classification_item'=>$jv->knowledge_ability_items,
+                                            'sub_institute_id'=>$request->sub_institute_id,
+                                            'created_by'=> $request->user_id,
+                                            'created_at'=>now(),
+                                        ];
+                                    $insert = userKnowledgeAbility::insert($insertArray);
+                                }
+                            }
+
+                            $abilityArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title',$skillName)->where('knowledge_ability_classification','ability')->groupBy('knowledge_ability_items')->get()->toArray();
+                            if(!empty($abilityArr)){
+                                foreach($abilityArr as $jk=>$jv){
+                                    $insertArray = [
+                                            'skill_id'=>$lastInsertedId,
+                                            'proficiency_level'=>$jv->proficiency_level,
+                                            'classification'=>'ability',
+                                            'classification_item'=>$jv->knowledge_ability_items,
+                                            'sub_institute_id'=>$request->sub_institute_id,
+                                            'created_by'=> $request->user_id,
+                                            'created_at'=>now(),
+                                        ];
+                                    $insert = userKnowledgeAbility::insert($insertArray);
+                                }
+                            }
+
+                        }
+                    }
                 }
 
                 $i++;
