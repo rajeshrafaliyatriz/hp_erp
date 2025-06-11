@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('hrms_departments', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('department',255)->index();
+            $table->string('department',191)->index();
             $table->unsignedBigInteger('parent_id')->nullable()->index();
             $table->text('tasks')->nullable();
             $table->text('roles_responsibility')->nullable();
