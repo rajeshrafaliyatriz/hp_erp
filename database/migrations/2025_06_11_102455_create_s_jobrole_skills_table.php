@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::create('s_jobrole_skills', function (Blueprint $table) {
             $table->bigIncrements('id');
-             $table->string('sector', 50);
-            $table->string('track', 50);
-            $table->string('jobrole', 191);
-            $table->string('skill', 191);
-            $table->string('type', 10);
+             $table->string('sector', 50)->index()->nullable();
+            $table->string('track', 50)->index()->nullable();
+            $table->string('jobrole', 191)->index()->nullable();
+            $table->string('skill', 191)->index()->nullable();
+            $table->string('type', 10)->index()->nullable();
             $table->string('proficiency_level', 20)->nullable();
             $table->timestamps();
         });
