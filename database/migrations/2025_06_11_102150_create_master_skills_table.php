@@ -13,9 +13,9 @@ return new class extends Migration
     {
         Schema::create('master_skills', function (Blueprint $table) {
             $table->bigIncrements('id');
-             $table->string('category', 191);
-            $table->string('sub_category', 191)->nullable();
-            $table->string('title', 191);
+             $table->string('category', 191)->index()->nullable();
+            $table->string('sub_category', 191)->index()->nullable();
+            $table->string('title', 191)->index()->nullable();
             $table->text('description')->nullable();
             $table->enum('status', ['Active', 'Inactive'])->default('Active');
             $table->text('related_skills')->nullable(); // Can store JSON or comma-separated IDs
