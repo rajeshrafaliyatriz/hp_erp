@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\auth\authController;
 use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\libraries\skillLibraryController;
+use App\Http\Controllers\libraries\jobroleLibraryController;
 use App\Http\Controllers\custom_module\CustomModuleController;
 use App\Http\Controllers\school_setup\masterSetupController;
 use App\Http\Controllers\school_setup\sub_std_mapController;
@@ -20,6 +21,7 @@ Route::middleware(['auth','session','menu'])->group(function () {
     
     Route::get('menu_lists', [authController::class, 'menu_lists'])->name('menu_lists');
     Route::resource('skill_library', skillLibraryController::class);
+    Route::resource('jobrole_library', jobroleLibraryController::class);
     Route::get('search_skill', [AJAXController::class, 'searchSkill'])->name('search_skill');
 
     Route::resource('jobrole', skillLibraryController::class);

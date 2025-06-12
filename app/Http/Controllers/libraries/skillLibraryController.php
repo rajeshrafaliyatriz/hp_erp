@@ -11,7 +11,7 @@ use function App\Helpers\is_mobile;
 use Laravel\Sanctum\PersonalAccessToken;
 use App\Models\libraries\jobroleModel;
 use App\Models\libraries\userSkills;
-use App\Models\libraries\userJobroleModel;
+use App\Models\libraries\skillJobroleMap;
 use App\Models\libraries\userProfeceincyLevel;
 use App\Models\libraries\userKnowledgeAbility;
 use App\Models\libraries\userApplication;
@@ -167,7 +167,7 @@ class skillLibraryController extends Controller
         $res['proficiency_levels'] = $proficiency_level;
         if($request->has('formType') && $request->formType=="jobrole"){
 
-            $res['userJobroleData'] = userJobroleModel::with([
+            $res['userJobroleData'] = skillJobroleMap::with([
                 'userSkills' => fn($q) => $q->select($skillFields),
                 'createdUser' => fn($q) => $q->select($createdUser),
             ])
@@ -455,7 +455,7 @@ class skillLibraryController extends Controller
                                         'created_by'=> $request->user_id,
                                         'created_at'=>now(),
                                     ];
-                                $insert = userJobroleModel::insert($insertArray);
+                                $insert = skillJobroleMap::insert($insertArray);
                             }
 
                             $proficiencyLevelArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title',$skillName)->groupBy('proficiency_level')->get()->toArray();
@@ -610,7 +610,7 @@ class skillLibraryController extends Controller
         if($request->formType=="user"){
             $res['editData'] = userSkills::find($id);
         }
-        $res['userJobroleData'] = userJobroleModel::with([
+        $res['userJobroleData'] = skillJobroleMap::with([
                 'userSkills' => fn($q) => $q->select($skillFields),
                 'createdUser' => fn($q) => $q->select($createdUser),
             ])
@@ -815,7 +815,7 @@ class skillLibraryController extends Controller
         }
         if($request->formType=='jobrole'){ 
             foreach ($request->job_role as $key => $value) {
-               $checkExists = userJobroleModel::where('jobrole',$value)->where('skill_id',$id)->where('sub_institute_id',$request->sub_institute_id)->whereNull('deleted_at')->first();
+               $checkExists = skillJobroleMap::where('jobrole',$value)->where('skill_id',$id)->where('sub_institute_id',$request->sub_institute_id)->whereNull('deleted_at')->first();
                if(!$checkExists){
                     $insertArray = [
                         'skill_id'=>$id,
@@ -825,7 +825,7 @@ class skillLibraryController extends Controller
                         'created_by'=> $request->user_id,
                         'created_at'=>now(),
                     ];
-                    $insert = userJobroleModel::insert($insertArray);
+                    $insert = skillJobroleMap::insert($insertArray);
                     $i++;
                }
                elseif(isset($checkExists->id)){
@@ -837,13 +837,13 @@ class skillLibraryController extends Controller
                         'updated_by'=> $request->user_id,
                         'updated_at'=>now(),
                     ];
-                    $insert = userJobroleModel::where('id',$checkExists->id)->update($insertArray);
+                    $insert = skillJobroleMap::where('id',$checkExists->id)->update($insertArray);
                     $i++;
                }
 
-            //    $res['userJobroleData'] = userJobroleModel::where('skill_id',$id)->where('sub_institute_id',$request->sub_institute_id)->whereNull('deleted_at')->get();
+            //    $res['userJobroleData'] = skillJobroleMap::where('skill_id',$id)->where('sub_institute_id',$request->sub_institute_id)->whereNull('deleted_at')->get();
 
-                $res['userJobroleData'] = userJobroleModel::with([
+                $res['userJobroleData'] = skillJobroleMap::with([
                     'userSkills' => fn($q) => $q->select($skillFields),
                     'createdUser' => fn($q) => $q->select($createdUser),
                 ])
@@ -1149,7 +1149,7 @@ class skillLibraryController extends Controller
         }
         $i=0;
         if($request->formType=="jobrole"){
-            $delete = userJobroleModel::where('id',$id)->update(['deleted_at'=>now(),'deleted_by'=>$request->user_id]);
+            $delete = skillJobroleMap::where('id',$id)->update(['deleted_at'=>now(),'deleted_by'=>$request->user_id]);
             if($delete){
                 $i++;
             }
@@ -1162,7 +1162,7 @@ class skillLibraryController extends Controller
         }
         if($request->has('formType') && $request->formType=="jobrole"){
 
-            $delete = userJobroleModel::where('id',$id)->update(['deleted_at'=>now(),'deleted_by'=>$request->user_id]);
+            $delete = skillJobroleMap::where('id',$id)->update(['deleted_at'=>now(),'deleted_by'=>$request->user_id]);
             if($delete){
                 $i++;
             }
