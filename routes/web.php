@@ -5,6 +5,7 @@ use App\Http\Controllers\auth\authController;
 use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\libraries\skillLibraryController;
 use App\Http\Controllers\libraries\jobroleLibraryController;
+use App\Http\Controllers\libraries\SkillMatrixController;
 use App\Http\Controllers\custom_module\CustomModuleController;
 use App\Http\Controllers\school_setup\masterSetupController;
 use App\Http\Controllers\school_setup\sub_std_mapController;
@@ -63,6 +64,8 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::post('/create-view-store/{id}',[CustomModuleController::class,'crudStore'])->name('custom_module_crud.store');
     Route::delete('/view-delete/{id}',[CustomModuleController::class,'viewDelete'])->name('custom_module_crud.delete');
     Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
+     Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
+    Route::post('/matrix/save', [SkillMatrixController::class, 'store'])->name('matrix.save');
 });
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 

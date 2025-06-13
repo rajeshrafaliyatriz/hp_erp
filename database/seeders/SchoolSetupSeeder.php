@@ -29,7 +29,7 @@ class SchoolSetupSeeder extends Seeder
             'syear' => '2025',
             'expire_date' => now()->addYear()->toDateString(),
             'given_space_mb' => 2048,
-            'institute_type' => 'Hospital Management',
+            'institute_type' => 'Healthcare',
             'created_at' => now(),
         ]);
     }

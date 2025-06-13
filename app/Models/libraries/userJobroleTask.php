@@ -1,10 +1,13 @@
 <?php
 
 namespace App\Models\libraries;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\libraries\userSkills;
 use App\Models\auth\tbluserModel;
+use App\Models\libraries\userJobroleModel;
+
 
 use Illuminate\Database\Eloquent\Model;
 
@@ -15,4 +18,15 @@ class userJobroleTask extends Model
 
     protected $table = "s_user_jobrole_task";
     protected $softDelete = true;
+    public function createdUser()
+    {
+        return $this->belongsTo(tbluserModel::class, 'created_by', 'id')
+            ->select(['id', 'first_name', 'middle_name', 'last_name']);
+    }
+
+    public function userJobrole()
+    {
+        return $this->belongsTo(userJobroleModel::class, 'created_by', 'jobrole')
+            ->select(['id', 'jobrole', 'description']);
+    }
 }

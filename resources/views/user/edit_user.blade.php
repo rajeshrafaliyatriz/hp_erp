@@ -58,8 +58,10 @@ br {
                             @if(!empty($data['salary_structure']))
                             <li class="nav-item"><a href="#section-linemove-3" class="nav-link" aria-selected="false" data-toggle="tab"><span>Salary</span></a></li>
                             @endif
-                           
-                            <li class="nav-item"><a href="#section-linemove-4" class="nav-link" aria-selected="false" data-toggle="tab"><span>My Skills & Certifications</span></a></li>
+
+                           <li class="nav-item"><a href="#section-linemove-4" class="nav-link" aria-selected="false" data-toggle="tab"><span>Skills Ratings Skills</span></a></li>
+
+                            <li class="nav-item"><a href="#section-linemove-5" class="nav-link" aria-selected="false" data-toggle="tab"><span>My Skills & Certifications</span></a></li>
                             {{-- @if(session()->get('sub_institute_id')==47)
                             <li class="nav-item"><a href="#section-linemove-5" class="nav-link" aria-selected="false" data-toggle="tab"><span>Contact Details</span></a></li>
                             @endif --}}
@@ -77,7 +79,7 @@ br {
                     $job_titles = $data['job_titles'];
                     $user_profiles = $data['user_profiles'];
                     $subject_data = $data['subject_data'];
-                    $standardLists = $data['standardLists'];
+                    $jobroleList = $data['jobroleList'];
                     $subject_data_selected_arr = $data['subject_data_selected_arr'];
                     $custom_fields = $data['custom_fields'];
                     $data_fields = $data['data_fields'] ?? [];
@@ -85,6 +87,10 @@ br {
                     $salary_deposit = $data['salary_deposit'];
                     $SalaryStructure = $data['salary_structure'];
                     $contactDetails = $data['contactDetails'];
+                    $skills = $data['skills'];
+                    $completedCount = $data['completedCount'];
+                    $totalSkills = $data['totalSkills'];
+                    $progress = $data['progress'];
                     $data = $data['data'];
                     @endphp
                     <!-- tabs starts  -->
@@ -146,15 +152,11 @@ br {
                             </div>
                             <!-- // 10-01-2025 start supervisor rights -->
                             <div class="col-md-4" class="form-group">
-                                <label for="allocate_standard">Allocate Standard</label>
-                                <select name="allocated_standards[]" id="allocated_standards" class="form-control resizableVertical" multiple>
-                                    @php 
-                                        $allocatedStd = (isset($data['allocated_standards']) && $data['allocated_standards']!='') ? explode(',',$data['allocated_standards']) : [];
-                                    @endphp
-
-                                    @if(!empty($standardLists))
-                                    @foreach($standardLists as $sk => $sv)
-                                       <option value="{{$sv['id']}}" @if(in_array($sv['id'],$allocatedStd)) selected @endif>{{$sv['name']}}</option>
+                                <label for="allocate_standard">Jobrole</label>
+                                <select name="allocated_standards" id="Jobrole" class="form-control resizableVertical">
+                                 @if(!empty($jobroleList))
+                                    @foreach($jobroleList as $sk => $sv)
+                                       <option value="{{$sv['id']}}" @if(isset($data['allocated_standards']) && $data['allocated_standards']==$sv['id']) selected @endif>{{$sv['jobrole']}}</option>
                                     @endforeach
                                     @endif
                                 </select>
@@ -239,7 +241,7 @@ br {
                             @endif
                             <div class="col-md-4 form-group">
                                 <label>Password</label>
-                                <input type="password" value="@if(isset($data['password'])){{ $data['password'] }}@endif" id='password' required name="password" class="form-control">
+                                <input type="password" value="@if(isset($data['plain_password'])){{ $data['plain_password'] }}@endif" id='password' required name="password" class="form-control">
                             </div>
                             <div class="col-md-4 form-group">
                                 <label>Birthdate</label>
@@ -705,12 +707,12 @@ br {
                     <!-- tab 4 ends  -->
                      <!-- tab 4 start  -->
                     <div class="tab-pane p-3" id="section-linemove-4" role="tabpanel">
-                        @include('lms.triz_skills')
+                        @include('user.selfSkillRating')
                     </div>
                     <!-- tab 4 ends  -->
                     <!-- tab 5 start  -->
                     <div class="tab-pane p-3" id="section-linemove-5" role="tabpanel">
-                        {{-- @include('user.contactDetails') --}}
+                        @include('lms.triz_skills')
                     </div>
                     <!-- tab 5 ends  -->
                 </div>

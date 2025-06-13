@@ -36,7 +36,7 @@ class authController extends Controller
 
         // Fetch user by email
         $user = tbluserModel::where('email', $email)->first();
-
+        // echo "<pre>";print_r($user);exit;
         if (!$user || !Hash::check($password, $user->password)) {
             return response()->json([
             'status_code' => 0,
@@ -281,6 +281,6 @@ class authController extends Controller
 
     public function menu_lists(Request $request)
     {
-         return is_mobile($type, 'login', $res, "view");
+        return "hello";
     }
 }
