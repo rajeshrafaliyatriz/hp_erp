@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use  App\Models\school_setup\standardModel;
 use Illuminate\Support\Facades\Hash;
+use App\Models\libraries\userJobroleModel;
+use Illuminate\Support\Str;
+use App\Models\skill\skill;
+use App\Models\skill\matrix;
 
 class tbluserController extends Controller
 {
@@ -226,13 +230,29 @@ class tbluserController extends Controller
                 if (is_array($value)) {
                     $value = implode(",", $value);
                 }
+
+                // Convert time fields to HH:MM:SS
+                if (Str::endsWith($key, '_in_date') || Str::endsWith($key, '_out_date')) {
+                    if (!empty($value)) {
+                        $value = date('H:i:s', strtotime($value));
+                    } else {
+                        $value = null;
+                    }
+                }
+
                 $finalArray[$key] = $value;
             }
-            if ($key=="password") {
+
+            if ($key == "password") {
                 $finalArray[$key] = Hash::make($value);
                 $finalArray['plain_password'] = $value;
             }
+
+            if ($key == "birthdate") {
+                $finalArray[$key] = date('Y-m-d', strtotime($value));
+            }
         }
+
         $finalArray['updated_at'] = now();
         $finalArray['updated_by'] = session()->get('user_id');
         return tbluserModel::where(['id' => $user_id])->update($finalArray);
@@ -379,7 +399,12 @@ class tbluserController extends Controller
             // dd(db::getQueryLog($res['contactDetails']));
         $res['data'] = $editData;
         // 10-01-2025 start supervisor rights
-        $res['standardLists'] = standardModel::where('sub_institute_id',$sub_institute_id)->orderBy('sort_order')->get()->toArray();
+        $res['jobroleList'] = userJobroleModel::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get()->toArray();
+        $user_id = $request->session()->get('user_id');
+        $res['skills']=$skills = skill::all();
+        $res['completedCount']=$completedCount = matrix::where('user_id', $user_id)->count();
+        $res['totalSkills']=$totalSkills = $skills->count();
+        $res['progress']=$progress = $totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
         // 10-01-2025 end supervisor rights
         // echo "<pre>";print_r($res['contactDetails']);exit;
         return is_mobile($type, "user/edit_user", $res, "view");
