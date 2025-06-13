@@ -18,6 +18,7 @@ use App\Models\libraries\userApplication;
 use App\Models\DynamicModel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 
 class skillLibraryController extends Controller
 {
@@ -61,27 +62,26 @@ class skillLibraryController extends Controller
         // ->toArray();
 
         // Build base query with eager loading and index optimization
-        $skillData = industryModel::from('s_industries as a')
-            ->select('c.*')
-            ->join('s_jobrole_skills as b', function ($join) {
-                $join->on('b.sector', '=', 'a.department')
-                    ->on('a.sub_department', '=', 'b.track')
-                    ->useIndex('idx_sector_track'); // Assuming index exists
-            })
-            ->join('master_skills as c', 'c.title', '=', 'b.skill')
-            ->where('a.industries', 'like', '%' . $request->org_type . '%')
-            // Apply filters conditionally using single when chain
-            ->when($request->filled(['department', 'sub_department']), function ($query) use ($request) {
-                return $query->where('a.department', $request->department)
-                    ->whereIn('a.sub_department', explode(',', $request->sub_department));
-            }, function ($query) use ($request) {
-                // If only department is present
-                return $query->when($request->has('department'), function ($q) use ($request) {
-                    return $q->where('a.department', $request->department);
-                });
-            })
-            ->remember(60) // Cache results for 1 minute
-            ->get();
+        $skillData = Cache::remember('skillData_' . md5(json_encode($request->all())), 60, function () use ($request) {
+            return industryModel::from('s_industries as a')
+                ->select('c.*')
+                ->join('s_jobrole_skills as b', function ($join) {
+                    $join->on('b.sector', '=', 'a.department')
+                        ->on('a.sub_department', '=', 'b.track')
+                        ->useIndex('idx_sector_track');
+                })
+                ->join('master_skills as c', 'c.title', '=', 'b.skill')
+                ->where('a.industries', 'like', '%' . $request->org_type . '%')
+                ->when($request->filled(['department', 'sub_department']), function ($query) use ($request) {
+                    return $query->where('a.department', $request->department)
+                        ->whereIn('a.sub_department', explode(',', $request->sub_department));
+                }, function ($query) use ($request) {
+                    return $query->when($request->has('department'), function ($q) use ($request) {
+                        return $q->where('a.department', $request->department);
+                    });
+                })
+                ->get();
+        });
 
         // echo "<pre>";print_r($skillData);exit;
         // $skills = DB::table('s_jobrole')->get();
