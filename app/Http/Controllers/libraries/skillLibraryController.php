@@ -73,14 +73,12 @@ class skillLibraryController extends Controller
                 })
                 // ->join('master_skills as c', 'c.title', '=', 'b.skill')
                 ->where('a.industries', $request->org_type)
-                ->when($request->filled(['department', 'sub_department']), function ($query) use ($request) {
-                    return $query->where('a.department', $request->department)
-                        ->whereIn('a.sub_department', explode(',', $request->sub_department));
-                }, function ($query) use ($request) {
-                    return $query->when($request->has('department'), function ($q) use ($request) {
-                        return $q->where('a.department', $request->department);
-                    });
+                ->when($request->has('department'), function ($q) use ($request) {
+                    $q->where('a.department', $request->department);
                 })
+                ->when($request->has('sub_department'), function ($q) use ($request) {
+                    $q->whereIn('a.sub_department', explode(',',$request->sub_department));
+                })  
                 ->groupBy('b.skill')
                 ->get();
 
