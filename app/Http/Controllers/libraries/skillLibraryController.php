@@ -119,9 +119,9 @@ class skillLibraryController extends Controller
                 $q->groupBy('department');
             });
 
-        $userSkills = userSkills::where('status', 'Active')
-            ->where('sub_institute_id', $request->sub_institute_id)
+        $userSkills = userSkills::where('sub_institute_id', $request->sub_institute_id)
             ->where('approve_status', 'Approved')
+            // ->where('status', 'Active')
             ->get();
         // return $userSkills
         $userTree = [];
@@ -409,6 +409,7 @@ class skillLibraryController extends Controller
         }
         $i = 0;
         if ($request->formType == "master") {
+
             $skillData = industryModel::from('s_industries as a')
                 ->join('s_jobrole_skills as b', function ($join) {
                     $join->on('b.sector', '=', 'a.department')
