@@ -62,16 +62,17 @@ class skillLibraryController extends Controller
         // ->toArray();
 
         // Build base query with eager loading and index optimization
-        $skillData = Cache::remember('skillData_' . md5(json_encode($request->all())), 60, function () use ($request) {
-            return industryModel::from('s_industries as a')
-                ->select('c.*')
+      $cacheKey = 'skillData_' . md5(json_encode($request->all()));
+
+        $AllskillData = industryModel::from('s_industries as a')
+                // ->select('c.*')
                 ->join('s_jobrole_skills as b', function ($join) {
                     $join->on('b.sector', '=', 'a.department')
                         ->on('a.sub_department', '=', 'b.track')
                         ->useIndex('idx_sector_track');
                 })
-                ->join('master_skills as c', 'c.title', '=', 'b.skill')
-                ->where('a.industries', 'like', '%' . $request->org_type . '%')
+                // ->join('master_skills as c', 'c.title', '=', 'b.skill')
+                ->where('a.industries', $request->org_type)
                 ->when($request->filled(['department', 'sub_department']), function ($query) use ($request) {
                     return $query->where('a.department', $request->department)
                         ->whereIn('a.sub_department', explode(',', $request->sub_department));
@@ -80,9 +81,23 @@ class skillLibraryController extends Controller
                         return $q->where('a.department', $request->department);
                     });
                 })
+                ->groupBy('b.skill')
                 ->get();
-        });
 
+        $skillData = [];
+        foreach($AllskillData as $key=>$values){
+            $skill = DB::table('master_skills')
+                ->where('title', $values->skill)
+                ->select('id', 'category', 'sub_category', 'title', 'description', 'status', 'related_skills', 'bussiness_links', 'custom_tags', 'proficiency_level', 'job_titles', 'learning_resources', 'assesment_method', 'certification_qualifications', 'experience_project', 'skill_maps')
+                ->first();
+
+            if ($skill) {
+                $skillData[] = (array) $skill + [
+                    'department' => $values->department,
+                    'sub_department' => $values->sub_department,
+                ];
+            }
+        }
         // echo "<pre>";print_r($skillData);exit;
         // $skills = DB::table('s_jobrole')->get();
 
@@ -315,20 +330,40 @@ class skillLibraryController extends Controller
                 });
         } else {
 
-            $skillData = industryModel::from('s_industries as a')
+           $AllskillData = industryModel::from('s_industries as a')
+                // ->select('c.*')
                 ->join('s_jobrole_skills as b', function ($join) {
                     $join->on('b.sector', '=', 'a.department')
-                        ->on('a.sub_department', '=', 'b.track');
+                        ->on('a.sub_department', '=', 'b.track')
+                        ->useIndex('idx_sector_track');
                 })
-                ->join('master_skills as c', 'c.title', '=', 'b.skill')
-                ->where('a.industries', 'like', '%' . $request->org_type . '%')
-                ->when($request->has('category'), function ($q) use ($request) {
-                    $q->where('c.category', $request->category)->groupBy('c.sub_category');
-                }, function ($q) {
-                    $q->groupBy('c.category');
+                // ->join('master_skills as c', 'c.title', '=', 'b.skill')
+                ->where('a.industries', $request->org_type)
+                ->when($request->filled(['department', 'sub_department']), function ($query) use ($request) {
+                    return $query->where('a.department', $request->department)
+                        ->whereIn('a.sub_department', explode(',', $request->sub_department));
+                }, function ($query) use ($request) {
+                    return $query->when($request->has('department'), function ($q) use ($request) {
+                        return $q->where('a.department', $request->department);
+                    });
                 })
-                ->select('c.*')
+                ->groupBy('b.skill')
                 ->get();
+
+            $skillData = [];
+            foreach($AllskillData as $key=>$values){
+                $skill = DB::table('master_skills')
+                    ->where('title', $values->skill)
+                    ->select('id', 'category', 'sub_category', 'title', 'description', 'status', 'related_skills', 'bussiness_links', 'custom_tags', 'proficiency_level', 'job_titles', 'learning_resources', 'assesment_method', 'certification_qualifications', 'experience_project', 'skill_maps')
+                    ->first();
+
+                if ($skill) {
+                    $skillData[] = (array) $skill + [
+                        'department' => $values->department,
+                        'sub_department' => $values->sub_department,
+                    ];
+                }
+            }
 
             $res['skillData'] = $skillData;
 
