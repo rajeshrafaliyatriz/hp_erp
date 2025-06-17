@@ -267,6 +267,7 @@ class jobroleLibraryController extends Controller
 
             // Check if the job role already exists for this institute
             $jobData = jobroleModel::where('id', $request->jobroleId)->first();
+            // return $jobData;exit;
             $jobExists = UserJobroleModel::where('jobrole', $request->jobrole)
                 ->where('sub_institute_id', $request->sub_institute_id)
                 ->whereNull('deleted_at')
@@ -284,6 +285,8 @@ class jobroleLibraryController extends Controller
                 $lastInsertedId  = userJobroleModel::insert($insertData);
                 // If jobrole inserted successfully
                 if ($lastInsertedId && $lastInsertedId != 0) {
+                     $jobroleLastInserted = userJobroleModel::where('id', $lastInsertedId)->first();
+                    // add skill related jobrole
                     $getSkillsExists = skillJobroleMap::where('jobrole', $request->jobrole)
                         ->where('sub_institute_id', $request->sub_institute_id)
                         ->whereNull('deleted_at')
@@ -292,7 +295,8 @@ class jobroleLibraryController extends Controller
                     if (!$getSkillsExists) {
                         $getAllJobrolesSkill = DB::table('s_jobrole_skills as a')
                             ->join('master_skills as b', 'b.title', '=', 'a.skill')
-                            ->where('a.jobrole', $request->jobrole)
+                            ->where('a.jobrole', $jobData->jobrole)
+                            ->where('a.track', $jobData->track)
                             ->get()
                             ->toArray();
                         foreach ($getAllJobrolesSkill as $key => $value) {
@@ -308,80 +312,89 @@ class jobroleLibraryController extends Controller
                             $skilArr['created_at'] = now();
                             $skilArr['status'] = 'Active';
                             $skilArr['approve_status'] = "approved";
+                            // check not exists
+                            $checkSkillExits = userSkills::where([
+                                "category" => $value->category,
+                                "sub_category" => $value->sub_category,
+                                "title" => $value->title
+                            ]);
 
-                            $lastSkillId  = userSkills::insertGetId($skilArr);
-                            // If skill inserted successfully
-                            if ($lastSkillId && $lastSkillId != 0) {
-                                $skillName = userSkills::where('id', $lastSkillId)->value('title');
-                                $getAllJobrolesSkill = DB::table('s_jobrole_skills')->where('skill', $skillName)->get()->toArray();
-                                if (!empty($getAllJobrolesSkill)) {
-                                    foreach ($getAllJobrolesSkill as $jk => $jv) {
-                                        $insertArray = [
-                                            'skill_id' => $lastSkillId,
-                                            'jobrole' => $jv->jobrole,
-                                            'description' => null,
-                                            'sub_institute_id' => $request->sub_institute_id,
-                                            'created_by' => $request->user_id,
-                                            'created_at' => now(),
-                                        ];
-                                        $insert = skillJobroleMap::insert($insertArray);
-                                    }
-
-                                    // Insert knowledge abilities
-                                    $knowledgeArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title', $skillName)->where('knowledge_ability_classification', 'knowledge')->groupBy('knowledge_ability_items')->get()->toArray();
-                                    if (!empty($knowledgeArr)) {
-                                        foreach ($knowledgeArr as $jk => $jv) {
-                                            $knowledgeInsert = [
-                                                'skill_id' => $lastSkillId,
-                                                'proficiency_level' => $jv->proficiency_level,
-                                                'classification' => 'knowledge',
-                                                'classification_item' => $jv->knowledge_ability_items,
-                                                'sub_institute_id' => $request->sub_institute_id,
-                                                'created_by' => $request->user_id,
-                                                'created_at' => now(),
-                                            ];
-                                            $insert = userKnowledgeAbility::insert($knowledgeInsert);
-                                        }
-                                    }
-
-                                    // Insert ability abilities
-                                    $abilityArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title', $skillName)->where('knowledge_ability_classification', 'ability')->groupBy('knowledge_ability_items')->get()->toArray();
-                                    if (!empty($abilityArr)) {
-                                        foreach ($abilityArr as $jk => $jv) {
-                                            $abilityInsert = [
-                                                'skill_id' => $lastSkillId,
-                                                'proficiency_level' => $jv->proficiency_level,
-                                                'classification' => 'ability',
-                                                'classification_item' => $jv->knowledge_ability_items,
-                                                'sub_institute_id' => $request->sub_institute_id,
-                                                'created_by' => $request->user_id,
-                                                'created_at' => now(),
-                                            ];
-                                            $insert = userKnowledgeAbility::insert($abilityInsert);
-                                        }
-                                    }
-
-                                    // Insert jobrole tasks
-                                    $jobroleTask = DB::table('s_jobrole_task')->where('jobrole', $request->jobrole)->get()->toArray();
-                                    if (!empty($jobroleTask)) {
-                                        foreach ($jobroleTask as $jk => $jv) {
-                                            $taskInsert = [
-                                                'sector' => $jv->sector,
-                                                'track' => $jv->track,
+                            if (!$checkSkillExits->exists()) {
+                                $lastSkillId  = userSkills::insertGetId($skilArr);
+                                // If skill inserted successfully
+                                if ($lastSkillId && $lastSkillId != 0) {
+                                    $skillName = userSkills::where('id', $lastSkillId)->value('title');
+                                    $getAllJobrolesSkill = DB::table('s_jobrole_skills')->where('jobrole', $request->jobrole)->where('skill', $skillName)->get()->toArray();
+                                    if (!empty($getAllJobrolesSkill)) {
+                                        foreach ($getAllJobrolesSkill as $jk => $jv) {
+                                            $insertArray = [
+                                                'skill' => $skillName,
                                                 'jobrole' => $jv->jobrole,
-                                                'critical_work_function' => $jv->critical_work_function,
-                                                'task' => $jv->task,
+                                                'proficiency_level' => $jv->proficiency_level,
                                                 'sub_institute_id' => $request->sub_institute_id,
                                                 'created_by' => $request->user_id,
                                                 'created_at' => now(),
                                             ];
-                                            $insert = userJobroleTask::insert($taskInsert);
+                                            $insert = skillJobroleMap::insert($insertArray);
+                                        }
+
+                                        // Insert knowledge abilities
+                                        $knowledgeArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title', $skillName)->where('knowledge_ability_classification', 'knowledge')->groupBy('knowledge_ability_items')->get()->toArray();
+                                        if (!empty($knowledgeArr)) {
+                                            foreach ($knowledgeArr as $jk => $jv) {
+                                                $knowledgeInsert = [
+                                                    'skill_id' => $lastSkillId,
+                                                    'proficiency_level' => $jv->proficiency_level,
+                                                    'classification' => 'knowledge',
+                                                    'classification_item' => $jv->knowledge_ability_items,
+                                                    'sub_institute_id' => $request->sub_institute_id,
+                                                    'created_by' => $request->user_id,
+                                                    'created_at' => now(),
+                                                ];
+                                                $insert = userKnowledgeAbility::insert($knowledgeInsert);
+                                            }
+                                        }
+
+                                        // Insert ability abilities
+                                        $abilityArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title', $skillName)->where('knowledge_ability_classification', 'ability')->groupBy('knowledge_ability_items')->get()->toArray();
+                                        if (!empty($abilityArr)) {
+                                            foreach ($abilityArr as $jk => $jv) {
+                                                $abilityInsert = [
+                                                    'skill_id' => $lastSkillId,
+                                                    'proficiency_level' => $jv->proficiency_level,
+                                                    'classification' => 'ability',
+                                                    'classification_item' => $jv->knowledge_ability_items,
+                                                    'sub_institute_id' => $request->sub_institute_id,
+                                                    'created_by' => $request->user_id,
+                                                    'created_at' => now(),
+                                                ];
+                                                $insert = userKnowledgeAbility::insert($abilityInsert);
+                                            }
+                                        }
+
+                                        // Insert jobrole tasks
+                                        $jobroleTask = DB::table('s_jobrole_task')->where('jobrole', $request->jobrole)->get()->toArray();
+                                        if (!empty($jobroleTask)) {
+                                            foreach ($jobroleTask as $jk => $jv) {
+                                                $taskInsert = [
+                                                    'sector' => $jv->sector,
+                                                    'track' => $jv->track,
+                                                    'jobrole' => $jv->jobrole,
+                                                    'critical_work_function' => $jv->critical_work_function,
+                                                    'task' => $jv->task,
+                                                    'sub_institute_id' => $request->sub_institute_id,
+                                                    'created_by' => $request->user_id,
+                                                    'created_at' => now(),
+                                                ];
+                                                $insert = userJobroleTask::insert($taskInsert);
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
+
                 }
             }
             $i++;
@@ -602,7 +615,7 @@ class jobroleLibraryController extends Controller
                     $lastInsertedId = userSkills::insertGetId($insertData);
                     if ($lastInsertedId && $lastInsertedId != 0) {
                         $insertArray = [
-                            'skill_id' => $lastInsertedId,
+                            'skill' => $skillName,
                             'jobrole' => $request->jobrole,
                             'description' => null,
                             'sub_institute_id' => $request->sub_institute_id,

@@ -21,7 +21,7 @@ return new class extends Migration
             $table->string('icon')->nullable();
             $table->boolean('status')->default(1)->index();
             $table->integer('sort_order')->default(1);
-            $table->mediumText('sub_institute_id')->nullable();
+            $table->text('sub_institute_id')->nullable();
             $table->string('menu_type')->nullable()->index();
              $table->softDeletes();
             $table->timestamps();

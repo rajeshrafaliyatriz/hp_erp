@@ -89,6 +89,10 @@ class AJAXController extends Controller
                 }
             }
         }
+        // get entry sort_order wise
+        if($request->has('sort_order') && $request->sort_order!=''){
+            $query->orderBy($request->sort_order);
+        }
 
         // Fetch data
         try {

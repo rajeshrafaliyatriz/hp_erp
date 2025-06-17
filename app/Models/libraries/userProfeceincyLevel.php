@@ -13,7 +13,7 @@ class userProfeceincyLevel extends Model
     //
     use HasFactory, SoftDeletes;
 
-    protected $table = "proficiency_levels";
+    protected $table = "s_proficiency_levels";
     protected $softDelete = true;
 
     public function userSkills()

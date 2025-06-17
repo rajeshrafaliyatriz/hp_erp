@@ -22,12 +22,10 @@ use Illuminate\Support\Facades\Cache;
 
 class skillLibraryController extends Controller
 {
-    // on loading the skill library page in nextJs this data will be displayed
-    // this is the index function which will be called when the skill library page is loaded
+    //
     public function index(Request $request)
     {
-        $type = $request->type; // always required to define response type
-        // if type is API sanctun token is require otherwise it will throw an error
+        $type = $request->type;
         if ($type == 'API') {
             $token = $request->input('token');  // get token from input field 'token'
 
@@ -41,17 +39,31 @@ class skillLibraryController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            // validate reuired fields for API requests
             $validator = Validator::make($request->all(), [
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
             ]);
-            // if validation fails it will throw error 
+
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
         }
-        // get master skills from the database on the basis of organization type
+
+        // $skillData = skillLibraryModel::where('industries',$request->org_type)
+        //  ->when($request->has('department'), function ($q) use ($request) {
+        //         $q->where('category', $request->department);
+        //     })
+        //     ->when($request->has('sub_department'), function ($q) use ($request) {
+        //         $q->whereIn('sub_category', explode(',',$request->sub_department));
+        //     })  
+        // ->orderby('category')
+        // ->groupBy('master_skills.id')
+        // ->get()
+        // ->toArray();
+
+        // Build base query with eager loading and index optimization
+      $cacheKey = 'skillData_' . md5(json_encode($request->all()));
+
         $AllskillData = industryModel::from('s_industries as a')
                 // ->select('c.*')
                 ->join('s_jobrole_skills as b', function ($join) {
@@ -71,7 +83,6 @@ class skillLibraryController extends Controller
                 ->get();
 
         $skillData = [];
-        // define skill category and sub_category wise
         foreach($AllskillData as $key=>$values){
             $skill = DB::table('master_skills')
                 ->where('title', $values->skill)
@@ -85,7 +96,9 @@ class skillLibraryController extends Controller
                 ];
             }
         }
-        // convert master skills for tree view 
+        // echo "<pre>";print_r($skillData);exit;
+        // $skills = DB::table('s_jobrole')->get();
+
         $treeData = [];
         foreach ($skillData as $key => $value) {
             if (isset($value['sub_category']) && $value['sub_category'] != null && $value['sub_category'] != '') {
@@ -94,7 +107,7 @@ class skillLibraryController extends Controller
                 $treeData[$value['category']]['no_sub_category'][] = $value;
             }
         }
-        // get all departments and sub_departments from the industries table for select in options
+
         $getSectore = industryModel::where('industries', $request->org_type)
             ->when($request->has('department'), function ($q) use ($request) {
                 $q->where('department', $request->department);
@@ -103,14 +116,12 @@ class skillLibraryController extends Controller
             }, function ($q) {
                 $q->groupBy('department');
             });
-        // get all skills added and imported by users in the their institute
+
         $userSkills = userSkills::where('sub_institute_id', $request->sub_institute_id)
             ->where('approve_status', 'Approved')
             // ->where('status', 'Active')
             ->get();
-        // return $userSkill
-
-        // convert users skills for tree view 
+        // return $userSkills
         $userTree = [];
         foreach ($userSkills as $key => $value) {
             if (isset($value['sub_category']) && $value['sub_category'] != null && $value['sub_category'] != '') {
@@ -119,20 +130,19 @@ class skillLibraryController extends Controller
                 $userTree[$value['category']]['no_sub_category'][] = $value;
             }
         }
-        // get all fetched data and convert it into an array to return response
+
         $res['jobroleSkill'] = $getSectore->get()->toArray();
         $res['allSkillData'] = $treeData;
         $res['tableData'] = $userSkills;
         $res['userSkills'] = $userSkills;
         $res['userTree'] = $userTree;
-        // is_mobile function is from helper.php which helps to return response as per type web or API
+        // echo "<pre>";print_r($userSkills);exit;
         return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 
-    // create function is used to fetch data and display it in table or other tpye of view
     public function create(Request $request)
     {
-        $type = $request->type; // always required to define response type
+        $type = $request->type;
         if ($type == 'API') {
             $token = $request->input('token');  // get token from input field 'token'
 
@@ -146,40 +156,45 @@ class skillLibraryController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            // validate reuired fields for API requests
             $validator = Validator::make($request->all(), [
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
             ]);
-            // if validation fails it will throw error 
+
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
         }
-        // below variables are used for model data fetching which have foreign key relations
+
         $skillFields = ['id', 'category', 'sub_category', 'title'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
-        // if user have added levels then display those levels
-        $proficiency_level = userProfeceincyLevel::where('skill_id', $request->skill_id)
-            ->where('sub_institute_id', $request->sub_institute_id)
-            ->whereNull('deleted_at')
-            ->get();
-        // if user have not added levels then display default levels aded by scholarclone
-        if ($proficiency_level->isEmpty()) {
-            $proficiency_level = userProfeceincyLevel::whereNull('skill_id')
-                ->whereNull('sub_institute_id')
-                ->whereNull('deleted_at')
-                ->get();
-        }
+        $jobroleFields = ['id', 'jobrole', 'description'];
+
+        $proficiency_level = userProfeceincyLevel::where(function($query) use ($request) {
+            $query->where('skill_id', $request->skill_id)
+                ->where('sub_institute_id', $request->sub_institute_id);
+        })
+        ->orWhere(function($query) {
+            $query->whereNull('skill_id')
+                ->whereNull('sub_institute_id');
+        })
+        ->whereNull('deleted_at')
+        ->get();
+        
         $res['proficiency_levels'] = $proficiency_level;
-        // if fromType is jobrole then fetch jobrole data to display in jobrole table
         if ($request->has('formType') && $request->formType == "jobrole") {
+            // getskill name first 
+            $skillName = userSkills::where('id', $request->skill_id)
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNull('deleted_at')
+                ->value('title');
 
             $res['userJobroleData'] = skillJobroleMap::with([
                 'userSkills' => fn($q) => $q->select($skillFields),
                 'createdUser' => fn($q) => $q->select($createdUser),
+                'userJobrole' => fn($q) => $q->select($jobroleFields),
             ])
-                ->where('skill_id', $request->skill_id)
+                ->where('skill', $skillName)
                 ->where('sub_institute_id', $request->sub_institute_id)
                 ->whereNull('deleted_at')
                 ->get()
@@ -197,14 +212,14 @@ class skillLibraryController extends Controller
                         $data['middle_name'] = $item->createdUser->middle_name;
                         $data['last_name'] = $item->createdUser->last_name;
                     }
-
-                    unset($data['user_skills'], $data['created_user']);
+                    if ($item->userJobrole) {
+                        $data['description'] = $item->userJobrole->description;
+                    }
+                    unset($data['user_skills'], $data['created_user'],$data['userJobrole']);
 
                     return $data;
                 });
-        } 
-        // if fromType is proficiency_level then fetch proficiency_level data to display in proficiency_level table
-        else if ($request->has('formType') && $request->formType == "proficiency_level") {
+        } else if ($request->has('formType') && $request->formType == "proficiency_level") {
             $res['userproficiency_levelData'] = userProfeceincyLevel::with([
                 'userSkills' => fn($q) => $q->select($skillFields),
                 'createdUser' => fn($q) => $q->select($createdUser),
@@ -232,9 +247,13 @@ class skillLibraryController extends Controller
 
                     return $data;
                 });
-        } 
-        // if fromType is knowledge then fetch knowledge data to display in knowledge table
-        else if ($request->has('formType') && $request->formType == "knowledge") {
+            if(empty($res['userproficiency_levelData'])){
+                $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
+                    ->whereNull('sub_institute_id')
+                    ->whereNull('deleted_at')
+                    ->get();
+            }
+        } else if ($request->has('formType') && $request->formType == "knowledge") {
             $res['userKnowledgeData'] = userKnowledgeAbility::with([
                 'userSkills' => fn($q) => $q->select($skillFields),
                 'createdUser' => fn($q) => $q->select($createdUser),
@@ -263,9 +282,7 @@ class skillLibraryController extends Controller
 
                     return $data;
                 });
-        } 
-        // if fromType is ability then fetch ability data to display in ability table
-        else if ($request->has('formType') && $request->formType == "ability") {
+        } else if ($request->has('formType') && $request->formType == "ability") {
             $res['userabilityData'] = userKnowledgeAbility::with([
                 'userSkills' => fn($q) => $q->select($skillFields),
                 'createdUser' => fn($q) => $q->select($createdUser),
@@ -295,7 +312,7 @@ class skillLibraryController extends Controller
                     return $data;
                 });
         }
-        // if fromType is application then fetch application data to display in application table
+        // userApplication
         else if ($request->has('formType') && $request->formType == "application") {
             $res['userApplicationData'] = userApplication::with([
                 'userSkills' => fn($q) => $q->select($skillFields),
@@ -324,9 +341,8 @@ class skillLibraryController extends Controller
 
                     return $data;
                 });
-        } 
-        // if fromType is users then fetch users data to display in users table
-        else {
+        } else {
+
            $AllskillData = industryModel::from('s_industries as a')
                 // ->select('c.*')
                 ->join('s_jobrole_skills as b', function ($join) {
@@ -367,15 +383,13 @@ class skillLibraryController extends Controller
             // $proficiency_level = DynamicModel::readRecords('z_master_select')->where('select_name','Proficiency Level');
             // $res['proficiency_levels'] = $proficiency_level;
         }
-        // is_mobile function is from helper.php which helps to return response as per type web or API
         return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 
-    // store imported and added data into database
     public function store(Request $request)
     {
         // return $request;exit;
-        $type = $request->type;  // always required to define response type
+        $type = $request->type;
         if ($type == 'API') {
             $token = $request->input('token');  // get token from input field 'token'
 
@@ -389,7 +403,7 @@ class skillLibraryController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            // validate reuired fields for API requests
+
             $validator = Validator::make($request->all(), [
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
@@ -397,20 +411,18 @@ class skillLibraryController extends Controller
                 'user_id' => 'required',
                 'formType' => 'required',
             ]);
-            // if validation fails it will throw error 
+
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
         }
-        // defined skills status
         $appStatus = 'Pending';
         if ($request->user_profile_name == "Admin") {
             $appStatus = 'Approved';
         }
         $i = 0;
-        // if fromType is master then store imported master data to display in skill table
         if ($request->formType == "master") {
-            // get selected master skill from master table to get mapped other data
+
             $skillData = industryModel::from('s_industries as a')
                 ->join('s_jobrole_skills as b', function ($join) {
                     $join->on('a.sub_department', '=', 'b.track');
@@ -430,7 +442,7 @@ class skillLibraryController extends Controller
                 ->selectRaw('c.*,a.department,a.sub_department')
                 ->get();
             // return $skillData;exit;
-           // run foreach loop to insert each skill data into userSkills table
+            // return $request;
             foreach ($skillData as $key => $value) {
                 $industries = $request->org_type;
                 $category = $value['category'];
@@ -479,23 +491,22 @@ class skillLibraryController extends Controller
                     $insertArray['skill_maps'] = $value['skill_maps'];
 
                     $lastInsertedId  = userSkills::insertGetId($insertArray);
-                    // get last inserted id to insert into other tables
+
                     if ($lastInsertedId && $lastInsertedId != 0) {
-                        // add 7 levels of proficiency level
                         $getAllJobrolesSkill = DB::table('s_jobrole_skills')->where('skill', $skillName)->get()->toArray();
                         if (!empty($getAllJobrolesSkill)) {
                             foreach ($getAllJobrolesSkill as $jk => $jv) {
                                 $insertArray = [
-                                    'skill_id' => $lastInsertedId,
+                                    'skill' => $skillName,
                                     'jobrole' => $jv->jobrole,
-                                    'description' => null,
+                                    // 'description' => null,
                                     'sub_institute_id' => $request->sub_institute_id,
                                     'created_by' => $request->user_id,
                                     'created_at' => now(),
                                 ];
                                 $insert = skillJobroleMap::insert($insertArray);
                             }
-                            // get all proficiency levels from s_skill_map_k_a table
+
                             $proficiencyLevelArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title', $skillName)->groupBy('proficiency_level')->get()->toArray();
                             if (!empty($proficiencyLevelArr)) {
                                 foreach ($proficiencyLevelArr as $jk => $jv) {
@@ -510,7 +521,7 @@ class skillLibraryController extends Controller
                                     $insert = userProfeceincyLevel::insert($insertArray);
                                 }
                             }
-                            // get all knowledge and ability items from s_skill_map_k_a table
+
                             $knowledgeArr = DB::table('s_skill_map_k_a')
                                 ->where('tsc_ccs_title', $skillName)
                                 ->where('knowledge_ability_classification', 'knowledge')
@@ -520,7 +531,7 @@ class skillLibraryController extends Controller
                             if (!empty($knowledgeArr)) {
                                 foreach ($knowledgeArr as $jk => $jv) {
                                     $insertArray = [
-                                        'skill_id' => $lastInsertedId,
+                                        'skill_id' => $skillName,
                                         'proficiency_level' => $jv->proficiency_level,
                                         'classification' => 'knowledge',
                                         'classification_item' => $jv->knowledge_ability_items,
@@ -531,12 +542,12 @@ class skillLibraryController extends Controller
                                     $insert = userKnowledgeAbility::insert($insertArray);
                                 }
                             }
-                            // get all ability items from s_skill_map_k_a table
+
                             $abilityArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title', $skillName)->where('knowledge_ability_classification', 'ability')->groupBy('knowledge_ability_items')->get()->toArray();
                             if (!empty($abilityArr)) {
                                 foreach ($abilityArr as $jk => $jv) {
                                     $insertArray = [
-                                        'skill_id' => $lastInsertedId,
+                                        'skill_id' => $skillName,
                                         'proficiency_level' => $jv->proficiency_level,
                                         'classification' => 'ability',
                                         'classification_item' => $jv->knowledge_ability_items,
@@ -553,9 +564,7 @@ class skillLibraryController extends Controller
 
                 $i++;
             }
-        } 
-        // if fromType is user then added imported user data to display in skill table
-        else {
+        } else {
             // return [$request,'type'=>$request->formType];
             $getIndustries = industryModel::where('department', $request->category)->first();
             $insertArray = [
@@ -566,7 +575,7 @@ class skillLibraryController extends Controller
                 "sub_institute_id" => $request->sub_institute_id,
                 // "user_id"=>$user_id,
             ];
-            // check if skill already exists in userSkills table
+
             $check = userSkills::where($insertArray)->first();
             if (!$check) {
                 $insertArray['department'] = $getIndustries->department ?? null;
@@ -591,7 +600,7 @@ class skillLibraryController extends Controller
 
             $i++;
         }
-        // if data is inserted successfully then fetch all user skills to display in skill table
+
         $userSkills = userSkills::where('status', 'Active')
             ->where('sub_institute_id', $request->sub_institute_id)
             ->where('approve_status', 'Approved')
@@ -605,7 +614,7 @@ class skillLibraryController extends Controller
                 $userTree[$value['category']]['no_sub_category'][] = $value;
             }
         }
-        // get all fetched data and convert it into an array to return response
+
         if ($i > 0) {
             $res['status_code'] = 1;
             $res['message'] = 'Added data successfully !';
@@ -615,14 +624,12 @@ class skillLibraryController extends Controller
             $res['status_code'] = 0;
             $res['message'] = 'Failed to Add data';
         }
-        // is_mobile function is from helper.php which helps to return response as per type web or API
         return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 
-    // used to edit an imported and added skill data
     public function edit(Request $request, $id)
     {
-        $type = $request->type;  // always required to define response type
+        $type = $request->type;
         if ($type == 'API') {
             $token = $request->input('token');  // get token from input field 'token'
 
@@ -636,30 +643,65 @@ class skillLibraryController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            // validate reuired fields for API requests
+
             $validator = Validator::make($request->all(), [
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
                 'formType' => 'required',
             ]);
-            // if validation fails it will throw error 
+
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
         }
-        // defined skills status
         $skillFields = ['id', 'category', 'sub_category', 'title'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
-        // if fromType is master then fetch master skill data to display in edit form
+        $jobroleFields = ['id', 'jobrole', 'description'];
+        
         $res['editData'] = skillLibraryModel::find($id);
         if ($request->formType == "user") {
             $res['editData'] = userSkills::find($id);
         }
-        // if fromType is jobrole then fetch jobrole data to display in edit form
-        $res['userJobroleData'] = skillJobroleMap::with([
-            'userSkills' => fn($q) => $q->select($skillFields),
-            'createdUser' => fn($q) => $q->select($createdUser),
-        ])
+        $skillName = userSkills::where('id', $request->skill_id)
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNull('deleted_at')
+                ->value('title');
+
+            $res['userJobroleData'] = skillJobroleMap::with([
+                'userSkills' => fn($q) => $q->select($skillFields),
+                'createdUser' => fn($q) => $q->select($createdUser),
+                'userJobrole' => fn($q) => $q->select($jobroleFields),
+            ])
+                ->where('skill', $skillName)
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNull('deleted_at')
+                ->get()
+                ->map(function ($item) {
+                    $data = $item->toArray();
+
+                    if ($item->userSkills) {
+                        $data['category'] = $item->userSkills->category;
+                        $data['sub_category'] = $item->userSkills->sub_category;
+                        $data['skillTitle'] = $item->userSkills->title;
+                    }
+
+                    if ($item->createdUser) {
+                        $data['first_name'] = $item->createdUser->first_name;
+                        $data['middle_name'] = $item->createdUser->middle_name;
+                        $data['last_name'] = $item->createdUser->last_name;
+                    }
+                    if ($item->userJobrole) {
+                        $data['description'] = $item->userJobrole->description;
+                    }
+                    unset($data['user_skills'], $data['created_user'],$data['userJobrole']);
+
+                    return $data;
+                });
+
+            $res['userproficiency_levelData'] = userProfeceincyLevel::with([
+                'userSkills' => fn($q) => $q->select($skillFields),
+                'createdUser' => fn($q) => $q->select($createdUser),
+            ])
             ->where('skill_id', $id)
             ->where('sub_institute_id', $request->sub_institute_id)
             ->whereNull('deleted_at')
@@ -683,35 +725,13 @@ class skillLibraryController extends Controller
 
                 return $data;
             });
-            // if fromType is proficiency_level then fetch proficiency_level data to display in edit form
-        $res['userproficiency_levelData'] = userProfeceincyLevel::with([
-            'userSkills' => fn($q) => $q->select($skillFields),
-            'createdUser' => fn($q) => $q->select($createdUser),
-        ])
-            ->where('skill_id', $id)
-            ->where('sub_institute_id', $request->sub_institute_id)
-            ->whereNull('deleted_at')
-            ->get()
-            ->map(function ($item) {
-                $data = $item->toArray();
 
-                if ($item->userSkills) {
-                    $data['category'] = $item->userSkills->category;
-                    $data['sub_category'] = $item->userSkills->sub_category;
-                    $data['skillTitle'] = $item->userSkills->title;
-                }
-
-                if ($item->createdUser) {
-                    $data['first_name'] = $item->createdUser->first_name;
-                    $data['middle_name'] = $item->createdUser->middle_name;
-                    $data['last_name'] = $item->createdUser->last_name;
-                }
-
-                unset($data['user_skills'], $data['created_user']);
-
-                return $data;
-            });
-            // if fromType is knowledge then fetch knowledge data to display in edit form
+            if(empty($res['userproficiency_levelData'])){
+                $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
+                    ->whereNull('sub_institute_id')
+                    ->whereNull('deleted_at')
+                    ->get();
+            }
         $res['userKnowledgeData'] = userKnowledgeAbility::with([
             'userSkills' => fn($q) => $q->select($skillFields),
             'createdUser' => fn($q) => $q->select($createdUser),
@@ -740,7 +760,6 @@ class skillLibraryController extends Controller
 
                 return $data;
             });
-        // if fromType is ability then fetch ability data to display in edit form
         $res['userabilityData'] = userKnowledgeAbility::with([
             'userSkills' => fn($q) => $q->select($skillFields),
             'createdUser' => fn($q) => $q->select($createdUser),
@@ -769,7 +788,6 @@ class skillLibraryController extends Controller
 
                 return $data;
             });
-        // if fromType is application then fetch application data to display in edit form
         $res['userApplicationData'] = userApplication::with([
             'userSkills' => fn($q) => $q->select($skillFields),
             'createdUser' => fn($q) => $q->select($createdUser),
@@ -797,15 +815,12 @@ class skillLibraryController extends Controller
 
                 return $data;
             });
-        // get all fetched data and convert it into an array $res to return response
-        // is_mobile function is from helper.php which helps to return response as per type web or API
         return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 
-    // after edit this function will update the skill data
     public function update(Request $request, $id)
     {
-        $type = $request->type;  // always required to define response type
+        $type = $request->type;
         if ($type == 'API') {
             $token = $request->input('token');  // get token from input field 'token'
 
@@ -819,7 +834,7 @@ class skillLibraryController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            // validate reuired fields for API requests
+
             $validator = Validator::make($request->all(), [
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
@@ -827,17 +842,16 @@ class skillLibraryController extends Controller
                 'user_id' => 'required',
                 'formType' => 'required',
             ]);
-            // if validation fails it will throw error 
+
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
         }
-        // defined skills status
+
         $skillFields = ['id', 'category', 'sub_category', 'title'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
         // return $request;exit;
         $i = 0;
-        // if fromType is master then update imported master data to display in skill table
         if ($request->formType == 'details') {
             $insertArray = [
                 "category" => $request->category,
@@ -867,15 +881,14 @@ class skillLibraryController extends Controller
 
             $i++;
         }
-        // if fromType is user then update imported user data to display in skill table
         if ($request->formType == 'jobrole') {
             foreach ($request->job_role as $key => $value) {
-                $checkExists = skillJobroleMap::where('jobrole', $value)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
+                $checkExists = skillJobroleMap::where('jobrole', $value)->where('skill', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
                 if (!$checkExists) {
                     $insertArray = [
-                        'skill_id' => $id,
+                        'skill' => $id,
                         'jobrole' => $value,
-                        'description' => $request->description[$key] ?? null,
+                        // 'description' => $request->description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
                         'created_by' => $request->user_id,
                         'created_at' => now(),
@@ -884,9 +897,9 @@ class skillLibraryController extends Controller
                     $i++;
                 } elseif (isset($checkExists->id)) {
                     $insertArray = [
-                        'skill_id' => $id,
+                        'skill' => $id,
                         'jobrole' => $value,
-                        'description' => $request->description[$key] ?? null,
+                        // 'description' => $request->description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
                         'updated_by' => $request->user_id,
                         'updated_at' => now(),
@@ -895,13 +908,13 @@ class skillLibraryController extends Controller
                     $i++;
                 }
 
-                //    $res['userJobroleData'] = skillJobroleMap::where('skill_id',$id)->where('sub_institute_id',$request->sub_institute_id)->whereNull('deleted_at')->get();
+                //    $res['userJobroleData'] = skillJobroleMap::where('skill',$id)->where('sub_institute_id',$request->sub_institute_id)->whereNull('deleted_at')->get();
 
                 $res['userJobroleData'] = skillJobroleMap::with([
                     'userSkills' => fn($q) => $q->select($skillFields),
                     'createdUser' => fn($q) => $q->select($createdUser),
                 ])
-                    ->where('skill_id', $request->skill_id)
+                    ->where('skill', $request->skill_id)
                     ->where('sub_institute_id', $request->sub_institute_id)
                     ->whereNull('deleted_at')
                     ->get()
@@ -926,7 +939,7 @@ class skillLibraryController extends Controller
                     });
             }
         }
-        // if fromType is proficiency_level then update proficiency_level data to display in skill table
+
         if ($request->formType == 'proficiency_level') {
             foreach ($request->proficiency_level as $key => $value) {
                 $checkExists = userProfeceincyLevel::where('proficiency_level', $value)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
@@ -935,6 +948,8 @@ class skillLibraryController extends Controller
                         'skill_id' => $id,
                         'proficiency_level' => $value,
                         'description' => $request->description[$key] ?? null,
+                        'proficiency_type'=>$request->proficiency_type[$key] ?? null,
+                        'type_description'=>$request->type_description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
                         'created_by' => $request->user_id,
                         'created_at' => now(),
@@ -943,9 +958,11 @@ class skillLibraryController extends Controller
                     $i++;
                 } elseif (isset($checkExists->id)) {
                     $insertArray = [
-                        'skill_id' => $id,
+                        'skill' => $id,
                         'proficiency_level' => $value,
                         'description' => $request->description[$key] ?? null,
+                        'proficiency_type'=>$request->proficiency_type[$key] ?? null,
+                        'type_description'=>$request->type_description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
                         'updated_by' => $request->user_id,
                         'updated_at' => now(),
@@ -954,39 +971,45 @@ class skillLibraryController extends Controller
                     $i++;
                 }
 
-                $res['userJobroleData'] = userProfeceincyLevel::with([
-                    'userSkills' => fn($q) => $q->select($skillFields),
-                    'createdUser' => fn($q) => $q->select($createdUser),
-                ])
-                    ->where('skill_id', $request->skill_id)
-                    ->where('sub_institute_id', $request->sub_institute_id)
+                  $res['userproficiency_levelData'] = userProfeceincyLevel::with([
+                'userSkills' => fn($q) => $q->select($skillFields),
+                'createdUser' => fn($q) => $q->select($createdUser),
+            ])
+                ->where('skill_id', $request->skill_id)
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNull('deleted_at')
+                ->get()
+                ->map(function ($item) {
+                    $data = $item->toArray();
+
+                    if ($item->userSkills) {
+                        $data['category'] = $item->userSkills->category;
+                        $data['sub_category'] = $item->userSkills->sub_category;
+                        $data['skillTitle'] = $item->userSkills->title;
+                    }
+
+                    if ($item->createdUser) {
+                        $data['first_name'] = $item->createdUser->first_name;
+                        $data['middle_name'] = $item->createdUser->middle_name;
+                        $data['last_name'] = $item->createdUser->last_name;
+                    }
+
+                    unset($data['user_skills'], $data['created_user']);
+
+                    return $data;
+                });
+            if(empty($res['userproficiency_levelData'])){
+                $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
+                    ->whereNull('sub_institute_id')
                     ->whereNull('deleted_at')
-                    ->get()
-                    ->map(function ($item) {
-                        $data = $item->toArray();
-
-                        if ($item->userSkills) {
-                            $data['category'] = $item->userSkills->category;
-                            $data['sub_category'] = $item->userSkills->sub_category;
-                            $data['skillTitle'] = $item->userSkills->title;
-                        }
-
-                        if ($item->createdUser) {
-                            $data['first_name'] = $item->createdUser->first_name;
-                            $data['middle_name'] = $item->createdUser->middle_name;
-                            $data['last_name'] = $item->createdUser->last_name;
-                        }
-
-                        unset($data['user_skills'], $data['created_user']);
-
-                        return $data;
-                    });
+                    ->get();
+            }
             }
         }
-        // if fromType is knowledge then update knowledge data to display in skill table
+
         if ($request->formType == 'knowledge') {
             foreach (json_decode($request->knowledge_ability_data) as $key => $value) {
-                $checkExists = userKnowledgeAbility::where('classification', 'knowledge')->where('classification_item', $value->classification_item)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
+                $checkExists = userKnowledgeAbility::where('classification', 'knowledge')->where('classification_item', $value->classification_item)->where('skill', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
                 if (!$checkExists) {
                     $insertArray = [
                         'skill_id' => $id,
@@ -1045,7 +1068,7 @@ class skillLibraryController extends Controller
 
         if ($request->formType == 'ability') {
             foreach (json_decode($request->ability_data) as $key => $value) {
-                $checkExists = userKnowledgeAbility::where('classification', 'ability')->where('classification_item', $value->classification_item)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
+                $checkExists = userKnowledgeAbility::where('classification', 'ability')->where('classification_item', $value->classification_item)->where('skill', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
                 if (!$checkExists) {
                     $insertArray = [
                         'skill_id' => $id,
@@ -1076,7 +1099,7 @@ class skillLibraryController extends Controller
                 'userSkills' => fn($q) => $q->select($skillFields),
                 'createdUser' => fn($q) => $q->select($createdUser),
             ])
-                ->where('skill_id', $id)
+                ->where('skill', $id)
                 ->where('classification', 'ability')
                 ->where('sub_institute_id', $request->sub_institute_id)
                 ->whereNull('deleted_at')
@@ -1158,7 +1181,7 @@ class skillLibraryController extends Controller
                     return $data;
                 });
         }
-        // get all fetched data and convert it into an array to return response
+
         if ($i > 0) {
             $res['status_code'] = 1;
             $res['message'] = 'updated data successfully !';
@@ -1166,15 +1189,12 @@ class skillLibraryController extends Controller
             $res['status_code'] = 0;
             $res['message'] = 'Failed to updated data';
         }
-        // is_mobile function is from helper.php which helps to return response as per type web or API
         return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 
-    // used for soft delete the skill data
     public function destroy(Request $request, $id)
     {
-        $type = $request->type;  // always required to define response type
-
+        $type = $request->type;
         if ($type == 'API') {
             $token = $request->input('token');  // get token from input field 'token'
 
@@ -1188,14 +1208,14 @@ class skillLibraryController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            // validate reuired fields for API requests
-            $validator = Validator::make($request->all(), [
+
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
                 'user_id' => 'required',
                 'formType' => 'required',
             ]);
-            // if validation fails it will throw error 
+
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
@@ -1247,7 +1267,7 @@ class skillLibraryController extends Controller
                 $i++;
             }
         }
-        // get all fetched data and convert it into an array to return response
+
         if ($i > 0) {
             $res['status_code'] = 1;
             $res['message'] = 'Deleted data successfully !';
@@ -1255,7 +1275,6 @@ class skillLibraryController extends Controller
             $res['status_code'] = 0;
             $res['message'] = 'Failed to updated data';
         }
-        // is_mobile function is from helper.php which helps to return response as per type web or API
         return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 }

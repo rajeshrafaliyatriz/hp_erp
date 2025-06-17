@@ -14,12 +14,13 @@ class skillJobroleMap extends Model
     //
     use HasFactory, SoftDeletes;
 
-    protected $table = "s_skill_jobrole";
+    // protected $table = "s_skill_jobrole";
+    protected $table = "s_user_skill_jobrole";
     protected $softDelete = true;
 
     public function userSkills()
     {
-        return $this->belongsTo(userSkills::class, 'skill_id', 'id')
+        return $this->belongsTo(userSkills::class, 'skill', 'title')
             ->select(['id', 'category', 'sub_category', 'title', 'description']);
     }
     public function createdUser()
@@ -30,7 +31,7 @@ class skillJobroleMap extends Model
 
     public function userJobrole()
     {
-        return $this->belongsTo(userJobroleModel::class, 'created_by', 'jobrole')
+        return $this->belongsTo(userJobroleModel::class, 'jobrole', 'jobrole')
             ->select(['id', 'jobrole', 'description']);
     }
 }
