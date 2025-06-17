@@ -67,9 +67,9 @@ class skillLibraryController extends Controller
         $AllskillData = industryModel::from('s_industries as a')
                 // ->select('c.*')
                 ->join('s_jobrole_skills as b', function ($join) {
-                    $join->on('b.sector', '=', 'a.department')
-                        ->on('a.sub_department', '=', 'b.track')
+                    $join->on('a.sub_department', '=', 'b.track')
                         ->useIndex('idx_sector_track');
+                        // ->on('b.sector', '=', 'a.department')
                 })
                 // ->join('master_skills as c', 'c.title', '=', 'b.skill')
                 ->where('a.industries', $request->org_type)
@@ -331,9 +331,9 @@ class skillLibraryController extends Controller
            $AllskillData = industryModel::from('s_industries as a')
                 // ->select('c.*')
                 ->join('s_jobrole_skills as b', function ($join) {
-                    $join->on('b.sector', '=', 'a.department')
-                        ->on('a.sub_department', '=', 'b.track')
+                    $join->on('a.sub_department', '=', 'b.track')
                         ->useIndex('idx_sector_track');
+                        // ->on('b.sector', '=', 'a.department')
                 })
                 // ->join('master_skills as c', 'c.title', '=', 'b.skill')
                 ->where('a.industries', $request->org_type)
@@ -410,8 +410,8 @@ class skillLibraryController extends Controller
 
             $skillData = industryModel::from('s_industries as a')
                 ->join('s_jobrole_skills as b', function ($join) {
-                    $join->on('b.sector', '=', 'a.department')
-                        ->on('a.sub_department', '=', 'b.track');
+                    $join->on('a.sub_department', '=', 'b.track');
+                    // ->on('b.sector', '=', 'a.department')
                 })
                 ->when($request->has('department'), function ($q) use ($request) {
                     $q->where('a.department', $request->department);
