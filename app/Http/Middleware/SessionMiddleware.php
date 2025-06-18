@@ -38,6 +38,8 @@ class SessionMiddleware
                     // Call controller
                     $controller = new authController;
                     $getData = $controller->index($newRequest);
+                    // echo "<pre>";print_r($getData);exit;
+
                 }
             }
         }

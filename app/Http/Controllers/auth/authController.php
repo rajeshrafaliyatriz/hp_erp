@@ -5,7 +5,6 @@ namespace App\Http\Controllers\auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\auth\tbluserModel;
-use App\Models\auth\schoolSetupModel;
 use Illuminate\Support\Facades\Validator;
 use DB;
 use Illuminate\Support\Facades\Hash;
@@ -45,16 +44,15 @@ class authController extends Controller
         }
 
         $password = $user->password; // For further usage in the code
-        $orgData = $user::with('organization')->first();
+        $orgData = $user::with('organization')->find($user->sub_institute_id);
         $orgDetails =$orgData['organization'];
-        $clientData = $user::with('client')->first();
+        $clientData = $user::with('client')->find($orgDetails->client_id);
         $clientDetails =$clientData['client'];
         $yearData = $user::with('yearData')->first();
         $yearDetails =$yearData['yearData'];
-        $profileData = $user::with('userProfile')->first();
-        $profileDetails =$orgData['userProfile'];
-
-        session()->put('sub_institute_id',$orgDetails);
+        $profileData = $user::with('userProfile')->find($user->id);
+        $profileDetails =$profileData['userProfile'] ?? [];
+        // echo "<pre>";print_r($profileDetails);exit;
         session()->put('client_id',$orgDetails);
         session()->put('is_admin',$clientDetails);
         session()->put('user_id',$user->id);

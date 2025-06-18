@@ -5,20 +5,16 @@ namespace App\Http\Controllers\libraries;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\libraries\skillLibraryModel;
-use App\Models\libraries\jobroleSkillModel;
 use App\Models\libraries\industryModel;
 use function App\Helpers\is_mobile;
 use Laravel\Sanctum\PersonalAccessToken;
-use App\Models\libraries\jobroleModel;
 use App\Models\libraries\userSkills;
 use App\Models\libraries\skillJobroleMap;
 use App\Models\libraries\userProfeceincyLevel;
 use App\Models\libraries\userKnowledgeAbility;
 use App\Models\libraries\userApplication;
-use App\Models\DynamicModel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Cache;
 
 class skillLibraryController extends Controller
 {
@@ -62,28 +58,28 @@ class skillLibraryController extends Controller
         // ->toArray();
 
         // Build base query with eager loading and index optimization
-      $cacheKey = 'skillData_' . md5(json_encode($request->all()));
+        $cacheKey = 'skillData_' . md5(json_encode($request->all()));
 
         $AllskillData = industryModel::from('s_industries as a')
-                // ->select('c.*')
-                ->join('s_jobrole_skills as b', function ($join) {
-                    $join->on('a.sub_department', '=', 'b.track')
-                        ->useIndex('idx_sector_track');
-                        // ->on('b.sector', '=', 'a.department')
-                })
-                // ->join('master_skills as c', 'c.title', '=', 'b.skill')
-                ->where('a.industries', $request->org_type)
-                ->when($request->has('department'), function ($q) use ($request) {
-                    $q->where('a.department', $request->department);
-                })
-                ->when($request->has('sub_department'), function ($q) use ($request) {
-                    $q->whereIn('a.sub_department', explode(',',$request->sub_department));
-                })  
-                ->groupBy('b.skill')
-                ->get();
+            // ->select('c.*')
+            ->join('s_jobrole_skills as b', function ($join) {
+                $join->on('a.sub_department', '=', 'b.track')
+                    ->useIndex('idx_sector_track');
+                // ->on('b.sector', '=', 'a.department')
+            })
+            // ->join('master_skills as c', 'c.title', '=', 'b.skill')
+            ->where('a.industries', $request->org_type)
+            ->when($request->has('department'), function ($q) use ($request) {
+                $q->where('a.department', $request->department);
+            })
+            ->when($request->has('sub_department'), function ($q) use ($request) {
+                $q->whereIn('a.sub_department', explode(',', $request->sub_department));
+            })
+            ->groupBy('b.skill')
+            ->get();
 
         $skillData = [];
-        foreach($AllskillData as $key=>$values){
+        foreach ($AllskillData as $key => $values) {
             $skill = DB::table('master_skills')
                 ->where('title', $values->skill)
                 ->select('id', 'category', 'sub_category', 'title', 'description', 'status', 'related_skills', 'bussiness_links', 'custom_tags', 'proficiency_level', 'job_titles', 'learning_resources', 'assesment_method', 'certification_qualifications', 'experience_project', 'skill_maps')
@@ -170,17 +166,17 @@ class skillLibraryController extends Controller
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
         $jobroleFields = ['id', 'jobrole', 'description'];
 
-        $proficiency_level = userProfeceincyLevel::where(function($query) use ($request) {
+        $proficiency_level = userProfeceincyLevel::where(function ($query) use ($request) {
             $query->where('skill_id', $request->skill_id)
                 ->where('sub_institute_id', $request->sub_institute_id);
         })
-        ->orWhere(function($query) {
-            $query->whereNull('skill_id')
-                ->whereNull('sub_institute_id');
-        })
-        ->whereNull('deleted_at')
-        ->get();
-        
+            ->orWhere(function ($query) {
+                $query->whereNull('skill_id')
+                    ->whereNull('sub_institute_id');
+            })
+            ->whereNull('deleted_at')
+            ->get();
+
         $res['proficiency_levels'] = $proficiency_level;
         if ($request->has('formType') && $request->formType == "jobrole") {
             // getskill name first 
@@ -215,7 +211,7 @@ class skillLibraryController extends Controller
                     if ($item->userJobrole) {
                         $data['description'] = $item->userJobrole->description;
                     }
-                    unset($data['user_skills'], $data['created_user'],$data['userJobrole']);
+                    unset($data['user_skills'], $data['created_user'], $data['userJobrole']);
 
                     return $data;
                 });
@@ -247,7 +243,7 @@ class skillLibraryController extends Controller
 
                     return $data;
                 });
-            if(empty($res['userproficiency_levelData'])){
+            if (empty($res['userproficiency_levelData'])) {
                 $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
                     ->whereNull('sub_institute_id')
                     ->whereNull('deleted_at')
@@ -343,12 +339,12 @@ class skillLibraryController extends Controller
                 });
         } else {
 
-           $AllskillData = industryModel::from('s_industries as a')
+            $AllskillData = industryModel::from('s_industries as a')
                 // ->select('c.*')
                 ->join('s_jobrole_skills as b', function ($join) {
                     $join->on('a.sub_department', '=', 'b.track')
                         ->useIndex('idx_sector_track');
-                        // ->on('b.sector', '=', 'a.department')
+                    // ->on('b.sector', '=', 'a.department')
                 })
                 // ->join('master_skills as c', 'c.title', '=', 'b.skill')
                 ->where('a.industries', $request->org_type)
@@ -364,7 +360,7 @@ class skillLibraryController extends Controller
                 ->get();
 
             $skillData = [];
-            foreach($AllskillData as $key=>$values){
+            foreach ($AllskillData as $key => $values) {
                 $skill = DB::table('master_skills')
                     ->where('title', $values->skill)
                     ->select('id', 'category', 'sub_category', 'title', 'description', 'status', 'related_skills', 'bussiness_links', 'custom_tags', 'proficiency_level', 'job_titles', 'learning_resources', 'assesment_method', 'certification_qualifications', 'experience_project', 'skill_maps')
@@ -657,53 +653,71 @@ class skillLibraryController extends Controller
         $skillFields = ['id', 'category', 'sub_category', 'title'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
         $jobroleFields = ['id', 'jobrole', 'description'];
-        
+
         $res['editData'] = skillLibraryModel::find($id);
         if ($request->formType == "user") {
             $res['editData'] = userSkills::find($id);
         }
-        $skillName = userSkills::where('id', $request->skill_id)
-                ->where('sub_institute_id', $request->sub_institute_id)
-                ->whereNull('deleted_at')
-                ->value('title');
-
-            $res['userJobroleData'] = skillJobroleMap::with([
-                'userSkills' => fn($q) => $q->select($skillFields),
-                'createdUser' => fn($q) => $q->select($createdUser),
-                'userJobrole' => fn($q) => $q->select($jobroleFields),
-            ])
-                ->where('skill', $skillName)
-                ->where('sub_institute_id', $request->sub_institute_id)
-                ->whereNull('deleted_at')
-                ->get()
-                ->map(function ($item) {
-                    $data = $item->toArray();
-
-                    if ($item->userSkills) {
-                        $data['category'] = $item->userSkills->category;
-                        $data['sub_category'] = $item->userSkills->sub_category;
-                        $data['skillTitle'] = $item->userSkills->title;
-                    }
-
-                    if ($item->createdUser) {
-                        $data['first_name'] = $item->createdUser->first_name;
-                        $data['middle_name'] = $item->createdUser->middle_name;
-                        $data['last_name'] = $item->createdUser->last_name;
-                    }
-                    if ($item->userJobrole) {
-                        $data['description'] = $item->userJobrole->description;
-                    }
-                    unset($data['user_skills'], $data['created_user'],$data['userJobrole']);
-
-                    return $data;
-                });
-
-            $res['userproficiency_levelData'] = userProfeceincyLevel::with([
-                'userSkills' => fn($q) => $q->select($skillFields),
-                'createdUser' => fn($q) => $q->select($createdUser),
-            ])
-            ->where('skill_id', $id)
+        $skillName = userSkills::where('id', $id)
             ->where('sub_institute_id', $request->sub_institute_id)
+            ->whereNull('deleted_at')
+            ->value('title');
+
+        $res['userJobroleData'] = skillJobroleMap::with([
+            'userSkills' => fn($q) => $q->select($skillFields),
+            'createdUser' => fn($q) => $q->select($createdUser),
+            'userJobrole' => fn($q) => $q->select($jobroleFields),
+        ])
+            ->where('skill', $skillName)
+            ->where('sub_institute_id', $request->sub_institute_id)
+            ->whereNull('deleted_at')
+            ->get()
+            ->map(function ($item) {
+                $data = $item->toArray();
+
+                if ($item->userSkills) {
+                    $data['category'] = $item->userSkills->category;
+                    $data['sub_category'] = $item->userSkills->sub_category;
+                    $data['skillTitle'] = $item->userSkills->title;
+                }
+
+                if ($item->createdUser) {
+                    $data['first_name'] = $item->createdUser->first_name;
+                    $data['middle_name'] = $item->createdUser->middle_name;
+                    $data['last_name'] = $item->createdUser->last_name;
+                }
+                if ($item->userJobrole) {
+                    $data['description'] = $item->userJobrole->description;
+                }
+                unset($data['user_skills'], $data['created_user'], $data['userJobrole']);
+
+                return $data;
+            });
+
+            $proficiency_level = userProfeceincyLevel::where(function ($query) use ($request) {
+                $query->where('skill_id', $request->skill_id)
+                    ->where('sub_institute_id', $request->sub_institute_id);
+            })
+                ->orWhere(function ($query) {
+                    $query->whereNull('skill_id')
+                        ->whereNull('sub_institute_id');
+                })
+                ->whereNull('deleted_at')
+                ->get();
+    
+            // $res['proficiency_levels'] = $proficiency_level;
+        $res['userproficiency_levelData'] = userProfeceincyLevel::with([
+            'userSkills' => fn($q) => $q->select($skillFields),
+            'createdUser' => fn($q) => $q->select($createdUser),
+        ])
+        ->where(function ($query) use ($request,$id) {
+            $query->where('skill_id', $id)
+                ->where('sub_institute_id', $request->sub_institute_id);
+        })
+            ->orWhere(function ($query) {
+                $query->whereNull('skill_id')
+                    ->whereNull('sub_institute_id');
+            })
             ->whereNull('deleted_at')
             ->get()
             ->map(function ($item) {
@@ -725,13 +739,12 @@ class skillLibraryController extends Controller
 
                 return $data;
             });
-
-            if(empty($res['userproficiency_levelData'])){
-                $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
-                    ->whereNull('sub_institute_id')
-                    ->whereNull('deleted_at')
-                    ->get();
-            }
+        if (empty($res['userproficiency_levelData'])) {
+            $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
+                ->whereNull('sub_institute_id')
+                ->whereNull('deleted_at')
+                ->get();
+        }
         $res['userKnowledgeData'] = userKnowledgeAbility::with([
             'userSkills' => fn($q) => $q->select($skillFields),
             'createdUser' => fn($q) => $q->select($createdUser),
@@ -948,8 +961,8 @@ class skillLibraryController extends Controller
                         'skill_id' => $id,
                         'proficiency_level' => $value,
                         'description' => $request->description[$key] ?? null,
-                        'proficiency_type'=>$request->proficiency_type[$key] ?? null,
-                        'type_description'=>$request->type_description[$key] ?? null,
+                        'proficiency_type' => $request->proficiency_type[$key] ?? null,
+                        'type_description' => $request->type_description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
                         'created_by' => $request->user_id,
                         'created_at' => now(),
@@ -961,8 +974,8 @@ class skillLibraryController extends Controller
                         'skill' => $id,
                         'proficiency_level' => $value,
                         'description' => $request->description[$key] ?? null,
-                        'proficiency_type'=>$request->proficiency_type[$key] ?? null,
-                        'type_description'=>$request->type_description[$key] ?? null,
+                        'proficiency_type' => $request->proficiency_type[$key] ?? null,
+                        'type_description' => $request->type_description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
                         'updated_by' => $request->user_id,
                         'updated_at' => now(),
@@ -971,39 +984,39 @@ class skillLibraryController extends Controller
                     $i++;
                 }
 
-                  $res['userproficiency_levelData'] = userProfeceincyLevel::with([
-                'userSkills' => fn($q) => $q->select($skillFields),
-                'createdUser' => fn($q) => $q->select($createdUser),
-            ])
-                ->where('skill_id', $request->skill_id)
-                ->where('sub_institute_id', $request->sub_institute_id)
-                ->whereNull('deleted_at')
-                ->get()
-                ->map(function ($item) {
-                    $data = $item->toArray();
-
-                    if ($item->userSkills) {
-                        $data['category'] = $item->userSkills->category;
-                        $data['sub_category'] = $item->userSkills->sub_category;
-                        $data['skillTitle'] = $item->userSkills->title;
-                    }
-
-                    if ($item->createdUser) {
-                        $data['first_name'] = $item->createdUser->first_name;
-                        $data['middle_name'] = $item->createdUser->middle_name;
-                        $data['last_name'] = $item->createdUser->last_name;
-                    }
-
-                    unset($data['user_skills'], $data['created_user']);
-
-                    return $data;
-                });
-            if(empty($res['userproficiency_levelData'])){
-                $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
-                    ->whereNull('sub_institute_id')
+                $res['userproficiency_levelData'] = userProfeceincyLevel::with([
+                    'userSkills' => fn($q) => $q->select($skillFields),
+                    'createdUser' => fn($q) => $q->select($createdUser),
+                ])
+                    ->where('skill_id', $request->skill_id)
+                    ->where('sub_institute_id', $request->sub_institute_id)
                     ->whereNull('deleted_at')
-                    ->get();
-            }
+                    ->get()
+                    ->map(function ($item) {
+                        $data = $item->toArray();
+
+                        if ($item->userSkills) {
+                            $data['category'] = $item->userSkills->category;
+                            $data['sub_category'] = $item->userSkills->sub_category;
+                            $data['skillTitle'] = $item->userSkills->title;
+                        }
+
+                        if ($item->createdUser) {
+                            $data['first_name'] = $item->createdUser->first_name;
+                            $data['middle_name'] = $item->createdUser->middle_name;
+                            $data['last_name'] = $item->createdUser->last_name;
+                        }
+
+                        unset($data['user_skills'], $data['created_user']);
+
+                        return $data;
+                    });
+                if (empty($res['userproficiency_levelData'])) {
+                    $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
+                        ->whereNull('sub_institute_id')
+                        ->whereNull('deleted_at')
+                        ->get();
+                }
             }
         }
 

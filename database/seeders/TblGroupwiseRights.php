@@ -33,6 +33,20 @@ class TblGroupwiseRights extends Seeder
             'created_at' => now(),
             'updated_at' => null,
             ],
+            [
+                'menu_id' =>$menu->id,
+                'profile_id' => 3,
+                'can_view' => 1,
+                'can_add' => 1,
+                'can_edit' => 1,
+                'can_delete' => 1,
+                'dashboard_right' => 0,
+                'sub_institute_id' => 1,
+                'sort_order' => 1,
+                'deleted_at'=>null,
+                'created_at' => now(),
+                'updated_at' => null,
+            ],
         ]);
     }
         

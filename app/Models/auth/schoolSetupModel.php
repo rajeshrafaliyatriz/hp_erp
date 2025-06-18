@@ -3,6 +3,7 @@
 namespace App\Models\auth;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\auth\tblclientModel as TblClient;
 
 class schoolSetupModel extends Model
 {
