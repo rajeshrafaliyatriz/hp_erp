@@ -130,7 +130,7 @@ class TblUserSeeder extends Seeder
                 'state' => 'AdminState',
                 'pincode' => '123456',
                 'otp' => null,
-                'user_profile_id' => $userProfileId,
+                'user_profile_id' => 3,
                 'join_year' => '2020',
                 'image' => null,
                 'sub_institute_id' => $subInstituteId,

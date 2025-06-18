@@ -15,9 +15,10 @@ use Illuminate\Support\Facades\File;
 use function App\Helpers\is_mobile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use  App\Models\school_setup\standardModel;
 use Illuminate\Support\Facades\Hash;
 use App\Models\libraries\userJobroleModel;
+use App\Models\libraries\skillJobroleMap;
+use App\Models\libraries\userJobroleTask;
 use Illuminate\Support\Str;
 use App\Models\skill\skill;
 use App\Models\skill\matrix;
@@ -27,6 +28,9 @@ class tbluserController extends Controller
 
     public function index(Request $request)
     {
+        // echo "<pre>";print_r(session()->all());exit;
+        $sub_institute_id = $request->session()->get('sub_institute_id');
+        $user_profile = $request->session()->get('user_profile_name');
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $user_profile = $request->session()->get('user_profile_name');
 
@@ -400,13 +404,37 @@ class tbluserController extends Controller
         $res['data'] = $editData;
         // 10-01-2025 start supervisor rights
         $res['jobroleList'] = userJobroleModel::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get()->toArray();
+        // echo "<pre>";print_r($res['jobroleList']);exit;
         $user_id = $request->session()->get('user_id');
-        $res['skills']=$skills = skill::all();
+        $user_profile_name = $request->session()->get('user_profile_name');
+
+        $res['skills']=$skills = skillJobroleMap::join('s_users_skills','s_user_skill_jobrole.skill','=','s_users_skills.title')->whereNull('s_user_skill_jobrole.deleted_at')->get();
+        
         $res['completedCount']=$completedCount = matrix::where('user_id', $user_id)->count();
         $res['totalSkills']=$totalSkills = $skills->count();
         $res['progress']=$progress = $totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
+        $res['jobroleSkills'] = $res['jobroleTasks'] = [];
+        if(!in_array($user_profile_name,['Admin','Supervisor'])){
+            
+            $assignedJobrole = userJobroleModel::where('sub_institute_id',$sub_institute_id)->where('id',$editData['allocated_standards'])->whereNull('deleted_at')->first();
+        // echo "<pre>";print_r($assignedJobrole);exit;
+
+            if(isset($assignedJobrole)){
+                $res['skills']=  $res['jobroleSkills'] = skillJobroleMap::join('s_users_skills','s_user_skill_jobrole.skill','=','s_users_skills.title')->where('s_user_skill_jobrole.jobrole',$assignedJobrole->jobrole)->whereNull('s_user_skill_jobrole.deleted_at')
+                ->groupBy('s_user_skill_jobrole.id')->get();
+                $res['totalSkills']=skillJobroleMap::where('jobrole',$assignedJobrole->jobrole)->count();
+
+                $res['jobroleTasks'] = DB::table('s_user_jobrole_task as a')
+                ->join('s_user_skill_jobrole as b', 'b.jobrole', '=', 'a.jobrole')
+                ->where('a.jobrole', $assignedJobrole->jobrole)
+                ->whereNull('a.deleted_at')
+                ->groupBy('task')
+                ->get();
+
+            }
+        }
         // 10-01-2025 end supervisor rights
-        // echo "<pre>";print_r($res['contactDetails']);exit;
+        // echo "<pre>";print_r($res['skills']);exit;
         return is_mobile($type, "user/edit_user", $res, "view");
     }
 

@@ -11,14 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('s_skill_jobrole', function (Blueprint $table) {
+        Schema::create('s_user_skill_jobrole', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->unsignedBigInteger('skill_id')->index();
-            $table->foreign('skill_id')->references('id')->on('s_users_skills')->nullOnDelete()  // Optional, if you want to set to null on delete
-                    ->onUpdate('NO ACTION')
-                    ->onDelete('NO ACTION');
+            $table->string('skill')->nullable();
             $table->string('jobrole')->index()->nullable();
-            $table->tinyText('description')->nullable();
+            $table->string('proficiency_level')->index()->nullable();
             $table->unsignedBigInteger('sub_institute_id')->nullable()->index();
             $table->foreign('sub_institute_id')
                     ->references('id')

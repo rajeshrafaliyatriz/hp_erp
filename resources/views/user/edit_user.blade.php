@@ -58,13 +58,15 @@ br {
                             @if(!empty($data['salary_structure']))
                             <li class="nav-item"><a href="#section-linemove-3" class="nav-link" aria-selected="false" data-toggle="tab"><span>Salary</span></a></li>
                             @endif
+  
+                            <li class="nav-item"><a href="#section-linemove-6" class="nav-link" aria-selected="false" data-toggle="tab"><span>Jobrole Skills</span></a></li>
+
+                            <li class="nav-item"><a href="#section-linemove-7" class="nav-link" aria-selected="false" data-toggle="tab"><span>Jobrole Tasks</span></a></li>
 
                            <li class="nav-item"><a href="#section-linemove-4" class="nav-link" aria-selected="false" data-toggle="tab"><span>Skills Ratings Skills</span></a></li>
 
                             <li class="nav-item"><a href="#section-linemove-5" class="nav-link" aria-selected="false" data-toggle="tab"><span>My Skills & Certifications</span></a></li>
-                            {{-- @if(session()->get('sub_institute_id')==47)
-                            <li class="nav-item"><a href="#section-linemove-5" class="nav-link" aria-selected="false" data-toggle="tab"><span>Contact Details</span></a></li>
-                            @endif --}}
+                          
                         </ul>
                         </center>
                     @php
@@ -80,6 +82,8 @@ br {
                     $user_profiles = $data['user_profiles'];
                     $subject_data = $data['subject_data'];
                     $jobroleList = $data['jobroleList'];
+                    $jobroleSkills = $data['jobroleSkills'];
+                    $jobroleTasks = $data['jobroleTasks'];
                     $subject_data_selected_arr = $data['subject_data_selected_arr'];
                     $custom_fields = $data['custom_fields'];
                     $data_fields = $data['data_fields'] ?? [];
@@ -154,6 +158,7 @@ br {
                             <div class="col-md-4" class="form-group">
                                 <label for="allocate_standard">Jobrole</label>
                                 <select name="allocated_standards" id="Jobrole" class="form-control resizableVertical">
+                                <option value="">Select Jobrole</option>
                                  @if(!empty($jobroleList))
                                     @foreach($jobroleList as $sk => $sv)
                                        <option value="{{$sv['id']}}" @if(isset($data['allocated_standards']) && $data['allocated_standards']==$sv['id']) selected @endif>{{$sv['jobrole']}}</option>
@@ -684,13 +689,13 @@ br {
                                 <input type="time" id='sunday_out_date'  value="{{ $data['sunday_out_date'] ? date('H:i',strtotime($data['sunday_out_date'])) : '' }}" name="sunday_out_date" class="form-control">
                             </div> -->
                             {{-- button should be display for this institute 328 24-04-2025 --}}
-                            @if(in_array(session()->get('user_profile_name'),["Admin","Super Admin"]) || in_array(session()->get('sub_institute_id'),[328]))              
+                           {{--  @if(in_array(session()->get('user_profile_name'),["Admin","Super Admin"]) || in_array(session()->get('sub_institute_id'),[328]))  --}}
                             <div class="col-md-12 form-group mt-2">
                                 <center>
                                     <input type="submit" name="submit" value="Update" class="btn btn-success" >
                                 </center>
                             </div>
-                            @endif
+                           {{--  @endif --}}
                         </div>
                     </form>
                     </div>
@@ -715,6 +720,16 @@ br {
                         @include('lms.triz_skills')
                     </div>
                     <!-- tab 5 ends  -->
+                    <!-- tab 6 starts  -->
+                    <div class="tab-pane p-3" id="section-linemove-6" role="tabpanel">
+                        @include('user.jobroleSkills')
+                    </div>
+                    <!-- tab 6 ends  -->
+                    <!-- tab 7 starts  -->
+                    <div class="tab-pane p-3" id="section-linemove-7" role="tabpanel">
+                        @include('user.jobroleTasks')
+                    </div>
+                    <!-- tab 7 ends  -->
                 </div>
                 <!-- tabs ends  -->
                 </div>

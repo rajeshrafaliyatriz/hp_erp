@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('track', 191)->index()->nullable();
             $table->string('jobrole', 191)->index()->nullable();
             $table->text('description')->nullable();
+            $table->string('performance_expectation', 191)->index()->nullable();
             $table->enum('status', ['Active', 'Inactive'])->default('Active');
             $table->enum('type', ['S', 'O', 'E'])->nullable();
             $table->string('code', 20)->nullable();

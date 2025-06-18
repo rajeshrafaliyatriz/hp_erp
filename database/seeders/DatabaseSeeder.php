@@ -21,7 +21,7 @@ class DatabaseSeeder extends Seeder
             AcademicYearSeeder::class,
             TblMenuMasterSeeder::class,
             TblGroupwiseRights::class,
-            // proficiency_levels::class,
+            proficiencyLevel::class,
         ]);
     }
 
