@@ -404,9 +404,10 @@ class tbluserController extends Controller
         $res['data'] = $editData;
         // 10-01-2025 start supervisor rights
         $res['jobroleList'] = userJobroleModel::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get()->toArray();
-        // echo "<pre>";print_r($res['jobroleList']);exit;
-        $user_id = $request->session()->get('user_id');
-        $user_profile_name = $request->session()->get('user_profile_name');
+        $user_id = $id;
+        $profileDetails =DB::table('tbluserprofilemaster')->where('id',$editData['user_profile_id'])->first();
+        $user_profile_name = $profileDetails->name ?? '';
+        // echo "<pre>";print_r($profileDetails);exit;
 
         $res['skills']=$skills = skillJobroleMap::join('s_users_skills','s_user_skill_jobrole.skill','=','s_users_skills.title')->whereNull('s_user_skill_jobrole.deleted_at')->get();
         
@@ -434,7 +435,7 @@ class tbluserController extends Controller
             }
         }
         // 10-01-2025 end supervisor rights
-        // echo "<pre>";print_r($res['skills']);exit;
+        // echo "<pre>";print_r($res['jobroleTasks']);exit;
         return is_mobile($type, "user/edit_user", $res, "view");
     }
 
