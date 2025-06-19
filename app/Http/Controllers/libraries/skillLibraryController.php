@@ -178,6 +178,19 @@ class skillLibraryController extends Controller
             ->get();
 
         $res['proficiency_levels'] = $proficiency_level;
+        $grouped_proficiency_levels = userProfeceincyLevel::where(function ($query) use ($request) {
+            $query->where('skill_id', $request->skill_id)
+                ->where('sub_institute_id', $request->sub_institute_id);
+        })
+            ->orWhere(function ($query) {
+                $query->whereNull('skill_id')
+                    ->whereNull('sub_institute_id');
+            })
+            ->whereNull('deleted_at')
+            ->groupBy('proficiency_level')
+            ->get();
+
+        $res['grouped_proficiency_levels'] = $grouped_proficiency_levels;
         if ($request->has('formType') && $request->formType == "jobrole") {
             // getskill name first 
             $skillName = userSkills::where('id', $request->skill_id)
