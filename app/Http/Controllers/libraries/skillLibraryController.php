@@ -178,6 +178,19 @@ class skillLibraryController extends Controller
             ->get();
 
         $res['proficiency_levels'] = $proficiency_level;
+        $grouped_proficiency_levels = userProfeceincyLevel::where(function ($query) use ($request) {
+            $query->where('skill_id', $request->skill_id)
+                ->where('sub_institute_id', $request->sub_institute_id);
+        })
+            ->orWhere(function ($query) {
+                $query->whereNull('skill_id')
+                    ->whereNull('sub_institute_id');
+            })
+            ->whereNull('deleted_at')
+            ->groupBy('proficiency_level')
+            ->get();
+
+        $res['grouped_proficiency_levels'] = $grouped_proficiency_levels;
         if ($request->has('formType') && $request->formType == "jobrole") {
             // getskill name first 
             $skillName = userSkills::where('id', $request->skill_id)
@@ -500,7 +513,11 @@ class skillLibraryController extends Controller
                                     'created_by' => $request->user_id,
                                     'created_at' => now(),
                                 ];
-                                $insert = skillJobroleMap::insert($insertArray);
+                                $check = s_jobrole_skills::where([
+                                    'skill' => $skillName,'jobrole' => $jv->jobrole,'sub_institute_id' => $request->sub_institute_id])->first();
+                                if (!$check) {  
+                                    $insert = skillJobroleMap::insert($insertArray);
+                                }
                             }
 
                             $proficiencyLevelArr = DB::table('s_skill_map_k_a')->where('tsc_ccs_title', $skillName)->groupBy('proficiency_level')->get()->toArray();
@@ -514,7 +531,15 @@ class skillLibraryController extends Controller
                                         'created_by' => $request->user_id,
                                         'created_at' => now(),
                                     ];
-                                    $insert = userProfeceincyLevel::insert($insertArray);
+                                    $check = userProfeceincyLevel::where([
+                                       'skill_id' => $lastInsertedId,
+                                        'proficiency_level' => $jv->proficiency_level,
+                                        'sub_institute_id' => $request->sub_institute_id,
+                                    ])->first();
+                                    if (!$check) {
+                                        $insert = userProfeceincyLevel::insert($insertArray);
+                                    }
+                                    
                                 }
                             }
 
@@ -535,7 +560,16 @@ class skillLibraryController extends Controller
                                         'created_by' => $request->user_id,
                                         'created_at' => now(),
                                     ];
-                                    $insert = userKnowledgeAbility::insert($insertArray);
+                                    $check = userKnowledgeAbility::where([
+                                       'skill_id' => $skillName,
+                                        'proficiency_level' => $jv->proficiency_level,
+                                        'classification' => 'knowledge',
+                                        'classification_item' => $jv->knowledge_ability_items,
+                                    ])->first();
+                                    if (!$check) {
+                                        $insert = userKnowledgeAbility::insert($insertArray);
+                                    }
+                                    
                                 }
                             }
 
@@ -551,7 +585,15 @@ class skillLibraryController extends Controller
                                         'created_by' => $request->user_id,
                                         'created_at' => now(),
                                     ];
-                                    $insert = userKnowledgeAbility::insert($insertArray);
+                                    $check = userKnowledgeAbility::where([
+                                       'skill_id' => $skillName,
+                                        'proficiency_level' => $jv->proficiency_level,
+                                        'classification' => 'ability',
+                                        'classification_item' => $jv->knowledge_ability_items,
+                                    ])->first();
+                                    if (!$check) {
+                                        $insert = userKnowledgeAbility::insert($insertArray);
+                                    }
                                 }
                             }
                         }
@@ -906,7 +948,14 @@ class skillLibraryController extends Controller
                         'created_by' => $request->user_id,
                         'created_at' => now(),
                     ];
+                    $check = skillJobroleMap::where([
+                        'skill' => $id,
+                        'jobrole' => $value,
+                        'sub_institute_id' => $request->sub_institute_id
+                    ])->first();
+                    if (!$check) {
                     $insert = skillJobroleMap::insert($insertArray);
+                    }
                     $i++;
                 } elseif (isset($checkExists->id)) {
                     $insertArray = [

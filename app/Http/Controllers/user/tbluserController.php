@@ -409,11 +409,17 @@ class tbluserController extends Controller
         $user_profile_name = $profileDetails->name ?? '';
         // echo "<pre>";print_r($profileDetails);exit;
 
-        $res['skills']=$skills = skillJobroleMap::join('s_users_skills','s_user_skill_jobrole.skill','=','s_users_skills.title')->whereNull('s_user_skill_jobrole.deleted_at')->get();
+        $res['skills']=$skills = skillJobroleMap::join('s_users_skills','s_user_skill_jobrole.skill','=','s_users_skills.title')->whereNull('s_user_skill_jobrole.deleted_at')
+                ->select('*','s_users_skills.id as skill_id')
+                ->groupBy('s_user_skill_jobrole.id')->get();
         
         $res['completedCount']=$completedCount = matrix::where('user_id', $user_id)->count();
         $res['totalSkills']=$totalSkills = $skills->count();
         $res['progress']=$progress = $totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
+        $res['userRatedSkills'] = matrix::join('s_users_skills','s_users_skills.id','=','s_skill_matrix.skill_id')
+        ->where('s_skill_matrix.user_id', $id)
+        ->get()->toArray();
+        // echo "<pre>";print_r($res['userRatedSkills']);exit;
         $res['jobroleSkills'] = $res['jobroleTasks'] = [];
         if(!in_array($user_profile_name,['Admin','Supervisor'])){
             
@@ -421,8 +427,44 @@ class tbluserController extends Controller
         // echo "<pre>";print_r($assignedJobrole);exit;
 
             if(isset($assignedJobrole)){
-                $res['skills']=  $res['jobroleSkills'] = skillJobroleMap::join('s_users_skills','s_user_skill_jobrole.skill','=','s_users_skills.title')->where('s_user_skill_jobrole.jobrole',$assignedJobrole->jobrole)->whereNull('s_user_skill_jobrole.deleted_at')
-                ->groupBy('s_user_skill_jobrole.id')->get();
+                $alreadyRated = matrix::where('user_id', $user_id)->get()->toArray();
+                $ratedIds = [];
+                foreach ($alreadyRated as $rated) {
+                    $ratedIds[] = $rated['skill_id'] ?? 0;
+                }
+                $res['skills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
+                    ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
+                    ->whereNull('s_user_skill_jobrole.deleted_at')
+                    ->whereNotIn('s_users_skills.id', $ratedIds)
+                    ->select(
+                        's_user_skill_jobrole.id as jobrole_skill_id',
+                        's_user_skill_jobrole.jobrole',
+                        's_user_skill_jobrole.skill',
+                        's_users_skills.id as skill_id',
+                        's_users_skills.title',
+                        's_users_skills.category',
+                        's_users_skills.sub_category',
+                        's_users_skills.description'
+                    )
+                    ->groupBy('s_user_skill_jobrole.id')
+                    ->get();
+
+                    $res['jobroleSkills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
+                    ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
+                    ->whereNull('s_user_skill_jobrole.deleted_at')
+                    ->select(
+                        's_user_skill_jobrole.id as jobrole_skill_id',  // ID from skillJobroleMap
+                        's_user_skill_jobrole.jobrole',
+                        's_user_skill_jobrole.skill',
+                        's_users_skills.id as skill_id',                // ID from s_users_skills
+                        's_users_skills.title',
+                        's_users_skills.category',
+                        's_users_skills.sub_category',
+                        's_users_skills.description'
+                    )
+                    ->groupBy('s_user_skill_jobrole.id')
+                    ->get();
+
                 $res['totalSkills']=skillJobroleMap::where('jobrole',$assignedJobrole->jobrole)->count();
 
                 $res['jobroleTasks'] = DB::table('s_user_jobrole_task as a')
@@ -434,6 +476,9 @@ class tbluserController extends Controller
 
             }
         }
+        // echo "<pre>";print_r($ratedIds);
+        // echo "<pre>";print_r($res['userRatedSkills']);exit;
+
         // 10-01-2025 end supervisor rights
         // echo "<pre>";print_r($res['jobroleTasks']);exit;
         return is_mobile($type, "user/edit_user", $res, "view");

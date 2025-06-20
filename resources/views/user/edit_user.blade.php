@@ -86,6 +86,7 @@ br {
                     $jobroleList = $data['jobroleList'];
                     $jobroleSkills = $data['jobroleSkills'];
                     $jobroleTasks = $data['jobroleTasks'];
+                    $userRatedSkills = $data['userRatedSkills'];
                     $subject_data_selected_arr = $data['subject_data_selected_arr'];
                     $custom_fields = $data['custom_fields'];
                     $data_fields = $data['data_fields'] ?? [];

@@ -28,7 +28,7 @@ class SkillMatrixController extends Controller
 
     public function store(Request $request)
     {
-        $user_id = $request->session()->get('user_id');
+        $user_id = $request->userId;
         matrix::updateOrCreate(
             ['user_id' => $user_id, 'skill_id' => $request->skill_id],
             ['skill_level' => $request->skill_level, 'interest_level' => $request->interest_level,'']
