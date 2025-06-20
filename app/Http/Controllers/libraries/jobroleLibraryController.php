@@ -335,7 +335,14 @@ class jobroleLibraryController extends Controller
                                                 'created_by' => $request->user_id,
                                                 'created_at' => now(),
                                             ];
+                                            $check = skillJobroleMap::where([
+                                                'skill' => $skillName,
+                                                'jobrole' =>  $jv->jobrole,
+                                                'sub_institute_id' => $request->sub_institute_id
+                                            ])->first();
+                                            if (!$check) {
                                             $insert = skillJobroleMap::insert($insertArray);
+                                            }
                                         }
 
                                         // Insert knowledge abilities
