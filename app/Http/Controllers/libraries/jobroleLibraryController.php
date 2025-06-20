@@ -379,6 +379,22 @@ class jobroleLibraryController extends Controller
                                             }
                                         }
 
+                                         // applicaion
+                                        $applicationArr = DB::table('s_skill_application')->where('skill_id', $lastSkillId)->groupBy('id')->get()->toArray();
+                                        if (!empty($applicationArr)) {
+                                            foreach ($applicationArr as $jk => $jv) {
+                                                $applicationInsert = [
+                                                    'skill_id' => $lastSkillId,
+                                                    'proficiency_level' => $jv->proficiency_level,
+                                                    'application' => $jv->application,
+                                                    'sub_institute_id' => $request->sub_institute_id,
+                                                    'created_by' => $request->user_id,
+                                                    'created_at' => now(),
+                                                ];
+                                                $insert = userApplication::insert($applicationInsert);
+                                            }
+                                        }
+
                                         // Insert jobrole tasks
                                         $jobroleTask = DB::table('s_jobrole_task')->where('jobrole', $request->jobrole)->get()->toArray();
                                         if (!empty($jobroleTask)) {

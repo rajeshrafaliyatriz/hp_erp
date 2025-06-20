@@ -13,32 +13,13 @@ return new class extends Migration
     {
         Schema::create('s_skill_application', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->unsignedBigInteger('skill_id')->index();
-            $table->foreign('skill_id')->references('id')->on('s_users_skills')->nullOnDelete()  // Optional, if you want to set to null on delete
-                    ->onUpdate('NO ACTION')
-                    ->onDelete('NO ACTION');
+            $table->string('sector')->index()->nullable();
+            $table->string('category')->index()->nullable();
+            $table->string('skill')->index()->nullable();
+            $table->text('description')->nullable();
             $table->string('proficiency_level')->index()->nullable();
-            $table->string('application')->index()->nullable();
-            $table->unsignedBigInteger('sub_institute_id')->nullable()->index();
-            $table->foreign('sub_institute_id')
-                    ->references('id')
-                    ->on('school_setup')
-                    ->nullOnDelete()  // Optional, if you want to set to null on delete
-                    ->onUpdate('NO ACTION')
-                    ->onDelete('NO ACTION');  
-            $table->unsignedBigInteger('created_by')->index()->nullable();
-            $table->foreign('created_by')->references('id')->on('tbluser')->nullOnDelete()  // Optional, if you want to set to null on delete
-                    ->onUpdate('NO ACTION')
-                    ->onDelete('NO ACTION');
-            $table->unsignedBigInteger('updated_by')->index()->nullable();
-            $table->foreign('updated_by')->references('id')->on('tbluser')->nullOnDelete()  // Optional, if you want to set to null on delete
-                    ->onUpdate('NO ACTION')
-                    ->onDelete('NO ACTION');
-            $table->unsignedBigInteger('deleted_by')->index()->nullable();
-            $table->foreign('deleted_by')->references('id')->on('tbluser')->nullOnDelete()  // Optional, if you want to set to null on delete
-                    ->onUpdate('NO ACTION')
-                    ->onDelete('NO ACTION');
-            $table->softDeletes();
+            $table->text('proficiency_description')->nullable();
+            $table->text('range_application')->nullable();
             $table->timestamps();
         });
     }
