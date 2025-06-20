@@ -13,7 +13,7 @@ class userApplication extends Model
     //
     use HasFactory, SoftDeletes;
 
-    protected $table = "s_skill_application";
+    protected $table = "s_user_skill_application";
     protected $softDelete = true;
 
     public function userSkills()
