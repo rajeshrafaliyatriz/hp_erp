@@ -34,7 +34,7 @@ return new class extends Migration
     {
         Schema::table('tbluser', function (Blueprint $table) {
             //
-             $table->timestamp('monday_in_date')->nullable()->change();
+            $table->timestamp('monday_in_date')->nullable()->change();
             $table->timestamp('monday_out_date')->nullable()->change();
             $table->timestamp('tuesday_in_date')->nullable()->change();
             $table->timestamp('tuesday_out_date')->nullable()->change();
