@@ -81,3 +81,4 @@ Route::get('api/get-exam-master-list', [AJAXController::class, 'getExamsMasterLi
 Route::get('ckeditor/create', [CkeditorFileUploadController::class, 'create'])->name('ckeditor.create');
 Route::post('ckeditor', [CkeditorFileUploadController::class, 'store'])->name('uploadimage');
 Route::get('ajax_checkEmailExist', [AJAXController::Class, 'ajax_checkEmailExist'])->name('ajax_checkEmailExist');
+Route::get('getUsersMappings', [AJAXController::Class, 'getUsersMappings'])->name('getUsersMappings');

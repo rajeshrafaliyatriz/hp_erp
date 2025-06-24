@@ -399,4 +399,52 @@ class AJAXController extends Controller
 		// 	return 1;
 		// }
 	}
+
+    public function getUsersMappings(Request $request){
+        $emp_id = $request->emp_id;
+        $getType = $request->getType; // skills or tasks
+        $res['status_code'] = 0;
+        $res['message'] = 'User not found';
+        $getEmp = DB::table('tbluser as u')
+            ->join('tbluserprofilemaster as upm', 'upm.id', '=', 'u.user_profile_id')
+            ->where('u.id', $emp_id)
+            ->first();
+
+        if($getEmp && $getType=="skills"){
+           $getSkills = DB::table('s_jobrole as s')->join('s_user_skill_jobrole as sus',function($join) {
+                $join->on('s.jobrole', '=', 'sus.jobrole');
+                })
+                ->where('s.id', $getEmp->allocated_standards)
+                ->whereNull('sus.deleted_at')
+                ->get()->toArray();
+
+            if(!empty($getSkills)){
+                $res['status_code'] = 1;
+                $res['message'] = 'Skills found';
+                $res['data'] = $getSkills;
+            }else{
+                $res['status_code'] = 0;
+                $res['message'] = 'No skills found for this user';
+            }
+        }
+        else if($getEmp && $getType=="tasks"){
+           $getTasks = DB::table('task as t')
+                ->join('tbluser as u', 'u.id', '=', 't.user_id')
+                ->join('tbluserprofilemaster as upm', 'upm.id', '=', 'u.user_profile_id')
+                ->where('t.user_id', $emp_id)
+                ->select('t.id as task_id', 't.task_name', 't.status', 'u.first_name', 'u.last_name', 'upm.name as user_role')
+                ->get();
+
+            if($getTasks->isNotEmpty()){
+                $res['status_code'] = 1;
+                $res['message'] = 'Tasks found';
+                $res['data'] = $getTasks;
+            }else{
+                $res['status_code'] = 0;
+                $res['message'] = 'No tasks found for this user';
+            }
+        }
+
+        return $res;
+    }
 }
