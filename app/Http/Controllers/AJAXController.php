@@ -10,6 +10,7 @@ use App\Models\libraries\industryModel;
 use Laravel\Sanctum\PersonalAccessToken;
 use App\Models\libraries\jobroleModel;
 use App\Models\libraries\userSkills;
+use App\Models\libraries\userJobroleModel;
 use App\Models\DynamicModel;
 use App\Models\school_setup\subjectModel;
 use App\Models\school_setup\standardModel;
@@ -145,12 +146,12 @@ class AJAXController extends Controller
         }
         else if($request->has('searchType') && $request->searchType=="department"){
             // echo "here";exit;
-            $res['searchData'] = industryModel::where('industries', $request->org_type)->groupBy('department')->pluck('department')
+            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->groupBy('department')->pluck('department')
             ->values();
         }
         else if($request->has('searchType') && $request->searchType=="sub_department"){
             // echo "here";exit;
-            $res['searchData'] = industryModel::where('industries', $request->org_type)->where('department',$request->searchWord)->groupBy('sub_department')->pluck('sub_department')
+            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->where('department',$request->searchWord)->groupBy('sub_department')->pluck('sub_department')
             ->values();
         }
         else{
