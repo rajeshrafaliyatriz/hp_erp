@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\File;
+use App\Models\auth\tbluserModel;
+use App\Models\school_setupModel;
 
 if (!function_exists('is_mobile')) {
 
@@ -732,5 +734,174 @@ if (!function_exists('SearchChainSubject')) {
         }
         $html .= '</div>';
         echo $html;
+    }
+
+    if (!function_exists('employeeDetails')) {
+
+        function employeeDetails($sub_institute_id='',$employee_id='',$status='',$department_id='',$userProfileName='',$profileUserId='')
+        {
+            // return $status;exit;
+            $empData= tbluserModel::join('tbluserprofilemaster as upm', 'upm.id', '=', 'tbluser.user_profile_id')
+            ->selectRaw('tbluser.*,IfNULL(tbluser.first_name, "-") as first_name, IFNULL(tbluser.last_name, "-") as last_name,IFNULL(tbluser.middle_name, "-") as middle_name, tbluser.employee_no,tbluser.sub_institute_id, IfNULL(upm.name,"-") as user_profile,tbluser.department_id as department_id')
+            ->where('tbluser.sub_institute_id', $sub_institute_id);
+
+            if($status!==0){
+                $empData->where('tbluser.status', 1);
+            }
+
+            $profileArr = ["Admin","Super Admin","School Admin","Assistant Admin"];
+            $SubCordinates = [];    
+            if($userProfileName!='' && !in_array($userProfileName,$profileArr) && $profileUserId!=''){
+                $SubCordinates = getSubCordinates($sub_institute_id,$profileUserId);
+            }
+            $empData = $empData->when($employee_id!='',function($query) use($employee_id){
+                $query->whereRaw('tbluser.id IN ('.$employee_id.')');
+            })
+            ->when($department_id!='',function($query) use($department_id){
+                $query->whereRaw('tbluser.department_id IN ('.$department_id.')');
+            })
+            ->when(!empty($SubCordinates),function($q) use($SubCordinates){
+                $q->whereIn('tbluser.id', $SubCordinates);
+            })
+            ->orderBy('tbluser.first_name')
+            // ->take(20)  
+            ->groupBy('tbluser.id')
+            ->get()
+            ->toArray();
+
+            $empDatas=[];
+            foreach($empData as $key => $value){
+                $dep = DB::table('hrms_departments')->where('sub_institute_id',$sub_institute_id)->where('id',$value['department_id'])->where('status',1)->first();
+                $empDatas[$key] = $value;
+                $empDatas[$key]['department'] = (isset($dep->department)) ? $dep->department : '-';
+            }
+            return $empDatas;
+        }
+    }
+    
+    // hrms department with employees
+    if (!function_exists('HrmsDepartments')) {
+
+        function HrmsDepartments($col="",$depMultiple="",$dep_ids="",$empMultiple="",$emp_ids="",$inactive="")
+        {
+            $sub_institute_id= session()->get('sub_institute_id');
+            $userId= session()->get('user_id');
+            $userProfileName= session()->get('user_profile_name');
+            
+            if($col==""){
+                $col=3;
+            }
+            $depname = "department_id";
+            $dep_idsArr = $emp_idsArr= [];
+            if($depMultiple!=""){
+                $depname = "department_id[]";
+                if($dep_ids!=''){
+                 $dep_idsArr = $dep_ids;
+                }
+            }
+            // dd($dep_idsArr);
+            // for subordinates 02-08-2024
+            $SubCordinatesDep =[];
+            $profileArr = ["Admin","Super Admin","School Admin","Assistant Admin"];
+            if(!in_array($userProfileName,$profileArr)){
+                $SubCordinatesDep = getSubCordinates($sub_institute_id,$userId,'dep');
+            }
+            // dd($SubCordinates); exit;
+            // end 02-08-2024
+
+            //get all department Lists
+            $depLists =DB::table('hrms_departments')
+                        ->where('sub_institute_id',$sub_institute_id)
+                        ->when(!empty($SubCordinatesDep),function($q) use($SubCordinatesDep){
+                            $q->whereIn('id',$SubCordinatesDep);
+                        })
+                        ->where('status',1)
+                        ->whereNull('deleted_at')
+                        ->orderBy('department','ASC')->pluck('department','id');
+                        
+            // make select for department
+            $SelectDepartment ="<div class='col-md-".$col." form-group'>
+                <label>Select Department</label>
+                <select class='form-control' name='".$depname."' id='department_ids' ".$depMultiple.">
+                <option value='0'>Select</option>";
+                foreach ($depLists as $dep_id => $dep_name) {
+                    $selected = "";
+                    if($depMultiple!="" && $dep_idsArr!=''){
+                        if(in_array($dep_id,$dep_idsArr)){
+                            $selected="selected";
+                        }
+                    } 
+                    if(isset($dep_ids) && $dep_id == $dep_ids){
+                        $selected="selected";
+                    }
+                    $SelectDepartment .= "<option value=".$dep_id." ".$selected.">".$dep_name."</option>";
+                }
+            $SelectDepartment .="</select>
+            </div>";
+            
+            // for employee list
+            $empname = "emp_id";
+            if($empMultiple!=""){
+                $empname = "emp_id[]";
+                if($emp_ids!=''){
+                    $emp_idsArr = $emp_ids;
+                    if(is_array($dep_ids)){
+                        $dep_idsArr = $dep_ids;
+                    }else{
+                        $dep_idsArr = [$dep_ids];
+                    }
+                }
+            }else if($depMultiple=="" && isset($dep_ids)){
+                $dep_idsArr = [$dep_ids];
+            }
+            $empData = [];
+
+            if(isset($dep_ids) && $dep_ids!=0){
+                // for subordinates 02-08-2024
+                $SubCordinates =[];
+                $profileArr = ["Admin","Super Admin","School Admin","Assistant Admin"];
+                if(!in_array($userProfileName,$profileArr)){
+                    $SubCordinates = getSubCordinates($sub_institute_id,$userId);
+                }
+                // dd($SubCordinates); exit;
+                // end 02-08-2024
+                $empData =DB::table('tbluser')->join('tbluserprofilemaster as upm', 'upm.id', '=', 'tbluser.user_profile_id')
+                ->selectRaw('tbluser.id,CONCAT_WS(" ",COALESCE(tbluser.first_name, "-"),COALESCE(tbluser.last_name, "-")) as full_name,tbluser.sub_institute_id, IfNULL(upm.name,"-") as user_profile')
+                ->where('tbluser.sub_institute_id', $sub_institute_id)
+                ->whereIn('tbluser.department_id', $dep_idsArr)
+                ->where('tbluser.department_id','!=',0)
+                ->where('tbluser.status', 1)
+                ->when(!empty($SubCordinates),function($q) use($SubCordinates){
+                    $q->whereIn('tbluser.id', $SubCordinates);
+                })
+                ->orderBy('tbluser.first_name')
+                ->groupBy('tbluser.id')
+                ->get()
+                ->toArray(); 
+            }
+            if($empMultiple!="none"){
+                $SelectDepartment .= "<div class='col-md-".$col." form-group'>
+                <label>Select Employee</label>
+                <select name='".$empname."' id='emp_id' class='form-control' ".$empMultiple.">
+                <option value=0>select employee</option>";
+                if(!empty($empData)){
+                    foreach ($empData as $key => $value) {
+                        $selected = "";
+                        if($emp_idsArr!=''){
+                            if(in_array($value->id,$emp_idsArr)){
+                                $selected="selected";
+                            }
+                        } 
+                        if(isset($emp_ids) && $value->id == $emp_ids){
+                            $selected="selected";
+                        }
+                        $SelectDepartment .= "<option value=".$value->id."  ".$selected.">".$value->full_name." (".$value->user_profile.")</option>";
+                    }
+                }
+                $SelectDepartment .= "</select>
+            </div>";
+            }
+            return $SelectDepartment;
+        }
     }
 }
