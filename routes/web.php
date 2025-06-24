@@ -23,7 +23,7 @@ Route::middleware(['auth','session','menu'])->group(function () {
     Route::get('menu_lists', [authController::class, 'menu_lists'])->name('menu_lists');
     Route::resource('skill_library', skillLibraryController::class);
     Route::resource('jobrole_library', jobroleLibraryController::class);
-    Route::get('search_skill', [AJAXController::class, 'searchSkill'])->name('search_skill');
+    Route::get('search_data', [AJAXController::class, 'searchSkill'])->name('search_skill');
 
     Route::resource('jobrole', skillLibraryController::class);
 

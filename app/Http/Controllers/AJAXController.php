@@ -142,10 +142,22 @@ class AJAXController extends Controller
             // echo "here";exit;
             $res['searchData'] = jobroleModel::where('jobrole', 'like', '%'.$request->searchWord.'%')->pluck('jobrole')
             ->values();
-        }else{
+        }
+        else if($request->has('searchType') && $request->searchType=="department"){
+            // echo "here";exit;
+            $res['searchData'] = industryModel::where('industries', $request->org_type)->groupBy('department')->pluck('department')
+            ->values();
+        }
+        else if($request->has('searchType') && $request->searchType=="sub_department"){
+            // echo "here";exit;
+            $res['searchData'] = industryModel::where('industries', $request->org_type)->where('department',$request->searchWord)->groupBy('sub_department')->pluck('sub_department')
+            ->values();
+        }
+        else{
             // echo "else here";exit;
             $res['searchData'] = skillLibraryModel::where('title', 'like', '%'.$request->searchWord.'%')->get();
         }
+
         if($res['searchData']->isNotEmpty()){
             $res['status_code'] = 1;
             $res['message'] = 'Search results found';
