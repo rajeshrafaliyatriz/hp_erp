@@ -98,7 +98,7 @@ class jobroleLibraryController extends Controller
                 ->when($request->has('sub_department') && $request->sub_department!='',
                     function ($q) use ($request) {
                         // Both department and sub_department provided
-                        $q->where('sub_department', $request->sub_department);
+                        $q->whereIn('sub_department', explode(',',$request->sub_department));
                     }
                 )
                 ->whereNull('deleted_at')
@@ -171,6 +171,7 @@ class jobroleLibraryController extends Controller
 
                     // Add skill fields if available
                     if ($item->userSkills) {
+                        $data['skill_id'] = $item->userSkills->id;
                         $data['category'] = $item->userSkills->category;
                         $data['sub_category'] = $item->userSkills->sub_category;
                         $data['skillTitle'] = $item->userSkills->title;
@@ -448,6 +449,10 @@ class jobroleLibraryController extends Controller
                 $checkSkillExits = userSkills::where('title', $request->skillName)->where('sub_institute_id', $request->sub_institute_id)->first();
                 if (!$checkSkillExits) {
                     $insertData = [
+                        'department' => $request->department,
+                        'sub_department' => $request->sub_department,
+                        'category' => $request->category [$key] ?? null,
+                        'sub_category' => $request->sub_category [$key] ?? null,
                         'title' => $skillName,
                         'description' => $skillDescription,
                         'sub_institute_id' => $request->sub_institute_id,
@@ -485,6 +490,10 @@ class jobroleLibraryController extends Controller
                     if (isset($checkSkillExits->skill)) {
 
                         $updateData = [
+                            'department' => $request->department,
+                            'sub_department' => $request->sub_department,
+                            'category' => $request->category [$key] ?? null,
+                            'sub_category' => $request->sub_category [$key] ?? null,
                             'title' => $skillName,
                             'description' => $skillDescription,
                             'sub_institute_id' => $request->sub_institute_id,
@@ -495,7 +504,7 @@ class jobroleLibraryController extends Controller
                         ];
                     // return $updateData;exit;
 
-                        $lastInsertedId = userSkills::where('id', $checkSkillExits->skill_id)->update($updateData);
+                        $lastInsertedId = userSkills::where('id', $request->skill_id)->update($updateData);
                          $updateArray = [
                             'skill' => $skillName,
                             'jobrole' =>  $request->jobrole,

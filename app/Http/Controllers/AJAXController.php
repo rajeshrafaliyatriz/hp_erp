@@ -154,6 +154,16 @@ class AJAXController extends Controller
             $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->where('department',$request->searchWord)->groupBy('sub_department')->pluck('sub_department')
             ->values();
         }
+        else if($request->has('searchType') && $request->searchType=="category"){
+            // echo "here";exit;
+            $res['searchData'] = userSkills::where('sub_institute_id', $request->sub_institute_id)->where('department',$request->searchWord)->whereNotNull('category')->groupBy('category')->pluck('category')
+            ->values();
+        }
+        else if($request->has('searchType') && $request->searchType=="sub_category"){
+            // echo "here";exit;
+            $res['searchData'] = userSkills::where('sub_institute_id', $request->sub_institute_id)->where('category',$request->searchWord)->whereNotNull('sub_category')->groupBy('sub_category')->pluck('sub_category')
+            ->values();
+        }
         else{
             // echo "else here";exit;
             $res['searchData'] = skillLibraryModel::where('title', 'like', '%'.$request->searchWord.'%')->get();
