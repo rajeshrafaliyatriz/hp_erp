@@ -51,18 +51,14 @@ class jobroleLibraryController extends Controller
         }
         // Fetch jobrole data based on filters
         $jobroleData = industryModel::from('s_industries as a')
-            // ->join('s_jobrole_skills as b', function($join) {
-            //     $join->on('b.sector', '=', 'a.department')
-            //         ->on('a.sub_department', '=', 'b.track');
+            // ->when($request->has('searchType') && $request->searchType=="department", function ($q) use ($request) {
+            //     // Filter by department if provided
+            //     $q->where('a.department', $request->searchWord);
             // })
-            ->when($request->has('department'), function ($q) use ($request) {
-                // Filter by department if provided
-                $q->where('a.department', $request->department);
-            })
-            ->when($request->has('sub_department'), function ($q) use ($request) {
-                // Filter by sub_department if provided
-                $q->whereIn('a.sub_department', explode(',', $request->sub_department));
-            })
+            // ->when($request->has('searchType') && $request->searchType=="sub_department", function ($q) use ($request) {
+            //     // Filter by sub_department if provided
+            //     $q->whereIn('a.sub_department', explode(',', $request->searchWord));
+            // })
             ->join('s_jobrole as c', 'c.track', '=', 'a.sub_department')
             ->where('a.industries', 'like', '%' . $request->org_type . '%')
             ->select('c.*')
@@ -93,7 +89,22 @@ class jobroleLibraryController extends Controller
 
         // Get all user jobroles for the sub_institute
         $usersJobroles = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)
-            ->whereNull('deleted_at')->orderBy('id','DESC')->get();
+                ->when($request->has('department') && $request->department!='',
+                    function ($q) use ($request) {
+                        // Only department is provided
+                        $q->where('department', $request->department);
+                    }
+                )
+                ->when($request->has('sub_department') && $request->sub_department!='',
+                    function ($q) use ($request) {
+                        // Both department and sub_department provided
+                        $q->where('sub_department', $request->sub_department);
+                    }
+                )
+                ->whereNull('deleted_at')
+                ->orderByDesc('id')
+                ->get();
+
 
         // Prepare response data
         // $res['jobroleData'] = $jobroleData;
@@ -182,6 +193,7 @@ class jobroleLibraryController extends Controller
 
                     return $data;
                 });
+                // echo "<pre>";print_r($res);exit;
         } elseif ($request->has('formType') && $request->formType == "tasks") {
             // If formType is 'tasks', fetch user jobrole tasks
             $res['usertaskData'] = userJobroleTask::with([
@@ -446,20 +458,31 @@ class jobroleLibraryController extends Controller
                     ];
                     $lastInsertedId = userSkills::insertGetId($insertData);
                     if ($lastInsertedId && $lastInsertedId != 0) {
-                        $insertArray = [
-                            'skill' => $skillName,
-                            'jobrole' => $request->jobrole,
-                            'description' => null,
+                        // $insertArray = [
+                        //     'skill' => $skillName,
+                        //     'jobrole' => $request->jobrole,
+                        //     'description' => null,
+                        //     'sub_institute_id' => $request->sub_institute_id,
+                        //     'created_by' => $request->user_id,
+                        //     'created_at' => now(),
+                        // ];
+                         $insertArray = [
+                             'skill' => $skillName,
+                            'jobrole' =>  $request->jobrole,
+                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
                             'sub_institute_id' => $request->sub_institute_id,
                             'created_by' => $request->user_id,
                             'created_at' => now(),
                         ];
                         $insert = skillJobroleMap::insert($insertArray);
                     }
-                } else {
+                } else if($request->has('id')) {
+                    // return $request->all();exit;
                     $checkSkillExits = skillJobroleMap::where('id', $request->id)->first();
+                    // return $checkSkillExits;exit;
+
                     // If skill-jobrole mapping exists, update skill
-                    if (isset($checkSkillExits->skill_id)) {
+                    if (isset($checkSkillExits->skill)) {
 
                         $updateData = [
                             'title' => $skillName,
@@ -470,9 +493,29 @@ class jobroleLibraryController extends Controller
                             'status' => 'Active',
                             'approve_status' => 'approved'
                         ];
+                    // return $updateData;exit;
 
                         $lastInsertedId = userSkills::where('id', $checkSkillExits->skill_id)->update($updateData);
+                         $updateArray = [
+                            'skill' => $skillName,
+                            'jobrole' =>  $request->jobrole,
+                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
+                            'sub_institute_id' => $request->sub_institute_id,
+                            'updated_by' => $request->user_id,
+                            'updated_at' => now(),
+                        ];
+                        $update = skillJobroleMap::where('id', $request->id)->update($updateArray);
                     }
+                }else{
+                     $insertArray = [
+                            'skill' => $skillName,
+                            'jobrole' =>  $request->jobrole,
+                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
+                            'sub_institute_id' => $request->sub_institute_id,
+                            'created_by' => $request->user_id,
+                            'created_at' => now(),
+                        ];
+                        $insert = skillJobroleMap::insert($insertArray);
                 }
             }
             $i++;
