@@ -552,9 +552,10 @@ class skillLibraryController extends Controller
             ->value('title');
 
         $res['userJobroleData'] = $this->getJobroleData($request, $skillName, 'usersJobrole');
-
         // $res['proficiency_levels'] = $proficiency_level;
-        $res['userproficiency_levelData'] = $this->getProficiencyLevels($request, '', $request->skill_id);
+        $res['userproficiency_levelData'] = $this->getProficiencyLevels($request, 'usersProficiencyLevel', $id);
+        // echo "<pre>";print_r($res['userproficiency_levelData']);exit;
+
         if (empty($res['userproficiency_levelData'])) {
             $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
                 ->whereNull('sub_institute_id')
@@ -916,10 +917,10 @@ class skillLibraryController extends Controller
                 $query->where('skill_id', $skillId)
                     ->where('sub_institute_id', $request->sub_institute_id);
             })
-                ->orWhere(function ($query) {
-                    $query->whereNull('skill_id')
-                        ->whereNull('sub_institute_id');
-                })
+                // ->orWhere(function ($query) {
+                //     $query->whereNull('skill_id')
+                //         ->whereNull('sub_institute_id');
+                // })
                 ->whereNull('deleted_at')
                 ->get();
         } elseif ($getType == "groupedProficiencyLevels") {
@@ -927,10 +928,10 @@ class skillLibraryController extends Controller
                 $query->where('skill_id', $skillId)
                     ->where('sub_institute_id', $request->sub_institute_id);
             })
-                ->orWhere(function ($query) {
-                    $query->whereNull('skill_id')
-                        ->whereNull('sub_institute_id');
-                })
+                // ->orWhere(function ($query) {
+                //     $query->whereNull('skill_id')
+                //         ->whereNull('sub_institute_id');
+                // })
                 ->whereNull('deleted_at')
                 ->groupBy('proficiency_level')
                 ->get();
