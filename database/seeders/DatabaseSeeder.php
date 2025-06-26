@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             TblMenuMasterSeeder::class,
             TblGroupwiseRights::class,
             proficiencyLevel::class,
+            SLevelResponsibilitySeeder::class,
         ]);
     }
 
