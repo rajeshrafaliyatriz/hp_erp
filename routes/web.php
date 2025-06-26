@@ -11,6 +11,7 @@ use App\Http\Controllers\school_setup\masterSetupController;
 use App\Http\Controllers\school_setup\sub_std_mapController;
 use App\Http\Controllers\CkeditorFileUploadController;
 use App\Http\Controllers\front_desk\syllabus\syllabusController;
+use App\Http\Controllers\libraries\levelOfResponsibilityController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -23,6 +24,8 @@ Route::middleware(['auth','session','menu'])->group(function () {
     Route::get('menu_lists', [authController::class, 'menu_lists'])->name('menu_lists');
     Route::resource('skill_library', skillLibraryController::class);
     Route::resource('jobrole_library', jobroleLibraryController::class);
+    Route::resource('level_of_responsibility', levelOfResponsibilityController::class);
+
     Route::get('search_data', [AJAXController::class, 'searchSkill'])->name('search_skill');
 
     Route::resource('jobrole', skillLibraryController::class);

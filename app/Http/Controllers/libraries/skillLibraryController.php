@@ -563,8 +563,52 @@ class skillLibraryController extends Controller
                 ->get();
         }
         $res['userKnowledgeData'] = $this->getKnowledgeAbilityData($request, $id, 'knowledge');
+       $viewKnowledge = [];
+
+        foreach ($res['userKnowledgeData'] as $value) {
+            $viewKnowledge[$value['proficiency_level']][] = $value;
+        }
+
+        $res['userViewKnowledge'] = [];
+
+        foreach ($viewKnowledge as $level => $items) {
+            $res['userViewKnowledge'][] = [
+                'proficiency_level' => $level,
+                'items' => $items
+            ];
+        }
+
         $res['userabilityData'] = $this->getKnowledgeAbilityData($request, $id, 'ability');
+
+        $viewAbility = [];
+
+        foreach ($res['userabilityData'] as $value) {
+            $viewAbility[$value['proficiency_level']][] = $value;
+        }
+
+        $res['userViewAbility'] = [];
+
+        foreach ($viewAbility as $level => $items) {
+            $res['userViewAbility'][] = [
+                'proficiency_level' => $level,
+                'items' => $items
+            ];
+        }
         $res['userApplicationData'] = $this->getApplicationData($request, $id);
+         $viewApplication = [];
+
+        foreach ($res['userApplicationData'] as $value) {
+            $viewApplication[$value['proficiency_level']][] = $value;
+        }
+
+        $res['userViewApplication'] = [];
+
+        foreach ($viewApplication as $level => $items) {
+            $res['userViewApplication'][] = [
+                'proficiency_level' => $level,
+                'items' => $items
+            ];
+        }
         return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 
@@ -1025,6 +1069,7 @@ class skillLibraryController extends Controller
             ->where('classification', $getType)
             ->where('sub_institute_id', $request->sub_institute_id)
             ->whereNull('deleted_at')
+            ->orderBy('proficiency_level','ASC')
             ->get()
             ->map(function ($item) {
                 $data = $item->toArray();
@@ -1063,6 +1108,7 @@ class skillLibraryController extends Controller
                 ->where('skill_id', $skillId)
                 ->where('sub_institute_id', $request->sub_institute_id)
                 ->whereNull('deleted_at')
+                ->orderBy('proficiency_level','ASC')
                 ->get()
                 ->map(function ($item) {
                     $data = $item->toArray();
