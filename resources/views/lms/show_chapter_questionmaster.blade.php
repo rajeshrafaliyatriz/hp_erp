@@ -1,8 +1,8 @@
 {{--@include('includes.lmsheadcss')
 @include('includes.header')
 @include('includes.sideNavigation')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <div id="page-wrapper">
     <div class="container-fluid">
         <div class="row bg-title align-items-center justify-content-between">
@@ -46,9 +46,9 @@
                                         <tr>
                                             <th></th>
                                             <th>Sr. No.</th>
-                                            <th>Academic Section</th>
+                                            <!--<th>Academic Section</th>
                                             <th>Standard</th>
-                                            <th>Subject</th>
+                                            <th>Subject</th>-->
                                             <th>Chapter</th>
                                             <th>Question</th>
                                             <th>Question Type</th>
@@ -71,9 +71,9 @@
                                                             id="{{ $quesdata->id }}" value="{{ $quesdata->id }}">
                                                     </td>
                                                     <td>@php echo $i++;@endphp</td>
-                                                    <td>{{ $quesdata->grade_name }}</td>
+                                                    <!--<td>{{ $quesdata->grade_name }}</td>
                                                     <td>{{ $quesdata->standard_name }}</td>
-                                                    <td>{{ $quesdata->subject_name }}</td>
+                                                    <td>{{ $quesdata->subject_name }}</td>-->
                                                     <td>{{ $quesdata->chapter_name }}</td>
                                                     <td>{!! $quesdata->question_title !!}</td>
                                                     <td>{{ ucwords($quesdata->question_type) }}</td>
@@ -140,7 +140,7 @@
     </div>
 </div>
 
-@include('includes.lmsfooterJs')
+{{--@include('includes.lmsfooterJs')--}}
 
 <script src="//cdn.mathjax.org/mathjax/latest/MathJax.js">
     MathJax.Hub.Config({
@@ -228,5 +228,5 @@
         }
     }
 </script>
-@include('includes.footer')
+{{--@include('includes.footer')--}}
 @endsection

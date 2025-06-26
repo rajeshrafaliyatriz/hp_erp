@@ -232,7 +232,7 @@ class questionmasterController extends Controller
         $status_val = isset($status) ? $status : '';
 
         $multiple_answer = $request->get('multiple_answer');
-        $multiple_answer_val = isset($multiple_answer) ? $multiple_answer : '';
+        $multiple_answer_val = isset($multiple_answer) ? $multiple_answer : 0;
 
         $pre_topic = $post_topic = $cross_curriculum_topic = "";
         if ($request->get('prechapter') != "") {
@@ -380,6 +380,7 @@ class questionmasterController extends Controller
                     ->orWhere('topic_id', '=', 0);
             })->get()->toArray();
         $lms_mapping_type = json_decode(json_encode($lms_mapping_type), true);
+        $lms_mapping_value = [];
         foreach ($lms_mapping_type as $lkey => $lval) {
             $arr = lmsmappingtypeModel::where(['parent_id' => $lval['id']])->get()->toArray();
             foreach ($arr as $k => $v) {

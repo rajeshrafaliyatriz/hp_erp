@@ -46,7 +46,7 @@
         $k=0;
         $user_profile = Session::get('user_profile_name');
         $show_block = 'NO';
-        if(strtoupper($user_profile) == 'Admin' || strtoupper($user_profile) == 'Admin')
+        if(strtoupper($user_profile) == 'ADMIN' || strtoupper($user_profile) == 'Admin')
         {
             $show_block = 'YES';
         }
@@ -71,7 +71,7 @@
                 <ol class="breadcrumb bg-transparent p-0">
                     <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                     @php $standard_name = DB::table('standard')->where('id',$_REQUEST['standard_id'])->get(); @endphp
-                    <li class="breadcrumb-item"><a href="#">{{ $standard_name[0]->name ?? '' }}</a></li>
+                    <li class="breadcrumb-item"><a href="#">{{ $standard_name[0]->name ?? '-' }}</a></li>
                     <li class="breadcrumb-item"><a href="#">{{$data['subject_name']}}</a></li>
                 </ol>
             </nav>
@@ -156,7 +156,7 @@
                                        class="btn btn-outline-dark mx-1 my-1">OER</a>
                                 @endif
                                 @if( $data['show_content'] == 'chapterwise' && $_REQUEST['perm'] == $data['sub_institute_id'] )
-                                    <a target="_blank"
+                                    <!--<a target="_blank"
                                        href="{{ route('lms_teacherResource.index',['standard_id'=>$chdata->standard_id,'subject_id'=>$chdata->subject_id,'chapter_id'=>$chdata->id,$preload_lms ?? '','mappedValues'=>$mappedValues]) }}"
                                        class="btn btn-outline-dark mx-1 my-1">Teacher Resource</a>
                                     <a target="_blank"
@@ -165,12 +165,14 @@
                                     <a target="_blank"
                                        href="{{ route('lmsmapping.index',['chapter_id'=>$chdata->id,$preload_lms ?? '']) }}"
                                        class="btn btn-outline-dark mx-1 my-1">Chapter-wise Mapping</a>
-                                       <a target="_blank"
+                                    -->
+                                    <a target="_blank"
                                        href="{{ route('create_content_master', ['chapter_id' => $chdata->id]) }}"
                                        class="btn btn-outline-dark mx-1 my-1">Add Content</a>
                                         {{-- <div class="col-md-2 chapter-img-box"> --}}
-                                    <a href="{{ route('lms_flashcard.index',['chapter_id' =>$chdata->id,$preload_lms ?? '' ])}}" target="_blank"
+                                    <!--<a href="{{ route('lms_flashcard.index',['chapter_id' =>$chdata->id,$preload_lms ?? '' ])}}" target="_blank"
                                     class="btn btn-outline-warning btn-sm mx-1" data-toggle="tooltip" title="" data-original-title="Add Flash Card"><i class="mdi mdi-cards-playing-outline"></i></a>
+                                -->
                             {{-- </div> --}}
                                 @endif
                             @endif
@@ -350,7 +352,7 @@
                                     $icons = ['pdf'=> 'mdi mdi-file-pdf-box', 'mp4' => 'mdi mdi-video','link' => 'mdi mdi-file-link', 'html' => 'mdi mdi-language-html5', 'mov' => 'mdi mdi-movie', 'docx' => 'mdi mdi-file-document' ];
                                     $ext = pathinfo($single_content['title'], PATHINFO_EXTENSION);
                                     if(empty($ext)){    
-                                        $ext = "pdf";
+                                        $ext = "..";
                                     }
                                 @endphp
                                 <a href="{{ $content_file_url }}" class="view-box d-flex justify-content-center w-100 h-100" target="_blank">
