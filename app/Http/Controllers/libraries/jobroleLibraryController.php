@@ -105,7 +105,6 @@ class jobroleLibraryController extends Controller
                 ->orderBy('id','Desc')
                 ->get();
 
-
         // Prepare response data
         // $res['jobroleData'] = $jobroleData;
         // $res['alljobroleData'] = $treeData;
