@@ -102,7 +102,7 @@ class jobroleLibraryController extends Controller
                     }
                 )
                 ->whereNull('deleted_at')
-                ->orderByDesc('id')
+                ->orderBy('id','Desc')
                 ->get();
 
 
