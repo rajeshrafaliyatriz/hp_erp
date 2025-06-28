@@ -1,0 +1,124 @@
+.sidebar {
+  width: fit-content;
+  border-right: 1px solid rgb(157, 157, 157);
+}
+
+.sidebar-icons-img {
+  width: 40px;
+  background-color: #f0f0f8;
+  box-sizing: content-box;
+}
+
+.sidebar .sidebar-icons p {
+  width: 80px;
+  font-size: 14px;
+}
+
+.disc {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, white 15%, #cccccc 40%);
+}
+
+.line {
+  width: 2px;
+  height: 40px;
+  background-color: #cccccc;
+  margin-top: 4px;
+}
+
+.dropdown-container {
+  width: 80%;
+  /* margin-left: 90px; */
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: end;
+}
+
+.dropdown-container .dropdownn {
+  background: white;
+  border-radius: 16px;
+}
+
+.dropdown-item-list {
+  width: 100%;
+  background-color: white;
+  margin: 0;
+  border: 0;
+  border-radius: 0px 0px 16px 16px;
+  margin-top: 16px;
+  padding-bottom: 20px;
+}
+
+#dropdownMenuButton.active h5 {
+  font-size: 24px;
+}
+#dropdownMenuButton.active p {
+  font-size: 17px;
+}
+
+#dropdownMenuButton.active img {
+  transform: rotate(180deg);
+  transition: transform 0.5s ease;
+}
+
+.show-sidebar {
+  padding-inline: 30px;
+  padding-block: 10px;
+  background-color: #25bdea;
+  position: absolute;
+  right: -56px;
+  top: 21%;
+  transform: rotate(270deg);
+  transform-origin: center;
+  border-radius: 6px 6px 0px 0px;
+}
+
+.dropdown-itemm {
+  display: flex;
+  margin-left: 70px;
+  margin-bottom: 16px;
+}
+
+.disc-and-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-inline: 16px;
+}
+
+.dropdown-itemm span.heading {
+  font-size: 18px;
+  font-weight: 500;
+  color: #646464;
+}
+
+.dropdown-itemm span.sub-heading {
+  color: #646464;
+}
+
+.dropdown-itemm .time {
+  font-weight: 500;
+  color: #646464;
+}
+
+.dropdown-itemm .link {
+  color: #25bdea;
+  cursor: pointer;
+}
+
+.dropdown-itemm.active .disc {
+  background: radial-gradient(circle, white 15%, #5c4ac7 40%);
+}
+
+.dropdown-itemm.active .line {
+  background-color: #5c4ac7;
+}
+
+.dropdown-itemm.active .heading,
+.dropdown-itemm.active .sub-heading {
+  color: black;
+}

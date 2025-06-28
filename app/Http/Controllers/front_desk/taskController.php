@@ -80,7 +80,7 @@ class taskController extends Controller
         $res['message'] = "Success";
         $res['data'] = $data;
 
-        return is_mobile($type, "frontdesk.show_task", $res, "view");
+        return is_mobile($type, "front_desk.show_task", $res, "view");
     }
 
     /**
@@ -106,7 +106,7 @@ class taskController extends Controller
         $res['userList'] = $users;
         $res['skillLists'] = DB::table('tblemp_skills')->whereIn('sub_institute_id',[0,$sub_institute_id])->get()->toArray();
 
-        return is_mobile($type, "frontdesk.add_task", $res, "view");
+        return is_mobile($type, "front_desk.add_task", $res, "view");
     }
 
     /**
@@ -161,7 +161,7 @@ class taskController extends Controller
             $name = "task_".date('YmdHis');
             $ext = File::extension($originalname);
             $file_name = $name.'.'.$ext;
-            $path = $file->storeAs('public/frontdesk/', $file_name);
+            $path = $file->storeAs('public/front_desk/', $file_name);
         }
 
         foreach ($TASK_ALLOCATED_TO as $key => $value) {
@@ -171,13 +171,14 @@ class taskController extends Controller
             $data['task_type'] = $task_type;
 
             $data['SYEAR'] = $syear;
-            $data['MARKING_PERIOD_ID'] = $term_id;
+            // $data['MARKING_PERIOD_ID'] = $term_id;
             $data['CREATED_BY'] = $user_id;
             $data['TASK_ALLOCATED'] = $manageby;
-            $data['TASK_ALLOCATED_TO'] = $TASK_ALLOCATED_TO[$key];
-            $data['required_skill'] = $required_skill;
+            $data['TASK_ALLOCATED_TO'] = $value;
+            $data['STATUS'] ='PENDING';
+            $data['required_skills'] = $required_skill;
             $data['CREATED_IP_ADDRESS'] = $_SERVER['REMOTE_ADDR'];
-            $data['CREATED_ON'] = date('Y-m-d H:i:s');
+            $data['created_at'] = date('Y-m-d H:i:s');
             $data['sub_institute_id'] = $sub_institute_id;
 
             if ($file_name != '') {
@@ -248,18 +249,18 @@ class taskController extends Controller
 
         $editData = $result[0];
        
-        $dataResult = DB::table("complaint_status")
-            ->where("TYPE", "=", 'TASK')
-            ->get()->toarray();
+        $dataResult = ['PENDING','IN PROGRESS','ON HOLD','COMPLETED'];// DB::table("complaint_status")
+            // ->where("TYPE", "=", 'TASK')
+            // ->get()->toarray();
 
-        $dataResult = array_map(function ($value) {
-            return (array) $value;
-        }, $dataResult);
+        // $dataResult = array_map(function ($value) {
+        //     return (array) $value;
+        // }, $dataResult);
 
         $taskStatus = $dataResult;
-        $editData['skillLists'] = DB::table('tblemp_skills')->whereIn('sub_institute_id',[0,$sub_institute_id])->get()->toArray();
+        $editData['skillLists'] = [];// DB::table('tblemp_skills')->whereIn('sub_institute_id',[0,$sub_institute_id])->get()->toArray();
 
-        return view('frontdesk/edit_task', ['data' => $editData, 'taskStatus' => $taskStatus]);
+        return view('front_desk/edit_task', ['data' => $editData, 'taskStatus' => $taskStatus]);
     }
 
     /**
@@ -287,24 +288,26 @@ class taskController extends Controller
         }
         
         $TASK_ALLOCATED_TO = $request->input("TASK_ALLOCATED_TO");
-        $KRA = $request->input("KRA");
-        $KPA = $request->input("KPA");
+        $KRA = $request->input("kra");
+        $KPA = $request->input("kpa");
         $task_type = $request->input("selType");
         $required_skill = $request->skills ?? '';
         $observation_point = $request->observation_point;
         // store skills
 
-        $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT','formName','selDepartment','selSubDepartment','selType','add','type','syear','sub_institute_id','user_id','manageby','KRA','KPA','skills']);
+        $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT','formName','selDepartment','selSubDepartment','selType','task_date','add','type','syear','sub_institute_id','user_id','manageby','KRA','KPA','skills']);
 
-        $data['KRA'] = $KRA;
-        $data['KPA'] = $KPA;
+        $data['kra'] = $KRA;
+        $data['TASK_DATE'] = Carbon::parse($request->TASK_DATE)->format('Y-m-d');
+
+        $data['kpa'] = $KPA;
         $data['task_type'] = $task_type;
         $data['observation_point'] = $observation_point;
 
         $data['SYEAR'] = $syear;
-        $data['MARKING_PERIOD_ID'] = $term_id;
+        // $data['MARKING_PERIOD_ID'] = $term_id;
         $data['CREATED_IP_ADDRESS'] = $_SERVER['REMOTE_ADDR'];
-        $data['CREATED_ON'] = date('Y-m-d H:i:s');
+        $data['updated_at'] = date('Y-m-d H:i:s');
         $data['approved_by'] = $user_id;
         $data['approved_on'] = date('Y-m-d H:i:s');
 
@@ -318,7 +321,7 @@ class taskController extends Controller
             $name = "task_".date('YmdHis');
             $ext = File::extension($originalname);
             $file_name = $name.'.'.$ext;
-            $path = $file->storeAs('public/frontdesk/', $file_name);
+            $path = $file->storeAs('public/front_desk/', $file_name);
         }
 
         if ($file_name != '') {
@@ -360,7 +363,7 @@ class taskController extends Controller
         $res['status_code'] = 1;
         $res['message'] = "Success";
 
-        return is_mobile($type, "frontdesk.task_report", $res, "view");
+        return is_mobile($type, "front_desk.task_report", $res, "view");
     }
 
     function getDatesWithoutSundays() {

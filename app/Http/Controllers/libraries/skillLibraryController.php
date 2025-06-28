@@ -153,12 +153,14 @@ class skillLibraryController extends Controller
         $res['proficiency_levels'] = $this->getProficiencyLevels($request, 'usersProficiencyLevel', $request->skill_id);
 
         $res['grouped_proficiency_levels'] = $this->getProficiencyLevels($request, 'groupedProficiencyLevels', $request->skill_id);
-        if ($request->has('formType') && $request->formType == "jobrole") {
-            // getskill name first 
+
+        // getskill name first 
             $skillName = userSkills::where('id', $request->skill_id)
                 ->where('sub_institute_id', $request->sub_institute_id)
                 ->whereNull('deleted_at')
                 ->value('title');
+        if ($request->has('formType') && $request->formType == "jobrole") {
+            
 
             $res['userJobroleData'] = $this->getJobroleData($request, $skillName, 'usersJobrole');
             // echo "<pre>";print_r($res['userJobroleData']);exit;
@@ -177,7 +179,7 @@ class skillLibraryController extends Controller
         }
         // userApplication
         else if ($request->has('formType') && $request->formType == "application") {
-            $res['userApplicationData'] = $this->getApplicationData($request, $request->skill_id);
+            $res['userApplicationData'] = $this->getApplicationData($request, $skillName);
             // echo "<pre>";print_r($res['userApplicationData']);exit;
         } else {
 
@@ -594,7 +596,9 @@ class skillLibraryController extends Controller
                 'items' => $items
             ];
         }
-        $res['userApplicationData'] = $this->getApplicationData($request, $id);
+        $res['userApplicationData'] = $this->getApplicationData($request, $skillName);
+        $res['skillName'] = $skillName;
+
          $viewApplication = [];
 
         foreach ($res['userApplicationData'] as $value) {
@@ -808,7 +812,7 @@ class skillLibraryController extends Controller
                     $i++;
                 } elseif (isset($checkExists->id)) {
                     $insertArray = [
-                        'skill_id' => $id,
+                        'skill' =>$request->skill_name,
                         'proficiency_level' => $value->proficiency_level,
                         'classification_item' => $value->classification_item,
                         'classification' => 'ability',
@@ -851,7 +855,7 @@ class skillLibraryController extends Controller
                 }
             }
 
-            $res['userApplicationData'] = $this->getApplicationData($request, $id);
+            $res['userApplicationData'] = $this->getApplicationData($request, $skillName);
         }
 
         if ($i > 0) {
@@ -1093,7 +1097,7 @@ class skillLibraryController extends Controller
         return $data;
     }
 
-    public function getApplicationData($request, $skillId, $getType = '')
+    public function getApplicationData($request, $skillName, $getType = '')
     {
         // return $request->all();
         $data = [];
@@ -1105,7 +1109,7 @@ class skillLibraryController extends Controller
                 'userSkills' => fn($q) => $q->select($skillFields),
                 'createdUser' => fn($q) => $q->select($createdUser),
             ])
-                ->where('skill_id', $skillId)
+                ->where('skill', $skillName)
                 ->where('sub_institute_id', $request->sub_institute_id)
                 ->whereNull('deleted_at')
                 ->orderBy('proficiency_level','ASC')

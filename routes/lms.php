@@ -52,6 +52,7 @@ use App\Http\Controllers\lms\content_library\contentLibraryController;
 use App\Http\Controllers\lms\curriculum\curriculumLessonplanController;
 use App\Http\Controllers\lms\library\skillLibraryController;
 use App\Http\Controllers\lms\library\H5PController;
+use App\Http\Controllers\front_desk\taskController;
 use Illuminate\Support\Facades\Route;
 
 Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], function () {
@@ -259,7 +260,7 @@ Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], f
     Route::resource('bazar_report', bulkUploadedReportController::class);
     Route::post('show_bazar_report', [bulkUploadedReportController::class, 'show_bazar_report'])->name('show_bazar_report');
 });
-
+Route::resource('task', taskController::class);
 Route::get('/upcoming', [lmsActivityStreamController::class, 'upcomingActivity'])->name('upcoming');
 Route::get('/today', [lmsActivityStreamController::class, 'todayActivity'])->name('today');
 Route::get('/recent', [lmsActivityStreamController::class, 'recentActivity'])->name('recent');

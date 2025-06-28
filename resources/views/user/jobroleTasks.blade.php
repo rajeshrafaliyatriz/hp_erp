@@ -1,7 +1,7 @@
 <div class="container">
     <!-- Header Section -->
     <div class="text-center mb-5">
-        <h2 class="fw-semibold text-dark">
+        <h2 class="fw-semibold text-dark">Jobrole:
             {{ $jobroleTasks[0]->jobrole ?? 'Please map jobrole..' }}
         </h2>
     </div>
@@ -9,18 +9,14 @@
     <!-- Cards Section -->
     <div class="row g-4">
         @foreach ($jobroleTasks as $index=> $jobrole)
-            <div class="col-md-3 col-lg-3" style="margin:12px 0px">
-                <div class="card h-100 border-0 rounded-4 custom-card" style="box-shadow:#e8efed 6px 6px 4px 4px;">
+            <div class="col-md-12 col-lg-12" style="margin:12px 0px">
+                <div class="card border-0 rounded-4 custom-card" style="box-shadow:#e8efed 6px 6px 4px 4px;">
                     <div class="card-body d-flex flex-column mb-2">
-                        <!-- Task Title -->
-                        <div class="card-title mb-3 text-white fw-bold px-3 py-2 rounded" style="background: linear-gradient(45deg, #09AFE8, #29F499);height:75px;font-size:16px;" title="{{$jobrole->task}}">
-                            {{ substr($jobrole->task,0,100) }} ...
+                        <div class="card-title mb-3 text-white fw-bold px-3 py-2 rounded" style="background: linear-gradient(45deg, #09AFE8, #29F499);font-size:16px;" title="{{$jobrole->task}}">
+                            {{ substr($jobrole->task,0,191) }}
                         </div>
                         <div class="dataDiv px-3 py-2">
-                            <!-- Task Description -->
-                            <p class="card-text text-secondary flex-grow-1"><b><u>Critical Work Function :</u></b><br>{{ $jobrole->critical_work_function }}</p>
-                            <p class="card-text text-secondary flex-grow-1"><b><u>Skill :</u></b><br>{{$jobrole->skill}}</p>
-                            <p class="card-text text-secondary flex-grow-1"><b><u>Proficiency Level :</u></b><br>{{$jobrole->proficiency_level}}</p>
+                            <p class="card-text text-secondary flex-grow-1"><b><u>Critical Work Function :</u></b>{{ $jobrole->critical_work_function }}</p>    
                         </div>
                     </div>
                 </div>

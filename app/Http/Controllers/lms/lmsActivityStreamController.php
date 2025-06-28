@@ -48,7 +48,7 @@ class lmsActivityStreamController extends Controller
         $res['upcoming'] = $this->upcomingActivity($request);
         $res['today'] = $this->todayActivity($request);
         $res['recent'] = $this->recentActivity($request);
-        $res['checkList'] = DB::table('task')->where('TASK_ALLOCATED',session()->get('user_id'))->where('task_type','=','Daily Task')->where('TASK_DATE',date('Y-m-d'))->get()->toArray();
+        $res['checkList'] = DB::table('task')->where('task_allocated',session()->get('user_id'))->where('task_type','=','Daily Task')->where('task_date',date('Y-m-d'))->get()->toArray();
         // echo "<pre>";print_r($res);exit;
         return is_mobile($type, 'lms/newActivityStream', $res, "view");
     }
@@ -83,34 +83,35 @@ class lmsActivityStreamController extends Controller
             $studentData = $this->studentData($user_id,$sub_institute_id,$syear);
             $classStdId = $standard_id = $studentData['standard_id'];
             $classDivId = $division_id = $studentData['section_id'];
-        }else if ($profileName=="Teacher"){
-            $getTeacherData = DB::table('timetable as h')->where('h.teacher_id',$user_id)
-            ->selectRaw('GROUP_CONCAT(DISTINCT h.standard_id) AS standard_id,GROUP_CONCAT(DISTINCT h.division_id) AS division_id')->where(['h.sub_institute_id'=>$sub_institute_id,'h.syear'=>$syear])->groupBy('h.teacher_id')->first();
-            $standard_id = $getTeacherData->standard_id;
-            $division_id = $getTeacherData->division_id;
-            $classTeacher = DB::table('class_teacher')->where(['sub_institute_id'=>$sub_institute_id,'syear'=>$syear])->first();
-            $classStdId = ($classTeacher->standard_id) ? : '';
-            $classDivId = ($classTeacher->division_id) ? : '';
         }
+        // else if ($profileName=="Teacher"){
+        //     $getTeacherData = DB::table('timetable as h')->where('h.teacher_id',$user_id)
+        //     ->selectRaw('GROUP_CONCAT(DISTINCT h.standard_id) AS standard_id,GROUP_CONCAT(DISTINCT h.division_id) AS division_id')->where(['h.sub_institute_id'=>$sub_institute_id,'h.syear'=>$syear])->groupBy('h.teacher_id')->first();
+        //     $standard_id = $getTeacherData->standard_id;
+        //     $division_id = $getTeacherData->division_id;
+        //     $classTeacher = DB::table('class_teacher')->where(['sub_institute_id'=>$sub_institute_id,'syear'=>$syear])->first();
+        //     $classStdId = ($classTeacher->standard_id) ? : '';
+        //     $classDivId = ($classTeacher->division_id) ? : '';
+        // }
 
         // class schedule data from timetable
-        $classSchedule = DB::table('timetable as tt')
-        ->join('period as p',function($join) use($sub_institute_id,$syear,$dayOfWeek){
-            $join->on('p.id','=','tt.period_id')->where(['p.sub_institute_id'=>$sub_institute_id,'p.used_for_attendance'=>'Yes']);
-        })
-        ->selectRaw("tt.*,p.*,(SELECT name FROM standard where id = tt.standard_id) as standard,(SELECT name FROM division WHERE id = tt.division_id) as division")
-        ->where(['tt.sub_institute_id'=>$sub_institute_id,'tt.syear'=>$syear])
-        ->where('tt.week_day',$firstLetter)
-        // when profile is student
-        ->when($profileName=='Student',function($query) use($standard_id,$division_id){
-            $query->where('tt.standard_id',$standard_id)->where('tt.division_id',$division_id);
-        }) 
-       // for teacher
-        ->when($profileName=='Teacher',function($query) use($user_id){
-            $query->where('tt.teacher_id',$user_id);
-        })
-        ->orderBy('p.sort_order')
-        ->get()->toArray();
+         $classSchedule = [];// DB::table('timetable as tt')
+    //     ->join('period as p',function($join) use($sub_institute_id,$syear,$dayOfWeek){
+    //         $join->on('p.id','=','tt.period_id')->where(['p.sub_institute_id'=>$sub_institute_id,'p.used_for_attendance'=>'Yes']);
+    //     })
+    //     ->selectRaw("tt.*,p.*,(SELECT name FROM standard where id = tt.standard_id) as standard,(SELECT name FROM division WHERE id = tt.division_id) as division")
+    //     ->where(['tt.sub_institute_id'=>$sub_institute_id,'tt.syear'=>$syear])
+    //     ->where('tt.week_day',$firstLetter)
+    //     // when profile is student
+    //     ->when($profileName=='Student',function($query) use($standard_id,$division_id){
+    //         $query->where('tt.standard_id',$standard_id)->where('tt.division_id',$division_id);
+    //     }) 
+    //    // for teacher
+    //     ->when($profileName=='Teacher',function($query) use($user_id){
+    //         $query->where('tt.teacher_id',$user_id);
+    //     })
+    //     ->orderBy('p.sort_order')
+    //     ->get()->toArray();
       
         // get Tomorrow homework
         $homework = $this->getHomeWork($profileName,$user_id,$sub_institute_id,$syear,$standard_id,$division_id,$searchDate,'upcoming');
@@ -181,8 +182,8 @@ class lmsActivityStreamController extends Controller
             $classStdId = $standard_id = $studentData['standard_id'];
             $classDivId = $division_id = $studentData['section_id'];
         }else if ($profileName=="Teacher"){
-            $getTeacherData = DB::table('timetable as h')->where('h.teacher_id',$user_id)
-            ->selectRaw('GROUP_CONCAT(DISTINCT h.standard_id) AS standard_id,GROUP_CONCAT(DISTINCT h.division_id) AS division_id')->where(['h.sub_institute_id'=>$sub_institute_id,'h.syear'=>$syear])->groupBy('h.teacher_id')->first();
+            $getTeacherData = []; // DB::table('timetable as h')->where('h.teacher_id',$user_id)
+            // ->selectRaw('GROUP_CONCAT(DISTINCT h.standard_id) AS standard_id,GROUP_CONCAT(DISTINCT h.division_id) AS division_id')->where(['h.sub_institute_id'=>$sub_institute_id,'h.syear'=>$syear])->groupBy('h.teacher_id')->first();
             $standard_id = $getTeacherData->standard_id;
             $division_id = $getTeacherData->division_id;
             $classTeacher = DB::table('class_teacher')->where(['sub_institute_id'=>$sub_institute_id,'syear'=>$syear])->first();
@@ -191,36 +192,36 @@ class lmsActivityStreamController extends Controller
         }
 
         // class schedule data from timetable
-        $classSchedule = DB::table('timetable as tt')
-        ->join('period as p',function($join) use($sub_institute_id,$syear,$dayOfWeek){
-            $join->on('p.id','=','tt.period_id')->where(['p.sub_institute_id'=>$sub_institute_id,'p.used_for_attendance'=>'Yes']);
-        })
-        ->leftJoin('attendance_student as att',function($join) use($standard_id,$division_id,$sub_institute_id,$syear){
-            $join->when($standard_id,function($q) use($standard_id){
-                $q->whereRaw('att.standard_id in ('.$standard_id.')');
-            })
-            ->when($division_id,function($q) use($division_id){
-                $q->whereRaw('att.section_id in ('.$division_id.')');
-            })->where(['att.sub_institute_id'=>$sub_institute_id,'att.syear'=>$syear]);
-        })
-        ->selectRaw("tt.*,p.*,(SELECT name FROM standard where id = tt.standard_id) as standard,(SELECT name FROM division WHERE id = tt.division_id) as division,count(att.id) as att,att.attendance_date")
-        ->where(['tt.sub_institute_id'=>$sub_institute_id,'tt.syear'=>$syear])
-        ->where('tt.week_day',$firstLetter)
-        // when profile is student
-        ->when($profileName=='Student',function($query) use($standard_id,$division_id){
-            $query->where('tt.standard_id',$standard_id)->where('tt.division_id',$division_id);
-        }) 
-       // for teacher
-        ->when($profileName=='Teacher',function($query) use($user_id){
-            $query->where('tt.teacher_id',$user_id);
-        })
-        ->where(['tt.sub_institute_id'=>$sub_institute_id,'tt.syear'=>$syear])
-        ->orderBy('p.sort_order')
-        ->groupBy('tt.id')
-        ->get()->toArray();
+        $classSchedule = []; //= DB::table('timetable as tt')
+    //     ->join('period as p',function($join) use($sub_institute_id,$syear,$dayOfWeek){
+    //         $join->on('p.id','=','tt.period_id')->where(['p.sub_institute_id'=>$sub_institute_id,'p.used_for_attendance'=>'Yes']);
+    //     })
+    //     ->leftJoin('attendance_student as att',function($join) use($standard_id,$division_id,$sub_institute_id,$syear){
+    //         $join->when($standard_id,function($q) use($standard_id){
+    //             $q->whereRaw('att.standard_id in ('.$standard_id.')');
+    //         })
+    //         ->when($division_id,function($q) use($division_id){
+    //             $q->whereRaw('att.section_id in ('.$division_id.')');
+    //         })->where(['att.sub_institute_id'=>$sub_institute_id,'att.syear'=>$syear]);
+    //     })
+    //     ->selectRaw("tt.*,p.*,(SELECT name FROM standard where id = tt.standard_id) as standard,(SELECT name FROM division WHERE id = tt.division_id) as division,count(att.id) as att,att.attendance_date")
+    //     ->where(['tt.sub_institute_id'=>$sub_institute_id,'tt.syear'=>$syear])
+    //     ->where('tt.week_day',$firstLetter)
+    //     // when profile is student
+    //     ->when($profileName=='Student',function($query) use($standard_id,$division_id){
+    //         $query->where('tt.standard_id',$standard_id)->where('tt.division_id',$division_id);
+    //     }) 
+    //    // for teacher
+    //     ->when($profileName=='Teacher',function($query) use($user_id){
+    //         $query->where('tt.teacher_id',$user_id);
+    //     })
+    //     ->where(['tt.sub_institute_id'=>$sub_institute_id,'tt.syear'=>$syear])
+    //     ->orderBy('p.sort_order')
+    //     ->groupBy('tt.id')
+    //     ->get()->toArray();
       
         // get Tomorrow homework
-        $homework = $this->getHomeWork($profileName,$user_id,$sub_institute_id,$syear,$standard_id,$division_id,$searchDate,'today');
+        $homework = [];// $this->getHomeWork($profileName,$user_id,$sub_institute_id,$syear,$standard_id,$division_id,$searchDate,'today');
 
         // get Event Calender
         $eventCalender = $this->getEventCalender($sub_institute_id,$syear,$standard_id,$searchDate,'today');
@@ -296,36 +297,10 @@ class lmsActivityStreamController extends Controller
         }
 
         // class schedule data from timetable
-        $classSchedule = DB::table('timetable as tt')
-        ->join('period as p',function($join) use($sub_institute_id,$syear,$dayOfWeek){
-            $join->on('p.id','=','tt.period_id')->where(['p.sub_institute_id'=>$sub_institute_id,'p.used_for_attendance'=>'Yes']);
-        })
-        ->leftJoin('attendance_student as att',function($join) use($standard_id,$division_id,$sub_institute_id,$syear){
-            $join->when($standard_id,function($q) use($standard_id){
-                $q->whereRaw('att.standard_id in ('.$standard_id.')');
-            })
-            ->when($division_id,function($q) use($division_id){
-                $q->whereRaw('att.section_id in ('.$division_id.')');
-            })->where(['att.sub_institute_id'=>$sub_institute_id,'att.syear'=>$syear]);
-        })
-        ->selectRaw("tt.*,p.*,(SELECT name FROM standard where id = tt.standard_id) as standard,(SELECT name FROM division WHERE id = tt.division_id) as division,count(att.id) as att,att.attendance_date")
-        ->where(['tt.sub_institute_id'=>$sub_institute_id,'tt.syear'=>$syear])
-        ->where('tt.week_day',$firstLetter)
-        // when profile is student
-        ->when($profileName=='Student',function($query) use($standard_id,$division_id){
-            $query->where('tt.standard_id',$standard_id)->where('tt.division_id',$division_id);
-        }) 
-       // for teacher
-        ->when($profileName=='Teacher',function($query) use($user_id){
-            $query->where('tt.teacher_id',$user_id);
-        })
-        ->where(['att.sub_institute_id'=>$sub_institute_id,'att.syear'=>$syear])
-        ->groupBy('tt.id')
-        ->orderBy('p.sort_order')
-        ->get()->toArray();
+        $classSchedule =[];
       
         // get Tomorrow homework
-        $homework = $this->getHomeWork($profileName,$user_id,$sub_institute_id,$syear,$standard_id,$division_id,$searchDate,'recent');
+        $homework = [];//$this->getHomeWork($profileName,$user_id,$sub_institute_id,$syear,$standard_id,$division_id,$searchDate,'recent');
 
         // get Event Calender
         $eventCalender = $this->getEventCalender($sub_institute_id,$syear,$standard_id,$searchDate,'recent');
@@ -381,39 +356,40 @@ class lmsActivityStreamController extends Controller
     }
 
     function getHomeWork($profileName,$user_id,$sub_institute_id,$syear,$standard_id,$division_id,$searchDate,$activityType=''){
-        return DB::table('homework as h')
-        ->join('sub_std_map as ssm','h.subject_id','=','ssm.subject_id')
-        ->selectRaw("h.id,h.title,h.`description`,h.student_id,h.created_by,h.image as attachment,h.date,h.submission_date,h.subject_id,h.completion_status,h.created_on,ssm.display_name,(SELECT name FROM standard where id = h.standard_id) as standard,(SELECT name FROM division WHERE id = h.division_id) as division")
-        // when profile is student
-        ->when($profileName=='Teacher',function($query) use($standard_id,$division_id){
-            $query->whereRaw("h.standard_id IN (".$standard_id.") AND h.division_id IN (".$division_id.")");
-        }) 
-        // for teacher
-        ->when($profileName=='Student',function($query) use($user_id){
-            $query->where('h.student_id',$user_id);
-        })
-        // for upcoming
-        ->when($activityType=='upcoming',function($q) use($searchDate){
-            $q->where('h.submission_date','>=',$searchDate);
-        })
-        // for today
-        ->when($activityType=='today',function($q) use($searchDate){
-            $q->where('h.submission_date',$searchDate);
-        }) 
-         // for recent
-         ->when($activityType=='recent',function($q) use($searchDate){
-            $q->where('h.submission_date','<',$searchDate);
-        }) 
-        ->where(['h.sub_institute_id'=>$sub_institute_id,'h.syear'=>$syear])
-        // when profile is student
-        ->when($profileName=='Teacher',function($query) use($standard_id){
-            $query->groupByRaw('h.standard_id,h.division_id,h.subject_id');
-        }) 
-        // for teacher
-        ->when($profileName=='Student',function($query) use($user_id){
-            $query->limit(10)->groupBy('h.id');
-        })
-        ->get()->toArray();
+        // return DB::table('homework as h')
+        // ->join('sub_std_map as ssm','h.subject_id','=','ssm.subject_id')
+        // ->selectRaw("h.id,h.title,h.`description`,h.student_id,h.created_by,h.image as attachment,h.date,h.submission_date,h.subject_id,h.completion_status,h.created_on,ssm.display_name,(SELECT name FROM standard where id = h.standard_id) as standard,(SELECT name FROM division WHERE id = h.division_id) as division")
+        // // when profile is student
+        // ->when($profileName=='Teacher',function($query) use($standard_id,$division_id){
+        //     $query->whereRaw("h.standard_id IN (".$standard_id.") AND h.division_id IN (".$division_id.")");
+        // }) 
+        // // for teacher
+        // ->when($profileName=='Student',function($query) use($user_id){
+        //     $query->where('h.student_id',$user_id);
+        // })
+        // // for upcoming
+        // ->when($activityType=='upcoming',function($q) use($searchDate){
+        //     $q->where('h.submission_date','>=',$searchDate);
+        // })
+        // // for today
+        // ->when($activityType=='today',function($q) use($searchDate){
+        //     $q->where('h.submission_date',$searchDate);
+        // }) 
+        //  // for recent
+        //  ->when($activityType=='recent',function($q) use($searchDate){
+        //     $q->where('h.submission_date','<',$searchDate);
+        // }) 
+        // ->where(['h.sub_institute_id'=>$sub_institute_id,'h.syear'=>$syear])
+        // // when profile is student
+        // ->when($profileName=='Teacher',function($query) use($standard_id){
+        //     $query->groupByRaw('h.standard_id,h.division_id,h.subject_id');
+        // }) 
+        // // for teacher
+        // ->when($profileName=='Student',function($query) use($user_id){
+        //     $query->limit(10)->groupBy('h.id');
+        // })
+        // ->get()->toArray();
+        return [];
     }
 
     function getEventCalender($sub_institute_id,$syear,$standard_id,$searchDate,$activityType=""){
@@ -476,31 +452,33 @@ class lmsActivityStreamController extends Controller
     }
     // ptm 
     function getPTM($sub_institute_id,$syear,$searchDate,$user_id,$profileName,$standard_id,$division_id,$activityType=""){
-        return DB::table('ptm_time_slots_master as ptm')
-                ->join('standard as std','std.id','=','ptm.standard_id')
-                ->join('division as d','ptm.division_id','=','d.id')
-                ->selectRaw('ptm.id,ptm.standard_id,std.name as standard,ptm.division_id,d.name as division,ptm.title as ptmTitle,ptm.from_time,ptm.to_time,ptm.ptm_date')
-                ->where(['ptm.sub_institute_id'=>$sub_institute_id,'ptm.syear'=>$syear])
-                // for admin / teacher and student
-                ->when($standard_id,function($q) use($standard_id){
-                    $q->whereRaw('ptm.standard_id in ('.$standard_id.')');
-                })
-                ->when($division_id,function($q) use($division_id){
-                    $q->whereRaw('ptm.division_id in ('.$division_id.')');
-                })
-                ->when($activityType=='upcoming',function($q) use($searchDate){
-                    $q->where('ptm.ptm_date','>=',$searchDate);
-                })
-                  // for today
-                  ->when($activityType=='today',function($q) use($searchDate){
-                    $q->where('ptm.ptm_date',$searchDate);
-                }) 
-                // for recent
-                ->when($activityType=='recent',function($q) use($searchDate){
-                    $q->where('ptm.ptm_date','<',$searchDate);
-                }) 
-                ->groupByRaw('ptm.standard_id,ptm.division_id')
-                ->get()->toArray();
+        // return DB::table('ptm_time_slots_master as ptm')
+        //         ->join('standard as std','std.id','=','ptm.standard_id')
+        //         ->join('division as d','ptm.division_id','=','d.id')
+        //         ->selectRaw('ptm.id,ptm.standard_id,std.name as standard,ptm.division_id,d.name as division,ptm.title as ptmTitle,ptm.from_time,ptm.to_time,ptm.ptm_date')
+        //         ->where(['ptm.sub_institute_id'=>$sub_institute_id,'ptm.syear'=>$syear])
+        //         // for admin / teacher and student
+        //         ->when($standard_id,function($q) use($standard_id){
+        //             $q->whereRaw('ptm.standard_id in ('.$standard_id.')');
+        //         })
+        //         ->when($division_id,function($q) use($division_id){
+        //             $q->whereRaw('ptm.division_id in ('.$division_id.')');
+        //         })
+        //         ->when($activityType=='upcoming',function($q) use($searchDate){
+        //             $q->where('ptm.ptm_date','>=',$searchDate);
+        //         })
+        //           // for today
+        //           ->when($activityType=='today',function($q) use($searchDate){
+        //             $q->where('ptm.ptm_date',$searchDate);
+        //         }) 
+        //         // for recent
+        //         ->when($activityType=='recent',function($q) use($searchDate){
+        //             $q->where('ptm.ptm_date','<',$searchDate);
+        //         }) 
+        //         ->groupByRaw('ptm.standard_id,ptm.division_id')
+        //         ->get()->toArray();
+
+        return [];
     }
     // lesson plan 
     function getLessonPlan($sub_institute_id,$syear,$searchDate,$user_id,$profileName,$standard_id,$division_id,$activityType=""){
@@ -522,109 +500,113 @@ class lmsActivityStreamController extends Controller
         $getDay = strtolower(date('l', $getDate));
         // return $getDay;
         if($activityType!="upcoming"){
-            return DB::table('hrms_attendances as ha')
-            ->join('tbluser as u','ha.user_id','=','u.id')
-            ->selectRaw('ha.*,u.id,u.user_name,u.'.$getDay.'_in_date as punch_in,u.'.$getDay.'_out_date as punch_out')
-            ->when($profileName=='Teacher',function($query) use($user_id){
-                $query->where('ha.user_id',$user_id);
-            }) 
-            ->where('ha.sub_institute_id',$sub_institute_id)->where('ha.day',$searchDate)->get()->toArray();
+            // return DB::table('hrms_attendances as ha')
+            // ->join('tbluser as u','ha.user_id','=','u.id')
+            // ->selectRaw('ha.*,u.id,u.user_name,u.'.$getDay.'_in_date as punch_in,u.'.$getDay.'_out_date as punch_out')
+            // ->when($profileName=='Teacher',function($query) use($user_id){
+            //     $query->where('ha.user_id',$user_id);
+            // }) 
+            // ->where('ha.sub_institute_id',$sub_institute_id)->where('ha.day',$searchDate)->get()->toArray();
+            return [];
         }else{
             return DB::table('tbluser as u')->selectRaw('u.id,u.user_name,u.'.$getDay.'_in_date as punch_in,u.'.$getDay.'_out_date as punch_out')->where('u.id',$user_id)->where('u.sub_institute_id',$sub_institute_id)->get()->toArray();
         }
     }
     // proxy lectures 
     function getProxyLecture($sub_institute_id,$syear,$searchDate,$user_id,$profileName,$profileId,$dayOfWeek,$activityType=''){
-        return DB::table('proxy_master as a')
-            ->join('period as p', 'a.period_id', '=', 'p.id')
-            ->join('standard as s', 's.id', '=', 'a.standard_id')
-            ->join('division as d', 'd.id', '=', 'a.division_id')
-            ->join('sub_std_map as ssm', 'ssm.subject_id', '=', 'a.subject_id')
-            ->join('tbluser as u', 'u.id', '=', 'a.teacher_id')
-            ->select('a.id','a.timetable_id','a.week_day','a.proxy_date','a.teacher_id','u.id as user_id','u.user_name','a.period_id','p.title as periods','p.start_time','p.end_time','s.name as standard','d.name as division')
-            ->where([['a.sub_institute_id', '=', $sub_institute_id],['a.syear', '=', $syear]])
-            ->when($activityType=='upcoming',function($q) use($searchDate){
-                $q->where('a.proxy_date','>=',$searchDate);
-            })
-              // for today
-              ->when($activityType=='today',function($q) use($searchDate){
-                $q->where('a.proxy_date',$searchDate);
-            }) 
-            // for recent
-            ->when($activityType=='recent',function($q) use($searchDate){
-                $q->where('a.proxy_date','<',$searchDate);
-            }) 
-            ->groupBy('a.id')
-            ->orderBy('a.proxy_date')
-            ->limit(10)
-            ->get()->toArray();
+        // return DB::table('proxy_master as a')
+        //     ->join('period as p', 'a.period_id', '=', 'p.id')
+        //     ->join('standard as s', 's.id', '=', 'a.standard_id')
+        //     ->join('division as d', 'd.id', '=', 'a.division_id')
+        //     ->join('sub_std_map as ssm', 'ssm.subject_id', '=', 'a.subject_id')
+        //     ->join('tbluser as u', 'u.id', '=', 'a.teacher_id')
+        //     ->select('a.id','a.timetable_id','a.week_day','a.proxy_date','a.teacher_id','u.id as user_id','u.user_name','a.period_id','p.title as periods','p.start_time','p.end_time','s.name as standard','d.name as division')
+        //     ->where([['a.sub_institute_id', '=', $sub_institute_id],['a.syear', '=', $syear]])
+        //     ->when($activityType=='upcoming',function($q) use($searchDate){
+        //         $q->where('a.proxy_date','>=',$searchDate);
+        //     })
+        //       // for today
+        //       ->when($activityType=='today',function($q) use($searchDate){
+        //         $q->where('a.proxy_date',$searchDate);
+        //     }) 
+        //     // for recent
+        //     ->when($activityType=='recent',function($q) use($searchDate){
+        //         $q->where('a.proxy_date','<',$searchDate);
+        //     }) 
+        //     ->groupBy('a.id')
+        //     ->orderBy('a.proxy_date')
+        //     ->limit(10)
+        //     ->get()->toArray();
+        return [];
     }
     // exam marks entered or not
     function getExamMarks($sub_institute_id,$syear,$searchDate,$user_id,$term_id,$standard_id,$activityType=""){
-        return DB::table('result_create_exam as rce')
-                ->join('standard as s', 's.id', '=', 'rce.standard_id')
-                ->leftJoin('result_marks as rm','rm.exam_id','=','rce.id')
-                ->selectRaw("rce.*,COUNT(rm.id) AS marks,s.name as standard")
-                ->when($standard_id,function($q) use($standard_id){
-                    $q->whereRaw('rce.standard_id in ('.$standard_id.')');
-                })
-                ->where(['rce.sub_institute_id'=>$sub_institute_id,'rce.syear'=>$syear,'rce.term_id'=>$term_id])
-                // for today
-                ->when($activityType=='today',function($q) use($searchDate){
-                    $q->where('rm.created_at',$searchDate);
-                }) 
-                // for recent
-                ->when($activityType=='recent',function($q) use($searchDate){
-                    $q->where('rm.created_at','<',$searchDate);
-                }) 
-                ->groupBy('rce.standard_id')
-                ->get()->toArray();
+        // return DB::table('result_create_exam as rce')
+        //         ->join('standard as s', 's.id', '=', 'rce.standard_id')
+        //         ->leftJoin('result_marks as rm','rm.exam_id','=','rce.id')
+        //         ->selectRaw("rce.*,COUNT(rm.id) AS marks,s.name as standard")
+        //         ->when($standard_id,function($q) use($standard_id){
+        //             $q->whereRaw('rce.standard_id in ('.$standard_id.')');
+        //         })
+        //         ->where(['rce.sub_institute_id'=>$sub_institute_id,'rce.syear'=>$syear,'rce.term_id'=>$term_id])
+        //         // for today
+        //         ->when($activityType=='today',function($q) use($searchDate){
+        //             $q->where('rm.created_at',$searchDate);
+        //         }) 
+        //         // for recent
+        //         ->when($activityType=='recent',function($q) use($searchDate){
+        //             $q->where('rm.created_at','<',$searchDate);
+        //         }) 
+        //         ->groupBy('rce.standard_id')
+        //         ->get()->toArray();
+        return [];
     }
 
     function getStudentAttendance($sub_institute_id,$syear,$searchDate,$user_id,$division_id,$standard_id,$activityType=""){
-        return DB::table('attendance_student as att')
-                ->join('standard as s', 's.id', '=', 'att.standard_id')
-                ->selectRaw('att.*,s.name as standard')
-                ->where(['att.sub_institute_id'=>$sub_institute_id,'att.syear'=>$syear])
-                ->when($standard_id,function($q) use($standard_id){
-                    $q->whereRaw('att.standard_id in ('.$standard_id.')');
-                })
-                ->when($division_id,function($q) use($division_id){
-                    $q->whereRaw('att.section_id in ('.$division_id.')');
-                })
-                ->when($activityType=='upcoming',function($q) use($searchDate){
-                    $q->where('att.attendance_date','>=',$searchDate);
-                })
-                  // for today
-                  ->when($activityType=='today',function($q) use($searchDate){
-                    $q->where('att.attendance_date',$searchDate);
-                }) 
-                // for recent
-                ->when($activityType=='recent',function($q) use($searchDate){
-                    $q->where('att.attendance_date','<',$searchDate);
-                }) 
-                ->groupByRaw('att.standard_id,att.section_id')
-                ->limit(10)
-                ->get()->toArray();
+        // return DB::table('attendance_student as att')
+        //         ->join('standard as s', 's.id', '=', 'att.standard_id')
+        //         ->selectRaw('att.*,s.name as standard')
+        //         ->where(['att.sub_institute_id'=>$sub_institute_id,'att.syear'=>$syear])
+        //         ->when($standard_id,function($q) use($standard_id){
+        //             $q->whereRaw('att.standard_id in ('.$standard_id.')');
+        //         })
+        //         ->when($division_id,function($q) use($division_id){
+        //             $q->whereRaw('att.section_id in ('.$division_id.')');
+        //         })
+        //         ->when($activityType=='upcoming',function($q) use($searchDate){
+        //             $q->where('att.attendance_date','>=',$searchDate);
+        //         })
+        //           // for today
+        //           ->when($activityType=='today',function($q) use($searchDate){
+        //             $q->where('att.attendance_date',$searchDate);
+        //         }) 
+        //         // for recent
+        //         ->when($activityType=='recent',function($q) use($searchDate){
+        //             $q->where('att.attendance_date','<',$searchDate);
+        //         }) 
+        //         ->groupByRaw('att.standard_id,att.section_id')
+        //         ->limit(10)
+        //         ->get()->toArray();
+        return [];
     }
 
     // task assigned 
     function getTaskAssigned($sub_institute_id,$syear,$searchDate,$user_id,$division_id,$standard_id,$activityType=''){
         return DB::table('task as t')
-        ->join('tbluser as u', 'u.id', '=', 't.TASK_ALLOCATED_TO')
+        ->join('tbluser as u', 'u.id', '=', 't.task_allocated_to')
         ->selectRaw('t.*,u.user_name as task_user_name')
         ->where(['t.sub_institute_id'=>$sub_institute_id,'t.syear'=>$syear])
         ->when($activityType=='upcoming',function($q) use($searchDate){
-            $q->where('t.TASK_DATE','>=',$searchDate)->where('t.STATUS','PENDING');
+            $q->where('t.task_date','>=',$searchDate)->where('t.status','PENDING');
         }) // for today
         ->when($activityType=='today',function($q) use($searchDate){
-          $q->where('t.TASK_DATE',$searchDate);
+          $q->where('t.task_date',$searchDate);
         }) 
         // for recent
         ->when($activityType=='recent',function($q) use($searchDate){
-            $q->where('t.TASK_DATE','<',$searchDate);
+            $q->where('t.task_date','<',$searchDate);
         }) 
-        ->where('t.TASK_ALLOCATED_TO',$user_id)
+        ->where('t.task_allocated_to',$user_id)
         ->get()->toArray();
     }
 

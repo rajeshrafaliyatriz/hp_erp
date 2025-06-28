@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('level', 10);
             $table->string('guiding_phrase', 50);
             $table->text('essence_level')->nullable();
+            $table->text('guidance_notes')->nullable();
             $table->string('attribute_code', 10)->nullable();
             $table->string('attribute_name', 50)->nullable();
             $table->string('attribute_type', 50)->nullable();

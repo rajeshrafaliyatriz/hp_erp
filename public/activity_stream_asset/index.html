@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fees</title>
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body style="background-color: #f0f0f8">
+    <nav
+      class="navbar navbar-expand-lg navbar-light p-0 bg-white"
+      style="border-bottom: 2px solid black"
+    >
+      <a class="navbar-brand d-flex align-items-center p-0" href="#">
+        <img src="logo.png" alt="Scholar Clone Logo" height="60" />
+        <span class="ml-4 fs-6" style="font-size: 17px"
+          >Triz International School</span
+        >
+      </a>
+
+      <div class="ml-auto d-flex align-items-center">
+        <div class="form-row mr-4">
+          <div class="form-group mb-0">
+            <input
+              type="text"
+              style="width: 140px"
+              class="form-control custom-input"
+              id="accountNumber"
+              placeholder="Search Anything"
+            />
+          </div>
+        </div>
+        <div class="form-row mr-4">
+          <div class="form-group mb-0">
+            <select class="form-control" id="feeType" style="width: 140px">
+              <option hidden>2020</option>
+              <option>1</option>
+              <option>2</option>
+              <option>3</option>
+              <option>4</option>
+              <option>5</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row mr-4">
+          <div class="form-group mb-0">
+            <select class="form-control" id="feeType" style="width: 140px">
+              <option hidden>Semester 2</option>
+              <option>1</option>
+              <option>2</option>
+              <option>3</option>
+              <option>4</option>
+              <option>5</option>
+            </select>
+          </div>
+        </div>
+        <img src="user.png" alt="Person Name" height="40" /><span
+          class="ml-3 fs-6"
+          style="font-size: 17px"
+          >Kalpesh Sheth</span
+        >
+        <img
+          src="arrow-down-sign-to-navigate.png"
+          class="ml-3 mr-4"
+          alt=""
+          height="13"
+        />
+      </div>
+    </nav>
+    <div class="d-flex">
+      <div
+        class="sidebar d-flex flex-column align-items-center justify-content-center px-2 pt-3 bg-white"
+      >
+        <div
+          class="sidebar-icons d-flex flex-column align-items-center justify-content-center my-1 mx-2"
+        >
+          <img
+            class="sidebar-icons-img p-2 rounded-lg rounded-lg"
+            src="dashboard.png"
+            alt=""
+          />
+          <p class="text-center">Dashboard</p>
+        </div>
+        <div
+          class="sidebar-icons d-flex flex-column align-items-center justify-content-center my-1 mx-2"
+        >
+          <img class="sidebar-icons-img p-2 rounded-lg" src="institute.png" />
+          <p class="text-center">Institute</p>
+        </div>
+        <div
+          class="sidebar-icons d-flex flex-column align-items-center justify-content-center my-1 mx-2"
+        >
+          <img class="sidebar-icons-img p-2 rounded-lg" src="student.png" />
+          <p class="text-center">Student Academics</p>
+        </div>
+        <div
+          class="sidebar-icons d-flex flex-column align-items-center justify-content-center my-1 mx-2"
+        >
+          <img class="sidebar-icons-img p-2 rounded-lg" src="teacher.png" />
+          <p class="text-center">Teacher /Users</p>
+        </div>
+        <div
+          class="sidebar-icons d-flex flex-column align-items-center justify-content-center my-1 mx-2"
+        >
+          <img class="sidebar-icons-img p-2 rounded-lg" src="report.png" />
+          <p class="text-center">Reports</p>
+        </div>
+        <div
+          class="sidebar-icons d-flex flex-column align-items-center justify-content-center my-1 mx-2"
+        >
+          <img
+            class="sidebar-icons-img p-2 rounded-lg"
+            src="person.png"
+            style="background-color: #25bdea"
+          />
+          <p class="text-center">LMS</p>
+        </div>
+        <div
+          class="sidebar-icons d-flex flex-column align-items-center justify-content-center my-1 mx-2"
+        >
+          <img class="sidebar-icons-img p-2 rounded-lg" src="teacher.png" />
+          <p class="text-center">HRMS</p>
+        </div>
+        <div
+          class="sidebar-icons d-flex flex-column align-items-center justify-content-center my-1 mx-2"
+        >
+          <img class="sidebar-icons-img p-2 rounded-lg" src="teacher.png" />
+          <p class="text-center">Library</p>
+        </div>
+      </div>
+      <div
+        class="sub-sidebar d-flex flex-column py-3"
+        style="background-color: white"
+      >
+        <div class="sub-sidebar-img-c p-3">
+          <img src="menu.png" alt="" width="30px" />
+        </div>
+        <div class="sub-sidebar-img-c p-3">
+          <img src="unity.png" alt="" width="30px" />
+        </div>
+        <div class="sub-sidebar-img-c p-3">
+          <img src="screen.png" alt="" width="30px" />
+        </div>
+        <div class="sub-sidebar-img-c p-3">
+          <img src="location.png" alt="" width="30px" />
+        </div>
+        <div
+          class="sub-sidebar-img-c p-3"
+          style="border-right: 4px solid #25bdea"
+        >
+          <img src="alarm.png" alt="" width="30px" />
+        </div>
+        <div class="sub-sidebar-img-c p-3">
+          <img src="spider.png" alt="" width="30px" />
+        </div>
+        <div class="sub-sidebar-img-c p-3">
+          <img src="square.png" alt="" width="30px" />
+        </div>
+        <div class="sub-sidebar-img-c p-3">
+          <img src="location.png" alt="" width="30px" />
+        </div>
+      </div>
+      <div style="margin-top: 30px; margin-left: 25px; width: 100%">
+        <h5>Activity Stream</h5>
+        <span style="color: #25bdea; font-weight: 500">LMS</span>
+        <span style="font-weight: 500"
+          >/ Engagement / Show Activity Stream</span
+        >
+        <div class="dropdown-container" style="margin-top: 55px">
+          <div style="width: 100%">
+            <div id="dropdown-1" class="dropdownn">
+              <div
+                type="button"
+                id="dropdownMenuButton"
+                style="padding: 10px 30px"
+              >
+                <h5 class="d-inline mr-2 sub-p">Upcoming</h5>
+                <img
+                  class="arrow-down"
+                  src="arrow-down-sign-to-navigate.png"
+                  height="12"
+                />
+              </div>
+
+              <div class="dropdown-item-list d-none"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dropdown-container">
+          <div style="width: 100%">
+            <div id="dropdown-2" class="dropdownn">
+              <div
+                type="button"
+                id="dropdownMenuButton"
+                style="padding: 10px 30px"
+              >
+                <h5 class="d-inline mr-2 sub-p">Today</h5>
+                <p class="d-inline" style="color: #7d7d7d; font-weight: 500">
+                  Monday, Jan 29, 2024
+                </p>
+                <img
+                  class="arrow-down"
+                  src="arrow-down-sign-to-navigate.png"
+                  height="12"
+                />
+              </div>
+
+              <div class="dropdown-item-list d-none">
+                <div class="dropdown-itemm active">
+                  <span class="time">12:50 PM</span>
+                  <div class="disc-and-line">
+                    <div class="disc"></div>
+                    <div class="line"></div>
+                  </div>
+                  <div>
+                    <span class="heading">Apply For Leave</span>
+                    <span class="sub-heading">
+                      - Abhi Mehta(7th-B) Apply for leave</span
+                    >
+                    <div class="link">View Now</div>
+                  </div>
+                </div>
+
+                <div class="dropdown-itemm active">
+                  <span class="time">10:18 AM</span>
+                  <div class="disc-and-line">
+                    <div class="disc"></div>
+                    <div class="line"></div>
+                  </div>
+                  <div>
+                    <span class="heading">Results</span>
+                    <span class="sub-heading">
+                      - 8th class results declare</span
+                    >
+                    <div class="link">View Now</div>
+                  </div>
+                </div>
+
+                <div class="dropdown-itemm">
+                  <span class="time">10:15 AM</span>
+                  <div class="disc-and-line">
+                    <div class="disc"></div>
+                    <div class="line"></div>
+                  </div>
+                  <div>
+                    <span class="heading">Schedule</span>
+                    <span class="sub-heading">
+                      - 11:00 to 12:00 go to for expert lecture</span
+                    >
+                    <div class="link">View Now</div>
+                  </div>
+                </div>
+
+                <div class="dropdown-itemm">
+                  <span class="time">10:00 AM</span>
+                  <div class="disc-and-line">
+                    <div class="disc"></div>
+                    <div class="line"></div>
+                  </div>
+                  <div>
+                    <span class="heading">Paid Fee</span>
+                    <span class="sub-heading">
+                      - Suresh Patel has paid his pending fees</span
+                    >
+                    <div class="link">View Now</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dropdown-container">
+          <div style="width: 100%">
+            <div id="dropdown-3" class="dropdownn">
+              <div
+                type="button"
+                id="dropdownMenuButton"
+                style="padding: 10px 30px"
+              >
+                <h5 class="d-inline mr-2 sub-p">Recent</h5>
+                <img
+                  class="arrow-down"
+                  src="arrow-down-sign-to-navigate.png"
+                  height="12"
+                />
+              </div>
+
+              <div class="dropdown-item-list d-none">
+                <div class="dropdown-itemm">
+                  <div class="d-flex flex-column">
+                    <span class="time">27 Jan, 2024</span>
+                    <span class="time">1:30 PM</span>
+                  </div>
+                  <div class="disc-and-line">
+                    <div class="disc"></div>
+                    <div class="line"></div>
+                  </div>
+                  <div>
+                    <span class="heading">Paid Fee</span>
+                    <span class="sub-heading">
+                      - Suresh Patel has paid his pending fees</span
+                    >
+                    <div class="link">View Now</div>
+                  </div>
+                </div>
+
+                <div class="dropdown-itemm">
+                  <div class="d-flex flex-column">
+                    <span class="time">27 Jan, 2024</span>
+                    <span class="time">12:45 PM</span>
+                  </div>
+                  <div class="disc-and-line">
+                    <div class="disc"></div>
+                    <div class="line"></div>
+                  </div>
+                  <div>
+                    <span class="heading">Paid Fee</span>
+                    <span class="sub-heading">
+                      - Suresh Patel has paid his pending fees</span
+                    >
+                    <div class="link">View Now</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="show-sidebar">
+        <p style="color: white; margin: 0">Show Sidebar</p>
+      </div>
+    </div>
+    <footer
+      style="
+        width: 100%;
+        background-color: white;
+        padding-block: 20px;
+        position: relative;
+      "
+    >
+      <p style="text-align: center; margin-bottom: 0">
+        2024 © Triz Innovation PVT LTD.
+        <a style="color: #0000ff; cursor: pointer">Site Map</a> |
+        <a style="color: #0000ff; cursor: pointer">Privacy Policy</a> |
+        <a style="color: #0000ff; cursor: pointer">Term & Condition</a> |
+        <a style="color: #0000ff; cursor: pointer">Other Policy</a>
+      </p>
+      <div class="form-row" style="position: absolute; right: 60px; top: -10px">
+        <div class="form-group mb-0">
+          <select
+            class="form-control"
+            id="feeType"
+            style="width: 160px; background-color: #303030; color: white"
+          >
+            <option hidden>Help Guide</option>
+            <option>1</option>
+            <option>2</option>
+            <option>3</option>
+            <option>4</option>
+            <option>5</option>
+          </select>
+        </div>
+      </div>
+    </footer>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>

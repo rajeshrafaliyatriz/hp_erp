@@ -64,9 +64,9 @@ br {
                             <li class="nav-item"><a href="#section-linemove-7" class="nav-link" aria-selected="false" data-toggle="tab"><span>Jobrole Tasks</span></a></li>
 
                            <li class="nav-item"><a href="#section-linemove-4" class="nav-link" aria-selected="false" data-toggle="tab"><span>Skills Ratings</span></a></li>
-
-                           <li class="nav-item"><a href="#section-linemove-8" class="nav-link" aria-selected="false" data-toggle="tab"><span>Assement</span></a></li>
-
+<!--
+                           <li class="nav-item"><a href="#section-linemove-8" class="nav-link" aria-selected="false" data-toggle="tab"><span>Assessment</span></a></li>
+-->
                             <li class="nav-item"><a href="#section-linemove-5" class="nav-link" aria-selected="false" data-toggle="tab"><span>My Skills & Certifications</span></a></li>
                           
                         </ul>

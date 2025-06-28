@@ -22,6 +22,8 @@ use App\Models\libraries\userJobroleTask;
 use Illuminate\Support\Str;
 use App\Models\skill\skill;
 use App\Models\skill\matrix;
+use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 
 class tbluserController extends Controller
 {
@@ -162,9 +164,13 @@ class tbluserController extends Controller
                 $finalArray[$key] = $value;
             }
 
-            if ($key=="password") {
+           if ($key == "password") {
                 $finalArray[$key] = Hash::make($value);
                 $finalArray['plain_password'] = $value;
+            }
+
+            if ($key == "birthdate") {
+                $finalArray[$key] = carbon::parse($value)->format('Y-m-d');
             }
         }
         $finalArray['created_at'] = now();
@@ -253,7 +259,7 @@ class tbluserController extends Controller
             }
 
             if ($key == "birthdate") {
-                $finalArray[$key] = date('Y-m-d', strtotime($value));
+                $finalArray[$key] = carbon::parse($value)->format('Y-m-d');
             }
         }
 
@@ -448,7 +454,7 @@ class tbluserController extends Controller
                     )
                     ->groupBy('s_user_skill_jobrole.id')
                     ->get();
-
+/*
                     $res['jobroleSkills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
                     ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
                     ->whereNull('s_user_skill_jobrole.deleted_at')
@@ -464,6 +470,43 @@ class tbluserController extends Controller
                     )
                     ->groupBy('s_user_skill_jobrole.id')
                     ->get();
+
+*/
+$res['jobroleSkills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
+    ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
+    ->whereNull('s_user_skill_jobrole.deleted_at')
+    ->select(
+        's_user_skill_jobrole.id as jobrole_skill_id',
+        's_user_skill_jobrole.jobrole',
+        's_user_skill_jobrole.skill',
+        's_users_skills.id as skill_id',
+        's_user_skill_jobrole.proficiency_level as proficiency_level',
+        's_users_skills.title',
+        's_users_skills.category',
+        's_users_skills.sub_category',
+        's_users_skills.description'
+    )
+    ->groupBy(['s_user_skill_jobrole.id','s_users_skills.proficiency_level'])
+    ->get()
+    ->map(function ($item) {
+        // Load knowledge and ability from the classification table
+        $classificationItems = DB::table('s_skill_knowledge_ability')
+            ->where('skill_id', $item->skill_id)
+            ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
+            ->get()
+            ->groupBy('classification');
+
+        $item->knowledge = $classificationItems->has('knowledge')
+        ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
+        : [];
+
+        $item->ability = $classificationItems->has('ability')
+        ? $classificationItems['ability']->pluck('classification_item')->toArray()
+        : [];
+
+        return $item;
+    });
+
 
                 $res['totalSkills']=skillJobroleMap::where('jobrole',$assignedJobrole->jobrole)->count();
 

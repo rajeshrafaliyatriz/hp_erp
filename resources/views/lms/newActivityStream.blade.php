@@ -1,5 +1,5 @@
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <link rel="stylesheet" href="{{asset('/activity_stream_asset/styles.css')}}">
 <div class="content-main flex-fill">
     <div class="container-fluid mb-5">
@@ -53,7 +53,7 @@
                 @if(isset($data['upcoming']['homework']) && !empty($data['upcoming']['homework']))
                   @foreach($data['upcoming']['homework'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                       $startDate =($value->date) ? \Carbon\Carbon::parse($value->date)->format('d-m-Y') : '-';
                     @endphp
                   <div class="dropdown-itemm {{ ($value->completion_status !='N' ) ? 'active' : '' }}">
@@ -231,7 +231,7 @@
                       <div>
                         <span class="heading">Punch In/Out</span>
                         <span class="sub-heading">Your {{$value->user_name}} time Punch In {{$startTime}} and Punch Out {{$endTime}}</span>
-                        <div class="link"><a href="{{route('hrms_attendance_report.index')}}">View Now</a></div>
+                        {{-- <div class="link"><a href="{{route('hrms_attendance_report.index')}}">View Now</a></div> --}}
                       </div>
                     </div>
                   @endforeach
@@ -286,7 +286,7 @@
                 @if(isset($data['upcoming']['studentAttendance']) && !empty($data['upcoming']['studentAttendance']))
                   @foreach($data['upcoming']['studentAttendance'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                       $startDate =\Carbon\Carbon::parse($value->attendance_date)->format('d-m-Y');
                     @endphp
                   <div class="dropdown-itemm">
@@ -309,8 +309,8 @@
                 @if(isset($data['upcoming']['taskAssigned']) && !empty($data['upcoming']['taskAssigned']))
                   @foreach($data['upcoming']['taskAssigned'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->CREATED_ON)->format('H:i A') : '-';
-                      $startDate =\Carbon\Carbon::parse($value->TASK_DATE)->format('d-m-Y');
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
+                      $startDate =\Carbon\Carbon::parse($value->task_date)->format('d-m-Y');
                     @endphp
                   <div class="dropdown-itemm">
                   <div class="d-flex flex-column">
@@ -323,7 +323,7 @@
                       </div>
                       <div>
                         <span class="heading">Task Assigned</span>
-                        <span class="sub-heading">Task {{$value->TASK_TITLE}} Assigned to {{$value->task_user_name}}</span>
+                        <span class="sub-heading">Task {{$value->task_title}} Assigned to {{$value->task_user_name}}</span>
                         <div class="link"><a href="{{route('task.index')}}">View Now</a></div>
                       </div>
                     </div>
@@ -332,7 +332,7 @@
                 @if(isset($data['upcoming']['parentCommunication']) && !empty($data['upcoming']['parentCommunication']))
                   @foreach($data['upcoming']['parentCommunication'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                       $startDate =\Carbon\Carbon::parse($value->start_date)->format('d-m-Y');
                     @endphp
                   <div class="dropdown-itemm {{($value->reply!=null && $value->reply!='') ? 'active' : ''}}">
@@ -419,7 +419,7 @@
                 @if(isset($data['today']['homework']) && !empty($data['today']['homework']))
                   @foreach($data['today']['homework'] as $key=>$value)
                     @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                     @endphp
                   <div class="dropdown-itemm {{ ($value->completion_status !=0 ) ? 'active' : '' }}">
                       <span class="time">{{$startTime}}</span>
@@ -574,7 +574,7 @@
                       <div>
                         <span class="heading">Punch In/Out</span>
                         <span class="sub-heading">Your {{$value->user_name}} time Punch In {{$startTime}} and Punch Out {{$endTime}}</span>
-                        <div class="link"><a href="{{route('hrms_attendance_report.index')}}">View Now</a></div>
+                        {{-- <div class="link"><a href="{{route('hrms_attendance_report.index')}}">View Now</a></div> --}}
                       </div>
                     </div>
                   @endforeach
@@ -623,7 +623,7 @@
                 @if(isset($data['today']['studentAttendance']) && !empty($data['today']['studentAttendance']))
                   @foreach($data['today']['studentAttendance'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                       $startDate =\Carbon\Carbon::parse($value->attendance_date)->format('d-m-Y');
                     @endphp
                   <div class="dropdown-itemm">
@@ -643,8 +643,8 @@
                 @if(isset($data['today']['taskAssigned']) && !empty($data['today']['taskAssigned']))
                   @foreach($data['today']['taskAssigned'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->CREATED_ON)->format('H:i A') : '-';
-                      $startDate =\Carbon\Carbon::parse($value->TASK_DATE)->format('d-m-Y');
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
+                      $startDate =\Carbon\Carbon::parse($value->task_date)->format('d-m-Y');
                     @endphp
                   <div class="dropdown-itemm">
                     <span class="time">{{$startTime}}</span>
@@ -654,7 +654,7 @@
                       </div>
                       <div>
                         <span class="heading">Task Assigned</span>
-                        <span class="sub-heading">Task {{$value->TASK_TITLE}} Assigned to {{$value->task_user_name}}</span>
+                        <span class="sub-heading">Task {{$value->task_title}} Assigned to {{$value->task_user_name}}</span>
                         <div class="link"><a href="{{route('task.index')}}">View Now</a></div>
                       </div>
                     </div>
@@ -663,7 +663,7 @@
                 @if(isset($data['today']['parentCommunication']) && !empty($data['today']['parentCommunication']))
                   @foreach($data['today']['parentCommunication'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                       $startDate =\Carbon\Carbon::parse($value->start_date)->format('d-m-Y');
                     @endphp
                   <div class="dropdown-itemm {{($value->reply!=null && $value->reply!='') ? 'active' : ''}}">
@@ -751,7 +751,7 @@
                 @if(isset($data['recent']['homework']) && !empty($data['recent']['homework']))
                   @foreach($data['recent']['homework'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                       $startDate =($value->date) ? \Carbon\Carbon::parse($value->date)->format('d-m-Y') : '-';
                     @endphp
                   <div class="dropdown-itemm {{ ($value->completion_status !='N' ) ? 'active' : '' }}">
@@ -929,7 +929,7 @@
                       <div>
                         <span class="heading">Punch In/Out</span>
                         <span class="sub-heading">Your {{$value->user_name}} time Punch In {{$startTime}} and Punch Out {{$endTime}}</span>
-                        <div class="link"><a href="{{route('hrms_attendance_report.index')}}">View Now</a></div>
+                        {{-- <div class="link"><a href="{{route('hrms_attendance_report.index')}}">View Now</a></div> --}}
                       </div>
                     </div>
                   @endforeach
@@ -984,7 +984,7 @@
                 @if(isset($data['recent']['studentAttendance']) && !empty($data['recent']['studentAttendance']))
                   @foreach($data['recent']['studentAttendance'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                       $startDate =\Carbon\Carbon::parse($value->attendance_date)->format('d-m-Y');
                     @endphp
                   <div class="dropdown-itemm">
@@ -1007,8 +1007,8 @@
                 @if(isset($data['recent']['taskAssigned']) && !empty($data['recent']['taskAssigned']))
                   @foreach($data['recent']['taskAssigned'] as $key=>$value)
                   @php
-				    $startTime = (isset($value->created_on) && $value->created_on) 
-				                 ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') 
+				    $startTime = (isset($value->created_at) && $value->created_at) 
+				                 ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') 
 				                 : '-';
 
 				    $startDate = (isset($value->task_date) && $value->task_date) 
@@ -1026,7 +1026,7 @@
                       </div>
                       <div>
                         <span class="heading">Task Assigned</span>
-                        <span class="sub-heading">Task {{$value->TASK_TITLE}} Assigned to {{$value->task_user_name}}</span>
+                        <span class="sub-heading">Task {{$value->task_title}} Assigned to {{$value->task_user_name}}</span>
                         <div class="link"><a href="{{route('task.index')}}">View Now</a></div>
                       </div>
                     </div>
@@ -1035,7 +1035,7 @@
                 @if(isset($data['recent']['parentCommunication']) && !empty($data['recent']['parentCommunication']))
                   @foreach($data['recent']['parentCommunication'] as $key=>$value)
                   @php 
-                      $startTime =($value->created_on) ? \Carbon\Carbon::parse($value->created_on)->format('H:i A') : '-';
+                      $startTime =($value->created_at) ? \Carbon\Carbon::parse($value->created_at)->format('H:i A') : '-';
                       $startDate =\Carbon\Carbon::parse($value->start_date)->format('d-m-Y');
                     @endphp
                   <div class="dropdown-itemm {{($value->reply!=null && $value->reply!='') ? 'active' : ''}}">
@@ -1112,8 +1112,8 @@
                 @foreach($data['checkList'] as $k => $value)
                 <tr>
                     <td>{{$k+1}}</td>
-                    <td>{{$value->TASK_TITLE}}</td>
-                    <td>{{$value->STATUS}}</td>
+                    <td>{{$value->task_title}}</td>
+                    <td>{{$value->status}}</td>
                     <td>{{$value->reply}}</td>
                 </tr>
                 @endforeach
@@ -1124,7 +1124,6 @@
   </div>
 </div>
 <!-- check list modal ends  -->
-@include('includes.footer')
 <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
