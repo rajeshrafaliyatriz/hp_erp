@@ -1,0 +1,170 @@
+git reset --soft HEAD~1
+
+git reset HEAD resources/views/test.blade.php
+
+accept current file changes:
+----------------------------
+git checkout HEAD -- app/Http/Controllers/fees/fees_collect/fees_collect_controller.php
+git config --global pull.rebase true
+
+==================================================================================================================================================
+Search student : 
+-----------------
+SELECT a.id,a.enrollment_no,a.gender,CONCAT_WS(" ",COALESCE(a.first_name,"-"),COALESCE(a.middle_name,"-"),COALESCE(a.last_name,"-")) AS student_name,a.mobile,b.roll_no,s.`name` AS stdname,d.`name` AS dname
+FROM tblstudent a 
+INNER JOIN tblstudent_enrollment b ON b.student_id=a.id
+INNER JOIN standard s ON s.id = b.standard_id
+INNER JOIN division d ON d.id = b.section_id
+WHERE a.sub_institute_id=48 AND b.syear=2024
+==================================================================================================================================================
+Student Exam marks : 
+--------------------
+SELECT a.id,a.points,a.is_absent,rce.title,a.student_id,s.id AS sid,se.syear,CONCAT_WS(" ",COALESCE(s.first_name,"-"),COALESCE(s.middle_name,"-"),COALESCE(s.last_name,"-")) AS student_name,
+rce.term_id,STD.`name` AS stdname,d.`name` AS divname,ssm.display_name AS subject_name                   
+FROM result_marks a                                                                                      
+INNER JOIN tblstudent s ON s.id=a.student_id                                                             
+inner join tblstudent_enrollment se ON se.student_id = s.id AND se.syear=2024                            
+INNER JOIN standard AS STD ON STD.id = se.standard_id                                                    
+INNER JOIN division AS d ON d.id = se.section_id                                                         
+INNER JOIN result_create_exam rce ON rce.id = a.exam_id                                                  
+INNER JOIN sub_std_map ssm ON ssm.subject_id=rce.subject_id                                              
+WHERE a.sub_institute_id=47 AND rce.syear=2024 AND a.is_absent="AB" AND a.student_id=231023 GROUP BY a.id
+===================================================================================================================================================
+Standard wise create exam : 
+----------------------------
+SELECT * FROM result_create_exam rce
+INNER JOIN result_exam_master rem ON rem.Id = rce.exam_id
+WHERE rce.sub_institute_id=254 AND rce.syear=2024 AND rce.standard_id=3299
+===================================================================================================================================================
+HRMS Attendance : 
+-----------------
+UPDATE hrms_attendances a
+JOIN tbluser u ON a.user_id = u.id AND u.sub_institute_id=47
+SET a.user_id = u.id
+WHERE a.sub_institute_id = 47 AND a.user_id = 71 AND a.`day` BETWEEN "2024-09-01" AND "2024-09-30";
+===================================================================================================================================================
+Teacher Timetable : 
+-------------------
+SELECT a.id,a.sub_institute_id,a.syear,a.standard_id,s.`name` AS standard,a.division_id,d.`name` AS division,a.subject_id,ssm.display_name,a.period_id,p.title AS period FROM timetable a 
+INNER JOIN standard s ON s.id = a.standard_id
+INNER JOIN division d ON d.id = a.division_id
+INNER JOIN sub_std_map ssm ON ssm.subject_id=a.subject_id
+INNER JOIN period p ON p.id=a.period_id
+WHERE a.teacher_id=8414 AND a.syear=2023 group BY a.subject_id
+===================================================================================================================================================
+HRMS Leaves :
+--------------
+SELECT a.* FROM hrms_emp_leaves a 
+INNER JOIN tbluser u ON u.id = a.user_id
+WHERE a.from_date >= "2024-07-25" AND a.to_date <= "2024-07-25" AND a.sub_institute_id=47 AND a.status = 'pending';
+===================================================================================================================================================
+Search Users :
+--------------
+SELECT a.id,CONCAT_WS(" ",COALESCE(a.first_name,"-"),COALESCE(a.middle_name,"-"),COALESCE(a.last_name,"-")) AS full_name,a.email,a.`password`,p.`name` AS profile_name,d.department
+FROM tbluser a
+INNER JOIN hrms_departments d ON d.id=a.department_id
+INNER JOIN tbluserprofilemaster p ON p.id = a.user_profile_id
+WHERE a.sub_institute_id=47 and a.status=1 
+===================================================================================================================================================
+Insert users profielwise rights : 
+-----------------------------------
+INSERT INTO tblprofilewise_menu (menu_id, user_profile_id, sub_institute_id)
+SELECT menu_id, 996, 133
+FROM tblprofilewise_menu
+WHERE sub_institute_id = 1 AND user_profile_id=1;
+===================================================================================================================================================
+Get Users groupwise rights : 
+----------------------------
+SELECT a.id,a.menu_id,b.`name`,a.profile_id,a.can_view,a.can_add,a.can_edit,a.can_delete, case when a.profile_id=24 then "admin" ELSE "teacher" END AS profile FROM tblgroupwise_rights a INNER JOIN tblmenumaster b ON b.id=a.menu_id WHERE a.sub_institute_id=47 AND a.profile_id IN (31)
+===================================================================================================================================================
+Student Fees Break Off :
+-------------------------
+SELECT s.*,se.syear,se.student_id,se.grade_id,se.standard_id,se.section_id,se.student_quota,g.medium,sq.title AS stu_quota,se.start_date,se.end_date,se.enrollment_code,se.drop_code,se.drop_remarks, st.short_name as standard_short_name,st.medium as standard_medium,se.term_id, se.remarks, se.admission_fees, se.house_id, se.lc_number, SUM(fb.amount) as bkoff,st.name as standard_name, d.name as division_name, fb.month_id,RIGHT(fb.month_id, 4) as sort_year,CAST(SUBSTRING(fb.month_id, 1, CHAR_LENGTH(fb.month_id) - 4) as signed) as sort_month
+FROM tblstudent AS s
+JOIN tblstudent_enrollment AS se ON se.student_id = s.id
+JOIN academic_section AS g ON g.id = se.grade_id
+JOIN standard AS st ON st.id = se.standard_id AND (st.id = se.standard_id OR st.id IS NOT NULL)
+LEFT JOIN division AS d ON d.id = se.section_id
+LEFT JOIN student_quota AS sq ON sq.id = se.student_quota
+JOIN fees_breackoff AS fb ON fb.syear = 2024 AND fb.admission_year = s.admission_year AND fb.quota = se.student_quota AND fb.grade_id = se.grade_id AND fb.sub_institute_id = 67 AND (fb.standard_id = se.standard_id OR fb.standard_id = 789)
+WHERE s.sub_institute_id = 67 AND se.syear = 2024 AND s.id IN (234275)
+GROUP BY s.id, fb.month_id
+ORDER BY sort_year, sort_month; 
+===================================================================================================================================================
+Student Double Marks Entries : 
+------------------------------
+SELECT id,student_id,sub_institute_id,COUNT(CONCAT_WS(student_id,exam_id,sub_institute_id)) AS TOTAL, CONCAT('\'',GROUP_CONCAT(sub_institute_id)) SCHOOL, CONCAT('\'',GROUP_CONCAT(id)) GROUPP
+FROM result_marks
+GROUP BY student_id,exam_id,sub_institute_id
+HAVING TOTAL > 1
+ORDER BY TOTAL DESC;
+===================================================================================================================================================
+update tblstudent_enrollment standard:
+--------------------------------------
+UPDATE tblstudent_enrollment a
+JOIN standard u ON a.standard_id = u.id AND u.sub_institute_id=328
+SET a.standard_id = u.next_standard_id
+WHERE a.sub_institute_id=328 
+AND a.standard_id IN (4042,4043,4044,4045,4046,4047,4048,4049,4050,4051)
+===================================================================================================================================================
+postgreSql Query:
+------------------
+INSERT INTO `FormSubmissions` (`createdAt`, `formId`, `content`) 
+SELECT 
+  CURDATE() AS createdAt,
+  1 AS formId,
+  CONCAT('{"1024":"","3137":"","8710":"', category, '"}') AS content
+FROM master_skills 
+WHERE category != 'Cognitive & Thinking Skills'
+GROUP BY category;
+===============
+INSERT INTO public."FormSubmissions" ("createdAt", "formId", "content") VALUES ('2025-05-13 12:40:43.259', 18, '{"2864":"","9076":"","9492":""}')
+===================================================================================================================================================
+insert earned leave from tbluser:
+--------------------------------------
+INSERT INTO hrms_leave_allocation (`employee_id`, `department_id`, `leave_type_id`,`year`,`value`,sub_institute_id)
+SELECT id, department_id, 9,2024,openingleave,47
+FROM tbluser 
+WHERE sub_institute_id = 47 AND (department_id!='' AND department_id IS NOT NULL )AND (openingleave!='' AND openingleave IS NOT NULL );
+
+/school_setup/period_master/create
+
+php artisan migrate --path=/database/migrations/2025_04_21_113738_add_columns_dicipline_dd.php
+php artisan migrate --path=/database/migrations/2025_05_12_144102_add_column_temp_address.php
+===================================================================
+content type removed
+---------------------
+SELECT * FROM lms_mapping_type a WHERE a.id IN (73568,73627)
+
+
+
+INSERT INTO `s_skill_knowledge_ability` (`sector`,`track`,`jobrole`,`critical_work_function`,`task`,`sub_institute_id`)
+SELECT a.department,a.sub_department,b.jobrole,b.critical_work_function,b.task,1
+FROM s_industries a 
+INNER JOIN s_jobrole_skills b ON b.track=a.sub_department
+INNER JOIN s_skill_map_k_a c ON c.tsc_ccs_title=b.skill
+WHERE a.industries="Financial Services"
+GROUP BY c.id
+
+
+INSERT INTO `s_users_skills` (`department`, `sub_department`, `category`, `sub_category`, `title`, `description`, `status`,`sub_institute_id`)
+SELECT `department`, `sub_department`, `category`, `sub_category`, `title`, `description`, `status`,1
+FROM s_industries a 
+INNER JOIN s_jobrole_skills b ON b.track=a.sub_department
+INNER JOIN master_skills c ON c.title = b.skill
+WHERE a.industries="Financial Services"
+GROUP BY c.id
+
+syear (String 50)
+sub_institute_id(unassigned bigInt) nullable no action deleted update from school_setup - - id
+title(sting) nullable index
+description (text) nullable
+attachment(sting) nullable
+from_date(Date) nullable index
+to_date(Date) nullable index
+user_profile_id(unassigned bigInt) nullable no action deleted update from Tbluserprofilemaster  - id
+created_by(unassigned bigInt) nullable no action deleted update from tbluser - id
+updated_by(unassigned bigInt) nullable no action deleted update from tbluser - id
+deleted_by(unassigned bigInt) nullable no action deleted update from tbluser - id
+timestamp
+deleted_at

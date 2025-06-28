@@ -37,7 +37,19 @@ class levelOfResponsibilityController extends Controller
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
         }
-        $res['allResponsibilty'] = SLevelResponsibility::get()->toArray();
+        $detailsLevel = SLevelResponsibility::get()->toArray();
+        $allLevels = $attrData = [];
+        foreach ($detailsLevel as $key => $value) {
+           $allLevels[$value['level']] = $value;
+           if($value['attribute_type']!='Business skills/Behavioural factors'){
+            $attrData[$value['level']][$value['attribute_type']][$value['attribute_name']] = $value;
+           }else{
+            $attrData[$value['level']]['Business_skills'][$value['attribute_name']] = $value;
+           }
+        }
+        $res['levelsData'] = array_values($allLevels);
+        $res['attrData'] = $attrData;
+        $res['allData'] = $detailsLevel;
         return is_mobile($type, 'level_of_responsibility.index', $res, 'redirect');
     }
 
