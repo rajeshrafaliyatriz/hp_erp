@@ -44,24 +44,31 @@ class departmentController extends Controller
     public function create(Request $request)
     {
         $type = $request->input('type');
-        $sub_institute_id = session()->get('sub_institute_id');
+        $sub_institute_id = session()->get('sub_institute_id') ?? 0;
         $res = session()->get('data');
 
         $res['departmentList'] = DB::table('hrms_departments')->where('status',1)->where('parent_id',0)->where('sub_institute_id',$sub_institute_id)->get()->toArray();
 
         $res['userDepartmentList'] = DB::table('hrms_departments as sub')
-                ->select(
-                    'sub.*',
-                    DB::Raw('IFNULL((select count(DISTINCT id) from hrms_departments where parent_id = sub.id),"-") as sub_dep'),
-                    DB::Raw('IFNULL((select count(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id='.$sub_institute_id.' and status=1),"-") as total_emp'),
-                    DB::Raw('IFNULL((select group_concat(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id='.$sub_institute_id.' and status=1),"-") as emp_ids')
-                )
-                ->where('sub.status', 1)
-                ->where('sub.parent_id', '=', 0)
-                ->where('sub.sub_institute_id', $sub_institute_id)
-                ->groupBy('sub.id')
-                ->get()
-                ->toArray();
+    ->select(
+        'sub.*',
+        DB::raw('IFNULL((select count(DISTINCT id) from hrms_departments where parent_id = sub.id),"-") as sub_dep'),
+        DB::raw("IFNULL((select count(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id = {$sub_institute_id} and status = 1), '-') as total_emp"),
+        DB::raw("IFNULL((select group_concat(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id = {$sub_institute_id} and status = 1), '-') as emp_ids")
+    )
+    ->where('sub.status', 1)
+    ->where('sub.parent_id', 0)
+    ->where(function($query) use ($sub_institute_id) {
+        if ($sub_institute_id !== null) {
+            $query->where('sub.sub_institute_id', $sub_institute_id);
+        } else {
+            $query->whereNull('sub.sub_institute_id');
+        }
+    })
+    ->groupBy('sub.id')
+    ->get()
+    ->toArray();
+
         // echo "<pre>";print_r($res['userDepartmentList']);exit;
         $res['SubDepartmentList'] = DB::table('hrms_departments as sub')
         ->select(
