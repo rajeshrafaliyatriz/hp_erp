@@ -721,7 +721,10 @@ class skillLibraryController extends Controller
                 $res['userJobroleData'] = $this->getJobroleData($request, $skillName, 'usersJobrole');
             }
         }
-
+        $skillName = userSkills::where('id', $request->skill_id)
+                    ->where('sub_institute_id', $request->sub_institute_id)
+                    ->whereNull('deleted_at')
+                    ->value('title');
         if ($request->formType == 'proficiency_level') {
             foreach ($request->proficiency_level as $key => $value) {
                 $checkExists = userProfeceincyLevel::where('proficiency_level', $value)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
@@ -843,7 +846,7 @@ class skillLibraryController extends Controller
                     $i++;
                 } elseif (isset($checkExists->id)) {
                     $insertArray = [
-                        'skill_id' => $id,
+                        'skill' => $skillName,
                         'proficiency_level' => $value->proficiency_level,
                         'application' => $value->application,
                         'sub_institute_id' => $request->sub_institute_id,
