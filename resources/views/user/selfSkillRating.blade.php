@@ -3,17 +3,37 @@
         <div class="row">
             <!-- Left Panel -->
             <div class="col-md-3">
-                <h5>Navigate my assessment</h5>
-                <ul class="list-group">
-                    <li class="list-group-item">Project Management ✅</li>
-                    <li class="list-group-item">Quality Assurance ✅</li>
-                    <li class="list-group-item active">Senior Management ({{ $totalSkills ?? '' }} skills)</li>
-                </ul>
-
-                <!-- Pie Chart -->
+                <h5>My Skills Audit</h5>
+                <p>{{ $completedCount ?? '' }} out of {{ $totalSkills ?? '' }} completed ({{ $progress ?? '' }}%)</p>
+                                <!-- Pie Chart -->
                 <canvas id="progressChart"></canvas>
 
-                <p>{{ $completedCount ?? '' }} out of {{ $totalSkills ?? '' }} completed ({{ $progress ?? '' }}%)</p>
+                <ul class="list-group">
+                    <li class="list-group-item active">My Skills ({{ $totalSkills ?? '' }} skills)</li>
+                </ul>
+
+<ul class="list-group">
+    <li class="list-group-item active d-flex justify-content-between align-items-center">
+        My Skills ({{ $totalSkills ?? 0 }} skills)
+        <a data-bs-toggle="collapse" href="#skillListCollapse" role="button" aria-expanded="false" aria-controls="skillListCollapse">
+            <span class="badge bg-light text-dark rounded-pill">+</span>
+        </a>
+    </li>
+    <div class="collapse" id="skillListCollapse">
+        @if(!empty($skills))
+            @foreach($skills as $skill)
+                <li class="list-group-item">{{ $skill->title }}</li>
+            @endforeach
+        @else
+            <li class="list-group-item text-muted">No skills added.</li>
+        @endif
+    </div>
+</ul>
+
+
+
+
+                
             </div>
 
             <!-- Skill Assessment Section -->
