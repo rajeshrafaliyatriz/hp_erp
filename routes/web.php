@@ -85,3 +85,5 @@ Route::get('ckeditor/create', [CkeditorFileUploadController::class, 'create'])->
 Route::post('ckeditor', [CkeditorFileUploadController::class, 'store'])->name('uploadimage');
 Route::get('ajax_checkEmailExist', [AJAXController::Class, 'ajax_checkEmailExist'])->name('ajax_checkEmailExist');
 Route::get('getUsersMappings', [AJAXController::Class, 'getUsersMappings'])->name('getUsersMappings');
+Route::get('DeepSeekChat', [AJAXController::Class, 'DeepSeekChat'])->name('DeepSeekChat');
+Route::get('AIassignTask', [AJAXController::Class, 'AIassignTask'])->name('AIassignTask');

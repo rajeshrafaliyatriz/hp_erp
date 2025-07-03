@@ -34,7 +34,7 @@ class lmsActivityStreamController extends Controller
     public function index(Request $request)
     {
         $type = $request->input('type');
-      
+        $user_id = session()->get('user_id');
         $request=$request->merge([
             'sub_institute_id' => session()->get('sub_institute_id'),
             'syear' => session()->get('syear'),
@@ -48,7 +48,7 @@ class lmsActivityStreamController extends Controller
         $res['upcoming'] = $this->upcomingActivity($request);
         $res['today'] = $this->todayActivity($request);
         $res['recent'] = $this->recentActivity($request);
-        $res['checkList'] = DB::table('task')->where('task_allocated',session()->get('user_id'))->where('task_type','=','Daily Task')->where('task_date',date('Y-m-d'))->get()->toArray();
+        $res['checkList'] = DB::table('task')->selectRaw('*,'.$user_id.' as user_id')->whereRaw("(TASK_ALLOCATED_TO = '".$user_id."' OR TASK_ALLOCATED = '".$user_id."')")->where('task_type','=','Daily Task')->where('TASK_DATE',date('Y-m-d'))->get()->toArray();
         // echo "<pre>";print_r($res);exit;
         return is_mobile($type, 'lms/newActivityStream', $res, "view");
     }
@@ -132,7 +132,7 @@ class lmsActivityStreamController extends Controller
         // Not for students
         $hrmsPunchInOut = $proxyLecture = $examMarks = $studentAttendance = $taskAssigned = $parentCommunication = $studentLeave = [];
         if($profileName!="Student"){
-            $hrmsPunchInOut = $this->getHrmsPunchInOut($sub_institute_id,$syear,$searchDate,$user_id,$profileName,$profileId,'upcoming');
+            $hrmsPunchInOut =$this->getHrmsPunchInOut($sub_institute_id,$syear,$searchDate,$user_id,$profileName,$profileId,'upcoming');
             $proxyLecture = $this->getProxyLecture($sub_institute_id,$syear,$searchDate,$user_id,$profileName,$profileId,$dayOfWeek,'upcoming');
             $examMarks = $this->getExamMarks($sub_institute_id,$syear,$searchDate,$user_id,$term_id,$classStdId,'upcoming');
             $studentAttendance = $this->getStudentAttendance($sub_institute_id,$syear,$searchDate,$user_id,$classDivId,$classStdId,'upcoming');

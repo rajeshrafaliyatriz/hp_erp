@@ -31,7 +31,7 @@ class SkillMatrixController extends Controller
         $user_id = $request->userId;
         matrix::updateOrCreate(
             ['user_id' => $user_id, 'skill_id' => $request->skill_id],
-            ['skill_level' => $request->skill_level, 'interest_level' => $request->interest_level,'']
+            ['skill_level' => $request->skill_level, 'interest_level' => $request->interest_level,'knowledge'=>$request->knowledge,'ability'=>$request->ability]
         );
 
         return response()->json(['success' => true]);

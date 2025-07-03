@@ -26,15 +26,15 @@
             @endif
 
             <center>
-                <ul class="nav nav-tabs tab-title mb-4 inst-nav">
-                    <li class="nav-item"><a href="#section-linemove-1" class="nav-link section-linemove-1 active"
-                            aria-selected="true" data-toggle="tab"><span>Institute Details</span></a></li>
-                    <li class="nav-item"><a href="#section-linemove-2" class="nav-link section-linemove-2"
-                            aria-selected="false" data-toggle="tab"><span>Add Departments</span></a></li>
-                    <li class="nav-item"><a href="#section-linemove-3" class="nav-link section-linemove-3"
+                <ul class="nav nav-tabs tab-title mb-4 inst-nav"   style="background:#3298b7">
+                    {{-- <li class="nav-item"><a href="#section-linemove-1" class="nav-link section-linemove-1 active"
+                            aria-selected="true" data-toggle="tab"><span>Institute Details</span></a></li> --}}
+                    <li class="nav-item"><a href="#section-linemove-2" class="nav-link section-linemove-2 active"
+                            aria-selected="true" data-toggle="tab"><span>Add Departments</span></a></li>
+                    {{-- <li class="nav-item"><a href="#section-linemove-3" class="nav-link section-linemove-3"
                             aria-selected="false" data-toggle="tab"><span>School Handbook</span></a></li>
                     <li class="nav-item"><a href="#section-linemove-4" class="nav-link section-linemove-4"
-                            aria-selected="false" data-toggle="tab"><span>Organization Chart</span></a></li>
+                            aria-selected="false" data-toggle="tab"><span>Organization Chart</span></a></li> --}}
                     <li class="nav-item"><a href="#section-linemove-5" class="nav-link section-linemove-5"
                             aria-selected="false" data-toggle="tab"><span>Compliance Library</span></a></li>
                 </ul>
@@ -43,7 +43,7 @@
             <!-- Start tabs  -->
             <div class="tab-content">
                 <!-- tab 1  -->
-                <div class="tab-pane p-3 active" id="section-linemove-1" role="tabpanel">
+                <div class="tab-pane p-3" id="section-linemove-1" role="tabpanel">
                     <form action="{{ route('institute_detail.store') }}" enctype="multipart/form-data" method="post">
                         {{ method_field('POST') }}
                         @csrf
@@ -200,7 +200,7 @@
                 </div>
                 <!-- tab 3 ends  -->
                 <!-- tab 2 start  -->
-                <div class="tab-pane p-3" id="section-linemove-2" role="tabpanel">
+                <div class="tab-pane p-3  active" id="section-linemove-2" role="tabpanel">
                     @include('HRMS.department.tabDepartment')
                 </div>
                 <!-- tab 2 ends  -->

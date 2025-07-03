@@ -74,8 +74,8 @@ class taskController extends Controller
         $data = $data->orderBy('t.ID', 'desc');
         $data = $data->get()->toArray();
 
-        $res['checkList'] = DB::table('task')->where('TASK_ALLOCATED',$user_id)->where('task_type','=','Daily Task')->where('TASK_DATE',date('Y-m-d'))->get()->toArray();
-
+        $res['checkList'] = DB::table('task')->selectRaw('*,'.$user_id.' as user_id')->whereRaw("(TASK_ALLOCATED_TO = '".$user_id."' OR TASK_ALLOCATED = '".$user_id."')")->where('task_type','=','Daily Task')->where('TASK_DATE',date('Y-m-d'))->get()->toArray();
+      
         $res['status_code'] = 1;
         $res['message'] = "Success";
         $res['data'] = $data;

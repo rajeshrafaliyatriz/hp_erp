@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\libraries\skillLibraryModel;
 use function App\Helpers\is_mobile;
+use App\Http\Controllers\user\tbluserController;
+use App\Http\Controllers\settings\instituteDetailController;
 use App\Models\libraries\jobroleSkillModel;
 use App\Models\libraries\industryModel;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -15,9 +17,10 @@ use App\Models\DynamicModel;
 use App\Models\school_setup\subjectModel;
 use App\Models\school_setup\standardModel;
 use App\Models\school_setup\academic_sectionModel;
-use Validator;
 use Illuminate\Support\Facades\Schema; // Import the Schema facade
 use Illuminate\Database\Schema\Blueprint; 
+use Illuminate\Support\Facades\Http;
+use Validator;
 use DB;
 
 class AJAXController extends Controller
@@ -469,5 +472,183 @@ class AJAXController extends Controller
         }
 
         return $res;
+    }
+
+    // deepseek chat API integrtion
+    public function DeepSeekChat(Request $request){
+        //rp2164394@gmail.com - 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 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
+
+        // pasi pasi - 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
+
+        $prompt = $request->message;
+        
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer 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',
+            'HTTP-Referer' => env('APP_URL'),
+        ])
+        ->timeout(90)
+        ->post('https://openrouter.ai/api/v1/chat/completions', [
+            'model' => 'deepseek/deepseek-chat-v3-0324:free',
+            'messages' => [
+                ['role' => 'user', 'content' => $prompt],
+            ],
+        ]);
+
+        $resBody = $response->json();
+
+        $res = [
+            'status' => 0,
+            'message' => 'No response from DeepSeek API',
+            'response' => '',
+        ];
+
+        if (isset($resBody['choices'][0]['message']['content'])) {
+            $res['status'] = 1;
+            $res['message'] = 'Success';
+            $res['response'] = $resBody['choices'][0]['message']['content'];
+        }else{
+            $res['response'] = $response->json();
+        }
+
+        return $res;
+    }
+
+    public function AIassignTask(Request $request){
+        $controller = new tbluserController;
+        $response = $controller->edit($request, $request->user_id);
+        $userData = json_decode($response->getContent(), true);
+         $res = [
+            'status' => 0,
+            'message' => 'No response from DeepSeek API',
+            'response' => [],
+        ];
+        if(isset($userData['jobroleTasks']) && !empty($userData['jobroleTasks'])){
+            $jsonTasks = $jsonSkills = [];
+           foreach ($userData['jobroleTasks'] as $key => $value) {
+                $jsonTasks[] = $value['task'];
+           }
+            foreach ($userData['jobroleSkills'] as $key => $value) {
+                $jsonSkills[] = $value['title'];
+           }
+           $jsonTaskEncode = json_encode($jsonTasks);
+           $jsonSkillEncode = json_encode($jsonSkills);
+           // make prompt to pass into Deepseek API
+           $prompt = $jsonTaskEncode . $jsonSkillEncode . ' For each task in the JSON, classify it as "Daily Task", "Weekly Task", "Monthly Task", or "Yearly Task" based on its nature, and also assign the most relevant skill(s) from the provided skills array to each task. Return only a PHP array in the format: ["type" => [["task" => "task1", "skills" => ["skill1", "skill2"]], ...]], with no explanation or extra content.';
+
+           $request->merge(['message' => $prompt]);
+           // pass prompt into Deepseek API as message
+           $chatResponse = $this->DeepSeekChat($request);
+            $chatRes = $chatResponse['response'];
+            if($chatRes!='' && $chatResponse['status']!=0){
+                $clean = preg_replace('/^```php\s*|\s*```$/', '', trim($chatRes));
+                $taskData = [];
+                eval('$taskData = ' . $clean . ';');
+                $insert = 0;
+                // ✅ Now $taskData is a real PHP array
+                $taskController = new instituteDetailController;
+                $insert = 0;
+
+                // collect tasks into arr[]
+                $arr = [];
+
+                foreach ($taskData as $frequency => $tasks) {
+                    foreach ($tasks as $taskItem) {
+                        $arr[] = [
+                            'TASK_ALLOCATED_TO' => [$userData['data']['id'] ?? 0],
+                            'TASK_TITLE' => $taskItem['task'],
+                            'TASK_DESCRIPTION' => $taskItem['task'],
+                            'KRA' => null,
+                            'KPA' => null,
+                            'selType' => $frequency,
+                            'TASK_ATTACHMENT' => null,
+                            'manageby' => 1,
+                            'skills' => $taskItem['skills'],
+                            'TASK_DATE' => now(),
+                            'observation_point' => null,
+                        ];
+                    }
+                }
+
+                if (count($arr)) {
+                    // create bulk request with arr[]
+                    $newReq = new Request([
+                        'formName' => 'addTask',
+                        'arr' => $arr ?? [],
+                        'type' => 'API',
+                        'sub_institute_id' => $request->sub_institute_id,
+                        'syear' => $request->syear,
+                        'user_id' => $request->user_id,
+                    ]);
+
+                    $taskStoreResponse = $taskController->store($newReq);
+                    $responseData = $taskStoreResponse->getData();   
+                                     
+                    $res['status'] = 1;
+                    $res['message'] = 'Tasks added successfully';
+                } else {
+                    $res['status'] = 0;
+                    $res['message'] = 'No valid task data found';
+                }
+
+                if($insert>0){
+                     $res = [
+                        'status' => 1,
+                        'message' => 'Task Added Succefully!',
+                        'response' =>$taskData,
+                    ];
+                }
+            }
+            
+            // Ensure $chatResponse is an array before looping
+            // if (!is_array($chatResponse)) {
+            //     $chatResponse = json_decode($chatResponse, true) ?? [];
+            // }
+
+            // // Check if $chatResponse is iterable
+            // if (is_array($chatResponse) || is_object($chatResponse)) {
+            //     $res['message'] = "Fail to store tasks";
+            //     foreach ($chatResponse as $frequency => $taskGroup) {
+            //         // Ensure taskGroup is an array
+            //         if (!is_array($taskGroup)) {
+            //             continue;
+            //         }
+
+            //         foreach ($taskGroup as $taskData) {
+            //             // Ensure taskData has the required structure
+            //             if (!isset($taskData['task'])) {
+            //                 continue;
+            //             }
+
+            //             $newReq = new Request([
+            //                 'formName' => "addTask",
+            //                 'TASK_ALLOCATED_TO' => $userData['data']['id'] ?? 0,
+            //                 'TASK_TITLE' => $taskData['task'], 
+            //                 'TASK_DESCRIPTION' => $taskData['task'],
+            //                 'KRA' => null,
+            //                 'KPA' => null,
+            //                 'selType' => $frequency,
+            //                 'TASK_ATTACHMENT' => null,
+            //                 'manageby' => 1,
+            //                 'skills' => isset($taskData['skills']) && is_array($taskData['skills']) 
+            //                     ? implode(', ', $taskData['skills']) 
+            //                     : '',
+            //                 'TASK_DATE' => now(),
+            //                 'observation_point' => null,
+            //                 'type' => 'API',
+            //                 'sub_institute_id' => $sub_institute_id,
+            //                 'syear' => $syear,
+            //                 'user_id' => $user_id
+            //             ]);
+                        
+            //             $taskController = new instituteDetailController;
+            //             $storeTask = $taskController->store($newReq);
+            //             $res['response'][] = $storeTask; // Store all responses
+            //         }
+            //     }
+            // } else {
+            //     $res['error'] = "Invalid chat response format";
+            // }
+        }
+        return $res; 
     }
 }

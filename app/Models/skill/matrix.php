@@ -9,6 +9,6 @@ class matrix extends Model
 {
     use HasFactory;
     protected $table = "s_skill_matrix";
-    protected $fillable = ['user_id', 'skill_id', 'skill_level', 'interest_level'];
+    protected $fillable = ['user_id', 'skill_id', 'skill_level', 'interest_level','knowledge','ability'];
     public $timestamps = false;
 }

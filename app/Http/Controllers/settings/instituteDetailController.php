@@ -95,12 +95,6 @@ class instituteDetailController extends Controller
 
         if(in_array($type,["API","JSON"])){
             try {
-                if (! $this->jwtToken()->validate()) {
-                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
-    
-                    return response()->json($response, 401);
-                }
-                
                 $sub_institute_id = $request->get('sub_institute_id');
                 $syear = $request->get('syear');
                 $user_id = $request->get('user_id');
