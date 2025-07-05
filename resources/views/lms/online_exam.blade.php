@@ -1,4 +1,5 @@
-@include('includes.lmsheadcss')
+@extends('layout')
+@section('content')
 <link rel="stylesheet" href="../../../tooltip/enjoyhint/jquery.enjoyhint.css">
 <style>
 html {
@@ -22,7 +23,7 @@ html {
             {{ method_field('POST') }}
             @csrf
 
-            <input type="hidden" name="hid_session_quiz" id="hid_session_quiz" value="{{ request()->session()->get('session_quiz') }}">
+            <input type="hidden" name="hid_session_quiz" id="hid_session_quiz" value="{{ now() }}">
             <div class="tab-content" id="pills-tabContent">
                 <div class="tab-pane fade show active" id="chat" role="tabpanel" aria-labelledby="chat-tab">
                     <div class="card border-0 rounded mb-5">
@@ -130,7 +131,6 @@ html {
 </div>
 
 
-@include('includes.lmsfooterJs')
 <script type="text/javascript">
 // added on 06-01-2025 for back restrictions
 $(document).ready(function() {
@@ -161,56 +161,55 @@ $(document).ready(function(){
 
 <script>
 
+// Get the minutes to add from input
+const min_to_add = parseInt($("#questionpaper_time").val());
 
-//Set the date we're counting down to
-//var countDownDate = new Date("Jan 7, 2021 15:57:25").getTime();
-
-var min_to_add = $("#questionpaper_time").val();
-var session_date = $("#hid_session_quiz").val();
-// alert(session_date);
-var dt = new Date(session_date);//new Date("<?php echo request()->session()->get('quiz'); ?>");
-// console.log("session_time"+dt);
-dt.setMinutes( dt.getMinutes() + parseInt(min_to_add) );
-var countDownDate = dt.getTime();
-// console.log("countDownDate"+countDownDate);
-// Update the count down every 1 second
-var x = setInterval(function() {
-
-  // Get today's date and time
-  var now = new Date().getTime();
-    // console.log("now"+now);
-  // Find the distance between now and the count down date
-  var distance = (countDownDate - now);
-  // console.log("distance"+distance);
+// Function to start the countdown timer
+function startCountdown(minutes) {
+    // Calculate end time (current time + minutes)
+    const endTime = new Date();
+    endTime.setMinutes(endTime.getMinutes() + minutes);
     
-  // Time calculations for days, hours, minutes and seconds
-  var days = Math.floor(distance / (1000 * 60 * 60 * 24));
-  var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-  var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+    // Update the timer every second
+    const timerInterval = setInterval(function() {
+        // Get current time
+        const now = new Date();
+        
+        // Calculate remaining time
+        const timeLeft = endTime - now;
+        
+        // If time is up
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            $("#showtimer").text("Time's up!");
+            
+            // Submit form and close window
+            $("#online_exam").submit();
+            window.close();
+            return;
+        }
+        
+        // Convert milliseconds to minutes and seconds
+        const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+        const secondsLeft = Math.floor((timeLeft % (1000 * 60)) / 1000);
+        
+        // Display the remaining time
+        $("#showtimer").text(
+            `${minutesLeft.toString().padStart(2, '0')}:${secondsLeft.toString().padStart(2, '0')}`
+        );
+    }, 1000); // Update every second
+}
 
-  // console.log("days"+days);
-  // console.log("hours"+hours);
-  // console.log("minutes"+minutes);
-  // console.log("seconds"+seconds);
-    
-  // Output the result in an element with id="demo"
-  document.getElementById("showtimer").innerHTML = hours + "h "+ minutes + "m " + seconds + "s ";
-    
-  // If the count down is over, write some text 
-  if (distance < 0) {
-    clearInterval(x);
-    document.getElementById("showtimer").innerHTML = "EXPIRED";
-    alert("Your Exam time is exipred");
-    $("#online_exam").submit();
-    @php
-    request()->session()->forget("session_quiz");
-    @endphp
-    window.close();
-  }
-}, 1000);
+// Start the countdown when the page loads
+$(document).ready(function() {
+    if (!isNaN(min_to_add) && min_to_add > 0) {
+        startCountdown(min_to_add);
+    } else {
+        $("#showtimer").text("Invalid time set");
+    }
+});
 
 
 </script>
 
-@include('includes.footer')
+@endsection

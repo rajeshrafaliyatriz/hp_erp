@@ -1,4 +1,5 @@
-@include('includes.lmsheadcss')
+@extends('layout')
+@section('content')
 <link rel="stylesheet" href="../../../tooltip/enjoyhint/jquery.enjoyhint.css">
 <meta http-equiv="cache-control" content="private, max-age=0, no-cache">
 <meta http-equiv="pragma" content="no-cache">
@@ -268,7 +269,6 @@
     </div>
 </div>
 @endif --}}
-@include('includes.lmsfooterJs')
 <script type="text/javascript">
 $(document).ready(function(){
     $('[data-toggle="tooltip"]').tooltip();   
@@ -317,4 +317,4 @@ $(document).ready(function(){
 })
 @endif
 </script>
-@include('includes.footer')
+@endsection

@@ -1,6 +1,35 @@
+<style>
+    .itemActive{
+        color: #02a70e;
+    }
+</style>
 <div id="page-wrapper">
     <div class="container-fluid">
         <div class="row">
+            @php 
+                $addedMattrix = [];
+                if(!empty($userRatedSkills)){
+                    foreach ($userRatedSkills as $key => $value) {
+                      $addedMattrix[$value['skill_id']] = $value;
+                    }
+                }
+                $levels = [
+                    'skill_levels' => [
+                        5 => 'Highly Skilled',
+                        4 => 'Developed Skills',
+                        3 => 'Competent',
+                        2 => 'Basic Capability',
+                        1 => 'Very Low',
+                    ],
+                    'interest_levels' => [
+                        5 => 'Highly Interested',
+                        4 => 'Interested',
+                        3 => 'Neutral',
+                        2 => 'Low Interest',
+                        1 => 'Very Low',
+                    ],
+                ];
+            @endphp
             <!-- Left Panel -->
             <div class="col-md-3">
                 <h5>My Skills Audit</h5>
@@ -19,7 +48,7 @@
                     <div class="collapse" id="skillListCollapse">
                         @if (!empty($skills))
                             @foreach ($jobroleSkills as $skill)
-                                <li class="list-group-item">☛ {{ $skill->skill }}</li>
+                                <li class="list-group-item item-{{$skill->skill_id}}" @if(isset($addedMattrix[$skill->skill_id]))  onclick='getFadeSkill("{{$skill->skill_id}}");' style="background:#f1fff2" @else style="background:#f3f3f3" @endif>☛ {{ $skill->skill }}</li>
                             @endforeach
                         @else
                             <li class="list-group-item text-muted">No skills added.</li>
@@ -27,12 +56,12 @@
                     </div>
                 </ul>
             </div>
-
+            
             <!-- Skill Assessment Section -->
             <div class="col-md-9">
                 <div id="skill-container">
-                    @foreach ($skills ?? [] as $skill)
-                        <div class="skill-box" data-skill-id="{{ $skill->skill_id }}">
+                    @foreach ($jobroleSkills ?? [] as $skill)
+                        <div class="skill-box skill-box-{{ $skill->skill_id }}" data-skill-id="{{ $skill->skill_id }}">
                             <div class="col-md-12">
                                 <h3>{{ $skill->title }}</h3>
                                 <h6>({{ $skill->category }}
@@ -42,23 +71,32 @@
 
                                 <label>Skill Level:</label>
                                 <select class="skill-level">
-                                    <option value="5">Highly Skilled</option>
-                                    <option value="4">Developed Skills</option>
-                                    <option value="3">Competent</option>
-                                    <option value="2">Basic Capability</option>
-                                    <option value="1">Very Low</option>
+                                    @foreach ($levels['skill_levels'] as $k=> $item)
+                                        @php 
+                                        $selected = '';
+                                         if(isset($addedMattrix[$skill->skill_id]['skill_level']) && ($addedMattrix[$skill->skill_id]['skill_level']) == $k){
+                                            $selected = "selected";
+                                         }
+                                        @endphp
+                                        <option value="{{$k}}" {{$selected}}>{{$item}}</option>
+                                    @endforeach
                                 </select>
 
                                 <label>Interest Level:</label>
                                 <select class="interest-level">
-                                    <option value="5">Highly Interested</option>
-                                    <option value="4">Interested</option>
-                                    <option value="3">Neutral</option>
-                                    <option value="2">Low Interest</option>
-                                    <option value="1">Very Low</option>
+                                    @foreach ($levels['interest_levels'] as $k=> $item)
+                                        @php 
+                                        $selected = '';
+                                         if(isset($addedMattrix[$skill->skill_id]['interest_level']) && ($addedMattrix[$skill->skill_id]['interest_level']) == $k){
+                                            $selected = "selected";
+                                         }
+                                        @endphp
+                                        <option value="{{$k}}" {{$selected}}>{{$item}}</option>
+                                    @endforeach
                                 </select>
                                 <hr>
                             </div>
+                          
                             <div class="col-md-12" style="display:flex;justify-content:space-between">
                                 <div class="knowledgeDiv" style="width:50%;padding:0px 4px;">
                                     <div class="subDiv" style="border:1px solid #ddd;padding:4px;border-radius:10px;">
@@ -66,14 +104,25 @@
                                         <hr style="margin:0px !important">
                                         @if (is_array($skill->knowledge))
                                             @foreach ($skill->knowledge as $ke => $k)
+                                                @php 
+                                                    $kstar = 0;
+                                                    if (isset($addedMattrix[$skill->skill_id]['knowledge'])) {
+                                                        $knowledgeJson = json_decode($addedMattrix[$skill->skill_id]['knowledge'],true);
+                                                        if(isset($knowledgeJson[$k])){
+                                                            $kstar = $knowledgeJson[$k];
+                                                        }
+                                                    }
+                                                @endphp
                                                 <input type="hidden" name="knowledge[{{ $k }}]"
-                                                    id="knowledgeInput_{{ $ke }}" class="knowledge-input" data-key="{{ $k }}" value="">
+                                                    id="knowledgeInput_{{ $skill->skill_id }}_{{ $ke }}" class="knowledge-input" data-key="{{ $k }}" value="{{ $kstar }}">
                                                 <ul style="padding: 4px 8px; border-bottom: 2px solid #09352b55;">
                                                     <li style="padding:2px;">{{ $k }}</li>
                                                     <li>
                                                         @for ($i = 1; $i <= 5; $i++)
-                                                            <span class="mdi mdi-star-outline knowledgeStar{{$ke}}" style="font-size:18px;"
-                                                                onclick="AKRating('knowledgeInput_{{ $ke }}','knowledge','{{ $i }}','{{$ke}}');"  id="knowledgeStar{{$ke}}_{{$i}}"></span>
+                                                            <span class="mdi {{ $i <= $kstar ? 'mdi-star text-warning' : 'mdi-star-outline' }} knowledgeStar{{ $skill->skill_id }}_{{ $ke }}" 
+                                                                style="font-size:18px; cursor:pointer;"
+                                                                onclick="AKRating('knowledgeInput_{{ $skill->skill_id }}_{{ $ke }}','knowledge','{{ $i }}','{{ $skill->skill_id }}_{{ $ke }}');"  
+                                                                id="knowledgeStar{{ $skill->skill_id }}_{{ $ke }}_{{$i}}"></span>
                                                         @endfor
                                                     </li>
                                                 </ul>
@@ -81,6 +130,7 @@
                                         @else
                                             <p class="text-muted">No knowledge items.</p>
                                         @endif
+
                                     </div>
                                 </div>
                                 <div class="abilityDiv" style="width:50%;padding:0px 4px;">
@@ -89,14 +139,23 @@
                                         <hr style="margin:0px !important">
                                         @if (is_array($skill->ability))
                                             @foreach ($skill->ability as $ke => $k)
+                                             @php 
+                                                    $astar = 0;
+                                                    if (isset($addedMattrix[$skill->skill_id]['ability'])) {
+                                                        $abilityJson = json_decode($addedMattrix[$skill->skill_id]['ability'],true);
+                                                        if(isset($abilityJson[$k])){
+                                                            $astar = $abilityJson[$k];
+                                                        }
+                                                    }
+                                                @endphp
                                                 <input type="hidden" name="ability[{{ $k }}]"
-                                                    id="AbilityInput_{{ $ke }}" class="ability-input" data-key="{{ $k }}" value="">
+                                                    id="abilityInput_{{ $skill->skill_id }}_{{ $ke }}" class="ability-input" data-key="{{ $k }}"  value="{{ $astar }}">
                                                 <ul style="padding: 4px 8px;border-bottom: 2px solid #09352b55;">
                                                     <li style="padding:2px;">{{ $k }}</li>
                                                     <li>
                                                         @for ($i = 1; $i <= 5; $i++)
-                                                            <span class="mdi mdi-star-outline abilityStar{{$ke}}" style="font-size:18px;"
-                                                                onclick="AKRating('AbilityInput_{{ $ke }}','ability','{{ $i }}','{{$ke}}');" id="abilityStar{{$ke}}_{{$i}}"></span>
+                                                            <span class="mdi {{ $i <= $astar ? 'mdi-star text-warning' : 'mdi-star-outline' }} abilityStar{{ $skill->skill_id }}_{{ $ke }}" style="font-size:18px; cursor:pointer;"
+                                                                onclick="AKRating('abilityInput_{{ $skill->skill_id }}_{{ $ke }}','ability','{{ $i }}','{{ $skill->skill_id }}_{{ $ke }}');" id="abilityStar{{ $skill->skill_id }}_{{ $ke }}_{{$i}}"></span>
                                                         @endfor
                                                     </li>
                                                 </ul>
@@ -115,24 +174,6 @@
                     @endforeach
                 </div>
                 <hr>
-                @php
-                    $levels = [
-                        'skill_levels' => [
-                            5 => 'Highly Skilled',
-                            4 => 'Developed Skills',
-                            3 => 'Competent',
-                            2 => 'Basic Capability',
-                            1 => 'Very Low',
-                        ],
-                        'interest_levels' => [
-                            5 => 'Highly Interested',
-                            4 => 'Interested',
-                            3 => 'Neutral',
-                            2 => 'Low Interest',
-                            1 => 'Very Low',
-                        ],
-                    ];
-                @endphp
 
                 @if (isset($userRatedSkills) && count($userRatedSkills) > 0)
                     <div class="usersSkillsRated mt-4">
@@ -180,6 +221,13 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     $(document).ready(function() {
+        @if (!empty($skills) && isset($skills[0]->skill_id))
+            var skillId = {{$skills[0]->skill_id}};
+            // Hide all skill boxes
+            $(".skill-box").fadeOut(500);
+            $(".skill-box-"+skillId).fadeIn(500);
+        @endif
+        
         let completedCount = {{ $completedCount ?? 0 }};
         let totalSkills = {{ $totalSkills ?? 0 }};
 
@@ -215,7 +263,7 @@
             
             // Check knowledge inputs
             skillBox.find('.knowledge-input').each(function() {
-                if (!$(this).val()) {
+                if ($(this).val() === "" || $(this).val() === "0") {
                     allFilled = false;
                     missingFields.push('Knowledge: ' + $(this).data('key'));
                 }
@@ -223,14 +271,14 @@
             
             // Check ability inputs
             skillBox.find('.ability-input').each(function() {
-                if (!$(this).val()) {
+                if ($(this).val() === "" || $(this).val() === "0") {
                     allFilled = false;
                     missingFields.push('Ability: ' + $(this).data('key'));
                 }
             });
             
             if (!allFilled) {
-                alert('Please rate all knowledge and ability items before proceeding:\n\n' + missingFields.join('\n'));
+                alert('Please rate all knowledge and ability items before proceeding');
                 return false;
             }
 
@@ -282,16 +330,22 @@
 
         // Find all stars for this input and reset color
         for (let i = 1; i <= 5; i++) {
-            $('.' + liName + 'Star' + liID).removeClass('mdi-star');
+            $('.' + liName + 'Star' + liID).removeClass('mdi-star text-warning');
             $('.' + liName + 'Star' + liID).addClass('mdi-star-outline');
-            $('.' + liName + 'Star' + liID).css('color', '#888');
         }
         
         // Set color for selected stars
         for (let i = 1; i <= starId; i++) {
             $('#' + liName + 'Star' + liID + '_' + i).removeClass('mdi-star-outline');
-            $('#' + liName + 'Star' + liID + '_' + i).addClass('mdi-star');
-            $('#' + liName + 'Star' + liID + '_' + i).css('color', 'gold');
+            $('#' + liName + 'Star' + liID + '_' + i).addClass('mdi-star text-warning');
         }
+    }
+
+    function getFadeSkill(skillId) {
+        $(".skill-box").fadeOut(500);
+        $(".skill-box-"+skillId).fadeIn(500);
+        // 02a70e
+        $('.list-group-item').removeClass('itemActive');
+        $(".item-"+skillId).addClass('itemActive');
     }
 </script>

@@ -37,7 +37,7 @@ class questionpaperController extends Controller
         $res['status_code'] = 1;
         $res['message'] = "SUCCESS";
         $res['data'] = $data['questionpaper_data'];
-
+        
         return is_mobile($type, 'lms/show_questionpaper', $res, "view");
     }
 
@@ -50,26 +50,44 @@ class questionpaperController extends Controller
         $teacher = session()->get('user_profile_name');
         $user_id = session()->get('user_id');
 
-         if ($teacher == "Teacher") 
-        {
-            $data['questionpaper_data'] = questionpaperModel::select('question_paper.*',
-                'standard.name as standard_name',
-                'academic_section.title as grade_name', 'subject_name', DB::raw('date_format(open_date,"%Y-%m-%d") as open_date,
-                date_format(close_date,"%Y-%m-%d") as close_date,if(now() between open_date and close_date,"yes","no") as active_exam'))
-                ->join('standard', function($join) use($marking_period_id){
-                    $join->on('standard.id', '=', 'question_paper.standard_id');
-                    // ->when($marking_period_id,function($query) use($marking_period_id){
-                    //     $query->where('standard.marking_period_id',$marking_period_id);
-                    // });
-                })
+        if (strtoupper(session()->get('user_profile_name')) == "EMPLOYEE") {
+            $student_id = session()->get('user_id');
+            $stu_data = DB::table('tbluser')->where(['id' => $student_id])->first();
+
+            if (!empty($stu_data)) {
+
+                $data['questionpaper_data'] = questionpaperModel::select(
+                    'question_paper.*',
+                    'standard.name as standard_name',
+                    'academic_section.title as grade_name',
+                    'ssm.display_name as subject_name',
+                    DB::raw('count(lms_online_exam.id) as total_attempt'),
+                    DB::raw('date_format(open_date, "%Y-%m-%d") as open_date'),
+                    DB::raw('date_format(close_date, "%Y-%m-%d") as close_date'),
+                    DB::raw('if(now() between open_date and close_date, "yes", "no") as active_exam')
+                )
+                ->join('standard', 'standard.id', '=', 'question_paper.standard_id')
+                ->join('tbluser as se', function ($join) use ($student_id, $syear, $sub_institute_id) {
+                    $join->on('se.id', '=', DB::raw($student_id))
+                        ->on('se.sub_institute_id', '=', DB::raw($sub_institute_id));
+                })                
                 ->join('academic_section', 'academic_section.id', '=', 'question_paper.grade_id')
-                ->join('subject', 'subject.id', '=', 'question_paper.subject_id')
+                ->join('sub_std_map as ssm', function ($join) use ($sub_institute_id) {
+                    $join->on('ssm.subject_id', '=', 'question_paper.subject_id');
+                })
+                ->leftJoin('lms_online_exam', function ($join) use ($student_id) {
+                    $join->on('lms_online_exam.question_paper_id', '=', 'question_paper.id')
+                        ->on('lms_online_exam.employee_id', '=', DB::raw($student_id));
+                })
                 ->where('question_paper.sub_institute_id', $sub_institute_id)
                 ->where('question_paper.syear', $syear)
-                ->where('question_paper.created_by', $user_id)
-                ->orderBy('question_paper.id', 'desc')
+                // ->where('standard.id', $stu_data[0]['standard_id'])
+                ->where('question_paper.exam_type', 'online')
+                ->groupBy('question_paper.id')
                 ->get();
-        }
+                
+            }
+        } 
         else
         {
             $data['questionpaper_data'] = questionpaperModel::select('question_paper.*',
@@ -189,63 +207,7 @@ class questionpaperController extends Controller
         // echo ('<pre>');print_r($questionpaper);die;
         $query = questionpaperModel::insertGetId($questionpaper);
         $questionpaper_id = DB::getPDO()->lastInsertId();
-        // send notification
-        if(isset($questionpaper_id) && $questionpaper_id!=0){
-            $student_data = SearchStudent($request['grade'], $request['standard']);
-
-            $schoolData = SchoolModel::where(['id' => $sub_institute_id])->get()->toArray();
-
-            $schoolName = $schoolData[0]['SchoolName'];
-            $schoolLogo = $_SERVER['APP_URL'].'/admin_dep/images/'.$schoolData[0]['Logo'];
-
-            foreach ($student_data as $id => $value) {
-                $text = "Reminder: ".$request['paper_name']." exam added on ".$open_date." and closing date of exam is ".$close_date." )";
-                $app_notification_content = [
-                    'NOTIFICATION_TYPE'        => 'Notification',
-                    'NOTIFICATION_DATE'        => now(),
-                    'STUDENT_ID'               => $value['id'],
-                    'NOTIFICATION_DESCRIPTION' => $text,
-                    'STATUS'                   => 0,
-                    'SUB_INSTITUTE_ID'         => $sub_institute_id,
-                    'SYEAR'                    => $syear,
-                    'SCREEN_NAME'              => 'general',
-                    'CREATED_BY'               => $user_id,
-                    'CREATED_IP'               => $_SERVER['REMOTE_ADDR'],
-                ];
-
-                $gcm_data = DB::table('gcm_users')->where('mobile_no', $value['mobile'])
-                        ->where('sub_institute_id', $sub_institute_id)->get()->toArray();
-
-                    $gcmRegIds = [];
-                    if (count($gcm_data) > 0) {
-                        foreach ($gcm_data as $key1 => $val1) {
-                            $gcmRegIds[] = $val1->gcm_regid;
-                        }
-                    }
-
-                    $pushMessage = $text;
-
-                    $bunch_arr = array_chunk($gcmRegIds, 1000);
-                    sendNotification($app_notification_content);
-                    
-                    if (! empty($bunch_arr)) {
-                        foreach ($bunch_arr as $val) {
-                            if (isset($val, $pushMessage)) {
-                                $type1 = 'Notification';
-                                $message = [
-                                    'body'  => $pushMessage, 'TYPE' => $type1, 'USER_ID' => $value['id'],
-                                    'title' => $schoolName, 'image' => $schoolLogo,
-                                ];
-                                $pushStatus = send_FCM_Notification($val, $message, $sub_institute_id);
-                               
-                            }
-                        }
-                      
-                    }
-            }
-          
-        }
-        // notification ended 
+      
 
         $res = array(
             "status_code" => 1,
@@ -797,7 +759,11 @@ public function search_question($all_data){
         $outer_extra = "1 = 1";
         if (isset($all_data["search_chapter"])) {
             $search_chapter = $all_data["search_chapter"];
-            $extra .= "qm.chapter_id IN (" . implode(",", $search_chapter) . ")";
+            // Remove empty values before implode
+            $filtered_chapters = array_filter($search_chapter, function($v) { return $v !== '' && $v !== null; });
+            if (!empty($filtered_chapters)) {
+                $extra .= "qm.chapter_id IN (" . implode(",", $filtered_chapters) . ")";
+            }
         }
         if (isset($all_data["search_topic"]) && $all_data["search_topic"] != [null]) {
 

@@ -84,7 +84,7 @@ class onlineExamController extends Controller
 
         //START Insert into lms_online_exam table
         $online_exam = [
-            'student_id'        => $user_id,
+            'employee_id'        => $user_id,
             'question_paper_id' => $request->get('questionpaper_id'),
             'total_right'       => $result['total_right_ans'],
             'total_wrong'       => $result['total_wrong_ans'],
@@ -134,7 +134,7 @@ class onlineExamController extends Controller
                         $multiple = [
                             'question_paper_id' => $request->get('questionpaper_id'),
                             'online_exam_id'    => $online_exam_id,
-                            'student_id'        => $user_id,
+                            'employee_id'        => $user_id,
                             'question_id'       => $multiple_question_id,
                             'answer_id'         => $multiple_ans_arr[0],
                             'ans_status'        => $ans_status,
@@ -151,7 +151,7 @@ class onlineExamController extends Controller
                 $narrative = [
                     'question_paper_id' => $request->get('questionpaper_id'),
                     'online_exam_id'    => $online_exam_id,
-                    'student_id'        => $user_id,
+                    'employee_id'        => $user_id,
                     'question_id'       => $narrative_question_id,
                     'narrative_answer'  => $narrative_answer_ids,
                     'ans_status'        => $ans_status,
@@ -388,15 +388,15 @@ class onlineExamController extends Controller
         $data['mapping_arr'] = $lmsmapping;
         $data['answer_arr'] = $answer;
         
-        // $data['online_exam_data'] =DB::SELECT("SELECT * FROM lms_online_exam  where id ='$online_exam_id' and student_id=95634 AND question_paper_id = '$user_id'");
+        // $data['online_exam_data'] =DB::SELECT("SELECT * FROM lms_online_exam  where id ='$online_exam_id' and employee_id=95634 AND question_paper_id = '$user_id'");
 
         $data['online_exam_data'] = lmsOnlineExamModel::where([
-            'id'=>$online_exam_id,'student_id'=>$user_id
+            'id'=>$online_exam_id,'employee_id'=>$user_id
         ])->get()->toArray();
         // print_r($data['online_exam_data']);exit;
         $data['online_exam_data'] = $data['online_exam_data'][0] ?? $data['online_exam_data'];
 
-        // $online_answer_data = lmsOnlineExamAnswerModel::where(['online_exam_id'=>$online_exam_id,'student_id'=>$user_id])->get()->toArray();
+        // $online_answer_data = lmsOnlineExamAnswerModel::where(['online_exam_id'=>$online_exam_id,'employee_id'=>$user_id])->get()->toArray();
         // foreach($online_answer_data as $key => $val)
         // {
         //     $data['online_answer_data'][$val['question_id']][] = $val; 
@@ -437,12 +437,12 @@ class onlineExamController extends Controller
     public function online_exam_attempt(Request $request)
     {
         $questionpaper_id = $request->get("questionpaper_id");
-        $student_id = $request->get("student_id");
+        $employee_id = $request->get("employee_id");
 
         $data['questionpaper_data'] = $this->get_questionpaper_details($questionpaper_id);
 
         $data['attempted_data'] = lmsOnlineExamModel::where([
-            'student_id'        => $student_id,
+            'employee_id'        => $employee_id,
             'question_paper_id' => $questionpaper_id,
         ])->orderby('start_time')->get()->toArray();
         foreach ($data['attempted_data'] as $key => $val) {
@@ -454,11 +454,11 @@ class onlineExamController extends Controller
                 INNER JOIN lms_mapping_type lt ON lt.id = l.mapping_value_id
                 INNER JOIN lms_mapping_type plt ON plt.id = lt.parent_id
                 LEFT JOIN lms_online_exam_answer e on e.question_id = l.questionmaster_id and e.question_paper_id = '".$val['question_paper_id']."' AND 
-                e.student_id = '".$val['student_id']."' and e.online_exam_id = '".$val['id']."'
+                e.employee_id = '".$val['employee_id']."' and e.online_exam_id = '".$val['id']."'
                 WHERE questionmaster_id IN (
                         SELECT question_id
                         FROM lms_online_exam_answer
-                        WHERE question_paper_id = '".$val['question_paper_id']."' AND student_id = '".$val['student_id']."' 
+                        WHERE question_paper_id = '".$val['question_paper_id']."' AND employee_id = '".$val['employee_id']."' 
                         AND online_exam_id = '".$val['id']."'
                     ) 
                 GROUP BY mapping_value_id

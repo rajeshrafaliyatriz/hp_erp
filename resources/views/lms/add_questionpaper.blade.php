@@ -1,6 +1,6 @@
 {{--@include('includes.lmsheadcss')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <link href="/plugins/bower_components/clockpicker/dist/jquery-clockpicker.min.css" rel="stylesheet">
 <style>
 .tooltip-inner {
@@ -416,7 +416,6 @@ br{
 </div>
 <!--END Modal -->
 
-@include('includes.lmsfooterJs')
 <script src="//cdnjs.cloudflare.com/ajax/libs/moment.js/2.9.0/moment-with-locales.js"></script>
 <script src="//cdn.rawgit.com/Eonasdan/bootstrap-datetimepicker/e8bddc60e73c1ec2475f827be36e1957af72e2ea/src/js/bootstrap-datetimepicker.js"></script>
 
@@ -437,17 +436,6 @@ $(function () {
     });
 
 });
-
-function getStandardwiseDivision(std_id){
-    var path = "{{ route('ajax_StandardwiseDivision') }}";
-    $('#division_id').find('option').remove().end().append('<option value="">Select Division</option>').val('');
-    $.ajax({url: path,data:'standard_id='+std_id, success: function(result){
-        for(var i=0;i < result.length;i++){
-            $("#division_id").append($("<option></option>").val(result[i]['division_id']).html(result[i]['name']));
-        }
-    }
-    });
-}
 
 $( document ).ready(function() {
     //START Load question on edit question paper
@@ -635,5 +623,4 @@ if($('#paper_desc').val() == ''){
 }
 </script>
 
-@include('includes.footer')
 @endsection

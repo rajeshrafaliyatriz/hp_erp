@@ -1,8 +1,8 @@
 {{--@include('includes.lmsheadcss')
 @include('includes.header')
 @include('includes.sideNavigation')--}}
-@extends('lmslayout')
-@section('container')
+@extends('layout')
+@section('content')
 <style>
     br {
         display: block !important;
@@ -24,7 +24,7 @@
             @php
                 $user_profile = Session::get('user_profile_name');
                 $show_block = 'NO';
-                if (strtoupper($user_profile) == 'LMS TEACHER' || strtoupper($user_profile) == 'TEACHER') {
+                if (strtoupper($user_profile) == 'ADMIN') {
                     $show_block = 'YES';
                 }
             @endphp
@@ -109,12 +109,11 @@
                                                            class="btn btn-info btn-outline btn m-r-5">View</a>
                                                     @endif
 
-                                                    @if (strtoupper($user_profile) == 'STUDENT')
+                                                    @if (strtoupper($user_profile) == 'EMPLOYEE')
                                                         <div class="text-nowrap">
                                                             @if ($quespaper->total_attempt > 0)
                                                                 <a href="{{ route('online_exam_attempt', ['questionpaper_id' => $quespaper->id, 'student_id' => session()->get('user_id')]) }}"
-                                                                   class="btn btn-info btn-outline btn m-r-5">View
-                                                                    Attempted Exam</a>
+                                                                   class="btn btn-info btn-outline btn m-r-5">View Attempted Exam</a>
                                                             @endif
 
                                                             @php
@@ -189,7 +188,6 @@
         </div>
     </div>
 </div>
-@include('includes.lmsfooterJs')
 <script>
     $(document).ready(function () {
         var table = $('#subject_list').DataTable({
@@ -319,5 +317,4 @@
         }
     }
 </script>
-@include('includes.footer')
 @endsection
