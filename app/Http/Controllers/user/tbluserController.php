@@ -138,7 +138,8 @@ class tbluserController extends Controller
             $name = $request->get('user_name') . date('YmdHis');
             $ext = File::extension($originalname);
             $file_name = $name . '.' . $ext;
-            $path = $file->storeAs('public/user/', $file_name);
+            // $path = $file->storeAs('public/user/', $file_name);
+            Storage::disk('digitalocean')->putFileAs('public/hp_user/', $file, $file_name, 'public');
         }
 
         $request->request->add(['image' => $file_name]); //add request
@@ -596,7 +597,8 @@ class tbluserController extends Controller
             $name = $request->get('user_name') . date('YmdHis');
             $ext = File::extension($originalname);
             $file_name = $name . '.' . $ext;
-            $path = $file->storeAs('public/user/', $file_name);
+            // $path = $file->storeAs('public/user/', $file_name);
+            Storage::disk('digitalocean')->putFileAs('public/hp_user/', $file, $file_name, 'public');
         }
         if ($file_name != "") {
             $request->request->add(['image' => $file_name]); //add request
@@ -704,7 +706,7 @@ class tbluserController extends Controller
             $ext = File::extension($originalname);
             $file_name = $name . '.' . $ext;
             // $path = $file->storeAs('public/student_document/', $file_name);
-            Storage::disk('digitalocean')->putFileAs('public/staff_document/', $file, $file_name, 'public');
+            Storage::disk('digitalocean')->putFileAs('public/hp_staff_document/', $file, $file_name, 'public');
         }
 
         $data = [
