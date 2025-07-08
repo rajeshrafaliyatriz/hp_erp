@@ -168,3 +168,6 @@ updated_by(unassigned bigInt) nullable no action deleted update from tbluser - i
 deleted_by(unassigned bigInt) nullable no action deleted update from tbluser - id
 timestamp
 deleted_at
+
+
+0px 0.5px 0px #ddd

@@ -62,6 +62,8 @@ class authController extends Controller
         $sessionData = [
             'user_id' => $user->id,
             'user_name' => $user->first_name . ' ' . $user->last_name,
+            'first_name'=>$user->first_name,
+            'last_name'=>$user->last_name,
             'user_email' => $user->email,
             'user_image'=> $user->image,
             'user_profile_name'=>$profileDetails->name,

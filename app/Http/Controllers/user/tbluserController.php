@@ -25,6 +25,7 @@ use App\Models\skill\skill;
 use App\Models\skill\matrix;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class tbluserController extends Controller
 {
@@ -32,11 +33,38 @@ class tbluserController extends Controller
     public function index(Request $request)
     {
         // echo "<pre>";print_r(session()->all());exit;
-        $sub_institute_id = $request->session()->get('sub_institute_id');
-        $user_profile = $request->session()->get('user_profile_name');
-        $sub_institute_id = $request->session()->get('sub_institute_id');
-        $user_profile = $request->session()->get('user_profile_name');
+        $sub_institute_id = session()->get('sub_institute_id');
+        $user_profile = session()->get('user_profile_name');
+        $type = $request->type;
+        // If the request is from API, validate token and required fields
+        if ($type == 'API') {
+            $token = $request->input('token');  // get token from input field 'token'
 
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'org_type' => 'required',
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_profile = $request->get('user_profile_name');
+        }
         $user_data = tbluserModel::select(
             'tbluser.*',
             'tbluserprofilemaster.name as profile_name',
@@ -53,7 +81,6 @@ class tbluserController extends Controller
         $res['message'] = "Success";
         $res['data'] = $user_data;
 
-        $type = $request->input('type');
 
         return is_mobile($type, "user/show_user", $res, "view");
     }
@@ -138,7 +165,8 @@ class tbluserController extends Controller
             $name = $request->get('user_name') . date('YmdHis');
             $ext = File::extension($originalname);
             $file_name = $name . '.' . $ext;
-            $path = $file->storeAs('public/user/', $file_name);
+            // $path = $file->storeAs('public/user/', $file_name);
+            Storage::disk('digitalocean')->putFileAs('public/hp_user/', $file, $file_name, 'public');
         }
 
         $request->request->add(['image' => $file_name]); //add request
@@ -356,7 +384,16 @@ class tbluserController extends Controller
         // end  20-04-24
 
         $departments = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->get()->toArray();
-
+        if(isset($editData['id'])){
+            $editData['userDepartment'] = $editData['userJobrole'] = '';
+            if(isset($editData['department_id'])){
+                $editData['userDepartment'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->where('id',$editData['department_id'])->value('department');
+            }
+            if(isset($editData['allocated_standards'])){
+                $editData['userJobrole'] = skillJobroleMap::where('sub_institute_id', $sub_institute_id)->where('id',$editData['allocated_standards'])->value('jobrole');
+            }
+        }
+        // echo "<pre>";print_r($editData->id);exit;
         // start 29-07-2024
         $masterSetups = []; //DB::table('master_setup_select')->select('type','fieldname',DB::raw('GROUP_CONCAT(fieldValue SEPARATOR "||") as selOptions'))->where('sub_institute_id',$sub_institute_id)->groupBy('type')->get()->toArray();
         $pluckedData = [];
@@ -596,7 +633,8 @@ class tbluserController extends Controller
             $name = $request->get('user_name') . date('YmdHis');
             $ext = File::extension($originalname);
             $file_name = $name . '.' . $ext;
-            $path = $file->storeAs('public/user/', $file_name);
+            // $path = $file->storeAs('public/user/', $file_name);
+            Storage::disk('digitalocean')->putFileAs('public/hp_user/', $file, $file_name, 'public');
         }
         if ($file_name != "") {
             $request->request->add(['image' => $file_name]); //add request
@@ -704,7 +742,7 @@ class tbluserController extends Controller
             $ext = File::extension($originalname);
             $file_name = $name . '.' . $ext;
             // $path = $file->storeAs('public/student_document/', $file_name);
-            Storage::disk('digitalocean')->putFileAs('public/staff_document/', $file, $file_name, 'public');
+            Storage::disk('digitalocean')->putFileAs('public/hp_staff_document/', $file, $file_name, 'public');
         }
 
         $data = [
