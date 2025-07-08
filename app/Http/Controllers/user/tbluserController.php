@@ -166,7 +166,14 @@ class tbluserController extends Controller
             $ext = File::extension($originalname);
             $file_name = $name . '.' . $ext;
             // $path = $file->storeAs('public/user/', $file_name);
-            Storage::disk('digitalocean')->putFileAs('public/hp_user/', $file, $file_name, 'public');
+            $path = Storage::disk('digitalocean')->putFileAs(
+        'hp_user',
+        $file,
+        $filename,
+        'public'
+    );
+    
+    $publicUrl = Storage::disk('digitalocean')->url($path);
         }
 
         $request->request->add(['image' => $file_name]); //add request
