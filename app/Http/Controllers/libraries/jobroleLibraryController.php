@@ -89,6 +89,12 @@ class jobroleLibraryController extends Controller
 
         // Get all user jobroles for the sub_institute
         $usersJobroles = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)
+                ->when($request->has('industry') && isset($request->industry) && $request->industry!='',
+                    function ($q) use ($request) {
+                        // Only department is provided
+                        $q->where('industries', $request->industry);
+                    }
+                )
                 ->when($request->has('department') && $request->department!='',
                     function ($q) use ($request) {
                         // Only department is provided

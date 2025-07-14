@@ -147,6 +147,11 @@ class AJAXController extends Controller
             $res['searchData'] = jobroleModel::where('jobrole', 'like', '%'.$request->searchWord.'%')->pluck('jobrole')
             ->values();
         }
+        else if($request->has('searchType') && $request->searchType=="industries"){
+            // echo "here";exit;
+            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->groupBy('industries')->pluck('industries')
+            ->values();
+        }
         else if($request->has('searchType') && $request->searchType=="department"){
             // echo "here";exit;
             $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->groupBy('department')->pluck('department')
