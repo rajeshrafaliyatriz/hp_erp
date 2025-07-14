@@ -135,7 +135,7 @@ class AJAXController extends Controller
             $validator = Validator::make($request->all(), [
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
-                'searchWord' => 'required',
+                // 'searchWord' => 'required',
             ]);
 
             if($validator->fails()){
@@ -154,7 +154,13 @@ class AJAXController extends Controller
         }
         else if($request->has('searchType') && $request->searchType=="department"){
             // echo "here";exit;
-            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->groupBy('department')->pluck('department')
+            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)
+            ->when($request->has('searchWord') && $request->searchWord!='' && $request->searchWord!=null, function ($query) use ($request) {
+                // Filter by industries if provided
+                $query->where('industries', $request->searchWord);
+            })
+            // ->where('industries',$request->searchWord)
+            ->groupBy('department')->pluck('department')
             ->values();
         }
         else if($request->has('searchType') && $request->searchType=="sub_department"){
