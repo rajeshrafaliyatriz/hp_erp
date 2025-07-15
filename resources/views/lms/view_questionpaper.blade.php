@@ -147,7 +147,6 @@ tbody tr th th {
   </div>
 </div>
 
-@include('includes.footerJs')
 <script src="//cdn.mathjax.org/mathjax/latest/MathJax.js">
  MathJax.Hub.Config({
    extensions: ["mml2jax.js"],
@@ -209,5 +208,4 @@ function mapValueModel(questionId){
         })
     }
 </script>
-@include('includes.footer')
 @endsection
