@@ -170,8 +170,11 @@ class AJAXController extends Controller
         }
         else if($request->has('searchType') && $request->searchType=="category"){
             // echo "here";exit;
-            $res['searchData'] = userSkills::where('sub_institute_id', $request->sub_institute_id)->where('department',$request->searchWord)->whereNotNull('category')->groupBy('category')->pluck('category')
+            // DB::enableQueryLog();
+            $res['searchData'] = userSkills::where('sub_institute_id', $request->sub_institute_id)->whereNotNull('category')->groupBy('category')->pluck('category')
             ->values();
+            // dd(DB::getQueryLog($res['searchData']));
+            // echo $res['searchData'];exit;
         }
         else if($request->has('searchType') && $request->searchType=="sub_category"){
             // echo "here";exit;
@@ -188,7 +191,7 @@ class AJAXController extends Controller
             $res['message'] = 'Search results found';
         }else{
             $res['status_code'] = 0;
-            $res['message'] = 'Search results filed to found';
+            $res['message'] = 'Search results failed to found';
         }
         return is_mobile($type, 'skill_library.index', $res,'redirect');
     }
