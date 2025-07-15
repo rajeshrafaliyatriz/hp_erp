@@ -97,9 +97,15 @@ class skillLibraryController extends Controller
             }, function ($q) {
                 $q->groupBy('department');
             });
-
+            // echo "<pre>";print_r($request->all());exit;
         $userSkills = userSkills::where('sub_institute_id', $request->sub_institute_id)
             ->where('approve_status', 'Approved')
+            ->when($request->has('category') && $request->category!='', function ($q) use ($request) {
+                $q->where('category', $request->category);
+            })
+             ->when($request->has('sub_category') && $request->sub_category!='', function ($q) use ($request) {
+                $q->whereIn('sub_category', explode(',',$request->sub_category));
+            })
             // ->where('status', 'Active')
             ->get();
         // return $userSkills
