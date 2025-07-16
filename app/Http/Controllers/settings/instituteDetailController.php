@@ -42,7 +42,7 @@ class instituteDetailController extends Controller
                 return response()->json($response);
             } 
         }
-        
+        $res = instituteDetailModel::where('sub_institute_id', $sub_institute_id)->first();
         $res['complainceData'] = DB::table('master_compliance as mc')
                                 ->select('mc.*',DB::Raw('(SELECT CONCAT_WS(" ",COALESCE(first_name,"-"),COALESCE(middle_name,"-"),COALESCE(last_name,"-")) FROM tbluser WHERE id=mc.assigned_to) as assigned_user'))
                                 ->where('mc.sub_institute_id',$sub_institute_id)
@@ -84,6 +84,7 @@ class instituteDetailController extends Controller
 
     public function store(Request $request)
     {
+    //    return  $request; 
         $type = $request->input('type');
 
         $sub_institute_id = session()->get('sub_institute_id');
@@ -119,7 +120,7 @@ class instituteDetailController extends Controller
             }    
         }
     
-        if($request->has('formName')){ 
+        if($request->has('formName') && $request->formName!="organization_details"){ 
 
              // get data from department controller
              $request1 = $request->merge(['type'=>'API','sub_institute_id'=>$sub_institute_id,'syear'=>$syear]);
@@ -217,23 +218,40 @@ class instituteDetailController extends Controller
             //  echo "<pre>";print_r($request->all());exit;
             
         }else{
-            $newRequest = $request->post();
-            $finalArray['sub_institute_id'] = $sub_institute_id;
-            foreach ($newRequest as $key => $value) {
-                if ($key != '_method' && $key != '_token' && $key != 'submit' && $key != 'college_name') {
-                    if (is_array($value)) {
-                        $value = implode(",", $value);
-                    }
-                    $finalArray[$key] = $value;
-                }
+              $insertData = [
+            'sub_institute_id' => $request->sub_institute_id,
+            'organization_name' => $request->organization_name,
+            'organization_code' => $request->organization_code,
+            'organization_type' => $request->organization_type,
+            'organization_email' => $request->organization_email,
+            'organization_ph_no' => $request->organization_ph_no,
+            'organization_website' => $request->organization_website,
+            'address' => $request->address,
+            'industry_type' => $request->industry_type,
+            'registration_number' => $request->registration_number,
+            'handler_name' => $request->handler_name,
+            'handler_mobile' => $request->handler_mobile,
+            'handler_email' => $request->handler_email,
+            'total_emp' => $request->total_emp,
+            'total_department' => $request->total_department,
+            'working_days' => $request->working_days,
+            'working_hours' => $request->working_hours,
+        ];
+            // check Data exists or not 
+            $check = instituteDetailModel::where('sub_institute_id', $sub_institute_id)->first();
+            
+            if(!empty($check) && isset($check->id)){
+                $insertData['updated_at']=now();
+                $insertData['updated_by']=$request->user_id;
+                instituteDetailModel::where('id',$check->id)->update($insertData);
+            }else{
+                $insertData['created_at']=now();
+                $insertData['created_by']=$request->user_id;
+                instituteDetailModel::insert($insertData);
             }
-    
-            instituteDetailModel::updateOrCreate([
-                'sub_institute_id' => $sub_institute_id,
-            ], $finalArray);
-    
+            
             $res['status_code'] = 1;
-            $res['message'] = "Institute Detail Added Successfully";
+            $res['message'] = "Detail Added Successfully";
             $res['data'] = $this->getData($sub_institute_id);
         }
         
