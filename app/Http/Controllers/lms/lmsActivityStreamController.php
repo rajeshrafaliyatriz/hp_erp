@@ -618,4 +618,33 @@ class lmsActivityStreamController extends Controller
     function getStudentLeave($sub_institute_id,$syear,$searchDate,$user_id,$division_id,$standard_id,$activityType=''){
         return [];
     }
+
+    public function store(Request $request){
+        // echo "<pre>";print_r($request->all());exit;
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
+
+        $res['status'] = 0;
+        $res['message'] = 'Something went wrong, please try again later.';
+        $i=0;
+        foreach($request->status as $taskId => $status){
+            $reply = $request->reply[$taskId] ? $request->reply[$taskId] : '';
+            $updateArray=[
+                'status' => $status,
+                'updated_by' => $user_id,
+                'updated_at' => now(),
+            ];
+            if($reply!=''){
+                $updateArray['reply'] = $reply;
+            }
+            DB::table('task')->where('id',$taskId)->update($updateArray);
+            $i++;
+        }
+        if($i>0){
+             $res['status'] = 1;
+            $res['message'] = 'Added successfully.';
+        }
+        return is_mobile($type,'lmsActivityStream.index',$res);
+    }
 }
