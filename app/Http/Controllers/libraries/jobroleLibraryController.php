@@ -277,6 +277,7 @@ class jobroleLibraryController extends Controller
         }
 
         $insertData = [
+                'industries'=>$request->org_type,
                 'department' => $request->department,
                 'sub_department' => $request->sub_department,
                 'jobrole' => $request->jobrole,
@@ -414,6 +415,7 @@ class jobroleLibraryController extends Controller
         // If updating user jobrole
         if ($request->formType == 'user') {
             $updateData = [
+                'industries' => $request->org_type,
                 'department' => $request->department,
                 'sub_department' => $request->sub_department,
                 'jobrole' => $request->jobrole,

@@ -149,13 +149,13 @@ class AJAXController extends Controller
         }
         else if($request->has('searchType') && $request->searchType=="industries"){
             // echo "here";exit;
-            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->groupBy('industries')->pluck('industries')
+            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->where('industries','!=','')->groupBy('industries')->pluck('industries')
             ->values();
         }
         else if($request->has('searchType') && $request->searchType=="department"){
             // echo "here";exit;
             $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)
-            ->when($request->has('searchWord') && $request->searchWord!='' && $request->searchWord!=null, function ($query) use ($request) {
+            ->when($request->has('searchWord') && $request->searchWord!='' && $request->searchWord!='departments' && $request->searchWord!=null, function ($query) use ($request) {
                 // Filter by industries if provided
                 $query->where('industries', $request->searchWord);
             })
