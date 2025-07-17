@@ -115,93 +115,191 @@ class taskController extends Controller
      * @param  Request  $request
      * @return Response
      */
+    // public function store(Request $request)
+    // {
+    //     // echo "<pre>";print_r($request->all());exit;
+    //     $type = $request->input("type");
+    //     if($type=="API"){
+    //         $sub_institute_id = $request->sub_institute_id;
+    //         $syear = $request->syear;
+    //         $term_id = 0;
+    //         $user_id = $request->user_id;
+    //         $manageby = $request->input("manageby");
+    //     }else{
+    //         $sub_institute_id = $request->session()->get("sub_institute_id");
+    //         $syear = $request->session()->get("syear");
+    //         $term_id = $request->session()->get("term_id");
+    //         $user_id = $request->session()->get("user_id");
+    //         $manageby = $request->session()->get("user_id");
+    //     }
+        
+    //     $TASK_ALLOCATED_TO = $request->input("TASK_ALLOCATED_TO");
+    //     $KRA = $request->input("KRA");
+    //     $KPA = $request->input("KPA");
+    //     $observation_point = $request->input("observation_point");
+    //     $task_type = $request->input("selType");
+    //     $required_skill = isset($request->skills) ? implode(',',$request->skills) : '';
+    //     // store skills
+    //     $dates = $this->getDatesWithoutSundays();
+    //     // echo "<pre>";print_r($required_skill);exit;
+    //     // if($required_skill!=''){
+    //     //     $explodeSkills = explode(',',$required_skill);
+    //     //     foreach ($explodeSkills as $id => $skillname) {
+    //     //        $checkSkillset = DB::table('tblemp_skills')->where('skills',$skillname)->whereIn('sub_institute_id',[0,$sub_institute_id])->get()->toArray();
+    //     //        if(empty($checkSkillset)){
+    //     //         DB::table('tblemp_skills')->insert(['sub_institute_id'=>$sub_institute_id,'skills'=>$skillname,'created_at'=>now()]);
+    //     //        }
+    //     //     }
+    //     // }
+    //     $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT','formName','selDepartment','selSubDepartment','selType','add','type','syear','sub_institute_id','user_id','manageby','KRA','KPA','skills','observation_point','TASK_DATE']);
+
+    //     $file_name = $ext = $file_size = "";
+    //     if ($request->hasFile('TASK_ATTACHMENT')) {
+    //         $file = $request->file('TASK_ATTACHMENT');
+    //         $originalname = $file->getClientOriginalName();
+    //         $file_size = $file->getSize();
+    //         $name = "task_".date('YmdHis');
+    //         $ext = File::extension($originalname);
+    //         $file_name = $name.'.'.$ext;
+    //         $path = $file->storeAs('public/front_desk/', $file_name);
+    //     }
+
+    //     foreach ($TASK_ALLOCATED_TO as $key => $value) {
+    //         $data['KRA'] = $KRA;
+    //         $data['KPA'] = $KPA;
+    //         $data['observation_point'] = $observation_point;
+    //         $data['task_type'] = $task_type;
+
+    //         $data['SYEAR'] = $syear;
+    //         // $data['MARKING_PERIOD_ID'] = $term_id;
+    //         $data['CREATED_BY'] = $user_id;
+    //         $data['TASK_ALLOCATED'] = $manageby;
+    //         $data['TASK_ALLOCATED_TO'] = $value;
+    //         $data['STATUS'] ='PENDING';
+    //         $data['required_skills'] = $required_skill;
+    //         $data['CREATED_IP_ADDRESS'] = $_SERVER['REMOTE_ADDR'];
+    //         $data['created_at'] = date('Y-m-d H:i:s');
+    //         $data['sub_institute_id'] = $sub_institute_id;
+
+    //         if ($file_name != '') {
+    //             $data['TASK_ATTACHMENT'] = $file_name;
+    //             $data['FILE_SIZE'] = $file_size;
+    //             $data['FILE_TYPE'] = $ext;
+    //         }
+    //         if($task_type=="Daily Task"){
+    //             foreach ($dates as $k => $date) {
+    //                 $data['TASK_DATE']=$date;
+    //                 taskModel::insert($data);
+    //             }
+    //         }else{
+    //             $data['TASK_DATE'] = $request->get('TASK_DATE');
+    //             taskModel::insert($data);
+    //         }
+    //     }
+
+    //     $res['status_code'] = "1";
+    //     $res['message'] = "Added successfully";
+
+    //     return is_mobile($type, "task.index", $res);
+    // }
+
     public function store(Request $request)
     {
-        // echo "<pre>";print_r($request->all());exit;
         $type = $request->input("type");
-        if($type=="API"){
+
+        if ($type == "API") {
             $sub_institute_id = $request->sub_institute_id;
             $syear = $request->syear;
             $term_id = 0;
             $user_id = $request->user_id;
             $manageby = $request->input("manageby");
-        }else{
+        } else {
             $sub_institute_id = $request->session()->get("sub_institute_id");
             $syear = $request->session()->get("syear");
             $term_id = $request->session()->get("term_id");
             $user_id = $request->session()->get("user_id");
-            $manageby = $request->session()->get("user_id");
+            $manageby = $user_id;
         }
-        
-        $TASK_ALLOCATED_TO = $request->input("TASK_ALLOCATED_TO");
-        $KRA = $request->input("KRA");
-        $KPA = $request->input("KPA");
-        $observation_point = $request->input("observation_point");
-        $task_type = $request->input("selType");
-        $required_skill = isset($request->skills) ? implode(',',$request->skills) : '';
-        // store skills
-        $dates = $this->getDatesWithoutSundays();
-        // echo "<pre>";print_r($required_skill);exit;
-        // if($required_skill!=''){
-        //     $explodeSkills = explode(',',$required_skill);
-        //     foreach ($explodeSkills as $id => $skillname) {
-        //        $checkSkillset = DB::table('tblemp_skills')->where('skills',$skillname)->whereIn('sub_institute_id',[0,$sub_institute_id])->get()->toArray();
-        //        if(empty($checkSkillset)){
-        //         DB::table('tblemp_skills')->insert(['sub_institute_id'=>$sub_institute_id,'skills'=>$skillname,'created_at'=>now()]);
-        //        }
-        //     }
-        // }
-        $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT','formName','selDepartment','selSubDepartment','selType','add','type','syear','sub_institute_id','user_id','manageby','KRA','KPA','skills','observation_point','TASK_DATE']);
 
-        $file_name = $ext = $file_size = "";
+        $dates = $this->getDatesWithoutSundays();
+        $task_type = $request->input('selType', ''); // fallback if not present
+
+        // Prepare file upload
+        $file_name = $ext = $file_size = '';
         if ($request->hasFile('TASK_ATTACHMENT')) {
             $file = $request->file('TASK_ATTACHMENT');
-            $originalname = $file->getClientOriginalName();
             $file_size = $file->getSize();
-            $name = "task_".date('YmdHis');
-            $ext = File::extension($originalname);
-            $file_name = $name.'.'.$ext;
-            $path = $file->storeAs('public/front_desk/', $file_name);
+            $ext = $file->getClientOriginalExtension();
+            $file_name = 'task_' . now()->format('YmdHis') . '.' . $ext;
+            $file->storeAs('public/front_desk', $file_name);
         }
 
-        foreach ($TASK_ALLOCATED_TO as $key => $value) {
-            $data['KRA'] = $KRA;
-            $data['KPA'] = $KPA;
-            $data['observation_point'] = $observation_point;
-            $data['task_type'] = $task_type;
+        // Common task data
+        $baseData = $request->except([
+            '_method', '_token','token', 'org_type','formType','submit', 'TASK_ATTACHMENT', 'formName', 
+            'selDepartment', 'selSubDepartment', 'selType', 'add', 'type', 
+            'syear', 'sub_institute_id', 'user_id', 'manageby', 
+            'skills', 'observation_point', 'TASK_DATE','employee_id','job_role',
+        ]);
 
-            $data['SYEAR'] = $syear;
-            // $data['MARKING_PERIOD_ID'] = $term_id;
-            $data['CREATED_BY'] = $user_id;
-            $data['TASK_ALLOCATED'] = $manageby;
-            $data['TASK_ALLOCATED_TO'] = $value;
-            $data['STATUS'] ='PENDING';
-            $data['required_skills'] = $required_skill;
-            $data['CREATED_IP_ADDRESS'] = $_SERVER['REMOTE_ADDR'];
-            $data['created_at'] = date('Y-m-d H:i:s');
-            $data['sub_institute_id'] = $sub_institute_id;
+        $extraData = [
+            'KRA' => $request->input("KRA"),
+            'KPA' => $request->input("KPA"),
+            'observation_point' => $request->input("observation_point"),
+            'task_type' => $task_type,
+            'SYEAR' => $syear,
+            'CREATED_BY' => $user_id,
+            'TASK_ALLOCATED' => $manageby,
+            'STATUS' => 'PENDING',
+            'CREATED_IP_ADDRESS' => $request->ip(),
+            'created_at' => now(),
+            'sub_institute_id' => $sub_institute_id,
+        ];
 
-            if ($file_name != '') {
-                $data['TASK_ATTACHMENT'] = $file_name;
-                $data['FILE_SIZE'] = $file_size;
-                $data['FILE_TYPE'] = $ext;
-            }
-            if($task_type=="Daily Task"){
-                foreach ($dates as $k => $date) {
-                    $data['TASK_DATE']=$date;
+        if ($file_name) {
+            $extraData['TASK_ATTACHMENT'] = $file_name;
+            $extraData['FILE_SIZE'] = $file_size;
+            $extraData['FILE_TYPE'] = $ext;
+        }
+
+        if ($request->formType == "single") {
+            // 'required_skills' => $request->has('skills') ? implode(',', $request->skills) : '',
+
+            $extraData['TASK_ALLOCATED_TO'] = $request->input("TASK_ALLOCATED_TO");
+            $extraData['required_skills'] = $request->input("skills");
+
+            if ($task_type == "Daily Task") {
+                foreach ($dates as $date) {
+                    $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                     taskModel::insert($data);
                 }
-            }else{
-                $data['TASK_DATE'] = $request->get('TASK_DATE');
+            } else {
+                $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->get('TASK_DATE')]);
                 taskModel::insert($data);
+            }
+        } else {
+            foreach ($request->input("TASK_ALLOCATED_TO", []) as $value) {
+                $extraData['TASK_ALLOCATED_TO'] = $value;
+                // 'required_skills' => $request->has('skills') ? implode(',', $request->skills) : '',
+                $extraData['required_skills'] = $request->has('skills') ? implode(',', $request->skills) : '';
+                if ($task_type == "Daily Task") {
+                    foreach ($dates as $date) {
+                        $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
+                        taskModel::insert($data);
+                    }
+                } else {
+                    $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->get('TASK_DATE')]);
+                    taskModel::insert($data);
+                }
             }
         }
 
-        $res['status_code'] = "1";
-        $res['message'] = "Added successfully";
-
-        return is_mobile($type, "task.index", $res);
+        return is_mobile($type, "task.index", [
+            'status_code' => "1",
+            'message' => "Added successfully"
+        ]);
     }
+
 
     /**
      * Display the specified resource.

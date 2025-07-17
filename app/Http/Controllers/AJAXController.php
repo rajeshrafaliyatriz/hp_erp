@@ -147,6 +147,11 @@ class AJAXController extends Controller
             $res['searchData'] = jobroleModel::where('jobrole', 'like', '%'.$request->searchWord.'%')->pluck('jobrole')
             ->values();
         }
+        if($request->has('searchType') && $request->searchType=="jobrole_lists"){
+            // echo "here";exit;
+            $res['searchData'] = userJobroleModel::where('sub_institute_id',$request->searchWord)->pluck('jobrole')
+            ->values();
+        }
         else if($request->has('searchType') && $request->searchType=="industries"){
             // echo "here";exit;
             $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->where('industries','!=','')->groupBy('industries')->pluck('industries')
@@ -180,6 +185,23 @@ class AJAXController extends Controller
             // echo "here";exit;
             $res['searchData'] = userSkills::where('sub_institute_id', $request->sub_institute_id)->where('category',$request->searchWord)->whereNotNull('sub_category')->groupBy('sub_category')->pluck('sub_category')
             ->values();
+        }
+        else if($request->has('searchType') && $request->searchType=="users_jobrole"){
+            // echo "here";exit;
+             $res['searchData'] = DB::table('tbluser as tu')
+            ->join('s_user_skill_jobrole as sus',function($join) use($request){
+                $join->on( 'tu.allocated_standards', '=', 'sus.id')->where('sus.sub_institute_id', $request->sub_institute_id);
+            })
+            ->select('tu.*','sus.jobrole as jobrole')
+            ->where('tu.sub_institute_id', $request->sub_institute_id)
+            ->groupBy('allocated_standards')
+            ->get();
+            return is_mobile($type, 'skill_library.index', $res,'redirect');
+        }
+        else if($request->has('searchType') && $request->searchType=="jobrole_emp"){
+            // echo "here";exit;
+            $res['searchData'] = DB::table('tbluser')->where('sub_institute_id', $request->sub_institute_id)->where('allocated_standards',$request->searchWord)->get();
+            return is_mobile($type, 'skill_library.index', $res,'redirect');
         }
         else{
             // echo "else here";exit;
