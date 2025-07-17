@@ -189,12 +189,13 @@ class AJAXController extends Controller
         else if($request->has('searchType') && $request->searchType=="users_jobrole"){
             // echo "here";exit;
              $res['searchData'] = DB::table('tbluser as tu')
-            ->join('s_user_skill_jobrole as sus',function($join) use($request){
+            ->join('s_user_jobrole as sus',function($join) use($request){
                 $join->on( 'tu.allocated_standards', '=', 'sus.id')->where('sus.sub_institute_id', $request->sub_institute_id);
             })
-            ->select('tu.*','sus.jobrole as jobrole')
+            ->select('tu.*','sus.jobrole as jobrole','sus.jobrole as jobroleTitle')
             ->where('tu.sub_institute_id', $request->sub_institute_id)
-            ->groupBy('allocated_standards')
+            ->where('tu.status',1)
+            ->groupBy('tu.allocated_standards')
             ->get();
             return is_mobile($type, 'skill_library.index', $res,'redirect');
         }
