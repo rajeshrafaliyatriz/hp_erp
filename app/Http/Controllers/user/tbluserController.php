@@ -34,6 +34,7 @@ class tbluserController extends Controller
     {
         // echo "<pre>";print_r(session()->all());exit;
         $sub_institute_id = session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
         $user_profile = session()->get('user_profile_name');
         $type = $request->type;
         // If the request is from API, validate token and required fields
@@ -63,6 +64,7 @@ class tbluserController extends Controller
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
             $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
             $user_profile = $request->get('user_profile_name');
         }
         $user_data = tbluserModel::select(
@@ -72,8 +74,8 @@ class tbluserController extends Controller
         )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
             ->where(['tbluser.sub_institute_id' => $sub_institute_id]) //, 'tbluser.status' => "1"
-            ->when(!in_array($user_profile, ["Admin", "Super Admin"]), function ($q) {
-                $q->where('tbluser.id', session()->get('user_id'));
+            ->when(!in_array($user_profile, ["Admin", "Super Admin"]), function ($q) use ($user_id) {
+                $q->where('tbluser.id', $user_id);
             })
             ->get();
 
@@ -167,13 +169,13 @@ class tbluserController extends Controller
             $file_name = $name . '.' . $ext;
             // $path = $file->storeAs('public/user/', $file_name);
             $path = Storage::disk('digitalocean')->putFileAs(
-        'hp_user',
-        $file,
-        $filename,
-        'public'
-    );
-    
-    $publicUrl = Storage::disk('digitalocean')->url($path);
+                'hp_user',
+                $file,
+                $filename,
+                'public'
+            );
+
+            $publicUrl = Storage::disk('digitalocean')->url($path);
         }
 
         $request->request->add(['image' => $file_name]); //add request
@@ -391,13 +393,13 @@ class tbluserController extends Controller
         // end  20-04-24
 
         $departments = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->get()->toArray();
-        if(isset($editData['id'])){
+        if (isset($editData['id'])) {
             $editData['userDepartment'] = $editData['userJobrole'] = '';
-            if(isset($editData['department_id'])){
-                $editData['userDepartment'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->where('id',$editData['department_id'])->value('department');
+            if (isset($editData['department_id'])) {
+                $editData['userDepartment'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->where('id', $editData['department_id'])->value('department');
             }
-            if(isset($editData['allocated_standards'])){
-                $editData['userJobrole'] = skillJobroleMap::where('sub_institute_id', $sub_institute_id)->where('id',$editData['allocated_standards'])->value('jobrole');
+            if (isset($editData['allocated_standards'])) {
+                $editData['userJobrole'] = skillJobroleMap::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
             }
         }
         // echo "<pre>";print_r($editData->id);exit;
@@ -465,26 +467,26 @@ class tbluserController extends Controller
         // echo "<pre>";print_r($profileDetails);exit;
 
         $res['skills'] = $skills = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')->whereNull('s_user_skill_jobrole.deleted_at')
-            ->select('*', 's_users_skills.id as skill_id','s_user_skill_jobrole.proficiency_level as proficiency_level')
+            ->select('*', 's_users_skills.id as skill_id', 's_user_skill_jobrole.proficiency_level as proficiency_level')
             ->groupBy('s_user_skill_jobrole.id')
             ->get()->map(function ($item) {
-                        // Load knowledge and ability from the classification table
-                        $classificationItems = DB::table('s_skill_knowledge_ability')
-                            ->where('skill_id', $item->skill_id)
-                            ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
-                            ->get()
-                            ->groupBy('classification');
+                // Load knowledge and ability from the classification table
+                $classificationItems = DB::table('s_skill_knowledge_ability')
+                    ->where('skill_id', $item->skill_id)
+                    ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
+                    ->get()
+                    ->groupBy('classification');
 
-                        $item->knowledge = $classificationItems->has('knowledge')
-                            ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
-                            : [];
+                $item->knowledge = $classificationItems->has('knowledge')
+                    ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
+                    : [];
 
-                        $item->ability = $classificationItems->has('ability')
-                            ? $classificationItems['ability']->pluck('classification_item')->toArray()
-                            : [];
+                $item->ability = $classificationItems->has('ability')
+                    ? $classificationItems['ability']->pluck('classification_item')->toArray()
+                    : [];
 
-                        return $item;
-                    });
+                return $item;
+            });
         // echo "<pre>";print_r($res['skills']);exit;
         $res['completedCount'] = $completedCount = matrix::where('user_id', $user_id)->count();
         $res['totalSkills'] = $totalSkills = $skills->count();
@@ -497,111 +499,112 @@ class tbluserController extends Controller
         $res['jobroleSkills'] = $res['jobroleTasks'] = [];
         // if (!in_array($user_profile_name, ['Admin', 'Supervisor'])) {
 
-            $assignedJobrole = userJobroleModel::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->whereNull('deleted_at')->first();
-            // echo "<pre>";print_r($assignedJobrole);exit;
+        $assignedJobrole = userJobroleModel::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->whereNull('deleted_at')->first();
+        // echo "<pre>";print_r($assignedJobrole);exit;
 
-            if (isset($assignedJobrole)) {
-                $alreadyRated = matrix::where('user_id', $user_id)->get()->toArray();
-                $ratedIds = [];
-                foreach ($alreadyRated as $rated) {
-                    $ratedIds[] = $rated['skill_id'] ?? 0;
-                }
-                $res['skills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
-                    ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
-                    ->whereNull('s_user_skill_jobrole.deleted_at')
-                    ->whereNotIn('s_users_skills.id', $ratedIds)
-                    ->select(
-                        's_user_skill_jobrole.id as jobrole_skill_id',
-                        's_user_skill_jobrole.jobrole',
-                        's_user_skill_jobrole.skill',
-                        's_users_skills.id as skill_id',
-                        's_users_skills.title',
-                        's_users_skills.category',
-                        's_users_skills.sub_category',
-                        's_users_skills.description',
-                        's_user_skill_jobrole.proficiency_level as proficiency_level',
-                    )
-                    ->groupBy('s_user_skill_jobrole.id')
-                  ->get()->map(function ($item) {
-                        // Load knowledge and ability from the classification table
-                        $classificationItems = DB::table('s_skill_knowledge_ability')
-                            ->where('skill_id', $item->skill_id)
-                            ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
-                            ->get()
-                            ->groupBy('classification');
-
-                        $item->knowledge = $classificationItems->has('knowledge')
-                            ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
-                            : [];
-
-                        $item->ability = $classificationItems->has('ability')
-                            ? $classificationItems['ability']->pluck('classification_item')->toArray()
-                            : [];
-
-                        return $item;
-                    });
-
-                $res['jobroleSkills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
-                    ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
-                    ->whereNull('s_user_skill_jobrole.deleted_at')
-                    ->select(
-                        's_user_skill_jobrole.id as jobrole_skill_id',
-                        's_user_skill_jobrole.jobrole',
-                        's_user_skill_jobrole.skill',
-                        's_users_skills.id as skill_id',
-                        's_user_skill_jobrole.proficiency_level as proficiency_level',
-                        's_users_skills.title',
-                        's_users_skills.category',
-                        's_users_skills.sub_category',
-                        's_users_skills.description'
-                    )
-                    ->groupBy(['s_user_skill_jobrole.id', 's_users_skills.proficiency_level'])
-                    ->get()
-                    ->map(function ($item) {
-                        // Load knowledge and ability from the classification table
-                        $classificationItems = DB::table('s_skill_knowledge_ability')
-                            ->where('skill_id', $item->skill_id)
-                            ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
-                            ->get()
-                            ->groupBy('classification');
-
-                        $item->knowledge = $classificationItems->has('knowledge')
-                            ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
-                            : [];
-
-                        $item->ability = $classificationItems->has('ability')
-                            ? $classificationItems['ability']->pluck('classification_item')->toArray()
-                            : [];
-
-                        return $item;
-                    });
-
-
-                $res['totalSkills'] = skillJobroleMap::where('jobrole', $assignedJobrole->jobrole)->count();
-
-                $res['jobroleTasks'] = DB::table('s_user_jobrole_task as a')
-                    ->join('s_user_skill_jobrole as b', 'b.jobrole', '=', 'a.jobrole')
-                    ->where('a.jobrole', $assignedJobrole->jobrole)
-                    ->whereNull('a.deleted_at')
-                    ->groupBy('task')
-                    ->get();
+        if (isset($assignedJobrole)) {
+            $alreadyRated = matrix::where('user_id', $user_id)->get()->toArray();
+            $ratedIds = [];
+            foreach ($alreadyRated as $rated) {
+                $ratedIds[] = $rated['skill_id'] ?? 0;
             }
-            
+            $res['skills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
+                ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
+                ->whereNull('s_user_skill_jobrole.deleted_at')
+                ->whereNotIn('s_users_skills.id', $ratedIds)
+                ->select(
+                    's_user_skill_jobrole.id as jobrole_skill_id',
+                    's_user_skill_jobrole.jobrole',
+                    's_user_skill_jobrole.skill',
+                    's_users_skills.id as skill_id',
+                    's_users_skills.title',
+                    's_users_skills.category',
+                    's_users_skills.sub_category',
+                    's_users_skills.description',
+                    's_user_skill_jobrole.proficiency_level as proficiency_level',
+                )
+                ->groupBy('s_user_skill_jobrole.id')
+                ->get()->map(function ($item) {
+                    // Load knowledge and ability from the classification table
+                    $classificationItems = DB::table('s_skill_knowledge_ability')
+                        ->where('skill_id', $item->skill_id)
+                        ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
+                        ->get()
+                        ->groupBy('classification');
+
+                    $item->knowledge = $classificationItems->has('knowledge')
+                        ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
+                        : [];
+
+                    $item->ability = $classificationItems->has('ability')
+                        ? $classificationItems['ability']->pluck('classification_item')->toArray()
+                        : [];
+
+                    return $item;
+                });
+
+            $res['jobroleSkills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
+                ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
+                ->whereNull('s_user_skill_jobrole.deleted_at')
+                ->select(
+                    's_user_skill_jobrole.id as jobrole_skill_id',
+                    's_user_skill_jobrole.jobrole',
+                    's_user_skill_jobrole.skill',
+                    's_users_skills.id as skill_id',
+                    's_user_skill_jobrole.proficiency_level as proficiency_level',
+                    's_users_skills.title',
+                    's_users_skills.category',
+                    's_users_skills.sub_category',
+                    's_users_skills.description'
+                )
+                ->groupBy(['s_user_skill_jobrole.id', 's_users_skills.proficiency_level'])
+                ->get()
+                ->map(function ($item) {
+                    // Load knowledge and ability from the classification table
+                    $classificationItems = DB::table('s_skill_knowledge_ability')
+                        ->where('skill_id', $item->skill_id)
+                        ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
+                        ->get()
+                        ->groupBy('classification');
+
+                    $item->knowledge = $classificationItems->has('knowledge')
+                        ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
+                        : [];
+
+                    $item->ability = $classificationItems->has('ability')
+                        ? $classificationItems['ability']->pluck('classification_item')->toArray()
+                        : [];
+
+                    return $item;
+                });
+
+
+            $res['totalSkills'] = skillJobroleMap::where('jobrole', $assignedJobrole->jobrole)->count();
+                // DB::enableQueryLog();
+            $res['jobroleTasks'] = DB::table('s_user_jobrole_task as a')
+                ->join('s_user_skill_jobrole as b', 'b.jobrole', '=', 'a.jobrole')
+                ->where('a.jobrole', $assignedJobrole->jobrole)
+                ->whereNull('a.deleted_at')
+                ->groupBy('task')
+                ->get();
+                // dd(DB::getQueryLog($res['jobroleTasks']));
+        }
+
 
         // }
-        $detailsLevel = SLevelResponsibility::where('level',$editData['subject_ids'])->get()->toArray();
+        $detailsLevel = SLevelResponsibility::where('level', $editData['subject_ids'])->get()->toArray();
         $allLevels = $attrData = [];
-            foreach ($detailsLevel as $key => $value) {
+        foreach ($detailsLevel as $key => $value) {
             $allLevels[$value['level']] = $value;
-            if($value['attribute_type']!='Business skills/Behavioural factors'){
+            if ($value['attribute_type'] != 'Business skills/Behavioural factors') {
                 $attrData[$value['level']][$value['attribute_type']][$value['attribute_name']] = $value;
-            }else{
+            } else {
                 $attrData[$value['level']]['Business_skills'][$value['attribute_name']] = $value;
             }
-            }
-            $res['usersLevelData']['levelsData'] = array_values($allLevels);
-            $res['usersLevelData']['attrData'] = $attrData;
-            $res['usersLevelData']['allData'] = $detailsLevel;
+        }
+        $res['usersLevelData']['levelsData'] = array_values($allLevels);
+        $res['usersLevelData']['attrData'] = $attrData;
+        $res['usersLevelData']['allData'] = $detailsLevel;
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();
         // echo "<pre>";print_r($res['skills']);exit;
         return is_mobile($type, "user/edit_user", $res, "view");
