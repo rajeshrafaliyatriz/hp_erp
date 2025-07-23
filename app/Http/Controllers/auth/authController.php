@@ -34,25 +34,29 @@ class authController extends Controller
         $password = $request->input('password');
 
         // Fetch user by email
-        $user = tbluserModel::where('email', $email)->first();
-        // echo "<pre>";print_r($user);exit;
+        $user = tbluserModel::with(['organization', 'client', 'yearData', 'userProfile'])
+            ->where('email', $email)
+            ->first();
+
         if (!$user || !Hash::check($password, $user->password)) {
             return response()->json([
-            'status_code' => 0,
-            'message' => 'Invalid User Id And Password'
+                'status_code' => 0,
+                'message' => 'Invalid User Id And Password'
             ]);
         }
 
-        $password = $user->password; // For further usage in the code
-        $orgData = $user::with('organization')->find($user->sub_institute_id);
-        $orgDetails =$orgData['organization'];
-        $clientData = $user::with('client')->find($orgDetails->client_id);
-        $clientDetails =$clientData['client'];
-        $yearData = $user::with('yearData')->first();
-        $yearDetails =$yearData['yearData'];
-        $profileData = $user::with('userProfile')->find($user->id);
-        $profileDetails =$profileData['userProfile'] ?? [];
-        // echo "<pre>";print_r($profileDetails);exit;
+        // Get organization details through the relationship
+        $orgDetails = $user->organization;
+
+        // Get client details through the organization relationship
+        $clientDetails = $orgDetails->client ?? null;
+
+        // Get year data through the relationship
+        $yearDetails = $user->yearData;
+
+        // Get profile data through the relationship
+        $profileDetails = $user->userProfile ?? [];
+        // echo "<pre>";print_r($orgDetails);exit;
         session()->put('client_id',$orgDetails);
         session()->put('is_admin',$clientDetails);
         session()->put('user_id',$user->id);
