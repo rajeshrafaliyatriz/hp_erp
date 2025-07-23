@@ -270,16 +270,22 @@ class tbluserController extends Controller
         return $id;
     }
 
-    public function updateData(Request $request)
+    public function updateData(Request $request,$id)
     {
-        $newRequest = $request->all();
-        $user_id = $newRequest['id'];
+        // return $request;exit;
         $sub_institute_id = $request->session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
+        if($request->type=="API"){
+            $sub_institute_id = $request->input('sub_institute_id');
+            $user_id = $request->input('user_id');
+        }
+        $newRequest = $request->all();
+        // $user_id = $newRequest['id'];
         $finalArray['sub_institute_id'] = $sub_institute_id;
         $finalArray['status'] = 1;
         unset($newRequest['user_image']);
         foreach ($newRequest as $key => $value) {
-            if ($key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id') {
+            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id') {
                 if (is_array($value)) {
                     $value = implode(",", $value);
                 }
@@ -307,8 +313,8 @@ class tbluserController extends Controller
         }
 
         $finalArray['updated_at'] = now();
-        $finalArray['updated_by'] = session()->get('user_id');
-        return tbluserModel::where(['id' => $user_id])->update($finalArray);
+        $finalArray['updated_by'] = $user_id;
+        return tbluserModel::where(['id' => $id])->update($finalArray);
     }
 
     public function edit(Request $request, $id)
@@ -655,6 +661,8 @@ class tbluserController extends Controller
 
     public function update(Request $request, $id)
     {
+        // return $request;exit;
+
         if (!$request->monday) {
             $request->request->add(['monday' => 0]);
         }
@@ -697,7 +705,7 @@ class tbluserController extends Controller
         $request->request->add(['id' => $id]); //add request
         $user_id = $id;
 
-        $data = $this->updateData($request);
+        $data = $this->updateData($request,$id);
 
         $res['status_code'] = "1";
         $res['message'] = "User updated successfully";
