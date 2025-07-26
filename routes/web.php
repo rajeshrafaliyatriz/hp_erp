@@ -26,6 +26,8 @@ Route::middleware(['auth','session','menu'])->group(function () {
     Route::resource('jobrole_library', jobroleLibraryController::class);
     Route::resource('level_of_responsibility', levelOfResponsibilityController::class);
 
+    Route::post('skill_library/add_category', [skillLibraryController::class, 'AddCategory'])->name('add_category');
+
     Route::get('search_data', [AJAXController::class, 'searchSkill'])->name('search_skill');
 
     Route::resource('jobrole', skillLibraryController::class);

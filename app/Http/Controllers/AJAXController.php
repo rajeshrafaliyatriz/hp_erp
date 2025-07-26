@@ -18,7 +18,7 @@ use App\Models\school_setup\subjectModel;
 use App\Models\school_setup\standardModel;
 use App\Models\school_setup\academic_sectionModel;
 use Illuminate\Support\Facades\Schema; // Import the Schema facade
-use Illuminate\Database\Schema\Blueprint; 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Http;
 use Validator;
 use DB;
@@ -44,9 +44,9 @@ class AJAXController extends Controller
         // 3. Manually validate if the table exists to bypass Schema::hasTable()
         try {
             $tableExists = DB::table('information_schema.tables')
-                             ->where('table_schema', DB::raw('DATABASE()')) // Current database
-                             ->where('table_name', $table)
-                             ->exists();
+                ->where('table_schema', DB::raw('DATABASE()')) // Current database
+                ->where('table_name', $table)
+                ->exists();
 
             if (!$tableExists) {
                 return response()->json(['error' => 'Table "' . $table . '" does not exist.'], 404);
@@ -74,10 +74,10 @@ class AJAXController extends Controller
                 // 5. Manually validate if the column exists to bypass Schema::hasColumn()
                 try {
                     $columnExists = DB::table('information_schema.columns')
-                                      ->where('table_schema', DB::raw('DATABASE()'))
-                                      ->where('table_name', $table)
-                                      ->where('column_name', $column)
-                                      ->exists();
+                        ->where('table_schema', DB::raw('DATABASE()'))
+                        ->where('table_name', $table)
+                        ->where('column_name', $column)
+                        ->exists();
 
                     if ($columnExists) {
                         $query->where($column, $value);
@@ -94,7 +94,7 @@ class AJAXController extends Controller
             }
         }
         // get entry sort_order wise
-        if($request->has('sort_order') && $request->sort_order!=''){
+        if ($request->has('sort_order') && $request->sort_order != '') {
             $query->orderBy($request->sort_order);
         }
 
@@ -116,9 +116,10 @@ class AJAXController extends Controller
         return response()->json($data);
     }
 
-    public function searchSkill(Request $request){
-        $type=$request->type;
-        if($type=='API'){
+    public function searchSkill(Request $request)
+    {
+        $type = $request->type;
+        if ($type == 'API') {
             $token = $request->input('token');  // get token from input field 'token'
 
             if (!$token) {
@@ -138,85 +139,120 @@ class AJAXController extends Controller
                 // 'searchWord' => 'required',
             ]);
 
-            if($validator->fails()){
+            if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
         }
-        if($request->has('searchType') && $request->searchType=="jobrole"){
+        if ($request->has('searchType') && $request->searchType == "jobrole") {
             // echo "here";exit;
-            $res['searchData'] = jobroleModel::where('jobrole', 'like', '%'.$request->searchWord.'%')->pluck('jobrole')
-            ->values();
+            $res['searchData'] = jobroleModel::where('jobrole', 'like', '%' . $request->searchWord . '%')->pluck('jobrole')
+                ->values();
         }
-        if($request->has('searchType') && $request->searchType=="jobrole_lists"){
+        if ($request->has('searchType') && $request->searchType == "jobrole_lists") {
             // echo "here";exit;
-            $res['searchData'] = userJobroleModel::where('sub_institute_id',$request->searchWord)->pluck('jobrole')
-            ->values();
-        }
-        else if($request->has('searchType') && $request->searchType=="industries"){
+            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->searchWord)->pluck('jobrole')
+                ->values();
+        } else if ($request->has('searchType') && $request->searchType == "industries") {
             // echo "here";exit;
-            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->where('industries','!=','')->groupBy('industries')->pluck('industries')
-            ->values();
-        }
-        else if($request->has('searchType') && $request->searchType=="department"){
+            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->where('industries', '!=', '')->groupBy('industries')->pluck('industries')
+                ->values();
+        } else if ($request->has('searchType') && $request->searchType == "department") {
             // echo "here";exit;
             $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)
-            ->when($request->has('searchWord') && $request->searchWord!='' && $request->searchWord!='departments' && $request->searchWord!=null, function ($query) use ($request) {
-                // Filter by industries if provided
-                $query->where('industries', $request->searchWord);
-            })
-            // ->where('industries',$request->searchWord)
-            ->groupBy('department')->pluck('department')
-            ->values();
-        }
-        else if($request->has('searchType') && $request->searchType=="sub_department"){
+                ->when($request->has('searchWord') && $request->searchWord != '' && $request->searchWord != 'departments' && $request->searchWord != null, function ($query) use ($request) {
+                    // Filter by industries if provided
+                    $query->where('industries', $request->searchWord);
+                })
+                // ->where('industries',$request->searchWord)
+                ->groupBy('department')->pluck('department')
+                ->values();
+        } else if ($request->has('searchType') && $request->searchType == "sub_department") {
             // echo "here";exit;
-            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->where('department',$request->searchWord)->groupBy('sub_department')->pluck('sub_department')
-            ->values();
-        }
-        else if($request->has('searchType') && $request->searchType=="category"){
+            $res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->where('department', $request->searchWord)->groupBy('sub_department')->pluck('sub_department')
+                ->values();
+        } else if ($request->has('searchType') && $request->searchType == "category") {
             // echo "here";exit;
             // DB::enableQueryLog();
             $res['searchData'] = userSkills::where('sub_institute_id', $request->sub_institute_id)->whereNotNull('category')->groupBy('category')->pluck('category')
-            ->values();
+                ->values();
             // dd(DB::getQueryLog($res['searchData']));
             // echo $res['searchData'];exit;
-        }
-        else if($request->has('searchType') && $request->searchType=="sub_category"){
+        } else if ($request->has('searchType') && $request->searchType == "sub_category") {
             // echo "here";exit;
-            $res['searchData'] = userSkills::where('sub_institute_id', $request->sub_institute_id)->where('category',$request->searchWord)->whereNotNull('sub_category')->groupBy('sub_category')->pluck('sub_category')
-            ->values();
-        }
-        else if($request->has('searchType') && $request->searchType=="users_jobrole"){
+            $res['searchData'] = userSkills::where('sub_institute_id', $request->sub_institute_id)->where('category', $request->searchWord)->whereNotNull('sub_category')->groupBy('sub_category')->pluck('sub_category')
+                ->values();
+        } else if ($request->has('searchType') && $request->searchType == "users_jobrole") {
             // echo "here";exit;
-             $res['searchData'] = DB::table('tbluser as tu')
-            ->join('s_user_jobrole as sus',function($join) use($request){
-                $join->on( 'tu.allocated_standards', '=', 'sus.id')->where('sus.sub_institute_id', $request->sub_institute_id);
-            })
-            ->select('tu.*','sus.jobrole as jobrole','sus.jobrole as jobroleTitle')
-            ->where('tu.sub_institute_id', $request->sub_institute_id)
-            ->where('tu.status',1)
-            ->groupBy('tu.allocated_standards')
-            ->get();
-            return is_mobile($type, 'skill_library.index', $res,'redirect');
-        }
-        else if($request->has('searchType') && $request->searchType=="jobrole_emp"){
+            $res['searchData'] = DB::table('tbluser as tu')
+                ->join('s_user_jobrole as sus', function ($join) use ($request) {
+                    $join->on('tu.allocated_standards', '=', 'sus.id')->where('sus.sub_institute_id', $request->sub_institute_id);
+                })
+                ->select('tu.*', 'sus.jobrole as jobrole', 'sus.jobrole as jobroleTitle')
+                ->where('tu.sub_institute_id', $request->sub_institute_id)
+                ->where('tu.status', 1)
+                ->groupBy('tu.allocated_standards')
+                ->get();
+            return is_mobile($type, 'skill_library.index', $res, 'redirect');
+        } else if ($request->has('searchType') && $request->searchType == "jobrole_emp") {
             // echo "here";exit;
-            $res['searchData'] = DB::table('tbluser')->where('sub_institute_id', $request->sub_institute_id)->where('allocated_standards',$request->searchWord)->get();
-            return is_mobile($type, 'skill_library.index', $res,'redirect');
+            $res['searchData'] = DB::table('tbluser')->where('sub_institute_id', $request->sub_institute_id)->where('allocated_standards', $request->searchWord)->get();
+            return is_mobile($type, 'skill_library.index', $res, 'redirect');
         }
-        else{
+        // added on 26-07-2025
+        else if ($request->has('searchType') && $request->searchType == "skillTaxonomy") {
+            $mainDepartments = DB::table('s_users_skills')
+                ->select('category as name', DB::raw('COUNT(*) as total'))
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNotNull('category')
+                ->whereNull('deleted_at')
+                ->groupBy('category')
+                ->get();
+            // Then get all subdepartments grouped by category
+            $subDepartments = DB::table('s_users_skills')
+                ->whereNotNull('sub_category')
+                ->select(
+                    'category',
+                    'sub_category as name',
+                    DB::raw('COUNT(*) as total')
+                )
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNull('deleted_at')
+                ->groupBy('category', 'sub_category')
+                ->get()
+                ->groupBy('category');
+
+            // Build the final structure
+            $departments = $mainDepartments->map(function ($dept, $index) use ($subDepartments) {
+                $subs = $subDepartments->get($dept->name, collect());
+
+                return [
+                    'id' => $index + 1,
+                    'category_name' => $dept->name,
+                    'total' => $dept->total,
+                    'subcategory' => $subs->map(function ($sub, $subIndex) {
+                        return [
+                            'id' => ($subIndex + 1) * 10 + 1, // Generate IDs like 11, 12, etc.
+                            'subCategory_name' => $sub->name,
+                            'total' => $sub->total,
+                        ];
+                    })->toArray(),
+                ];
+            });
+
+            return response()->json($departments);
+        } else {
             // echo "else here";exit;
-            $res['searchData'] = skillLibraryModel::where('title', 'like', '%'.$request->searchWord.'%')->get();
+            $res['searchData'] = skillLibraryModel::where('title', 'like', '%' . $request->searchWord . '%')->get();
         }
 
-        if($res['searchData']->isNotEmpty()){
+        if ($res['searchData']->isNotEmpty()) {
             $res['status_code'] = 1;
             $res['message'] = 'Search results found';
-        }else{
+        } else {
             $res['status_code'] = 0;
             $res['message'] = 'Search results failed to found';
         }
-        return is_mobile($type, 'skill_library.index', $res,'redirect');
+        return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 
     public function collectsct(Request $req)
@@ -233,7 +269,6 @@ class AJAXController extends Controller
                 $option .= '<option value=' . $row['id'] . '>' . $row['short_name'] . '</option>';
             }
         } else if ($req->sectionId == 3) {
-            
         } else if ($req->sectionId == 5) {
             $std = standardModel::where(['sub_institute_id' => $req->session()->get('sub_institute_id'), 'grade_id' => $req->grade])->get(['id', 'short_name']);
             foreach ($std as $row) {
@@ -248,20 +283,20 @@ class AJAXController extends Controller
 
         if ($path) {
             $parsedUrl = parse_url($path);
-            
+
             if (isset($parsedUrl['path'])) {
                 $pathParts = pathinfo($parsedUrl['path']);
-                
+
                 if (isset($pathParts['filename'])) {
                     $module_name = $pathParts['filename'];
                 }
-                if($parsedUrl['path'] == '/lms/question_paper/create' || $parsedUrl['path'] == '/lms/question_paper/search'){
+                if ($parsedUrl['path'] == '/lms/question_paper/create' || $parsedUrl['path'] == '/lms/question_paper/search') {
                     $module_name = 'question_paper';
                 }
-               
+
                 $path2 = "/student/student_homework/create";
                 $keyword2 = "create";
-              
+
                 if (strpos($path2, $keyword2) !== false) {
                     $module_name = "student_homework";
                 }
@@ -276,18 +311,17 @@ class AJAXController extends Controller
             '5' => 'questionReport',
             '6' => 'parent_communication',
             '7' => 'question_paper',
-            '8' => 'co_scholastic_marks_entry',                        
+            '8' => 'co_scholastic_marks_entry',
         ];
 
         $explode = explode(',', $request->grade_id);
         // menu_ids to get class teacher class only
         // menu_ids to get class teacher class only
-        if(session()->get('sub_institute_id')==195){
-            $menu_ids = [80,102];
-        }else{
+        if (session()->get('sub_institute_id') == 195) {
+            $menu_ids = [80, 102];
+        } else {
             // $menu_ids = [80,102,156];
-            $menu_ids=[];
-
+            $menu_ids = [];
         }
         // added on 07-03-2025 for standalone modules end 
 
@@ -295,16 +329,16 @@ class AJAXController extends Controller
         $sub_institute_id = session()->get('sub_institute_id');
         $syear = session()->get('syear');
         $user_id = session()->get('user_id');
-        if($type=='webForm'){
+        if ($type == 'webForm') {
             $sub_institute_id = $request->sub_institute_id ?? 0;
             $syear = $request->syear ?? 0;
             $user_id = $request->user_id ?? 0;
         }
         // added on 07-03-2025 for standalone modules end 
-        
+
         $studentData = [];
-        
-        $getClass=[];
+
+        $getClass = [];
 
         $query = DB::table('standard');
         // $query->where("grade_id", $request->grade_id);
@@ -320,9 +354,9 @@ class AJAXController extends Controller
                 $checkstd = '1=1';
             }
             if ($checkstd && $classTeacherStdArr != "" && !in_array($module_name, $module_array)) {
-                if(in_array(session()->get('right_menu_id'),$menu_ids) && session()->get('user_profile_name')=="Teacher"){
+                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
                     $query->where('id', $getClass->standard_id);
-                }else{
+                } else {
                     $query->whereIn('id', $classTeacherStdArr);
                 }
             }
@@ -331,19 +365,19 @@ class AJAXController extends Controller
             //START Check for subject teacher assigned
             $subjectTeacherStdArr = session()->get('subjectTeacherStdArr');
             if ($subjectTeacherStdArr != "" && ($classTeacherStdArr == "" || in_array($module_name, $module_array))) {
-                if(in_array(session()->get('right_menu_id'),$menu_ids) && session()->get('user_profile_name')=="Teacher"){
+                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
                     $query->where('id', $getClass->standard_id);
-                }else{
-                $query->whereIn('id', $subjectTeacherStdArr);
+                } else {
+                    $query->whereIn('id', $subjectTeacherStdArr);
                 }
             }
             //END Check for subject teacher assigned
-               // for student 01-01-2025 start
-              
-                if(session()->get('user_profile_name')=="Student"){
-                    $query->where('id', [$studentData->standard_id ?? 0 ]);
-                }
-                // for student 01-01-2025 end
+            // for student 01-01-2025 start
+
+            if (session()->get('user_profile_name') == "Student") {
+                $query->where('id', [$studentData->standard_id ?? 0]);
+            }
+            // for student 01-01-2025 end
 
         } else {
 
@@ -356,10 +390,10 @@ class AJAXController extends Controller
                 $checkstd = '1=1';
             }
             if ($checkstd && $classTeacherStdArr != "" && !in_array($module_name, $module_array)) {
-                if(in_array(session()->get('right_menu_id'),$menu_ids) && session()->get('user_profile_name')=="Teacher"){
+                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
                     $query->where('id', $getClass->standard_id);
-                }else{
-                $query->whereIn('id', $classTeacherStdArr);
+                } else {
+                    $query->whereIn('id', $classTeacherStdArr);
                 }
             }
             //END Check for class teacher assigned standards
@@ -367,17 +401,17 @@ class AJAXController extends Controller
             //START Check for subject teacher assigned
             $subjectTeacherStdArr = session()->get('subjectTeacherStdArr');
             if ($subjectTeacherStdArr != "" && ($classTeacherStdArr == "" || in_array($module_name, $module_array))) {
-                if(in_array(session()->get('right_menu_id'),$menu_ids) && session()->get('user_profile_name')=="Teacher" && isset($getClass->standard_id)){
+                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher" && isset($getClass->standard_id)) {
                     $query->where('id', $getClass->standard_id);
-                }else{
-                $query->whereIn('id', $subjectTeacherStdArr);
+                } else {
+                    $query->whereIn('id', $subjectTeacherStdArr);
                 }
             }
 
             // for student 01-01-2025 start
-              
-            if(session()->get('user_profile_name')=="Student"){
-                $query->where('id', [$studentData->standard_id ?? 0 ]);
+
+            if (session()->get('user_profile_name') == "Student") {
+                $query->where('id', [$studentData->standard_id ?? 0]);
             }
             // for student 01-01-2025 end
             //END Check for subject teacher assigned
@@ -389,7 +423,7 @@ class AJAXController extends Controller
         // return $classTeacherStdArr;
     }
 
-     public function getSubjectList(Request $request)
+    public function getSubjectList(Request $request)
     {
         $standard_id = $request->standard_id;
         $explode = explode(',', $request->standard_id);
@@ -448,22 +482,23 @@ class AJAXController extends Controller
     }
 
     public function ajax_checkEmailExist(Request $request)
-	{
-		// $email = $request->input("email");
-		
+    {
+        // $email = $request->input("email");
+
         // $check_user_sql =DB::table('tbluser')
         //         ->select('id', 'email', DB::raw("'user' as user_type"))
         //         ->where('email', $email)
         //         ->get();
 
-		// if (count($check_user_sql) == 0) {
-		// 	return 0;
-		// } else {
-		// 	return 1;
-		// }
-	}
+        // if (count($check_user_sql) == 0) {
+        // 	return 0;
+        // } else {
+        // 	return 1;
+        // }
+    }
 
-    public function getUsersMappings(Request $request){
+    public function getUsersMappings(Request $request)
+    {
         $emp_id = $request->emp_id;
         $getType = $request->getType; // skills or tasks
         $res['status_code'] = 0;
@@ -473,36 +508,35 @@ class AJAXController extends Controller
             ->where('u.id', $emp_id)
             ->first();
 
-        if($getEmp && $getType=="skills"){
-           $getSkills = DB::table('s_jobrole as s')->join('s_user_skill_jobrole as sus',function($join) {
+        if ($getEmp && $getType == "skills") {
+            $getSkills = DB::table('s_jobrole as s')->join('s_user_skill_jobrole as sus', function ($join) {
                 $join->on('s.jobrole', '=', 'sus.jobrole');
-                })
+            })
                 ->where('s.id', $getEmp->allocated_standards)
                 ->whereNull('sus.deleted_at')
                 ->get()->toArray();
 
-            if(!empty($getSkills)){
+            if (!empty($getSkills)) {
                 $res['status_code'] = 1;
                 $res['message'] = 'Skills found';
                 $res['data'] = $getSkills;
-            }else{
+            } else {
                 $res['status_code'] = 0;
                 $res['message'] = 'No skills found for this user';
             }
-        }
-        else if($getEmp && $getType=="tasks"){
-           $getTasks = DB::table('task as t')
+        } else if ($getEmp && $getType == "tasks") {
+            $getTasks = DB::table('task as t')
                 ->join('tbluser as u', 'u.id', '=', 't.user_id')
                 ->join('tbluserprofilemaster as upm', 'upm.id', '=', 'u.user_profile_id')
                 ->where('t.user_id', $emp_id)
                 ->select('t.id as task_id', 't.task_name', 't.status', 'u.first_name', 'u.last_name', 'upm.name as user_role')
                 ->get();
 
-            if($getTasks->isNotEmpty()){
+            if ($getTasks->isNotEmpty()) {
                 $res['status_code'] = 1;
                 $res['message'] = 'Tasks found';
                 $res['data'] = $getTasks;
-            }else{
+            } else {
                 $res['status_code'] = 0;
                 $res['message'] = 'No tasks found for this user';
             }
@@ -512,24 +546,25 @@ class AJAXController extends Controller
     }
 
     // deepseek chat API integrtion
-    public function DeepSeekChat(Request $request){
+    public function DeepSeekChat(Request $request)
+    {
         //rp2164394@gmail.com - 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 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
 
         // pasi pasi - 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
 
         $prompt = $request->message;
-        
+
         $response = Http::withHeaders([
             'Authorization' => 'Bearer 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',
             'HTTP-Referer' => env('APP_URL'),
         ])
-        ->timeout(90)
-        ->post('https://openrouter.ai/api/v1/chat/completions', [
-            'model' => 'deepseek/deepseek-chat-v3-0324:free',
-            'messages' => [
-                ['role' => 'user', 'content' => $prompt],
-            ],
-        ]);
+            ->timeout(90)
+            ->post('https://openrouter.ai/api/v1/chat/completions', [
+                'model' => 'deepseek/deepseek-chat-v3-0324:free',
+                'messages' => [
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+            ]);
 
         $resBody = $response->json();
 
@@ -543,40 +578,41 @@ class AJAXController extends Controller
             $res['status'] = 1;
             $res['message'] = 'Success';
             $res['response'] = $resBody['choices'][0]['message']['content'];
-        }else{
+        } else {
             $res['response'] = $response->json();
         }
 
         return $res;
     }
 
-    public function AIassignTask(Request $request){
+    public function AIassignTask(Request $request)
+    {
         $controller = new tbluserController;
         $response = $controller->edit($request, $request->user_id);
         $userData = json_decode($response->getContent(), true);
-         $res = [
+        $res = [
             'status' => 0,
             'message' => 'No response from DeepSeek API',
             'response' => [],
         ];
-        if(isset($userData['jobroleTasks']) && !empty($userData['jobroleTasks'])){
+        if (isset($userData['jobroleTasks']) && !empty($userData['jobroleTasks'])) {
             $jsonTasks = $jsonSkills = [];
-           foreach ($userData['jobroleTasks'] as $key => $value) {
+            foreach ($userData['jobroleTasks'] as $key => $value) {
                 $jsonTasks[] = $value['task'];
-           }
+            }
             foreach ($userData['jobroleSkills'] as $key => $value) {
                 $jsonSkills[] = $value['title'];
-           }
-           $jsonTaskEncode = json_encode($jsonTasks);
-           $jsonSkillEncode = json_encode($jsonSkills);
-           // make prompt to pass into Deepseek API
-           $prompt = $jsonTaskEncode . $jsonSkillEncode . ' For each task in the JSON, classify it as "Daily Task", "Weekly Task", "Monthly Task", or "Yearly Task" based on its nature, and also assign the most relevant skill(s) from the provided skills array to each task. Return only a PHP array in the format: ["type" => [["task" => "task1", "skills" => ["skill1", "skill2"]], ...]], with no explanation or extra content.';
+            }
+            $jsonTaskEncode = json_encode($jsonTasks);
+            $jsonSkillEncode = json_encode($jsonSkills);
+            // make prompt to pass into Deepseek API
+            $prompt = $jsonTaskEncode . $jsonSkillEncode . ' For each task in the JSON, classify it as "Daily Task", "Weekly Task", "Monthly Task", or "Yearly Task" based on its nature, and also assign the most relevant skill(s) from the provided skills array to each task. Return only a PHP array in the format: ["type" => [["task" => "task1", "skills" => ["skill1", "skill2"]], ...]], with no explanation or extra content.';
 
-           $request->merge(['message' => $prompt]);
-           // pass prompt into Deepseek API as message
-           $chatResponse = $this->DeepSeekChat($request);
+            $request->merge(['message' => $prompt]);
+            // pass prompt into Deepseek API as message
+            $chatResponse = $this->DeepSeekChat($request);
             $chatRes = $chatResponse['response'];
-            if($chatRes!='' && $chatResponse['status']!=0){
+            if ($chatRes != '' && $chatResponse['status'] != 0) {
                 $clean = preg_replace('/^```php\s*|\s*```$/', '', trim($chatRes));
                 $taskData = [];
                 eval('$taskData = ' . $clean . ';');
@@ -618,8 +654,8 @@ class AJAXController extends Controller
                     ]);
 
                     $taskStoreResponse = $taskController->store($newReq);
-                    $responseData = $taskStoreResponse->getData();   
-                                     
+                    $responseData = $taskStoreResponse->getData();
+
                     $res['status'] = 1;
                     $res['message'] = 'Tasks added successfully';
                 } else {
@@ -627,15 +663,15 @@ class AJAXController extends Controller
                     $res['message'] = 'No valid task data found';
                 }
 
-                if($insert>0){
-                     $res = [
+                if ($insert > 0) {
+                    $res = [
                         'status' => 1,
                         'message' => 'Task Added Succefully!',
-                        'response' =>$taskData,
+                        'response' => $taskData,
                     ];
                 }
             }
-            
+
             // Ensure $chatResponse is an array before looping
             // if (!is_array($chatResponse)) {
             //     $chatResponse = json_decode($chatResponse, true) ?? [];
@@ -676,7 +712,7 @@ class AJAXController extends Controller
             //                 'syear' => $syear,
             //                 'user_id' => $user_id
             //             ]);
-                        
+
             //             $taskController = new instituteDetailController;
             //             $storeTask = $taskController->store($newReq);
             //             $res['response'][] = $storeTask; // Store all responses
@@ -686,6 +722,6 @@ class AJAXController extends Controller
             //     $res['error'] = "Invalid chat response format";
             // }
         }
-        return $res; 
+        return $res;
     }
 }
