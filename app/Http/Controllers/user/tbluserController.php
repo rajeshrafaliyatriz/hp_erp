@@ -69,11 +69,11 @@ class tbluserController extends Controller
             $user_id = $request->get('user_id');
             $user_profile = $request->get('user_profile_name');
         }
-        $user_data = tbluserModel::select(
-            'tbluser.*',
-            'tbluserprofilemaster.name as profile_name',
-            DB::raw('if(tbluser.status = 1,"Active","Inactive") as status')
-        )
+            $user_data = tbluserModel::select(
+                'tbluser.*',
+                'tbluserprofilemaster.name as profile_name',
+                DB::raw('if(tbluser.status = 1,"Active","Inactive") as status')
+            )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
             ->where(['tbluser.sub_institute_id' => $sub_institute_id]) //, 'tbluser.status' => "1"
             ->when(!in_array($user_profile, ["Admin", "Super Admin"]), function ($q) use ($user_id) {
@@ -81,6 +81,8 @@ class tbluserController extends Controller
             })
             ->get();
 
+             $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
+           $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();  
         $res['status_code'] = 1;
         $res['message'] = "Success";
         $res['data'] = $user_data;
