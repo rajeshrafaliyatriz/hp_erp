@@ -81,12 +81,13 @@ class tbluserController extends Controller
             })
             ->get();
 
-             $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
-           $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();  
+            
         $res['status_code'] = 1;
         $res['message'] = "Success";
+        $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
+        $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();  
+        $res["user_profiles"] = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $res['data'] = $user_data;
-
 
         return is_mobile($type, "user/show_user", $res, "view");
     }
