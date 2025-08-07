@@ -724,4 +724,54 @@ class AJAXController extends Controller
         }
         return $res;
     }
+
+    public function getSkillCompetency(Request $request)
+    {
+        $subInstituteId = $request->get('sub_institute_id', 3); // default 3
+
+        $jobRoles = DB::table('s_user_jobrole')
+            ->select('jobrole')
+            ->where('sub_institute_id', $subInstituteId)
+            ->distinct()
+            ->inRandomOrder()
+            ->limit(50)
+            ->pluck('jobrole'); // Use pluck if you only need an array of jobrole names
+
+        $data = DB::table('s_skill_knowledge_ability as s')
+            ->join('s_users_skills as u', 'u.id', '=', 's.skill_id')
+            ->join('s_user_skill_jobrole as us', function ($join) {
+                $join->on('us.skill', '=', 'u.title')
+                     ->on('us.sub_institute_id', '=', 'u.sub_institute_id');
+            })
+            ->join('s_user_jobrole as uj', function ($join) {
+                $join->on('uj.jobrole', '=', 'us.jobrole')
+                     ->on('uj.sub_institute_id', '=', 'us.sub_institute_id');
+            })
+            ->where('s.sub_institute_id', $subInstituteId)
+            ->whereIn('uj.jobrole', $jobRoles)
+            ->orderBy('uj.industries')
+            ->orderBy('uj.department')
+            ->orderBy('uj.jobrole')
+            ->orderBy('u.category')
+            ->orderBy('u.title')
+            ->orderBy('s.classification')
+            ->select([
+                'uj.industries',
+                'uj.department',
+                'uj.jobrole',
+                'u.category',
+                'u.sub_category',
+                'u.title as skill_name',
+                's.classification',
+                's.classification_category',
+                's.classification_sub_category',
+                's.classification_item'
+            ])
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $data
+        ]);
+    }
 }
