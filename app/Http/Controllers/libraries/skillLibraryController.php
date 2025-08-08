@@ -570,6 +570,8 @@ class skillLibraryController extends Controller
                 ->whereNull('deleted_at')
                 ->get();
         }
+        $res['userAttitudeData'] = $this->getKnowledgeAbilityData($request, $id, 'attitute');
+        $res['userBehaviourData'] = $this->getKnowledgeAbilityData($request, $id, 'behaviour');
         $res['userKnowledgeData'] = $this->getKnowledgeAbilityData($request, $id, 'knowledge');
         $viewKnowledge = [];
 
@@ -1031,7 +1033,7 @@ class skillLibraryController extends Controller
         $jobroles = [];
         $skillFields = ['id', 'category', 'sub_category', 'title'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
-        $jobroleFields = ['id', 'jobrole', 'description'];
+        $jobroleFields = ['id', 'jobrole', 'description','jobrole_category'];
 
         if ($getType == "usersJobrole") {
             $jobroles = skillJobroleMap::with([
@@ -1059,6 +1061,9 @@ class skillLibraryController extends Controller
                     }
                     if ($item->userJobrole) {
                         $data['description'] = $item->userJobrole->description;
+                    }
+                    if ($item->userJobrole) {
+                        $data['jobrole_category'] = $item->userJobrole->jobrole_category;
                     }
                     unset($data['user_skills'], $data['created_user'], $data['userJobrole']);
 

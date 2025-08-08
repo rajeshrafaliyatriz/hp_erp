@@ -32,8 +32,7 @@ class skillJobroleMap extends Model
 
     public function userJobrole()
     {
-        return $this->belongsTo(userJobroleModel::class, 'jobrole', 'jobrole')
-            ->select(['id', 'jobrole', 'description']);
+        return $this->belongsTo(userJobroleModel::class, 'jobrole', 'jobrole');
     }
 
     public function knowledgeAbility()
