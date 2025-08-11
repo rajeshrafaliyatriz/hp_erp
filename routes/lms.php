@@ -125,6 +125,7 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
 
     Route::resource('question_paper', questionpaperController::class);
     Route::post('question_paper/search', [questionpaperController::class,'search']);
+    Route::post('question_paper/storeData', [questionpaperController::class,'storeData']);
     Route::resource('bulk_chapter_upload', bulk_chapter_uploadController::class);
     Route::get('ajax_SubjectwiseQuestion', [questionpaperController::class, 'ajax_SubjectwiseQuestion'])->name('ajax_SubjectwiseQuestion');
 

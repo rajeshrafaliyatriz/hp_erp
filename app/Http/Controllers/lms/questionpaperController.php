@@ -141,6 +141,77 @@ class questionpaperController extends Controller
         return is_mobile($type, 'lms/add_questionpaper', $data, "view");
     }
 
+    public function storeData(Request $request){
+        $open_date = $close_date = null;
+        if ($request->open_date != "") {
+            $open_date = date('Y-m-d H:i:s', strtotime($request->open_date));
+        }
+        if ($request->close_date != "") {
+            $close_date = date('Y-m-d 23:59:59', strtotime($request->close_date));
+        }
+
+        $sub_institute_id = $request->sub_institute_id;
+        $syear = $request->syear;
+        $user_id = $request->created_by;
+        // return $syear;exit;
+        $show_hide = $request->show_hide;
+        $show_hide_val = isset($show_hide) ? $show_hide : '';
+
+        $result_show_ans = $request->result_show_ans;
+        $result_show_ans_val = isset($result_show_ans) ? $result_show_ans : '';
+
+        $shuffle_question = $request->shuffle_question;
+        $shuffle_question_val = isset($shuffle_question) ? $shuffle_question : '';
+
+        $show_feedback = $request->show_feedback;
+        $show_feedback_val = $show_feedback ?? '';
+
+        $timelimit_enable = $request->timelimit_enable;
+        $timelimit_enable_val = isset($timelimit_enable) ? $timelimit_enable : '';
+
+        $question_ids = "";
+        if ($request->question_ids) {
+            $question_ids = implode(",", $request->question_ids);
+        }
+
+        $questionpaper = array(
+            'grade_id'         => $request->grade,
+            'standard_id'      => $request->standard,
+            'subject_id'       => $request->subject,
+            'paper_name'       => $request->paper_name,
+            'paper_desc'       => $request->paper_desc,
+            'open_date'        => $open_date,
+            'close_date'       => $close_date,
+            'timelimit_enable' => $timelimit_enable_val,
+            'time_allowed'     => $request->time_allowed,
+            'total_ques'       => $request->total_ques,
+            'total_marks'      => $request->total_marks,
+            'question_ids'     => $question_ids,
+            'shuffle_question' => $shuffle_question_val,
+            'attempt_allowed'  => $request->attempt_allowed,
+            'show_feedback'    => $show_feedback_val,
+            'show_hide'        => $show_hide_val,
+            'result_show_ans'  => $result_show_ans_val,
+            'created_by'       => $user_id,
+            'sub_institute_id' => $sub_institute_id,
+            'syear'            => $syear,
+            'exam_type'        => $request->exam_type,
+        );
+        // echo ('<pre>');print_r($questionpaper);die;
+        $query = questionpaperModel::insertGetId($questionpaper);
+        $questionpaper_id = DB::getPDO()->lastInsertId();
+      
+
+        $res = array(
+            "status_code" => 1,
+            "message"     => "Question-Paper Added Successfully",
+        );
+        $type = $request->type;
+        // $this->generatePDF($questionpaper, $questionpaper_id);
+
+        return is_mobile($type, "question_paper.index", $res, "redirect");
+    }
+
     /**
      * Store a newly created resource in storage.
      *
@@ -149,6 +220,7 @@ class questionpaperController extends Controller
      */
     public function store($request)
     {
+        // return $request;exit;
         $open_date = $close_date = null;
         if ($request['open_date'] != "") {
             $open_date = date('Y-m-d H:i:s', strtotime($_REQUEST['open_date']));
