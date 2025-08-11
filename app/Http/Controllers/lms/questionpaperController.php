@@ -939,12 +939,18 @@ public function search_question($all_data){
 }
     public function ajax_LMS_StandardwiseSubject(Request $request)
     {
+        $type= $request->type;
         $std_id = $request->input("std_id");
         $sub_institute_id = session()->get("sub_institute_id");
         $user_profile_id = session()->get('user_profile_id');
         $user_profile_name = session()->get('user_profile_name');
         $user_id = session()->get('user_id');
-
+        if($type=='API'){
+            $sub_institute_id = $request->get("sub_institute_id");
+            $user_profile_id = $request->get('user_profile_id');
+            $user_profile_name = $request->get('user_profile_name');
+            $user_id = $request->get('user_id');
+        }
         if ($user_profile_name == 'Teacher') {
             $wherecondition = ['t.sub_institute_id' => $sub_institute_id, 't.teacher_id' => $user_id];
             if ($std_id != "") {
