@@ -19,6 +19,7 @@ use App\Models\school_setup\standardModel;
 use App\Models\school_setup\academic_sectionModel;
 use Illuminate\Support\Facades\Schema; // Import the Schema facade
 use Illuminate\Database\Schema\Blueprint;
+use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Http;
 use Validator;
 use DB;
@@ -279,7 +280,7 @@ class AJAXController extends Controller
     }
     public function getStandardList(Request $request)
     {
-        $path = $_SERVER['HTTP_REFERER'] ?? URL::current();
+        $path = $_SERVER['HTTP_REFERER'] ?? '';
 
         if ($path) {
             $parsedUrl = parse_url($path);
