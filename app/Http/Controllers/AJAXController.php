@@ -99,6 +99,10 @@ class AJAXController extends Controller
             $query->orderBy($request->sort_order);
         }
 
+        if ($request->has('group_by') && $request->group_by != '') {
+            $query->orderBy($request->group_by);
+        }
+
         // Fetch data
         try {
             $data = $query->get();
