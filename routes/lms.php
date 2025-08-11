@@ -312,3 +312,4 @@ Route::get('/download-File', [contentLibraryController::class, 'downloadFile'])-
 //     return view('recommend');
 // });
 // Route::get('/sync-neo4j', [Neo4jSyncController::class, 'sync']);
+    Route::get('question_paper/search_question', [questionpaperController::class,'search_question2']);

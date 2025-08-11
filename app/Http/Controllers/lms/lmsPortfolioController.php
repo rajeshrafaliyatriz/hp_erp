@@ -261,10 +261,13 @@ class lmsPortfolioController extends Controller
 
     public function ajax_LMS_SubjectwiseChapter(Request $request)
     {
+        $type = $request->input("type");
         $sub_id = $request->input("sub_id");
         $std_id = $request->input("std_id");
         $sub_institute_id = $request->session()->get("sub_institute_id");
-
+        if($type=='API'){
+        $sub_institute_id = $request->get("sub_institute_id");
+        }
         return chapterModel::where([
             'chapter_master.sub_institute_id' => $sub_institute_id,
             'chapter_master.subject_id'       => $sub_id,
