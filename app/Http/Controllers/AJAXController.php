@@ -100,7 +100,7 @@ class AJAXController extends Controller
         }
 
         if ($request->has('group_by') && $request->group_by != '') {
-            $query->orderBy($request->group_by);
+            $query->groupBy($request->group_by);
         }
 
         // Fetch data
