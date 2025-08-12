@@ -53,8 +53,8 @@ class AJAXController extends Controller
                 return response()->json(['error' => 'Table "' . $table . '" does not exist.'], 404);
             }
         } catch (\Exception $e) {
-            // Catch database connection errors or other unexpected issues during the check
-            \Log::error('Database error checking table existence: ' . $e->getMessage(), ['exception' => $e]);
+            // // Catch database connection errors or other unexpected issues during the check
+            // \Log::error('Database error checking table existence: ' . $e->getMessage(), ['exception' => $e]);
             return response()->json(['error' => 'An internal server error occurred while validating the table.'], 500);
         }
 
@@ -67,7 +67,7 @@ class AJAXController extends Controller
                 // 4. IMPORTANT: Validate column name format for security
                 if (!preg_match('/^[a-zA-Z0-9_]+$/', $column)) {
                     // Skip invalid column names or return an error
-                    \Log::warning('Attempted to filter by invalid column name: ' . $column);
+                    // \Log::warning('Attempted to filter by invalid column name: ' . $column);
                     continue; // Skip this filter
                     // OR: return response()->json(['error' => 'Invalid column name format in filters.'], 400);
                 }
@@ -84,12 +84,12 @@ class AJAXController extends Controller
                         $query->where($column, $value);
                     } else {
                         // Log or handle case where filter column doesn't exist
-                        \Log::warning('Attempted to filter by non-existent column: ' . $column . ' on table ' . $table);
+                        // \Log::warning('Attempted to filter by non-existent column: ' . $column . ' on table ' . $table);
                         // Optionally, you might want to return an error here if a non-existent column is critical
                         // return response()->json(['error' => 'Column "' . $column . '" does not exist in table "' . $table . '".'], 400);
                     }
                 } catch (\Exception $e) {
-                    \Log::error('Database error checking column existence: ' . $e->getMessage(), ['exception' => $e]);
+                    // \Log::error('Database error checking column existence: ' . $e->getMessage(), ['exception' => $e]);
                     return response()->json(['error' => 'An internal server error occurred while validating a filter column.'], 500);
                 }
             }
@@ -97,6 +97,20 @@ class AJAXController extends Controller
         // get entry sort_order wise
         if ($request->has('sort_order') && $request->sort_order != '') {
             $query->orderBy($request->sort_order);
+        }
+        // Apply order by if provided
+        if ($request->has('order_by') && is_array($request->order_by)) {
+            $orderColumn = $request->order_by['column'] ?? 'id';
+            $orderDirection = strtolower($request->order_by['direction'] ?? 'asc');
+
+            // Sanitize direction
+            if (!in_array($orderDirection, ['asc', 'desc'])) {
+                $orderDirection = 'asc';
+            }
+
+            if ($orderColumn && Schema::hasColumn($table, $orderColumn)) {
+                $query->orderBy($orderColumn, $orderDirection);
+            }
         }
 
         if ($request->has('group_by') && $request->group_by != '') {
@@ -108,7 +122,7 @@ class AJAXController extends Controller
             $data = $query->get();
         } catch (\Exception $e) {
             // Catch errors during data fetching (e.g., malformed queries, database down)
-            \Log::error('Database error fetching data for table ' . $table . ': ' . $e->getMessage(), ['exception' => $e]);
+            // \Log::error('Database error fetching data for table ' . $table . ': ' . $e->getMessage(), ['exception' => $e]);
             return response()->json(['error' => 'An internal server error occurred while fetching data.'], 500);
         }
 
