@@ -42,7 +42,7 @@ class organizationDetailsController extends Controller
 
             if ($validator->fails()) {
                 $response['status'] = '0';
-                $response['message'] = $validator->messages();
+                $response['message'] = $validator->messages()->first();
                 return response()->json($response);
             }
             
@@ -90,7 +90,7 @@ public function store(Request $request)
     if ($validator->fails()) {
         return response()->json([
             'status'  => 0,
-            'message' => $validator->messages()
+            'message' => $validator->messages()->first()->first()
         ]);
     }
 
@@ -126,8 +126,11 @@ public function store(Request $request)
             $file_name,
             'public'
         );
+        $fileUrl = Storage::disk('digitalocean')->url('public/hp_logo/' . $file_name);
 
-        $orgDetail->logo = $file_name; // assuming you have a logo column
+        // Save to DB
+        $orgDetail->logo = $file_name;
+        // $orgDetail->logo = $file_name; // assuming you have a logo column
     }
 
     $orgDetail->save();
@@ -167,7 +170,10 @@ public function store(Request $request)
                     'public'
                 );
 
-                $sister->logo = $file_name; // assuming you have a logo column
+                $fileUrl = Storage::disk('digitalocean')->url('public/hp_logo/' . $file_name);
+
+                // Save to DB
+                $sister->logo = $file_name;// assuming you have a logo column
             }
 
             $sister->save();
