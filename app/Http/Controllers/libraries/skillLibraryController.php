@@ -1153,72 +1153,204 @@ class skillLibraryController extends Controller
 
     public function AddCategory(Request $request)
     {
-        // return $request;    
-        $formType = $request->formType;
-        $category_name = $request->category_name;
-        $old_category_name = $request->old_category_name;
-        $new_category_name = $request->new_category_name;
-        $old_subcategory_name = $request->old_subcategory_name;
-        $new_subcategory_name = $request->new_subcategory_name;
-        $sub_institute_id = $request->sub_institute_id;
-        $org_type = $request->org_type;
-        $subcategory_name = $request->subcategory_name;
-        $user_id = $request->user_id;
+        // // return $request;    
+        // $formType = $request->formType;
+        // $category_name = $request->category_name;
+        // $old_category_name = $request->old_category_name;
+        // $new_category_name = $request->new_category_name;
+        // $old_subcategory_name = $request->old_subcategory_name;
+        // $new_subcategory_name = $request->new_subcategory_name;
+        // $sub_institute_id = $request->sub_institute_id;
+        // $org_type = $request->org_type;
+        // $subcategory_name = $request->subcategory_name;
+        // $user_id = $request->user_id;
+        // $i=0;
+        // if ($formType == "category") {
+        //     $checkxists = userSkills::where(['category'=> $category_name,'sub_institute_id'=>$sub_institute_id])->exists();
+
+        //     if(!$checkxists){
+        //         userSkills::insert(['category'=> $category_name,'sub_institute_id'=>$sub_institute_id,'created_by'=>$user_id,'created_at'=>now()]);
+        //         $i=1;
+        //     }else{
+        //         $updateArray = ['category'=> $new_category_name,'sub_institute_id'=>$sub_institute_id,'updated_by'=>$user_id,'updated_at'=>now()];
+        //         $update = userSkills::where('category', $old_category_name)
+        //         ->where('sub_institute_id', $sub_institute_id)
+        //         ->update($updateArray);
+        //         $i=2;
+        //     }
+        // } 
+        // // update category and add sub_category
+        // else if ($formType == "sub_category") {
+        //     $checkxists = userSkills::where(['category'=> $old_category_name,'sub_institute_id'=>$sub_institute_id])->get();
+
+        //     if(count($checkxists) > 0){
+        //         $updateArray = ['category'=> $new_category_name,'sub_institute_id'=>$sub_institute_id,'updated_by'=>$user_id,'updated_at'=>now()];
+
+        //         if(isset($subcategory_name) && $subcategory_name!=''){
+        //             $updateArray['sub_category'] = $subcategory_name;
+        //         }
+        //        // Update category name in user_skills table
+        //         $update = userSkills::where('category', $old_category_name)
+        //         ->where('sub_institute_id', $sub_institute_id)
+        //         ->update($updateArray);
+        //         $i=3;
+        //     }
+        // }
+        // else if($formType == "update_subCategory"){
+        //     $checkxists = userSkills::where(['category'=>$category_name,'sub_category'=> $old_subcategory_name,'sub_institute_id'=>$sub_institute_id])->get();
+
+        //     $updateArray = ['sub_category'=> $new_subcategory_name,'sub_institute_id'=>$sub_institute_id,'updated_by'=>$user_id,'updated_at'=>now()];
+
+        //     $update = userSkills::where(['category'=>$category_name,'sub_category'=> $old_subcategory_name,'sub_institute_id'=>$sub_institute_id])
+        //         ->update($updateArray);
+        //         $i=3;
+        // }
+
+        // if($i==1){
+        //     $res['status_code'] = 1;
+        //     $res['message'] = 'Category added successfully!';
+        // }else if($i==2){
+        //     $res['status_code'] = 2;
+        //     $res['message'] = 'Category update successfully!';
+        // }else if($i==3){
+        //     $res['status_code'] = 3;
+        //     $res['message'] = 'Sub Category updated successfully!';
+        // }else{
+        //     $res['status_code'] = 0;
+        //     $res['message'] = 'Failed to add category';
+        // }
+        $token = $request->input('token');
+
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $type = $request->input('type');
+
+        $validator = Validator::make($request->all(), [
+            'sub_institute_id' => 'required|numeric',
+            'user_id'          => 'required|numeric',
+            'formType'         => 'required'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->messages()->first()
+            ]);
+        }
+
         $i=0;
-        if ($formType == "category") {
-            $checkxists = userSkills::where(['category'=> $category_name,'sub_institute_id'=>$sub_institute_id])->exists();
+        $sub_institute_id = $request->sub_institute_id;
+        $user_id = $request->user_id;
+        $formType = $request->formType;
 
-            if(!$checkxists){
-                userSkills::insert(['category'=> $category_name,'sub_institute_id'=>$sub_institute_id,'created_by'=>$user_id,'created_at'=>now()]);
-                $i=1;
-            }else{
-                $updateArray = ['category'=> $new_category_name,'sub_institute_id'=>$sub_institute_id,'updated_by'=>$user_id,'updated_at'=>now()];
-                $update = userSkills::where('category', $old_category_name)
-                ->where('sub_institute_id', $sub_institute_id)
-                ->update($updateArray);
-                $i=2;
+        if($formType=="add category"){
+            $category = $request->category;
+            $checkCategory = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->category])->whereNull('deleted_at')->first();
+
+            if(empty($checkCategory) && !isset($checkCategory->id)){
+                $i = DB::table('s_users_skills')->insert([
+                    'sub_institute_id'=>$sub_institute_id,
+                    'category'=>$request->category,
+                    'created_by'=>$user_id,
+                    'created_at'=>now(),
+                ]);
             }
-        } 
-        // update category and add sub_category
-        else if ($formType == "sub_category") {
-            $checkxists = userSkills::where(['category'=> $old_category_name,'sub_institute_id'=>$sub_institute_id])->get();
+        }
+        else if($formType=="edit category"){
+            $category = $request->category;
+            $old_category = $request->old_category;
+            $sub_category = $request->sub_category;
 
-            if(count($checkxists) > 0){
-                $updateArray = ['category'=> $new_category_name,'sub_institute_id'=>$sub_institute_id,'updated_by'=>$user_id,'updated_at'=>now()];
+            $checkCategory = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->old_category])->whereNull('deleted_at')->first();
 
-                if(isset($subcategory_name) && $subcategory_name!=''){
-                    $updateArray['sub_category'] = $subcategory_name;
+            if(!empty($checkCategory) && isset($checkCategory->id) && $sub_category==''){
+                
+                $updateArray = [
+                    'sub_institute_id'=>$sub_institute_id,
+                    'category'=>$request->category,
+                    'updated_at'=>now(),
+                    'updated_by'=>$user_id
+                ];
+
+                $i = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->old_category])->update($updateArray);
+
+                $checkSubCategory = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->category,'sub_category'=>$sub_category])->whereNull('deleted_at')->first();
+
+                if(empty($checkCategory) && !isset($checkCategory->id)){
+                    $updateArray['sub_category'] = $sub_category;
+                    $updateArray['created_at'] = now();
+                    $updateArray['created_by'] = $user_id;
+
+                     $i = DB::table('s_users_skills')->insert($updateArray);
                 }
-               // Update category name in user_skills table
-                $update = userSkills::where('category', $old_category_name)
-                ->where('sub_institute_id', $sub_institute_id)
-                ->update($updateArray);
-                $i=3;
+            }
+            else if($request->has('sub_category')){
+                $updateArray = [
+                    'sub_institute_id'=>$sub_institute_id,
+                    'category'=>$request->category,
+                    'updated_at'=>now(),
+                    'updated_by'=>$user_id
+                ];
+
+                $i = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->old_category])->update($updateArray);
+
+                $checkSubCategory = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->category,'sub_category'=>$sub_category])->whereNull('deleted_at')->first();
+
+                if(empty($checkSubCategory) && !isset($checkSubCategory->id)){
+                    $updateArray['sub_category'] = $sub_category;
+                    $updateArray['created_at'] = now();
+                    $updateArray['created_by'] = $user_id;
+
+                     $i = DB::table('s_users_skills')->insert($updateArray);
+                }
             }
         }
-        else if($formType == "update_subCategory"){
-            $checkxists = userSkills::where(['category'=>$category_name,'sub_category'=> $old_subcategory_name,'sub_institute_id'=>$sub_institute_id])->get();
+        else if ($formType == "edit sub_category") {
+            $category = $request->category;
+            $old_sub_category = $request->old_sub_category;
+            $sub_category = $request->sub_category;
 
-            $updateArray = ['sub_category'=> $new_subcategory_name,'sub_institute_id'=>$sub_institute_id,'updated_by'=>$user_id,'updated_at'=>now()];
+            $checkSubCategory = DB::table('s_users_skills')
+                ->where([
+                    'sub_institute_id' => $sub_institute_id,
+                    'category'         => $category,
+                    'sub_category'     => $old_sub_category
+                ])
+                ->whereNull('deleted_at')
+                ->first();
 
-            $update = userSkills::where(['category'=>$category_name,'sub_category'=> $old_subcategory_name,'sub_institute_id'=>$sub_institute_id])
-                ->update($updateArray);
-                $i=3;
+            if (!empty($checkSubCategory) && isset($checkSubCategory->id)) {
+                $updateArray['sub_category'] = $sub_category;
+                $updateArray['updated_at'] = now();
+                $updateArray['updated_by'] = $user_id;
+
+                $i = DB::table('s_users_skills')
+                    ->where([
+                        'sub_institute_id' => $sub_institute_id,
+                        'category'         => $category,
+                        'sub_category'     => $old_sub_category
+                    ])
+                    ->update($updateArray);
+            }
         }
 
-        if($i==1){
-            $res['status_code'] = 1;
-            $res['message'] = 'Category added successfully!';
-        }else if($i==2){
-            $res['status_code'] = 2;
-            $res['message'] = 'Category update successfully!';
-        }else if($i==3){
-            $res['status_code'] = 3;
-            $res['message'] = 'Sub Category updated successfully!';
+
+        if($i!=0){
+            $res['status_code']=1;
+            $res['message']="Data Add Successfully!";
         }else{
-            $res['status_code'] = 0;
-            $res['message'] = 'Failed to add category';
+            $res['status_code']=0;
+            $res['message']="Failed to Add, May be already Exists!";
         }
+
         return response()->json($res);
     }
 }
