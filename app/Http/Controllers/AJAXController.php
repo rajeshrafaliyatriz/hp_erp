@@ -72,6 +72,17 @@ class AJAXController extends Controller
 
                 // 5. Manually validate if the column exists to bypass Schema::hasColumn()
                 try {
+                    //check table has deleted_at
+                    $hasDeletedAt = DB::table('information_schema.columns')
+                        ->where('table_schema', DB::raw('DATABASE()'))
+                        ->where('table_name', $table)
+                        ->where('column_name', 'deleted_at')
+                        ->exists();
+
+                    if ($hasDeletedAt) {
+                        $query->whereNull('deleted_at');
+                    }
+                    // other column
                     $columnExists = DB::table('information_schema.columns')
                         ->where('table_schema', DB::raw('DATABASE()'))
                         ->where('table_name', $table)
