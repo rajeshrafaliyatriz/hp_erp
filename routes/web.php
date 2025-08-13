@@ -39,6 +39,10 @@ Route::middleware(['auth','session','menu'])->group(function () {
 
 // Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']]), function () {
 
+Route::get('forget-password', [ForgotPasswordController::class, 'showForgetPasswordForm'])->name('forget.password.get');
+Route::post('forget-password', [ForgotPasswordController::class, 'submitForgetPasswordForm'])->name('forget.password.post');
+Route::get('reset-password/{token}/{email}', [ForgotPasswordController::class, 'showResetPasswordForm'])->name('reset.password.get');
+Route::post('reset-password', [ForgotPasswordController::class, 'submitResetPasswordForm'])->name('reset.password.post');
 
 Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']], function () {
     Route::resource('master_setup', masterSetupController::class);
