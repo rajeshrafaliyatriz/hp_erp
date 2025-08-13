@@ -28,6 +28,8 @@ Route::middleware(['auth','session','menu'])->group(function () {
 
     Route::post('skill_library/add_category', [skillLibraryController::class, 'AddCategory'])->name('add_category');
 
+    Route::post('skill_library/attributes_taxonomy', [skillLibraryController::class, 'AddAttributeTaxonomy'])->name('attributes_taxonomy');
+
     Route::get('search_data', [AJAXController::class, 'searchSkill'])->name('search_skill');
 
     Route::resource('jobrole', skillLibraryController::class);
