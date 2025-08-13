@@ -176,7 +176,7 @@ class tbluserController extends Controller
             $path = Storage::disk('digitalocean')->putFileAs(
                 'hp_user',
                 $file,
-                $filename,
+                $file_name,
                 'public'
             );
 
@@ -203,7 +203,7 @@ class tbluserController extends Controller
         $finalArray['status'] = 1;
         unset($newRequest['user_image']);
         foreach ($newRequest as $key => $value) {
-            if ($key != '_method' && $key != '_token' && $key != 'submit') {
+            if ($key != '_method' && $key != '_token' && $key != 'type' &&  $key != 'token'  && $key != 'user_id'    && $key != 'submit') {
                 if (is_array($value)) {
                     $value = implode(",", $value);
                 }
