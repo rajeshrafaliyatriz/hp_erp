@@ -50,7 +50,7 @@ use App\Http\Controllers\lms\lmsCurriculumController;
 use App\Http\Controllers\front_desk\syllabus\syllabusController;
 use App\Http\Controllers\lms\content_library\contentLibraryController;
 use App\Http\Controllers\lms\curriculum\curriculumLessonplanController;
-use App\Http\Controllers\lms\library\skillLibraryController;
+use App\Http\Controllers\lms\library\skillLibraryController1;
 use App\Http\Controllers\lms\library\H5PController;
 use App\Http\Controllers\front_desk\taskController;
 use Illuminate\Support\Facades\Route;
@@ -95,10 +95,10 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
 
     Route::resource('lo_category', locategoryController::class);
 
-    Route::resource('skill_library',skillLibraryController::class);
+    Route::resource('lms_skill_library',skillLibraryController1::class);
     
-    Route::get('skill_library/{id}/delete', [skillLibraryController::class, 'destroy']);
-    Route::get('skill_library/{id}/show', [skillLibraryController::class, 'show']);
+    Route::get('lms_skill_library/{id}/delete', [skillLibraryController1::class, 'destroy']);
+    Route::get('lms_skill_library/{id}/show', [skillLibraryController1::class, 'show']);
 
     // multi delete questions
     Route::get('multi_delete_questions', [questionmasterController::class, 'ajax_multiDeleteQuestion'])->name('multi_delete_questions');

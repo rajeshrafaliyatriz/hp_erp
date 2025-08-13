@@ -743,14 +743,14 @@ class AJAXController extends Controller
 
     public function getSkillCompetency(Request $request)
     {
-        $subInstituteId = $request->get('sub_institute_id', 3); // default 3
+        $subInstituteId = $request->get('sub_institute_id', 4); // default 3
 
         $jobRoles = DB::table('s_user_jobrole')
             ->select('jobrole')
             ->where('sub_institute_id', $subInstituteId)
             ->distinct()
             ->inRandomOrder()
-            ->limit(50)
+            ->limit(500)
             ->pluck('jobrole'); // Use pluck if you only need an array of jobrole names
 
         $data = DB::table('s_skill_knowledge_ability as s')
