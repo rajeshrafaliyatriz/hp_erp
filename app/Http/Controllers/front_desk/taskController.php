@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\File;
 use function App\Helpers\is_mobile;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
+use Illuminate\Support\Facades\Storage;
 
 class taskController extends Controller
 {
@@ -25,7 +26,7 @@ class taskController extends Controller
      */
     public function index(Request $request)
     {
-
+        // return $request;
         $type = $request->input("type");
         $from_date = $request->input("from_date");
         $to_date = $request->input("to_date");
@@ -35,6 +36,14 @@ class taskController extends Controller
         $user_id = $request->session()->get("user_id");
         $taskType = $request->taskType;
 
+        if($type=="API"){
+            $sub_institute_id = $request->get("sub_institute_id");
+            $syear = $request->get("syear");
+            $user_profile_name = $request->get("user_profile_name");
+            $user_id = $request->get("user_id");
+        }
+
+        // DB::enableQueryLog();
         $data = DB::table("task as t")
             ->join('tbluser as u', function ($join) use ($sub_institute_id) {
                 $join->whereRaw("t.TASK_ALLOCATED = u.id AND u.sub_institute_id = '".$sub_institute_id."'")->where('u.status',1); // 23-04-24 by uma
@@ -52,11 +61,12 @@ class taskController extends Controller
             CONCAT_WS(' ',u1.first_name,u1.middle_name,u1.last_name) AS ALLOCATOR,
             CONCAT_WS(' ',u2.first_name,u2.middle_name,u2.last_name) AS ALLOCATED_TO,
             CONCAT_WS(' ',u3.first_name,u3.middle_name,u3.last_name) AS approved_by")
-            ->where("t.SYEAR", "=", $syear);
+            ->where("t.SYEAR", "=", $syear)->where("t.sub_institute_id", "=", $sub_institute_id)
+            ->whereNull('t.deleted_at');
 
         if (isset($from_date)) {
             $data = $data->where('t.TASK_DATE', '>=', $from_date);
-            $res['from_date'] = $from_date;
+            $res['from_date'] = $from_date; 
         }
         
         if (isset($to_date)) {
@@ -71,8 +81,9 @@ class taskController extends Controller
         if (strtoupper($user_profile_name) != 'ADMIN') {
             $data = $data->whereRaw("(t.TASK_ALLOCATED_TO = '".$user_id."' OR t.TASK_ALLOCATED = '".$user_id."')");
         }
-        $data = $data->orderBy('t.ID', 'desc');
+        $data = $data->orderBy('t.TASK_DATE', 'desc');
         $data = $data->get()->toArray();
+        // dd(DB::getQueryLog($data));
 
         $res['checkList'] = DB::table('task')->selectRaw('*,'.$user_id.' as user_id')->whereRaw("(TASK_ALLOCATED_TO = '".$user_id."' OR TASK_ALLOCATED = '".$user_id."')")->where('task_type','=','Daily Task')->where('TASK_DATE',date('Y-m-d'))->get()->toArray();
       
@@ -221,18 +232,21 @@ class taskController extends Controller
             $manageby = $user_id;
         }
 
-        $dates = $this->getDatesWithoutSundays();
+        $dates = $this->getDatesWithoutSundays("Daily Task");
         $task_type = $request->input('selType', ''); // fallback if not present
 
         // Prepare file upload
-        $file_name = $ext = $file_size = '';
-        if ($request->hasFile('TASK_ATTACHMENT')) {
-            $file = $request->file('TASK_ATTACHMENT');
-            $file_size = $file->getSize();
-            $ext = $file->getClientOriginalExtension();
-            $file_name = 'task_' . now()->format('YmdHis') . '.' . $ext;
-            $file->storeAs('public/front_desk', $file_name);
-        }
+        $file_name = $ext = $file_size = "";
+            if ($request->hasFile('TASK_ATTACHMENT')) {
+                $file = $request->file('TASK_ATTACHMENT');
+                $originalname = $file->getClientOriginalName();
+                $file_size = $file->getSize();
+                $name = "task_".date('YmdHis');
+                $ext = File::extension($originalname);
+                $file_name = $name.'.'.$ext;
+                // $path = $file->storeAs('public/hp_task/', $file_name);
+                Storage::disk('digitalocean')->putFileAs('public/hp_task/', $file, $file_name, 'public');
+            }
 
         // Common task data
         $baseData = $request->except([
@@ -248,7 +262,6 @@ class taskController extends Controller
             'observation_point' => $request->input("observation_point"),
             'task_type' => $task_type,
             'SYEAR' => $syear,
-            'CREATED_BY' => $user_id,
             'TASK_ALLOCATED' => $manageby,
             'STATUS' => 'PENDING',
             'CREATED_IP_ADDRESS' => $request->ip(),
@@ -262,6 +275,7 @@ class taskController extends Controller
             $extraData['FILE_TYPE'] = $ext;
         }
 
+
         if ($request->formType == "single") {
             // 'required_skills' => $request->has('skills') ? implode(',', $request->skills) : '',
 
@@ -271,10 +285,20 @@ class taskController extends Controller
             if ($task_type == "Daily Task") {
                 foreach ($dates as $date) {
                     $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
+                    $data['created_by'] = $user_id;
                     taskModel::insert($data);
                 }
-            } else {
-                $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->get('TASK_DATE')]);
+            } 
+            else if ($task_type == "weekly") { 
+                $dates = $this->getDatesWithoutSundays('weekly');
+                foreach ($dates as $date) {
+                    $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
+                    $data['created_by'] = $user_id;
+                    taskModel::insert($data);
+                }
+            }else {
+                $data = array_merge($baseData, $extraData, ['TASK_DATE' => now()]);
+                $data['created_by'] = $user_id;
                 taskModel::insert($data);
             }
         } else {
@@ -285,10 +309,12 @@ class taskController extends Controller
                 if ($task_type == "Daily Task") {
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
+                        $data['created_by'] = $user_id;
                         taskModel::insert($data);
                     }
                 } else {
                     $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->get('TASK_DATE')]);
+                    $data['created_by'] = $user_id;
                     taskModel::insert($data);
                 }
             }
@@ -370,6 +396,7 @@ class taskController extends Controller
      */
     public function update(Request $request, $id)
     {
+        // return $request;
         $type = $request->input("type");
         if($type=="API"){
             $sub_institute_id = $request->sub_institute_id;
@@ -392,40 +419,78 @@ class taskController extends Controller
         $required_skill = $request->skills ?? '';
         $observation_point = $request->observation_point;
         // store skills
+        if($request->has('formType') && $request->formType=="approveStatus"){
+           $data = $request->except([
+                '_method', '_token', 'submit','formType','update','token','user_id','add','type',
+                'syear','sub_institute_id','user_id','manageby','KRA','KPA','skills','ALLOCATOR',
+                'ALLOCATED_TO','method_field'
+            ]);
+            foreach ($data as $key => $value) {
+                if ($value === 'null' || $value === '') {
+                    $data[$key] = null;
+                }
+            }
 
-        $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT','formName','selDepartment','selSubDepartment','selType','task_date','add','type','syear','sub_institute_id','user_id','manageby','KRA','KPA','skills']);
+            $file_name = $ext = $file_size = "";
+            if ($request->hasFile('TASK_ATTACHMENT')) {
+                $file = $request->file('TASK_ATTACHMENT');
+                $originalname = $file->getClientOriginalName();
+                $file_size = $file->getSize();
+                $name = "task_".date('YmdHis');
+                $ext = File::extension($originalname);
+                $file_name = $name.'.'.$ext;
+                $path = $file->storeAs('public/hp_task/', $file_name);
 
-        $data['kra'] = $KRA;
-        $data['TASK_DATE'] = Carbon::parse($request->TASK_DATE)->format('Y-m-d');
-
-        $data['kpa'] = $KPA;
-        $data['task_type'] = $task_type;
-        $data['observation_point'] = $observation_point;
-
-        $data['SYEAR'] = $syear;
-        // $data['MARKING_PERIOD_ID'] = $term_id;
-        $data['CREATED_IP_ADDRESS'] = $_SERVER['REMOTE_ADDR'];
-        $data['updated_at'] = date('Y-m-d H:i:s');
-        $data['approved_by'] = $user_id;
-        $data['approved_on'] = date('Y-m-d H:i:s');
-
-        $TASK_ALLOCATED_TO = $request->input("TASK_ALLOCATED_TO");
-
-        $file_name = $ext = $file_size = "";
-        if ($request->hasFile('TASK_ATTACHMENT')) {
-            $file = $request->file('TASK_ATTACHMENT');
-            $originalname = $file->getClientOriginalName();
-            $file_size = $file->getSize();
-            $name = "task_".date('YmdHis');
-            $ext = File::extension($originalname);
-            $file_name = $name.'.'.$ext;
-            $path = $file->storeAs('public/front_desk/', $file_name);
+                $data['TASK_ATTACHMENT'] = $file_name;
+                $data['FILE_SIZE'] = $file_size;
+                $data['FILE_TYPE'] = $ext;
+            }
+            $data['updated_by'] = $user_id;
+            $data['updated_at'] = now();
+           
+            if ($request->has('approve_status') && $request->approve_status !== '') {
+                $data['approved_by'] = $user_id;
+                $data['approved_on'] = now(); 
+            } else {
+                $data['approved_on'] = null;
+            }
         }
+        else{
+            $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT','formName','selDepartment','selSubDepartment','selType','task_date','add','type','syear','sub_institute_id','user_id','manageby','KRA','KPA','skills']);
 
-        if ($file_name != '') {
-            $data['TASK_ATTACHMENT'] = $file_name;
-            $data['FILE_SIZE'] = $file_size;
-            $data['FILE_TYPE'] = $ext;
+            $data['kra'] = $KRA;
+            $data['TASK_DATE'] = Carbon::parse($request->TASK_DATE)->format('Y-m-d');
+
+            $data['kpa'] = $KPA;
+            $data['task_type'] = $task_type;
+            $data['observation_point'] = $observation_point;
+
+            $data['SYEAR'] = $syear;
+            // $data['MARKING_PERIOD_ID'] = $term_id;
+            $data['CREATED_IP_ADDRESS'] = $_SERVER['REMOTE_ADDR'];
+            $data['updated_at'] = date('Y-m-d H:i:s');
+            $data['approved_by'] = $user_id;
+            $data['approved_on'] = date('Y-m-d H:i:s');
+
+            $TASK_ALLOCATED_TO = $request->input("TASK_ALLOCATED_TO");
+
+            $file_name = $ext = $file_size = "";
+            if ($request->hasFile('TASK_ATTACHMENT')) {
+                $file = $request->file('TASK_ATTACHMENT');
+                $originalname = $file->getClientOriginalName();
+                $file_size = $file->getSize();
+                $name = "task_".date('YmdHis');
+                $ext = File::extension($originalname);
+                $file_name = $name.'.'.$ext;
+                // $path = $file->storeAs('public/hp_task/', $file_name);
+                Storage::disk('digitalocean')->putFileAs('public/hp_task/', $file, $file_name, 'public');
+            }
+
+            if ($file_name != '') {
+                $data['TASK_ATTACHMENT'] = $file_name;
+                $data['FILE_SIZE'] = $file_size;
+                $data['FILE_TYPE'] = $ext;
+            }
         }
 
         $data = taskModel::where(['id' => $id])->update($data);
@@ -445,11 +510,24 @@ class taskController extends Controller
     public function destroy(Request $request, $id)
     {
         $type = $request->input('type');
+        $user_id = session()->get('user_id');
 
-        taskModel::where(["id" => $id])->delete();
+        if($type=="API"){
+            $user_id = $request->user_id;
+        }
 
-        $res['status_code'] = "1";
-        $res['message'] = "Deleted successfully";
+        $delete =taskModel::where(["id" => $id])->update([
+            'deleted_by' => $user_id,
+            'deleted_at' => now(),
+        ]);
+
+        if($delete){
+            $res['status_code'] = "1";
+            $res['message'] = "Deleted successfully";
+        }else{
+            $res['status_code'] = "1";
+            $res['message'] = "Deleted successfully";
+        }
 
         return is_mobile($type, "task.index", $res);
     }
@@ -464,19 +542,24 @@ class taskController extends Controller
         return is_mobile($type, "front_desk.task_report", $res, "view");
     }
 
-    function getDatesWithoutSundays() {
+    function getDatesWithoutSundays($type="") {
         $startDate = Carbon::now();
         $endDate = Carbon::create($startDate->year, $startDate->month)->endOfMonth();  
         
         $dates = [];
         
-        $period = CarbonPeriod::create($startDate, $endDate);
-        
-        foreach ($period as $date) {
-            if ($date->isSunday()) {
-                continue;
+        if($type!="Daily Task"){
+            for ($i = 0; $i < 7; $i++) {
+                $dates[] = Carbon::today()->addDays($i)->format('Y-m-d');
             }
-            $dates[] = $date->format('Y-m-d');
+        }else{
+            $period = CarbonPeriod::create($startDate, $endDate);
+            foreach ($period as $date) {
+                if ($date->isSunday()) {
+                    continue;
+                }
+                $dates[] = $date->format('Y-m-d');
+            }
         }
         
         return $dates;
