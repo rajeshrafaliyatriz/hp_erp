@@ -183,6 +183,12 @@ class skillLibraryController extends Controller
         } else if ($request->has('formType') && $request->formType == "ability") {
             $res['userabilityData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'ability');
         }
+        else if ($request->has('formType') && $request->formType == "attitude") {
+            $res['userAttitudeData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'attitude');
+        }
+        else if ($request->has('formType') && $request->formType == "behaviour") {
+            $res['userBehaviourData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'behaviour');
+        }
         // userApplication
         else if ($request->has('formType') && $request->formType == "application") {
             $res['userApplicationData'] = $this->getApplicationData($request, $skillName);
