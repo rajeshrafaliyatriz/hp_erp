@@ -203,7 +203,7 @@ class tbluserController extends Controller
         $finalArray['status'] = 1;
         unset($newRequest['user_image']);
         foreach ($newRequest as $key => $value) {
-            if ($key != '_method' && $key != '_token' && $key != 'submit') {
+            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name') {
                 if (is_array($value)) {
                     $value = implode(",", $value);
                 }
@@ -288,7 +288,7 @@ class tbluserController extends Controller
         $finalArray['status'] = 1;
         unset($newRequest['user_image']);
         foreach ($newRequest as $key => $value) {
-            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id') {
+            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name') {
                 if (is_array($value)) {
                     $value = implode(",", $value);
                 }
