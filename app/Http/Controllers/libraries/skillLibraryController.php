@@ -183,6 +183,12 @@ class skillLibraryController extends Controller
         } else if ($request->has('formType') && $request->formType == "ability") {
             $res['userabilityData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'ability');
         }
+        else if ($request->has('formType') && $request->formType == "attitude") {
+            $res['userAttitudeData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'attitude');
+        }
+        else if ($request->has('formType') && $request->formType == "behaviour") {
+            $res['userBehaviourData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'behaviour');
+        }
         // userApplication
         else if ($request->has('formType') && $request->formType == "application") {
             $res['userApplicationData'] = $this->getApplicationData($request, $skillName);
@@ -823,6 +829,8 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill_id' => $id,
                         'proficiency_level' => $value->proficiency_level,
+                        'classification_category'=>$value->classification_category,
+                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'knowledge',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -857,6 +865,8 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill' => $request->skill_name,
                         'proficiency_level' => $value->proficiency_level,
+                        'classification_category'=>$value->classification_category,
+                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'ability',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -891,6 +901,8 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill' => $request->skill_name,
                         'proficiency_level' => $value->proficiency_level,
+                        'classification_category'=>$value->classification_category,
+                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'attitude',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -925,6 +937,8 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill' => $request->skill_name,
                         'proficiency_level' => $value->proficiency_level,
+                        'classification_category'=>$value->classification_category,
+                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'behaviour',
                         'sub_institute_id' => $request->sub_institute_id,
