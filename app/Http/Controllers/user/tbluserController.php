@@ -176,7 +176,7 @@ class tbluserController extends Controller
             $path = Storage::disk('digitalocean')->putFileAs(
                 'hp_user',
                 $file,
-                $filename,
+                $file_name,
                 'public'
             );
 
