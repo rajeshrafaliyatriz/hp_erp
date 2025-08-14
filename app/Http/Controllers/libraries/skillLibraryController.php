@@ -829,6 +829,8 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill_id' => $id,
                         'proficiency_level' => $value->proficiency_level,
+                        'classification_category'=>$value->classification_category,
+                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'knowledge',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -863,6 +865,8 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill' => $request->skill_name,
                         'proficiency_level' => $value->proficiency_level,
+                        'classification_category'=>$value->classification_category,
+                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'ability',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -897,6 +901,8 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill' => $request->skill_name,
                         'proficiency_level' => $value->proficiency_level,
+                        'classification_category'=>$value->classification_category,
+                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'attitude',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -931,6 +937,8 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill' => $request->skill_name,
                         'proficiency_level' => $value->proficiency_level,
+                        'classification_category'=>$value->classification_category,
+                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'behaviour',
                         'sub_institute_id' => $request->sub_institute_id,

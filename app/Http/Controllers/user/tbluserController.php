@@ -224,51 +224,51 @@ class tbluserController extends Controller
         tbluserModel::insert($finalArray);
         $id = DB::getPdo()->lastInsertId();
 
-        $client_data = DB::table("school_setup as s")
-            ->join('tblclient as c', function ($join) {
-                $join->whereRaw("c.id = s.client_id");
-            })
-            ->selectRaw('*,if(db_hrms is null,0,1) as rights')
-            ->where("s.Id", "=", $sub_institute_id)
-            ->get()->toArray();
+        // $client_data = DB::table("school_setup as s")
+        //     ->join('tblclient as c', function ($join) {
+        //         $join->whereRaw("c.id = s.client_id");
+        //     })
+        //     ->selectRaw('*,if(db_hrms is null,0,1) as rights')
+        //     ->where("s.Id", "=", $sub_institute_id)
+        //     ->get()->toArray();
 
-        $hrms_db_host = $client_data[0]->db_host;
-        $hrms_db_user = $client_data[0]->db_user;
-        $hrms_db_password = $client_data[0]->db_password;
-        $hrms_db_hrms = $client_data[0]->db_hrms;
-        $hrms_rights = $client_data[0]->rights;
+        // $hrms_db_host = $client_data[0]->db_host;
+        // $hrms_db_user = $client_data[0]->db_user;
+        // $hrms_db_password = $client_data[0]->db_password;
+        // $hrms_db_hrms = $client_data[0]->db_hrms;
+        // $hrms_rights = $client_data[0]->rights;
 
-        if ($hrms_rights == 1 && $id != "") {
-            $fields = [
-                'db_host'     => $hrms_db_host,
-                'db_user'     => $hrms_db_user,
-                'db_password' => $hrms_db_password,
-                'db_hrms'     => $hrms_db_hrms,
-            ];
-            $fields = array_merge($fields, $finalArray);
+        // if ($hrms_rights == 1 && $id != "") {
+        //     $fields = [
+        //         'db_host'     => $hrms_db_host,
+        //         'db_user'     => $hrms_db_user,
+        //         'db_password' => $hrms_db_password,
+        //         'db_hrms'     => $hrms_db_hrms,
+        //     ];
+        //     $fields = array_merge($fields, $finalArray);
 
-            //url-ify the data for the POST
-            $fields_string = "";
-            foreach ($fields as $key => $value) {
-                $fields_string .= $key . '=' . $value . '&';
-            }
-            rtrim($fields_string, '&');
-            //open connection
-            $ch = curl_init();
+        //     //url-ify the data for the POST
+        //     $fields_string = "";
+        //     foreach ($fields as $key => $value) {
+        //         $fields_string .= $key . '=' . $value . '&';
+        //     }
+        //     rtrim($fields_string, '&');
+        //     //open connection
+        //     $ch = curl_init();
 
-            $url = "http://" . $_SERVER['HTTP_HOST'] . "/add_user_hrms.php";
+        //     $url = "http://" . $_SERVER['HTTP_HOST'] . "/add_user_hrms.php";
 
-            //set the url, number of POST vars, POST data
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_POST, count($fields));
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $fields_string);
+        //     //set the url, number of POST vars, POST data
+        //     curl_setopt($ch, CURLOPT_URL, $url);
+        //     curl_setopt($ch, CURLOPT_POST, count($fields));
+        //     curl_setopt($ch, CURLOPT_POSTFIELDS, $fields_string);
 
-            //execute post
-            $result = curl_exec($ch);
+        //     //execute post
+        //     $result = curl_exec($ch);
 
-            //close connection
-            curl_close($ch);
-        }
+        //     //close connection
+        //     curl_close($ch);
+        // }
 
         return $id;
     }
