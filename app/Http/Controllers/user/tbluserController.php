@@ -347,9 +347,30 @@ class tbluserController extends Controller
         $editData = tbluserModel::find($id)->toArray();
         $data = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $subject_data = subjectModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
-        // $userLevelOfResponsibility = $editData['subject_ids'];
+        $userLevels = DB::table('s_level_responsibility')->where('id', $editData['subject_ids'])
+                // ->groupBy('level')
+                ->first();
+        $userLevelsArr = DB::table('s_level_responsibility')->where('level', $userLevels->level)
+                // ->groupBy('level')
+                ->get();
+
+        $allLevels = $userLevelOfResponsibility = [];
+        foreach ($userLevelsArr as $key => $value) {
+            $userLevelOfResponsibility['level'] = $value->level;
+            $userLevelOfResponsibility['essence_level'] = $value->essence_level;
+            $userLevelOfResponsibility['guidance_note'] = $value->attribute_guidance_notes;
+           if($value->attribute_type!='Business skills/Behavioural factors'){
+            $userLevelOfResponsibility[$value->attribute_type][$value->attribute_name] = $value;
+           }else{
+            $userLevelOfResponsibility['Business_skills'][str_replace(' ', '_', $value->attribute_name)] = $value;
+
+           }
+        }
+        // $userLevelOfResponsibility = array_values($allLevels)
         // if (isset($subject_data_selected)) {
-        //     $userLevelOfResponsibility = explode(",", $subject_data_selected);
+        //     $userLevelOfResponsibility =DB::table('s_level_responsibility')->where('level', $editData['subject_ids'])
+        //         ->where('sub_institute_id', $sub_institute_id)
+        //         ->toArray();
         // }
 
         $dataCustomFields = tblcustomfieldsModel::where([
