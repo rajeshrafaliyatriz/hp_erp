@@ -16,6 +16,8 @@ use function App\Helpers\is_mobile;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\PersonalAccessToken;
+use Validator;
 
 class taskController extends Controller
 {
@@ -563,6 +565,80 @@ class taskController extends Controller
         }
         
         return $dates;
+    }
+
+    // added on 19-08-2025 by uma for task analysis report
+    public function taskAnalysisReport(Request $request)
+    {
+        $type = $request->input('type');
+        $token = $request->input('token');  // get token from input field 'token'
+
+        // Check if token is provided
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        // Find the token in the database
+        $accessToken = PersonalAccessToken::findToken($token);
+
+        // If token is invalid
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+        // Validate required fields
+        $validator = Validator::make($request->all(), [
+            'sub_institute_id' => 'required',
+            'syear' => 'required',
+        ]);
+
+        // If validation fails
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+        }
+        $sub_institute_id = $request->input('sub_institute_id');
+        $syear = $request->input('syear');
+
+        $taskData = DB::table("task as t")
+        ->join('tbluser as u', function ($join) use ($sub_institute_id) {
+            $join->whereRaw("t.TASK_ALLOCATED = u.id AND u.sub_institute_id = ?", [$sub_institute_id])
+                ->where('u.status', 1);
+        })
+        ->join('tbluser as u1', function ($join) use ($sub_institute_id) {
+            $join->whereRaw("t.CREATED_BY = u1.id AND u1.sub_institute_id = ?", [$sub_institute_id])
+                ->where('u1.status', 1);
+        })
+        ->join('tbluser as u2', function ($join) use ($sub_institute_id) {
+            $join->whereRaw("t.TASK_ALLOCATED_TO = u2.id AND u2.sub_institute_id = ?", [$sub_institute_id])
+                ->where('u2.status', 1);
+        })
+        ->leftJoin('tbluser as u3', function ($join) use ($sub_institute_id) {
+            $join->whereRaw("t.approved_by = u3.id AND u3.sub_institute_id = ?", [$sub_institute_id])
+                ->where('u3.status', 1);
+        })
+        ->selectRaw("
+            t.*,
+            CONCAT_WS(' ', u1.first_name, u1.middle_name, u1.last_name) AS ALLOCATOR,
+            CONCAT_WS(' ', u2.first_name, u2.middle_name, u2.last_name) AS ALLOCATED_TO,
+            u2.image AS employee_image,
+            CONCAT_WS(' ', u3.first_name, u3.middle_name, u3.last_name) AS approved_by
+        ")
+        ->where("t.SYEAR", $syear)
+        ->where("t.sub_institute_id", $sub_institute_id)
+        ->whereNull('t.deleted_at')
+        ->orderBy('t.TASK_DATE', 'DESC')
+        ->get();
+
+    $taskData->map(function ($item) {
+        $item->employee_image = $item->employee_image 
+            ? Storage::disk('digitalocean')->url('public/hp_user/' . $item->employee_image) 
+            : null;
+        return $item;
+    });
+
+        $res['status'] = 1;
+        $res['message'] = "Success";
+        $res['taskData'] = $taskData;
+        return response()->json($res);
     }
     
 }
