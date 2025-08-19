@@ -9,7 +9,12 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
+use Laravel\Sanctum\PersonalAccessToken;
 use function App\Helpers\is_mobile;
+use Illuminate\Support\Facades\Storage;
+use App\Models\libraries\skillJobroleMap;
+use App\Models\skill\matrix;
+use Validator;
 
 class userReportController extends Controller
 {
@@ -126,5 +131,160 @@ class userReportController extends Controller
 
         return is_mobile($type, "user/show_user_report", $res, "view");
 
+    }
+
+    public function employeeReport(Request $request){
+         $type = $request->input('type');
+        $token = $request->input('token');  // get token from input field 'token'
+
+        // Check if token is provided
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        // Find the token in the database
+        $accessToken = PersonalAccessToken::findToken($token);
+
+        // If token is invalid
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+        // Validate required fields
+        $validator = Validator::make($request->all(), [
+            'sub_institute_id' => 'required',
+            'syear' => 'required',
+            'employee_id' =>'required',
+        ]);
+
+        // If validation fails
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+        }
+
+        $sub_institute_id = $request->input('sub_institute_id');
+        $syear = $request->input('syear');
+        $employee_id = $request->input('employee_id');
+
+        $employeeData = tbluserModel::selectRaw('tbluser.*,tbluserprofilemaster.name as profile_name,s_user_jobrole.jobrole')
+        ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
+        ->leftJoin('s_user_jobrole','s_user_jobrole.id','=','tbluser.allocated_standards')
+        ->where(['tbluser.sub_institute_id'=>$sub_institute_id,'tbluser.id'=>$employee_id])
+        ->orderBy('tbluser.id','desc')
+        ->first();
+
+        if ($employeeData && $employeeData->image) {
+            $employeeData->image = Storage::disk('digitalocean')->url('public/hp_user/' . $employeeData->image);
+        }
+        if ($employeeData && $employeeData->status) {
+            $employeeData->status = ($employeeData->status==1) ? 'Active' : 'In-active';
+        }
+
+        $alreadyRated = matrix::where('user_id', $employee_id)->get()->toArray();
+        $ratedIds = [];
+        foreach ($alreadyRated as $rated) {
+            $ratedIds[] = $rated['skill_id'] ?? 0;
+        }
+        $skillData = skillJobroleMap::with([
+                'userSkills'=> function($query) use($ratedIds) {
+                    $query->whereNotIn('id', $ratedIds);
+                }
+            ])
+            ->where('jobrole', $employeeData->jobrole)
+            ->whereNull('deleted_at')
+            // ->whereNotIn('skill_id', $ratedIds)
+            ->groupBy('id')
+            ->get()
+            ->map(function ($item) {
+                $classificationItems = DB::table('s_skill_knowledge_ability')
+                            ->where('skill_id', $item->userSkills->id ?? null)
+                            ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
+                            ->get()
+                            ->groupBy('classification');
+                return [
+                    'jobrole_skill_id' => $item->id,
+                    'jobrole' => $item->jobrole,
+                    'skill' => $item->skill,
+                    'skill_id' => $item->userSkills->id ?? null,
+                    'title' => $item->userSkills->title ?? null,
+                    'category' => $item->userSkills->category ?? null,
+                    'sub_category' => $item->userSkills->sub_category ?? null,
+                    'description' => $item->userSkills->description ?? null,
+                    'proficiency_level' => $item->proficiency_level,
+                    'knowledge' => $classificationItems->has('knowledge')
+                            ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
+                            : [],
+                    'ability' => $classificationItems->has('ability')
+                            ? $classificationItems['ability']->pluck('classification_item')->toArray()
+                            : [],
+                ];
+            });
+
+        $certificateData = DB::table('staff_document')->select('staff_document.*', 'd.document_type')
+            ->join('student_document_type as d', 'd.id', 'staff_document.document_type_id')
+            ->where(['sub_institute_id' => $sub_institute_id, 'user_id' => $employee_id])
+            ->get()
+            ->toArray();
+
+        $taskData = DB::table("task as t")
+            ->join('tbluser as u', function ($join) use ($sub_institute_id) {
+                $join->whereRaw("t.TASK_ALLOCATED = u.id AND u.sub_institute_id = ?", [$sub_institute_id])
+                    ->where('u.status', 1);
+            })
+            ->join('tbluser as u1', function ($join) use ($sub_institute_id) {
+                $join->whereRaw("t.CREATED_BY = u1.id AND u1.sub_institute_id = ?", [$sub_institute_id])
+                    ->where('u1.status', 1);
+            })
+            ->join('tbluser as u2', function ($join) use ($sub_institute_id) {
+                $join->whereRaw("t.TASK_ALLOCATED_TO = u2.id AND u2.sub_institute_id = ?", [$sub_institute_id])
+                    ->where('u2.status', 1);
+            })
+            ->leftJoin('tbluser as u3', function ($join) use ($sub_institute_id) {
+                $join->whereRaw("t.approved_by = u3.id AND u3.sub_institute_id = ?", [$sub_institute_id])
+                    ->where('u3.status', 1);
+            })
+            ->selectRaw("
+                t.*,
+                CONCAT_WS(' ', u1.first_name, u1.middle_name, u1.last_name) AS ALLOCATOR,
+                CONCAT_WS(' ', u2.first_name, u2.middle_name, u2.last_name) AS ALLOCATED_TO,
+                u2.image AS employee_image,
+                CONCAT_WS(' ', u3.first_name, u3.middle_name, u3.last_name) AS approved_by
+            ")
+            ->where("t.SYEAR", $syear)
+            ->where("t.TASK_ALLOCATED_TO", $employee_id)
+            ->where("t.sub_institute_id", $sub_institute_id)
+            ->whereNull('t.deleted_at')
+            ->orderBy('t.TASK_DATE', 'DESC')
+            ->get();
+    
+        $taskData->map(function ($item) {
+            $item->employee_image = $item->employee_image 
+                ? Storage::disk('digitalocean')->url('public/hp_user/' . $item->employee_image) 
+                : null;
+            return $item;
+        });
+
+        $taskDetail = DB::table("task as t")
+        ->selectRaw("
+            COUNT(t.id) AS total_task,
+            SUM(CASE WHEN t.approve_status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+            SUM(CASE WHEN t.approve_status = 'approved' THEN 1 ELSE 0 END) AS rejected_count,
+            SUM(CASE WHEN t.approve_status = 'rejected' THEN 1 ELSE 0 END) AS approved_count
+        ")
+        ->where("t.SYEAR", $syear)
+        ->where("t.TASK_ALLOCATED_TO", $employee_id)
+        ->where("t.sub_institute_id", $sub_institute_id)
+        ->whereNull('t.deleted_at')
+        ->groupBy('t.TASK_ALLOCATED_TO')
+        ->get();
+
+        $res['status'] = 1;
+        $res['message'] = "Success";
+        $res['employeeData'] = $employeeData;
+        $res['skillData'] = $skillData;
+        $res['certificateData'] = $certificateData;
+        $res['taskDetail'] = $taskDetail;
+        $res['taskData'] = $taskData;
+
+        return response()->json($res);
     }
 }
