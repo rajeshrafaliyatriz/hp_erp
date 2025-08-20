@@ -55,6 +55,18 @@ class discliplinaryManagementController extends Controller
                     DB::raw('CONCAT_WS(" ", COALESCE(first_name,"-"), COALESCE(middle_name,"-"), COALESCE(last_name,"-")) as employee_name')
                 );
             },
+            'witnessData' => function($query) {
+                $query->select(
+                    'id', 
+                    DB::raw('CONCAT_WS(" ", COALESCE(first_name,"-"), COALESCE(middle_name,"-"), COALESCE(last_name,"-")) as employee_name')
+                );
+            },
+            'reportByData' => function($query) {
+                $query->select(
+                    'id', 
+                    DB::raw('CONCAT_WS(" ", COALESCE(first_name,"-"), COALESCE(middle_name,"-"), COALESCE(last_name,"-")) as employee_name')
+                );
+            },
         ])
         ->where('sub_institute_id', $sub_institute_id)
         ->whereNull('deleted_at')
@@ -63,10 +75,14 @@ class discliplinaryManagementController extends Controller
             // Flatten the relationships into the main object
             $item->department_name = $item->departmentData->department_name ?? null;
             $item->employee_name = $item->employeeData->employee_name ?? null;
+            $item->witness_name = $item->employeeData->employee_name ?? null;
+            $item->reported_by_name = $item->employeeData->employee_name ?? null;
             
             // Remove the relationship objects
             unset($item->departmentData);
             unset($item->employeeData);
+            unset($item->witnessData);
+            unset($item->reportByData);
             
             return $item;
         })
