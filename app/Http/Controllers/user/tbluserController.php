@@ -84,6 +84,7 @@ class tbluserController extends Controller
             
         $res['status_code'] = 1;
         $res['message'] = "Success";
+        $res['departments'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->get()->toArray();
         $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();  
         $res["user_profiles"] = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
