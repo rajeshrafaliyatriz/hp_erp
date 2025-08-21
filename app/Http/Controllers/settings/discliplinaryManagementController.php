@@ -75,8 +75,8 @@ class discliplinaryManagementController extends Controller
             // Flatten the relationships into the main object
             $item->department_name = $item->departmentData->department_name ?? null;
             $item->employee_name = $item->employeeData->employee_name ?? null;
-            $item->witness_name = $item->employeeData->employee_name ?? null;
-            $item->reported_by_name = $item->employeeData->employee_name ?? null;
+            $item->witness_name = $item->witnessData->employee_name ?? null;
+            $item->reported_by_name = $item->reportByData->employee_name ?? null;
             
             // Remove the relationship objects
             unset($item->departmentData);
