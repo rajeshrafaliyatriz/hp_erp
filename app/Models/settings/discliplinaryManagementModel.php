@@ -22,6 +22,16 @@ class discliplinaryManagementModel extends Model
         return $this->belongsTo(tbluserModel::class, 'employee_id', 'id');
     }
 
+    public function witnessData()
+    {
+        return $this->belongsTo(tbluserModel::class, 'witness_id', 'id');
+    }
+
+    public function reportByData()
+    {
+        return $this->belongsTo(tbluserModel::class, 'reported_by', 'id');
+    }
+
     public function createdUser()
     {
         return $this->belongsTo(tbluserModel::class, 'created_by', 'id');

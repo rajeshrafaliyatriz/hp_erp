@@ -350,7 +350,7 @@ class tbluserController extends Controller
         $userLevels = DB::table('s_level_responsibility')->where('id', $editData['subject_ids'])
                 // ->groupBy('level')
                 ->first();
-        $userLevelsArr = DB::table('s_level_responsibility')->where('level', $userLevels->level)
+        $userLevelsArr = DB::table('s_level_responsibility')->where('level', $userLevels->level ?? 0)
                 // ->groupBy('level')
                 ->get();
 
