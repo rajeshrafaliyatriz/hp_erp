@@ -478,7 +478,8 @@ class taskController extends Controller
                 'skills',
                 'ALLOCATOR',
                 'ALLOCATED_TO',
-                'method_field'
+                'method_field',
+                'repeat_days'
             ]);
             foreach ($data as $key => $value) {
                 if ($value === 'null' || $value === '') {
