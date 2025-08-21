@@ -21,7 +21,7 @@ class onlineExamController extends Controller
     {
 
         $data = $this->getData($request);
-        $type = $request->input('type');
+        $type = $request->type;
         $res['status_code'] = 1;
         $res['message'] = "SUCCESS";
         $res['answer_arr'] = $data['answer_arr'];
@@ -42,7 +42,7 @@ class onlineExamController extends Controller
         }
 
         $type = $request->input('type');
-        $sub_institute_id = $request->session()->get('sub_institute_id');
+        $sub_institute_id = $request->sub_institute_id;
         $questionpaper_id = $request->get('questionpaper_id');
         $data['questionpaper_data'] = questionpaperModel::find($questionpaper_id)->toArray();
 
@@ -73,12 +73,16 @@ class onlineExamController extends Controller
 
     public function store(Request $request)
     {
+        $type = $request->input('type');
         //Clear session for timer
         Session::forget('session_quiz');
 
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $user_id = $request->session()->get('user_id');
-
+        if($type=="API"){
+            $user_id = $request->get('user_id');
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
         //$questionpaper_details = $this->get_questionpaper_details($request->get('questionpaper_id'));
         $result = $this->get_calculate_marks($request);
 
@@ -177,7 +181,13 @@ class onlineExamController extends Controller
         //END Insert into lms_online_exam_answer table
 
         //return is_mobile($type,'lms/online_exam_result',$res,"view");
+        if($type=="API"){
+            return redirect()->json($res);
+
+        }else{
         return redirect()->route('online_exam.show',[$request->get('questionpaper_id'),"online_exam_id"=> $online_exam_id]);
+            
+        }
     }
 
 
@@ -358,7 +368,7 @@ class onlineExamController extends Controller
         //Get all questions subject wise        
         $question_ids = explode(",", $data['questionpaper_data']['question_ids']);
         $data['question_arr'] = lmsQuestionMasterModel::whereIn("id", $question_ids)->get()->toArray();
-
+        $data['answer_arr'] = $answer = [];
         $lmsmapping = array();
         foreach ($data['question_arr'] as $key => $val) {
             $answer_arr = answermasterModel::where([
@@ -427,7 +437,7 @@ class onlineExamController extends Controller
         }
         //dd($online_answer_data);
 
-        $type = $request->input('type');
+        $type = $request->type;
         $data['status_code'] = 1;
         $data['message'] = "SUCCESS";
         // echo "<pre>";print_r($data);exit;

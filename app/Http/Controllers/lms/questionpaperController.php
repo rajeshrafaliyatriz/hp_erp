@@ -45,6 +45,10 @@ class questionpaperController extends Controller
     {
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
+        if($request->type=="API"){
+            $sub_institute_id = $request->sub_institute_id;
+            $syear = $request->syear;
+        }
         $data['questionpaper_data'] = array();
         $marking_period_id = session()->get('term_id');
         $teacher = session()->get('user_profile_name');
