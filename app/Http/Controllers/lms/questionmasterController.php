@@ -16,6 +16,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use function App\Helpers\is_mobile;
+use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\Validator;
 
 class questionmasterController extends Controller
 {
@@ -24,92 +26,129 @@ class questionmasterController extends Controller
      *
      * @return Response
      */
-    public function index(Request $request)
-    {
-        $data = $this->getData($request);
-        $type = $request->input('type');
-        $res['status_code'] = 1;
-        $res['message'] = "SUCCESS";
-        $res['data'] = $data['questionmaster_data'];
-        $res['breadcrum_data'] = $data['breadcrum_data'];
-        // echo "<pre>";print_r($data);exit;
-        return is_mobile($type, 'lms/show_questionmaster', $res, "view");
-    }
+    // public function index(Request $request)
+    // {
+    //     $type = $request->input('type');
+    //     if ($type == "API") {
+    //         $token = $request->input('token');  // get token from input field 'token'
 
-    public function getData($request)
-    {
-        $sub_institute_id = $request->session()->get('sub_institute_id');
-        $data['questionmaster_data'] = array();
+    //         // Check if token is provided
+    //         if (!$token) {
+    //             return response()->json(['message' => 'Token not provided'], 401);
+    //         }
 
-        $where_condition = array();
+    //         // Find the token in the database
+    //         $accessToken = PersonalAccessToken::findToken($token);
 
-        if ($request->has('chapter_id')) {
-            $where_condition['cm.id'] = $request->get('chapter_id');
-        }
+    //         // If token is invalid
+    //         if (!$accessToken) {
+    //             return response()->json(['message' => 'Invalid token'], 401);
+    //         }
+    //         // Validate required fields
+    //         $validator = Validator::make($request->all(), [
+    //             'sub_institute_id' => 'required',
+    //         ]);
 
-        if ($request->has('topic_id')) {
-            $where_condition['lms_question_master.topic_id'] = $request->get('topic_id');
-        }
+    //         // If validation fails
+    //         if ($validator->fails()) {
+    //             return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+    //         }
+    //     }
+    //     $data = $this->getData($request);
+    //     $res['status_code'] = 1;
+    //     $res['message'] = "SUCCESS";
+    //     $res['data'] = $data['questionmaster_data'];
+    //     // echo "<pre>";print_r($data);exit;
+    //     return is_mobile($type, 'lms/show_questionmaster', $res, "view");
+    // }
 
-        $where_condition['lms_question_master.sub_institute_id'] = $sub_institute_id;
+    // public function getData($request)
+    // {
+    //     $sub_institute_id = $request->session()->get('sub_institute_id');
+    //     $data['questionmaster_data'] = array();
+    //     if($request->type=="API"){
+    //         $sub_institute_id = $request->input('sub_institute_id');
+    //     }
+    //     $where_condition = array();
 
-        $data['questionmaster_data'] = lmsQuestionMasterModel::select('lms_question_master.*','standard.name as standard_name','academic_section.title as grade_name', 'subject_name', 'chapter_name', 'question_type',DB::raw('group_concat(distinct t1.name SEPARATOR "||") as type_name'),DB::raw('IFNULL(loea.question_id,"0") as attempt_question')
-        )
-        ->join('standard', 'standard.id', '=', 'lms_question_master.standard_id')
-        ->join('academic_section', 'academic_section.id', '=', 'lms_question_master.grade_id')
-        ->join('subject', 'subject.id', '=', 'lms_question_master.subject_id')
-        ->join('chapter_master as cm', 'cm.id', '=', 'lms_question_master.chapter_id')
-        ->join('question_type_master as tm', 'tm.id', '=', 'lms_question_master.question_type_id')
-        ->leftJoin('lms_question_mapping as ltm', 'ltm.questionmaster_id', '=', 'lms_question_master.id')            
-        ->leftJoin('lms_mapping_type as t', 't.id', 'ltm.mapping_type_id')
-        ->leftJoin('lms_mapping_type as t1', function($query) {
-            $query->on('t1.id', 'ltm.mapping_value_id');
-        })
-        ->leftJoin('lms_online_exam_answer as loea','loea.question_id','=','lms_question_master.id')
-        ->where($where_condition)
-        ->orderBy('lms_question_master.id')
-        ->groupBy('lms_question_master.id')
-        ->get();    
+    //     if ($request->has('chapter_id')) {
+    //         $where_condition['cm.id'] = $request->get('chapter_id');
+    //     }
 
-            $data['breadcrum_data'] = $this->getBreadcrum($sub_institute_id, $request->get('chapter_id'),
-            $request->get('topic_id'));
+    //     if ($request->has('topic_id')) {
+    //         $where_condition['lms_question_master.topic_id'] = $request->get('topic_id');
+    //     }
 
-        return $data;
-    }
+    //     $where_condition['lms_question_master.sub_institute_id'] = $sub_institute_id;
 
-    public function getBreadcrum($sub_institute_id, $chapter_id, $topic_id = '')
-    {
-        $where = '';
-        $select = '';
+    //     $data['questionmaster_data'] = lmsQuestionMasterModel::select(
+    //         'lms_question_master.*',
+    //         'standard.name as standard_name',
+    //         'academic_section.title as grade_name',
+    //         'subject_name',
+    //         'chapter_name',
+    //         'question_type',
+    //         DB::raw('group_concat(distinct t1.name SEPARATOR "||") as type_name'),
+    //         DB::raw('IFNULL(loea.question_id,"0") as attempt_question')
+    //     )
+    //         ->join('standard', 'standard.id', '=', 'lms_question_master.standard_id')
+    //         ->join('academic_section', 'academic_section.id', '=', 'lms_question_master.grade_id')
+    //         ->join('subject', 'subject.id', '=', 'lms_question_master.subject_id')
+    //         ->join('chapter_master as cm', 'cm.id', '=', 'lms_question_master.chapter_id')
+    //         ->join('question_type_master as tm', 'tm.id', '=', 'lms_question_master.question_type_id')
+    //         ->leftJoin('lms_question_mapping as ltm', 'ltm.questionmaster_id', '=', 'lms_question_master.id')
+    //         ->leftJoin('lms_mapping_type as t', 't.id', 'ltm.mapping_type_id')
+    //         ->leftJoin('lms_mapping_type as t1', function ($query) {
+    //             $query->on('t1.id', 'ltm.mapping_value_id');
+    //         })
+    //         ->leftJoin('lms_online_exam_answer as loea', 'loea.question_id', '=', 'lms_question_master.id')
+    //         ->where($where_condition)
+    //         ->orderBy('lms_question_master.id')
+    //         ->groupBy('lms_question_master.id')
+    //         ->get();
 
-        // Get breadcrum
-        $breadcrum_data = DB::table('chapter_master as c')
-            ->select(
-                'c.subject_id',
-                's.display_name AS subject_name',
-                'c.standard_id',
-                'st.name AS standard_name',
-                'c.id AS chapter_id',
-                'c.chapter_name'
-            )->join('sub_std_map as s', function ($query) {
-                $query->on('s.subject_id', '=', 'c.subject_id')
-                    ->on('s.standard_id', '=', 'c.standard_id');
-            })
-            ->join('standard as st', 'st.id', '=', "c.standard_id")
-            ->where('c.id',$chapter_id);
+    //     // $data['breadcrum_data'] = $this->getBreadcrum(
+    //     //     $sub_institute_id,
+    //     //     $request->get('chapter_id'),
+    //     //     $request->get('topic_id')
+    //     // );
 
-        if ($topic_id) {
-            $breadcrum_data->addSelect('t.id as topic_id', 't.name as topic_name');
-            $breadcrum_data->join('topic_master as t', 't.chapter_id', '=', 'c.id');
-        }
+    //     return $data;
+    // }
 
-        // dd($breadcrum_data);
-        if (!empty($breadcrum_data)) {
-            return $breadcrum_data->first();
-        } else {
-            return 0;
-        }
-    }
+    // public function getBreadcrum($sub_institute_id, $chapter_id, $topic_id = '')
+    // {
+    //     $where = '';
+    //     $select = '';
+
+    //     // Get breadcrum
+    //     $breadcrum_data = DB::table('chapter_master as c')
+    //         ->select(
+    //             'c.subject_id',
+    //             's.display_name AS subject_name',
+    //             'c.standard_id',
+    //             'st.name AS standard_name',
+    //             'c.id AS chapter_id',
+    //             'c.chapter_name'
+    //         )->join('sub_std_map as s', function ($query) {
+    //             $query->on('s.subject_id', '=', 'c.subject_id')
+    //                 ->on('s.standard_id', '=', 'c.standard_id');
+    //         })
+    //         ->join('standard as st', 'st.id', '=', "c.standard_id")
+    //         ->where('c.id', $chapter_id);
+
+    //     if ($topic_id) {
+    //         $breadcrum_data->addSelect('t.id as topic_id', 't.name as topic_name');
+    //         $breadcrum_data->join('topic_master as t', 't.chapter_id', '=', 'c.id');
+    //     }
+
+    //     // dd($breadcrum_data);
+    //     if (!empty($breadcrum_data)) {
+    //         return $breadcrum_data->first();
+    //     } else {
+    //         return 0;
+    //     }
+    // }
 
     /**
      * Display a listing of the Chapter resource.
@@ -118,12 +157,37 @@ class questionmasterController extends Controller
      */
     public function indexChapter(Request $request)
     {
-        $data = $this->getChepterData($request);
         $type = $request->input('type');
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+        }
+        $data = $this->getChepterData($request);
+
         $res['status_code'] = 1;
         $res['message'] = "SUCCESS";
         $res['data'] = $data['questionmaster_data'];
-        $res['breadcrum_data'] = $data['breadcrum_data'];
         // echo "<pre>";print_r($data['questionmaster_data']);exit;
         return is_mobile($type, 'lms/show_chapter_questionmaster', $res, "view");
     }
@@ -134,6 +198,10 @@ class questionmasterController extends Controller
     public function getChepterData($request)
     {
         $sub_institute_id = $request->session()->get('sub_institute_id');
+        $type = $request->get('type');
+        if($type=="API"){
+            $sub_institute_id = $request->input('sub_institute_id');
+        }
         $data['questionmaster_data'] = array();
 
         $where_condition = array();
@@ -145,31 +213,35 @@ class questionmasterController extends Controller
 
         $where_condition['lms_question_master.sub_institute_id'] = $sub_institute_id;
 
-        $data['questionmaster_data'] = lmsQuestionMasterModel::select('lms_question_master.*',
+        $data['questionmaster_data'] = lmsQuestionMasterModel::select(
+            'lms_question_master.*',
             'standard.name as standard_name',
-            'academic_section.title as grade_name', 'subject_name', 'chapter_name', 'question_type'
-            ,DB::raw('group_concat(DISTINCT t1.name SEPARATOR "||") as type_name'),
+            'academic_section.title as grade_name',
+            'subject_name',
+            'chapter_name',
+            'question_type',
+            DB::raw('group_concat(DISTINCT t1.name SEPARATOR "||") as type_name'),
             DB::raw('IFNULL(loea.question_id,"0") as attempt_question')
             // , 't.id as type_id'
             // , 't1.name as value_name', 't1.id as value_id'
-            )
+        )
             ->join('standard', 'standard.id', '=', 'lms_question_master.standard_id')
             ->join('academic_section', 'academic_section.id', '=', 'lms_question_master.grade_id')
             ->join('subject', 'subject.id', '=', 'lms_question_master.subject_id')
             ->join('chapter_master as cm', 'cm.id', '=', 'lms_question_master.chapter_id')
             ->join('question_type_master as tm', 'tm.id', '=', 'lms_question_master.question_type_id')
-            ->LeftJoin('lms_question_mapping as ltm', 'ltm.questionmaster_id', '=', 'lms_question_master.id')            
+            ->LeftJoin('lms_question_mapping as ltm', 'ltm.questionmaster_id', '=', 'lms_question_master.id')
             ->LeftJoin('lms_mapping_type as t', 't.id', 'ltm.mapping_type_id')
-            ->LeftJoin('lms_mapping_type as t1', function($query) {
+            ->LeftJoin('lms_mapping_type as t1', function ($query) {
                 $query->on('t1.id', 'ltm.mapping_value_id');
             })
-            ->leftJoin('lms_online_exam_answer as loea','loea.question_id','=','lms_question_master.id')
+            ->leftJoin('lms_online_exam_answer as loea', 'loea.question_id', '=', 'lms_question_master.id')
             ->where($where_condition)
             ->orderby('lms_question_master.id')
             ->groupBy('lms_question_master.id')
             ->get();
 
-        $data['breadcrum_data'] = $this->getBreadcrum($sub_institute_id, $request->get('chapter_id'));
+        // $data['breadcrum_data'] = $this->getBreadcrum($sub_institute_id, $request->get('chapter_id'));
 
         return $data;
     }
@@ -195,16 +267,19 @@ class questionmasterController extends Controller
         $where = '';
         if ($request->get('topic_id')) {
             $data['topic_id'] = $request->get('topic_id');
-            $where = "and (topic_id = '".$request->get('topic_id')."' or topic_id = 0)";
+            $where = "and (topic_id = '" . $request->get('topic_id') . "' or topic_id = 0)";
         }
 
         $lms_mapping_type = DB::select("SELECT * FROM lms_mapping_type WHERE status=1 AND parent_id=0 AND
-                                (globally=1 OR chapter_id = '".$request->get('chapter_id')."') $where");
+                                (globally=1 OR chapter_id = '" . $request->get('chapter_id') . "') $where");
         $lms_mapping_type = json_decode(json_encode($lms_mapping_type), true);
         $data['lms_mapping_type'] = $lms_mapping_type;
 
-        $data['breadcrum_data'] = $this->getBreadcrum($sub_institute_id, $request->get('chapter_id'),
-            $request->get('topic_id'));
+        // $data['breadcrum_data'] = $this->getBreadcrum(
+        //     $sub_institute_id,
+        //     $request->get('chapter_id'),
+        //     $request->get('topic_id')
+        // );
 
         //GET lms mapping from lmsmappingController
         if ($request->get('topic_id')) {
@@ -226,23 +301,53 @@ class questionmasterController extends Controller
     public function store(Request $request)
     {
         // echo ('<pre>');print_r($_REQUEST);die;
+        $type=$request->input('type');
+
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $user_id = $request->session()->get('user_id');
         $status = $request->get('status');
         $status_val = isset($status) ? $status : '';
 
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' =>'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+        }
         $multiple_answer = $request->get('multiple_answer');
         $multiple_answer_val = isset($multiple_answer) ? $multiple_answer : 0;
 
         $pre_topic = $post_topic = $cross_curriculum_topic = "";
         if ($request->get('prechapter') != "") {
-            $pre_topic = $request->get('prechapter').'####'.$request->get('pretopic');
+            $pre_topic = $request->get('prechapter') . '####' . $request->get('pretopic');
         }
         if ($request->get('postchapter') != "") {
-            $post_topic = $request->get('postchapter').'####'.$request->get('posttopic');
+            $post_topic = $request->get('postchapter') . '####' . $request->get('posttopic');
         }
         if ($request->get('cross-curriculumchapter') != "") {
-            $cross_curriculum_topic = $request->get('cross-curriculumchapter').'####'.$request->get('cross-curriculumtopic');
+            $cross_curriculum_topic = $request->get('cross-curriculumchapter') . '####' . $request->get('cross-curriculumtopic');
         }
 
         $question = array(
@@ -264,6 +369,8 @@ class questionmasterController extends Controller
             'sub_institute_id'             => $sub_institute_id,
             'hint_text'                    => $request->get('hint_text'),
             'learning_outcome'             => $request->get('learning_outcome'),
+            'created_at'                   => now(),
+            'created_by'                => $user_id,
         );
         $question_id = lmsQuestionMasterModel::insertGetId($question);
         // echo "<pre>";print_r($question);
@@ -272,18 +379,18 @@ class questionmasterController extends Controller
         $mapping_type = $request->get('mapping_type');
         $mapping_value = $request->get('mapping_value');
         $reasons = $request->get('reasons');
-        
+
         foreach ($mapping_type as $key => $val) {
             if ($val != "" && $mapping_value[$key] != "") {
                 $contentmappingtype = array(
                     'questionmaster_id' => $question_id,
                     'mapping_type_id'   => $val,
                     'mapping_value_id'  => $mapping_value[$key],
-                    'mapping_value_id'  => $mapping_value[$key], 
-                    'reasons' => $reasons[$key],                   
+                    'mapping_value_id'  => $mapping_value[$key],
+                    'reasons' => $reasons[$key],
                 );
-        // echo "<pre>";print_r($contentmappingtype);
-                
+                // echo "<pre>";print_r($contentmappingtype);
+
                 lmsQuestionMappingModel::insert($contentmappingtype);
             }
         }
@@ -303,7 +410,7 @@ class questionmasterController extends Controller
                 $answer = array(
                     'question_id'      => $question_id,
                     'answer'           => $val,
-                    'feedback'         => $feedback_arr['NEW'][$key],
+                    'feedback'         => $feedback_arr['NEW'][$key] ?? '-',
                     'correct_answer'   => $correct_answer_val,
                     'created_by'       => $user_id,
                     'sub_institute_id' => $sub_institute_id,
@@ -313,19 +420,31 @@ class questionmasterController extends Controller
             }
         }
         //END Insert into answer_master
-// exit;
-        $res = array(
-            "status_code" => 1,
-            "message"     => "Question-Master Added Successfully",
-        );
-        $type = $request->input('type');
+        // exit;
+        if($question_id && $question_id!=''){
+            $res = array(
+                "status_code" => 1,
+                "message"     => "Question-Master Added Successfully",
+            );
+        }else{
+            $res = array(
+                "status_code" => 0,
+                "message"     => "Failed to Add Question",
+            );
+        }
+        
 
         // return array
-        if ($request->get('topic_id')) {
-            return redirect()->route('question_master.index',
-                ['chapter_id' => $request->get('chapter_id'), 'topic_id' => $request->get('topic_id'),'standard_id'=>$request->get('standard_id')]);
+        if($type=="API"){
+            return response()->json($res, 200);
+        }
+        else if ($request->get('topic_id')) {
+            return redirect()->route(
+                'question_master.index',
+                ['chapter_id' => $request->get('chapter_id'), 'topic_id' => $request->get('topic_id'), 'standard_id' => $request->get('standard_id')]
+            );
         } else {
-            return redirect()->route('question_chapter_master', ['chapter_id' => $request->get('chapter_id'),'standard_id'=>$request->get('standard_id')]);
+            return redirect()->route('question_chapter_master', ['chapter_id' => $request->get('chapter_id'), 'standard_id' => $request->get('standard_id')]);
         }
 
         //return is_mobile($type, "question_master.index", $res, "redirect");
@@ -414,7 +533,6 @@ class questionmasterController extends Controller
                         ->selectRaw('c.id AS chapter_id,c.standard_id,c.subject_id')
                         ->where('c.id', '=', $pre_arr_chapter_id)
                         ->get()->toArray();
-
                 }
             }
 
@@ -439,7 +557,6 @@ class questionmasterController extends Controller
                     ->selectRaw('t.id as topic_id,c.id AS chapter_id,c.standard_id,c.subject_id')
                     ->where('t.id', '=', $post_arr_topic_id)
                     ->get()->toArray();
-
             } else {
                 if ($post_arr_chapter_id != "") //If only chapter is mapped
                 {
@@ -470,7 +587,6 @@ class questionmasterController extends Controller
                     ->selectRaw('t.id as topic_id,c.id AS chapter_id,c.standard_id,c.subject_id')
                     ->where('t.id', '=', $cc_arr_topic_id)
                     ->get()->toArray();
-
             } else {
                 if ($cc_arr_chapter_id != "") //If only chapter is mapped
                 {
@@ -485,8 +601,11 @@ class questionmasterController extends Controller
         }
         //END Get Cross curriculum Topic
 
-        $data['breadcrum_data'] = $this->getBreadcrum($sub_institute_id, $data['questionmaster_data']['chapter_id'],
-            $data['questionmaster_data']['topic_id']);
+        // $data['breadcrum_data'] = $this->getBreadcrum(
+        //     $sub_institute_id,
+        //     $data['questionmaster_data']['chapter_id'],
+        //     $data['questionmaster_data']['topic_id']
+        // );
 
         // condition for page call form chapter or topic
         if ($request->has('topic_id')) {
@@ -500,25 +619,54 @@ class questionmasterController extends Controller
 
     public function update(Request $request, $id)
     {
-        // dd($request->all());
-        // echo ('<pre>');print_r($_REQUEST);die;
+        // return $request->all();
+        // echo ('<pre>');print_r($request->all());die;
+        $type = $request->input('type');
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
         $user_id = $request->session()->get('user_id');
         $status = $request->get('status');
         $status_val = $status ?? '';
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
 
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'syear' => 'required',
+                'user_id'=> 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+        }
         // $multiple_answer = $request->get('multiple_answer');
         // $multiple_answer_val = isset($multiple_answer) ? $multiple_answer : '';
         $pre_topic = $post_topic = $cross_curriculum_topic = "";
         if ($request->get('prechapter') != "") {
-            $pre_topic = $request->get('prechapter').'####'.$request->get('pretopic');
+            $pre_topic = $request->get('prechapter') . '####' . $request->get('pretopic');
         }
         if ($request->get('postchapter') != "") {
-            $post_topic = $request->get('postchapter').'####'.$request->get('posttopic');
+            $post_topic = $request->get('postchapter') . '####' . $request->get('posttopic');
         }
         if ($request->get('cross-curriculumchapter') != "") {
-            $cross_curriculum_topic = $request->get('cross-curriculumchapter').'####'.$request->get('cross-curriculumtopic');
+            $cross_curriculum_topic = $request->get('cross-curriculumchapter') . '####' . $request->get('cross-curriculumtopic');
         }
 
         $question = array(
@@ -538,9 +686,11 @@ class questionmasterController extends Controller
             'sub_institute_id'             => $sub_institute_id,
             'hint_text'                    => $request->get('hint_text'),
             'learning_outcome'             => $request->get('learning_outcome'),
+            'updated_by'                   => $user_id,
+            'updated_at'                   => now(),    
         );
 
-        lmsQuestionMasterModel::where(["id" => $id])->update($question);
+       $update = lmsQuestionMasterModel::where(["id" => $id])->update($question);
 
         if ($request->get('hid_question_type_id') == 1) {
             $option_arr = $request->get('options');
@@ -568,7 +718,7 @@ class questionmasterController extends Controller
 
         $mapping_type = $request->get('mapping_type');
         $mapping_value = $request->get('mapping_value');
-        $reasons = $request->get('reasons');        
+        $reasons = $request->get('reasons');
 
         foreach ($mapping_type as $key => $val) {
             if ($val != "" && $mapping_value[$key] != "") {
@@ -576,26 +726,36 @@ class questionmasterController extends Controller
                     'questionmaster_id' => $id,
                     'mapping_type_id'   => $val,
                     'mapping_value_id'  => $mapping_value[$key],
-                    'reasons'  => $reasons[$key],                    
+                    'reasons'  => $reasons[$key],
                 ];
                 lmsQuestionMappingModel::insert($questionmappingtype);
             }
         }
         //END Delete and insert into question_mapping_Data
-
-        $res = [
-            "status_code" => 1,
-            "message"     => "Question-Master Updated Successfully",
-        ];
-        $type = $request->input('type');
+        if($update){
+            $res = [
+                "status_code" => 1,
+                "message"     => "Question-Master Updated Successfully",
+            ];
+        }else{
+            $res = [
+                "status_code" => 0,
+                "message"     => "Failed to Update Question",
+            ];
+        }
+        
         //return is_mobile($type, "question_master.index", $res, "redirect");
 
         // return array
-        if ($request->get('topic_id')) {
-            return redirect()->route('question_master.index',
-                ['chapter_id' => $request->get('chapter_id'), 'topic_id' => $request->get('topic_id'),'standard_id'=>$request->get('standard_id')]);
+        if($type=="API"){
+            return response()->json($res, 200);
+        }else if ($request->get('topic_id')) {
+            return redirect()->route(
+                'question_master.index',
+                ['chapter_id' => $request->get('chapter_id'), 'topic_id' => $request->get('topic_id'), 'standard_id' => $request->get('standard_id')]
+            );
         } else {
-            return redirect()->route('question_chapter_master', ['chapter_id' => $request->get('chapter_id'),'standard_id'=>$request->get('standard_id')]);
+            return redirect()->route('question_chapter_master', ['chapter_id' => $request->get('chapter_id'), 'standard_id' => $request->get('standard_id')]);
         }
     }
 
@@ -608,18 +768,55 @@ class questionmasterController extends Controller
     public function destroy(Request $request, $id)
     {
         $type = $request->input('type');
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id'=> 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+        }
         $questiondata = lmsQuestionMasterModel::where(["id" => $id])->get()->toArray();
         $chapter_id = $questiondata[0]['chapter_id'];
         $topic_id = $questiondata[0]['topic_id'];
-        $standard_id = $questiondata[0]['standard_id'];        
+        $standard_id = $questiondata[0]['standard_id'];
 
-        lmsQuestionMasterModel::where(["id" => $id])->delete();
-        answermasterModel::where(["question_id" => $id])->delete();
-        lmsQuestionMappingModel::where(["questionmaster_id" => $id])->delete();
+        $deleteAnswer = answermasterModel::where(["question_id" => $id])->delete();
+        $deleteQuestionPaper = lmsQuestionMappingModel::where(["questionmaster_id" => $id])->delete();
+        $deleteQuestion = lmsQuestionMasterModel::where(["id" => $id])->delete();
+
+        if($deleteQuestion){
         $res['status_code'] = "1";
         $res['message'] = "Question-Master Deleted Successfully";
-
-        return redirect()->route('question_master.index', ['chapter_id' => $chapter_id, 'topic_id' => $topic_id,'standard_id'=>$standard_id]);
+        }else{
+            
+        $res['status_code'] = "0";
+        $res['message'] = "Failed to Delete Question-Master";
+        }
+        if($type=="API"){
+            return response()->json($res, 200);
+        }else{
+            return redirect()->route('question_master.index', ['chapter_id' => $chapter_id, 'topic_id' => $topic_id,'standard_id' => $standard_id]);
+        }
+    
         //return is_mobile($type, "question_master.index", $res);
     }
 
@@ -635,7 +832,8 @@ class questionmasterController extends Controller
         $sub_institute_id = $request->session()->get("sub_institute_id");
 
         $lomasterData = questionmasterModel::where([
-            'sub_institute_id' => $sub_institute_id, 'chapter_id' => $chapter_id,
+            'sub_institute_id' => $sub_institute_id,
+            'chapter_id' => $chapter_id,
         ])
             ->get()->toArray();
 
@@ -649,7 +847,7 @@ class questionmasterController extends Controller
 
         $data = questionpaperModel::select(DB::raw('count(*) as total'))
             ->where('question_paper.sub_institute_id', $sub_institute_id)
-            ->whereraw('find_in_set('.$question_id.',question_ids)')
+            ->whereraw('find_in_set(' . $question_id . ',question_ids)')
             ->get()->toArray();
 
         return $data[0]['total'];
@@ -667,20 +865,21 @@ class questionmasterController extends Controller
         }
     }
 
-    public function getMappedValue(Request $request){
-       $mappedType = DB::table('lms_question_mapping as ltm') 
-                ->selectRaw('ltm.*,t.name as name,GROUP_CONCAT(mapping_value_id) as mappedVal')         
-                ->join('lms_mapping_type as t', 't.id', 'ltm.mapping_type_id')
-                ->where('ltm.questionmaster_id',$request->question_id)
-                ->groupBy('mapping_type_id')
-                ->get()->toArray();
-            
+    public function getMappedValue(Request $request)
+    {
+        $mappedType = DB::table('lms_question_mapping as ltm')
+            ->selectRaw('ltm.*,t.name as name,GROUP_CONCAT(mapping_value_id) as mappedVal')
+            ->join('lms_mapping_type as t', 't.id', 'ltm.mapping_type_id')
+            ->where('ltm.questionmaster_id', $request->question_id)
+            ->groupBy('mapping_type_id')
+            ->get()->toArray();
+
         $mappedValues = [];
         foreach ($mappedType as $key => $value) {
             $mappedValues[$key] = $value;
-            $mappedValues[$key]->mappedValue = DB::table('lms_mapping_type')->whereRaw('id in ('.$value->mappedVal.')')->get()->toArray();
+            $mappedValues[$key]->mappedValue = DB::table('lms_mapping_type')->whereRaw('id in (' . $value->mappedVal . ')')->get()->toArray();
         }
-        $res['questionTitle'] =DB::table('lms_question_master')->where('id',$request->question_id)->value('question_title');
+        $res['questionTitle'] = DB::table('lms_question_master')->where('id', $request->question_id)->value('question_title');
         $res['MappedData'] =  $mappedValues;
         return $res;
     }
