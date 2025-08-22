@@ -105,7 +105,7 @@ class onlineExamController extends Controller
         $answer_single = $request->get('answer_single');
         $answer_multiple = $request->get('answer_multiple');
         $answer_narrative = $request->get('answer_narrative');
-
+        $i=0;
         if (is_array($answer_single)) {
             foreach ($answer_single as $single_question_id => $single_answer_ids) {
                 $ans_status = "wrong";
@@ -116,12 +116,15 @@ class onlineExamController extends Controller
                 $single = [
                     'question_paper_id' => $request->get('questionpaper_id'),
                     'online_exam_id'    => $online_exam_id,
-                    'student_id'        => $user_id,
+                    'employee_id'        => $user_id,
                     'question_id'       => $single_question_id,
                     'answer_id'         => $single_ans_arr[0],
                     'ans_status'        => $ans_status,
                 ];
-                lmsOnlineExamAnswerModel::insert($single);
+                $insert = lmsOnlineExamAnswerModel::insert($single);
+                if($insert){
+                    $i++;
+                }
             }
         }
 
@@ -143,7 +146,10 @@ class onlineExamController extends Controller
                             'answer_id'         => $multiple_ans_arr[0],
                             'ans_status'        => $ans_status,
                         ];
-                        lmsOnlineExamAnswerModel::insert($multiple);
+                        $insert = lmsOnlineExamAnswerModel::insert($multiple);
+                        if($insert){
+                            $i++;
+                        }
                     }
                 }
             }
@@ -160,7 +166,10 @@ class onlineExamController extends Controller
                     'narrative_answer'  => $narrative_answer_ids,
                     'ans_status'        => $ans_status,
                 ];
-                lmsOnlineExamAnswerModel::insert($narrative);
+                $insert = lmsOnlineExamAnswerModel::insert($narrative);
+                if($insert){
+                    $i++;
+                }
             }
         }
 
@@ -181,8 +190,15 @@ class onlineExamController extends Controller
         //END Insert into lms_online_exam_answer table
 
         //return is_mobile($type,'lms/online_exam_result',$res,"view");
+        $res['status_code'] = 0;
+        $res['message'] = "Assessment not submitted";
+        if($i>0){
+            $res['status_code'] = 1;
+            $res['message'] = "Assessment submitted succussefully";
+            $res['online_exam_id'] = $online_exam_id;
+        }
         if($type=="API"){
-            return redirect()->json($res);
+            return response()->json($res);
 
         }else{
         return redirect()->route('online_exam.show',[$request->get('questionpaper_id'),"online_exam_id"=> $online_exam_id]);
@@ -355,6 +371,7 @@ class onlineExamController extends Controller
 
     public function show(Request $request, $id)
     {
+        // echo "<pre>";print_r($request->all());die;
         $questionpaper_id = $id;
 
         $type = $request->input('type');
@@ -362,7 +379,10 @@ class onlineExamController extends Controller
         $user_id = $request->session()->get('user_id');
         $online_exam_id = $request->get('online_exam_id');
         $data['user_id'] = $online_exam_id;
-
+        if($type=="API"){
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+        }
         $data['questionpaper_data'] = questionpaperModel::find($questionpaper_id)->toArray();
 
         //Get all questions subject wise        
@@ -423,7 +443,7 @@ class onlineExamController extends Controller
                 FROM (
                 SELECT question_id,ans_status, IFNULL(narrative_answer, GROUP_CONCAT(answer_id)) AS given_answer
                 FROM lms_online_exam_answer
-                WHERE online_exam_id = '".$online_exam_id."' AND student_id = '".$user_id."'
+                WHERE online_exam_id = '".$online_exam_id."' AND employee_id = '".$user_id."'
                 GROUP BY question_id) AS a
                 INNER JOIN lms_question_master q ON q.id = a.question_id
                 LEFT JOIN answer_master am ON a.question_id = am.question_id AND correct_answer = 1
