@@ -45,6 +45,10 @@ class questionpaperController extends Controller
     {
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
+        if($request->type=="API"){
+            $sub_institute_id = $request->sub_institute_id;
+            $syear = $request->syear;
+        }
         $data['questionpaper_data'] = array();
         $marking_period_id = session()->get('term_id');
         $teacher = session()->get('user_profile_name');
@@ -196,16 +200,26 @@ class questionpaperController extends Controller
             'sub_institute_id' => $sub_institute_id,
             'syear'            => $syear,
             'exam_type'        => $request->exam_type,
+            'created_on'       => now(),
+            'created_at'       => now(),
         );
         // echo ('<pre>');print_r($questionpaper);die;
         $query = questionpaperModel::insertGetId($questionpaper);
         $questionpaper_id = DB::getPDO()->lastInsertId();
       
-
-        $res = array(
-            "status_code" => 1,
-            "message"     => "Question-Paper Added Successfully",
+        if($query && isset($questionpaper_id) && $questionpaper_id!=''){
+            $res = array(
+                    "status_code" => 1,
+                    "message"     => "Question-Paper Added Successfully",
+                );
+        }
+        else{
+             $res = array(
+            "status_code" =>0,
+            "message"     => "Failed to add Data",
         );
+        }
+       
         $type = $request->type;
         // $this->generatePDF($questionpaper, $questionpaper_id);
 

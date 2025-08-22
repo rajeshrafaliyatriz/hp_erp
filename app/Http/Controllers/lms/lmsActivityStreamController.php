@@ -17,20 +17,6 @@ class lmsActivityStreamController extends Controller
      *
      * @return Response
      */
-    /* public function index(Request $request)
-    {
-        $type = $request->input('type');
-       
-        $data = $this->getData($request);
-        $res['status_code'] = 1;
-        $res['message'] = "SUCCESS";
-        $res['activitystream_today_data'] = $data['activitystream_today_data'];
-        $res['activitystream_upcoming_data'] = $data['activitystream_upcoming_data'];
-
-        // return is_mobile($type, 'lms/show_lmsActivityStream', $res, "view");
-    } */
-
-    // new index 
     public function index(Request $request)
     {
         $type = $request->input('type');
@@ -118,35 +104,9 @@ class lmsActivityStreamController extends Controller
             $classStdId = $standard_id = $studentData['standard_id'];
             $classDivId = $division_id = $studentData['section_id'];
         }
-        // else if ($profileName=="Teacher"){
-        //     $getTeacherData = DB::table('timetable as h')->where('h.teacher_id',$user_id)
-        //     ->selectRaw('GROUP_CONCAT(DISTINCT h.standard_id) AS standard_id,GROUP_CONCAT(DISTINCT h.division_id) AS division_id')->where(['h.sub_institute_id'=>$sub_institute_id,'h.syear'=>$syear])->groupBy('h.teacher_id')->first();
-        //     $standard_id = $getTeacherData->standard_id;
-        //     $division_id = $getTeacherData->division_id;
-        //     $classTeacher = DB::table('class_teacher')->where(['sub_institute_id'=>$sub_institute_id,'syear'=>$syear])->first();
-        //     $classStdId = ($classTeacher->standard_id) ? : '';
-        //     $classDivId = ($classTeacher->division_id) ? : '';
-        // }
 
         // class schedule data from timetable
-        $classSchedule = []; // DB::table('timetable as tt')
-        //     ->join('period as p',function($join) use($sub_institute_id,$syear,$dayOfWeek){
-        //         $join->on('p.id','=','tt.period_id')->where(['p.sub_institute_id'=>$sub_institute_id,'p.used_for_attendance'=>'Yes']);
-        //     })
-        //     ->selectRaw("tt.*,p.*,(SELECT name FROM standard where id = tt.standard_id) as standard,(SELECT name FROM division WHERE id = tt.division_id) as division")
-        //     ->where(['tt.sub_institute_id'=>$sub_institute_id,'tt.syear'=>$syear])
-        //     ->where('tt.week_day',$firstLetter)
-        //     // when profile is student
-        //     ->when($profileName=='Student',function($query) use($standard_id,$division_id){
-        //         $query->where('tt.standard_id',$standard_id)->where('tt.division_id',$division_id);
-        //     }) 
-        //    // for teacher
-        //     ->when($profileName=='Teacher',function($query) use($user_id){
-        //         $query->where('tt.teacher_id',$user_id);
-        //     })
-        //     ->orderBy('p.sort_order')
-        //     ->get()->toArray();
-
+        $classSchedule = [];
         // get Tomorrow homework
         $homework = $this->getHomeWork($profileName, $user_id, $sub_institute_id, $syear, $standard_id, $division_id, $searchDate, 'upcoming');
 
@@ -174,21 +134,21 @@ class lmsActivityStreamController extends Controller
             $parentCommunication = $this->getParentCommunication($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'upcoming');
             $studentLeave = $this->getStudentLeave($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'upcoming');
         }
-        $res['class_schedule'] = $classSchedule;
-        $res['homework'] = $homework;
-        $res['eventCalender'] = $eventCalender;
-        $res['announcementNotice'] = $announcementNotice;
-        $res['dueBooks'] = $dueBooks;
-        $res['studentProgress'] = $studentProgress;
-        $res['ptm'] = $ptm;
-        $res['lessonPlan'] = $lessonPlan;
-        $res['hrmsPunchInOut'] = $hrmsPunchInOut;
-        $res['proxyLecture'] = $proxyLecture;
-        $res['examMarks'] = $examMarks;
-        $res['studentAttendance'] = $studentAttendance;
+        // $res['class_schedule'] = $classSchedule;
+        // $res['homework'] = $homework;
+        // $res['eventCalender'] = $eventCalender;
+        // $res['announcementNotice'] = $announcementNotice;
+        // $res['dueBooks'] = $dueBooks;
+        // $res['studentProgress'] = $studentProgress;
+        // $res['ptm'] = $ptm;
+        // $res['lessonPlan'] = $lessonPlan;
+        // $res['hrmsPunchInOut'] = $hrmsPunchInOut;
+        // $res['proxyLecture'] = $proxyLecture;
+        // $res['examMarks'] = $examMarks;
+        // $res['studentAttendance'] = $studentAttendance;
         $res['taskAssigned'] = $taskAssigned;
-        $res['parentCommunication'] = $parentCommunication;
-        $res['studentLeave'] = $studentLeave;
+        // $res['parentCommunication'] = $parentCommunication;
+        // $res['studentLeave'] = $studentLeave;
 
         return $res;
     }
@@ -281,21 +241,21 @@ class lmsActivityStreamController extends Controller
             $parentCommunication = $this->getParentCommunication($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'today');
             $studentLeave = $this->getStudentLeave($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'today');
         }
-        $res['class_schedule'] = $classSchedule;
-        $res['homework'] = $homework;
-        $res['eventCalender'] = $eventCalender;
-        $res['announcementNotice'] = $announcementNotice;
-        $res['dueBooks'] = $dueBooks;
-        $res['studentProgress'] = $studentProgress;
-        $res['ptm'] = $ptm;
-        $res['lessonPlan'] = $lessonPlan;
-        $res['hrmsPunchInOut'] = $hrmsPunchInOut;
-        $res['proxyLecture'] = $proxyLecture;
-        $res['examMarks'] = $examMarks;
-        $res['studentAttendance'] = $studentAttendance;
+        // $res['class_schedule'] = $classSchedule;
+        // $res['homework'] = $homework;
+        // $res['eventCalender'] = $eventCalender;
+        // $res['announcementNotice'] = $announcementNotice;
+        // $res['dueBooks'] = $dueBooks;
+        // $res['studentProgress'] = $studentProgress;
+        // $res['ptm'] = $ptm;
+        // $res['lessonPlan'] = $lessonPlan;
+        // $res['hrmsPunchInOut'] = $hrmsPunchInOut;
+        // $res['proxyLecture'] = $proxyLecture;
+        // $res['examMarks'] = $examMarks;
+        // $res['studentAttendance'] = $studentAttendance;
         $res['taskAssigned'] = $taskAssigned;
-        $res['parentCommunication'] = $parentCommunication;
-        $res['studentLeave'] = $studentLeave;
+        // $res['parentCommunication'] = $parentCommunication;
+        // $res['studentLeave'] = $studentLeave;
         return $res;
     }
 
@@ -360,21 +320,21 @@ class lmsActivityStreamController extends Controller
             $parentCommunication = $this->getParentCommunication($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'recent');
             $studentLeave = $this->getStudentLeave($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'recent');
         }
-        $res['class_schedule'] = $classSchedule;
-        $res['homework'] = $homework;
-        $res['eventCalender'] = $eventCalender;
-        $res['announcementNotice'] = $announcementNotice;
-        $res['dueBooks'] = $dueBooks;
-        $res['studentProgress'] = $studentProgress;
-        $res['ptm'] = $ptm;
-        $res['lessonPlan'] = $lessonPlan;
-        $res['hrmsPunchInOut'] = $hrmsPunchInOut;
-        $res['proxyLecture'] = $proxyLecture;
-        $res['examMarks'] = $examMarks;
-        $res['studentAttendance'] = $studentAttendance;
+        // $res['class_schedule'] = $classSchedule;
+        // $res['homework'] = $homework;
+        // $res['eventCalender'] = $eventCalender;
+        // $res['announcementNotice'] = $announcementNotice;
+        // $res['dueBooks'] = $dueBooks;
+        // $res['studentProgress'] = $studentProgress;
+        // $res['ptm'] = $ptm;
+        // $res['lessonPlan'] = $lessonPlan;
+        // $res['hrmsPunchInOut'] = $hrmsPunchInOut;
+        // $res['proxyLecture'] = $proxyLecture;
+        // $res['examMarks'] = $examMarks;
+        // $res['studentAttendance'] = $studentAttendance;
         $res['taskAssigned'] = $taskAssigned;
-        $res['parentCommunication'] = $parentCommunication;
-        $res['studentLeave'] = $studentLeave;
+        // $res['parentCommunication'] = $parentCommunication;
+        // $res['studentLeave'] = $studentLeave;
         return $res;
     }
     // get student data
@@ -639,29 +599,81 @@ class lmsActivityStreamController extends Controller
     // task assigned 
     function getTaskAssigned($sub_institute_id, $syear, $searchDate, $user_id, $division_id, $standard_id, $activityType = '')
     {
-        return DB::table('task as t')
-            ->join('tbluser as tu', function ($join) use ($sub_institute_id, $syear) {
-                $join->on('t.TASK_ALLOCATED_TO', '=', 'tu.id')->where(['tu.sub_institute_id' => $sub_institute_id]);
+        // return DB::table('task as t')
+        //     ->join('tbluser as tu', function ($join) use ($sub_institute_id, $syear) {
+        //         $join->on('t.TASK_ALLOCATED_TO', '=', 'tu.id')->where(['tu.sub_institute_id' => $sub_institute_id]);
+        //     })
+        //     ->join('tbluser as us', function ($join) use ($sub_institute_id, $syear) {
+        //         $join->on('t.task_allocated', '=', 'us.id')->where(['us.sub_institute_id' => $sub_institute_id]);
+        //     })
+        //     ->selectRaw('t.*,CONCAT_WS(" ",COALESCE(tu.first_name,"-"),COALESCE(tu.middle_name,"-"),COALESCE(tu.last_name,"-")) as allocatedUser,CONCAT_WS(" ",COALESCE(us.first_name,"-"),COALESCE(us.middle_name,"-"),COALESCE(us.last_name,"-")) as allocatedBy')
+        //     ->where(['t.sub_institute_id' => $sub_institute_id, 't.syear' => $syear])
+        //     ->when($activityType == 'upcoming', function ($q) use ($searchDate) {
+        //         $q->where('t.task_date', '>=', $searchDate);
+        //         // ->where('t.status', 'PENDING');
+        //     }) 
+        //     // for today
+        //     ->when($activityType == 'today', function ($q) use ($searchDate) {
+        //         $q->where('t.task_date', $searchDate);
+        //     })
+        //     // for recent
+        //     ->when($activityType == 'recent', function ($q) use ($searchDate) {
+        //         $q->where('t.task_date', '<', $searchDate);
+        //     })
+        //     ->where('t.task_allocated_to', $user_id)
+        //     ->get()->toArray();
+
+        $userData = DB::table('tbluser')->where('id',$user_id)->first();
+
+        $taskQuery = DB::table('task as t')
+            ->join('tbluser as tu', function ($join) use ($sub_institute_id) {
+                $join->on('t.TASK_ALLOCATED_TO', '=', 'tu.id')
+                    ->where(['tu.sub_institute_id' => $sub_institute_id]);
             })
-            ->join('tbluser as us', function ($join) use ($sub_institute_id, $syear) {
-                $join->on('t.task_allocated', '=', 'us.id')->where(['us.sub_institute_id' => $sub_institute_id]);
+            ->join('tbluser as us', function ($join) use ($sub_institute_id) {
+                $join->on('t.task_allocated', '=', 'us.id')
+                    ->where(['us.sub_institute_id' => $sub_institute_id]);
             })
-            ->selectRaw('t.*,CONCAT_WS(" ",COALESCE(tu.first_name,"-"),COALESCE(tu.middle_name,"-"),COALESCE(tu.last_name,"-")) as allocatedUser,CONCAT_WS(" ",COALESCE(us.first_name,"-"),COALESCE(us.middle_name,"-"),COALESCE(us.last_name,"-")) as allocatedBy')
+            ->selectRaw('t.id,t.task_title,t.task_type,t.task_date,t.status,t.sub_institute_id,t.syear,t.created_at,CONCAT_WS(" ", COALESCE(tu.first_name,"-"), COALESCE(tu.middle_name,"-"), COALESCE(tu.last_name,"-")) as allocatedUser,CONCAT_WS(" ", COALESCE(us.first_name,"-"), COALESCE(us.middle_name,"-"), COALESCE(us.last_name,"-")) as allocatedBy')
             ->where(['t.sub_institute_id' => $sub_institute_id, 't.syear' => $syear])
             ->when($activityType == 'upcoming', function ($q) use ($searchDate) {
                 $q->where('t.task_date', '>=', $searchDate);
-                // ->where('t.status', 'PENDING');
-            }) 
-            // for today
+            })
             ->when($activityType == 'today', function ($q) use ($searchDate) {
                 $q->where('t.task_date', $searchDate);
             })
-            // for recent
             ->when($activityType == 'recent', function ($q) use ($searchDate) {
                 $q->where('t.task_date', '<', $searchDate);
             })
-            ->where('t.task_allocated_to', $user_id)
-            ->get()->toArray();
+            ->where('t.task_allocated_to', $user_id);
+
+        // Second query for s_user_jobrole_task
+        $fullName = trim(
+            $userData->first_name . ' ' .
+            ($userData->middle_name ?? '') . ' ' .
+            $userData->last_name
+        );
+        
+        $jobRoleTaskQuery = DB::table('s_user_jobrole as suj')
+            ->join('s_user_jobrole_task as sj', 'suj.jobrole', '=', 'sj.jobrole')
+            ->selectRaw('
+                NULL as id,
+                sj.task as task_title,
+                sj.task_type,
+                ? as task_date,
+                "PENDING" as status,
+                sj.sub_institute_id,
+                NULL as syear,
+                ? as created_at,
+                ? as allocatedUser,
+                ? as allocatedBy
+            ', [now(),now(),$fullName, $fullName])
+            ->where('sj.sub_institute_id', $sub_institute_id)
+            ->where('suj.id', $userData->allocated_standards ?? 0)
+            ->whereNull('sj.deleted_at');        
+
+        // Union both queries
+        return $result = $taskQuery->union($jobRoleTaskQuery)->get()->toArray();
     }
 
     // parent communication 
@@ -685,7 +697,7 @@ class lmsActivityStreamController extends Controller
         $res['status'] = 0;
         $res['message'] = 'Something went wrong, please try again later.';
         $i = 0;
-        if($request->has('formType') && $request->formType == 'single') {
+        if ($request->has('formType') && $request->formType == 'single') {
             $updateArray = [
                 'status' => $request->status,
                 'updated_by' => $user_id,
@@ -696,7 +708,7 @@ class lmsActivityStreamController extends Controller
             }
             DB::table('task')->where('id', $request->task_id)->update($updateArray);
             $i++;
-        }else{
+        } else {
             foreach ($request->status as $taskId => $status) {
                 $reply = $request->reply[$taskId] ? $request->reply[$taskId] : '';
                 $updateArray = [
@@ -711,7 +723,7 @@ class lmsActivityStreamController extends Controller
                 $i++;
             }
         }
-        
+
         if ($i > 0) {
             $res['status'] = 1;
             $res['message'] = 'Added successfully.';

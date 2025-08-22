@@ -261,7 +261,10 @@ Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], f
     Route::resource('bazar_report', bulkUploadedReportController::class);
     Route::post('show_bazar_report', [bulkUploadedReportController::class, 'show_bazar_report'])->name('show_bazar_report');
 });
+
 Route::resource('task', taskController::class);
+Route::get('task_analysis_report', [taskController::class,'taskAnalysisReport'])->name('task_analysis_report');
+
 Route::get('/upcoming', [lmsActivityStreamController::class, 'upcomingActivity'])->name('upcoming');
 Route::get('/today', [lmsActivityStreamController::class, 'todayActivity'])->name('today');
 Route::get('/recent', [lmsActivityStreamController::class, 'recentActivity'])->name('recent');

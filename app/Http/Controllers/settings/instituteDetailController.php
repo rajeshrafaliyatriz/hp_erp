@@ -274,12 +274,6 @@ class instituteDetailController extends Controller
 
         if(in_array($type,["API","JSON"])){
             try {
-                if (! $this->jwtToken()->validate()) {
-                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
-    
-                    return response()->json($response, 401);
-                }
-                
                 $sub_institute_id = $request->get('sub_institute_id');
                 $syear = $request->get('syear');
                 $user_id = $request->get('user_id');
@@ -321,7 +315,16 @@ class instituteDetailController extends Controller
                     $assigned_to = $request->assigned_to;
                     $duedate = $request->duedate;
                     $attachment= ($request->oldAttachment) ? $request->oldAttachment : null;
-
+                    $complainceData = [
+                        'name'=>$name,
+                        'description'=>$description,
+                        'standard_name'=>$standard_name,
+                        'assigned_to'=>$assigned_to,
+                        'duedate'=> date('Y-m-d',strtotime($duedate)),
+                        'sub_institute_id'=>$sub_institute_id,
+                        'updated_by'=>$user_id,
+                        'updated_at'=>now()
+                    ];
                     if($request->hasFile('attachment')){
                         // delete old file
                         $oldAttachment=$request->oldAttachment;
@@ -333,20 +336,10 @@ class instituteDetailController extends Controller
                         $img = $request->file('attachment');
                         $filename = $img->getClientOriginalName();
                         $attachment = time().'_'.$filename;
+                        $complainceData['attachment'] = $attachment;
                         Storage::disk('digitalocean')->putFileAs('public/compliance_library/', $img, $attachment, 'public');
                     }
-
-                    $complainceData = [
-                        'name'=>$name,
-                        'description'=>$description,
-                        'standard_name'=>$standard_name,
-                        'assigned_to'=>$assigned_to,
-                        'duedate'=> date('Y-m-d',strtotime($duedate)),
-                        'attachment'=>$attachment,
-                        'sub_institute_id'=>$sub_institute_id,
-                        'created_by'=>$user_id,
-                        'updated_at'=>now()
-                    ];
+                    
                     // echo "<pre>";print_r($complainceData);exit; 
 
                     $i = DB::table('master_compliance')->where('id',$id)->update($complainceData);
