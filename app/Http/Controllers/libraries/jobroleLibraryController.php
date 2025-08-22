@@ -89,12 +89,6 @@ class jobroleLibraryController extends Controller
 
         // Get all user jobroles for the sub_institute
         $usersJobroles = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)
-                ->when($request->has('industry') && isset($request->industry) && $request->industry!='',
-                    function ($q) use ($request) {
-                        // Only department is provided
-                        $q->where('industries', $request->industry);
-                    }
-                )
                 ->when($request->has('department') && $request->department!='',
                     function ($q) use ($request) {
                         // Only department is provided
@@ -277,7 +271,6 @@ class jobroleLibraryController extends Controller
         }
 
         $insertData = [
-                'industries'=>$request->org_type,
                 'department' => $request->department,
                 'sub_department' => $request->sub_department,
                 'jobrole' => $request->jobrole,
@@ -415,7 +408,6 @@ class jobroleLibraryController extends Controller
         // If updating user jobrole
         if ($request->formType == 'user') {
             $updateData = [
-                'industries' => $request->org_type,
                 'department' => $request->department,
                 'sub_department' => $request->sub_department,
                 'jobrole' => $request->jobrole,
@@ -432,9 +424,6 @@ class jobroleLibraryController extends Controller
                 'benefits' => $request->benefits,
                 'keyword_tags' => $request->keyword_tags,
                 'internal_tracking' => $request->internal_tracking,
-                'education' => $request->education,
-                'training' => $request->training,
-                'experience' => $request->experience,
                 'sub_institute_id' => $request->sub_institute_id,
                 'updated_by' => $request->user_id,
                 'updated_at' => now(),

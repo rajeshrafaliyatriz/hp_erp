@@ -50,7 +50,7 @@ use App\Http\Controllers\lms\lmsCurriculumController;
 use App\Http\Controllers\front_desk\syllabus\syllabusController;
 use App\Http\Controllers\lms\content_library\contentLibraryController;
 use App\Http\Controllers\lms\curriculum\curriculumLessonplanController;
-use App\Http\Controllers\lms\library\skillLibraryController1;
+use App\Http\Controllers\lms\library\skillLibraryController;
 use App\Http\Controllers\lms\library\H5PController;
 use App\Http\Controllers\front_desk\taskController;
 use Illuminate\Support\Facades\Route;
@@ -95,10 +95,10 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
 
     Route::resource('lo_category', locategoryController::class);
 
-    Route::resource('lms_skill_library',skillLibraryController1::class);
+    Route::resource('skill_library',skillLibraryController::class);
     
-    Route::get('lms_skill_library/{id}/delete', [skillLibraryController1::class, 'destroy']);
-    Route::get('lms_skill_library/{id}/show', [skillLibraryController1::class, 'show']);
+    Route::get('skill_library/{id}/delete', [skillLibraryController::class, 'destroy']);
+    Route::get('skill_library/{id}/show', [skillLibraryController::class, 'show']);
 
     // multi delete questions
     Route::get('multi_delete_questions', [questionmasterController::class, 'ajax_multiDeleteQuestion'])->name('multi_delete_questions');
@@ -125,7 +125,6 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
 
     Route::resource('question_paper', questionpaperController::class);
     Route::post('question_paper/search', [questionpaperController::class,'search']);
-    Route::post('question_paper/storeData', [questionpaperController::class,'storeData']);
     Route::resource('bulk_chapter_upload', bulk_chapter_uploadController::class);
     Route::get('ajax_SubjectwiseQuestion', [questionpaperController::class, 'ajax_SubjectwiseQuestion'])->name('ajax_SubjectwiseQuestion');
 
@@ -261,10 +260,7 @@ Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], f
     Route::resource('bazar_report', bulkUploadedReportController::class);
     Route::post('show_bazar_report', [bulkUploadedReportController::class, 'show_bazar_report'])->name('show_bazar_report');
 });
-
 Route::resource('task', taskController::class);
-Route::get('task_analysis_report', [taskController::class,'taskAnalysisReport'])->name('task_analysis_report');
-
 Route::get('/upcoming', [lmsActivityStreamController::class, 'upcomingActivity'])->name('upcoming');
 Route::get('/today', [lmsActivityStreamController::class, 'todayActivity'])->name('today');
 Route::get('/recent', [lmsActivityStreamController::class, 'recentActivity'])->name('recent');
@@ -316,4 +312,3 @@ Route::get('/download-File', [contentLibraryController::class, 'downloadFile'])-
 //     return view('recommend');
 // });
 // Route::get('/sync-neo4j', [Neo4jSyncController::class, 'sync']);
-    Route::get('question_paper/search_question', [questionpaperController::class,'search_question2']);

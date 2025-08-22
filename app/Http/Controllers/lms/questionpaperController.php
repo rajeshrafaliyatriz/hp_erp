@@ -45,10 +45,6 @@ class questionpaperController extends Controller
     {
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
-        if($request->type=="API"){
-            $sub_institute_id = $request->sub_institute_id;
-            $syear = $request->syear;
-        }
         $data['questionpaper_data'] = array();
         $marking_period_id = session()->get('term_id');
         $teacher = session()->get('user_profile_name');
@@ -145,87 +141,6 @@ class questionpaperController extends Controller
         return is_mobile($type, 'lms/add_questionpaper', $data, "view");
     }
 
-    public function storeData(Request $request){
-        $open_date = $close_date = null;
-        if ($request->open_date != "") {
-            $open_date = date('Y-m-d H:i:s', strtotime($request->open_date));
-        }
-        if ($request->close_date != "") {
-            $close_date = date('Y-m-d 23:59:59', strtotime($request->close_date));
-        }
-
-        $sub_institute_id = $request->sub_institute_id;
-        $syear = $request->syear;
-        $user_id = $request->created_by;
-        // return $syear;exit;
-        $show_hide = $request->show_hide;
-        $show_hide_val = isset($show_hide) ? $show_hide : '';
-
-        $result_show_ans = $request->result_show_ans;
-        $result_show_ans_val = isset($result_show_ans) ? $result_show_ans : '';
-
-        $shuffle_question = $request->shuffle_question;
-        $shuffle_question_val = isset($shuffle_question) ? $shuffle_question : '';
-
-        $show_feedback = $request->show_feedback;
-        $show_feedback_val = $show_feedback ?? '';
-
-        $timelimit_enable = $request->timelimit_enable;
-        $timelimit_enable_val = isset($timelimit_enable) ? $timelimit_enable : '';
-
-        $question_ids = "";
-        if ($request->question_ids) {
-            $question_ids = implode(",", $request->question_ids);
-        }
-
-        $questionpaper = array(
-            'grade_id'         => $request->grade,
-            'standard_id'      => $request->standard,
-            'subject_id'       => $request->subject,
-            'paper_name'       => $request->paper_name,
-            'paper_desc'       => $request->paper_desc,
-            'open_date'        => $open_date,
-            'close_date'       => $close_date,
-            'timelimit_enable' => $timelimit_enable_val,
-            'time_allowed'     => $request->time_allowed,
-            'total_ques'       => $request->total_ques,
-            'total_marks'      => $request->total_marks,
-            'question_ids'     => $question_ids,
-            'shuffle_question' => $shuffle_question_val,
-            'attempt_allowed'  => $request->attempt_allowed,
-            'show_feedback'    => $show_feedback_val,
-            'show_hide'        => $show_hide_val,
-            'result_show_ans'  => $result_show_ans_val,
-            'created_by'       => $user_id,
-            'sub_institute_id' => $sub_institute_id,
-            'syear'            => $syear,
-            'exam_type'        => $request->exam_type,
-            'created_on'       => now(),
-            'created_at'       => now(),
-        );
-        // echo ('<pre>');print_r($questionpaper);die;
-        $query = questionpaperModel::insertGetId($questionpaper);
-        $questionpaper_id = DB::getPDO()->lastInsertId();
-      
-        if($query && isset($questionpaper_id) && $questionpaper_id!=''){
-            $res = array(
-                    "status_code" => 1,
-                    "message"     => "Question-Paper Added Successfully",
-                );
-        }
-        else{
-             $res = array(
-            "status_code" =>0,
-            "message"     => "Failed to add Data",
-        );
-        }
-       
-        $type = $request->type;
-        // $this->generatePDF($questionpaper, $questionpaper_id);
-
-        return is_mobile($type, "question_paper.index", $res, "redirect");
-    }
-
     /**
      * Store a newly created resource in storage.
      *
@@ -234,7 +149,6 @@ class questionpaperController extends Controller
      */
     public function store($request)
     {
-        // return $request;exit;
         $open_date = $close_date = null;
         if ($request['open_date'] != "") {
             $open_date = date('Y-m-d H:i:s', strtotime($_REQUEST['open_date']));
@@ -246,7 +160,7 @@ class questionpaperController extends Controller
         $sub_institute_id = $request['sub_institute_id'];
         $syear = $request['syear'];
         $user_id = $request['created_by'];
-        // return $syear;exit;
+
         $show_hide = $request['show_hide'];
         $show_hide_val = isset($show_hide) ? $show_hide : '';
 
@@ -735,40 +649,9 @@ foreach ($questionData as $key => $val) {
 
         return $questionData;
     }
-public function search_question2(Request $request){
-// echo "<pre>";print_r($request->all());exit;
-    $type= $request->type;
-    if($type=="API"){
-        $sub_institute_id = $request->get("sub_institute_id");
-        $syear = $request->get("syear");
-        $user_id = $request->get('user_id');
-    }
-    $grade = $request->grade;
-    $subject = $request->subject;
-    $standard = $request->standard;
-    $search_chapter = $request->search_chapter;
 
-    // print_r($search_chapter);exit;
-    $search_topic = $request->input('search_topic');
-    $search_mapping_type = $request->search_mapping_type;
-    $search_mapping_value = $request->search_mapping_value;
-    $all_data = array(
-                "grade"=>$grade,
-                "subject"=>$subject,
-                "standard"=>$standard,
-                "search_chapter"=>$search_chapter,
-                "search_topic"=>$search_topic,
-                "search_mapping_type"=>$search_mapping_type,
-                "search_mapping_value"=>$search_mapping_value,
-                "sub_institute_id"=> $sub_institute_id,
-                "type"=> "API",
-            );
-
-        return $this->search_question($all_data,$request);
-
-}
 public function search(Request $request){
-// echo "<pre>";print_r($request->all());exit;
+
 $validate = Validator::make($request->all(), [
             'paper_name' => 'required',
             'paper_desc' => 'required',
@@ -779,12 +662,7 @@ $validate = Validator::make($request->all(), [
     $sub_institute_id = $request->session()->get("sub_institute_id");
     $syear = $request->session()->get("syear");
     $user_id = $request->session()->get('user_id');
-    $type= $request->type;
-    if($type=="API"){
-        $sub_institute_id = $request->get("sub_institute_id");
-        $syear = $request->get("syear");
-        $user_id = $request->get('user_id');
-    }
+
     $grade = $request->grade;
     $subject = $request->subject;
     $standard = $request->standard;
@@ -826,7 +704,7 @@ if(!isset($request->paper_name) && !isset($request->attempt_allowed) && !isset($
                 "sub_institute_id"=> $sub_institute_id,
             );
 
-        return $this->search_question($all_data,$request);
+        return $this->search_question($all_data);
 
     }else{
         return back()->with("failed","Please Select Required Fileds !");
@@ -868,21 +746,16 @@ if(isset($request->paper_name) && isset($request->attempt_allowed) && isset($req
 }
 
 }
-    public function search_question($all_data,$request){
-        // return $request;exit;
-        $sub_id = $all_data['subject'];
+public function search_question($all_data){
+    // return $all_data['sub_institute_id'];exit;
+    $sub_id = $all_data['subject'];
         $std_id = $all_data['standard'];
         $sub_institute_id = $all_data["sub_institute_id"];
         $user_profile_id = session()->get('user_profile_id');
         $user_profile_name = session()->get('user_profile_name');
         $user_id = session()->get('user_id');
-        $type= $request->type;
-        if($type=="API"){
-            $sub_institute_id = $request->get("sub_institute_id");
-            $syear = $request->get("syear");
-            $user_id = $request->get('user_id');
-        }
-            $extra = "";
+
+        $extra = "";
         $outer_extra = "1 = 1";
         if (isset($all_data["search_chapter"])) {
             $search_chapter = $all_data["search_chapter"];
@@ -1041,7 +914,7 @@ if(isset($request->paper_name) && isset($request->attempt_allowed) && isset($req
         $res['mapping_value'] = $map_val;
 
 }
-        $type = $request->type;
+        $type = " ";
         $res['status_code'] = 1;
         $res['message'] = "Success";
         $res['grade_id'] = $all_data['grade'];
@@ -1060,25 +933,18 @@ if(isset($request->paper_name) && isset($request->attempt_allowed) && isset($req
         }
         // <img alt="" src="https://erp.triz.co.in/lms_editor_upload/2736ch-3 1.jpg" style="width: 500px; height: 111px;" />
         // echo "<pre>";print_r($res['questionData']);exit;
-        // return $type;exit;
         return is_mobile($type, "lms/add_questionpaper", $res, "view");
 
         // return view('lms.add_questionpaper')->with("questionData",$questionData);
 }
     public function ajax_LMS_StandardwiseSubject(Request $request)
     {
-        $type= $request->type;
         $std_id = $request->input("std_id");
         $sub_institute_id = session()->get("sub_institute_id");
         $user_profile_id = session()->get('user_profile_id');
         $user_profile_name = session()->get('user_profile_name');
         $user_id = session()->get('user_id');
-        if($type=='API'){
-            $sub_institute_id = $request->get("sub_institute_id");
-            $user_profile_id = $request->get('user_profile_id');
-            $user_profile_name = $request->get('user_profile_name');
-            $user_id = $request->get('user_id');
-        }
+
         if ($user_profile_name == 'Teacher') {
             $wherecondition = ['t.sub_institute_id' => $sub_institute_id, 't.teacher_id' => $user_id];
             if ($std_id != "") {

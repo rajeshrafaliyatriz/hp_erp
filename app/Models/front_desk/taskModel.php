@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class taskModel extends Model
 {
     protected $table = "task";
-    protected $guarded = [];
+
     public $timestamps = false;
 
 }

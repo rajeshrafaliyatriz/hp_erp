@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\libraries\userSkills;
 use App\Models\auth\tbluserModel;
 use App\Models\libraries\userJobroleModel;
-use App\Models\libraries\userKnowledgeAbility;
 
 class skillJobroleMap extends Model
 {
@@ -32,11 +31,7 @@ class skillJobroleMap extends Model
 
     public function userJobrole()
     {
-        return $this->belongsTo(userJobroleModel::class, 'jobrole', 'jobrole');
-    }
-
-    public function knowledgeAbility()
-    {
-        return $this->belongsTo(userKnowledgeAbility::class, 'skill_id', 'id');
+        return $this->belongsTo(userJobroleModel::class, 'jobrole', 'jobrole')
+            ->select(['id', 'jobrole', 'description']);
     }
 }

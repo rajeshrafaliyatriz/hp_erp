@@ -97,15 +97,9 @@ class skillLibraryController extends Controller
             }, function ($q) {
                 $q->groupBy('department');
             });
-        // echo "<pre>";print_r($request->all());exit;
+
         $userSkills = userSkills::where('sub_institute_id', $request->sub_institute_id)
             ->where('approve_status', 'Approved')
-            ->when($request->has('category') && $request->category != '', function ($q) use ($request) {
-                $q->where('category', $request->category);
-            })
-            ->when($request->has('sub_category') && $request->sub_category != '', function ($q) use ($request) {
-                $q->whereIn('sub_category', explode(',', $request->sub_category));
-            })
             // ->where('status', 'Active')
             ->get();
         // return $userSkills
@@ -161,12 +155,12 @@ class skillLibraryController extends Controller
         $res['grouped_proficiency_levels'] = $this->getProficiencyLevels($request, 'groupedProficiencyLevels', $request->skill_id);
 
         // getskill name first 
-        $skillName = userSkills::where('id', $request->skill_id)
-            ->where('sub_institute_id', $request->sub_institute_id)
-            ->whereNull('deleted_at')
-            ->value('title');
+            $skillName = userSkills::where('id', $request->skill_id)
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNull('deleted_at')
+                ->value('title');
         if ($request->has('formType') && $request->formType == "jobrole") {
-
+            
 
             $res['userJobroleData'] = $this->getJobroleData($request, $skillName, 'usersJobrole');
             // echo "<pre>";print_r($res['userJobroleData']);exit;
@@ -182,12 +176,6 @@ class skillLibraryController extends Controller
             $res['userKnowledgeData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'knowledge');
         } else if ($request->has('formType') && $request->formType == "ability") {
             $res['userabilityData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'ability');
-        }
-        else if ($request->has('formType') && $request->formType == "attitude") {
-            $res['userAttitudeData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'attitude');
-        }
-        else if ($request->has('formType') && $request->formType == "behaviour") {
-            $res['userBehaviourData'] = $this->getKnowledgeAbilityData($request, $request->skill_id, 'behaviour');
         }
         // userApplication
         else if ($request->has('formType') && $request->formType == "application") {
@@ -576,10 +564,8 @@ class skillLibraryController extends Controller
                 ->whereNull('deleted_at')
                 ->get();
         }
-        $res['userAttitudeData'] = $this->getKnowledgeAbilityData($request, $id, 'attitute');
-        $res['userBehaviourData'] = $this->getKnowledgeAbilityData($request, $id, 'behaviour');
         $res['userKnowledgeData'] = $this->getKnowledgeAbilityData($request, $id, 'knowledge');
-        $viewKnowledge = [];
+       $viewKnowledge = [];
 
         foreach ($res['userKnowledgeData'] as $value) {
             $viewKnowledge[$value['proficiency_level']][] = $value;
@@ -613,7 +599,7 @@ class skillLibraryController extends Controller
         $res['userApplicationData'] = $this->getApplicationData($request, $skillName);
         $res['skillName'] = $skillName;
 
-        $viewApplication = [];
+         $viewApplication = [];
 
         foreach ($res['userApplicationData'] as $value) {
             $viewApplication[$value['proficiency_level']][] = $value;
@@ -736,87 +722,57 @@ class skillLibraryController extends Controller
             }
         }
         $skillName = userSkills::where('id', $request->skill_id)
-            ->where('sub_institute_id', $request->sub_institute_id)
-            ->whereNull('deleted_at')
-            ->value('title');
-
+                    ->where('sub_institute_id', $request->sub_institute_id)
+                    ->whereNull('deleted_at')
+                    ->value('title');
         if ($request->formType == 'proficiency_level') {
-            // foreach ($request->proficiency_level as $key => $value) {
-            //     $checkExists = userProfeceincyLevel::where('proficiency_level', $value)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
-            //     if (!$checkExists) {
-            //         $insertArray = [
-            //             'skill_id' => $id,
-            //             'proficiency_level' => $value,
-            //             'description' => $request->description[$key] ?? null,
-            //             'proficiency_type' => $request->proficiency_type[$key] ?? null,
-            //             'type_description' => $request->type_description[$key] ?? null,
-            //             'sub_institute_id' => $request->sub_institute_id,
-            //             'created_by' => $request->user_id,
-            //             'created_at' => now(),
-            //         ];
-            //         $insert = userProfeceincyLevel::insert($insertArray);
-            //         $i++;
-            //     } elseif (isset($checkExists->id)) {
-            //         $insertArray = [
-            //             'skill' => $id,
-            //             'proficiency_level' => $value,
-            //             'description' => $request->description[$key] ?? null,
-            //             'proficiency_type' => $request->proficiency_type[$key] ?? null,
-            //             'type_description' => $request->type_description[$key] ?? null,
-            //             'sub_institute_id' => $request->sub_institute_id,
-            //             'updated_by' => $request->user_id,
-            //             'updated_at' => now(),
-            //         ];
-            //         $insert = userProfeceincyLevel::where('id', $checkExists->id)->update($insertArray);
-            //         $i++;
-            //     }
-
-               
-            // }
-            foreach (json_decode($request->proficiency_level) as $key => $value) {
-                $checkExists = userKnowledgeAbility::where('proficiency_level', $value->proficiency_level)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
+            foreach ($request->proficiency_level as $key => $value) {
+                $checkExists = userProfeceincyLevel::where('proficiency_level', $value)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
                 if (!$checkExists) {
                     $insertArray = [
                         'skill_id' => $id,
-                        'proficiency_level' => $value->proficiency_level,
-                        'proficiency_description'=>$value->proficiency_description,
+                        'proficiency_level' => $value,
+                        'description' => $request->description[$key] ?? null,
+                        'proficiency_type' => $request->proficiency_type[$key] ?? null,
+                        'type_description' => $request->type_description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
                         'created_by' => $request->user_id,
                         'created_at' => now(),
                     ];
-                    $insert = userKnowledgeAbility::insert($insertArray);
+                    $insert = userProfeceincyLevel::insert($insertArray);
                     $i++;
                 } elseif (isset($checkExists->id)) {
                     $insertArray = [
-                        'skill_id' => $id,
-                        'proficiency_level' => $value->proficiency_level,
-                        'proficiency_description'=>$value->proficiency_description,
+                        'skill' => $id,
+                        'proficiency_level' => $value,
+                        'description' => $request->description[$key] ?? null,
+                        'proficiency_type' => $request->proficiency_type[$key] ?? null,
+                        'type_description' => $request->type_description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
                         'updated_by' => $request->user_id,
                         'updated_at' => now(),
                     ];
-                    $insert = userKnowledgeAbility::where('id', $checkExists->id)->update($insertArray);
+                    $insert = userProfeceincyLevel::where('id', $checkExists->id)->update($insertArray);
                     $i++;
                 }
-            }
-             $res['userproficiency_levelData'] = $this->getProficiencyLevels($request, '', $request->skill_id);
+
+                $res['userproficiency_levelData'] = $this->getProficiencyLevels($request, '', $request->skill_id);
                 if (empty($res['userproficiency_levelData'])) {
                     $res['userproficiency_levelData'] = userProfeceincyLevel::whereNull('skill_id')
                         ->whereNull('sub_institute_id')
                         ->whereNull('deleted_at')
                         ->get();
                 }
+            }
         }
 
         if ($request->formType == 'knowledge') {
             foreach (json_decode($request->knowledge_ability_data) as $key => $value) {
-                $checkExists = userKnowledgeAbility::where('classification', 'knowledge')->where('classification_item', $value->classification_item)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
+                $checkExists = userKnowledgeAbility::where('classification', 'knowledge')->where('classification_item', $value->classification_item)->where('skill', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
                 if (!$checkExists) {
                     $insertArray = [
                         'skill_id' => $id,
                         'proficiency_level' => $value->proficiency_level,
-                        'classification_category'=>$value->classification_category,
-                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'knowledge',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -829,8 +785,6 @@ class skillLibraryController extends Controller
                     $insertArray = [
                         'skill_id' => $id,
                         'proficiency_level' => $value->proficiency_level,
-                        'classification_category'=>$value->classification_category,
-                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'knowledge',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -846,14 +800,12 @@ class skillLibraryController extends Controller
 
         if ($request->formType == 'ability') {
             foreach (json_decode($request->ability_data) as $key => $value) {
-                $checkExists = userKnowledgeAbility::where('classification', 'ability')->where('classification_item', $value->classification_item)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
+                $checkExists = userKnowledgeAbility::where('classification', 'ability')->where('classification_item', $value->classification_item)->where('skill', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
                 if (!$checkExists) {
                     $insertArray = [
                         'skill_id' => $id,
                         'proficiency_level' => $value->proficiency_level,
                         'classification_item' => $value->classification_item,
-                        'classification_category'=>$value->classification_category,
-                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification' => 'ability',
                         'sub_institute_id' => $request->sub_institute_id,
                         'created_by' => $request->user_id,
@@ -863,10 +815,8 @@ class skillLibraryController extends Controller
                     $i++;
                 } elseif (isset($checkExists->id)) {
                     $insertArray = [
-                        'skill' => $request->skill_name,
+                        'skill' =>$request->skill_name,
                         'proficiency_level' => $value->proficiency_level,
-                        'classification_category'=>$value->classification_category,
-                        'classification_sub_category'=>$value->classification_sub_category,
                         'classification_item' => $value->classification_item,
                         'classification' => 'ability',
                         'sub_institute_id' => $request->sub_institute_id,
@@ -878,78 +828,6 @@ class skillLibraryController extends Controller
                 }
             }
             $res['userabilityData'] = $this->getKnowledgeAbilityData($request, $id, 'ability');
-        }
-
-        if ($request->formType == 'attitude') {
-            foreach (json_decode($request->ability_data) as $key => $value) {
-                $checkExists = userKnowledgeAbility::where('classification', 'attitude')->where('classification_item', $value->classification_item)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
-                if (!$checkExists) {
-                    $insertArray = [
-                        'skill_id' => $id,
-                        'proficiency_level' => $value->proficiency_level,
-                        'classification_item' => $value->classification_item,
-                        'classification_category'=>$value->classification_category,
-                        'classification_sub_category'=>$value->classification_sub_category,
-                        'classification' => 'attitude',
-                        'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
-                        'created_at' => now(),
-                    ];
-                    $insert = userKnowledgeAbility::insert($insertArray);
-                    $i++;
-                } elseif (isset($checkExists->id)) {
-                    $insertArray = [
-                        'skill' => $request->skill_name,
-                        'proficiency_level' => $value->proficiency_level,
-                        'classification_category'=>$value->classification_category,
-                        'classification_sub_category'=>$value->classification_sub_category,
-                        'classification_item' => $value->classification_item,
-                        'classification' => 'attitude',
-                        'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
-                        'updated_at' => now(),
-                    ];
-                    $insert = userKnowledgeAbility::where('id', $checkExists->id)->update($insertArray);
-                    $i++;
-                }
-            }
-            $res['userAttitudeData'] = $this->getKnowledgeAbilityData($request, $id, 'attitude');
-        }
-
-        if ($request->formType == 'behaviour') {
-            foreach (json_decode($request->ability_data) as $key => $value) {
-                $checkExists = userKnowledgeAbility::where('classification', 'behaviour')->where('classification_item', $value->classification_item)->where('skill_id', $id)->where('sub_institute_id', $request->sub_institute_id)->whereNull('deleted_at')->first();
-                if (!$checkExists) {
-                    $insertArray = [
-                        'skill_id' => $id,
-                        'proficiency_level' => $value->proficiency_level,
-                        'classification_item' => $value->classification_item,
-                        'classification_category'=>$value->classification_category,
-                        'classification_sub_category'=>$value->classification_sub_category,
-                        'classification' => 'behaviour',
-                        'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
-                        'created_at' => now(),
-                    ];
-                    $insert = userKnowledgeAbility::insert($insertArray);
-                    $i++;
-                } elseif (isset($checkExists->id)) {
-                    $insertArray = [
-                        'skill' => $request->skill_name,
-                        'proficiency_level' => $value->proficiency_level,
-                        'classification_category'=>$value->classification_category,
-                        'classification_sub_category'=>$value->classification_sub_category,
-                        'classification_item' => $value->classification_item,
-                        'classification' => 'behaviour',
-                        'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
-                        'updated_at' => now(),
-                    ];
-                    $insert = userKnowledgeAbility::where('id', $checkExists->id)->update($insertArray);
-                    $i++;
-                }
-            }
-            $res['userBehaviourData'] = $this->getKnowledgeAbilityData($request, $id, 'behaviour');
         }
 
         if ($request->has('formType') && $request->formType == "application") {
@@ -1081,41 +959,64 @@ class skillLibraryController extends Controller
 
     public function getProficiencyLevels(Request $request, $getType = '', $skillId = null)
     {
-     $data = [];
+        $proficiency_level = [];
         $skillFields = ['id', 'category', 'sub_category', 'title'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
         $jobroleFields = ['id', 'jobrole', 'description'];
-        $data =    userKnowledgeAbility::with([
-            'userSkills' => fn($q) => $q->select($skillFields),
-            'createdUser' => fn($q) => $q->select($createdUser),
-        ])
-            ->where('skill_id', $skillId)
-            // ->where('classification', $getType)
-            ->where('sub_institute_id', $request->sub_institute_id)
-            ->whereNull('deleted_at')
-            ->orderBy('proficiency_level', 'ASC')
-            ->groupBy('proficiency_level')
-            ->get()
-            ->map(function ($item) {
-                $data = $item->toArray();
+        if ($getType == "usersProficiencyLevel") {
+            $proficiency_level = userProfeceincyLevel::where(function ($query) use ($request,$skillId) {
+                $query->where('skill_id', $skillId)
+                    ->where('sub_institute_id', $request->sub_institute_id);
+            })
+                // ->orWhere(function ($query) {
+                //     $query->whereNull('skill_id')
+                //         ->whereNull('sub_institute_id');
+                // })
+                ->whereNull('deleted_at')
+                ->get();
+        } elseif ($getType == "groupedProficiencyLevels") {
+            $proficiency_level = userProfeceincyLevel::where(function ($query) use ($request,$skillId) {
+                $query->where('skill_id', $skillId)
+                    ->where('sub_institute_id', $request->sub_institute_id);
+            })
+                // ->orWhere(function ($query) {
+                //     $query->whereNull('skill_id')
+                //         ->whereNull('sub_institute_id');
+                // })
+                ->whereNull('deleted_at')
+                ->groupBy('proficiency_level')
+                ->get();
+        } else {
 
-                if ($item->userSkills) {
-                    $data['category'] = $item->userSkills->category;
-                    $data['sub_category'] = $item->userSkills->sub_category;
-                    $data['skillTitle'] = $item->userSkills->title;
-                }
+            $proficiency_level = userProfeceincyLevel::with([
+                'userSkills' => fn($q) => $q->select($skillFields),
+                'createdUser' => fn($q) => $q->select($createdUser),
+            ])
+                ->where('skill_id', $skillId)
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNull('deleted_at')
+                ->get()
+                ->map(function ($item) {
+                    $data = $item->toArray();
 
-                if ($item->createdUser) {
-                    $data['first_name'] = $item->createdUser->first_name;
-                    $data['middle_name'] = $item->createdUser->middle_name;
-                    $data['last_name'] = $item->createdUser->last_name;
-                }
+                    if ($item->userSkills) {
+                        $data['category'] = $item->userSkills->category;
+                        $data['sub_category'] = $item->userSkills->sub_category;
+                        $data['skillTitle'] = $item->userSkills->title;
+                    }
 
-                unset($data['user_skills'], $data['created_user']);
+                    if ($item->createdUser) {
+                        $data['first_name'] = $item->createdUser->first_name;
+                        $data['middle_name'] = $item->createdUser->middle_name;
+                        $data['last_name'] = $item->createdUser->last_name;
+                    }
 
-                return $data;
-            });
-        return $data;
+                    unset($data['user_skills'], $data['created_user']);
+
+                    return $data;
+                });
+        }
+        return $proficiency_level;
     }
 
     public function getJobroleData($request, $skillName, $getType = '')
@@ -1124,7 +1025,7 @@ class skillLibraryController extends Controller
         $jobroles = [];
         $skillFields = ['id', 'category', 'sub_category', 'title'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
-        $jobroleFields = ['id', 'jobrole', 'description','jobrole_category'];
+        $jobroleFields = ['id', 'jobrole', 'description'];
 
         if ($getType == "usersJobrole") {
             $jobroles = skillJobroleMap::with([
@@ -1153,9 +1054,6 @@ class skillLibraryController extends Controller
                     if ($item->userJobrole) {
                         $data['description'] = $item->userJobrole->description;
                     }
-                    if ($item->userJobrole) {
-                        $data['jobrole_category'] = $item->userJobrole->jobrole_category;
-                    }
                     unset($data['user_skills'], $data['created_user'], $data['userJobrole']);
 
                     return $data;
@@ -1178,7 +1076,7 @@ class skillLibraryController extends Controller
             ->where('classification', $getType)
             ->where('sub_institute_id', $request->sub_institute_id)
             ->whereNull('deleted_at')
-            ->orderBy('proficiency_level', 'ASC')
+            ->orderBy('proficiency_level','ASC')
             ->get()
             ->map(function ($item) {
                 $data = $item->toArray();
@@ -1209,358 +1107,36 @@ class skillLibraryController extends Controller
         $skillFields = ['id', 'category', 'sub_category', 'title'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
         $jobroleFields = ['id', 'jobrole', 'description'];
+        
+            $data = userApplication::with([
+                'userSkills' => fn($q) => $q->select($skillFields),
+                'createdUser' => fn($q) => $q->select($createdUser),
+            ])
+                ->where('skill', $skillName)
+                ->where('sub_institute_id', $request->sub_institute_id)
+                ->whereNull('deleted_at')
+                ->orderBy('proficiency_level','ASC')
+                ->get()
+                ->map(function ($item) {
+                    $data = $item->toArray();
 
-        $data = userApplication::with([
-            'userSkills' => fn($q) => $q->select($skillFields),
-            'createdUser' => fn($q) => $q->select($createdUser),
-        ])
-            ->where('skill', $skillName)
-            ->where('sub_institute_id', $request->sub_institute_id)
-            ->whereNull('deleted_at')
-            ->orderBy('proficiency_level', 'ASC')
-            ->get()
-            ->map(function ($item) {
-                $data = $item->toArray();
+                    if ($item->userSkills) {
+                        $data['category'] = $item->userSkills->category;
+                        $data['sub_category'] = $item->userSkills->sub_category;
+                        $data['skillTitle'] = $item->userSkills->title;
+                    }
 
-                if ($item->userSkills) {
-                    $data['category'] = $item->userSkills->category;
-                    $data['sub_category'] = $item->userSkills->sub_category;
-                    $data['skillTitle'] = $item->userSkills->title;
-                }
+                    if ($item->createdUser) {
+                        $data['first_name'] = $item->createdUser->first_name;
+                        $data['middle_name'] = $item->createdUser->middle_name;
+                        $data['last_name'] = $item->createdUser->last_name;
+                    }
 
-                if ($item->createdUser) {
-                    $data['first_name'] = $item->createdUser->first_name;
-                    $data['middle_name'] = $item->createdUser->middle_name;
-                    $data['last_name'] = $item->createdUser->last_name;
-                }
+                    unset($data['user_skills'], $data['created_user']);
 
-                unset($data['user_skills'], $data['created_user']);
-
-                return $data;
-            });
-
+                    return $data;
+                });
+        
         return $data;
-    }
-
-    public function AddCategory(Request $request)
-    {
-        $token = $request->input('token');
-
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
-
-        $accessToken = PersonalAccessToken::findToken($token);
-
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
-
-        $type = $request->input('type');
-
-        $validator = Validator::make($request->all(), [
-            'sub_institute_id' => 'required|numeric',
-            'user_id'          => 'required|numeric',
-            'formType'         => 'required'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status'  => 0,
-                'message' => $validator->messages()->first()
-            ]);
-        }
-
-        $i=0;
-        $sub_institute_id = $request->sub_institute_id;
-        $user_id = $request->user_id;
-        $formType = $request->formType;
-
-        if($formType=="add category"){
-            $category = $request->category;
-            $checkCategory = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->category])->whereNull('deleted_at')->first();
-
-            if(empty($checkCategory) && !isset($checkCategory->id)){
-                $i = DB::table('s_users_skills')->insert([
-                    'sub_institute_id'=>$sub_institute_id,
-                    'category'=>$request->category,
-                    'created_by'=>$user_id,
-                    'created_at'=>now(),
-                ]);
-            }
-        }
-        else if($formType=="edit category"){
-            $category = $request->category;
-            $old_category = $request->old_category;
-            $sub_category = $request->sub_category;
-
-            $checkCategory = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->old_category])->whereNull('deleted_at')->first();
-
-            if(!empty($checkCategory) && isset($checkCategory->id) && $sub_category==''){
-                
-                $updateArray = [
-                    'sub_institute_id'=>$sub_institute_id,
-                    'category'=>$request->category,
-                    'updated_at'=>now(),
-                    'updated_by'=>$user_id
-                ];
-
-                $i = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->old_category])->update($updateArray);
-
-                $checkSubCategory = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->category,'sub_category'=>$sub_category])->whereNull('deleted_at')->first();
-
-                if(empty($checkCategory) && !isset($checkCategory->id)){
-                    $updateArray['sub_category'] = $sub_category;
-                    $updateArray['created_at'] = now();
-                    $updateArray['created_by'] = $user_id;
-
-                     $i = DB::table('s_users_skills')->insert($updateArray);
-                }
-            }
-            else if($request->has('sub_category')){
-                $updateArray = [
-                    'sub_institute_id'=>$sub_institute_id,
-                    'category'=>$request->category,
-                    'updated_at'=>now(),
-                    'updated_by'=>$user_id
-                ];
-
-                $i = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->old_category])->update($updateArray);
-
-                $checkSubCategory = DB::table('s_users_skills')->where(['sub_institute_id'=>$sub_institute_id,'category'=>$request->category,'sub_category'=>$sub_category])->whereNull('deleted_at')->first();
-
-                if(empty($checkSubCategory) && !isset($checkSubCategory->id)){
-                    $updateArray['sub_category'] = $sub_category;
-                    $updateArray['created_at'] = now();
-                    $updateArray['created_by'] = $user_id;
-
-                     $i = DB::table('s_users_skills')->insert($updateArray);
-                }
-            }
-        }
-        else if ($formType == "edit sub_category") {
-            $category = $request->category;
-            $old_sub_category = $request->old_sub_category;
-            $sub_category = $request->sub_category;
-
-            $checkSubCategory = DB::table('s_users_skills')
-                ->where([
-                    'sub_institute_id' => $sub_institute_id,
-                    'category'         => $category,
-                    'sub_category'     => $old_sub_category
-                ])
-                ->whereNull('deleted_at')
-                ->first();
-
-            if (!empty($checkSubCategory) && isset($checkSubCategory->id)) {
-                $updateArray['sub_category'] = $sub_category;
-                $updateArray['updated_at'] = now();
-                $updateArray['updated_by'] = $user_id;
-
-                $i = DB::table('s_users_skills')
-                    ->where([
-                        'sub_institute_id' => $sub_institute_id,
-                        'category'         => $category,
-                        'sub_category'     => $old_sub_category
-                    ])
-                    ->update($updateArray);
-            }
-        }
-
-
-        if($i!=0){
-            $res['status_code']=1;
-            $res['message']="Data Add Successfully!";
-        }else{
-            $res['status_code']=0;
-            $res['message']="Failed to Add, May be already Exists!";
-        }
-
-        return response()->json($res);
-    }
-
-    public function AddAttributeTaxonomy(Request $request)
-    {
-        $token = $request->input('token');
-
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
-
-        $accessToken = PersonalAccessToken::findToken($token);
-
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
-
-        $type = $request->input('type');
-
-        $validator = Validator::make($request->all(), [
-            'sub_institute_id' => 'required|numeric',
-            'user_id'          => 'required|numeric',
-            'formType'         => 'required'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status'  => 0,
-                'message' => $validator->messages()->first()
-            ]);
-        }
-
-        $i = 0;
-        $sub_institute_id = $request->sub_institute_id;
-        $user_id = $request->user_id;
-        $formType = $request->formType;
-        $attribute = $request->attribute;
-
-        if ($formType == "add category") {
-            $checkCategory = DB::table('s_skill_knowledge_ability')
-                ->where([
-                    'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->classification_category,
-                    'classification'=>$attribute
-                ])
-                ->whereNull('deleted_at')
-                ->first();
-
-            if (empty($checkCategory) && !isset($checkCategory->id)) {
-                $i = DB::table('s_skill_knowledge_ability')->insert([
-                    'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->classification_category,
-                    'classification'=>$attribute,
-                    'created_by' => $user_id,
-                    'created_at' => now(),
-                ]);
-            }
-        }
-        else if ($formType == "edit category") {
-            $classification_category = $request->classification_category;
-            $old_classification_category = $request->old_classification_category;
-            $classification_sub_category = $request->classification_sub_category;
-
-            $checkCategory = DB::table('s_skill_knowledge_ability')
-                ->where([
-                    'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->old_classification_category,
-                    'classification'=>$attribute
-                ])
-                ->whereNull('deleted_at')
-                ->first();
-
-            if (!empty($checkCategory) && isset($checkCategory->id) && $classification_sub_category == '') {
-                $updateArray = [
-                    'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->classification_category,
-                    'classification'=>$attribute,
-                    'updated_at' => now(),
-                    'updated_by' => $user_id
-                ];
-
-                $i = DB::table('s_skill_knowledge_ability')
-                    ->where([
-                        'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $request->old_classification_category,
-                        'classification'=>$attribute,
-                    ])
-                    ->update($updateArray);
-
-                $checkSubCategory = DB::table('s_skill_knowledge_ability')
-                    ->where([
-                        'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $request->classification_category,
-                        'classification_sub_category' => $classification_sub_category,
-                        'classification'=>$attribute,
-                    ])
-                    ->whereNull('deleted_at')
-                    ->first();
-
-                if (empty($checkCategory) && !isset($checkCategory->id)) {
-                    $updateArray['classification_sub_category'] = $classification_sub_category;
-                    $updateArray['created_at'] = now();
-                    $updateArray['created_by'] = $user_id;
-
-                    $i = DB::table('s_skill_knowledge_ability')->insert($updateArray);
-                }
-            }
-            else if ($request->has('classification_sub_category')) {
-                $updateArray = [
-                    'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->classification_category,
-                    'classification'=>$attribute,
-                    'updated_at' => now(),
-                    'updated_by' => $user_id
-                ];
-
-                $i = DB::table('s_skill_knowledge_ability')
-                    ->where([
-                        'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $request->old_classification_category,
-                        'classification'=>$attribute,
-                    ])
-                    ->update($updateArray);
-
-                $checkSubCategory = DB::table('s_skill_knowledge_ability')
-                    ->where([
-                        'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $request->classification_category,
-                        'classification_sub_category' => $classification_sub_category,
-                        'classification'=>$attribute,
-                    ])
-                    ->whereNull('deleted_at')
-                    ->first();
-
-                if (empty($checkSubCategory) && !isset($checkSubCategory->id)) {
-                    $updateArray['classification_sub_category'] = $classification_sub_category;
-                    $updateArray['created_at'] = now();
-                    $updateArray['created_by'] = $user_id;
-
-                    $i = DB::table('s_skill_knowledge_ability')->insert($updateArray);
-                }
-            }
-        }
-        else if ($formType == "edit sub_category") {
-            $classification_category = $request->classification_category;
-            $old_classification_sub_category = $request->old_classification_sub_category;
-            $classification_sub_category = $request->classification_sub_category;
-
-            $checkSubCategory = DB::table('s_skill_knowledge_ability')
-                ->where([
-                    'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $classification_category,
-                    'classification_sub_category' => $old_classification_sub_category,
-                    'classification'=>$attribute,
-                ])
-                ->whereNull('deleted_at')
-                ->first();
-
-            if (!empty($checkSubCategory) && isset($checkSubCategory->id)) {
-                $updateArray = [
-                    'classification_sub_category' => $classification_sub_category,
-                    'classification'=>$attribute,
-                    'updated_at' => now(),
-                    'updated_by' => $user_id
-                ];
-
-                $i = DB::table('s_skill_knowledge_ability')
-                    ->where([
-                        'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $classification_category,
-                        'classification_sub_category' => $old_classification_sub_category,
-                        'classification'=>$attribute,
-                    ])
-                    ->update($updateArray);
-            }
-        }
-
-        if ($i != 0) {
-            $res['status_code'] = 1;
-            $res['message'] = "Data Added Successfully!";
-        } else {
-            $res['status_code'] = 0;
-            $res['message'] = "Failed to Add, May Already Exist!";
-        }
-
-        return response()->json($res);
     }
 }

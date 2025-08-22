@@ -5,8 +5,6 @@ namespace App\Http\Controllers\HRMS;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
-use Laravel\Sanctum\PersonalAccessToken;
-use Validator;
 use DB;
 
 class departmentController extends Controller
@@ -106,151 +104,40 @@ class departmentController extends Controller
 
     public function store(Request $request)
     {
-        // $type = $request->input('type');
-        // $sub_institute_id = session()->get('sub_institute_id');
-
-        // $department_name = $request->department_name;
-        // $roles_responsibility = $request->roles_responsibility;
-        // $is_calculated = $request->is_calculated;
-        // $task = $request->tasks;
-        // $i=$parent_id=0;
-
-        // if($request->has('parentDiv') && $request->parentDiv!=''){
-        //     $parent_id = $request->parentDiv;
-        //     $check = DB::table('hrms_departments')->where(['department'=>$department_name,'parent_id'=>$parent_id])->get()->toArray();
-        // }else{
-        //     $check = DB::table('hrms_departments')->where(['department'=>$department_name,'parent_id'=>$parent_id])->get()->toArray();
-        // }
-
-        // if(empty($check)){
-        //     $i=1;
-        //     $insert = DB::table('hrms_departments')->insert([
-        //         'department'=>$department_name,
-        //         'parent_id'=>$parent_id,
-        //         'tasks'=>$task,
-        //         'roles_responsibility'=>$roles_responsibility,
-        //         'status'=>1,
-        //         'is_calculated'=>$is_calculated,
-        //         'sub_institute_id'=>$sub_institute_id
-        //     ]);
-        // }
-        // return $request;
-        $token = $request->input('token');
-
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
-
-        $accessToken = PersonalAccessToken::findToken($token);
-
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
-
         $type = $request->input('type');
+        $sub_institute_id = session()->get('sub_institute_id');
 
-        $validator = Validator::make($request->all(), [
-            'sub_institute_id' => 'required|numeric',
-            'user_id'          => 'required|numeric',
-            'formType'         => 'required'
-        ]);
+        $department_name = $request->department_name;
+        $roles_responsibility = $request->roles_responsibility;
+        $is_calculated = $request->is_calculated;
+        $task = $request->tasks;
+        $i=$parent_id=0;
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status'  => 0,
-                'message' => $validator->messages()->first()
+        if($request->has('parentDiv') && $request->parentDiv!=''){
+            $parent_id = $request->parentDiv;
+            $check = DB::table('hrms_departments')->where(['department'=>$department_name,'parent_id'=>$parent_id])->get()->toArray();
+        }else{
+            $check = DB::table('hrms_departments')->where(['department'=>$department_name,'parent_id'=>$parent_id])->get()->toArray();
+        }
+
+        if(empty($check)){
+            $i=1;
+            $insert = DB::table('hrms_departments')->insert([
+                'department'=>$department_name,
+                'parent_id'=>$parent_id,
+                'tasks'=>$task,
+                'roles_responsibility'=>$roles_responsibility,
+                'status'=>1,
+                'is_calculated'=>$is_calculated,
+                'sub_institute_id'=>$sub_institute_id
             ]);
         }
-
-        $i=0;
-        $sub_institute_id = $request->sub_institute_id;
-        $user_id = $request->user_id;
-        $formType = $request->formType;
-
-        if($formType=="add department"){
-            $department = $request->department;
-            $checkDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department])->whereNull('deleted_at')->first();
-
-            if(empty($checkDepartment) && !isset($checkDepartment->id)){
-                $i = DB::table('s_user_jobrole')->insert([
-                    'sub_institute_id'=>$sub_institute_id,
-                    'department'=>$request->department,
-                    'created_by'=>$user_id,
-                    'created_at'=>now(),
-                ]);
-            }
-        }
-        else if($formType=="edit department"){
-            $department = $request->department;
-            $old_department = $request->old_department;
-            $sub_department = $request->sub_department;
-
-            $checkDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department])->whereNull('deleted_at')->first();
-
-            if(!empty($checkDepartment) && isset($checkDepartment->id) && $sub_department==''){
-                
-                $updateArray = [
-                    'sub_institute_id'=>$sub_institute_id,
-                    'department'=>$request->department,
-                    'updated_at'=>now(),
-                    'updated_by'=>$user_id
-                ];
-
-                $i = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department])->update($updateArray);
-
-                $checkSubDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$sub_department])->whereNull('deleted_at')->first();
-
-                if(empty($checkSubDepartment) && !isset($checkSubDepartment->id)){
-                    $updateArray['sub_department'] = $sub_department;
-                    $updateArray['created_at'] = now();
-                    $updateArray['created_by'] = $user_id;
-
-                     $i = DB::table('s_user_jobrole')->insert($updateArray);
-                }
-            }
-            else if($request->has('sub_department')){
-                $updateArray = [
-                    'sub_institute_id'=>$sub_institute_id,
-                    'department'=>$request->department,
-                    'updated_at'=>now(),
-                    'updated_by'=>$user_id
-                ];
-
-                $i = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department])->update($updateArray);
-
-                $checkSubDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$sub_department])->whereNull('deleted_at')->first();
-
-                if(empty($checkSubDepartment) && !isset($checkSubDepartment->id)){
-                    $updateArray['sub_department'] = $sub_department;
-                    $updateArray['created_at'] = now();
-                    $updateArray['created_by'] = $user_id;
-
-                     $i = DB::table('s_user_jobrole')->insert($updateArray);
-                }
-            }
-        }
-        else if($formType=="edit sub_department"){
-            $department = $request->department;
-            $old_sub_department = $request->old_sub_department;
-            $sub_department = $request->sub_department;
-
-            $checkSubDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$old_sub_department])->whereNull('deleted_at')->first();
-
-                if(!empty($checkSubDepartment) && isset($checkSubDepartment->id)){
-                    $updateArray['sub_department'] = $sub_department;
-                    $updateArray['updated_at'] = now();
-                    $updateArray['updated_by'] = $user_id;
-
-                    $i = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$old_sub_department])->update($updateArray);
-                }
-        }
-
         if($i!=0){
             $res['status_code']=1;
-            $res['message']="Data Add Successfully!";
+            $res['message']="Add Successfully!!";
         }else{
             $res['status_code']=0;
-            $res['message']="Failed to Add, May be already Exists!";
+            $res['message']="Failed to Add!!";
         }
         return is_mobile($type, "add_department.create", $res);
     }

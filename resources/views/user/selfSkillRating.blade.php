@@ -46,7 +46,7 @@
                         </a>
                     </li>
                     <div class="collapse" id="skillListCollapse">
-                        @if (!empty($jobroleSkills))
+                        @if (!empty($skills))
                             @foreach ($jobroleSkills as $skill)
                                 <li class="list-group-item item-{{$skill->skill_id}}" @if(isset($addedMattrix[$skill->skill_id]))  onclick='getFadeSkill("{{$skill->skill_id}}");' style="background:#f1fff2" @else style="background:#f3f3f3" @endif>☛ {{ $skill->skill }}</li>
                             @endforeach

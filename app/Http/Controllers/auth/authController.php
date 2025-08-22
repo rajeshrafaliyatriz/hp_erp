@@ -34,29 +34,25 @@ class authController extends Controller
         $password = $request->input('password');
 
         // Fetch user by email
-        $user = tbluserModel::with(['organization', 'client', 'yearData', 'userProfile'])
-            ->where('email', $email)
-            ->first();
-
+        $user = tbluserModel::where('email', $email)->first();
+        // echo "<pre>";print_r($user);exit;
         if (!$user || !Hash::check($password, $user->password)) {
             return response()->json([
-                'status_code' => 0,
-                'message' => 'Invalid User Id And Password'
+            'status_code' => 0,
+            'message' => 'Invalid User Id And Password'
             ]);
         }
 
-        // Get organization details through the relationship
-        $orgDetails = $user->organization;
-
-        // Get client details through the organization relationship
-        $clientDetails = $orgDetails->client ?? null;
-
-        // Get year data through the relationship
-        $yearDetails = $user->yearData;
-
-        // Get profile data through the relationship
-        $profileDetails = $user->userProfile ?? [];
-        // echo "<pre>";print_r($orgDetails);exit;
+        $password = $user->password; // For further usage in the code
+        $orgData = $user::with('organization')->find($user->sub_institute_id);
+        $orgDetails =$orgData['organization'];
+        $clientData = $user::with('client')->find($orgDetails->client_id);
+        $clientDetails =$clientData['client'];
+        $yearData = $user::with('yearData')->first();
+        $yearDetails =$yearData['yearData'];
+        $profileData = $user::with('userProfile')->find($user->id);
+        $profileDetails =$profileData['userProfile'] ?? [];
+        // echo "<pre>";print_r($profileDetails);exit;
         session()->put('client_id',$orgDetails);
         session()->put('is_admin',$clientDetails);
         session()->put('user_id',$user->id);
@@ -88,7 +84,7 @@ class authController extends Controller
         ];
         // echo "<pre>";print_r($sessionData);exit;
         
-       $rightsMenusIds = 0;
+        $rightsMenusIds = 0;
         if (!empty($user)) {
             //START FOR MULTI-INSTITUTE
             if ($user->sub_institute_id == 0 && $user->client_id != '' && $user->is_admin == 1) {
@@ -133,29 +129,27 @@ class authController extends Controller
 
              return is_mobile($type, 'login', $res, "view");
         } else {
-            // if ($rightsMenusIds == 0) { //Check user Rights
-            //     $res['status_code'] = 0;
-            //     $res['message'] = "Please Contact Administrator For ERP Rights";
+            if ($rightsMenusIds == 0) { //Check user Rights
+                $res['status_code'] = 0;
+                $res['message'] = "Please Contact Administrator For ERP Rights";
 
-            //     return is_mobile($type, 'login', $res, "view");
-            // } else {
+                return is_mobile($type, 'login', $res, "view");
+            } else {
                 
-                $userprofiledetails = DB::table('tbluserprofilemaster')->where(['id' => $user->user_profile_id])->get()->toArray();
-                $request->session()->put('user_profile_id', $user->user_profile_id);
+                $userprofiledetails = DB::table('tbluserprofilemaster')->where(['id' => $user['user_profile_id']])->get()->toArray();
+                $request->session()->put('user_profile_id', $user['user_profile_id']);
                 //START FOR MULTI-INSTITUTE
-                if ($user->is_admin == 1 || $user->is_admin==2) {
-                    if($user->is_admin==2){
+                if ($user['is_admin'] == 1 || $user['is_admin']==2) {
+                    if($user['is_admin']==2){
                         $schoolData = DB::table('tblclient')->get()->toArray();
                     }else{
-                        $schoolData = DB::table('tblclient')->where(['id' => $user->client_id])->get()->toArray();
+                        $schoolData = DB::table('tblclient')->where(['id' => $user['client_id']])->get()->toArray();
                     }
                      
                     $schoolData = json_decode(json_encode($schoolData), true);
-                    // return $schoolData;exit;
-                    $ShortCode = isset($schoolData[0]) ? $schoolData[0]['short_code'] : '';
-                    $SchoolName = isset($schoolData[0]) ? $schoolData[0]['client_name'] : '';
-                    $Logo = isset($schoolData[0]) ? $schoolData[0]['logo'] : '';
-                    
+                    $ShortCode = $schoolData[0]->short_code;
+                    $SchoolName = $schoolData[0]->client_name;
+                    $Logo = $schoolData[0]->logo;
                     if($user['is_admin']==2){
                         $getMultiInst = DB::table('tblclient')->get()->toArray();
                     }else{
@@ -167,13 +161,13 @@ class authController extends Controller
                     if($user['is_admin']==2){
                         $schools = DB::table('school_setup')->whereIn('client_id',[2,11,20,34,81])->get()->toArray();
                     }else{
-                        $schools = DB::table('school_setup')->where(['client_id' => $user->client_id])->get()->toArray();
+                        $schools = DB::table('school_setup')->where(['client_id' => $user['client_id']])->get()->toArray();
                     }
-                    // echo "<pre>";print_r($schools);exit;    
+                    // echo "<pre>";print_r($schools);exit;    /
                     $client_sub_institute_id = '';
                     if (count($schools) > 0) {
-                        $client_sub_institute_id = isset($schools[0]) ? $schools[0]->id : '';
-                        $request->session()->put('syear', isset($schools[0]) ? $schools[0]->syear : '');
+                        $client_sub_institute_id = $schools[0]['Id'];
+                        $request->session()->put('syear', $schools[0]['syear']);
                     }
                     if($user['is_admin']==2){
                         $getTermId = DB::table('academic_year')->whereIn('sub_institute_id',[254,195,47,72,1])
@@ -281,7 +275,7 @@ class authController extends Controller
                 // }
                 // echo "<pre>";print_r(session()->all());exit;
                return is_mobile($type, 'login', $res, "view");
-            // }
+            }
         }
     }
 

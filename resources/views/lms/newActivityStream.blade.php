@@ -9,18 +9,6 @@
 
                 </div>
             </div>
-              @if ($message = Session::get('data'))
-                @if($message['status']==0)
-  <div class="alert alert-danger alert-block">
-
-                @else
-  <div class="alert alert-success alert-block">
-    @endif
-                <button type="button" class="close" data-dismiss="alert">×</button>
-                <strong>{{ $message['message'] }}</strong>
-              </div>
-          
-            @endif
             <!-- upcoming start  -->
             <div class="dropdown-container">
                 <div style="width: 100%">
@@ -495,7 +483,7 @@
     <!--check list Modal -->
     <div class="modal fade" id="exampleModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel"
         aria-hidden="true">
-        <div class="modal-dialog" role="document" style="max-width: 1000px">
+        <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="exampleModalLabel">Today's Check List</h5>
@@ -504,11 +492,6 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    @php 
-                    $options =['PENDING','IN-PROGRESS','COMPLETED','CANCELLED'];
-                    @endphp
-                    <form action="{{route('lmsActivityStream.store')}}" method="POST">
-                        @csrf
                     <table class="table table-bordered" style="filter:unset !important">
                         <thead>
                             <tr>
@@ -524,17 +507,7 @@
                                 <tr>
                                     <td>{{ $k + 1 }}</td>
                                     <td>{{ $value->task_title }}</td>
-                                    {{-- <td>{{ $value->status }}</td> --}}
-                                    <td>
-                                        
-                                        <select name="status[{{ $value->id }}]" id="" class="form-control">
-                                            @foreach ($options as $option)
-                                                <option value="{{ $option }}"
-                                                    {{ $value->status == $option ? 'selected' : '' }}>
-                                                    {{ $option }}</option>
-                                            @endforeach
-                                        </select>
-                                    </td>
+                                    <td>{{ $value->status }}</td>
                                     <td>
                                         @php
                                             $activity_type = 'Observe';
@@ -544,19 +517,11 @@
                                         @endphp
                                         {{ $activity_type }}
                                     </td>
-                                    <td><textarea name="reply[{{ $value->id }}]" id="" cols="10" rows="5" class="form-control">{{ $value->reply }}</textarea></td>
+                                    <td>{{ $value->reply }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <center>
-                                <input type="submit" value="Submit" class="btn btn-primary">
-                            </center>
-                        </div>
-                    </div>
-                    </form>
                 </div>
             </div>
         </div>
