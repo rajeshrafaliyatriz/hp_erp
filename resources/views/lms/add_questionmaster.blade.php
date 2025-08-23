@@ -51,9 +51,9 @@ br {
 
                             <div class="row align-items-center">
                                 <div class="col-md-12">
-                                <div class="d-flex">                                
+                                {{-- <div class="d-flex">                                
                                     <input type="text" class="form-control" id="question_prompt" name="question_prompt" value="get 1 question for standard '{{$data['breadcrum_data']->standard_name}}' and subject '{{$data['breadcrum_data']->subject_name}}' and chapter '{{$data['breadcrum_data']->chapter_name}}' @isset($data['topic_id']) and for topic '{{$data['breadcrum_data']->topic_name}}' @endisset "><span onclick="question_prompt();" style="padding:2px 6px"><i class="mdi mdi-refresh"></i></span>
-                                </div>
+                                </div> --}}
 
                                     <div class="form-group">
                                         <textarea name="question_title" id="question_title" contenteditable="true" onchange="check_input(this)">
