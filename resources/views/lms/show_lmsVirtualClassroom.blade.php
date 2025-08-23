@@ -8,13 +8,13 @@
         <div class="row">
             <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12 mb-4">
                 <h1 class="h4 mb-3">Virtual Classroom</h1>
-                <nav aria-label="breadcrumb">
+                {{-- <nav aria-label="breadcrumb">
                     <ol class="breadcrumb bg-transparent p-0">
                         <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                         <li class="breadcrumb-item">Engagement</li>
                         <li class="breadcrumb-item">Show Virtual Classroom</li>
                     </ol>
-                </nav>
+                </nav> --}}
             </div>
         </div>
 

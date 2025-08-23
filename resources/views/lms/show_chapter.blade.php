@@ -67,14 +67,14 @@
     <div class="row align-items-center">
         <div class="col-md-6 mb-3">
             <h1 class="h4 mb-3">Chapter List</h1>
-            <nav aria-label="breadcrumb">
+            {{-- <nav aria-label="breadcrumb">
                 <ol class="breadcrumb bg-transparent p-0">
                     <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                     @php $standard_name = DB::table('standard')->where('id',$_REQUEST['standard_id'])->get(); @endphp
                     <li class="breadcrumb-item"><a href="#">{{ $standard_name[0]->name ?? '-' }}</a></li>
                     <li class="breadcrumb-item"><a href="#">{{$data['subject_name']}}</a></li>
                 </ol>
-            </nav>
+            </nav> --}}
         </div>
         <div class="col-md-6 mb-3">
         @if($show_block == 'YES' && $_REQUEST['perm']==$data['sub_institute_id'])

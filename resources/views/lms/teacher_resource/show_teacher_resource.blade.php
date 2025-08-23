@@ -8,13 +8,13 @@
       <h1 class="h4 mb-3">
         Add Teacher Resource
       </h1>
-      <nav aria-label="breadcrumb">
+      {{-- <nav aria-label="breadcrumb">
         <ol class="breadcrumb bg-transparent p-0">
           <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
           <li class="breadcrumb-item">Teacher Resource</li>
           <li class="breadcrumb-item active" aria-current="page">Add Teacher Resource</li>
         </ol>
-      </nav>
+      </nav> --}}
     </div>
   </div>
   @php

@@ -8,13 +8,13 @@
         <div class="row bg-title align-items-center justify-content-between">
             <div class="col-lg-6 col-md-4 col-sm-4 col-xs-12 mb-4">
                 <h1 class="h4 mb-3">Create Counselling Question Bank</h1>
-                <nav aria-label="breadcrumb">
+                {{-- <nav aria-label="breadcrumb">
                     <ol class="breadcrumb bg-transparent p-0">
                         <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">Counselling</a></li>
                         <li class="breadcrumb-item">{{$data['breadcrum_data']->course_title}}</li>
                         <li class="breadcrumb-item active" aria-current="page">Create Counselling Question Bank</li>
                     </ol>
-                </nav>
+                </nav> --}}
             </div>
             <div class="col-md-3 mb-4 text-md-right">
                 <a href="{{ route('lmsCounsellingQuestion.create',['course_id'=>$data['breadcrum_data']->course_id]) }}" class="btn btn-info add-new"><i class="fa fa-plus"></i> Add Counselling Question</a>
