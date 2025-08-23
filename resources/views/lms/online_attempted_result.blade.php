@@ -7,13 +7,13 @@
 <div class="content-main flex-fill">
     <div class="row">
         <div class="col-md-6">
-            <nav aria-label="breadcrumb">
+            {{-- <nav aria-label="breadcrumb">
                 <ol class="breadcrumb bg-transparent p-0">
                     <li class="breadcrumb-item">LMS</li>
                     <li class="breadcrumb-item"><a href="{{route('question_paper.index')}}">Question Paper</a></li>
                     <li class="breadcrumb-item active" aria-current="page">Attempted Exam Result</li>
                 </ol>
-            </nav>
+            </nav> --}}
         </div>
     </div>
 

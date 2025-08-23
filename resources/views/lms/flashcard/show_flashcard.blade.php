@@ -11,15 +11,15 @@
         <div class="row bg-title align-items-center justify-content-between">
             <div class="col-lg-6 col-md-4 col-sm-4 col-xs-12 mb-4">
                 <h1 class="h4 mb-3">Create Flash Card</h1>
-                <nav aria-label="breadcrumb">
+                {{-- <nav aria-label="breadcrumb">
                     <ol class="breadcrumb bg-transparent p-0">
                         <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('chapter_master.index',['standard_id'=>$data['breadcrum_data']->standard_id ?? '','subject_id'=>$data['breadcrum_data']->subject_id ?? '']) }}">{{$data['breadcrum_data']->subject_name ?? ''}}</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('topic_master.index',['id'=>$data['breadcrum_data']->chapter_id ?? '']) }}">{{$data['breadcrum_data']->chapter_name ?? ''}}</a></li>
-                        {{--<li class="breadcrumb-item"><a href="{{ route('topic_master.index',['id'=>$data['breadcrum_data']->chapter_id ?? '']) }}">{{$data['breadcrum_data']->topic_name ?? ''}}</a></li> --}}
+                        <li class="breadcrumb-item"><a href="{{ route('topic_master.index',['id'=>$data['breadcrum_data']->chapter_id ?? '']) }}">{{$data['breadcrum_data']->topic_name ?? ''}}</a></li>
                         <li class="breadcrumb-item active" aria-current="page">Create Flash Card</li>
                     </ol>
-                </nav>
+                </nav> --}}
             </div>
             @php
             $user_profile = Session::get('user_profile_name');
