@@ -4,12 +4,12 @@
     <div class="row">
         <div class="col-md-6">
             <h1 class="h4 mb-3">Result of Counselling Exam : {{$data['exam_data']['course_title']}}</h1>
-            <nav aria-label="breadcrumb">
+            {{-- <nav aria-label="breadcrumb">
                 <ol class="breadcrumb bg-transparent p-0">
                     <li class="breadcrumb-item"><a href="http://202.47.117.124/triz-lms">Home</a></li>                                        
                     <li class="breadcrumb-item active" aria-current="page">Result</li>
                 </ol>
-            </nav>
+            </nav> --}}
         </div>        
     </div>
 

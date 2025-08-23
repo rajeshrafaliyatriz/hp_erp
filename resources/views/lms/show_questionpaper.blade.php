@@ -13,13 +13,13 @@
         <div class="row bg-title align-items-center justify-content-between">
             <div class="col-lg-6 col-md-4 col-sm-4 col-xs-12 mb-4">
                 <h1 class="h4 mb-3">Create Exam</h1>
-                <nav aria-label="breadcrumb">
+                {{-- <nav aria-label="breadcrumb">
                     <ol class="breadcrumb bg-transparent p-0">
                         <li class="breadcrumb-item"><a href="{{ route('course_master.index') }}">LMS</a></li>
                         <li class="breadcrumb-item">Exam</li>
                         <li class="breadcrumb-item active" aria-current="page">Create Exam</li>
                     </ol>
-                </nav>
+                </nav> --}}
             </div>
             @php
                 $user_profile = Session::get('user_profile_name');

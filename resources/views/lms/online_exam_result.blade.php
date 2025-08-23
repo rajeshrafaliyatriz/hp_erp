@@ -9,13 +9,13 @@
     <div class="row">
         <div class="col-md-6">
             <h1 class="h4 mb-3">Result of Practice : {{$data['questionpaper_data']['paper_name']}}</h1>
-            <nav aria-label="breadcrumb">
+            {{-- <nav aria-label="breadcrumb">
                 <ol class="breadcrumb bg-transparent p-0">
                     <li class="breadcrumb-item"><a href="http://202.47.117.124/triz-lms">Home</a></li>                    
                     <li class="breadcrumb-item active" aria-current="page">Quiz</li>
                     <li class="breadcrumb-item active" aria-current="page">Result</li>
                 </ol>
-            </nav>
+            </nav> --}}
         </div>   
         <div class="col-md-6" align="right">
             @if(isset($data['exam_type']) && $data['exam_type']=="PAL")
