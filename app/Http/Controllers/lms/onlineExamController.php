@@ -42,7 +42,12 @@ class onlineExamController extends Controller
         }
 
         $type = $request->input('type');
+        $sub_institute_id = session()->get('sub_institute_id');
+
+        if($type=="API"){
         $sub_institute_id = $request->sub_institute_id;
+            
+        }
         $questionpaper_id = $request->get('questionpaper_id');
         $data['questionpaper_data'] = questionpaperModel::find($questionpaper_id)->toArray();
 
@@ -73,6 +78,7 @@ class onlineExamController extends Controller
 
     public function store(Request $request)
     {
+        // echo "<pre>";print_r($request->all());die;
         $type = $request->input('type');
         //Clear session for timer
         Session::forget('session_quiz');
