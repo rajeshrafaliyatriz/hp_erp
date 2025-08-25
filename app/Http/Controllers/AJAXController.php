@@ -22,7 +22,7 @@ use Illuminate\Database\Schema\Blueprint;
 use GuzzleHttp\Client;
 use PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Database\Schema\Validator;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 
 class AJAXController extends Controller
