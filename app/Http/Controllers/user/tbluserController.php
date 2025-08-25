@@ -575,6 +575,12 @@ class tbluserController extends Controller
                         'ability' => $classificationItems->has('ability')
                                 ? $classificationItems['ability']->pluck('classification_item')->toArray()
                                 : [],
+                        'behaviour' => $classificationItems->has('behaviour')
+                                ? $classificationItems['behaviour']->pluck('classification_item')->toArray()
+                                : [],
+                        'attitude' => $classificationItems->has('attitude')
+                                ? $classificationItems['attitude']->pluck('classification_item')->toArray()
+                                : [],
                     ];
                 });
 
