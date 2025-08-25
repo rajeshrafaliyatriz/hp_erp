@@ -13,6 +13,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use function App\Helpers\is_mobile;
+use Illuminate\Support\Facades\Validator;
+use App\Http\Controllers\AJAXController;
+use Illuminate\Support\Facades\Hash;
 
 class ForgotPasswordController extends Controller
 {
@@ -22,10 +26,11 @@ class ForgotPasswordController extends Controller
      * @return Application|Factory|View()
      */
 
-    public function showForgetPasswordForm()
-    {
-        return view('auth.forgetPassword');
-    }
+    // public function showForgetPasswordForm()
+    // {
+    //     return view('auth.forgetPassword');
+    // }
+
 
     /**
      * Write code on Method
@@ -35,25 +40,89 @@ class ForgotPasswordController extends Controller
 
     public function submitForgetPasswordForm(Request $request)
     {
-        $request->validate([
-            'email' => 'required|email|exists:tbluser',
+        // return $request;
+        $type = $request->type;
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'reset_url'=>'required',
         ]);
 
-        $token = Str::random(64);
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' =>  $validator->errors()->first(),
+            ], 422);
+        }
 
-        DB::table('password_resets')->insert([
-            'email'      => $request->email,
+        $checkUser = tbluserModel::where('email', $request->email)->first();
+        if (! $checkUser) {
+            return response()->json([
+               'status' => false,
+               'message' =>  'Email does not exist!',
+            ], 422);
+        } //end if
+
+        $token = Str::random(64);
+        $email = $request->email;
+        $reset_url = $request->reset_url;
+        $checkEmailExists = DB::table('password_reset_tokens')->where('email', $email)->first();
+        if ($checkEmailExists) {    
+            DB::table('password_reset_tokens')->where('email', $email)->delete();
+        } //end if
+        $insert = DB::table('password_reset_tokens')->insert([
+            'email'      => $email,
             'token'      => $token,
             'created_at' => Carbon::now(),
         ]);
 
-        Mail::send('email.forgetPassword', ['token' => $token, 'email' => $request->email],
-            function ($message) use ($request) {
-                $message->to($request->email);
-                $message->subject('Reset Password');
-            });
+        $htmlContent = '
+        <html>
+            <head>
+                <title>Reset Password</title>
+            </head>
+            <body>
+                <p>Dear User,</p>
+                <p>We have received a request to reset your password. Please click on the following link to reset your password:</p>
+                <p><a href="' . $reset_url . '?token=' . $token . '&email=' . $email . '">Reset Password</a></p>
+                <p>If you did not request a password reset, no further action is required.</p>
+                <p>Thank you,</p>
+            </body>
+        </html>';
+        
+        $emailController  = new AJAXController();
+        $newRequest = request()->merge([
+            'email' => $request->email,
+            'token' => $token,
+            'sub_institute_id' => 1,
+            'example_subject' => 'Reset Password',
+            'all_email' => $email,
+            'content' => $htmlContent,
+        ]);
 
-        return back()->with('message', 'We have e-mailed your password reset link!');
+        $emailSent = $emailController->sendEmail($newRequest);
+        // return $emailSent;
+        // Mail::send(
+        //     'email.forgetPassword',
+        //     ['token' => $token, 'email' => $request->email],
+        //     function ($message) use ($request) {
+        //         $message->to($request->email);
+        //         $message->subject('Reset Password');
+        //     }
+        // );
+
+        if ($insert) {
+            $res = [
+                'message' => 'We have e-mailed your password reset link!',
+                'status'  => 1,
+            ];
+        } else {
+            $res = [
+                'message' => 'Failed to Find Email!',
+                'status'  => 0,
+            ];
+        }
+        // return back()->with('message', 'We have e-mailed your password reset link!');
+        return is_mobile($type, 'login', $res, "view");
     }
 
     /**
@@ -75,13 +144,19 @@ class ForgotPasswordController extends Controller
 
     public function submitResetPasswordForm(Request $request)
     {
-        $request->validate([
-            'email'                 => 'required|email|exists:tbluser',
+        $type = $request->type;
+        $validator = Validator::make($request->all(),[
+            'email'                 => 'required|email',
             'password'              => 'required|string|min:6|confirmed',
             'password_confirmation' => 'required',
         ]);
-
-        $updatePassword = DB::table('password_resets')
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' =>  $validator->errors()->first(),
+            ], 422);
+        }
+        $updatePassword = DB::table('password_reset_tokens')
             ->where([
                 'email' => $request->email,
                 'token' => $request->token,
@@ -91,9 +166,25 @@ class ForgotPasswordController extends Controller
             return back()->withInput()->with('error', 'Invalid token!');
         }
 
-        $user = tbluserModel::where('email', $request->email)->update(['password' => $request->password]);
-        DB::table('password_resets')->where(['email' => $request->email])->delete();
+        $user = tbluserModel::where('email', $request->email)->update(['password' => Hash::make($request->token),'plain_password'=>$request->password]);
 
-        return view('login')->with('successMsg', 'Your password has been changed!');
+        DB::table('password_reset_tokens')->where(['email' => $request->email])->delete();
+
+        // return view('login')->with('successMsg', 'Your password has been changed!');
+        if ($user) {
+            $res = [
+                'message' => 'Your password has been changed!',
+                'status'  => 1,
+            ];
+        } else {
+            $res = [
+                'message' => 'Failed to change password!',
+                'status'  => 0,
+            ];
+        }
+        // return back()->with('message', 'We have e-mailed your password reset link!');
+        return is_mobile($type, 'login', $res, "view");
     }
+
+    
 }
