@@ -252,20 +252,24 @@ class tblgroupwise_rightsController extends Controller
         $i = 0;
         foreach ($subMenuData as $key => $value) {
             $finalSubMenu[$value['parent_id']][$i] = $subMenuData[$key];
-            $finalSubMenu[$value['parent_id']]['can_view'] = $rights->can_view ?? 0;
-            $finalSubMenu[$value['parent_id']]['can_add'] = $rights->can_add ?? 0;
-            $finalSubMenu[$value['parent_id']]['can_edit'] = $rights->can_edit ?? 0;
-            $finalSubMenu[$value['parent_id']]['can_delete'] = $rights->can_delete ?? 0;
+            $rights = tblgroupwise_rightsModel::where(['profile_id' => $profile_id,'menu_id'=>$value['id']])->first();
+
+            $finalSubMenu[$value['parent_id']][$i]['can_view'] = $rights->can_view ?? 0;
+            $finalSubMenu[$value['parent_id']][$i]['can_add'] = $rights->can_add ?? 0;
+            $finalSubMenu[$value['parent_id']][$i]['can_edit'] = $rights->can_edit ?? 0;
+            $finalSubMenu[$value['parent_id']][$i]['can_delete'] = $rights->can_delete ?? 0;
             $i++;
         }
 
         $i = 0;
         foreach ($SubsubMenuData as $key => $value) {
             $finalSubSubMenu[$value['parent_id']][$i] = $SubsubMenuData[$key];
-            $finalSubSubMenu[$value['parent_id']]['can_view'] = $rights->can_view ?? 0;
-            $finalSubSubMenu[$value['parent_id']]['can_add'] = $rights->can_add ?? 0;
-            $finalSubSubMenu[$value['parent_id']]['can_edit'] = $rights->can_edit ?? 0;
-            $finalSubSubMenu[$value['parent_id']]['can_delete'] = $rights->can_delete ?? 0;
+            $rights = tblgroupwise_rightsModel::where(['profile_id' => $profile_id,'menu_id'=>$value['id']])->first();
+
+            $finalSubSubMenu[$value['parent_id']][$i]['can_view'] = $rights->can_view ?? 0;
+            $finalSubSubMenu[$value['parent_id']][$i]['can_add'] = $rights->can_add ?? 0;
+            $finalSubSubMenu[$value['parent_id']][$i]['can_edit'] = $rights->can_edit ?? 0;
+            $finalSubSubMenu[$value['parent_id']][$i]['can_delete'] = $rights->can_delete ?? 0;
             $i++;
         }
 
