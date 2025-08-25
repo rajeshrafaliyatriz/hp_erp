@@ -45,17 +45,21 @@ class questionpaperController extends Controller
     {
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
+      
+        $data['questionpaper_data'] = array();
+        $marking_period_id = session()->get('term_id');
+        $profile = session()->get('user_profile_name');
+        $user_id = session()->get('user_id');
+
         if($request->type=="API"){
             $sub_institute_id = $request->sub_institute_id;
             $syear = $request->syear;
+            $profile = $request->user_profile_name;
+            $user_id = $request->user_id;
         }
-        $data['questionpaper_data'] = array();
-        $marking_period_id = session()->get('term_id');
-        $teacher = session()->get('user_profile_name');
-        $user_id = session()->get('user_id');
-
-        if (strtoupper(session()->get('user_profile_name')) == "EMPLOYEE") {
-            $student_id = session()->get('user_id');
+        if (strtoupper($profile) == "EMPLOYEE") {
+            $student_id = $user_id;
+           
             $stu_data = DB::table('tbluser')->where(['id' => $student_id])->first();
 
             if (!empty($stu_data)) {
