@@ -238,14 +238,34 @@ class tblgroupwise_rightsController extends Controller
             ->toArray();
 
         $i = 0;
+        foreach ($data as $key => $value) {
+            $data[$i] = $data[$key];
+
+            $rights = tblgroupwise_rightsModel::where(['profile_id' => $profile_id,'menu_id'=>$value['id']])->first();
+            $data[$i]['can_view'] = $rights->can_view ?? 0;
+            $data[$i]['can_add'] = $rights->can_add ?? 0;
+            $data[$i]['can_edit'] = $rights->can_edit ?? 0;
+            $data[$i]['can_delete'] = $rights->can_delete ?? 0;
+            $i++;
+        }
+
+        $i = 0;
         foreach ($subMenuData as $key => $value) {
             $finalSubMenu[$value['parent_id']][$i] = $subMenuData[$key];
+            $finalSubMenu[$value['parent_id']]['can_view'] = $rights->can_view ?? 0;
+            $finalSubMenu[$value['parent_id']]['can_add'] = $rights->can_add ?? 0;
+            $finalSubMenu[$value['parent_id']]['can_edit'] = $rights->can_edit ?? 0;
+            $finalSubMenu[$value['parent_id']]['can_delete'] = $rights->can_delete ?? 0;
             $i++;
         }
 
         $i = 0;
         foreach ($SubsubMenuData as $key => $value) {
             $finalSubSubMenu[$value['parent_id']][$i] = $SubsubMenuData[$key];
+            $finalSubSubMenu[$value['parent_id']]['can_view'] = $rights->can_view ?? 0;
+            $finalSubSubMenu[$value['parent_id']]['can_add'] = $rights->can_add ?? 0;
+            $finalSubSubMenu[$value['parent_id']]['can_edit'] = $rights->can_edit ?? 0;
+            $finalSubSubMenu[$value['parent_id']]['can_delete'] = $rights->can_delete ?? 0;
             $i++;
         }
 
@@ -267,25 +287,25 @@ class tblgroupwise_rightsController extends Controller
         if (!empty($rightsData)) {
             foreach ($rightsData as $key => $value) {
                 if ($value['can_view'] == 1) {
-                    $rights['view'][] = $value['menu_id'] . "_" . $value['can_view'];
+                    $rights['view'][$value['menu_id']] = $value['can_view'];
                 }
                 if ($value['can_add'] == 1) {
-                    $rights['add'][] = $value['menu_id'] . "_" . $value['can_add'];
+                    $rights['add'][$value['menu_id']] = $value['can_add'];
                 }
                 if ($value['can_edit'] == 1) {
-                    $rights['edit'][] = $value['menu_id'] . "_" . $value['can_edit'];
+                    $rights['edit'][$value['menu_id']] = $value['can_edit'];
                 }
                 if ($value['can_delete'] == 1) {
-                    $rights['delete'][] = $value['menu_id'] . "_" . $value['can_delete'];
+                    $rights['delete'][$value['menu_id']] = $value['can_delete'];
                 }
             }
         }
 
         $response = array(
-            $data,
-            $finalSubMenu ?? [],
-            $finalSubSubMenu ?? [],
-            $rights
+            'level_1'=>$data,
+            'level_2'=>$finalSubMenu ?? [],
+            'level_3'=>$finalSubSubMenu ?? [],
+            // 'profile_rights'=>$rights
         );
 
         // return $response;
