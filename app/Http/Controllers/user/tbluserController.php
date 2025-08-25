@@ -358,6 +358,7 @@ class tbluserController extends Controller
         $allLevels = $userLevelOfResponsibility = [];
         foreach ($userLevelsArr as $key => $value) {
             $userLevelOfResponsibility['level'] = $value->level;
+            $userLevelOfResponsibility['guiding_phrase'] = $value->guiding_phrase;
             $userLevelOfResponsibility['essence_level'] = $value->essence_level;
             $userLevelOfResponsibility['guidance_note'] = $value->attribute_guidance_notes;
            if($value->attribute_type!='Business skills/Behavioural factors'){
@@ -432,7 +433,7 @@ class tbluserController extends Controller
                 $editData['userDepartment'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->where('id', $editData['department_id'])->value('department');
             }
             if (isset($editData['allocated_standards'])) {
-                $editData['userJobrole'] = skillJobroleMap::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
+                $editData['userJobrole'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
             }
         }
         // echo "<pre>";print_r($editData->id);exit;
@@ -915,7 +916,7 @@ class tbluserController extends Controller
                 $editData['userDepartment'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->where('id', $editData['department_id'])->value('department');
             }
             if (isset($editData['allocated_standards'])) {
-                $editData['userJobrole'] = skillJobroleMap::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
+                $editData['userJobrole'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
             }
         }
         // 29-10-2024 salary data
