@@ -20,9 +20,10 @@ use App\Models\school_setup\academic_sectionModel;
 use Illuminate\Support\Facades\Schema; // Import the Schema facade
 use Illuminate\Database\Schema\Blueprint;
 use GuzzleHttp\Client;
+use PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Http;
-use Validator;
-use DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class AJAXController extends Controller
 {
@@ -800,5 +801,76 @@ class AJAXController extends Controller
             'status' => 'success',
             'data' => $data
         ]);
+    }
+
+    public function sendEmail(Request $request)
+    {
+        $path = "";
+        $type = $request->input('type');
+        $sub_institute_id = $request->sub_institute_id;
+
+        $where_arr = [
+            "sub_institute_id" => $sub_institute_id,
+        ];
+        $smtp_details = DB::table('smtp_details')
+            ->where($where_arr)
+            ->whereNull('deleted_at')
+            ->get();
+
+        if (count($smtp_details) > 0) {
+            $emails = $request->all_email;
+            $to_arr = explode(',', $emails);
+
+            $subject = $request->example_subject;
+            $message = $request->content;
+            $attechment = $path;
+
+            //$ip = Request::ip();
+            $ip = $request->ip();
+
+            $from = $smtp_details[0]->gmail;
+            $from_pass = $smtp_details[0]->password;
+
+            $mail = new PHPMailer\PHPMailer();
+            $mail->IsSMTP();
+            $mail->isHTML(true);
+            $mail->SMTPDebug = 0;
+            $mail->SMTPAuth = true;
+            $mail->SMTPSecure = "ssl";
+            $mail->Host = $smtp_details[0]->server_address;
+            $mail->Port = $smtp_details[0]->port;
+
+            foreach ($to_arr as $id => $val) {
+                $mail->AddAddress($val);
+            }
+
+            $mail->Username = $from;
+            $mail->Password = $from_pass;
+            $mail->SetFrom($from, $from);
+            $mail->AddReplyTo($from, $from);
+            $mail->addAttachment($attechment);
+            $mail->Subject = $subject;
+            $mail->Body = $message;
+            $mail->AltBody = $message;
+
+            if (!$mail->Send()) {
+                $res = [
+                    "status_code" => 0,
+                    "message"     => "There is some error , while sending mail",
+                ];
+            } else {
+                $res = [
+                    "status_code" => 1,
+                    "message"     => "Email Sent",
+                ];
+            }
+        } else {
+            $res = [
+                "status_code" => 1,
+                "message"     => "You did not setup mail client.",
+            ];
+        }
+
+        return response()->json($res);
     }
 }
