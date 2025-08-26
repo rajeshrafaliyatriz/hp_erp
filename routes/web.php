@@ -75,7 +75,7 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::get('/create-view/{id}/update/{recordId}',[CustomModuleController::class,'crudCreate']);
     Route::post('/create-view-store/{id}',[CustomModuleController::class,'crudStore'])->name('custom_module_crud.store');
     Route::delete('/view-delete/{id}',[CustomModuleController::class,'viewDelete'])->name('custom_module_crud.delete');
-    // Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
+    Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
      Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
     Route::post('/matrix/save', [SkillMatrixController::class, 'store'])->name('matrix.save');
 });

@@ -559,6 +559,11 @@ class tbluserController extends Controller
                                 ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
                                 ->get()
                                 ->groupBy('classification');
+
+                     $classificationItems2 = DB::table('s_skill_knowledge_ability')
+                                ->where('skill_id', $item->userSkills->id ?? null)
+                                ->get()
+                                ->groupBy('classification');
                     return [
                         'jobrole_skill_id' => $item->id,
                         'jobrole' => $item->jobrole,
@@ -575,11 +580,11 @@ class tbluserController extends Controller
                         'ability' => $classificationItems->has('ability')
                                 ? $classificationItems['ability']->pluck('classification_item')->toArray()
                                 : [],
-                        'behaviour' => $classificationItems->has('behaviour')
-                                ? $classificationItems['behaviour']->pluck('classification_item')->toArray()
+                        'behaviour' => $classificationItems2->has('behaviour')
+                                ? $classificationItems2['behaviour']->pluck('classification_item')->toArray()
                                 : [],
-                        'attitude' => $classificationItems->has('attitude')
-                                ? $classificationItems['attitude']->pluck('classification_item')->toArray()
+                        'attitude' => $classificationItems2->has('attitude')
+                                ? $classificationItems2['attitude']->pluck('classification_item')->toArray()
                                 : [],
                     ];
                 });
