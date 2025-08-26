@@ -126,6 +126,7 @@ class tblgroupwise_rightsController extends Controller
         $editRights = $request->input('edit');
         $deleteRights = $request->input('delete');
         $viewRights = $request->input('view');
+        $dashboardRights = $request->input('dashboard');
 
         if (!isset($addRights)) {
             $addRights = array();
@@ -139,8 +140,11 @@ class tblgroupwise_rightsController extends Controller
         if (!isset($viewRights)) {
             $viewRights = array();
         }
+         if (!isset($dashboardRights)) {
+            $dashboardRights = array();
+        }
 
-        $arrayKeys = array_replace($addRights, $editRights, $deleteRights, $viewRights);
+        $arrayKeys = array_replace($addRights, $editRights, $deleteRights, $viewRights,$dashboardRights);
 
         tblgroupwise_rightsModel::where(["profile_id" => $request->input('profile_id')])->delete();
         $i = 0;
@@ -163,6 +167,9 @@ class tblgroupwise_rightsController extends Controller
             }
             if (isset($deleteRights[$key])) {
                 $finalArray['can_delete'] = 1;
+            }
+              if (isset($dashboardRights[$key])) {
+                $finalArray['dashboard_right'] = 1;
             }
             $insert = tblgroupwise_rightsModel::insert($finalArray);
             if ($insert) {
@@ -246,6 +253,7 @@ class tblgroupwise_rightsController extends Controller
             $data[$i]['can_add'] = $rights->can_add ?? 0;
             $data[$i]['can_edit'] = $rights->can_edit ?? 0;
             $data[$i]['can_delete'] = $rights->can_delete ?? 0;
+            $data[$i]['dashboard_right'] = $rights->dashboard_right ?? 0;
             $i++;
         }
 
@@ -258,6 +266,7 @@ class tblgroupwise_rightsController extends Controller
             $finalSubMenu[$value['parent_id']][$i]['can_add'] = $rights->can_add ?? 0;
             $finalSubMenu[$value['parent_id']][$i]['can_edit'] = $rights->can_edit ?? 0;
             $finalSubMenu[$value['parent_id']][$i]['can_delete'] = $rights->can_delete ?? 0;
+            $finalSubMenu[$value['parent_id']][$i]['dashboard_right'] = $rights->dashboard_right ?? 0;
             $i++;
         }
 
@@ -270,6 +279,7 @@ class tblgroupwise_rightsController extends Controller
             $finalSubSubMenu[$value['parent_id']][$i]['can_add'] = $rights->can_add ?? 0;
             $finalSubSubMenu[$value['parent_id']][$i]['can_edit'] = $rights->can_edit ?? 0;
             $finalSubSubMenu[$value['parent_id']][$i]['can_delete'] = $rights->can_delete ?? 0;
+            $finalSubSubMenu[$value['parent_id']][$i]['dashboard_right'] = $rights->dashboard_right ?? 0;
             $i++;
         }
 
