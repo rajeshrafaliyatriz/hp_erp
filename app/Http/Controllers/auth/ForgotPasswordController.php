@@ -144,6 +144,7 @@ class ForgotPasswordController extends Controller
 
     public function submitResetPasswordForm(Request $request)
     {
+    //    return $request;
         $type = $request->type;
         $validator = Validator::make($request->all(),[
             'email'                 => 'required|email',
@@ -156,17 +157,21 @@ class ForgotPasswordController extends Controller
                 'message' =>  $validator->errors()->first(),
             ], 422);
         }
+        
         $updatePassword = DB::table('password_reset_tokens')
             ->where([
                 'email' => $request->email,
                 'token' => $request->token,
             ])->first();
 
-        if (! $updatePassword) {
-            return back()->withInput()->with('error', 'Invalid token!');
+        if (!$updatePassword) {
+             return response()->json([
+                'status' => false,
+                'message' =>  'Failed to fetch Email! please retry !',
+            ], 422);
         }
 
-        $user = tbluserModel::where('email', $request->email)->update(['password' => Hash::make($request->token),'plain_password'=>$request->password]);
+        $user = tbluserModel::where('email', $request->email)->update(['password' => Hash::make($request->password),'plain_password'=>$request->password]);
 
         DB::table('password_reset_tokens')->where(['email' => $request->email])->delete();
 

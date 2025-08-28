@@ -72,9 +72,11 @@ class tbluserController extends Controller
             $user_data = tbluserModel::select(
                 'tbluser.*',
                 'tbluserprofilemaster.name as profile_name',
-                DB::raw('if(tbluser.status = 1,"Active","Inactive") as status')
+                DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
+                DB::raw('hrms_departments.department as department_name')
             )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
+            ->leftJoin('hrms_departments', 'tbluser.department_id', '=', 'hrms_departments.id')
             ->where(['tbluser.sub_institute_id' => $sub_institute_id]) //, 'tbluser.status' => "1"
             ->when(!in_array($user_profile, ["Admin", "Super Admin"]), function ($q) use ($user_id) {
                 $q->where('tbluser.id', $user_id);

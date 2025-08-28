@@ -31,10 +31,18 @@ class courseController extends Controller
 
     public function getData($request)
 	{
+		$type=$request->type;
 	    $sub_institute_id = session()->get('sub_institute_id');
 	    $syear = session()->get('syear');
 	    $user_profile_name = session()->get('user_profile_name');
 	    $user_id = session()->get('user_id');
+
+		if($type=="API"){
+			$sub_institute_id = $request->get('sub_institute_id');
+			$syear = $request->get('syear');
+			$user_profile_name = $request->get('user_profile_name');
+			$user_id = $request->get('user_id');
+		}
 	    $mycourse_arr = [];
 
 	    $extra = " 1=1 ";
@@ -105,10 +113,11 @@ class courseController extends Controller
 
 	    } else {
 	        $arr = DB::table('sub_std_map as s')
-	            ->selectRaw("STD.name AS standard_name,s.display_name AS subject_name,s.subject_id,STD.id AS standard_id,
+	            ->selectRaw("STD.name AS standard_name,s.display_name AS subject_name,ss.subject_code,ss.short_name,ss.subject_type,s.subject_id,STD.id AS standard_id,
 	                s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))SEPARATOR '#') AS chapter_list,
 	                IFNULL(s.subject_category,'My Course') AS content_category,s.sub_institute_id")
 	            ->join('standard AS STD', 'STD.id', '=', 's.standard_id')
+				->join('subject AS ss', 'ss.id', '=', 's.subject_id')
 	            ->leftJoin('chapter_master AS cp', function ($join) {
 	                $join->on('cp.subject_id', '=', 's.subject_id')
 	                    ->on('cp.standard_id', '=', 's.standard_id');
