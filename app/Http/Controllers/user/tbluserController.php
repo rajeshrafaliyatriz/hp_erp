@@ -73,7 +73,7 @@ class tbluserController extends Controller
                 'tbluser.*',
                 'tbluserprofilemaster.name as profile_name',
                 DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
-                DB::raw('hrms_departments.department as department_name')
+                DB::raw('IFNULL(hrms_departments.department,"-") as department_name')
             )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
             ->leftJoin('hrms_departments', 'tbluser.department_id', '=', 'hrms_departments.id')
