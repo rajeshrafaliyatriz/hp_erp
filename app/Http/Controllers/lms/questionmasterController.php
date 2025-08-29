@@ -199,7 +199,7 @@ class questionmasterController extends Controller
     {
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $type = $request->get('type');
-        if($type=="API"){
+        if ($type == "API") {
             $sub_institute_id = $request->input('sub_institute_id');
         }
         $data['questionmaster_data'] = array();
@@ -301,7 +301,7 @@ class questionmasterController extends Controller
     public function store(Request $request)
     {
         // echo ('<pre>');print_r($_REQUEST);die;
-        $type=$request->input('type');
+        $type = $request->input('type');
 
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $user_id = $request->session()->get('user_id');
@@ -326,7 +326,7 @@ class questionmasterController extends Controller
             // Validate required fields
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
-                'user_id' =>'required',
+                'user_id' => 'required',
             ]);
 
             // If validation fails
@@ -359,6 +359,8 @@ class questionmasterController extends Controller
             'topic_id'                     => $request->get('topic_id'),
             'question_title'               => $request->get('question_title'),
             'description'                  => $request->get('description'),
+            'concept'                  => $request->get('concept'),
+            'subconcept'                  => $request->get('subconcept'),
             'multiple_answer'              => $multiple_answer_val,
             'pre_grade_topic'              => $pre_topic,
             'post_grade_topic'             => $post_topic,
@@ -388,6 +390,8 @@ class questionmasterController extends Controller
                     'mapping_value_id'  => $mapping_value[$key],
                     'mapping_value_id'  => $mapping_value[$key],
                     'reasons' => $reasons[$key],
+                    'created_at'                   => now(),
+                    'created_by'                => $user_id,
                 );
                 // echo "<pre>";print_r($contentmappingtype);
 
@@ -421,24 +425,23 @@ class questionmasterController extends Controller
         }
         //END Insert into answer_master
         // exit;
-        if($question_id && $question_id!=''){
+        if ($question_id && $question_id != '') {
             $res = array(
                 "status_code" => 1,
                 "message"     => "Question-Master Added Successfully",
             );
-        }else{
+        } else {
             $res = array(
                 "status_code" => 0,
                 "message"     => "Failed to Add Question",
             );
         }
-        
+
 
         // return array
-        if($type=="API"){
+        if ($type == "API") {
             return response()->json($res, 200);
-        }
-        else if ($request->get('topic_id')) {
+        } else if ($request->get('topic_id')) {
             return redirect()->route(
                 'question_master.index',
                 ['chapter_id' => $request->get('chapter_id'), 'topic_id' => $request->get('topic_id'), 'standard_id' => $request->get('standard_id')]
@@ -460,7 +463,9 @@ class questionmasterController extends Controller
     {
         $type = $request->input('type');
         $sub_institute_id = $request->session()->get('sub_institute_id');
-
+        if($type == "API"){
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
         $data['questionmaster_data'] = lmsQuestionMasterModel::find($id)->toArray();
 
         ////GET Question Answer values
@@ -646,7 +651,7 @@ class questionmasterController extends Controller
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
                 'syear' => 'required',
-                'user_id'=> 'required',
+                'user_id' => 'required',
             ]);
 
             // If validation fails
@@ -677,6 +682,8 @@ class questionmasterController extends Controller
             'topic_id'                     => $request->get('topic_id'),
             'question_title'               => $request->get('question_title'),
             'description'                  => $request->get('description'),
+            'concept'                  => $request->get('concept'),
+            'subconcept'                  => $request->get('subconcept'),
             'points'                       => $request->get('points'),
             'pre_grade_topic'              => $pre_topic,
             'post_grade_topic'             => $post_topic,
@@ -687,10 +694,10 @@ class questionmasterController extends Controller
             'hint_text'                    => $request->get('hint_text'),
             'learning_outcome'             => $request->get('learning_outcome'),
             'updated_by'                   => $user_id,
-            'updated_at'                   => now(),    
+            'updated_at'                   => now(),
         );
 
-       $update = lmsQuestionMasterModel::where(["id" => $id])->update($question);
+        $update = lmsQuestionMasterModel::where(["id" => $id])->update($question);
 
         if ($request->get('hid_question_type_id') == 1) {
             $option_arr = $request->get('options');
@@ -706,8 +713,9 @@ class questionmasterController extends Controller
                     'answer'           => $val,
                     'feedback'         => $feedback_arr['EDIT'][$key],
                     'correct_answer'   => $correct_answer_val,
-                    'created_by'       => $user_id,
                     'sub_institute_id' => $sub_institute_id,
+                    'updated_by'                   => $user_id,
+                    'updated_at'                   => now(),
                 );
                 answermasterModel::where(["id" => $key])->update($answer);
             }
@@ -732,24 +740,24 @@ class questionmasterController extends Controller
             }
         }
         //END Delete and insert into question_mapping_Data
-        if($update){
+        if ($update) {
             $res = [
                 "status_code" => 1,
                 "message"     => "Question-Master Updated Successfully",
             ];
-        }else{
+        } else {
             $res = [
                 "status_code" => 0,
                 "message"     => "Failed to Update Question",
             ];
         }
-        
+
         //return is_mobile($type, "question_master.index", $res, "redirect");
 
         // return array
-        if($type=="API"){
+        if ($type == "API") {
             return response()->json($res, 200);
-        }else if ($request->get('topic_id')) {
+        } else if ($request->get('topic_id')) {
             return redirect()->route(
                 'question_master.index',
                 ['chapter_id' => $request->get('chapter_id'), 'topic_id' => $request->get('topic_id'), 'standard_id' => $request->get('standard_id')]
@@ -786,7 +794,7 @@ class questionmasterController extends Controller
             // Validate required fields
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
-                'user_id'=> 'required',
+                'user_id' => 'required',
             ]);
 
             // If validation fails
@@ -803,20 +811,20 @@ class questionmasterController extends Controller
         $deleteQuestionPaper = lmsQuestionMappingModel::where(["questionmaster_id" => $id])->delete();
         $deleteQuestion = lmsQuestionMasterModel::where(["id" => $id])->delete();
 
-        if($deleteQuestion){
-        $res['status_code'] = "1";
-        $res['message'] = "Question-Master Deleted Successfully";
-        }else{
-            
-        $res['status_code'] = "0";
-        $res['message'] = "Failed to Delete Question-Master";
+        if ($deleteQuestion) {
+            $res['status_code'] = "1";
+            $res['message'] = "Question-Master Deleted Successfully";
+        } else {
+
+            $res['status_code'] = "0";
+            $res['message'] = "Failed to Delete Question-Master";
         }
-        if($type=="API"){
+        if ($type == "API") {
             return response()->json($res, 200);
-        }else{
-            return redirect()->route('question_master.index', ['chapter_id' => $chapter_id, 'topic_id' => $topic_id,'standard_id' => $standard_id]);
+        } else {
+            return redirect()->route('question_master.index', ['chapter_id' => $chapter_id, 'topic_id' => $topic_id, 'standard_id' => $standard_id]);
         }
-    
+
         //return is_mobile($type, "question_master.index", $res);
     }
 

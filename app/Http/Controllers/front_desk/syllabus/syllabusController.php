@@ -54,7 +54,7 @@ class syllabusController extends Controller
                     $join->on("s.id", "=", "c.standard_id");
                 })
                 ->join('sub_std_map as su', function ($join) {
-                    $join->on("su.subject_id", "=", "c.subject_id")->whereRaw("su.standard_id = c.standard_id");
+                    $join->on("su.id", "=", "c.subject_id")->whereRaw("su.standard_id = c.standard_id");
                 })
                 ->join('timetable as t', function ($join) {
                     $join->on("t.standard_id", "=", "s.id")->whereRaw("t.subject_id = su.subject_id AND t.sub_institute_id = su.sub_institute_id");
@@ -75,7 +75,7 @@ class syllabusController extends Controller
                     $join->on("s.id", "=", "c.standard_id");
                 })
                 ->join('sub_std_map as su', function ($join) {
-                    $join->on("su.subject_id", "=", "c.subject_id")->whereRaw("su.standard_id = c.standard_id");
+                    $join->on("su.id", "=", "c.subject_id")->whereRaw("su.standard_id = c.standard_id");
                 })
                 ->join('tbluser as u',function($q){
                     $q->on('u.id','=','c.created_by');

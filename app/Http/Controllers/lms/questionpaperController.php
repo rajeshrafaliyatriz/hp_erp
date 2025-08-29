@@ -81,7 +81,7 @@ class questionpaperController extends Controller
                 })                
                 ->join('academic_section', 'academic_section.id', '=', 'question_paper.grade_id')
                 ->join('sub_std_map as ssm', function ($join) use ($sub_institute_id) {
-                    $join->on('ssm.subject_id', '=', 'question_paper.subject_id');
+                    $join->on('ssm.id', '=', 'question_paper.subject_id');
                 })
                 ->leftJoin('lms_online_exam', function ($join) use ($student_id) {
                     $join->on('lms_online_exam.question_paper_id', '=', 'question_paper.id')

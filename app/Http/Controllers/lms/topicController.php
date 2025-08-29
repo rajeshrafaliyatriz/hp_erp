@@ -130,7 +130,7 @@ class topicController extends Controller
 
         $breadcrum_data = DB::table('chapter_master as c')
             ->join('sub_std_map as s', function ($join) {
-                $join->whereRaw('s.subject_id = c.subject_id AND s.standard_id = c.standard_id');
+                $join->whereRaw('s.id = c.subject_id AND s.standard_id = c.standard_id');
             })->join('standard as st', function ($join) {
                 $join->whereRaw('st.id = c.standard_id');
             })->selectRaw('c.subject_id,s.display_name AS subject_name,c.standard_id,st.name AS standard_name,

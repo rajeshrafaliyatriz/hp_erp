@@ -40,10 +40,10 @@ class lmsVirtualClassroomController extends Controller
             $data['virtualclassroom_data'] = virtualclassroomModel::select('lms_virtual_classroom.*',
                 DB::raw('sub_std_map.display_name as subject_name,chapter_master.chapter_name AS chapter_name,
                 topic_master.name AS topic_name,concat_ws(" ",tbluser.first_name,tbluser.last_name) as teacher_name,concat(lms_virtual_classroom.event_date," ",lms_virtual_classroom.from_time) as event_datetime'))
-                ->join('sub_std_map', 'sub_std_map.subject_id', '=', 'lms_virtual_classroom.subject_id')
+                ->join('sub_std_map', 'sub_std_map.id', '=', 'lms_virtual_classroom.subject_id')
                 ->join("timetable", function ($join) {
                     $join->on("timetable.standard_id", "=", "sub_std_map.standard_id")
-                        ->on("timetable.subject_id", "=", "sub_std_map.subject_id")
+                        ->on("timetable.subject_id", "=", "sub_std_map.id")
                         ->on("timetable.sub_institute_id", "=", "sub_std_map.sub_institute_id");
                 })
                 ->join('chapter_master', 'chapter_master.id', '=', 'lms_virtual_classroom.chapter_id')
@@ -62,7 +62,7 @@ class lmsVirtualClassroomController extends Controller
             $data['virtualclassroom_data'] = virtualclassroomModel::select('lms_virtual_classroom.*',
                 DB::raw('sub_std_map.display_name as subject_name,chapter_master.chapter_name AS chapter_name,
                 topic_master.name AS topic_name,concat_ws(" ",tbluser.first_name,tbluser.last_name) as teacher_name,concat(lms_virtual_classroom.event_date," ",lms_virtual_classroom.from_time) as event_datetime'))
-                ->join('sub_std_map', 'sub_std_map.subject_id', '=', 'lms_virtual_classroom.subject_id')
+                ->join('sub_std_map', 'sub_std_map.id', '=', 'lms_virtual_classroom.subject_id')
                 ->join('chapter_master', 'chapter_master.id', '=', 'lms_virtual_classroom.chapter_id')
                 ->join('topic_master', 'topic_master.id', '=', 'lms_virtual_classroom.topic_id')
                 ->join('tbluser', function($join){
