@@ -82,7 +82,7 @@ class flashcardController extends Controller
 
         $breadcrum_data = DB::table('chapter_master as c')
             ->join('sub_std_map as s', function ($join) {
-                $join->whereRaw('s.subject_id = c.subject_id AND s.standard_id = c.standard_id');
+                $join->whereRaw('s.id = c.subject_id AND s.standard_id = c.standard_id');
             })->join('standard as st', function ($join) {
                 $join->whereRaw('st.id = c.standard_id');
             })->Join('topic_master as t', function ($join) {

@@ -25,7 +25,7 @@ class lmsSyllabusController extends Controller
         $getData = DB::table('lms_syllabus as ls')
         ->join('lms_curriculum as lc','ls.curriculum_id','=','lc.id')
         ->join('standard as s','s.id','=','ls.standard_id')
-        ->join('sub_std_map as ssm','ssm.subject_id','=','ls.subject_id')
+        ->join('sub_std_map as ssm','ssm.id','=','ls.subject_id')
         ->selectRaw('ls.*,s.name as standard_name,ssm.display_name as subject_name,lc.curriculum_name')
         ->where('ls.sub_institute_id',$sub_institute_id)
         ->groupBy('ls.id')

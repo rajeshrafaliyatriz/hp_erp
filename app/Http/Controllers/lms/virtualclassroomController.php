@@ -71,7 +71,7 @@ class virtualclassroomController extends Controller
         $marking_period_id=session()->get('term_id');
         $breadcrum_data = DB::table('chapter_master as c')
             ->join('sub_std_map as s', function ($join) use($topic_id){
-                $join->whereRaw('s.subject_id = c.subject_id AND s.standard_id = c.standard_id');
+                $join->whereRaw('s.id = c.subject_id AND s.standard_id = c.standard_id');
                 // ->when($marking_period_id,function($query) use($marking_period_id){
                 //     $query->where('s.marking_period_id',$marking_period_id);
                 // });

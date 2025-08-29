@@ -478,12 +478,12 @@ class AJAXController extends Controller
             );
         }
         if (count($explode) > 1) {
-            $std_sub_map = DB::table('subject')
-                ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
+            $std_sub_map = DB::table('sub_std_map')
+                // ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
                 ->whereIn("sub_std_map.standard_id", $explode)
                 ->where($where)
                 ->orderBy('sub_std_map.sort_order')
-                ->pluck('sub_std_map.display_name', 'subject.id');
+                ->pluck('sub_std_map.display_name', 'sub_std_map.id');
         } else {
             if (session()->get('user_profile_name') == 'Teacher') {
                 # Get subjects by teacher, standard and division
@@ -498,11 +498,11 @@ class AJAXController extends Controller
                     ->pluck('sub.subject_name as display_name', 'sub.id');
             } else {
                 $where['sub_std_map.standard_id'] = $request->standard_id;
-                $std_sub_map = DB::table('subject')
-                    ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
+                $std_sub_map = DB::table('sub_std_map')
+                    // ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
                     ->where($where)
                     ->orderBy('sub_std_map.sort_order')
-                    ->pluck('sub_std_map.display_name', 'subject.id');
+                    ->pluck('sub_std_map.display_name', 'sub_std_map.id');
             }
         }
 

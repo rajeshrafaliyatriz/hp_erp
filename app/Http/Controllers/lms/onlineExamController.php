@@ -323,7 +323,7 @@ class onlineExamController extends Controller
     {
         $data = questionpaperModel::select('question_paper.*', 'sub_std_map.display_name as subject_name')
             ->join("sub_std_map", function ($join) {
-                $join->on("sub_std_map.subject_id", "=", "question_paper.subject_id")
+                $join->on("sub_std_map.id", "=", "question_paper.subject_id")
                     ->on("sub_std_map.standard_id", "=", "question_paper.standard_id");
             })
             ->where('question_paper.id', $questionpaper_id)->get()->toArray();

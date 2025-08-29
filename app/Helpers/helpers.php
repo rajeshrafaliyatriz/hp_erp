@@ -481,9 +481,9 @@ if (!function_exists('is_mobile')) {
 
         if ($std_val != "") {
             $subjects = DB::table('sub_std_map')
-                ->join('subject', 'subject.id', '=', 'sub_std_map.subject_id')
+                // ->join('subject', 'subject.id', '=', 'sub_std_map.subject_id')
                 ->where("sub_std_map.standard_id", $std_val)
-                ->pluck('subject.subject_name', 'subject.id');
+                ->pluck('sub_std_map.display_name', 'sub_std_map.id');
 
             $sub_option = "<option value=''>Select Subject</option>";
             foreach ($subjects as $id => $val) {
@@ -679,9 +679,9 @@ if (!function_exists('SearchChainSubject')) {
 
         if ($std_val != "") {
             $subjects = DB::table('sub_std_map')
-                ->join('subject', 'subject.id', '=', 'sub_std_map.subject_id')
-                ->where("sub_std_map.standard_id", $std_val)
-                ->pluck('subject.subject_name', 'subject.id');
+            // ->join('subject', 'subject.id', '=', 'sub_std_map.subject_id')
+            ->where("sub_std_map.standard_id", $std_val)
+            ->pluck('sub_std_map.display_name', 'sub_std_map.id');
 
             foreach ($subjects as $id => $val) {
                 $selected = '';

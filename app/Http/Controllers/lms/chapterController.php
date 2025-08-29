@@ -145,7 +145,7 @@ class chapterController extends Controller
             ->orderBy('chapter_master.sort_order')
             ->get();
 
-        $data['basic_ids'] = sub_std_mapModel::select('standard.grade_id', 'sub_std_map.subject_id',
+        $data['basic_ids'] = sub_std_mapModel::select('standard.grade_id', 'sub_std_map.id as subject_id',
             'sub_std_map.standard_id',
             'sub_std_map.display_name as subject_name', 'sub_std_map.add_content')
             ->join('standard', 'standard.id', '=', 'sub_std_map.standard_id')
@@ -155,7 +155,7 @@ class chapterController extends Controller
                         ->orWhere('sub_std_map.sub_institute_id', $sub_institute_id);
                 }
             })
-            ->where('sub_std_map.subject_id', $subject_id)
+            ->where('sub_std_map.id', $subject_id)
             ->where('sub_std_map.standard_id', $standard_id)
             ->get()->toArray();
 
@@ -593,7 +593,7 @@ class chapterController extends Controller
             $standard_id = $request->get('standard_id');
 
             //START Get subject name
-            $subject = DB::table('sub_std_map')->where('subject_id', $subject_id)
+            $subject = DB::table('sub_std_map')->where('id', $subject_id)
                 ->where('standard_id', $standard_id)->get()->toArray();
 
             $subject_name = str_replace($this->searchArr, $this->replaceArr, $subject[0]->display_name);
