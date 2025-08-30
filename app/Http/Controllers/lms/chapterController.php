@@ -10,6 +10,8 @@ use App\Models\school_setup\sub_std_mapModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use function App\Helpers\is_mobile;
+use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\Validator;
 
 class chapterController extends Controller
 {
@@ -22,6 +24,32 @@ class chapterController extends Controller
         // echo "<pre>";print_r(session()->all());exit;
         $type = $request->input('type');
         $res['sub_institute_id'] = session()->get('sub_institute_id');
+
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+        }
         // 28-02-2025 starts     
         $lms_mapping_type = DB::table('lms_mapping_type')
         ->where('status', '=', 1)
@@ -50,11 +78,11 @@ class chapterController extends Controller
         $res['message'] = "SUCCESS";
         $res['data'] = $data['chapter_data'];
         $res['content_data'] = $data['content_data'];
-        $res['grade'] = $data['basic_ids']['grade_id'];
-        $res['standard'] = $data['basic_ids']['standard_id'];
-        $res['subject'] = $data['basic_ids']['subject_id'];
-        $res['subject_name'] = $data['basic_ids']['subject_name'];
-        $res['show_content'] = $data['basic_ids']['add_content'];
+        $res['grade'] = $data['basic_ids']['grade_id'] ?? [];
+        $res['standard'] = $data['basic_ids']['standard_id'] ?? [];
+        $res['subject'] = $data['basic_ids']['subject_id'] ?? [];
+        $res['subject_name'] = $data['basic_ids']['subject_name'] ?? [];
+        $res['show_content'] = $data['basic_ids']['add_content'] ?? [];
         $res['lms_mapping_type'] = $lms_mapping_type;  // added on 28-02-2025
         $res['lms_mapping_Values'] = $lms_mapping_Values;  // added on 28-02-2025
         $res['mapped_type'] = $request->mapping_type;  // added on 28-02-2025
@@ -70,6 +98,12 @@ class chapterController extends Controller
             $year = DB::table('academic_year')->where('sub_institute_id',$sub_institute_id)->get()->toArray();
             $syear =$year[0]->syear;
             $user_profile_name = 1;
+        }
+        elseif($request->type=="API"){
+            
+            $sub_institute_id = $request->get('sub_institute_id');
+            $syear = $request->get('syear');
+            $user_profile_name = $request->get('user_profile_name');
         }else{
             $sub_institute_id = $request->session()->get('sub_institute_id');
             $syear = $request->session()->get('syear');
@@ -106,11 +140,12 @@ class chapterController extends Controller
             ->where('chapter_master.subject_id', $subject_id)
             ->where('chapter_master.standard_id', $standard_id)
             ->where($extra_where)
+            ->whereNull('chapter_master.deleted_at')
             ->groupBy('chapter_master.id')
             ->orderBy('chapter_master.sort_order')
             ->get();
 
-        $data['basic_ids'] = sub_std_mapModel::select('standard.grade_id', 'sub_std_map.subject_id',
+        $data['basic_ids'] = sub_std_mapModel::select('standard.grade_id', 'sub_std_map.id as subject_id',
             'sub_std_map.standard_id',
             'sub_std_map.display_name as subject_name', 'sub_std_map.add_content')
             ->join('standard', 'standard.id', '=', 'sub_std_map.standard_id')
@@ -120,7 +155,7 @@ class chapterController extends Controller
                         ->orWhere('sub_std_map.sub_institute_id', $sub_institute_id);
                 }
             })
-            ->where('sub_std_map.subject_id', $subject_id)
+            ->where('sub_std_map.id', $subject_id)
             ->where('sub_std_map.standard_id', $standard_id)
             ->get()->toArray();
 
@@ -197,7 +232,7 @@ class chapterController extends Controller
         // echo "<pre>";print_r($content_data_array);exit;
         $data['content_data'] = $content_data_array;
 
-        $data['basic_ids'] = $data['basic_ids'][0];
+        $data['basic_ids'] = $data['basic_ids'][0] ?? [];
 
         return $data;
     }
@@ -213,15 +248,46 @@ class chapterController extends Controller
 
     public function store(Request $request)
     {
+        $type=$request->type;
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
         $user_id = $request->session()->get('user_id');
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'syear' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+             $sub_institute_id = $request->get('sub_institute_id');
+            $syear = $request->get('syear');
+            $user_id = $request->get('user_id');
+        }
         $chapter_name = $request->get('chapter_name');
         $chapter_desc = $request->get('chapter_desc');
         $availability = $request->get('availability');
         $sort_order = $request->get('sort_order');
         $show_hide = $request->get('show_hide');
-
+        $i = 0;
         foreach ($chapter_name as $key => $val) {
             $show_hide_val = $show_hide[$key] ?? '';
             $availability_val = $availability[$key] ?? '';
@@ -240,19 +306,33 @@ class chapterController extends Controller
                 'sub_institute_id' => $sub_institute_id,
                 'sort_order'       => $sort_order_val,
                 'syear'            => $syear,
+                'created_at'        =>now(),
+                'created_by'        => $user_id,
             ];
 
-            chapterModel::insert($ch);
+            $insert = chapterModel::insert($ch);
+            if($insert){
+                $i++;
+            }
         }
-
+        if($i>0){
         $res = [
             "status_code" => 1,
             "message"     => "Chapters Added Successfully",
             "subject_id"  => $request->get('subject'),
         ];
 
-        $type = $request->input('type');
+        }else{
+            
+        $res = [
+            "status_code" => 0,
+            "message"     => "Failed to add chapter",
+        ];
+        }
 
+        if($type=="API"){
+            return response()->json($res);
+        }
         return redirect()->route('chapter_master.index',
             [
                 'standard_id' => $request->get('standard'), 'subject_id' => $request->get('subject'),'perm'=>$sub_institute_id
@@ -277,30 +357,75 @@ class chapterController extends Controller
 
     public function update(Request $request, $id)
     {
+        // return $request;
+        $type = $request->input('type');
+
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
         $user_id = $request->session()->get('user_id');
+
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'syear' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+            $syear = $request->get('syear');
+            $user_id = $request->get('user_id');
+        }
 // print_r($request->get('show_hide')[0]);EXIT;
         $data = [
             'grade_id'         => $request->get('grade'),
             'standard_id'      => $request->get('standard'),
             'subject_id'       => $request->get('subject'),
-            'chapter_name'     => $request->get('chapter_name')[0] ?? '',
-            'availability'     => $request->get('availability')[0] ?? '',
-            'show_hide'        => $request->get('show_hide')[0] ?? '',
-            'chapter_desc'     => $request->get('chapter_desc')[0] ?? '',
+            'chapter_name'     => $request->get('chapter_name')[0] ?? '-',
+            'availability'     => $request->get('availability')[0] ?? '1',
+            'show_hide'        => $request->get('show_hide')[0] ?? '1',
+            'chapter_desc'     => $request->get('chapter_desc')[0] ?? '-',
             'created_by'       => $user_id,
             'sub_institute_id' => $sub_institute_id,
-            'sort_order'       => $request->get('sort_order')[0] ?? '',
-            'syear'            => $syear,
+            'sort_order'       => $request->get('sort_order')[0] ?? '1',
+            'syear'            => $syear ?? date('Y'),
+            'updated_by'        =>$user_id,
+            'updated_at'        => now(),
         ];
 
-        chapterModel::where(["id" => $id])->update($data);
-        $res = [
+        $update = chapterModel::where(["id" => $id])->update($data);
+        if($update){
+         $res = [
             "status_code" => 1,
             "message"     => "Chapter Updated Successfully",
         ];
-        $type = $request->input('type');
+        }else{
+             $res = [
+            "status_code" => 0,
+            "message"     => "Failed to update Chapter",
+        ];
+        }
+       if($type=="API"){
+        return response()->json($res);
+       }
 
         return redirect()->route('chapter_master.index',
             [
@@ -311,14 +436,56 @@ class chapterController extends Controller
     public function destroy(Request $request, $id)
     {
         $type = $request->input('type');
-        $sub_institute_id = session()->get('sub_institute_id');
-        $chapterdata = chapterModel::where(["id" => $id])->get()->toArray();
-        $subject_id = $chapterdata[0]['subject_id'];
-        $standard_id = $chapterdata[0]['standard_id'];
-        chapterModel::where(["id" => $id])->delete();
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+            $user_id = $request->user_id;
+            $delete = chapterModel::where(["id" => $id])->update(['deleted_by'=>$user_id,'deleted_at'=>now()]);
+
+        }else{
+
+            $sub_institute_id = session()->get('sub_institute_id');
+            $chapterdata = chapterModel::where(["id" => $id])->get()->toArray();
+            $subject_id = $chapterdata[0]['subject_id'];
+            $standard_id = $chapterdata[0]['standard_id'];
+            $delete = chapterModel::where(["id" => $id])->delete();
+        }
+
+        if($delete){
+
         $res['status_code'] = "1";
         $res['message'] = "Chapter Deleted Successfully";
+        }else{
 
+        $res['status_code'] = "0";
+        $res['message'] = "Failed to delete chapter";
+        }
+
+        if($type=="API"){
+            return $res;
+        }
         return redirect()->route('chapter_master.index', ['subject_id' => $subject_id, 'standard_id' => $standard_id,'perm'=>$sub_institute_id]);
     }
 
@@ -426,7 +593,7 @@ class chapterController extends Controller
             $standard_id = $request->get('standard_id');
 
             //START Get subject name
-            $subject = DB::table('sub_std_map')->where('subject_id', $subject_id)
+            $subject = DB::table('sub_std_map')->where('id', $subject_id)
                 ->where('standard_id', $standard_id)->get()->toArray();
 
             $subject_name = str_replace($this->searchArr, $this->replaceArr, $subject[0]->display_name);

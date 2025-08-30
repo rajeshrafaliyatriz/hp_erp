@@ -169,7 +169,7 @@ class curriculumLessonplanController extends Controller
             $join->on('std.id','=','lp.standard_id')->on('std.sub_institute_id','=','lp.sub_institute_id');
         })
         ->join('sub_std_map as ssm',function($join){
-            $join->on('ssm.subject_id','=','lp.subject_id')->on('ssm.sub_institute_id','=','lp.sub_institute_id');
+            $join->on('ssm.id','=','lp.subject_id')->on('ssm.sub_institute_id','=','lp.sub_institute_id');
         })
         ->selectRaw('lp.*,ssm.display_name as subject_name,std.name as standard_name,(SELECT concat_ws(" ",COALESCE(first_name),COALESCE(middle_name),COALESCE(last_name)) FROM tbluser WHERE id=lp.teacher_id) as teacher_name')
         ->where(['lp.sub_institute_id'=>$sub_institute_id,'lp.syear'=>$syear])

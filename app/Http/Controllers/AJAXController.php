@@ -478,12 +478,12 @@ class AJAXController extends Controller
             );
         }
         if (count($explode) > 1) {
-            $std_sub_map = DB::table('subject')
-                ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
+            $std_sub_map = DB::table('sub_std_map')
+                // ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
                 ->whereIn("sub_std_map.standard_id", $explode)
                 ->where($where)
                 ->orderBy('sub_std_map.sort_order')
-                ->pluck('sub_std_map.display_name', 'subject.id');
+                ->pluck('sub_std_map.display_name', 'sub_std_map.id');
         } else {
             if (session()->get('user_profile_name') == 'Teacher') {
                 # Get subjects by teacher, standard and division
@@ -498,11 +498,11 @@ class AJAXController extends Controller
                     ->pluck('sub.subject_name as display_name', 'sub.id');
             } else {
                 $where['sub_std_map.standard_id'] = $request->standard_id;
-                $std_sub_map = DB::table('subject')
-                    ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
+                $std_sub_map = DB::table('sub_std_map')
+                    // ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
                     ->where($where)
                     ->orderBy('sub_std_map.sort_order')
-                    ->pluck('sub_std_map.display_name', 'subject.id');
+                    ->pluck('sub_std_map.display_name', 'sub_std_map.id');
             }
         }
 
@@ -580,15 +580,17 @@ class AJAXController extends Controller
 
         // pasi pasi - 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
 
+        // rp  - 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 openai/gpt-oss-20b:free
+
         $prompt = $request->message;
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer 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',
+            'Authorization' => 'Bearer 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',
             'HTTP-Referer' => env('APP_URL'),
         ])
             ->timeout(90)
             ->post('https://openrouter.ai/api/v1/chat/completions', [
-                'model' => 'deepseek/deepseek-chat-v3-0324:free',
+                'model' => 'openai/gpt-4o-mini',
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],
                 ],
@@ -755,14 +757,16 @@ class AJAXController extends Controller
 
     public function getSkillCompetency(Request $request)
     {
-        $subInstituteId = $request->get('sub_institute_id', 4); // default 3
+        //$subInstituteId = $request->get('sub_institute_id', 4); // default 3
+        $type = $request->input('type');
+        $sub_institute_id = $request->sub_institute_id ?? 4;
 
         $jobRoles = DB::table('s_user_jobrole')
             ->select('jobrole')
-            ->where('sub_institute_id', $subInstituteId)
+            ->where('sub_institute_id', $sub_institute_id)
             ->distinct()
             ->inRandomOrder()
-            ->limit(100)
+            ->limit(50)
             ->pluck('jobrole'); // Use pluck if you only need an array of jobrole names
 
         $data = DB::table('s_skill_knowledge_ability as s')
@@ -775,8 +779,8 @@ class AJAXController extends Controller
                 $join->on('uj.jobrole', '=', 'us.jobrole')
                      ->on('uj.sub_institute_id', '=', 'us.sub_institute_id');
             })
-            ->where('s.sub_institute_id', $subInstituteId)
-            ->whereIn('uj.jobrole', $jobRoles)
+            ->where('s.sub_institute_id', $sub_institute_id)
+            //->whereIn('uj.jobrole', $jobRoles)
             ->orderBy('uj.industries')
             ->orderBy('uj.department')
             ->orderBy('uj.jobrole')
@@ -787,6 +791,7 @@ class AJAXController extends Controller
                 'uj.industries',
                 'uj.department',
                 'uj.jobrole',
+                'uj.jobrole_category',
                 'u.category',
                 'u.sub_category',
                 'u.title as skill_name',
