@@ -20,9 +20,10 @@ use App\Models\school_setup\academic_sectionModel;
 use Illuminate\Support\Facades\Schema; // Import the Schema facade
 use Illuminate\Database\Schema\Blueprint;
 use GuzzleHttp\Client;
+use PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Http;
-use Validator;
-use DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class AJAXController extends Controller
 {
@@ -53,8 +54,7 @@ class AJAXController extends Controller
                 return response()->json(['error' => 'Table "' . $table . '" does not exist.'], 404);
             }
         } catch (\Exception $e) {
-            // Catch database connection errors or other unexpected issues during the check
-            \Log::error('Database error checking table existence: ' . $e->getMessage(), ['exception' => $e]);
+            // // Catch database connection errors or other unexpected issues during the check
             return response()->json(['error' => 'An internal server error occurred while validating the table.'], 500);
         }
 
@@ -67,13 +67,23 @@ class AJAXController extends Controller
                 // 4. IMPORTANT: Validate column name format for security
                 if (!preg_match('/^[a-zA-Z0-9_]+$/', $column)) {
                     // Skip invalid column names or return an error
-                    \Log::warning('Attempted to filter by invalid column name: ' . $column);
                     continue; // Skip this filter
                     // OR: return response()->json(['error' => 'Invalid column name format in filters.'], 400);
                 }
 
                 // 5. Manually validate if the column exists to bypass Schema::hasColumn()
                 try {
+                    //check table has deleted_at
+                    $hasDeletedAt = DB::table('information_schema.columns')
+                        ->where('table_schema', DB::raw('DATABASE()'))
+                        ->where('table_name', $table)
+                        ->where('column_name', 'deleted_at')
+                        ->exists();
+
+                    if ($hasDeletedAt) {
+                        $query->whereNull('deleted_at');
+                    }
+                    // other column
                     $columnExists = DB::table('information_schema.columns')
                         ->where('table_schema', DB::raw('DATABASE()'))
                         ->where('table_name', $table)
@@ -84,12 +94,10 @@ class AJAXController extends Controller
                         $query->where($column, $value);
                     } else {
                         // Log or handle case where filter column doesn't exist
-                        \Log::warning('Attempted to filter by non-existent column: ' . $column . ' on table ' . $table);
                         // Optionally, you might want to return an error here if a non-existent column is critical
                         // return response()->json(['error' => 'Column "' . $column . '" does not exist in table "' . $table . '".'], 400);
                     }
                 } catch (\Exception $e) {
-                    \Log::error('Database error checking column existence: ' . $e->getMessage(), ['exception' => $e]);
                     return response()->json(['error' => 'An internal server error occurred while validating a filter column.'], 500);
                 }
             }
@@ -97,6 +105,21 @@ class AJAXController extends Controller
         // get entry sort_order wise
         if ($request->has('sort_order') && $request->sort_order != '') {
             $query->orderBy($request->sort_order);
+        }
+        // Apply order by if provided
+        if ($request->has('order_by') && is_array($request->order_by)) {
+            $orderColumn = $request->order_by['column'] ?? 'id';
+            $orderDirection = strtolower($request->order_by['direction'] ?? 'asc');
+
+            // Sanitize direction
+            if (!in_array($orderDirection, ['asc', 'desc'])) {
+                $orderDirection = 'asc';
+            }
+
+            // if ($orderColumn && Schema::hasColumn($table, $orderColumn)) {
+            //     return $orderColumn;
+            $query->orderBy($orderColumn, $orderDirection);
+            // }
         }
 
         if ($request->has('group_by') && $request->group_by != '') {
@@ -108,7 +131,7 @@ class AJAXController extends Controller
             $data = $query->get();
         } catch (\Exception $e) {
             // Catch errors during data fetching (e.g., malformed queries, database down)
-            \Log::error('Database error fetching data for table ' . $table . ': ' . $e->getMessage(), ['exception' => $e]);
+
             return response()->json(['error' => 'An internal server error occurred while fetching data.'], 500);
         }
 
@@ -455,12 +478,12 @@ class AJAXController extends Controller
             );
         }
         if (count($explode) > 1) {
-            $std_sub_map = DB::table('subject')
-                ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
+            $std_sub_map = DB::table('sub_std_map')
+                // ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
                 ->whereIn("sub_std_map.standard_id", $explode)
                 ->where($where)
                 ->orderBy('sub_std_map.sort_order')
-                ->pluck('sub_std_map.display_name', 'subject.id');
+                ->pluck('sub_std_map.display_name', 'sub_std_map.id');
         } else {
             if (session()->get('user_profile_name') == 'Teacher') {
                 # Get subjects by teacher, standard and division
@@ -475,11 +498,11 @@ class AJAXController extends Controller
                     ->pluck('sub.subject_name as display_name', 'sub.id');
             } else {
                 $where['sub_std_map.standard_id'] = $request->standard_id;
-                $std_sub_map = DB::table('subject')
-                    ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
+                $std_sub_map = DB::table('sub_std_map')
+                    // ->join('sub_std_map', 'subject.id', '=', 'sub_std_map.subject_id')
                     ->where($where)
                     ->orderBy('sub_std_map.sort_order')
-                    ->pluck('sub_std_map.display_name', 'subject.id');
+                    ->pluck('sub_std_map.display_name', 'sub_std_map.id');
             }
         }
 
@@ -557,15 +580,17 @@ class AJAXController extends Controller
 
         // pasi pasi - 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
 
+        // rp  - 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 openai/gpt-oss-20b:free
+
         $prompt = $request->message;
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer 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',
+            'Authorization' => 'Bearer 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',
             'HTTP-Referer' => env('APP_URL'),
         ])
             ->timeout(90)
             ->post('https://openrouter.ai/api/v1/chat/completions', [
-                'model' => 'deepseek/deepseek-chat-v3-0324:free',
+                'model' => 'openai/gpt-4o-mini',
                 'messages' => [
                     ['role' => 'user', 'content' => $prompt],
                 ],
@@ -732,18 +757,23 @@ class AJAXController extends Controller
 
     public function getSkillCompetency(Request $request)
     {
-        $subInstituteId = $request->get('sub_institute_id', 3); // default 3
+        //$subInstituteId = $request->get('sub_institute_id', 4); // default 3
+        $type = $request->input('type');
+        $sub_institute_id = $request->sub_institute_id ?? 2;
 
         $jobRoles = DB::table('s_user_jobrole')
             ->select('jobrole')
-            ->where('sub_institute_id', $subInstituteId)
+            ->where('sub_institute_id', $sub_institute_id)
             ->distinct()
             ->inRandomOrder()
             ->limit(50)
             ->pluck('jobrole'); // Use pluck if you only need an array of jobrole names
 
         $data = DB::table('s_skill_knowledge_ability as s')
-            ->join('s_users_skills as u', 'u.id', '=', 's.skill_id')
+            ->join('s_users_skills as u', function ($join) {
+                $join->on('u.id', '=', 's.skill_id')
+                     ->on('u.sub_institute_id', '=', 's.sub_institute_id');
+            })
             ->join('s_user_skill_jobrole as us', function ($join) {
                 $join->on('us.skill', '=', 'u.title')
                     ->on('us.sub_institute_id', '=', 'u.sub_institute_id');
@@ -752,8 +782,8 @@ class AJAXController extends Controller
                 $join->on('uj.jobrole', '=', 'us.jobrole')
                     ->on('uj.sub_institute_id', '=', 'us.sub_institute_id');
             })
-            ->where('s.sub_institute_id', $subInstituteId)
-            ->whereIn('uj.jobrole', $jobRoles)
+            ->where('uj.sub_institute_id', $sub_institute_id)
+            //->whereIn('uj.jobrole', $jobRoles)
             ->orderBy('uj.industries')
             ->orderBy('uj.department')
             ->orderBy('uj.jobrole')
@@ -764,6 +794,7 @@ class AJAXController extends Controller
                 'uj.industries',
                 'uj.department',
                 'uj.jobrole',
+                'uj.jobrole_category',
                 'u.category',
                 'u.sub_category',
                 'u.title as skill_name',
@@ -778,5 +809,111 @@ class AJAXController extends Controller
             'status' => 'success',
             'data' => $data
         ]);
+    }
+
+    public function sendEmail(Request $request)
+    {
+        $path = "";
+        $type = $request->input('type');
+        $sub_institute_id = $request->sub_institute_id;
+
+        $where_arr = [
+            "sub_institute_id" => $sub_institute_id,
+        ];
+        $smtp_details = DB::table('smtp_details')
+            ->where($where_arr)
+            ->whereNull('deleted_at')
+            ->get();
+
+        if (count($smtp_details) > 0) {
+            $emails = $request->all_email;
+            $to_arr = explode(',', $emails);
+
+            $subject = $request->example_subject;
+            $message = $request->content;
+            $attechment = $path;
+
+            //$ip = Request::ip();
+            $ip = $request->ip();
+
+            $from = $smtp_details[0]->gmail;
+            $from_pass = $smtp_details[0]->password;
+
+            $mail = new PHPMailer\PHPMailer();
+            $mail->IsSMTP();
+            $mail->isHTML(true);
+            $mail->SMTPDebug = 0;
+            $mail->SMTPAuth = true;
+            $mail->SMTPSecure = "ssl";
+            $mail->Host = $smtp_details[0]->server_address;
+            $mail->Port = $smtp_details[0]->port;
+
+            foreach ($to_arr as $id => $val) {
+                $mail->AddAddress($val);
+            }
+
+            $mail->Username = $from;
+            $mail->Password = $from_pass;
+            $mail->SetFrom($from, $from);
+            $mail->AddReplyTo($from, $from);
+            $mail->addAttachment($attechment);
+            $mail->Subject = $subject;
+            $mail->Body = $message;
+            $mail->AltBody = $message;
+
+            if (!$mail->Send()) {
+                $res = [
+                    "status_code" => 0,
+                    "message"     => "There is some error , while sending mail",
+                ];
+            } else {
+                $res = [
+                    "status_code" => 1,
+                    "message"     => "Email Sent",
+                ];
+            }
+        } else {
+            $res = [
+                "status_code" => 1,
+                "message"     => "You did not setup mail client.",
+            ];
+        }
+
+        return response()->json($res);
+    }
+
+    public function geminiChat(Request $request)
+    {
+        $apiKey = env('GEMINI_API_KEY'); // put your key in .env as GEMINI_API_KEY=xxxx
+        $prompt = $request->input('prompt');
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyBPtCAFtNtyfkaiBrE_jr3BXCCvUmptBfY";
+
+        $response = Http::withHeaders([
+            'Content-Type' => 'application/json',
+        ])->post($url, [
+            "contents" => [
+                [
+                    "parts" => [
+                        ["text" => $prompt]
+                    ]
+                ]
+            ]
+        ])->json();
+
+        $text = $response['candidates'][0]['content']['parts'][0]['text'] ?? 'Failed To Find';
+
+        // 🔹 Remove ```json or ``` if Gemini wrapped output in markdown
+        $cleanText = trim($text);
+        $cleanText = preg_replace('/^```json|```$/m', '', $cleanText);
+
+        // 🔹 Convert string to PHP array
+        $jsonData = json_decode($cleanText, true);
+
+        if (json_last_error() === JSON_ERROR_NONE) {
+            // Success - now you can use $jsonData as array
+            return response()->json($jsonData);
+        } else {
+            return response()->json(['error' => 'Invalid JSON', 'raw' => $text]);
+        }
     }
 }
