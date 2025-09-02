@@ -576,7 +576,7 @@ class skillLibraryController extends Controller
                 ->whereNull('deleted_at')
                 ->get();
         }
-        $res['userAttitudeData'] = $this->getKnowledgeAbilityData($request, $id, 'attitute');
+        $res['userAttitudeData'] = $this->getKnowledgeAbilityData($request, $id, 'attitude');
         $res['userBehaviourData'] = $this->getKnowledgeAbilityData($request, $id, 'behaviour');
         $res['userKnowledgeData'] = $this->getKnowledgeAbilityData($request, $id, 'knowledge');
         $viewKnowledge = [];

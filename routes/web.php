@@ -102,3 +102,5 @@ Route::get('AIassignTask', [AJAXController::class, 'AIassignTask'])->name('AIass
 /*Rajesh for only API temporary created for data fetch*/
 Route::get('getSkillCompetency', [AJAXController::class, 'getSkillCompetency'])->name('getSkillCompetency');
 Route::get('sendEmail', [AJAXController::class, 'sendEmail'])->name('sendEmail');
+
+Route::post('gemini_chat',[AJAXController::class,'geminiChat']);

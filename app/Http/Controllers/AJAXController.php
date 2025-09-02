@@ -118,7 +118,7 @@ class AJAXController extends Controller
 
             // if ($orderColumn && Schema::hasColumn($table, $orderColumn)) {
             //     return $orderColumn;
-                $query->orderBy($orderColumn, $orderDirection);
+            $query->orderBy($orderColumn, $orderDirection);
             // }
         }
 
@@ -131,7 +131,7 @@ class AJAXController extends Controller
             $data = $query->get();
         } catch (\Exception $e) {
             // Catch errors during data fetching (e.g., malformed queries, database down)
-           
+
             return response()->json(['error' => 'An internal server error occurred while fetching data.'], 500);
         }
 
@@ -759,7 +759,7 @@ class AJAXController extends Controller
     {
         //$subInstituteId = $request->get('sub_institute_id', 4); // default 3
         $type = $request->input('type');
-        $sub_institute_id = $request->sub_institute_id ?? 4;
+        $sub_institute_id = $request->sub_institute_id ?? 2;
 
         $jobRoles = DB::table('s_user_jobrole')
             ->select('jobrole')
@@ -770,16 +770,19 @@ class AJAXController extends Controller
             ->pluck('jobrole'); // Use pluck if you only need an array of jobrole names
 
         $data = DB::table('s_skill_knowledge_ability as s')
-            ->join('s_users_skills as u', 'u.id', '=', 's.skill_id')
+            ->join('s_users_skills as u', function ($join) {
+                $join->on('u.id', '=', 's.skill_id')
+                     ->on('u.sub_institute_id', '=', 's.sub_institute_id');
+            })
             ->join('s_user_skill_jobrole as us', function ($join) {
                 $join->on('us.skill', '=', 'u.title')
-                     ->on('us.sub_institute_id', '=', 'u.sub_institute_id');
+                    ->on('us.sub_institute_id', '=', 'u.sub_institute_id');
             })
             ->join('s_user_jobrole as uj', function ($join) {
                 $join->on('uj.jobrole', '=', 'us.jobrole')
-                     ->on('uj.sub_institute_id', '=', 'us.sub_institute_id');
+                    ->on('uj.sub_institute_id', '=', 'us.sub_institute_id');
             })
-            ->where('s.sub_institute_id', $sub_institute_id)
+            ->where('uj.sub_institute_id', $sub_institute_id)
             //->whereIn('uj.jobrole', $jobRoles)
             ->orderBy('uj.industries')
             ->orderBy('uj.department')
@@ -877,5 +880,40 @@ class AJAXController extends Controller
         }
 
         return response()->json($res);
+    }
+
+    public function geminiChat(Request $request)
+    {
+        $apiKey = env('GEMINI_API_KEY'); // put your key in .env as GEMINI_API_KEY=xxxx
+        $prompt = $request->input('prompt');
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyBPtCAFtNtyfkaiBrE_jr3BXCCvUmptBfY";
+
+        $response = Http::withHeaders([
+            'Content-Type' => 'application/json',
+        ])->post($url, [
+            "contents" => [
+                [
+                    "parts" => [
+                        ["text" => $prompt]
+                    ]
+                ]
+            ]
+        ])->json();
+
+        $text = $response['candidates'][0]['content']['parts'][0]['text'] ?? 'Failed To Find';
+
+        // 🔹 Remove ```json or ``` if Gemini wrapped output in markdown
+        $cleanText = trim($text);
+        $cleanText = preg_replace('/^```json|```$/m', '', $cleanText);
+
+        // 🔹 Convert string to PHP array
+        $jsonData = json_decode($cleanText, true);
+
+        if (json_last_error() === JSON_ERROR_NONE) {
+            // Success - now you can use $jsonData as array
+            return response()->json($jsonData);
+        } else {
+            return response()->json(['error' => 'Invalid JSON', 'raw' => $text]);
+        }
     }
 }
