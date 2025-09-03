@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\auth\authController;
 use App\Http\Controllers\AJAXController;
+use App\Http\Controllers\dashboardController;
 use App\Http\Controllers\libraries\skillLibraryController;
 use App\Http\Controllers\libraries\jobroleLibraryController;
 use App\Http\Controllers\libraries\SkillMatrixController;
@@ -21,6 +22,7 @@ Route::get('/', function () {
 Route::resource('login', authController::class);
 
 Route::middleware(['auth','session','menu'])->group(function () {
+    Route::resource('dashboard', dashboardController::class);
     
     Route::get('menu_lists', [authController::class, 'menu_lists'])->name('menu_lists');
     Route::resource('skill_library', skillLibraryController::class);
