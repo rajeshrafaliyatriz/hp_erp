@@ -73,17 +73,21 @@ class tbluserController extends Controller
                 'tbluser.*',
                 'tbluserprofilemaster.name as profile_name',
                 DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
-                DB::raw('IFNULL(hrms_departments.department,"-") as department_name')
+                DB::raw('IFNULL(hrms_departments.department,"-") as department_name'),
+                DB::raw('IFNULL(s_user_skill_jobrole.jobrole,"-") as jobrole'),
             )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
             ->leftJoin('hrms_departments', 'tbluser.department_id', '=', 'hrms_departments.id')
+            ->leftJoin('s_user_skill_jobrole', 'tbluser.allocated_standards', '=', 's_user_skill_jobrole.id')
             ->where(['tbluser.sub_institute_id' => $sub_institute_id]) //, 'tbluser.status' => "1"
-            ->when(!in_array($user_profile, ["Admin", "Super Admin"]), function ($q) use ($user_id) {
+            ->when((!in_array(strtoupper($user_profile), ['ADMIN', 'SUPER ADMIN']) && !$request->has('menu_type')), function ($q) use ($user_id) {
                 $q->where('tbluser.id', $user_id);
+            })
+            ->when($request->has('active_status'),function ($q) use ($request) {
+                $q->where('tbluser.status', $request->active_status);
             })
             ->get();
 
-            
         $res['status_code'] = 1;
         $res['message'] = "Success";
         $res['departments'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->get()->toArray();
