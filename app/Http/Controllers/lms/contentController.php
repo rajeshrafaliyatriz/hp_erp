@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 use function App\Helpers\is_mobile;
 use Illuminate\Support\Facades\Storage;
 use App\Services\OpenAIService;
+use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\Validator;
 
 class contentController extends Controller
 {
@@ -32,6 +34,9 @@ class contentController extends Controller
             $sub_institute_id = 1;
         }else{
         $sub_institute_id = $request->session()->get('sub_institute_id');
+        }
+        if($type=="API"){
+            $sub_institute_id = $request->sub_institute_id;
         }
         $data['content_data'] = contentModel::select('content_master.*','standard.name as standard_name','academic_section.title as grade_name',
         'subject_name','chapter_name','tm.name as topic_name','stm.name as sub_topic_name')
@@ -59,7 +64,7 @@ class contentController extends Controller
 
         $breadcrum_data = DB::table('chapter_master as c')
             ->join('sub_std_map as s', function ($join) {
-                $join->whereRaw('s.subject_id = c.subject_id AND s.standard_id = c.standard_id');
+                $join->whereRaw('s.id = c.subject_id AND s.standard_id = c.standard_id');
             })->join('standard as st', function ($join) {
                 $join->whereRaw('st.id = c.standard_id');
             })->Leftjoin('topic_master as t', function ($join) {
@@ -90,7 +95,32 @@ class contentController extends Controller
         $type = $request->input('type');
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $data = array();
+if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
 
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+             $sub_institute_id = $request->get('sub_institute_id');
+        }
         $lms_mapping_type = DB::table('lms_mapping_type')
             ->where('status', '=', 1)
             ->where('parent_id', '=', 0)
@@ -201,10 +231,42 @@ class contentController extends Controller
         return $video_arr;
     }      
     
-    public function store(Request $request){               
+    public function store(Request $request){     
+        // echo "<pre>";print_r($request->all());exit;
+        $type= $request->type;          
         $sub_institute_id = $request->session()->get('sub_institute_id'); 		
         $syear = $request->session()->get('syear'); 		
         $user_id = $request->session()->get('user_id');       
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'syear' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+             $sub_institute_id = $request->get('sub_institute_id');
+            $syear = $request->get('syear');
+            $user_id = $request->get('user_id');
+        }
         $show_hide = $request->get('show_hide');             
         $show_hide_val = isset($show_hide) ? $show_hide : '';
 
@@ -215,18 +277,19 @@ class contentController extends Controller
         $file_folder = $ext = $size = $newfilename = "";
         if($request->hasFile('filename'))
         {           
+            // return "in";
             $img = $request->file('filename');
             $filename = $img->getClientOriginalName();
             $ext = $img->getClientOriginalExtension();
             $size = $img->getSize();
             $newfilename = 'lms_'.date('Y-m-d_h-i-s').'.'.$ext;             
-            $file_folder = '/lms_content_file';
+            $file_folder = '/hp_lms_content_file';
             //$img->move(public_path().'/lms_content_file/',$newfilename);
             // $img->storeAs('public/lms_content_file/',$newfilename); 20-05-2024
-            Storage::disk('digitalocean')->putFileAs('public/lms_content_file/', $img, $newfilename, 'public');
+            Storage::disk('digitalocean')->putFileAs('public/hp_lms_content_file/', $img, $newfilename, 'public');
 
         }
-
+        // return "out";
         if($request->get('contentType') == "link")
         {
             $newfilename = $request->get('link');
@@ -276,6 +339,8 @@ class contentController extends Controller
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
             'basic_advance'                => $basic_advanced_val,
             'syear'                        => $syear,
+            'created_at'    =>now(),
+            'created_by'=>$user_id,
         ];
         //'sub_topic_id' => $request->get('subtopic'),                            
         contentModel::insert($content);
@@ -283,22 +348,34 @@ class contentController extends Controller
 
         $mapping_type = $request->get('mapping_type');
         $mapping_value = $request->get('mapping_value');
-        foreach ($mapping_type as $key => $val) {
-            if ($val != "" && $mapping_value[$key] != "") {
-                $contentmappingtype = [
-                    'content_id'       => $last_id,
-                    'mapping_type_id'  => $val,
-                    'mapping_value_id' => $mapping_value[$key],
-                ];
-                contentmappingtypeModel::insert($contentmappingtype);
+        if(!empty($mapping_type)){
+            foreach ($mapping_type as $key => $val) {
+                if ($val != "" && $mapping_value[$key] != "") {
+                    $contentmappingtype = [
+                        'content_id'       => $last_id,
+                        'mapping_type_id'  => $val,
+                        'mapping_value_id' => $mapping_value[$key],
+                        'created_at'    =>now(),
+                    ];
+                    contentmappingtypeModel::insert($contentmappingtype);
+                }
             }
         }
 
         $res = [
-            "status_code" => 1,
-            "message"     => "Content Added Successfully",
+            "status_code" =>0,
+            "message"     => "Content Failed to Add",
         ];
-        $type = $request->input('type');
+        if($last_id){
+            $res = [
+                        "status_code" => 1,
+                        "message"     => "Content Added Successfully",
+                    ];
+        }
+        
+        if($type=="API"){
+            return response()->json($res);
+        }
         //return is_mobile($type, "content_master.index", $res, "redirect");
         // return redirect()->route('topic_master.index', ['id' => $request->get('hid_chapter_id')]);
         if ( $request->has('hid_topic_id') ) {
@@ -328,10 +405,10 @@ class contentController extends Controller
             $ext = $img->getClientOriginalExtension();
             $size = $img->getSize();
             $newfilename = 'lms_'.date('Y-m-d_h-i-s').'.'.$ext;             
-            $file_folder = '/lms_content_file';
+            $file_folder = '/hp_lms_content_file';
             //$img->move(public_path().'/lms_content_file/',$newfilename);
             // $img->storeAs('public/lms_content_file/',$newfilename);  20-05-24
-            Storage::disk('digitalocean')->putFileAs('public/lms_content_file/', $img, $newfilename, 'public');
+            Storage::disk('digitalocean')->putFileAs('public/hp_lms_content_file/', $img, $newfilename, 'public');
         }
 
         if($request->get('contentType') == "link")
@@ -558,13 +635,45 @@ class contentController extends Controller
     public function update(Request $request,$id)
     {
         //ValidateInsertData('subject','update');        
-        // echo "<pre>";print_r($request);exit;
+        // return $request;
+        $type = $request->input('type');
+
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
         $user_id = $request->session()->get('user_id');
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'syear' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+             $sub_institute_id = $request->get('sub_institute_id');
+            $syear = $request->get('syear');
+            $user_id = $request->get('user_id');
+        }
         $show_hide = $request->get('show_hide');
         $show_hide_val = $show_hide ?? '';
-        $filePath = "public/lms_content_file/"; 
+        $filePath = "public/hp_lms_content_file/"; 
         $url = $request->get('link');
         $image_data = [];
         if ($request->hasFile('filename')) {
@@ -592,10 +701,10 @@ class contentController extends Controller
             $newfilename = 'lms_'.date('Y-m-d_h-i-s').'.'.$ext;
             //$img->move(public_path().'/lms_content_file/',$newfilename);
             // $img->storeAs('public/lms_content_file/', $newfilename);
-            Storage::disk('digitalocean')->putFileAs('public/lms_content_file/', $img, $newfilename, 'public');
+            Storage::disk('digitalocean')->putFileAs('public/hp_lms_content_file/', $img, $newfilename, 'public');
 
             $image_data = [
-                'file_folder' => '/lms_content_file',
+                'file_folder' => '/hp_lms_content_file',
                 'filename'    => $newfilename,
                 'file_type'   => $ext,
                 'file_size'   => $size,
@@ -642,36 +751,48 @@ class contentController extends Controller
             'post_grade_topic'             => $post_topic,
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
             'syear'                        => $syear,
+            'updated_by'=>$user_id,
+            'updated_at'=>now(),
         ];
         
         $data = array_merge($data,$image_data);    
 
-		contentModel::where(["id" => $id])->update($data);
+		$update = contentModel::where(["id" => $id])->update($data);
         
         //START Delete and insert into content_mapping_Data
         contentmappingtypeModel::where(["content_id" => $id])->delete();
 
         $mapping_type = $request->get('mapping_type');
         $mapping_value = $request->get('mapping_value');
-       
+       if(!empty($mapping_type)){
         foreach($mapping_type as $key => $val) {
-            if ($val != "" && $mapping_value[$key] != "") {
-                $contentmappingtype = [
-                    'content_id'       => $id,
-                    'mapping_type_id'  => $val,
-                    'mapping_value_id' => $mapping_value[$key],
-                ];
-                contentmappingtypeModel::insert($contentmappingtype);
-            }
-        }
+                    if ($val != "" && $mapping_value[$key] != "") {
+                        $contentmappingtype = [
+                            'content_id'       => $id,
+                            'mapping_type_id'  => $val,
+                            'mapping_value_id' => $mapping_value[$key],
+                            'created_at' => now(),
+                        ];
+                        contentmappingtypeModel::insert($contentmappingtype);
+                    }
+                }
+       }
+        
         //END Delete and insert into content_mapping_Data
 
         $res = [
+            "status_code" => 0,
+            "message"     => "Content Failed to Update",
+        ];
+        if($update){
+            $res = [
             "status_code" => 1,
             "message"     => "Content Updated Successfully",
         ];
-        $type = $request->input('type');
-
+        }
+        if($type=='API'){
+            return response()->json($res);
+        }
         // return redirect()->route('topic_master.index', ['id' => $request->get('chapter')]);
         return redirect('/lms/chapter_master?standard_id='.$request->get('standard').'&subject_id='.$request->get('subject').'&perm='.$sub_institute_id.' ');
     }
@@ -679,14 +800,54 @@ class contentController extends Controller
     public function destroy(Request $request,$id){
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
+
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+             $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+        }
         $contentdata = contentModel::where(["id" => $id])->get()->toArray();
         $chapter_id = $contentdata[0]['chapter_id'];
         $std = $contentdata[0]['standard_id'];
         $subject = $contentdata[0]['subject_id'];
 
-        contentModel::where(["id" => $id])->delete();
-        $res['status_code'] = "1";
-        $res['message'] = "Content Deleted Successfully";
+        // $delete = contentModel::where(["id" => $id])->delete();
+        $delete = contentModel::where(["id" => $id])->update(['deleted_by'=>$user_id,'deleted_at'=>now()]);
+       
+        $res['status_code'] = "0";
+        $res['message'] = "Content Failed to Delete";
+         if($delete){
+            $res['status_code'] = "1";
+            $res['message'] = "Content Deleted Successfully";
+        }
+
+        if($type=="API"){
+            return response()->json($res);
+        }
         return redirect()->route('chapter_master.index', ['standard_id' => $std,'subject_id' => $subject,'perm'=>$sub_institute_id]);
     }
 	

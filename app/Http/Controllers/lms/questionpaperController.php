@@ -45,13 +45,21 @@ class questionpaperController extends Controller
     {
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $syear = $request->session()->get('syear');
+      
         $data['questionpaper_data'] = array();
         $marking_period_id = session()->get('term_id');
-        $teacher = session()->get('user_profile_name');
+        $profile = session()->get('user_profile_name');
         $user_id = session()->get('user_id');
 
-        if (strtoupper(session()->get('user_profile_name')) == "EMPLOYEE") {
-            $student_id = session()->get('user_id');
+        if($request->type=="API"){
+            $sub_institute_id = $request->sub_institute_id;
+            $syear = $request->syear;
+            $profile = $request->user_profile_name;
+            $user_id = $request->user_id;
+        }
+        if (strtoupper($profile) == "EMPLOYEE") {
+            $student_id = $user_id;
+           
             $stu_data = DB::table('tbluser')->where(['id' => $student_id])->first();
 
             if (!empty($stu_data)) {
@@ -73,7 +81,7 @@ class questionpaperController extends Controller
                 })                
                 ->join('academic_section', 'academic_section.id', '=', 'question_paper.grade_id')
                 ->join('sub_std_map as ssm', function ($join) use ($sub_institute_id) {
-                    $join->on('ssm.subject_id', '=', 'question_paper.subject_id');
+                    $join->on('ssm.id', '=', 'question_paper.subject_id');
                 })
                 ->leftJoin('lms_online_exam', function ($join) use ($student_id) {
                     $join->on('lms_online_exam.question_paper_id', '=', 'question_paper.id')
@@ -196,16 +204,26 @@ class questionpaperController extends Controller
             'sub_institute_id' => $sub_institute_id,
             'syear'            => $syear,
             'exam_type'        => $request->exam_type,
+            'created_on'       => now(),
+            'created_at'       => now(),
         );
         // echo ('<pre>');print_r($questionpaper);die;
         $query = questionpaperModel::insertGetId($questionpaper);
         $questionpaper_id = DB::getPDO()->lastInsertId();
       
-
-        $res = array(
-            "status_code" => 1,
-            "message"     => "Question-Paper Added Successfully",
+        if($query && isset($questionpaper_id) && $questionpaper_id!=''){
+            $res = array(
+                    "status_code" => 1,
+                    "message"     => "Question-Paper Added Successfully",
+                );
+        }
+        else{
+             $res = array(
+            "status_code" =>0,
+            "message"     => "Failed to add Data",
         );
+        }
+       
         $type = $request->type;
         // $this->generatePDF($questionpaper, $questionpaper_id);
 

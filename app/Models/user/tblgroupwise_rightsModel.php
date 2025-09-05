@@ -3,6 +3,7 @@
 namespace App\Models\user;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\tblmenumasterModel;
 
 class tblgroupwise_rightsModel extends Model
 {
@@ -21,4 +22,8 @@ class tblgroupwise_rightsModel extends Model
     ];
 
     public $timestamps = false;
+
+    public function menuData(){
+        return $this->belongsTo(tblmenumasterModel::class, 'menu_id','id');
+    }
 }

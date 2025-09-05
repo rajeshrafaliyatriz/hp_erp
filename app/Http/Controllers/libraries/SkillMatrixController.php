@@ -26,12 +26,23 @@ class SkillMatrixController extends Controller
         return view('skill.matrix.index', compact('skills', 'progress', 'completedCount', 'totalSkills'));
     }
 
-    public function store(Request $request)
+   public function store(Request $request)
     {
         $user_id = $request->userId;
+        $addUpdate = ['skill_level' => $request->skill_level];
+
+        $attributes = ['knowledge', 'ability', 'behaviour', 'attitude'];
+
+        foreach ($attributes as $attribute) {
+            if ($request->has($attribute) && !empty($request->$attribute)) {
+                // Convert the array to JSON string before storing
+                $addUpdate[$attribute] = json_encode($request->$attribute);
+            }
+        }
+        // return $addUpdate;/
         matrix::updateOrCreate(
             ['user_id' => $user_id, 'skill_id' => $request->skill_id],
-            ['skill_level' => $request->skill_level, 'interest_level' => $request->interest_level,'knowledge'=>$request->knowledge,'ability'=>$request->ability]
+            $addUpdate,
         );
 
         return response()->json(['success' => true]);

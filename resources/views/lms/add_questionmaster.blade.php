@@ -18,7 +18,7 @@ br {
         <div class="row bg-title align-items-center justify-content-between">
             <div class="col-lg-6 col-md-4 col-sm-4 col-xs-12 mb-4">
                 <h1 class="h4 mb-3">Add Question Answer</h1>
-                <nav aria-label="breadcrumb">
+                {{-- <nav aria-label="breadcrumb">
                     <ol class="breadcrumb bg-transparent p-0 mb-0">
                         <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('chapter_master.index',['standard_id'=>$data['breadcrum_data']->standard_id,'subject_id'=>$data['breadcrum_data']->subject_id]) }}">{{$data['breadcrum_data']->subject_name}}</a></li>
@@ -28,7 +28,7 @@ br {
                         @endisset
                         <li class="breadcrumb-item active" aria-current="page">Add Question Answer</li>
                     </ol>
-                </nav>
+                </nav> --}}
             </div>
         </div>
         <div class="card border-0">
@@ -51,9 +51,9 @@ br {
 
                             <div class="row align-items-center">
                                 <div class="col-md-12">
-                                <div class="d-flex">                                
+                                {{-- <div class="d-flex">                                
                                     <input type="text" class="form-control" id="question_prompt" name="question_prompt" value="get 1 question for standard '{{$data['breadcrum_data']->standard_name}}' and subject '{{$data['breadcrum_data']->subject_name}}' and chapter '{{$data['breadcrum_data']->chapter_name}}' @isset($data['topic_id']) and for topic '{{$data['breadcrum_data']->topic_name}}' @endisset "><span onclick="question_prompt();" style="padding:2px 6px"><i class="mdi mdi-refresh"></i></span>
-                                </div>
+                                </div> --}}
 
                                     <div class="form-group">
                                         <textarea name="question_title" id="question_title" contenteditable="true" onchange="check_input(this)">

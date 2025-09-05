@@ -8,13 +8,13 @@
         <div class="row bg-title align-items-center justify-content-between">
             <div class="col-lg-6 col-md-4 col-sm-4 col-xs-12 mb-4">
                 <h1 class="h4 mb-3">Create Portfolio</h1>
-                <nav aria-label="breadcrumb">
+                {{-- <nav aria-label="breadcrumb">
                     <ol class="breadcrumb bg-transparent p-0">
                         <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                         <li class="breadcrumb-item">Portfolio</li>
                         <li class="breadcrumb-item active" aria-current="page">Create New Portfolio</li>
                     </ol>
-                </nav>
+                </nav> --}}
             </div>
             <div class="col-md-6 mb-4 text-md-right">
                 <a href="{{ route('lmsPortfolio.create',['action'=>'personal']) }}" class="btn btn-info add-new"><i

@@ -43,7 +43,7 @@
     <div class="row">
         <div class="col-md-6">
             <h1 class="h4 mb-3">Add Content</h1>
-            <nav aria-label="breadcrumb">
+            {{-- <nav aria-label="breadcrumb">
                 <ol class="breadcrumb bg-transparent p-0">
                     <li class="breadcrumb-item"><a href="{{route('course_master.index')}}">LMS</a></li>
                     <li class="breadcrumb-item"><a href="{{ route('chapter_master.index',['standard_id'=>$data['breadcrum_data']->standard_id ?? '','subject_id'=>$data['breadcrum_data']->subject_id ?? '']) }}">{{$data['breadcrum_data']->subject_name  ?? ''}}</a></li>
@@ -51,7 +51,7 @@
                     <li class="breadcrumb-item"><a href="{{ route('topic_master.index',['id'=>$data['breadcrum_data']->chapter_id ?? '']) }}">{{$data['breadcrum_data']->topic_name ?? ''}}</a></li>
                     <li class="breadcrumb-item active" aria-current="page">Add Content</li>
                 </ol>
-            </nav>
+            </nav> --}}
         </div>
     </div>
 

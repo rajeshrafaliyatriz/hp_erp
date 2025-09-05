@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\auth\authController;
 use App\Http\Controllers\AJAXController;
+use App\Http\Controllers\dashboardController;
 use App\Http\Controllers\libraries\skillLibraryController;
 use App\Http\Controllers\libraries\jobroleLibraryController;
 use App\Http\Controllers\libraries\SkillMatrixController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\school_setup\sub_std_mapController;
 use App\Http\Controllers\CkeditorFileUploadController;
 use App\Http\Controllers\front_desk\syllabus\syllabusController;
 use App\Http\Controllers\libraries\levelOfResponsibilityController;
+use App\Http\Controllers\auth\ForgotPasswordController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -20,6 +22,7 @@ Route::get('/', function () {
 Route::resource('login', authController::class);
 
 Route::middleware(['auth','session','menu'])->group(function () {
+    Route::resource('dashboard', dashboardController::class);
     
     Route::get('menu_lists', [authController::class, 'menu_lists'])->name('menu_lists');
     Route::resource('skill_library', skillLibraryController::class);
@@ -40,7 +43,7 @@ Route::middleware(['auth','session','menu'])->group(function () {
 });
 
 // Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']]), function () {
-
+// route::resource('forget_password',ForgotPasswordController::class);
 Route::get('forget-password', [ForgotPasswordController::class, 'showForgetPasswordForm'])->name('forget.password.get');
 Route::post('forget-password', [ForgotPasswordController::class, 'submitForgetPasswordForm'])->name('forget.password.post');
 Route::get('reset-password/{token}/{email}', [ForgotPasswordController::class, 'showResetPasswordForm'])->name('reset.password.get');
@@ -76,8 +79,10 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::delete('/view-delete/{id}',[CustomModuleController::class,'viewDelete'])->name('custom_module_crud.delete');
     Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
      Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
-    Route::post('/matrix/save', [SkillMatrixController::class, 'store'])->name('matrix.save');
 });
+
+    Route::post('/matrix/save', [SkillMatrixController::class, 'store'])->name('matrix.save');
+
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 
 Route::get('menuLevel2', [CustomModuleController::class, 'menuLevel2'])->name('menuLevel2.index');
@@ -91,10 +96,13 @@ Route::get('api/get-exam-master-list', [AJAXController::class, 'getExamsMasterLi
 
 Route::get('ckeditor/create', [CkeditorFileUploadController::class, 'create'])->name('ckeditor.create');
 Route::post('ckeditor', [CkeditorFileUploadController::class, 'store'])->name('uploadimage');
-Route::get('ajax_checkEmailExist', [AJAXController::Class, 'ajax_checkEmailExist'])->name('ajax_checkEmailExist');
-Route::get('getUsersMappings', [AJAXController::Class, 'getUsersMappings'])->name('getUsersMappings');
-Route::get('DeepSeekChat', [AJAXController::Class, 'DeepSeekChat'])->name('DeepSeekChat');
-Route::get('AIassignTask', [AJAXController::Class, 'AIassignTask'])->name('AIassignTask');
+Route::get('ajax_checkEmailExist', [AJAXController::class, 'ajax_checkEmailExist'])->name('ajax_checkEmailExist');
+Route::get('getUsersMappings', [AJAXController::class, 'getUsersMappings'])->name('getUsersMappings');
+Route::get('DeepSeekChat', [AJAXController::class, 'DeepSeekChat'])->name('DeepSeekChat');
+Route::get('AIassignTask', [AJAXController::class, 'AIassignTask'])->name('AIassignTask');
 
 /*Rajesh for only API temporary created for data fetch*/
-Route::get('getSkillCompetency', [AJAXController::Class, 'getSkillCompetency'])->name('getSkillCompetency');
+Route::get('getSkillCompetency', [AJAXController::class, 'getSkillCompetency'])->name('getSkillCompetency');
+Route::get('sendEmail', [AJAXController::class, 'sendEmail'])->name('sendEmail');
+
+Route::post('gemini_chat',[AJAXController::class,'geminiChat']);

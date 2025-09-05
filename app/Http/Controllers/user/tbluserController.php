@@ -72,18 +72,25 @@ class tbluserController extends Controller
             $user_data = tbluserModel::select(
                 'tbluser.*',
                 'tbluserprofilemaster.name as profile_name',
-                DB::raw('if(tbluser.status = 1,"Active","Inactive") as status')
+                DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
+                DB::raw('IFNULL(hrms_departments.department,"-") as department_name'),
+                DB::raw('IFNULL(s_user_skill_jobrole.jobrole,"-") as jobrole'),
             )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
+            ->leftJoin('hrms_departments', 'tbluser.department_id', '=', 'hrms_departments.id')
+            ->leftJoin('s_user_skill_jobrole', 'tbluser.allocated_standards', '=', 's_user_skill_jobrole.id')
             ->where(['tbluser.sub_institute_id' => $sub_institute_id]) //, 'tbluser.status' => "1"
-            ->when(!in_array($user_profile, ["Admin", "Super Admin"]), function ($q) use ($user_id) {
+            ->when((!in_array(strtoupper($user_profile), ['ADMIN', 'SUPER ADMIN']) && !$request->has('menu_type')), function ($q) use ($user_id) {
                 $q->where('tbluser.id', $user_id);
+            })
+            ->when($request->has('active_status'),function ($q) use ($request) {
+                $q->where('tbluser.status', $request->active_status);
             })
             ->get();
 
-            
         $res['status_code'] = 1;
         $res['message'] = "Success";
+        $res['departments'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->get()->toArray();
         $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();  
         $res["user_profiles"] = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
@@ -350,13 +357,14 @@ class tbluserController extends Controller
         $userLevels = DB::table('s_level_responsibility')->where('id', $editData['subject_ids'])
                 // ->groupBy('level')
                 ->first();
-        $userLevelsArr = DB::table('s_level_responsibility')->where('level', $userLevels->level)
+        $userLevelsArr = DB::table('s_level_responsibility')->where('level', $userLevels->level ?? 0)
                 // ->groupBy('level')
                 ->get();
 
         $allLevels = $userLevelOfResponsibility = [];
         foreach ($userLevelsArr as $key => $value) {
             $userLevelOfResponsibility['level'] = $value->level;
+            $userLevelOfResponsibility['guiding_phrase'] = $value->guiding_phrase;
             $userLevelOfResponsibility['essence_level'] = $value->essence_level;
             $userLevelOfResponsibility['guidance_note'] = $value->attribute_guidance_notes;
            if($value->attribute_type!='Business skills/Behavioural factors'){
@@ -431,7 +439,7 @@ class tbluserController extends Controller
                 $editData['userDepartment'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->where('id', $editData['department_id'])->value('department');
             }
             if (isset($editData['allocated_standards'])) {
-                $editData['userJobrole'] = skillJobroleMap::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
+                $editData['userJobrole'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
             }
         }
         // echo "<pre>";print_r($editData->id);exit;
@@ -557,6 +565,11 @@ class tbluserController extends Controller
                                 ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
                                 ->get()
                                 ->groupBy('classification');
+
+                     $classificationItems2 = DB::table('s_skill_knowledge_ability')
+                                ->where('skill_id', $item->userSkills->id ?? null)
+                                ->get()
+                                ->groupBy('classification');
                     return [
                         'jobrole_skill_id' => $item->id,
                         'jobrole' => $item->jobrole,
@@ -572,6 +585,12 @@ class tbluserController extends Controller
                                 : [],
                         'ability' => $classificationItems->has('ability')
                                 ? $classificationItems['ability']->pluck('classification_item')->toArray()
+                                : [],
+                        'behaviour' => $classificationItems2->has('behaviour')
+                                ? $classificationItems2['behaviour']->pluck('classification_item')->toArray()
+                                : [],
+                        'attitude' => $classificationItems2->has('attitude')
+                                ? $classificationItems2['attitude']->pluck('classification_item')->toArray()
                                 : [],
                     ];
                 });
@@ -914,7 +933,7 @@ class tbluserController extends Controller
                 $editData['userDepartment'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->where('id', $editData['department_id'])->value('department');
             }
             if (isset($editData['allocated_standards'])) {
-                $editData['userJobrole'] = skillJobroleMap::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
+                $editData['userJobrole'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->where('id', $editData['allocated_standards'])->value('jobrole');
             }
         }
         // 29-10-2024 salary data

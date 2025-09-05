@@ -31,10 +31,18 @@ class courseController extends Controller
 
     public function getData($request)
 	{
+		$type=$request->type;
 	    $sub_institute_id = session()->get('sub_institute_id');
 	    $syear = session()->get('syear');
 	    $user_profile_name = session()->get('user_profile_name');
 	    $user_id = session()->get('user_id');
+
+		if($type=="API"){
+			$sub_institute_id = $request->get('sub_institute_id');
+			$syear = $request->get('syear');
+			$user_profile_name = $request->get('user_profile_name');
+			$user_id = $request->get('user_id');
+		}
 	    $mycourse_arr = [];
 
 	    $extra = " 1=1 ";
@@ -45,76 +53,19 @@ class courseController extends Controller
 
 	    $sub_institute_id_by_lms = ($getIsLms == 'Y') ? "(s.sub_institute_id = 1 or s.sub_institute_id = $sub_institute_id)" : "s.sub_institute_id = $sub_institute_id";
 
-	    if ($user_profile_name == 'Teacher') {
+	  
 	        $arr = DB::table('sub_std_map as s')
-	            ->selectRaw("STD.name AS standard_name,s.display_name AS subject_name,s.subject_id,STD.id AS standard_id,
+	            ->selectRaw("STD.name AS standard_name,s.display_name AS subject_name,s.subject_code,s.short_name,s.subject_type,s.id as subject_id,STD.id AS standard_id,
 	                s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))SEPARATOR '#') AS chapter_list,
 	                IFNULL(s.subject_category,'My Course') AS content_category,s.sub_institute_id")
 	            ->join('standard AS STD', 'STD.id', '=', 's.standard_id')
-	            ->Join('timetable AS t', function ($join) use ($user_id, $syear, $sub_institute_id, $extra) {
-	                $join->on('t.standard_id', '=', 's.standard_id')
-	                    ->on('t.subject_id', '=', 's.subject_id')
-	                    ->on('t.sub_institute_id', '=', 's.sub_institute_id')
-	                    ->where('t.teacher_id', '=', $user_id)
-	                    ->where('t.syear', '=', $syear)
-	                    ->whereRaw($extra);
-	            })
+				// ->join('subject AS ss', 'ss.id', '=', 's.subject_id')
 	            ->leftJoin('chapter_master AS cp', function ($join) {
-	                $join->on('cp.subject_id', '=', 's.subject_id')
+	                $join->on('cp.subject_id', '=', 's.id')
 	                    ->on('cp.standard_id', '=', 's.standard_id');
 	            })
 	            ->leftJoin('content_master AS c', function ($join) use ($sub_institute_id) {
-	                $join->on('c.subject_id', '=', 's.subject_id')
-	                    ->on('c.standard_id', '=', 's.standard_id')
-	                    ->on('c.sub_institute_id', '=', 's.sub_institute_id')
-	                    ->where('c.sub_institute_id', '=', $sub_institute_id);
-	            })
-	            ->where('s.sub_institute_id', '=', $sub_institute_id)
-				->where('s.subject_category','!=','SEL') // 17-12-2024 give sel rights teacher
-	            ->groupBy('s.subject_id', 's.standard_id', 's.subject_category')
-	            ->orderBy('s.sort_order')
-	            ->get();
-				// 17-12-2024 give sel rights teacher
-				$getSEL = DB::table('sub_std_map as s')
-	            ->selectRaw("STD.name AS standard_name,s.display_name AS subject_name,s.subject_id,STD.id AS standard_id,
-	                s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))SEPARATOR '#') AS chapter_list,
-	                IFNULL(s.subject_category,'SEL') AS content_category,s.sub_institute_id")
-	            ->join('standard AS STD', 'STD.id', '=', 's.standard_id')
-	            ->leftJoin('chapter_master AS cp', function ($join) {
-	                $join->on('cp.subject_id', '=', 's.subject_id')
-	                    ->on('cp.standard_id', '=', 's.standard_id');
-	            })
-	            ->leftJoin('content_master AS c', function ($join) use ($sub_institute_id) {
-	                $join->on('c.subject_id', '=', 's.subject_id')
-	                    ->on('c.standard_id', '=', 's.standard_id')
-	                    ->on('c.sub_institute_id', '=', 's.sub_institute_id')
-	                    ->whereIn('c.sub_institute_id',[1,$sub_institute_id]);
-	            })
-	            ->whereRaw($sub_institute_id_by_lms)
-	            ->where('s.allow_content', '=', 'Yes')
-				->where('s.subject_category','=','SEL') // 17-12-2024 give sel rights teacher
-	            ->groupBy('s.subject_id', 's.standard_id', 's.subject_category')
-	            ->orderBy('s.sort_order')
-	            ->get()->toArray();
-				// echo "<pre>";print_r($getSEL);exit;
-				if (count($getSEL) > 0) {
-					foreach ($getSEL as $key => $val) {
-						$mycourse_arr[$val->content_category][] = (array)$val;
-					}
-				}
-
-	    } else {
-	        $arr = DB::table('sub_std_map as s')
-	            ->selectRaw("STD.name AS standard_name,s.display_name AS subject_name,s.subject_id,STD.id AS standard_id,
-	                s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))SEPARATOR '#') AS chapter_list,
-	                IFNULL(s.subject_category,'My Course') AS content_category,s.sub_institute_id")
-	            ->join('standard AS STD', 'STD.id', '=', 's.standard_id')
-	            ->leftJoin('chapter_master AS cp', function ($join) {
-	                $join->on('cp.subject_id', '=', 's.subject_id')
-	                    ->on('cp.standard_id', '=', 's.standard_id');
-	            })
-	            ->leftJoin('content_master AS c', function ($join) use ($sub_institute_id) {
-	                $join->on('c.subject_id', '=', 's.subject_id')
+	                $join->on('c.subject_id', '=', 's.id')
 	                    ->on('c.standard_id', '=', 's.standard_id')
 	                    ->on('c.sub_institute_id', '=', 's.sub_institute_id')
 	                    ->where('c.sub_institute_id', '=', $sub_institute_id);
@@ -123,10 +74,10 @@ class courseController extends Controller
 	            ->where('s.allow_content', '=', 'Yes')
 	            // ->whereRaw($extra)
 	            ->whereRaw(ltrim($extra, ' AND '))
-	            ->groupBy('s.subject_id', 's.standard_id', 's.subject_category')
+	            ->groupBy('s.id', 's.standard_id', 's.subject_category')
 	            ->orderBy('s.sort_order')
 	            ->get();
-	    }
+	    
 
 	    $arr = $arr->toArray();
 	    if (count($arr) > 0) {
@@ -170,16 +121,16 @@ class courseController extends Controller
             $extra .= " AND STD.id = '".$standard."'";
         }
 
-        $arr = DB::select("SELECT STD.name AS standard_name,s.display_name AS subject_name,s.subject_id,STD.id AS standard_id,s.sub_institute_id,
+        $arr = DB::select("SELECT STD.name AS standard_name,s.display_name AS subject_name,s.id as subject_id,STD.id AS standard_id,s.sub_institute_id,
                 s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))) AS chapter_list,
                 ifnull(s.subject_category,'My Course') AS content_category
                 FROM sub_std_map s
                 INNER JOIN standard STD ON STD.id = s.standard_id
-                LEFT JOIN chapter_master cp ON cp.subject_id = s.subject_id
-                LEFT JOIN content_master c ON c.subject_id = s.subject_id AND c.standard_id = s.standard_id AND c.sub_institute_id = s.sub_institute_id
+                LEFT JOIN chapter_master cp ON cp.subject_id = s.id
+                LEFT JOIN content_master c ON c.subject_id = s.id AND c.standard_id = s.standard_id AND c.sub_institute_id = s.sub_institute_id
                 WHERE s.sub_institute_id = $sub_institute_id AND allow_content = 'Yes'
                  ".$extra." AND s.subject_category!='SEL'
-                GROUP BY s.subject_id,s.standard_id,s.subject_category ORDER BY s.sort_order");
+                GROUP BY s.id,s.standard_id,s.subject_category ORDER BY s.sort_order");
 
 		$arr = json_decode(json_encode($arr), true);
 				if (count($arr) > 0) {
@@ -188,16 +139,16 @@ class courseController extends Controller
 					}
 				}
 
-		$getSEL =	DB::select("SELECT STD.name AS standard_name,s.display_name AS subject_name,s.subject_id,STD.id AS standard_id,s.sub_institute_id,
+		$getSEL =	DB::select("SELECT STD.name AS standard_name,s.display_name AS subject_name,s.id as subject_id,STD.id AS standard_id,s.sub_institute_id,
                 s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))) AS chapter_list,
                 ifnull(s.subject_category,'My Course') AS content_category
                 FROM sub_std_map s
                 INNER JOIN standard STD ON STD.id = s.standard_id
-                LEFT JOIN chapter_master cp ON cp.subject_id = s.subject_id
-                LEFT JOIN content_master c ON c.subject_id = s.subject_id AND c.standard_id = s.standard_id AND c.sub_institute_id = s.sub_institute_id
+                LEFT JOIN chapter_master cp ON cp.subject_id = s.id
+                LEFT JOIN content_master c ON c.subject_id = s.id AND c.standard_id = s.standard_id AND c.sub_institute_id = s.sub_institute_id
                 WHERE s.sub_institute_id IN (1,".$sub_institute_id.") AND allow_content = 'Yes'
                  AND s.subject_category='SEL'
-                GROUP BY s.subject_id,s.standard_id,s.subject_category ORDER BY s.sort_order");
+                GROUP BY s.id,s.standard_id,s.subject_category ORDER BY s.sort_order");
 
 		$getSEL = json_decode(json_encode($getSEL), true);
 			if (count($getSEL) > 0) {

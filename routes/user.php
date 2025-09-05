@@ -47,6 +47,7 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
     Route::post('show_user_report', [userReportController::class, 'searchUser'])->name("show_user_report");
     Route::resource('user_report', userReportController::Class);
     Route::post('user_document/{id}',[tbluserController::class, 'addUserDocument'])->name('user_document');
+    Route::get('employee_report', [userReportController::class,'employeeReport'])->name('employee_report');
 });
 
 Route::post('/teacherListAPI', [tbluserController::class, 'teacherListAPI']);
