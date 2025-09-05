@@ -300,7 +300,7 @@ class questionmasterController extends Controller
      */
     public function store(Request $request)
     {
-        // echo ('<pre>');print_r($_REQUEST);die;
+    //    return $request->all();die;
         $type = $request->input('type');
 
         $sub_institute_id = $request->session()->get('sub_institute_id');
@@ -416,7 +416,8 @@ class questionmasterController extends Controller
                     'answer'           => $val,
                     'feedback'         => $feedback_arr['NEW'][$key] ?? '-',
                     'correct_answer'   => $correct_answer_val,
-                    'created_by'       => $user_id,
+                    'created_at'                   => now(),
+                    'created_by'                => $user_id,
                     'sub_institute_id' => $sub_institute_id,
                 );
 

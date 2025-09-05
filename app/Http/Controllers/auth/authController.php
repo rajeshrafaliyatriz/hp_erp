@@ -40,7 +40,7 @@ class authController extends Controller
 
         if (!$user || !Hash::check($password, $user->password)) {
             return response()->json([
-                'status_code' => 0,
+                'status' => 0,
                 'message' => 'Invalid User Id And Password'
             ]);
         }
@@ -128,13 +128,13 @@ class authController extends Controller
         }
         // echo "<pre>";print_r($rightsMenusIds);exit;
         if (empty($user)) {
-            $res['status_code'] = 0;
+            $res['status'] = 0;
             $res['message'] = "Invalid User Id And Password";
 
              return is_mobile($type, 'login', $res, "view");
         } else {
             // if ($rightsMenusIds == 0) { //Check user Rights
-            //     $res['status_code'] = 0;
+            //     $res['status'] = 0;
             //     $res['message'] = "Please Contact Administrator For ERP Rights";
 
             //     return is_mobile($type, 'login', $res, "view");
@@ -186,7 +186,7 @@ class authController extends Controller
                             ->get()->toArray();
                         // when academic end date
                         if(empty($getTermId)){
-                            $res['status_code'] = 0;
+                            $res['status'] = 0;
                             $res['message'] = "Academic Term Date Expired";
                             // return is_mobile($type, "login", $res, "view");
                             return is_mobile($type, 'login', $res, "view");
@@ -226,7 +226,7 @@ class authController extends Controller
                         // echo "<pre>";print_r($getTermId);exit;
                         // when academic end date
                     if(empty($getTermId)){
-                        $res['status_code'] = 0;
+                        $res['status'] = 0;
                         $res['message'] = "Academic Term Date Expired";
                         // return is_mobile($type, "login", $res, "view");
                         return is_mobile($type, 'login', $res, "view");
