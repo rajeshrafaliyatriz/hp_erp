@@ -913,7 +913,7 @@ class AJAXController extends Controller
             // Success - now you can use $jsonData as array
             return response()->json($jsonData);
         } else {
-            return response()->json(['error' => 'Invalid JSON', 'raw' => $text]);
+            return response()->json(['error' => $text, 'raw' => $response]);
         }
     }
 }
