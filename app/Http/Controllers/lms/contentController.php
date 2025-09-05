@@ -30,6 +30,7 @@ class contentController extends Controller
     }
 
     public function getData($request){
+        $type = $request->input('type');
         if($request->has('preload_lms')){
             $sub_institute_id = 1;
         }else{

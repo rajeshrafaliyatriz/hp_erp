@@ -56,13 +56,16 @@ class taskController extends Controller
             ->join('tbluser as u2', function ($join) use ($sub_institute_id) {
                 $join->whereRaw("t.TASK_ALLOCATED_TO = u2.id AND u2.sub_institute_id = '" . $sub_institute_id . "'")->where('u2.status', 1); // 23-04-24 by uma
             })
+            ->leftJoin('hrms_departments as hd','hd.id','=','u2.department_id')
+            ->leftJoin('s_user_jobrole as uj','uj.id','=','u2.allocated_standards')
             ->leftJoin('tbluser as u3', function ($join) use ($sub_institute_id) {
                 $join->whereRaw("t.approved_by = u3.id AND u3.sub_institute_id = '" . $sub_institute_id . "'")->where('u3.status', 1); // 23-04-24 by uma
             })
             ->selectRaw("t.*, CONCAT_WS(' ',u.first_name,u.middle_name,u.last_name) AS manageby, 
             CONCAT_WS(' ',u1.first_name,u1.middle_name,u1.last_name) AS ALLOCATOR,
             CONCAT_WS(' ',u2.first_name,u2.middle_name,u2.last_name) AS ALLOCATED_TO,
-            CONCAT_WS(' ',u3.first_name,u3.middle_name,u3.last_name) AS approved_by")
+            CONCAT_WS(' ',u3.first_name,u3.middle_name,u3.last_name) AS approved_by,
+            hd.department,uj.jobrole")
             ->where("t.SYEAR", "=", $syear)->where("t.sub_institute_id", "=", $sub_institute_id)
             ->whereNull('t.deleted_at');
 
