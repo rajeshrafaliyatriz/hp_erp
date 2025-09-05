@@ -186,7 +186,7 @@ if($type=="API"){
         ->where(['chapter_master.sub_institute_id'=>$sub_institute_id,'chapter_master.id'=>$request->get('chapter_id')])         
         ->get()->toArray(); 
         
-        $data['standard_id'] = $chapter_data[0]['standard_id'];
+        $data['standard_id'] = $chapter_data[0]['standard_id'] ?? '';
         //END Get Standard
 
         //$data['YouTubeSuggestionList'] = $this->getYouTubeSuggestion($data['breadcrum_data']->standard_name,$data['breadcrum_data']->subject_name,$data['breadcrum_data']->chapter_name);        
