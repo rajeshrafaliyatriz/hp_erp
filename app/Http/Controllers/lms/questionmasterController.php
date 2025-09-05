@@ -417,6 +417,7 @@ class questionmasterController extends Controller
                     'feedback'         => $feedback_arr['NEW'][$key] ?? '-',
                     'correct_answer'   => $correct_answer_val,
                     'created_by'       => $user_id,
+                    'created_at'       => now(),
                     'sub_institute_id' => $sub_institute_id,
                 );
 
