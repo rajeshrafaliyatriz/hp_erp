@@ -105,6 +105,7 @@ class dashboardController extends Controller
         // get employee list
         $empData = $usercontroller->index($request);
         $mySKill = $myGrowth = [];
+        $currentLevel = $orgSkillLevel = 0;
         // get total skills
         if(in_array(strtoupper($user_profile_name),["ADMIN", "SUPER ADMIN"])){
            $getTotalJobroles = DB::table('s_user_skill_jobrole')
@@ -135,16 +136,20 @@ class dashboardController extends Controller
             $PersonalData = $usercontroller->edit($request,$user_id);
             $mySKill = $PersonalData->original['jobroleSkills'] ?? [];
             $myGrowth = $PersonalData->original['skills'] ?? [];
-            return $mySKill;
+            $userRatedSkills = $PersonalData->original['userRatedSkills'] ?? 0;
+            $currentLevel = (count($userRatedSkills) > 0 && count($mySKill) > 0) 
+                ? round((count($userRatedSkills) / count($mySKill)) * 100, 2)
+                : 0;
+            $orgSkillLevel = DB::table('s_proficiency_levels')->where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->count();
+            // return $orgSkillLevel;
         }
 
         $lmsActivityStreamController = new lmsActivityStreamController;
         $taskList = $lmsActivityStreamController->index($request);
-        return $taskList;
+        // return $taskList;
         // Handle JsonResponse object properly
         $taskListArray = $taskList->original ?? [];
         // return $taskListArray['today']['taskAssigned'];
-        $res['today_task'] = $taskListArray['today']['taskAssigned'] ?? [];
         $weekTasks = [];
         $currentDate = now();
         $weekStart = $currentDate->copy()->startOfWeek();
@@ -162,8 +167,6 @@ class dashboardController extends Controller
             }
         }
         
-        $res['week_task'] = $weekTasks;
-
         $res['totle_employees'] = count($empData->original['data']) ?? 0;
         $res['umapped_employees'] = tbluserModel::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])
         ->whereNull('allocated_standards')
@@ -171,8 +174,12 @@ class dashboardController extends Controller
         $res['totle_skills'] = $getTotalSkill;
         $res['widget'] = ['Employee List','Weekly Task Progress','Today Task List','Week Task List'];
         $res['totle_jobroles'] = $getTotalJobroles;
-        $res['employeeList'] = $empData->original['data'] ?? [];
+        $res['today_task'] = $taskListArray['today']['taskAssigned'] ?? [];
+        $res['week_task'] = $weekTasks;
+        $res['current_level'] = $currentLevel;
+        $res['orgSkillLevel'] = $orgSkillLevel;
         $res['mySKill'] = $mySKill;
+        $res['employeeList'] = $empData->original['data'] ?? [];
 
         return response()->json($res);
     }
