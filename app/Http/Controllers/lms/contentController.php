@@ -498,7 +498,11 @@ if($type=="API"){
             $sub_institute_id = 1;
         }else{
         $sub_institute_id = $request->session()->get('sub_institute_id');
-        } 		
+        } 	
+        
+        if($type=="API"){
+            $sub_institute_id= $request->sub_institute_id;
+        }
 						
         $data['content_data'] = contentModel::find($id)->toArray();
 

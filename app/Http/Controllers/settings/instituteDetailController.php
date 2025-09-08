@@ -178,6 +178,7 @@ class instituteDetailController extends Controller
                 $assigned_to = $request->assigned_to;
                 $duedate = $request->duedate;
                 $frequency = $request->frequency;
+                $custom_frequency_details = $request->custom_frequency_details ?? null;
                 $attachment= null;
 
                 if($request->hasFile('attachment')){
@@ -195,6 +196,7 @@ class instituteDetailController extends Controller
                     'duedate'=> date('Y-m-d',strtotime($duedate)),
                     'attachment'=>$attachment,
                     'frequency'=>$frequency,
+                    'custom_frequency_details'=>$custom_frequency_details,
                     'sub_institute_id'=>$sub_institute_id,
                     'created_by'=>$user_id,
                     'created_at'=>now()
@@ -318,6 +320,7 @@ class instituteDetailController extends Controller
                     $duedate = $request->duedate;
                     $attachment= ($request->oldAttachment) ? $request->oldAttachment : null;
                     $frequency = $request->frequency;
+                    $custom_frequency_details = $request->custom_frequency_details ?? null;
 
                     $complainceData = [
                         'name'=>$name,
@@ -327,6 +330,7 @@ class instituteDetailController extends Controller
                         'duedate'=> date('Y-m-d',strtotime($duedate)),
                         'sub_institute_id'=>$sub_institute_id,
                         'frequency'=>$frequency,
+                        'custom_frequency_details'=>$custom_frequency_details,
                         'updated_by'=>$user_id,
                         'updated_at'=>now()
                     ];
