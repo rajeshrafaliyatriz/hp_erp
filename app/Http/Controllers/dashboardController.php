@@ -104,7 +104,7 @@ class dashboardController extends Controller
         ])->toArray();
         // get employee list
         $empData = $usercontroller->index($request);
-
+        $mySKill = $myGrowth = [];
         // get total skills
         if(in_array(strtoupper($user_profile_name),["ADMIN", "SUPER ADMIN"])){
            $getTotalJobroles = DB::table('s_user_skill_jobrole')
@@ -131,10 +131,16 @@ class dashboardController extends Controller
             ->where('title',$userjobrole[0]->jobrole ?? '')
             ->whereNull('deleted_at')
             ->count();
+
+            $PersonalData = $usercontroller->edit($request,$user_id);
+            $mySKill = $PersonalData->original['jobroleSkills'] ?? [];
+            $myGrowth = $PersonalData->original['skills'] ?? [];
+            return $mySKill;
         }
 
         $lmsActivityStreamController = new lmsActivityStreamController;
         $taskList = $lmsActivityStreamController->index($request);
+        return $taskList;
         // Handle JsonResponse object properly
         $taskListArray = $taskList->original ?? [];
         // return $taskListArray['today']['taskAssigned'];
@@ -166,6 +172,7 @@ class dashboardController extends Controller
         $res['widget'] = ['Employee List','Weekly Task Progress','Today Task List','Week Task List'];
         $res['totle_jobroles'] = $getTotalJobroles;
         $res['employeeList'] = $empData->original['data'] ?? [];
+        $res['mySKill'] = $mySKill;
 
         return response()->json($res);
     }

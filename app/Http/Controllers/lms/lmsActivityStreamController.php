@@ -634,7 +634,22 @@ class lmsActivityStreamController extends Controller
                 $join->on('t.task_allocated', '=', 'us.id')
                     ->where(['us.sub_institute_id' => $sub_institute_id]);
             })
-            ->selectRaw('t.id,t.task_title,t.task_type,t.task_date,t.status,t.sub_institute_id,t.syear,t.created_at,CONCAT_WS(" ", COALESCE(tu.first_name,"-"), COALESCE(tu.middle_name,"-"), COALESCE(tu.last_name,"-")) as allocatedUser,CONCAT_WS(" ", COALESCE(us.first_name,"-"), COALESCE(us.middle_name,"-"), COALESCE(us.last_name,"-")) as allocatedBy')
+            ->selectRaw('
+                t.id,
+                t.task_title,
+                t.task_type,
+                t.task_date,
+                t.status,
+                t.sub_institute_id,
+                t.syear,
+                t.created_at,
+                CONCAT_WS(" ", COALESCE(tu.first_name,"-"), COALESCE(tu.middle_name,"-"), COALESCE(tu.last_name,"-")) as allocatedUser,
+                CONCAT_WS(" ", COALESCE(us.first_name,"-"), COALESCE(us.middle_name,"-"), COALESCE(us.last_name,"-")) as allocatedBy,
+                CASE WHEN tu.image IS NOT NULL 
+                    THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", tu.image)
+                    ELSE NULL 
+                END as image
+            ')
             ->where(['t.sub_institute_id' => $sub_institute_id, 't.syear' => $syear])
             ->when($activityType == 'upcoming', function ($q) use ($searchDate) {
                 $q->where('t.task_date', '>=', $searchDate);
@@ -658,7 +673,7 @@ class lmsActivityStreamController extends Controller
             ->join('s_user_jobrole_task as sj', 'suj.jobrole', '=', 'sj.jobrole')
             ->selectRaw('
                 NULL as id,
-                sj.task as task_title,
+                sj.task as task_title, 
                 sj.task_type,
                 ? as task_date,
                 "PENDING" as status,
@@ -666,11 +681,22 @@ class lmsActivityStreamController extends Controller
                 NULL as syear,
                 ? as created_at,
                 ? as allocatedUser,
-                ? as allocatedBy
-            ', [now(),now(),$fullName, $fullName])
+                ? as allocatedBy,
+                CASE WHEN ? IS NOT NULL 
+                    THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", ?)
+                    ELSE NULL 
+                END as image
+            ', [
+                now(),
+                now(),
+                $fullName, 
+                $fullName,
+                $userData->image,
+                $userData->image
+            ])
             ->where('sj.sub_institute_id', $sub_institute_id)
             ->where('suj.id', $userData->allocated_standards ?? 0)
-            ->whereNull('sj.deleted_at');        
+            ->whereNull('sj.deleted_at');
 
         // Union both queries
         return $result = $taskQuery->union($jobRoleTaskQuery)->get()->toArray();

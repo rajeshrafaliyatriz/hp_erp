@@ -550,9 +550,10 @@ class tbluserController extends Controller
                 $ratedIds[] = $rated['skill_id'] ?? 0;
             }
             $res['skills'] = skillJobroleMap::with([
-                    'userSkills'=> function($query) use($ratedIds) {
-                        $query->whereNotIn('id', $ratedIds);
-                    }
+                    'userSkills'
+                    // => function($query) use($ratedIds) {
+                    //     $query->whereNotIn('id', $ratedIds);
+                    // }
                 ])
                 ->where('jobrole', $assignedJobrole->jobrole)
                 ->whereNull('deleted_at')
