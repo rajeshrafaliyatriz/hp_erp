@@ -134,9 +134,10 @@ class dashboardController extends Controller
             ->count();
 
             $PersonalData = $usercontroller->edit($request,$user_id);
+            // return $PersonalData;
             $mySKill = $PersonalData->original['jobroleSkills'] ?? [];
-            $myGrowth = $PersonalData->original['skills'] ?? [];
-            $userRatedSkills = $PersonalData->original['userRatedSkills'] ?? 0;
+            $unRatedSkills = $PersonalData->original['skills'] ?? [];
+            $userRatedSkills = $PersonalData->original['userRatedSkills'] ?? [];
             $currentLevel = (count($userRatedSkills) > 0 && count($mySKill) > 0) 
                 ? round((count($userRatedSkills) / count($mySKill)) * 100, 2)
                 : 0;
@@ -179,6 +180,7 @@ class dashboardController extends Controller
         $res['current_level'] = $currentLevel;
         $res['orgSkillLevel'] = $orgSkillLevel;
         $res['mySKill'] = $mySKill;
+        $res['myGrowth'] = $userRatedSkills;
         $res['employeeList'] = $empData->original['data'] ?? [];
 
         return response()->json($res);
