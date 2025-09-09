@@ -23,7 +23,7 @@ class chapterController extends Controller
         $data = $this->getData($request);
         // echo "<pre>";print_r(session()->all());exit;
         $type = $request->input('type');
-        $res['sub_institute_id'] = session()->get('sub_institute_id');
+        $res['sub_institute_id'] = $sub_institute_id = session()->get('sub_institute_id');
 
         if($type=="API"){
             $token = $request->input('token');  // get token from input field 'token'
@@ -49,6 +49,7 @@ class chapterController extends Controller
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
+            $sub_institute_id = $request->sub_institute_id;
         }
         // 28-02-2025 starts     
         $lms_mapping_type = DB::table('lms_mapping_type')
@@ -74,10 +75,21 @@ class chapterController extends Controller
             ->get()->toArray();
        }
 
+       $allResources =contentModel::join('chapter_master',function($q) use($request){
+        $q->on('content_master.chapter_id','=','chapter_master.id')->whereNull('chapter_master.deleted_at');
+       })
+       ->selectRaw('content_master.*,chapter_master.chapter_name')
+       ->where(['content_master.subject_id'=>$request->subject_id,'content_master.standard_id'=>$request->standard_id,'content_master.sub_institute_id' => $sub_institute_id])
+       ->whereNull('content_master.deleted_at')
+       ->get()->toArray();
+
         $res['status_code'] = 1;
         $res['message'] = "SUCCESS";
+        $res['course_details'] = DB::table('sub_std_map')->where('id',$request->subject_id)->first();
+        $res['standard_details'] = DB::table('standard')->where('id',$request->standard_id)->first();
         $res['data'] = $data['chapter_data'];
         $res['content_data'] = $data['content_data'];
+        $res['all_resources'] = $allResources;
         $res['grade'] = $data['basic_ids']['grade_id'] ?? [];
         $res['standard'] = $data['basic_ids']['standard_id'] ?? [];
         $res['subject'] = $data['basic_ids']['subject_id'] ?? [];
@@ -172,6 +184,7 @@ class chapterController extends Controller
                 $query->whereNull('content_master.topic_id')
                     ->orWhere('content_master.topic_id', '0');
             })
+            ->whereNull('deleted_at')
             ->get()->toArray(); // commented on 28-02-2025
         // added on 28-02-2025
         // $content_data = contentModel::select('content_master.*',DB::Raw('group_concat(cmt.mapping_type_id) as mapping_types'),DB::Raw('group_concat(cmt.mapping_value_id) as mapping_values'))
