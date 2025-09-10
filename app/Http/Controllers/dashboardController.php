@@ -11,6 +11,7 @@ use App\Models\auth\tbluserModel;
 use App\Models\user\tblgroupwise_rightsModel;
 use App\Http\Controllers\user\tbluserController;
 use App\Http\Controllers\lms\lmsActivityStreamController;
+use App\Models\HRMS\hrmsDepartmentModel;
 
 class dashboardController extends Controller
 {
@@ -97,6 +98,7 @@ class dashboardController extends Controller
         $res['status_code'] = 1;
         $res['message'] = 'Welcome User '.$user->first_name.' '.$user->last_name;
         
+        $SkillLevels= DB::table('s_proficiency_levels')->where(['sub_institute_id'=>$sub_institute_id])->whereNull('deleted_at')->get()->toArray();
         $usercontroller =  new tbluserController;
         $request->merge([
             'active_status' => 1,
@@ -104,7 +106,9 @@ class dashboardController extends Controller
         ])->toArray();
         // get employee list
         $empData = $usercontroller->index($request);
-
+        $department = hrmsDepartmentModel::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])->whereNull('deleted_at')->get()->toArray();
+        $mySKill = $myGrowth = $skillHatMap= $userRatedSkills=$unRatedSkills=$departmentWiseSkill=[];
+        $currentLevel = $orgSkillLevel = 0;
         // get total skills
         if(in_array(strtoupper($user_profile_name),["ADMIN", "SUPER ADMIN"])){
            $getTotalJobroles = DB::table('s_user_skill_jobrole')
@@ -116,6 +120,31 @@ class dashboardController extends Controller
            ->where(['sub_institute_id'=>$sub_institute_id,'status'=>'Active'])
            ->whereNull('deleted_at')
            ->count();
+
+            foreach($department as $key=>$value){
+                foreach($SkillLevels as $sk=>$sv){
+                    $getSkillRating = DB::table('s_skill_matrix as sm')
+                    ->join('tbluser as tu',function($join) use($sub_institute_id,$value){
+                            $join->on('sm.user_id','=','tu.id')->where(['sub_institute_id'=>$sub_institute_id,'tu.status'=>1,'tu.department_id'=>$value['id']]); 
+                    })
+                    ->join('s_user_skill_jobrole as usj',function($join) use($sub_institute_id){
+                                $join->on('sm.skill_id','=','usj.id')->where(['usj.sub_institute_id'=>$sub_institute_id]); 
+                        })
+                    ->selectRaw('sm.*,CONCAT_WS(" ",COALESCE(tu.first_name,"-"),COALESCE(tu.middle_name,"-"),COALESCE(tu.last_name,"-")) as user_name,CASE WHEN tu.image IS NOT NULL 
+                    THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/hp_user/", tu.image)
+                    ELSE NULL 
+                END as image,usj.jobrole,usj.skill')
+                    ->where(['tu.sub_institute_id'=>$sub_institute_id,'sm.skill_level'=>$sv->proficiency_level])->get();
+                    
+                    $totalRatedSkills = count($getSkillRating);
+                    $heatMap = [
+                        'total_emp'=>$totalRatedSkills,
+                        'skillData'=>$getSkillRating,
+                    ];
+                    $departmentWiseSkill[$value['department']][$sv->proficiency_level] = $heatMap; 
+                }
+            }
+        //    $departmentWiseSkill = 
         }
         else{
             $userjobrole = DB::table('s_user_skill_jobrole')
@@ -131,14 +160,25 @@ class dashboardController extends Controller
             ->where('title',$userjobrole[0]->jobrole ?? '')
             ->whereNull('deleted_at')
             ->count();
+
+            $PersonalData = $usercontroller->edit($request,$user_id);
+            // return $PersonalData;
+            $mySKill = $PersonalData->original['jobroleSkills'] ?? [];
+            $unRatedSkills = $PersonalData->original['skills'] ?? [];
+            $userRatedSkills = $PersonalData->original['userRatedSkills'] ?? [];
+            $currentLevel = (count($userRatedSkills) > 0 && count($mySKill) > 0) 
+                ? round((count($userRatedSkills) / count($mySKill)) * 100, 2)
+                : 0;
+            $orgSkillLevel = DB::table('s_proficiency_levels')->where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->count();
+            // return $orgSkillLevel;
         }
 
         $lmsActivityStreamController = new lmsActivityStreamController;
         $taskList = $lmsActivityStreamController->index($request);
+        // return $taskList;
         // Handle JsonResponse object properly
         $taskListArray = $taskList->original ?? [];
         // return $taskListArray['today']['taskAssigned'];
-        $res['today_task'] = $taskListArray['today']['taskAssigned'] ?? [];
         $weekTasks = [];
         $currentDate = now();
         $weekStart = $currentDate->copy()->startOfWeek();
@@ -155,8 +195,6 @@ class dashboardController extends Controller
                 }
             }
         }
-        
-        $res['week_task'] = $weekTasks;
 
         $res['totle_employees'] = count($empData->original['data']) ?? 0;
         $res['umapped_employees'] = tbluserModel::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])
@@ -165,6 +203,14 @@ class dashboardController extends Controller
         $res['totle_skills'] = $getTotalSkill;
         $res['widget'] = ['Employee List','Weekly Task Progress','Today Task List','Week Task List'];
         $res['totle_jobroles'] = $getTotalJobroles;
+        $res['today_task'] = $taskListArray['today']['taskAssigned'] ?? [];
+        $res['week_task'] = $weekTasks;
+        $res['current_level'] = $currentLevel;
+        $res['orgSkillLevel'] = $orgSkillLevel;
+        $res['mySKill'] = $mySKill;
+        $res['SkillLevels'] = $SkillLevels;
+        $res['skillHeatmap'] = $departmentWiseSkill;
+        $res['myGrowth'] = $userRatedSkills;
         $res['employeeList'] = $empData->original['data'] ?? [];
 
         return response()->json($res);
