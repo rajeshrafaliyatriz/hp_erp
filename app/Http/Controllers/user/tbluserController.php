@@ -698,6 +698,7 @@ class tbluserController extends Controller
         $res['usersLevelData']['levelsData'] = array_values($allLevels);
         $res['usersLevelData']['attrData'] = $attrData;
         $res['usersLevelData']['allData'] = $detailsLevel;
+        $res['usersJobroleComponent'] = DB::table('s_user_jobrole')->where('jobrole',$assignedJobrole->jobrole)->where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->first();
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();
         // echo "<pre>";print_r($res['skills']);exit;
         return is_mobile($type, "user/edit_user", $res, "view");
