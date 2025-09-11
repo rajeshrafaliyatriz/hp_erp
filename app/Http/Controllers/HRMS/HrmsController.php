@@ -359,8 +359,41 @@ class HrmsController extends Controller
         }
         $res['status_code'] = 0;
         $res['message'] = "Failed to Find Data";
+
         if($request->has('formType') && $request->formType == 'MyAttendance'){
-            $attendanceData = HrmsAttendance::with('getUser')->where([['user_id', $userId], ['sub_institute_id', $sub_institute_id], ['day', Carbon::now()->format('Y-m-d')],['status',1]])->whereNull('deleted_at')->first();
+            $attendanceData = HrmsAttendance::with([
+                'getUser' => function($query) {
+                    $query->select(
+                        'tbluser.id',
+                        DB::raw('CONCAT_WS(" ", COALESCE(first_name,"-"), COALESCE(middle_name,"-"), COALESCE(last_name,"-")) as employee_name')
+                    );
+                },
+                'getDepartment' => function($query) {
+                    $query->select(
+                        'hrms_departments.id',
+                        'department'
+                    );
+                },
+            ])
+            ->where([['user_id', $userId], ['sub_institute_id', $sub_institute_id], ['day', Carbon::now()->format('Y-m-d')],['status',1]])->whereNull('deleted_at')
+            ->get()
+             ->map(function($item) {
+                $item->employee_name = $item->getUser ? $item->getUser->employee_name : '';
+                $item->department = $item->getDepartment ? $item->getDepartment->department : '';
+                unset($item->getUser);
+                unset($item->getDepartment);
+                return $item;
+            });
+
+            $monthAttendance = HrmsAttendance::where([
+                ['user_id', $userId],
+                ['sub_institute_id', $sub_institute_id],
+                ['status', 1]
+            ])
+            ->whereNull('deleted_at')
+            ->whereMonth('day', Carbon::now()->month)
+            ->whereYear('day', Carbon::now()->year)
+            ->get();
         }
         elseif($request->has('formType') && $request->formType == 'UserAttendance'){
             $attendanceData = HrmsAttendance::with([
@@ -402,11 +435,19 @@ class HrmsController extends Controller
                 return $item;
             });
         }
+
         if($attendanceData){
             $res['status_code'] = 1;
             $res['message'] = "Success to Find Data";
-            $res['data'] = $attendanceData;
+            if($request->has('formType') && $request->formType == 'MyAttendance'){
+                $res['daysInMonth'] =$daysInMonth= Carbon::now()->daysInMonth;
+                $res['presentDays'] = $presentDays = $monthAttendance->count();
+                $res['absentDays'] = $absentDays = $daysInMonth - $presentDays;
+                $res['percentege'] = $percentege = ($presentDays / $daysInMonth) * 100;
+            }
+            $res['attendanceData'] = $attendanceData;
         }
+
         // if ($request->employee_id) {
         //     $hrmsAttendanceInOutTime['employee_id'] = $request->employee_id;
         //     $date = $request->date ? Carbon::parse($request->date)->format('Y-m-d') : Carbon::now()->format('Y-m-d');
