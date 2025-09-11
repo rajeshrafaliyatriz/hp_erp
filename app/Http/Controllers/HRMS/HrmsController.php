@@ -386,11 +386,11 @@ class HrmsController extends Controller
                 $q->whereBetween('day', [$request->from_date, $request->to_date]);
             })
             ->when($request->has('employee_id'), function($q) use ($request) {
-                $q->where('user_id', $request->employee_id);
+                $q->whereIn('user_id', $request->employee_id);
             })
             ->when($request->has('department_id'), function($q) use ($request) {
                 $q->whereHas('getUser', function($q) use ($request) {
-                    $q->where('department_id', $request->department_id);
+                    $q->whereIn('department_id', $request->department_id);
                 });
             })
             ->get()
