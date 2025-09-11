@@ -904,4 +904,62 @@ if (!function_exists('SearchChainSubject')) {
             return $SelectDepartment;
         }
     }
+
+    if (!function_exists('getSubCordinates')) {
+
+        function getSubCordinates($sub_institute_id='',$user_id='',$type='')
+        {
+            if($type=='dep'){
+                $SubCordinatesDep = DB::table('tbluser as u')
+                            ->where(['u.sub_institute_id'=>$sub_institute_id,'u.status'=>1])
+                            ->whereRaw('(u.id = '.$user_id.' or u.employee_id='.$user_id.')')
+                            ->groupBy('u.department_id')
+                            ->pluck('department_id')->toArray();
+                return $SubCordinatesDep;
+            }else{
+                $SubCordinates = DB::table('tbluser as u')
+                ->where(['u.sub_institute_id'=>$sub_institute_id,'u.status'=>1])
+                ->whereRaw('(u.id = '.$user_id.' or u.employee_id='.$user_id.')')
+                ->pluck('id')->toArray();
+                return $SubCordinates;
+            }
+            
+        }
+    }
+
+    if (!function_exists('countDays')) {
+
+        function countDays($from_date,$to_date,$dayType='',$skipday='')
+        {
+            $fromDate = Carbon::parse($from_date);
+            $toDate = Carbon::parse($to_date);
+            // count days without sunday
+            if($skipday!='' && $skipday=="skip_sunday"){
+                $daysCount = 0;
+                while ($fromDate->lte($toDate)) {
+                    if ($fromDate->dayOfWeek != Carbon::SUNDAY) {
+                        // Calculate the total number of days if day type = 1 or 0.5
+                        if($dayType!=''){
+                            $daysCount = $dayType + $daysCount;
+                        }else{
+                            $daysCount++;
+                        }
+                    }
+                    $fromDate->addDay();
+                }
+            }
+            // count days with sunday 
+            else{
+                // Calculate the total number of days if day type = 1 or 0.5
+                if($dayType!=''){
+                    $mainDays = $fromDate->diffInDays($toDate) + 1;
+                    $daysCount = ($mainDays*$dayType);
+                }else{
+                    $daysCount = $fromDate->diffInDays($toDate) + 1;
+                }
+            }
+           return $daysCount;
+        }
+    }
+
 }
