@@ -646,6 +646,12 @@ class tbluserController extends Controller
                         ->get()
                         ->groupBy('classification');
                     
+                    $classificationItems2 = DB::table('s_skill_knowledge_ability')
+                        ->where('skill_id', $item->userSkills->id ?? null)
+                        // ->where('proficiency_level', $item->proficiency_level)
+                        ->get()
+                        ->groupBy('classification');
+                    
                     // Assign properties to the new object
                     $mappedItem->jobrole_skill_id = $item->id;
                     $mappedItem->jobrole = $item->jobrole;
@@ -661,6 +667,12 @@ class tbluserController extends Controller
                         : [];
                     $mappedItem->ability = $classificationItems->has('ability')
                         ? $classificationItems['ability']->pluck('classification_item')->toArray()
+                        : [];
+                    $mappedItem->behaviour = $classificationItems2->has('behaviour')
+                        ? $classificationItems2['behaviour']->pluck('classification_item')->toArray()
+                        : [];
+                    $mappedItem->attitude = $classificationItems2->has('attitude')
+                        ? $classificationItems2['attitude']->pluck('classification_item')->toArray()
                         : [];
                     
                     return $mappedItem;
