@@ -345,7 +345,7 @@ class HrmsController extends Controller
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required|numeric',
                 'user_id' => 'required|numeric',
-                'formType'=>'required|in:MyAttendance,UserAttendance'
+                'formType' => 'required|in:MyAttendance,UserAttendance'
             ]);
 
             if ($validator->fails()) {
@@ -360,89 +360,88 @@ class HrmsController extends Controller
         $res['status_code'] = 0;
         $res['message'] = "Failed to Find Data";
 
-        if($request->has('formType') && $request->formType == 'MyAttendance'){
+        if ($request->has('formType') && $request->formType == 'MyAttendance') {
             $attendanceData = HrmsAttendance::with([
-                'getUser' => function($query) {
+                'getUser' => function ($query) {
                     $query->select(
                         'tbluser.id',
                         DB::raw('CONCAT_WS(" ", COALESCE(first_name,"-"), COALESCE(middle_name,"-"), COALESCE(last_name,"-")) as employee_name')
                     );
                 },
-                'getDepartment' => function($query) {
+                'getDepartment' => function ($query) {
                     $query->select(
                         'hrms_departments.id',
                         'department'
                     );
                 },
             ])
-            ->where([['user_id', $userId], ['sub_institute_id', $sub_institute_id], ['day', Carbon::now()->format('Y-m-d')],['status',1]])->whereNull('deleted_at')
-            ->get()
-             ->map(function($item) {
-                $item->employee_name = $item->getUser ? $item->getUser->employee_name : '';
-                $item->department = $item->getDepartment ? $item->getDepartment->department : '';
-                unset($item->getUser);
-                unset($item->getDepartment);
-                return $item;
-            });
+                ->where([['user_id', $userId], ['sub_institute_id', $sub_institute_id], ['day', Carbon::now()->format('Y-m-d')], ['status', 1]])->whereNull('deleted_at')
+                ->get()
+                ->map(function ($item) {
+                    $item->employee_name = $item->getUser ? $item->getUser->employee_name : '';
+                    $item->department = $item->getDepartment ? $item->getDepartment->department : '';
+                    unset($item->getUser);
+                    unset($item->getDepartment);
+                    return $item;
+                });
 
             $monthAttendance = HrmsAttendance::where([
                 ['user_id', $userId],
                 ['sub_institute_id', $sub_institute_id],
                 ['status', 1]
             ])
-            ->whereNull('deleted_at')
-            ->whereMonth('day', Carbon::now()->month)
-            ->whereYear('day', Carbon::now()->year)
-            ->get();
-        }
-        elseif($request->has('formType') && $request->formType == 'UserAttendance'){
+                ->whereNull('deleted_at')
+                ->whereMonth('day', Carbon::now()->month)
+                ->whereYear('day', Carbon::now()->year)
+                ->get();
+        } elseif ($request->has('formType') && $request->formType == 'UserAttendance') {
             $attendanceData = HrmsAttendance::with([
-                'getUser' => function($query) {
+                'getUser' => function ($query) {
                     $query->select(
                         'tbluser.id',
                         DB::raw('CONCAT_WS(" ", COALESCE(first_name,"-"), COALESCE(middle_name,"-"), COALESCE(last_name,"-")) as employee_name'),
                         'tbluser.image',
                     );
                 },
-                'getDepartment' => function($query) {
+                'getDepartment' => function ($query) {
                     $query->select(
                         'hrms_departments.id',
                         'department'
                     );
                 },
             ])
-            ->where([
-                ['sub_institute_id', $sub_institute_id],
-                ['status', 1]
-            ])
-            ->whereNull('deleted_at')
-            ->when($request->has('from_date') && $request->has('to_date'), function($q) use ($request) {
-                $q->whereBetween('day', [$request->from_date, $request->to_date]);
-            })
-            ->when($request->has('employee_id'), function($q) use ($request) {
-                $q->whereIn('user_id', $request->employee_id);
-            })
-            ->when($request->has('department_id'), function($q) use ($request) {
-                $q->whereHas('getUser', function($q) use ($request) {
-                    $q->whereIn('department_id', $request->department_id);
+                ->where([
+                    ['sub_institute_id', $sub_institute_id],
+                    ['status', 1]
+                ])
+                ->whereNull('deleted_at')
+                ->when($request->has('from_date') && $request->has('to_date'), function ($q) use ($request) {
+                    $q->whereBetween('day', [$request->from_date, $request->to_date]);
+                })
+                ->when($request->has('employee_id'), function ($q) use ($request) {
+                    $q->whereIn('user_id', $request->employee_id);
+                })
+                ->when($request->has('department_id'), function ($q) use ($request) {
+                    $q->whereHas('getUser', function ($q) use ($request) {
+                        $q->whereIn('department_id', $request->department_id);
+                    });
+                })
+                ->get()
+                ->map(function ($item) {
+                    $item->employee_name = $item->getUser ? $item->getUser->employee_name : '';
+                    $item->employee_image = $item->getUser ? $item->getUser->image : '';
+                    $item->department = $item->getDepartment ? $item->getDepartment->department : '';
+                    unset($item->getUser);
+                    unset($item->getDepartment);
+                    return $item;
                 });
-            })
-            ->get()
-            ->map(function($item) {
-                $item->employee_name = $item->getUser ? $item->getUser->employee_name : '';
-                $item->employee_image = $item->getUser ? $item->getUser->image : '';
-                $item->department = $item->getDepartment ? $item->getDepartment->department : '';
-                unset($item->getUser);
-                unset($item->getDepartment);
-                return $item;
-            });
         }
 
-        if($attendanceData){
+        if ($attendanceData) {
             $res['status_code'] = 1;
             $res['message'] = "Success to Find Data";
-            if($request->has('formType') && $request->formType == 'MyAttendance'){
-                $res['daysInMonth'] =$daysInMonth= Carbon::now()->daysInMonth;
+            if ($request->has('formType') && $request->formType == 'MyAttendance') {
+                $res['daysInMonth'] = $daysInMonth = Carbon::now()->daysInMonth;
                 $res['presentDays'] = $presentDays = $monthAttendance->count();
                 $res['absentDays'] = $absentDays = $daysInMonth - $presentDays;
                 $res['percentege'] = $percentege = ($presentDays / $daysInMonth) * 100;
@@ -1750,7 +1749,7 @@ class HrmsController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        DB::table('hrms_attendances')->where('id', $id)->delete();
+        DB::table('hrms_attendances')->where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
         if ($request->type == 'API') {
             return 1;
         }
@@ -1761,18 +1760,49 @@ class HrmsController extends Controller
     {
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+            // $photo_out = $request->input('photo_out');
+
+            $photo_out = null;
+
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required|numeric',
+                'user_id' => 'required|numeric',
+                'formType' => 'required|in:add,update,delete',
+            ]);
+
+            if ($validator->fails()) {
+                $res['status'] = 0;
+                $res['message'] = $validator->messages()->first();
+                return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
+            }
+        }
         $res['status_code'] = 0;
         $res['message'] = "Failed to Update";
-
-        if ($request->has('deleteAtt') && !empty($request->deleteAtt)) {
+        $i = 0;
+        if ($request->has('deleteAtt') && !empty($request->deleteAtt) && $request->formType == "delete") {
             foreach ($request->deleteAtt as $attId => $value) {
                 $this->destroy($request, $attId);
             }
             $res['status_code'] = 1;
             $res['message'] = "Deleted Successfully";
-        }
-        $i = 0;
-        if ($request->has('in_time') && !empty($request->in_time)) {
+        } elseif ($request->has('in_time') && !empty($request->in_time) && $request->formType == "update") {
             foreach ($request->in_time as $attDate => $inTimeData) {
                 foreach ($inTimeData as $empId => $inTime) {
                     try {
@@ -1796,6 +1826,7 @@ class HrmsController extends Controller
                                 $updateArr['out_note'] = 1;
                                 $updateArr['timestamp_diff'] = $formattedDiff;
                                 $updateArr['updated_at'] = now();
+                                $updateArr['updated_by'] = $user_id;
                             } catch (\Exception $e) {
                                 // Log invalid out_time format if needed
                                 continue;
@@ -1831,6 +1862,59 @@ class HrmsController extends Controller
                         continue;
                     }
                 }
+            }
+        } elseif ($request->has('punch_in') && !empty($request->punch_in) && $request->formType == "add") {
+            $punch_out = $addressout = $diff = null;
+            $outnote = 0;
+            $day = $request->day;
+            $department_id = $request->department_id;
+            $emp_id = $request->employee_id;
+            $punch_in = Carbon::parse($day . ' ' . $request->punch_in)->format('Y-m-d H:i:s');
+            $address = $request->address;
+            $innote = 1;
+            if ($request->has('punch_out') && !empty($request->punch_out)) {
+                $punch_out = Carbon::parse($day . ' ' . $request->punch_out)->format('Y-m-d H:i:s');
+                $addressout = $address;
+                $outnote = 1;
+                $punchout_time = Carbon::parse($punch_in);
+                $punchin_time = Carbon::parse($punch_out);
+
+                $min = $punchout_time->diffInMinutes($punchin_time);
+                $diff = date('H:i', mktime(0, $min));
+            }
+            $check = hrmsAttendance::where([
+                'user_id' => $emp_id,
+                'sub_institute_id' => $sub_institute_id,
+                'day' => $day,
+            ])->whereNull('deleted_at')->first();
+            // return $check;
+            if ($check && isset($check->id)) {
+                $res['status_code'] = 0;
+                $res['message'] = "Already Punched in! please edit data";
+                return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
+            }
+            $insertData = [
+                'user_id' => $emp_id,
+                'sub_institute_id' => $sub_institute_id,
+                'day' => $day,
+                'punchin_time' => $punch_in,
+                'punchout_time' => $punch_in,
+                'in_note' => $innote,
+                'out_note' => $outnote,
+                'timestamp_diff' => $diff,
+                'status' => 1,
+                'ipaddress_in' => $address,
+                'ipaddress_out' => $addressout,
+                'created_by' => $user_id,
+                'created_at' => now(),
+            ];
+            $insert = hrmsAttendance::insert($insertData);
+            if ($insert) {
+                $res['status_code'] = 1;
+                $res['message'] = "Added Successfully";
+            } else {
+                $res['status_code'] = 0;
+                $res['message'] = "Failed to Add";
             }
         }
         // exit;
