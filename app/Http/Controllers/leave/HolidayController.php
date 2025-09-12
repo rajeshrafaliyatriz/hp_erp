@@ -1,0 +1,197 @@
+<?php
+
+namespace App\Http\Controllers\leave;
+
+use App\Http\Controllers\Controller;
+use App\Models\HrmsDepartment;
+use App\Models\HrmsHoliday;
+use App\Models\HrmsWeekday;
+use Exception;
+use Illuminate\Http\Request;
+use Yajra\DataTables\Facades\DataTables;
+use App\Traits\Helpers;
+use function App\Helpers\is_mobile;
+
+class HolidayController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index(Request $request)
+    {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+        if ($request->ajax()) {
+            $data = HrmsHoliday::latest()
+                ->when(request()->year, function ($q) {
+                    $q->whereYear('from_date', request()->year);
+                })
+                ->where('sub_institute_id',$sub_institute_id)
+                ->get();
+            return DataTables::of($data)
+                ->addColumn('checkbox', function ($row) {
+                    return '<input type="checkbox" id="' . $row->id . '" name="someCheckbox" class="checkSingle" />';
+                })
+                ->addIndexColumn()
+                ->addColumn('action', function ($row) {
+                    $actionBtn = '<a class="delete btn btn-danger btn-delete btn-sm" data-id="' . $row->id . '">Delete</a>';
+                    return $actionBtn;
+                })
+                ->rawColumns(['checkbox', 'action'])
+                ->make(true);
+        }
+        $departments = HrmsDepartment::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])->whereNull('deleted_at')->orderBy('department')->pluck('department', 'id');
+        $weekdays = HrmsWeekday::pluck('day_type', 'day');
+
+        if ($weekdays->isEmpty()) {
+            $weekdays = [
+                'monday' => '',    // Default value for Monday
+                'tuesday' => '',   // Default value for Tuesday
+                'wednesday' => '', // Default value for Wednesday
+                'thursday' => '', // Default value for thursday
+                'friday' => '', // Default value for friday
+                'saturday' => '', // Default value for saturday
+                'sunday' => '', // Default value for sunday
+            ];
+        }
+
+        $res['weekdays']= $weekdays;
+        $res['departments']= $departments;
+        $res['years']= Helpers::getPairYears();
+        $res['selYear']= date('Y');
+        // return view('leave.holiday_master', compact('weekdays', 'departments'));
+        return is_mobile($type, "leave.holiday_master", $res, "view");
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+            // Step 1: Validate input
+        $validated = $request->validate([
+            'holiday_name'  => 'required|string|max:255',
+            'from_date'     => 'required|date',
+            // 'to_date'    => 'required|date|after_or_equal:from_date',
+            // 'day_type'   => 'required|in:full,half',
+            'department'    => 'required|array',
+        ]);
+
+        // Step 2: Prepare data
+        $holidayData = [
+            'holiday_name'    => $request->holiday_name,
+            'to_date'         => $request->from_date, // use to_date if dynamic later
+            // 'day_type'      => $request->day_type,
+            'department'      => implode(',', $request->department),
+        ];
+
+        $conditions = [
+            'from_date'       => $request->from_date,
+            'to_date'         => $request->from_date,
+            'sub_institute_id'=> session()->get('sub_institute_id'),
+            'department'      => implode(',', $request->department),
+        ];
+
+        // Step 3: Store or update record
+        try {
+            HrmsHoliday::updateOrCreate($conditions, $holidayData);
+
+            return response()->json(['message' => 'Holiday saved successfully!'], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'error' => 'An error occurred while saving the holiday.',
+                'details' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        //
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id)
+    {
+        //
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        try {
+            HrmsHoliday::whereIn('id', explode(',', $id))->delete();
+        } catch (Exception $e) {
+            return response()->json($e->getMessage(), 500);
+        }
+    }
+
+    public function storeWeekdays(Request $request)
+    {
+        $request->validate([
+            'monday' => 'required|in:full,half,weekend',
+            'tuesday' => 'required|in:full,half,weekend',
+            'wednesday' => 'required|in:full,half,weekend',
+            'thursday' => 'required|in:full,half,weekend',
+            'friday' => 'required|in:full,half,weekend',
+            'saturday' => 'required|in:full,half,weekend',
+            'sunday' => 'required|in:full,half,weekend',
+        ]);
+
+        try {
+            HrmsWeekday::updateOrCreate(['day' => 'monday'], ['day_type' => $request->monday]);
+            HrmsWeekday::updateOrCreate(['day' => 'tuesday'], ['day_type' => $request->tuesday]);
+            HrmsWeekday::updateOrCreate(['day' => 'wednesday'], ['day_type' => $request->wednesday]);
+            HrmsWeekday::updateOrCreate(['day' => 'thursday'], ['day_type' => $request->thursday]);
+            HrmsWeekday::updateOrCreate(['day' => 'friday'], ['day_type' => $request->friday]);
+            HrmsWeekday::updateOrCreate(['day' => 'saturday'], ['day_type' => $request->saturday]);
+            HrmsWeekday::updateOrCreate(['day' => 'sunday'], ['day_type' => $request->sunday]);
+            return response()->json(['message' => 'Weekday saved successfully !!'], 200);
+        } catch (Exception $e) {
+            return response()->json($e->getMessage(), 500);
+        }
+    }
+}
