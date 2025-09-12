@@ -208,6 +208,12 @@ class jobroleLibraryController extends Controller
             ])
                 ->where('jobrole', $request->jobrole)
                 ->where('sub_institute_id', $request->sub_institute_id)
+                ->when($request->has('department') && $request->department!='',function($q) use($request){
+                    $q->where('sector',$request->department);
+                })
+                ->when($request->has('function') && $request->function!='',function($q) use($request){
+                    $q->where('critical_work_function',$request->function);
+                })
                 ->whereNull('deleted_at')
                 ->orderBy('id','DESC')
                 ->get()
