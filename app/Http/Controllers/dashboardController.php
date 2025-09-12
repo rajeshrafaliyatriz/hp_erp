@@ -128,20 +128,22 @@ class dashboardController extends Controller
                             $join->on('sm.user_id','=','tu.id')->where(['sub_institute_id'=>$sub_institute_id,'tu.status'=>1,'tu.department_id'=>$value['id']]); 
                     })
                     ->join('s_user_skill_jobrole as usj',function($join) use($sub_institute_id){
-                                $join->on('sm.skill_id','=','usj.id')->where(['usj.sub_institute_id'=>$sub_institute_id]); 
+                                $join->on('sm.skill_id','=','usj.id');
+                                // ->where(['usj.sub_institute_id'=>$sub_institute_id]); 
                         })
                     ->selectRaw('sm.*,CONCAT_WS(" ",COALESCE(tu.first_name,"-"),COALESCE(tu.middle_name,"-"),COALESCE(tu.last_name,"-")) as user_name,CASE WHEN tu.image IS NOT NULL 
                     THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/hp_user/", tu.image)
                     ELSE NULL 
-                END as image,usj.jobrole,usj.skill')
-                    ->where(['tu.sub_institute_id'=>$sub_institute_id,'sm.skill_level'=>$sv->proficiency_level])->get();
+                END as image,usj.jobrole,count(usj.skill) as total_skills,GROUP_CONCAT(usj.skill SEPARATOR "|||") as skillList')
+                    ->where(['tu.sub_institute_id'=>$sub_institute_id,'sm.skill_level'=>$sv->proficiency_type])->groupBy('sm.user_id')->get();
                     
                     $totalRatedSkills = count($getSkillRating);
                     $heatMap = [
                         'total_emp'=>$totalRatedSkills,
+                        'level_name' => $sv->proficiency_level,
                         'skillData'=>$getSkillRating,
                     ];
-                    $departmentWiseSkill[$value['department']][$sv->proficiency_level] = $heatMap; 
+                    $departmentWiseSkill[$value['department']][$sv->proficiency_type] = $heatMap; 
                 }
             }
         //    $departmentWiseSkill = 
@@ -208,6 +210,7 @@ class dashboardController extends Controller
         $res['current_level'] = $currentLevel;
         $res['orgSkillLevel'] = $orgSkillLevel;
         $res['mySKill'] = $mySKill;
+        $res['departmentList'] = $department;
         $res['SkillLevels'] = $SkillLevels;
         $res['skillHeatmap'] = $departmentWiseSkill;
         $res['myGrowth'] = $userRatedSkills;
