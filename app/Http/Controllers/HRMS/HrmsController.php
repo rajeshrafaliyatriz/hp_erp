@@ -400,7 +400,8 @@ class HrmsController extends Controller
                 'getUser' => function($query) {
                     $query->select(
                         'tbluser.id',
-                        DB::raw('CONCAT_WS(" ", COALESCE(first_name,"-"), COALESCE(middle_name,"-"), COALESCE(last_name,"-")) as employee_name')
+                        DB::raw('CONCAT_WS(" ", COALESCE(first_name,"-"), COALESCE(middle_name,"-"), COALESCE(last_name,"-")) as employee_name'),
+                        'tbluser.image',
                     );
                 },
                 'getDepartment' => function($query) {
@@ -429,6 +430,7 @@ class HrmsController extends Controller
             ->get()
             ->map(function($item) {
                 $item->employee_name = $item->getUser ? $item->getUser->employee_name : '';
+                $item->employee_image = $item->getUser ? $item->getUser->image : '';
                 $item->department = $item->getDepartment ? $item->getDepartment->department : '';
                 unset($item->getUser);
                 unset($item->getDepartment);
