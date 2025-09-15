@@ -18,6 +18,7 @@ use App\Http\Controllers\auth\ForgotPasswordController;
 use App\Http\Controllers\Dashboards\SkillDashboardController;
 
 
+
 Route::resource('skill_dashboard', SkillDashboardController::class);
 
 
