@@ -15,6 +15,12 @@ use App\Http\Controllers\CkeditorFileUploadController;
 use App\Http\Controllers\front_desk\syllabus\syllabusController;
 use App\Http\Controllers\libraries\levelOfResponsibilityController;
 use App\Http\Controllers\auth\ForgotPasswordController;
+use App\Http\Controllers\Dashboards\SkillDashboardController;
+
+
+Route::resource('skill_dashboard', SkillDashboardController::class);
+
+
 
 Route::get('/', function () {
     return view('welcome');
