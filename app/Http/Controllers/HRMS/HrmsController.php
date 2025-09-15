@@ -1443,16 +1443,24 @@ class HrmsController extends Controller
         $syear = session()->get('syear');
         $userId = session()->get('user_id');
         $userProfileName = session()->get('user_profile_name');
-
+        if($type=="API"){
+            $sub_institute_id = $request->get('sub_institute_id');
+            $syear = $request->get('syear');
+            $userId = $request->get('user_id');
+            $userProfileName = $request->get('user_profile_name');
+            $department_id = implode(',',$request->department_id);
+            $employee_id = implode(',',$request->employee_id);
+        }else{
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
         $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : 0;
+        }
         $from_date = $request->from_date;
         $to_date = $request->to_date;
         $currentMonth = '';
 
         // sub cordinates 02-08-2024
         $SubCordinates = [];
-        $profileArr = ["Admin", "Super Admin", "School Admin", "Assistant Admin"];
+        $profileArr = ["ADMIN", "SUPER ADMIN", "SCHOOL ADMIN", "ASSISTANT ADMIN"];
         if ($employee_id == 0 && !in_array($userProfileName, $profileArr)) {
             $SubCordinates = getSubCordinates($sub_institute_id, $userId);
             if (!empty($SubCordinates)) {
