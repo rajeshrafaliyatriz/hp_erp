@@ -370,7 +370,93 @@ class taskController extends Controller
                         }
                     }
                 }
-            } else {
+            }
+            else if($request->formType=="BulkTask" && $request->TASK_ALLOCATED_TO && $request->task_details){
+               $insertCount = 0;
+
+                // Convert TASK_ALLOCATED_TO into array
+                $allocatedUsers = $request->TASK_ALLOCATED_TO ? explode(',', $request->TASK_ALLOCATED_TO) : [];
+
+                foreach ($allocatedUsers as $allocatedUser) {
+                    if (!empty($allocatedUser)) {
+
+                        // Decode task details from request
+                        $taskDetails = $request->has('task_details') ? json_decode($request->task_details, true) : [];
+
+                        foreach ($taskDetails as $taskValue) {
+
+                            // Base request data except unwanted fields
+                            $baseData = $request->except([
+                                '_method', '_token', 'token', 'org_type', 'formType',
+                                'submit', 'formName', 'repeat_until', 'task_details',
+                                'TASK_ALLOCATED_TO','type','user_id'
+                            ]);
+
+                            // Task specific data
+                            $taskData = [
+                                'task_title'       => $taskValue['task_title'] ?? '',
+                                'task_description' => $taskValue['task_description'] ?? '',
+                                'repeat_days'      => $taskValue['repeat_days'] ?? 0,
+                                'task_allocated'   => $taskValue['task_allocated'] ?? 0,
+                                'task_type'        => $taskValue['task_type'] ?? 'Medium',
+                                'TASK_DATE'        => $taskValue['TASK_DATE'] ?? date('Y-m-d'),
+                                'TASK_ALLOCATED_TO'=> $allocatedUser,
+                            ];
+
+                            $task_type = $taskValue['task_type'] ?? 'Medium';
+                            $task_date = $taskValue['TASK_DATE'] ?? now()->format('Y-m-d');
+
+                            // Get dates based on task type
+                                $dates = $this->getDatesWithoutSundays($task_type, $task_date, (int)$taskValue['repeat_days'] ?? 1);
+                          
+                            // return $dates;
+                            if(!empty($dates)){
+                                foreach ($dates as $date) {
+                                $data = array_merge($baseData, $taskData, [
+                                    'TASK_DATE'  => $date,
+                                    'created_by' => $user_id,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                    ]);
+
+                                    // Insert using Eloquent create()
+                                    $insert = taskModel::create($data);
+
+                                    if ($insert) {
+                                        $insertCount++;
+                                    }
+                                }
+                            }else{
+                            $data = array_merge($baseData, $taskData, [
+                                    'TASK_DATE'  => $task_date,
+                                    'created_by' => $user_id,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ]);
+
+                                // Insert using Eloquent create()
+                                $insert = taskModel::create($data);
+
+                                if ($insert) {
+                                    $insertCount++;
+                                }
+                            }
+                            
+                        }
+                    }
+                }
+
+                // Response
+                $res['status_code'] = 0;
+                $res['message']     = "Failed to Add";
+
+                if ($insertCount > 0) {
+                    $res['status_code'] = 1;
+                    $res['message']     = "Added successfully";
+                }
+
+            } 
+             else {
                 foreach ($request->input("TASK_ALLOCATED_TO", []) as $value) {
                     $extraData['TASK_ALLOCATED_TO'] = $value;
                     // 'required_skills' => $request->has('skills') ? implode(',', $request->skills) : '',
@@ -667,7 +753,7 @@ class taskController extends Controller
         $startDate = Carbon::now();
         $endDate = $task_date ? Carbon::parse($task_date) : Carbon::create($startDate->year, $startDate->month)->endOfMonth();
         $dates = [];
-
+        // return $task_date;
         if ($type == "High" || $type == "Medium" || $type == "Low") {
             for ($date = $startDate->copy(); $date->lte($endDate); $date->addDays((int)$repeat_days)) {
                 if (!$date->isSunday()) {
@@ -675,6 +761,7 @@ class taskController extends Controller
                 }
             }
         } else {
+
             $period = CarbonPeriod::create($startDate, $endDate);
             foreach ($period as $date) {
                 if ($date->isSunday()) continue;
