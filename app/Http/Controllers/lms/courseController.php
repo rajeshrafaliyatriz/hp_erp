@@ -51,7 +51,8 @@ class courseController extends Controller
 	        ->where('Id', $sub_institute_id)
 	        ->value('is_Lms');
 
-	    $sub_institute_id_by_lms = ($getIsLms == 'Y') ? "(s.sub_institute_id = 1 or s.sub_institute_id = $sub_institute_id)" : "s.sub_institute_id = $sub_institute_id";
+	    // $sub_institute_id_by_lms = ($getIsLms == 'Y') ? "(s.sub_institute_id = 1 or s.sub_institute_id = $sub_institute_id)" : "s.sub_institute_id = $sub_institute_id";
+		$sub_institute_id_by_lms = "(s.sub_institute_id = $sub_institute_id)";
 
 	  
 	        $arr = DB::table('sub_std_map as s')
@@ -146,7 +147,7 @@ class courseController extends Controller
                 INNER JOIN standard STD ON STD.id = s.standard_id
                 LEFT JOIN chapter_master cp ON cp.subject_id = s.id
                 LEFT JOIN content_master c ON c.subject_id = s.id AND c.standard_id = s.standard_id AND c.sub_institute_id = s.sub_institute_id
-                WHERE s.sub_institute_id IN (1,".$sub_institute_id.") AND allow_content = 'Yes'
+                WHERE s.sub_institute_id IN (".$sub_institute_id.") AND allow_content = 'Yes'
                  AND s.subject_category='SEL'
                 GROUP BY s.id,s.standard_id,s.subject_category ORDER BY s.sort_order");
 
