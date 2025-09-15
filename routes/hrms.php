@@ -36,7 +36,7 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::get('/payroll-type/create', [PayrollController::class, 'payrollCreate'])->name('payroll_type.create');
     Route::post('/payroll-type/store', [PayrollController::class, 'payrollStore'])->name('payroll_type.store');
     Route::get('/payroll-type/create/{id}', [PayrollController::class, 'payrollCreate']);
-    Route::delete('/payroll-type/destroy/{id}', [PayrollController::class, 'payrollDestroy'])->name('payroll_type.destroy');
+    Route::post('/payroll-type/destroy/{id}', [PayrollController::class, 'payrollDestroy'])->name('payroll_type.destroy');
 
     Route::get('/payroll-type-report', [PayrollController::class, 'payrollTypeReport'])->name('payrollTypeReport.index');
     Route::get('/payroll-type-report/create', [PayrollController::class, 'payrollTypeReportCreate'])->name('payrollTypeReport.create');
