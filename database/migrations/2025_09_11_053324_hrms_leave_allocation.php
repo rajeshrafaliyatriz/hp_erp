@@ -18,7 +18,7 @@ return new class extends Migration
         $table->unsignedBigInteger('leave_type_id')->index()->nullable();
         $table->year('year')->nullable();
         $table->integer('value')->default(0); // value INT with default 0
-        $table->unsignedBigInteger('sub_institute_id')->length(11)->index()->nullable();
+        $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
         $table->unsignedBigInteger('created_by')->index()->nullable(); 
         $table->unsignedBigInteger('updated_by')->index()->nullable();
         $table->unsignedBigInteger('deleted_by')->index()->nullable();
@@ -26,14 +26,6 @@ return new class extends Migration
         $table->softDeletes();
 
         $table->foreign('employee_id')
-                ->references('id')->on('tbluser')
-                ->onDelete('NO ACTION')->onUpdate('NO ACTION');
-
-        $table->foreign('department_id')
-                ->references('id')->on('hrms_departments')
-                ->onDelete('NO ACTION')->onUpdate('NO ACTION');
-
-        $table->foreign('leave_type_id')
                 ->references('id')->on('tbluser')
                 ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 

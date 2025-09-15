@@ -29,13 +29,9 @@ return new class extends Migration
             $table->softDeletes();
 
             // Foreign key constraints
-            $table->foreign('department_id')
-                    ->references('id')->on('departments')
-                    ->onDelete('NO ACTION')->onUpdate('NO ACTION');
-
-
+         
             $table->foreign('employee_id')
-                    ->references('id')->on('employees')
+                    ->references('id')->on('tbluser')
                    ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
 

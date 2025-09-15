@@ -27,9 +27,6 @@ return new class extends Migration
         $table->timestamps();
         $table->softDeletes();
 
-        $table->foreign('parent_id')
-              ->references('id')->on('tbluser') 
-               ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
         $table->foreign('sub_institute_id')
                 ->references('id')->on('school_setup')

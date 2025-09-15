@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('biomatrix', function (Blueprint $table) {
         $table->bigIncrements('id');
-        $table->unsignedBigInteger('biomatrix_id', 100)->index()->nullable();
+        $table->string('biomatrix_id', 100)->index()->nullable();
         $table->unsignedBigInteger('sub_institute_id')->index()->nullable();
         $table->unsignedBigInteger('created_by')->index()->nullable(); 
         $table->unsignedBigInteger('updated_by')->index()->nullable();
@@ -21,9 +21,6 @@ return new class extends Migration
         $table->timestamps();
         $table->softDeletes();
 
-        $table->foreign('biomatrix_id')
-                ->references('id')->on('')
-                ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
         $table->foreign('sub_institute_id')
                 ->references('id')->on('school_setup')

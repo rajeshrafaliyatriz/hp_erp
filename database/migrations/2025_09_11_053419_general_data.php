@@ -31,7 +31,7 @@ return new class extends Migration
                 ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
         $table->foreign('client_id')
-                ->references('id')->on('tblclient_id')
+                ->references('id')->on('tblclient')
                 ->onDelete('NO ACTION')->onUpdate('NO ACTION');
         
         $table->foreign('created_by')

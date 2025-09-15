@@ -13,7 +13,7 @@ return new class extends Migration
     {
             Schema::create('hrms_holidays', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->unsignedInteger('sub_institute_id')->index()->nullable(); // sub_institute_id INT 11 UNSIGNED
+            $table->unsignedBigInteger('sub_institute_id')->index()->nullable(); // sub_institute_id INT 11 UNSIGNED
             $table->string('holiday_name', 191)->nullable(); // holiday_name VARCHAR 191
             $table->enum('day_type', ['full', 'half'])->nullable(); // day_type ENUM 'full','half'
             $table->string('department', 191)->nullable(); // department VARCHAR 191
@@ -22,13 +22,12 @@ return new class extends Migration
             $table->unsignedBigInteger('created_by')->index()->nullable(); 
             $table->unsignedBigInteger('updated_by')->index()->nullable();
             $table->unsignedBigInteger('deleted_by')->index()->nullable();
-            $table->timestamp('deleted_at')->nullable(); // deleted_at TIMESTAMP
             $table->timestamps(); // created_at and updated_at TIMESTAMP
             $table->softDeletes();
 
             $table->foreign('sub_institute_id')
-                ->references('id')->on('school_setup')
-                ->onDelete('NO ACTION')->onUpdate('NO ACTION');
+            ->references('id')->on('school_setup')
+            ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
             $table->foreign('created_by')
                 ->references('id')->on('tbluser')

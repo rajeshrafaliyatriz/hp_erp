@@ -11,21 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('employee_salary_structures', function (Blueprint $table) {
-            $table->bigIncrements('id');// BIGINT auto-increment (Primary Key)
-            $table->unsignedBigInteger('employee_id')->index()->nullable(); // BIGINT
-            $table->longText('employee_salary_data')->index()->nullable(); // LONGTEXT
-            $table->integer('year')->nullable(); // INT
-            $table->integer('sub_institute_id')->nullable(); // INT
-            $table->unsignedBigInteger('created_by')->index()->nullable(); 
-            $table->unsignedBigInteger('updated_by')->index()->nullable();
-            $table->unsignedBigInteger('deleted_by')->index()->nullable();
-            $table->timestamps();// created_at & updated_at (TIMESTAMP)
+        Schema::create('hrms_leave_types', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->unsignedBigInteger('leave_type_id')->nullable();
+            $table->string('leave_type', 30)->nullable();
+            $table->integer('sort_order')->nullable();
+            $table->integer('status')->default(1);
+            $table->unsignedBigInteger('sub_institute_id')->nullable();
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+            $table->timestamps();
             $table->softDeletes();
-
-            $table->foreign('employee_id')
-                ->references('id')->on('employee')
-                ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
             $table->foreign('sub_institute_id')
                 ->references('id')->on('school_setup')
@@ -50,6 +47,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('employee_salary_structures');
+        Schema::dropIfExists('hrms_leave_types');
     }
 };
