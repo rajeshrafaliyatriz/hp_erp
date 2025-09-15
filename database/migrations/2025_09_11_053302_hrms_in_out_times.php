@@ -27,7 +27,7 @@ return new class extends Migration
 
 
             $table->foreign('user_id')
-                ->references('id')->on('school_setup')
+                ->references('id')->on('tbluser')
                 ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
             $table->foreign('client_id')

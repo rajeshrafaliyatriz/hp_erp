@@ -13,7 +13,7 @@ return new class extends Migration
     {
             Schema::create('hrms_emp_leaves', function (Blueprint $table) {
             $table->bigIncrements('id');// BIGINT auto-increment (Primary Key)
-            $table->unsignedBigInteger('sub_institute_id')->length(11)->index()->nullable(); // sub_institute_id INT 11
+            $table->unsignedBigInteger('sub_institute_id')->index()->nullable(); // sub_institute_id INT 11
             $table->unsignedBigInteger('department_id')->index()->nullable(); // department_id BIGINT 20
             $table->unsignedBigInteger('user_id')->index()->nullable(); // user_id BIGINT 20
             $table->unsignedBigInteger('leave_type_id')->index()->nullable(); // leave_type_id BIGINT 20
@@ -31,7 +31,6 @@ return new class extends Migration
             $table->unsignedBigInteger('created_by')->index()->nullable(); 
             $table->unsignedBigInteger('updated_by')->index()->nullable();
             $table->unsignedBigInteger('deleted_by')->index()->nullable();
-            $table->timestamp('deleted_at')->nullable(); // deleted_at TIMESTAMP
             $table->timestamps(); // created_at and updated_at TIMESTAMP
             $table->softDeletes();
             

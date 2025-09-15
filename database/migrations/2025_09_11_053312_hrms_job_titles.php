@@ -25,7 +25,7 @@ return new class extends Migration
         $table->softDeletes();
 
          $table->foreign('client_id')
-                ->references('id')->on('tbluser')
+                ->references('id')->on('tblclient')
                 ->onDelete('NO ACTION')->onUpdate('NO ACTION');
 
             $table->foreign('sub_institute_id')
