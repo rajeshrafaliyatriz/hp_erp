@@ -1,0 +1,13 @@
+<?php
+
+namespace App\Models\payroll;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class PayrollType extends Model
+{
+    use HasFactory;
+
+    // public $fillable=['payroll_type','payroll_name','amount_type','status','sub_institute_id'];
+}
