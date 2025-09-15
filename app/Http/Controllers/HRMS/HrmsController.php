@@ -288,11 +288,22 @@ class HrmsController extends Controller
         $hrmsInOutTime = HrmsAttendance::where([['user_id', $userId], ['sub_institute_id', $sub_institute_id], ['day', $day], ['punchout_time', null]])->first();
 
         if ($hrmsInOutTime) {
-            $punchout_time = Carbon::parse($punchout_time);
-            $punchin_time = Carbon::parse($hrmsInOutTime->punchin_time);
+            // $punchout_time = Carbon::parse($punchout_time);
+            // $punchin_time = Carbon::parse($hrmsInOutTime->punchin_time);
 
-            $min = $punchout_time->diffInMinutes($punchin_time);
-            $diff = date('H:i', mktime(0, $min));
+            // $min = $punchout_time->diffInMinutes($punchin_time);
+            // $diff = date('H:i', mktime(0, $min));
+            $punchout_time = Carbon::parse($punchout_time);
+            $punchin_time  = Carbon::parse($hrmsInOutTime->punchin_time);
+
+            // Always absolute difference in minutes
+            $min = $punchout_time->diffInMinutes($punchin_time, true);
+
+            // Convert minutes into H:i format
+            $hours   = floor($min / 60);
+            $minutes = $min % 60;
+
+            $diff = sprintf('%02d:%02d', $hours, $minutes);
 
             // Strat overtime calculation
             $overtime = null;
@@ -555,8 +566,15 @@ class HrmsController extends Controller
             $attendance->out_note = 1;
 
             if ($punchoutTime && $attendance->punchin_time) {
-                $minutes = $punchoutTime->diffInMinutes(Carbon::parse($attendance->punchin_time));
-                $attendance->timestamp_diff = date('H:i', mktime(0, $minutes));
+                // $minutes = $punchoutTime->diffInMinutes(Carbon::parse($attendance->punchin_time));
+                // $attendance->timestamp_diff = date('H:i', mktime(0, $minutes));
+                 $min = $punchoutTime->diffInMinutes($attendance->punchin_time, true);
+                // Convert minutes into H:i format
+                $hours   = floor($min / 60);
+
+                $minutes = $min % 60;
+
+                $attendance->timestamp_diff = sprintf('%02d:%02d', $hours, $minutes);
             }
 
             $attendance->save();
@@ -574,8 +592,17 @@ class HrmsController extends Controller
                 $existingRecord->punchout_time = ($request->outtime == "") ? null : $now->format('Y-m-d H:i:s');
                 $existingRecord->ipaddress_out = $request->ip();
 
-                $minutes = $now->diffInMinutes($punchin_time);
-                $diff = date('H:i', mktime(0, $minutes));
+                // $minutes = $now->diffInMinutes($punchin_time);
+                // $diff = date('H:i', mktime(0, $minutes));
+
+                // Always absolute difference in minutes
+                $min = $now->diffInMinutes($punchin_time, true);
+
+                // Convert minutes into H:i format
+                $hours   = floor($min / 60);
+                $minutes = $min % 60;
+
+                $diff = sprintf('%02d:%02d', $hours, $minutes);
 
                 $existingRecord->out_note = 1;
                 $existingRecord->timestamp_diff = $diff;
@@ -1816,21 +1843,31 @@ class HrmsController extends Controller
 
                         // Check if out_time exists and is valid
                         if (isset($request->out_time[$attDate][$empId])) {
-                            try {
+                                            //  echo $empId."<pre>";print_r($updateArr);exit;
+
+                           
                                 $outTime = $request->out_time[$attDate][$empId];
+
                                 $punchout_time = Carbon::parse($outTime);
-                                $minutesDiff = $punchout_time->diffInMinutes($punchin_time);
-                                $formattedDiff = sprintf('%02d:%02d', floor($minutesDiff / 60), $minutesDiff % 60);
+                                $punchin_time = Carbon::parse($punchin_time);
+
+                                // $min = $punchout_time->diffInMinutes($punchin_time);
+                                // $diff = date('H:i', mktime(0, $min));
+                                $min = $punchout_time->diffInMinutes($punchin_time, true);
+                                // Convert minutes into H:i format
+                                $hours   = floor($min / 60);
+
+                                $minutes = $min % 60;
+
+                                $formattedDiff = sprintf('%02d:%02d', $hours, $minutes);
 
                                 $updateArr['punchout_time'] = Carbon::parse($attDate . ' ' . $punchout_time->format('H:i:s'))->format('Y-m-d H:i:s');
                                 $updateArr['out_note'] = 1;
                                 $updateArr['timestamp_diff'] = $formattedDiff;
                                 $updateArr['updated_at'] = now();
                                 $updateArr['updated_by'] = $user_id;
-                            } catch (\Exception $e) {
-                                // Log invalid out_time format if needed
-                                continue;
-                            }
+
+                           
                         }
 
                         $exists = DB::table('hrms_attendances')
@@ -1839,7 +1876,7 @@ class HrmsController extends Controller
                                 'user_id' => $empId,
                             ])
                             ->exists();
-                        // echo $empId."<pre>";print_r($updateArr);
+
                         if ($exists) {
                             DB::table('hrms_attendances')
                                 ->where([
@@ -1876,11 +1913,20 @@ class HrmsController extends Controller
                 $punch_out = Carbon::parse($day . ' ' . $request->punch_out)->format('Y-m-d H:i:s');
                 $addressout = $address;
                 $outnote = 1;
-                $punchout_time = Carbon::parse($punch_in);
-                $punchin_time = Carbon::parse($punch_out);
+              $punchout_time = Carbon::parse($day . ' ' . $request->punch_out);
+                $punchin_time  = Carbon::parse($day . ' ' . $request->punch_in);
 
-                $min = $punchout_time->diffInMinutes($punchin_time);
-                $diff = date('H:i', mktime(0, $min));
+                if ($punchout_time->lessThan($punchin_time)) {
+                    // punch out is next day
+                    $punchout_time->addDay();
+                }
+
+                $min = $punchin_time->diffInMinutes($punchout_time);
+                $hours = floor($min / 60);
+                $minutes = $min % 60;
+
+                $diff = sprintf('%02d:%02d', $hours, $minutes);
+
             }
             $check = hrmsAttendance::where([
                 'user_id' => $emp_id,
@@ -1898,7 +1944,7 @@ class HrmsController extends Controller
                 'sub_institute_id' => $sub_institute_id,
                 'day' => $day,
                 'punchin_time' => $punch_in,
-                'punchout_time' => $punch_in,
+                'punchout_time' => $punch_out,
                 'in_note' => $innote,
                 'out_note' => $outnote,
                 'timestamp_diff' => $diff,
