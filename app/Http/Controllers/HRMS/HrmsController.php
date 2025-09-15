@@ -12,12 +12,13 @@ use App\Models\HRMS\general_dataModel;
 use App\Models\user\tbluserModel;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
 use function App\Helpers\is_mobile;
 use function App\Helpers\employeeDetails;
 use function App\Helpers\getSubCordinates;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Laravel\Sanctum\PersonalAccessToken;
+
 
 class HrmsController extends Controller
 {
@@ -1443,16 +1444,53 @@ class HrmsController extends Controller
         $syear = session()->get('syear');
         $userId = session()->get('user_id');
         $userProfileName = session()->get('user_profile_name');
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
 
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'syear' => 'required',
+                'user_id'=>'required',
+                'user_profile_name'=>'required',
+                'department_id'=>'required',
+                'employee_id'=>'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+            $syear = $request->get('syear');
+            $userId = $request->get('user_id');
+            $userProfileName = $request->get('user_profile_name');
+            $department_id = implode(',',$request->department_id);
+            $employee_id = implode(',',$request->employee_id);
+        }else{
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
         $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : 0;
+        }
         $from_date = $request->from_date;
         $to_date = $request->to_date;
         $currentMonth = '';
 
         // sub cordinates 02-08-2024
         $SubCordinates = [];
-        $profileArr = ["Admin", "Super Admin", "School Admin", "Assistant Admin"];
+        $profileArr = ["ADMIN", "SUPER ADMIN", "SCHOOL ADMIN", "ASSISTANT ADMIN"];
         if ($employee_id == 0 && !in_array($userProfileName, $profileArr)) {
             $SubCordinates = getSubCordinates($sub_institute_id, $userId);
             if (!empty($SubCordinates)) {

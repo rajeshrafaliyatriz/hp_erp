@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Payroll;
 use App\Http\Controllers\Controller;
 use App\Models\EmployeeMonthlySalaryData;
 use App\Models\EmployeeSalaryStructure;
-use App\Models\PayrollType;
+use App\Models\payroll\PayrollType;
 use App\Models\HrmsDepartment;
 use App\Models\user\tbluserModel;
 use App\Http\Controllers\HRMS\HrmsController;
@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Storage;
 use function App\Helpers\is_mobile;
 use function App\Helpers\employeeDetails;
 use function App\Helpers\countDays;
-use GenTux\Jwt\GetsJwtToken;
+use Laravel\Sanctum\PersonalAccessToken;
 use DB;
 use PDF;
 use Validator;
@@ -27,12 +27,39 @@ use DatePeriod;
 
 class PayrollController extends Controller
 {
-    use GetsJwtToken;
     
     public function payrollType(Request $request)
     {
+        $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->get();
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
         // return view('payroll.payroll_type.index', ["data" => $data]);
         $type = $request->input('type');
         return is_mobile($type, "payroll.payroll_type.index", $data, "view");
@@ -60,29 +87,125 @@ class PayrollController extends Controller
 
     public function payrollStore(Request $request)
     {
-        $sub_institute_id = session()->get('sub_institute_id');
+        $type = $request->type;
 
+        $sub_institute_id = session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
+
+if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+                'payroll_name' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+
+        }
         if ($request->id > 0) {
             $payrollType = PayrollType::find($request->id);
         } else {
             $payrollType = new PayrollType();
         }
-        $payrollType->payroll_type = $request->type;
+        $payrollType->payroll_type = $request->payroll_type;
         $payrollType->payroll_name = $request->payroll_name;
         $payrollType->amount_type = $request->amount_type;
         $payrollType->status = $request->status;
         $payrollType->day_count = $request->day_count;
+        $payrollType->sort_order = $request->sort_order;
         $payrollType->sub_institute_id = $sub_institute_id;
         $payrollType->payroll_percentage = $request->payroll_percentage !='' ? $request->payroll_percentage : 0;
+        if ($request->id > 0) {
+           $payrollType->updated_by = $user_id; 
+        } else {
+            $payrollType->created_by = $user_id; 
+        }
         $payrollType->save();
+
+        $res['status_code'] = 0;
+        $res['message'] = "Failed To Add Data";
+        if($payrollType){
+            $res['status_code'] = 1;
+            $res['message'] = "Data Added Successfully";
+        }
+
+        if($type=="API"){
+            return response()->json($res);
+        }
 
         return redirect('payroll-type');
     }
 
     public function payrollDestroy(Request $request, $id)
     {
+        // return $request->all();
+         $type = $request->type;
+
+        $sub_institute_id = session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+
+        }
+        $res['status_code'] = 0;
+        $res['message'] = "Failed to Delete";
         if ($id > 0) {
-            PayrollType::where('id', $id)->delete();
+            // PayrollType::where('id', $id)->delete();
+            $delete = PayrollType::where('id', $id)->update(['deleted_at'=>now(),'deleted_by'=>$user_id]);
+            if($delete){
+                $res['status_code'] = 1;
+                $res['message'] = "Data Deleted Successfully";
+            }
+        }
+        if($type=="API"){
+            return response()->json($res);
         }
         return redirect('payroll-type');
     }
