@@ -1502,6 +1502,7 @@ class HrmsController extends Controller
         $from_date_formatted = (isset($from_date)) ? Carbon::createFromFormat('Y-m-d', $from_date)->format('Y-m-d') : date('Y-m-d');
         $to_date_formatted = (isset($to_date)) ? Carbon::createFromFormat('Y-m-d', $to_date)->format('Y-m-d') : date('Y-m-d');
         // echo $from_date_formatted;exit;
+        // DB::enableQueryLog();
         $hrmsAtt = DB::table('hrms_attendances as ha')
             ->join('tbluser as u', function ($join) use ($sub_institute_id) {
                 $join->on('u.id', '=', 'ha.user_id')->where(['u.sub_institute_id' => $sub_institute_id, 'u.status' => 1]);
@@ -1522,7 +1523,7 @@ class HrmsController extends Controller
             ->orderBy('ha.day')
             ->orderBy('u.first_name')
             ->get()->toArray();
-        // echo "<pre>";print_r($hrmsAtt);exit;
+        // dd(DB::getQueryLog($hrmsAtt));exit;
 
         $get_hrms_emp_leaves = DB::table('hrms_emp_leaves as hel')
             ->join('tbluser as u', 'u.id', '=', 'hel.user_id')
@@ -1546,7 +1547,7 @@ class HrmsController extends Controller
             ->get()->toArray();
 
         $newHrmsAtt = [];
-
+        // echo "<pre>";print_r($hrmsAtt);exit;
         foreach ($hrmsAtt as $key => $value) {
             $newHrmsAtt[$value->empId][$value->day] = $value;
 
