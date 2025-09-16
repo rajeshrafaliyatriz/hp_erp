@@ -7,7 +7,7 @@ use App\Models\HRMS\HrmsAttendance;
 use App\Models\HRMS\hrmsDepartmentModel;
 use App\Models\HRMS\HrmsInOutTime;
 use App\Models\HRMS\HrmsJobTitle;
-use App\Models\PayrollType;
+use App\Models\payroll\PayrollType;
 use App\Models\HRMS\general_dataModel;
 use App\Models\user\tbluserModel;
 use Carbon\Carbon;
@@ -2708,7 +2708,7 @@ class HrmsController extends Controller
         return is_mobile($type, "HRMS.hrms_attendance_report.daywiseAttendanceReport", $res, 'view');
     }
 
-    public function edit($id)
+    public function edit(Request $request,$id)
     {
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
