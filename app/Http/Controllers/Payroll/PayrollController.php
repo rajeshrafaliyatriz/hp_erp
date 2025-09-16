@@ -17,9 +17,9 @@ use function App\Helpers\is_mobile;
 use function App\Helpers\employeeDetails;
 use function App\Helpers\countDays;
 use Laravel\Sanctum\PersonalAccessToken;
-use DB;
+use Illuminate\Support\Facades\DB;
 use PDF;
-use Validator;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
 use DateTime;
 use DateInterval;
@@ -221,17 +221,31 @@ if($type=="API"){
         $department_id= ($request->department_id!=0) ? implode(',',$request->department_id) : '';
 
         if($type=="API"){
-            try {
-                if (!$this->jwtToken()->validate()) {
-                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
-    
-                    return response()->json($response, 401);
-                }
-            } catch (\Exception $e) {
-                $response = ['status' => '2', 'message' => $e->getMessage(), 'data' => []];
-    
-                return response()->json($response, 401);
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
             }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'syear' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
             $sub_institute_id = $request->get('sub_institute_id');
             $syear = $request->get('syear');
         }
