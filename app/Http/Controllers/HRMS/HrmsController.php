@@ -1627,24 +1627,30 @@ class HrmsController extends Controller
             }
        
             $sub_institute_id = $request->get('sub_institute_id');
+            
+        $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
+        $employee_id = ($request->employee_id != 0) ? implode(',', $request->employee_id) : 0;
+        }
+        else{
+            
+        $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
+        $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : 0;
         }
        
         // echo "<pre>";print_r($request->all());exit; 
 
-        $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
-        $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : 0;
         $date = $request->date;
 
         $date_formatted = Carbon::createFromFormat('Y-m-d', $date)->format('Y-m-d');
         $timestamp = strtotime($date_formatted);
         $day = date('D', $timestamp);
 
-        $departments = hrmsDepartmentModel::where('status', true)->pluck('department', 'id');
+        $departments = hrmsDepartmentModel::where('status', true)->where('sub_institute_id',$sub_institute_id)->pluck('department', 'id');
 
         $employeeDep = DB::table('tbluser')->where('sub_institute_id', $sub_institute_id)->when($department_id != 0, function ($q) use ($department_id) {
             $q->whereRaw('department_id in (' . $department_id . ')');
         })->where('status', 1)->selectRaw('GROUP_CONCAT(DISTINCT id) as user_id')->groupBy('sub_institute_id')->first();
-        // echo "<pre>";print_r($employeeDep->user_id);exit;  
+        // echo "<pre>";print_r($departments);exit;  
 
         $hrmsList = HrmsAttendance::join('tbluser as u', 'u.id', '=', 'hrms_attendances.user_id')->where('hrms_attendances.sub_institute_id', $sub_institute_id);
 
@@ -1706,15 +1712,15 @@ class HrmsController extends Controller
                 }
             }
             return $e;
-        })->where('is_late', 1);
+        });
 
         $res['employees'] = $employeeDep;
         $res['date_formatted'] = $date_formatted;
         $res['hrmsList'] = $hrmsList;
-        $res['employee_id'] = $employee_id;
-        $res['selEmp'] = $request->emp_id;
-        $res['department_id'] = $request->department_id;
-        $res['departments'] = $departments;
+        // $res['employee_id'] = $employee_id;
+        // $res['selEmp'] = $request->emp_id;
+        // $res['department_id'] = $request->department_id;
+        // $res['departments'] = $departments;
 
         //return view('HRMS.hrms_attendance_report.early_going_report', compact('employees', 'employee_id', 'date_formatted', 'hrmsList', 'type', 'departments', 'department_id'));
         return is_mobile($type, "HRMS/hrms_attendance_report/early_going_report", $res, "view");
@@ -1772,7 +1778,7 @@ class HrmsController extends Controller
             $sub_institute_id = $request->sub_institute_id;
         }
         $res['selDepartments'] = $department_ids = $request->department_id;
-        $res['emp_id'] = $emp_id = $request->emp_id;
+        $res['emp_id'] = $emp_id = $request->emp_id ?? $request->employee_id;
         $res['selectedFromDate'] = $from_date = $request->from_date;
         $res['selectedToDate'] = $to_date = $request->to_date;
 
