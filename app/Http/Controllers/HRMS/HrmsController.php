@@ -1922,7 +1922,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+        return  $request;
         
     }
 

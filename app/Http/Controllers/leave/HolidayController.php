@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\leave;
 
 use App\Http\Controllers\Controller;
-use App\Models\HrmsDepartment;
-use App\Models\HrmsHoliday;
-use App\Models\HrmsWeekday;
+use App\Models\HRMS\hrmsDepartmentModel;
+use App\Models\HRMS\HrmsHoliday;
+use App\Models\HRMS\HrmsWeekday;
 use Exception;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 use App\Traits\Helpers;
 use function App\Helpers\is_mobile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class HolidayController extends Controller
 {
@@ -23,44 +26,37 @@ class HolidayController extends Controller
     {
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
-        if ($request->ajax()) {
-            $data = HrmsHoliday::latest()
-                ->when(request()->year, function ($q) {
-                    $q->whereYear('from_date', request()->year);
-                })
-                ->where('sub_institute_id',$sub_institute_id)
-                ->get();
-            return DataTables::of($data)
-                ->addColumn('checkbox', function ($row) {
-                    return '<input type="checkbox" id="' . $row->id . '" name="someCheckbox" class="checkSingle" />';
-                })
-                ->addIndexColumn()
-                ->addColumn('action', function ($row) {
-                    $actionBtn = '<a class="delete btn btn-danger btn-delete btn-sm" data-id="' . $row->id . '">Delete</a>';
-                    return $actionBtn;
-                })
-                ->rawColumns(['checkbox', 'action'])
-                ->make(true);
-        }
-        $departments = HrmsDepartment::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])->whereNull('deleted_at')->orderBy('department')->pluck('department', 'id');
-        $weekdays = HrmsWeekday::pluck('day_type', 'day');
+        if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
 
-        if ($weekdays->isEmpty()) {
-            $weekdays = [
-                'monday' => '',    // Default value for Monday
-                'tuesday' => '',   // Default value for Tuesday
-                'wednesday' => '', // Default value for Wednesday
-                'thursday' => '', // Default value for thursday
-                'friday' => '', // Default value for friday
-                'saturday' => '', // Default value for saturday
-                'sunday' => '', // Default value for sunday
-            ];
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
         }
 
-        $res['weekdays']= $weekdays;
-        $res['departments']= $departments;
-        $res['years']= Helpers::getPairYears();
-        $res['selYear']= date('Y');
+        $res['holidayList'] = HrmsHoliday::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        $res['weekDayList'] = HrmsWeekday::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        $res['status_code'] = 1;
         // return view('leave.holiday_master', compact('weekdays', 'departments'));
         return is_mobile($type, "leave.holiday_master", $res, "view");
     }
@@ -83,41 +79,66 @@ class HolidayController extends Controller
      */
     public function store(Request $request)
     {
-            // Step 1: Validate input
-        $validated = $request->validate([
-            'holiday_name'  => 'required|string|max:255',
-            'from_date'     => 'required|date',
-            // 'to_date'    => 'required|date|after_or_equal:from_date',
-            // 'day_type'   => 'required|in:full,half',
-            'department'    => 'required|array',
-        ]);
+           $token = $request->input('token');  // get token from input field 'token'
 
-        // Step 2: Prepare data
-        $holidayData = [
-            'holiday_name'    => $request->holiday_name,
-            'to_date'         => $request->from_date, // use to_date if dynamic later
-            // 'day_type'      => $request->day_type,
-            'department'      => implode(',', $request->department),
-        ];
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
 
-        $conditions = [
-            'from_date'       => $request->from_date,
-            'to_date'         => $request->from_date,
-            'sub_institute_id'=> session()->get('sub_institute_id'),
-            'department'      => implode(',', $request->department),
-        ];
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
 
-        // Step 3: Store or update record
-        try {
-            HrmsHoliday::updateOrCreate($conditions, $holidayData);
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+                'holiday_name'  => 'required|string|max:255',
+                'from_date'     => 'required|date',
+                // 'to_date'    => 'required|date|after_or_equal:from_date',
+                // 'day_type'   => 'required|in:full,half',
+                'department'    => 'required|array',
+            ]);
 
-            return response()->json(['message' => 'Holiday saved successfully!'], 200);
-        } catch (Exception $e) {
-            return response()->json([
-                'error' => 'An error occurred while saving the holiday.',
-                'details' => $e->getMessage()
-            ], 500);
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+            $insert = DB::table('hrms_holidays')->updateOrInsert(
+                [
+                    'from_date'        => $request->from_date,
+                    'to_date'          => $request->from_date,
+                    'sub_institute_id' => $sub_institute_id,
+                    'department'       => implode(',', $request->department),
+                ],
+                [
+                    'holiday_name' => $request->holiday_name,
+                    'day_type'     => 'Full',
+                    'created_at'   => now(),
+                    'updated_at'   => now(),
+                    'created_by'   => $user_id,
+                    'updated_by'   => $user_id,
+                    'deleted_at'   => null,
+                ]
+            );
+
+        $res['status_code'] = 0;
+            $res['message'] = "Failed To Add !";
+
+        if($insert){
+            $res['status_code'] = 1;
+            $res['message'] = "Added Successfully !";
         }
+
+        return response()->json($res);
+
     }
 
     /**
@@ -160,10 +181,40 @@ class HolidayController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Request $request,$id)
     {
+        $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+            $user_id = $request->get('user_id');
+
+
         try {
-            HrmsHoliday::whereIn('id', explode(',', $id))->delete();
+            HrmsHoliday::whereIn('id', explode(',', $id))->update(['deleted_at'=>now(),'deleted_by'=>$user_id]);
+            return response()->json(['status_code'=>1,'message'=>'Deleted Successfully']);
         } catch (Exception $e) {
             return response()->json($e->getMessage(), 500);
         }
@@ -171,27 +222,88 @@ class HolidayController extends Controller
 
     public function storeWeekdays(Request $request)
     {
-        $request->validate([
-            'monday' => 'required|in:full,half,weekend',
-            'tuesday' => 'required|in:full,half,weekend',
-            'wednesday' => 'required|in:full,half,weekend',
-            'thursday' => 'required|in:full,half,weekend',
-            'friday' => 'required|in:full,half,weekend',
-            'saturday' => 'required|in:full,half,weekend',
-            'sunday' => 'required|in:full,half,weekend',
-        ]);
+        $token = $request->input('token');  // get token from input field 'token'
 
-        try {
-            HrmsWeekday::updateOrCreate(['day' => 'monday'], ['day_type' => $request->monday]);
-            HrmsWeekday::updateOrCreate(['day' => 'tuesday'], ['day_type' => $request->tuesday]);
-            HrmsWeekday::updateOrCreate(['day' => 'wednesday'], ['day_type' => $request->wednesday]);
-            HrmsWeekday::updateOrCreate(['day' => 'thursday'], ['day_type' => $request->thursday]);
-            HrmsWeekday::updateOrCreate(['day' => 'friday'], ['day_type' => $request->friday]);
-            HrmsWeekday::updateOrCreate(['day' => 'saturday'], ['day_type' => $request->saturday]);
-            HrmsWeekday::updateOrCreate(['day' => 'sunday'], ['day_type' => $request->sunday]);
-            return response()->json(['message' => 'Weekday saved successfully !!'], 200);
-        } catch (Exception $e) {
-            return response()->json($e->getMessage(), 500);
-        }
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+                'monday' => 'required|in:full,half,weekend',
+                'tuesday' => 'required|in:full,half,weekend',
+                'wednesday' => 'required|in:full,half,weekend',
+                'thursday' => 'required|in:full,half,weekend',
+                'friday' => 'required|in:full,half,weekend',
+                'saturday' => 'required|in:full,half,weekend',
+                'sunday' => 'required|in:full,half,weekend',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+        
+
+           $weekdays = [
+                'monday'    => $request->monday,
+                'tuesday'   => $request->tuesday,
+                'wednesday' => $request->wednesday,
+                'thursday'  => $request->thursday,
+                'friday'    => $request->friday,
+                'saturday'  => $request->saturday,
+                'sunday'    => $request->sunday,
+            ];
+
+            $status =0;
+            
+            foreach ($weekdays as $day => $dayType) {
+                // Try to update first
+                $checked = DB::table('hrms_weekdays')
+                    ->where('day', $day)
+                    ->where('sub_institute_id',$request->sub_institute_id)
+                    ->whereNull('deleted_at')
+                    ->first();
+
+                if (isset($checked->id)) {
+                      $updated = DB::table('hrms_weekdays')
+                    ->where('day', $day)
+                    ->where('sub_institute_id',$request->sub_institute_id)
+                    ->update(['day_type' => $dayType,'updated_at'=>now(),'updated_by'=>$request->user_id]);
+                    $status=2;
+                } else {
+                    DB::table('hrms_weekdays')->insert([
+                        'day'      => $day,
+                        'day_type' => $dayType,
+                        'sub_institute_id' => $request->sub_institute_id,
+                        'created_at'=>now(),
+                        'created_by'=>$request->user_id,
+                    ]);
+                    $status=1;
+                }
+            }
+
+            // Fetch sorted result (assuming you want Monday -> Sunday order)
+            $sorted = DB::table('hrms_weekdays')
+                ->orderByRaw("FIELD(day, 'monday','tuesday','wednesday','thursday','friday','saturday','sunday')")
+                ->get();
+
+            $res['status_code'] = 0;
+            $res['message'] = 'Failed to Add Data';
+            if($status>0){
+                $res['status_code'] = 1;
+                $res['message'] = 'Added Successfully';
+            }
+            return response()->json($res);
     }
 }
