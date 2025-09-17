@@ -7,7 +7,7 @@ use App\Models\HRMS\HrmsAttendance;
 use App\Models\HRMS\hrmsDepartmentModel;
 use App\Models\HRMS\HrmsInOutTime;
 use App\Models\HRMS\HrmsJobTitle;
-use App\Models\PayrollType;
+use App\Models\payroll\PayrollType;
 use App\Models\HRMS\general_dataModel;
 use App\Models\user\tbluserModel;
 use Carbon\Carbon;
@@ -24,6 +24,40 @@ class HrmsController extends Controller
 {
     public function hrmsJobTitle(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $data['data'] = HrmsJobTitle::all();
         //        return $data;
         $type = $request->input('type');
@@ -34,6 +68,39 @@ class HrmsController extends Controller
     public function hrmsCreate(Request $request, $id = 0)
     {
         $type = $request->input('type');
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
         if ($id) {
             $res = HrmsJobTitle::find($id);
             return is_mobile($type, "HRMS.hrms_job_title.create", $res, "view");
@@ -49,7 +116,39 @@ class HrmsController extends Controller
 
     public function hrmsStore(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
 
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $type = $request->input('type');
         $request->validate([
@@ -72,7 +171,41 @@ class HrmsController extends Controller
     }
 
     public function hrmsDestroy(Request $request, $id)
-    {
+    {   
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->input('type');
         if ($id > 0) {
             HrmsJobTitle::where('id', $id)->delete();
@@ -83,6 +216,40 @@ class HrmsController extends Controller
 
     public function hrmsInOutTime(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
         $userId = session()->get('user_id');
@@ -139,6 +306,39 @@ class HrmsController extends Controller
 
     public function hrmsInTimeStore(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
 
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
@@ -224,6 +424,40 @@ class HrmsController extends Controller
 
     public function hrmsOutTimeStore(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->input('type');
 
         if ($type == "API") {
@@ -335,6 +569,40 @@ class HrmsController extends Controller
 
     public function hrmsAttendance(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->input('type');
         // $hrmsAttendanceDetails = '';
 
@@ -501,6 +769,40 @@ class HrmsController extends Controller
 
     public function hrmsAttendanceInTimeStore(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $request->validate([
             'employee' => 'required',
             'indate' => 'required',
@@ -542,6 +844,40 @@ class HrmsController extends Controller
 
     public function hrmsAttendanceOutTimeStore(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $request->validate([
             'employee' => 'required',
             'outdate' => 'required',
@@ -617,6 +953,40 @@ class HrmsController extends Controller
 
     public function hrmsAttendanceReportIndex(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->input('type');
         if (in_array($type, ['API', 'JSON'])) {
             $sub_institute_id = $request->input('sub_institute_id');
@@ -638,6 +1008,41 @@ class HrmsController extends Controller
 
     public function getEmployeeLists(Request $request)
     {
+
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $department_id = $request->input('department_id');
         $employee_id = $request->get('employee_id');
@@ -649,6 +1054,41 @@ class HrmsController extends Controller
 
     public function hrmsAttendanceReport(Request $request)
     {
+
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->input('type');
         if (in_array($type, ['API', 'JSON'])) {
             $sub_institute_id = $request->input('sub_institute_id');
@@ -774,6 +1214,40 @@ class HrmsController extends Controller
 
     public function generalSettingIndex(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->input('type');
         if (in_array($type, ['API', 'JSON'])) {
             $sub_institute_id = $request->input('sub_institute_id');
@@ -829,6 +1303,41 @@ class HrmsController extends Controller
 
     public function generalSettingStore(Request $request)
     {
+
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         // echo "<pre>";print_r($request->all());exit;        
         $type = $request->input('type');
         if (in_array($type, ['API', 'JSON'])) {
@@ -1122,6 +1631,40 @@ class HrmsController extends Controller
 
     public function earlyGoingHrmsAttendanceReportIndex(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->input('type');
         if (in_array($type, ['API', 'JSON'])) {
             $sub_institute_id = $request->input('sub_institute_id');
@@ -1147,6 +1690,40 @@ class HrmsController extends Controller
 
     public function earlyGoingHrmsAttendanceReport(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         // echo "<pre>";print_r($request->all());exit; 
         $type = $request->input('type');
         if (in_array($type, ['API', 'JSON'])) {
@@ -1247,6 +1824,7 @@ class HrmsController extends Controller
 
     public function departmentAttendanceReport(Request $request)
     {
+        
         $type = $request->type;
         $res = session()->get('data');
         $sub_institute_id = session()->get('sub_institute_id');
@@ -1261,6 +1839,40 @@ class HrmsController extends Controller
 
     public function departmentAttendanceReportCreate(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
         if (in_array($type, ['API', 'JSON'])) {
@@ -1382,6 +1994,40 @@ class HrmsController extends Controller
 
     public function getHolidays(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $sub_institute_id = session()->get('sub_institute_id');
         $data = DB::table('hrms_holidays')->where('sub_institute_id', $sub_institute_id)->where(['department_id' => $request->department_id, 'from_date' => $request->from_date, 'to_date' => $request->to_date])->get()->toArray();
         return $data;
@@ -1389,6 +2035,40 @@ class HrmsController extends Controller
 
     public function getPresentDays(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $sub_institute_id = session()->get('sub_institute_id');
         $data = DB::table('hrms_attendances as ha')
             ->join('tbluser as tu', 'ha.user_id', '=', 'tu.id')
@@ -1400,6 +2080,40 @@ class HrmsController extends Controller
 
     public function getAbsentDays(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $sub_institute_id = session()->get('sub_institute_id');
         $data = DB::table('hrms_emp_leaves as hel')
             ->join('tbluser as tu', 'hel.user_id', '=', 'tu.id')
@@ -1412,6 +2126,40 @@ class HrmsController extends Controller
 
     public function getHalfDays(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $sub_institute_id = session()->get('sub_institute_id');
         $data = DB::table('hrms_emp_leaves as hel')
             ->join('tbluser as tu', 'hel.user_id', '=', 'tu.id')
@@ -1432,6 +2180,39 @@ class HrmsController extends Controller
     {
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
         $syear = session()->get('syear');
         $res = session()->get('data');
         return is_mobile($type, "HRMS.hrms_attendance_report.multiEmpAttendanceReport", $res, 'view');
@@ -1439,6 +2220,41 @@ class HrmsController extends Controller
 
     public function multipleAttendanceReportCreate(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
+
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
         $syear = session()->get('syear');
@@ -1650,6 +2466,40 @@ class HrmsController extends Controller
     public function getAttandanceData(Request $request)
     {
 
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+
         $attId = isset($request->attId) ? explode(',', $request->attId) : [];
         $sub_institute_id = session()->get('sub_institute_id');
 
@@ -1666,6 +2516,39 @@ class HrmsController extends Controller
     public function DaywiseAttendanceReportIndex(Request $request)
     {
         $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+        $type = $request->type;
         $res['from_date'] = Carbon::now()->startOfMonth()->toDateString();
         $res['to_date'] = Carbon::now()->toDateString();
         // echo "<pre>";print_r($res);exit;
@@ -1674,6 +2557,39 @@ class HrmsController extends Controller
 
     public function DaywiseAttendanceportCreate(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
         $syear = session()->get('syear');
@@ -1792,8 +2708,41 @@ class HrmsController extends Controller
         return is_mobile($type, "HRMS.hrms_attendance_report.daywiseAttendanceReport", $res, 'view');
     }
 
-    public function edit($id)
+    public function edit(Request $request,$id)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
         $attendance = DB::table('hrms_attendance')->where('id', $id)->first();
         $employeeLists = DB::table('tbluser')->where('status', 1)->get();
 
@@ -1802,6 +2751,39 @@ class HrmsController extends Controller
 
     public function update(Request $request, $id)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
         DB::table('hrms_attendance')->where('id', $id)->update([
             'user_id' => $request->employee,
             'day' => $request->day,
@@ -1815,6 +2797,39 @@ class HrmsController extends Controller
 
     public function destroy(Request $request, $id)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
         DB::table('hrms_attendances')->where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
         if ($request->type == 'API') {
             return 1;
@@ -1824,6 +2839,39 @@ class HrmsController extends Controller
 
     public function updateUserAttendance(Request $request)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+          if($type=="API"){
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        // return view('payroll.payroll_type.index', ["data" => $data]);
+        $type = $request->input('type');
+        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');

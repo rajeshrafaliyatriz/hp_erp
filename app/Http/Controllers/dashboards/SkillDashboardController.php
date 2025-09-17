@@ -58,10 +58,8 @@ public function index(Request $request)
           'classification'=>'behaviour'])->whereNull('deleted_at')->groupBy('classification_item')->count();
     $res['total_ability']   = DB::table('s_skill_knowledge_ability')->where(['sub_institute_id'=>$sub_institute_id,'classification'=>'ability'])->whereNull('deleted_at')->groupBy('classification_item')->count();
     $res['total_attitude']  = DB::table('s_skill_knowledge_ability')->where(['sub_institute_id'=>$sub_institute_id,'classification'=>'ability'])->whereNull('deleted_at')->groupBy('classification_item')->count();
-    $res['skill_levels']=db::table('s_proficiency_levels')->whereNull('sub_institute_id')->groupBy('proficiency_level')->get();
 
-    $SkillLevels = DB::table('s_proficiency_levels')->whereNull('sub_institute_id')->groupBy('proficiency_level')->get();
-    $res['skill_levels'] = $SkillLevels;
+    
 
     $usercontroller = new tbluserController;
     $request->merge(['active_status' => 1, 'menu_type' => 'Dashboard'])->toArray();
@@ -70,9 +68,9 @@ public function index(Request $request)
     $user_data = $usercontroller->edit($request, $user_id);
 
     $department = hrmsDepartmentModel::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])->whereNull('deleted_at')->get()->toArray();
-    $mySKill = $userRatedSkills = $departmentWiseSkill = [];
+  
 
-    $currentLevel = $orgSkillLevel = 0;
+    
 
     if(in_array(strtoupper($user_profile_name),["ADMIN", "SUPER ADMIN"])){
         // your admin-specific logic...
@@ -91,25 +89,11 @@ public function index(Request $request)
             ->whereNull('deleted_at')
             ->count();
 
-        $mySKill = $user_data->original['jobroleSkills'] ?? [];
-        $userRatedSkills = $user_data->original['userRatedSkills'] ?? [];
 
-        $currentLevel = (count($userRatedSkills) && count($mySKill)) 
-            ? round((count($userRatedSkills) / count($mySKill)) * 100, 2)
-            : 0;
-
-        $orgSkillLevel = DB::table('s_proficiency_levels')->where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->count();
     }
-
     $lmsActivityStreamController = new lmsActivityStreamController;
     $taskList = $lmsActivityStreamController->index($request);
-    $taskListArray = $taskList->original ?? [];
-
-    $weekTasks = [];
-    $currentDate = now();
-    $weekStart = $currentDate->copy()->startOfWeek();
-    $weekEnd = $currentDate->copy()->endOfWeek();
-
+      
     foreach(['today', 'upcoming', 'recent'] as $period) {
         if(isset($taskListArray[$period]['taskAssigned'])) {
             foreach($taskListArray[$period]['taskAssigned'] as $task) {
@@ -120,20 +104,8 @@ public function index(Request $request)
             }
         }
     }
-
-    $res['totle_employees'] = count($user_list->original['data'] ?? []);
-    $res['umapped_employees'] = \App\Models\auth\tbluserModel::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])
-        ->whereNull('allocated_standards')->count();
-    $res['widget'] = ['Employee List','Weekly Task Progress','Today Task List','Week Task List'];
-    $res['today_task'] = $taskListArray['today']['taskAssigned'] ?? [];
-    $res['week_task'] = $weekTasks;
-    $res['current_level'] = $currentLevel;
-    $res['orgSkillLevel'] = $orgSkillLevel;
-    $res['mySKill'] = $mySKill;
+    
     $res['departmentList'] = $department;
-    $res['SkillLevels'] = $SkillLevels;
-    $res['skillHeatmap'] = $departmentWiseSkill;
-    $res['myGrowth'] = $userRatedSkills;
     $res['employeeList'] = $user_list->original['data'] ?? [];
 
     return response()->json($res);
