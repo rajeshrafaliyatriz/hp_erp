@@ -1720,7 +1720,7 @@ class HrmsController extends Controller
         // $res['employee_id'] = $employee_id;
         // $res['selEmp'] = $request->emp_id;
         // $res['department_id'] = $request->department_id;
-        // $res['departments'] = $departments;
+        $res['departments'] = $departments;
 
         //return view('HRMS.hrms_attendance_report.early_going_report', compact('employees', 'employee_id', 'date_formatted', 'hrmsList', 'type', 'departments', 'department_id'));
         return is_mobile($type, "HRMS/hrms_attendance_report/early_going_report", $res, "view");
@@ -1922,8 +1922,8 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-       
-       
+        return  $request;
+        
     }
 
     public function getPresentDays(Request $request)
