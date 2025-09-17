@@ -9,6 +9,8 @@ use App\Http\Controllers\leave\leaveEncashmentController;
 use App\Http\Controllers\HRMS\departmentController;
 use App\Http\Controllers\HRMS\shiftMasterController;
 use App\Http\Controllers\HRMS\bulkUserShiftUpdateController;
+use App\Http\Controllers\leave\HolidayController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -23,9 +25,12 @@ use App\Http\Controllers\HRMS\bulkUserShiftUpdateController;
 Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], function () {
 
     Route::resource('add_department', departmentController::class);
+    Route::resource('holiday', HolidayController::class);
     route::get('department-Emp-Lists', [departmentController::class, 'departmentEmpLists'])->name('departmentEmpLists');
     route::get('sub-department-list', [departmentController::class, 'subDepartmentList'])->name('subDepartmentList');
     route::get('department-employee-list', [departmentController::class, 'departmentEmployeeList'])->name('departmentEmployeeList');
+    Route::get('holiday_weekdays', [HolidayController::class,'getWeekdays'])->name('holiday.weekdays');
+    Route::post('holiday_weekdays', [HolidayController::class,'storeWeekdays'])->name('holiday.weekdays');
 });
 
 
@@ -94,9 +99,10 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::post('/show-hrms-attendance-report', [HrmsController::class, 'hrmsAttendanceReport'])->name('hrms.show_hrms_attendance_report');
     Route::post('/get-employees-list', [HrmsController::class, 'getEmployeeLists'])->name('get.employees.list');
 
+    Route::get('early-going-hrms-attendance-report/create', [HrmsController::class, 'earlyGoingHrmsAttendanceReportCreate'])->name('hrms_attendance_report.early_going_report.create');
     Route::get('early-going-hrms-attendance-report', [HrmsController::class, 'earlyGoingHrmsAttendanceReportIndex'])->name('hrms_attendance_report.early_going_report');
 
-    Route::post('/show-early-going-hrms-attendance-report', [HrmsController::class, 'earlyGoingHrmsAttendanceReport'])->name('hrms.show_early_going_hrms_attendance_report');
+    Route::get('/show-early-going-hrms-attendance-report', [HrmsController::class, 'earlyGoingHrmsAttendanceReport'])->name('hrms.show_early_going_hrms_attendance_report');
     Route::get('hrms-general-setting', [HrmsController::class, 'generalSettingIndex'])->name('hrms_general_setting.index');
     Route::post('hrms-general-setting/store', [HrmsController::class, 'generalSettingStore'])->name('hrms_general_setting.store');
 
