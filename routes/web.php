@@ -116,3 +116,4 @@ Route::get('sendEmail', [AJAXController::class, 'sendEmail'])->name('sendEmail')
 
 Route::post('gemini_chat',[AJAXController::class,'geminiChat']);
 Route::get('AICourseGeneration',[AJAXController::class,'AICourseGeneration']);
+Route::get('gammaContent',[AJAXController::class,'GammaContentGeneration']);

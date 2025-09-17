@@ -375,7 +375,7 @@ class questionmasterController extends Controller
             'created_by'                => $user_id,
         );
         $question_id = lmsQuestionMasterModel::insertGetId($question);
-        // echo "<pre>";print_r($question);
+        // echo "<pre>";print_r($request->all());exit;
 
         //START Insert into answer_master
         $mapping_type = $request->get('mapping_type');
@@ -383,7 +383,7 @@ class questionmasterController extends Controller
         $reasons = $request->get('reasons');
 
         foreach ($mapping_type as $key => $val) {
-            if ($val != "" && $mapping_value[$key] != "") {
+            if ($val != "" && $mapping_value[$key] != "" && $val != 0 && $mapping_value[$key] != 0 ) {
                 $contentmappingtype = array(
                     'questionmaster_id' => $question_id,
                     'mapping_type_id'   => $val,

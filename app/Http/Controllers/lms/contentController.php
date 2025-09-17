@@ -233,7 +233,6 @@ if($type=="API"){
     }      
     
     public function store(Request $request){     
-        // echo "<pre>";print_r($request->all());exit;
         $type= $request->type;          
         $sub_institute_id = session()->get('sub_institute_id'); 		
         $syear = session()->get('syear'); 		
@@ -291,11 +290,12 @@ if($type=="API"){
 
         }
         // return "out";
-        if($request->get('contentType') == "link")
+        if($request->get('contentType') === "link")
         {
             $newfilename = $request->get('link');
             $ext = "link";
         }       
+        // echo "<pre>";print_r([$request->all(),$newfilename]);exit;
            
         $chapter_data = chapterModel::select('*')        
         ->where(['chapter_master.sub_institute_id'=>$sub_institute_id,'chapter_master.id'=>$request->get('hid_chapter_id')])         

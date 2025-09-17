@@ -25,6 +25,9 @@ use PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 class AJAXController extends Controller
 {
@@ -879,7 +882,7 @@ class AJAXController extends Controller
         if (count($todayUsedKeys) === 0) {
             $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1])->whereNull('sub_institute_id')->first();
             if ($firstGeminiKey) {
-                $apiKey = $firstGeminiKey->key;
+                $apiKey[] = $firstGeminiKey->key;
                 $insert = DB::table('ai_daily_used_api')->insert(['api_name' => 'gemini', 'key' => $firstGeminiKey->key, 'parent_id' => $firstGeminiKey->id, 'date' => date('Y-m-d'), 'count' => 1]);
             }
         } else {
@@ -888,6 +891,11 @@ class AJAXController extends Controller
                 if ($value->count < $firstGeminiKey->limit) {
                     $apiKey[] = $value->key;
                     $update = DB::table('ai_daily_used_api')->where(['id' => $value->id])->update(['count' => $value->count + 1]);
+                    break;
+                }else{
+                    $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1])->where('id','!=', $value->parent_id)->whereNull('sub_institute_id')->first();
+                    $apiKey[] = $firstGeminiKey->key;
+                    $insert = DB::table('ai_daily_used_api')->insert(['api_name' => 'gemini', 'key' => $firstGeminiKey->key, 'parent_id' => $firstGeminiKey->id, 'date' => date('Y-m-d'), 'count' => 1]); 
                     break;
                 }
             }
@@ -1058,6 +1066,7 @@ class AJAXController extends Controller
                            -- contents: list of content items with:
                                 --- content_title
                                 --- content_description
+                                --- content_html (Make Simple html[make label's bold and bg-color proper] with content title,content description,skill, skill description,skill category, skill sub category ,jobrole, jobrole description, list of tasks realted to content)
                                 --- content_category any 1 from (" . $lms_content_category . ")
                                 --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
                                 --- mapping_value (easy/medium/hard)
@@ -1075,7 +1084,7 @@ class AJAXController extends Controller
                     Align everything tightly with the skill context fields.
                     Use concise, engaging, and adult-learner-appropriate language.
                     Do not add explanations — only output the structured JSON.
-                    provide me atleast 3 course realted this skills. in JSON array";
+                    provide me 3 course with atleast 3 content realted this skills > course > chapter. in JSON array";
         $request->merge(['prompt' => $prompt]);
         $gemeniJson = $this->geminiChat($request);
         $gemeniData = json_decode(json_encode($gemeniJson->original), true);
@@ -1084,6 +1093,7 @@ class AJAXController extends Controller
         if (!isset($gemeniData['error'])) {
             foreach ($gemeniData as $courseKey => $courseData) {
 
+                // Create course
                 $courseController = new masterSetupController;
                 $course_request = new Request([
                     'type' => 'API',
@@ -1106,14 +1116,17 @@ class AJAXController extends Controller
                     'short_name' => $courseData['short_name'] ?? '-',
                     'status' => 1,
                 ]);
+
                 $courseStore = $courseController->store($course_request);
-                $courseData = json_decode(json_encode($courseStore->original), true);
-                $courseId = $courseData['course_id'];
-                if (isset($courseData['chapters']) && count($courseData['chapters']) > 0) {
+
+                $courseId = $courseStore->original['course_id'];
+
+                // Process chapters if they exist
+                if (isset($courseData['chapters'])) {
                     foreach ($courseData['chapters'] as $chapterKey => $chapterData) {
+                        // Create chapter
                         $moduleController = new chapterController;
-                        // Create request data array with all parameters
-                        $requestData = [
+                        $chapter_request = new Request([
                             'type' => 'API',
                             'sub_institute_id' => $sub_institute_id,
                             'user_id' => $user_id,
@@ -1128,26 +1141,50 @@ class AJAXController extends Controller
                             'availability' => [1],
                             'show_hide' => [1],
                             'sort_order' => [1]
-                        ];
+                        ]);
 
-                        // Create new request with data and merge into current request
-                        $module_request = Request::create('', 'POST', $requestData);
-                        $module_request->merge($requestData);
-
-                        // Store chapter and get response
-                        $chapterStore = $moduleController->store($module_request);
-                        $chapterData = json_decode(json_encode($chapterStore->original), true);
-                        $chapterId = $chapterData['chapter_id'];
-
-                        $getstandard = DB::table('standard')->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard])->whereNull('deleted_at')->first();
-                        $getcourse = DB::table('sub_std_map')->where(['sub_institute_id' => $sub_institute_id, 'id' => $courseId])->whereNull('deleted_at')->first();
-                        $getChapter = DB::table('chapter_master')->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapterId])->whereNull('deleted_at')->first();
-
-                        if (isset($chapterData['contents']) && count($chapterData['contents']) > 0) {
+                        $chapterStore = $moduleController->store($chapter_request);
+                        $chapterId = $chapterStore->original['chapter_id'];
+                        // Get related data
+                        $getstandard = DB::table('standard')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        $getcourse = DB::table('sub_std_map')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $courseId])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        $getChapter = DB::table('chapter_master')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapterId])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        // echo "<pre>";print_r($chapterData['contents']);exit;
+                        // Process contents if they exist
+                        if (isset($chapterData['contents'])) {
                             foreach ($chapterData['contents'] as $contentKey => $contentData) {
+                                $content_html = $contentData['content_html'];
+                                // Convert HTML content to PDF using DomPDF
+                                $options = new Options();
+                                $options->set('isHtml5ParserEnabled', true);
+                                $options->set('isRemoteEnabled', true);
+
+                                // Generate PDF
+                                $pdf = new Dompdf($options);
+                                $pdf->loadHtml($content_html);
+                                $pdf->setPaper('A4', 'portrait');
+                                $pdf->render();
+                                $pdfContent = $pdf->output();
+                                $newfilename = date('Ymd') . '-' . time() . '.pdf';
+                                // Store directly in DigitalOcean Spaces
+                                Storage::disk('digitalocean')->put(
+                                    "public/hp_lms_content_file/{$newfilename}",
+                                    $pdfContent,
+                                    'public' // visibility
+                                );
+                                // echo "<pre>";print_r($newfilename);exit;
 
                                 $contentController = new contentController;
-                                $content_request = [
+                                $content_request = new Request([
                                     'type' => 'API',
                                     'sub_institute_id' => $sub_institute_id,
                                     'user_id' => $user_id,
@@ -1161,21 +1198,26 @@ class AJAXController extends Controller
                                     'title' => $contentData['content_title'] ?? '-',
                                     'description' => $contentData['content_description'] ?? '-',
                                     'content_category' => $contentData['content_category'] ?? '-',
+                                    'contentType' => 'link',
+                                    'link' => 'https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/hp_lms_content_file/' . $newfilename,
+                                    'cross_curriculum_grade_topic' => $newfilename,
                                     'mapping_type' => isset($contentData['mapping_type']) ? $mappingTypes[$contentData['mapping_type']] ?? 0 : 0,
                                     'mapping_value' => isset($contentData['mapping_value']) ? $mappingValues[$contentData['mapping_value']] ?? 0 : 0,
-                                    'contentType' => 'pdf',
-                                    'filename' => 'filename.pdf',
-                                    'show_hide' => 1,
-                                ];
-                                $content_request2 = Request::create('', 'POST', $content_request);
-                                $content_request2->merge($content_request);
-                                $contentStore = $contentController->store($content_request2);
+                                    'filename' => 'content_' . time() . '.pdf',
+                                    'show_hide' => 1
+                                ]);
+
+                                $contentStore = $contentController->store($content_request);
+                                // echo "<pre>";print_r($contentStore);exit;
                             }
                         }
-                        if (isset($chapterData['questions']) && count($chapterData['questions']) > 0) {
-                            foreach ($chapterData['questions'] as $questionKey => $questionData) {
+
+                        // Process questions if they exist
+                        if (isset($chapterData['questions'])) {
+                            foreach ($chapterData['questions'] as $questionData) {
+
                                 $questionController = new questionmasterController;
-                                $question_request = [
+                                $question_request = new Request([
                                     'type' => 'API',
                                     'sub_institute_id' => $sub_institute_id,
                                     'user_id' => $user_id,
@@ -1184,30 +1226,32 @@ class AJAXController extends Controller
                                     'standard_id' => $standard,
                                     'subject_id' => $courseId,
                                     'chapter_id' => $chapterId,
-                                    'question_title' =>$questionData['question_title']?? '-',
-                                    'description' =>$questionData['description']?? '-',
-                                    'mapping_type' => isset($questionData['mapping_type']) ? array($mappingTypes[$questionData['mapping_type'] ?? 0]) : 0,
-                                    'mapping_value' => isset($questionData['mapping_value']) ? array($mappingValues[$questionData['mapping_value'] ?? 0]) : 0,
-                                    'reasons' => array($questionData['reason']?? '-'),
+                                    'question_title' => $questionData['question_title'] ?? '-',
+                                    'description' => $questionData['description'] ?? '-',
+                                    'mapping_type' => isset($questionData['mapping_type']) ? array($mappingTypes[$questionData['mapping_type']] ?? 0) : array(),
+                                    'mapping_value' => isset($questionData['mapping_value']) ? array($mappingValues[$questionData['mapping_value']] ?? 0) : array(),
+                                    'reasons' => array($questionData['reason'] ?? '-'),
                                     'question_type_id' => 1,
                                     'points' => 1,
                                     'multiple_answer' => 1,
                                     'status' => 1,
                                     'options' => [
-                                        "NEW" => array_map(function($answer) {
+                                        "NEW" => array_map(function ($answer) {
                                             return $answer['answer'];
-                                        }, $questionData['answers'])
+                                        }, $questionData['answers'] ?? [])
                                     ],
-                                    'correct_answer' => [array_search(true, array_column($questionData['answers'], 'correct_answer')) => "1"],
-                                ];
-                                $question_request2 = Request::create('', 'POST', $question_request);
-                                $question_request2->merge($question_request);
-                                $questionStore = $questionController->store($question_request2);
+                                    'correct_answer' => isset($questionData['answers']) ?
+                                        [array_search(true, array_column($questionData['answers'], 'correct_answer')) => "1"] :
+                                        [0 => "1"]
+                                ]);
+
+                                $questionStore = $questionController->store($question_request);
+                                // echo "<pre>";print_r($questionStore);exit;
                             }
                         }
-                        $i++;
                     }
                 }
+                $i++;
             }
         }
         $res['status_code'] = 0;
@@ -1216,6 +1260,153 @@ class AJAXController extends Controller
             $res['status_code'] = 1;
             $res['message'] = 'Successfully Find Data from AI and Added';
         }
+        $res['geminiData'] = $gemeniData;
         return response()->json($res);
+    }
+
+    public function GammaContentGeneration(Request $request)
+    {
+        $industry   = $request->input('industry');
+        $department = $request->input('department');
+        $jobRole    = $request->input('jobrole');
+        $skill      = $request->input('skill');
+        $course     = $request->input('course');
+        $title      = $request->input('content_title');
+
+        $prompt = "Create a 10-slide professional presentation focused on upskilling employees in the {$industry} industry, within the Department: {$department}, specifically for the Job Role: {$jobRole}, emphasizing the Skill: {$skill}, under the Course: {$course}, Content Title: {$title}; use a formal, instructional tone with consistent formatting and terminology throughout, structuring each slide with 3–5 concise bullet points under 70 words each, strictly following this order: 
+        Slide 1 – Title slide titled “Upskilling for Industry: {$industry}, Department: {$department}, Job Role: {$jobRole}, Skill: {$skill}” with subtitle/visual; 
+        Slide 2 – Overview and objectives outlining 2–3 key goals of upskilling Skill: {$skill}; 
+        Slide 3 – Importance of Skill: {$skill} in Industry: {$industry} explained in 3 clear bullets; 
+        Slide 4 – Relevance of Skill: {$skill} to Job Role: {$jobRole} detailing specific daily impacts; 
+        Slide 5 – {$skill}-specific challenges and learning needs listed as top 3 points; 
+        Slide 6 – Expected learning outcomes stating what employees will achieve post-training; 
+        Slide 7 – Stepwise skill-building framework for Skill: {$skill}; 
+        Slide 8 – Tools and technologies essential for developing Skill: {$skill} briefly described; 
+        Slide 9 – Assessment methods of Skill: {$skill} proposing 2–3 measurable evaluation approaches; 
+        Slide 10 – Summary recapping key insights and outlining actionable next steps; 
+        Verify full adherence to tone, structure, clarity, and formatting before completion.";
+
+        $payload = [
+            "inputText" => $prompt,
+            "textMode"   => "generate",
+            "format"     => "presentation",
+            "themeName"  => "Oasis",
+            "numCards"   => 10,
+            "cardSplit"  => "auto",
+            "additionalInstructions" => "All slides must use clear, consistent formatting. Ensure a formal instructional tone.",
+            "exportAs"   => "pdf",
+            "textOptions" => [
+                "amount"     => "extensive",
+                "tone"       => "formal, instructional",
+                "audience"   => "employees, L&D managers, HR",
+                "language"   => "en"
+            ],
+            "imageOptions" => [
+                "source" => "aiGenerated",
+                "model"  => "imagen-4-pro",
+                "style"  => "minimal, professional"
+            ],
+            "cardOptions" => [
+                "dimensions" => "fluid"
+            ],
+            "sharingOptions" => [
+                "workspaceAccess" => "view",
+                "externalAccess" => "noAccess"
+            ]
+        ];
+
+        // Replace <correct-endpoint> with whatever Gamma’s actual endpoint is per their docs
+        $endpoint = 'https://public-api.gamma.app/v0.2/generations';
+
+        try {
+            $response = Http::withHeaders([
+                'X-API-KEY'     => "sk-gamma-g2Ny0homDeDYfhRIFbrQeSugMnuZUw4x9WtwNi87dA",
+                'Accept'        => 'application/json',
+                'Content-Type'  => 'application/json'
+            ])->timeout(30)->post($endpoint, $payload);
+
+            if ($response->status() == 404) {
+
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Endpoint not found. Please verify: 1) Correct API endpoint 2) API key permissions 3) Beta feature access'
+                ], 404);
+            }
+
+            // Handle other error responses
+            if (!$response->successful()) {
+                $errorBody = $response->json() ?? $response->body();
+
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Gamma API error: ' . json_encode($errorBody),
+                    'status_code' => $response->status()
+                ], $response->status());
+            }
+
+            // Process successful response
+            $result = $response->json();
+
+            // Get generation ID from result
+            $generationId = $result['generationId'];
+            $newfilename = '';
+            // Poll the status endpoint until complete
+            $maxAttempts = 5;
+            $attempt = 0;
+            $timeout = 10; // Timeout in seconds
+
+            do {
+                try {
+                    $statusResponse = Http::timeout($timeout)
+                        ->get("https://public-api.gamma.app/v0.2/generations/" . $generationId);
+
+                    if ($statusResponse->successful()) {
+                        $status = $statusResponse->json();
+
+                        if (isset($status['status']) && $status['status'] === 'completed') {
+                            // Get file from export URL with timeout
+                            $exportUrl = $status['exportUrl'];
+                            $file = Http::timeout($timeout)->get($exportUrl)->body();
+
+                            // Generate unique filename
+                            $newfilename = uniqid() . '.pdf';
+
+                            // Store file on DigitalOcean
+                            Storage::disk('digitalocean')->putFileAs(
+                                'public/hp_lms_content_file/',
+                                $file,
+                                $newfilename,
+                                'public'
+                            );
+
+                            break;
+                        }
+                    }
+                } catch (\Exception $e) {
+
+                    $attempt++;
+                    if ($attempt >= $maxAttempts) {
+                        throw new \Exception('Maximum retry attempts reached');
+                    }
+                }
+
+                sleep(2); // Wait 2 seconds before retrying
+
+            } while ($attempt < $maxAttempts);
+
+            $result['stored_filename'] = $newfilename;
+
+            return response()->json([
+                'status' => true,
+                'data' => $result,
+                'generationId' => $generationId,
+                'newfilename' => $newfilename,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Request failed: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }
