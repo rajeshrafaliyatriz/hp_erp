@@ -69,7 +69,7 @@ class jobrolecontroller extends Controller
     public function searchskills(Request $request)
     {
 
-
+        
         $token = $request->input('token');
         if (!$token) {
             return response()->json(['message' => 'Token not provided'], 401);
@@ -97,5 +97,4 @@ class jobrolecontroller extends Controller
         return response()->json(['status' => 1,'skills' => $skills]);
     
     }
-    
 }
