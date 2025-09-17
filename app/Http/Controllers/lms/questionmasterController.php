@@ -303,8 +303,8 @@ class questionmasterController extends Controller
     //    return $request->all();die;
         $type = $request->input('type');
 
-        $sub_institute_id = $request->session()->get('sub_institute_id');
-        $user_id = $request->session()->get('user_id');
+        $sub_institute_id = session()->get('sub_institute_id');
+        $user_id = session()->get('user_id');
         $status = $request->get('status');
         $status_val = isset($status) ? $status : '';
 
@@ -365,8 +365,8 @@ class questionmasterController extends Controller
             'pre_grade_topic'              => $pre_topic,
             'post_grade_topic'             => $post_topic,
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
-            'points'                       => $request->get('points'),
-            'status'                       => $status_val,
+            'points'                       => $request->points ?? 1,
+            'status'                       => 1,
             'created_by'                   => $user_id,
             'sub_institute_id'             => $sub_institute_id,
             'hint_text'                    => $request->get('hint_text'),

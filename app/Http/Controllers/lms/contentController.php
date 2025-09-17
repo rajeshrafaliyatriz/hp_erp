@@ -235,9 +235,9 @@ if($type=="API"){
     public function store(Request $request){     
         // echo "<pre>";print_r($request->all());exit;
         $type= $request->type;          
-        $sub_institute_id = $request->session()->get('sub_institute_id'); 		
-        $syear = $request->session()->get('syear'); 		
-        $user_id = $request->session()->get('user_id');       
+        $sub_institute_id = session()->get('sub_institute_id'); 		
+        $syear = session()->get('syear'); 		
+        $user_id = session()->get('user_id');       
         if($type=="API"){
             $token = $request->input('token');  // get token from input field 'token'
 

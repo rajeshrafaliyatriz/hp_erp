@@ -17,9 +17,10 @@ use App\Models\DynamicModel;
 use App\Models\school_setup\subjectModel;
 use App\Models\school_setup\standardModel;
 use App\Models\school_setup\academic_sectionModel;
-use Illuminate\Support\Facades\Schema; // Import the Schema facade
-use Illuminate\Database\Schema\Blueprint;
-use GuzzleHttp\Client;
+use App\Http\Controllers\school_setup\masterSetupController;
+use App\Http\Controllers\lms\questionmasterController;
+use App\Http\Controllers\lms\contentController;
+use App\Http\Controllers\lms\chapterController;
 use PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
@@ -382,22 +383,16 @@ class AJAXController extends Controller
                 $checkstd = '1=1';
             }
             if ($checkstd && $classTeacherStdArr != "" && !in_array($module_name, $module_array)) {
-                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
-                    $query->where('id', $getClass->standard_id);
-                } else {
-                    $query->whereIn('id', $classTeacherStdArr);
-                }
+
+                $query->whereIn('id', $classTeacherStdArr);
             }
             //END Check for class teacher assigned standards
 
             //START Check for subject teacher assigned
             $subjectTeacherStdArr = session()->get('subjectTeacherStdArr');
             if ($subjectTeacherStdArr != "" && ($classTeacherStdArr == "" || in_array($module_name, $module_array))) {
-                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
-                    $query->where('id', $getClass->standard_id);
-                } else {
-                    $query->whereIn('id', $subjectTeacherStdArr);
-                }
+
+                $query->whereIn('id', $subjectTeacherStdArr);
             }
             //END Check for subject teacher assigned
             // for student 01-01-2025 start
@@ -418,22 +413,16 @@ class AJAXController extends Controller
                 $checkstd = '1=1';
             }
             if ($checkstd && $classTeacherStdArr != "" && !in_array($module_name, $module_array)) {
-                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
-                    $query->where('id', $getClass->standard_id);
-                } else {
-                    $query->whereIn('id', $classTeacherStdArr);
-                }
+
+                $query->whereIn('id', $classTeacherStdArr);
             }
             //END Check for class teacher assigned standards
 
             //START Check for subject teacher assigned
             $subjectTeacherStdArr = session()->get('subjectTeacherStdArr');
             if ($subjectTeacherStdArr != "" && ($classTeacherStdArr == "" || in_array($module_name, $module_array))) {
-                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher" && isset($getClass->standard_id)) {
-                    $query->where('id', $getClass->standard_id);
-                } else {
-                    $query->whereIn('id', $subjectTeacherStdArr);
-                }
+
+                $query->whereIn('id', $subjectTeacherStdArr);
             }
 
             // for student 01-01-2025 start
@@ -772,7 +761,7 @@ class AJAXController extends Controller
         $data = DB::table('s_skill_knowledge_ability as s')
             ->join('s_users_skills as u', function ($join) {
                 $join->on('u.id', '=', 's.skill_id')
-                     ->on('u.sub_institute_id', '=', 's.sub_institute_id');
+                    ->on('u.sub_institute_id', '=', 's.sub_institute_id');
             })
             ->join('s_user_skill_jobrole as us', function ($join) {
                 $join->on('us.skill', '=', 'u.title')
@@ -884,9 +873,28 @@ class AJAXController extends Controller
 
     public function geminiChat(Request $request)
     {
-        $apiKey = env('GEMINI_API_KEY'); // put your key in .env as GEMINI_API_KEY=xxxx
+        // get API key from database; AIzaSyBPtCAFtNtyfkaiBrE_jr3BXCCvUmptBfY
+        $apiKey = [];
+        $todayUsedKeys = DB::table('ai_daily_used_api')->where(['api_name' => 'gemini', 'date' => date('Y-m-d')])->whereNull('sub_institute_id')->get();
+        if (count($todayUsedKeys) === 0) {
+            $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1])->whereNull('sub_institute_id')->first();
+            if ($firstGeminiKey) {
+                $apiKey = $firstGeminiKey->key;
+                $insert = DB::table('ai_daily_used_api')->insert(['api_name' => 'gemini', 'key' => $firstGeminiKey->key, 'parent_id' => $firstGeminiKey->id, 'date' => date('Y-m-d'), 'count' => 1]);
+            }
+        } else {
+            foreach ($todayUsedKeys as $key => $value) {
+                $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1, 'id' => $value->parent_id])->whereNull('sub_institute_id')->first();
+                if ($value->count < $firstGeminiKey->limit) {
+                    $apiKey[] = $value->key;
+                    $update = DB::table('ai_daily_used_api')->where(['id' => $value->id])->update(['count' => $value->count + 1]);
+                    break;
+                }
+            }
+        }
+        $geminiKey = isset($apiKey[0]) ? $apiKey[0] : '';
         $prompt = $request->input('prompt');
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyBPtCAFtNtyfkaiBrE_jr3BXCCvUmptBfY";
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" . $geminiKey;
 
         $response = Http::withHeaders([
             'Content-Type' => 'application/json',
@@ -913,7 +921,301 @@ class AJAXController extends Controller
             // Success - now you can use $jsonData as array
             return response()->json($jsonData);
         } else {
-            return response()->json(['error' => $text, 'raw' => $response]);
+            return response()->json(['error' => $text, 'raw' => $response, 'Key' => $geminiKey]);
         }
+    }
+
+    public function AICourseGeneration(Request $request)
+    {
+        // Get request variables
+        $sub_institute_id = $request->sub_institute_id;
+        $token = $request->token;
+        $user_id = $request->user_id;
+        $user_profile_name = $request->user_profile_name;
+        $syear = $request->syear;
+        $industry = $request->industry;
+        $skill_department = $request->department;
+        $skill_category = $request->skill_category;
+        $skill_sub_category = $request->skill_sub_category;
+        $skill_micro_category = $request->skill_micro_category;
+        $skill_name = $request->skill_name;
+        $skill_description = $request->skill_description;
+
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        // Find the token in the database
+        $accessToken = PersonalAccessToken::findToken($token);
+
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'sub_institute_id' => 'required',
+            'user_id' => 'required',
+            'user_profile_name' => 'required',
+            'syear' => 'required',
+            'industry' => 'required',
+            'department' => 'required',
+            'skill_category' => 'required',
+            'skill_sub_category' => 'required',
+            'skill_micro_category' => 'required',
+            'skill_name' => 'required',
+            'skill_description' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+        }
+
+        $getJobroles = DB::table('s_user_skill_jobrole')->where(['sub_institute_id' => $sub_institute_id, 'skill' => $skill_name])->whereNull('deleted_at')->groupBy('jobrole')->get();
+        // return $getJobroles;
+        $jobroleLists = $proficiencyLists = [];
+        foreach ($getJobroles as $key => $value) {
+            $jobroleLists[] = $value->jobrole;
+            $proficiencyLists[] = $value->proficiency_level;
+        }
+        $jobroleData = json_encode($jobroleLists);
+        $proficencyData = json_encode($proficiencyLists);
+        // check grade and add grade
+        $checkGrade = DB::table('academic_section')->where(['sub_institute_id' => $sub_institute_id, 'title' => $industry])->whereNull('deleted_at')->get();
+        if (count($checkGrade) > 0) {
+            $grade = $checkGrade[0]->id;
+        } else {
+            $gradeInsert = DB::table('academic_section')->insertGetId([
+                'sub_institute_id' => $sub_institute_id,
+                'title' => $industry,
+                'short_name' => $industry,
+                'sort_order' => '1',
+                'created_by' => $user_id,
+                'created_at' => now()
+            ]);
+            $grade = $gradeInsert;
+        }
+
+        $checkStandard = DB::table('standard')->where(['sub_institute_id' => $sub_institute_id, 'grade_id' => $grade, 'name' => $skill_department])->whereNull('deleted_at')->get();
+        if (count($checkStandard) > 0) {
+            $standard = $checkStandard[0]->id;
+        } else {
+            $standardInsert = DB::table('standard')->insertGetId([
+                'sub_institute_id' => $sub_institute_id,
+                'grade_id' => $grade,
+                'name' => $skill_department,
+                'short_name' => $skill_department,
+                'sort_order' => '1',
+                'created_by' => $user_id,
+                'created_at' => now()
+            ]);
+            $standard = $standardInsert;
+        }
+        $mappingTypes = DB::table('lms_mapping_type')->where('id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
+        $mappingValues = DB::table('lms_mapping_type')->where('parent_id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
+        $lms_content_category = DB::table('lms_content_category')->where('status', 2)->whereNull('deleted_at')->get()->pluck('category_name');
+        $course_category = DB::table('lms_content_category')->where('status', 1)->whereNull('deleted_at')->get()->pluck('category_name');
+        // return $mappingTypes;
+        $prompt = "I have Skills Name: '" . $skill_name . "' of 
+                    Industry: " . $industry . "
+                    I have Skills Description: " . $skill_description . "
+                    I have Skills Department: " . $skill_department . "
+                    I have Skills Category: " . $skill_category . "
+                    I have Skills Sub Category: " . $skill_sub_category;
+        if ($jobroleData == true) {
+            $prompt .= "
+                    I have Skills Jobrole: " . $jobroleData . "
+                    I have Skills Proficiency Level: " . $proficencyData;
+        }
+        $prompt .= "1.Understand the depth, complexity, and learning needs of the given skill.
+                    2.Break the skill into logical continuous chapters, each representing a key theme.
+                    3.For each chapter, create continuous content items with:
+                        title
+                        description
+                        content_category any 1 from (" . $lms_content_category . ")
+                        mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                        mapping_value (Easy/Medium/Hard)
+                    4. Create question items with:  
+                        question_title
+                        description
+                        mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                        mapping_value (Easy/Medium/Hard)
+                        reason (why above mapping_value selected)
+                    5. For each question item, create 4 answer item with:
+                        answer
+                        correct_answer (true/false)
+                        feedback
+                    6.Output Expectation:
+                    Generate and return a structured JSON with the following fields:
+                        - course_name
+                        - short_name
+                        - course_category any 1 of (" . $course_category . ")
+                        - course_code
+                        - course_type
+                        - short_name
+                        - chapters: list of chapters with:
+                           -- chapter_name
+                           -- chapter_description
+                           -- contents: list of content items with:
+                                --- content_title
+                                --- content_description
+                                --- content_category any 1 from (" . $lms_content_category . ")
+                                --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                                --- mapping_value (easy/medium/hard)
+                            -- questions: list of question items with (always MCQ question):
+                                --- question_title
+                                --- description
+                                --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                                --- mapping_value (easy/medium/hard)
+                                --- reason (why this mapping_value selected)
+                            -- answers: list of 4 corresponding answer items with only one correct answer:
+                                --- answer
+                                --- correct_answer (true as a 1/false as a 0)
+                                --- feedback
+                    Rules:
+                    Align everything tightly with the skill context fields.
+                    Use concise, engaging, and adult-learner-appropriate language.
+                    Do not add explanations — only output the structured JSON.
+                    provide me atleast 3 course realted this skills. in JSON array";
+        $request->merge(['prompt' => $prompt]);
+        $gemeniJson = $this->geminiChat($request);
+        $gemeniData = json_decode(json_encode($gemeniJson->original), true);
+        // return $gemeniData;
+        $i = 0;
+        if (!isset($gemeniData['error'])) {
+            foreach ($gemeniData as $courseKey => $courseData) {
+
+                $courseController = new masterSetupController;
+                $course_request = new Request([
+                    'type' => 'API',
+                    'sub_institute_id' => $sub_institute_id,
+                    'user_id' => $user_id,
+                    'token' => $token,
+                    'formType' => 'course',
+                    'subject_id' => 0,
+                    'standard_id' => $standard,
+                    'allow_grades' => 'Yes',
+                    'allow_content' => 'Yes',
+                    'sort_order' => '1',
+                    'elective_subject' => 'No',
+                    'add_content' => 'chapterwise',
+                    'display_name' => $courseData['course_name'] ?? '-',
+                    'display_image' => null,
+                    'subject_category' => $courseData['course_category'] ?? '-',
+                    'subject_code' => $courseData['course_code'] ?? '-',
+                    'subject_type' => $courseData['course_type'] ?? '-',
+                    'short_name' => $courseData['short_name'] ?? '-',
+                    'status' => 1,
+                ]);
+                $courseStore = $courseController->store($course_request);
+                $courseData = json_decode(json_encode($courseStore->original), true);
+                $courseId = $courseData['course_id'];
+                if (isset($courseData['chapters']) && count($courseData['chapters']) > 0) {
+                    foreach ($courseData['chapters'] as $chapterKey => $chapterData) {
+                        $moduleController = new chapterController;
+                        // Create request data array with all parameters
+                        $requestData = [
+                            'type' => 'API',
+                            'sub_institute_id' => $sub_institute_id,
+                            'user_id' => $user_id,
+                            'user_profile_name' => $user_profile_name,
+                            'token' => $token,
+                            'syear' => $syear,
+                            'grade' => $grade,
+                            'standard' => $standard,
+                            'subject' => $courseId,
+                            'chapter_name' => [$chapterData['chapter_name'] ?? '-'],
+                            'chapter_desc' => [$chapterData['chapter_description'] ?? '-'],
+                            'availability' => [1],
+                            'show_hide' => [1],
+                            'sort_order' => [1]
+                        ];
+
+                        // Create new request with data and merge into current request
+                        $module_request = Request::create('', 'POST', $requestData);
+                        $module_request->merge($requestData);
+
+                        // Store chapter and get response
+                        $chapterStore = $moduleController->store($module_request);
+                        $chapterData = json_decode(json_encode($chapterStore->original), true);
+                        $chapterId = $chapterData['chapter_id'];
+
+                        $getstandard = DB::table('standard')->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard])->whereNull('deleted_at')->first();
+                        $getcourse = DB::table('sub_std_map')->where(['sub_institute_id' => $sub_institute_id, 'id' => $courseId])->whereNull('deleted_at')->first();
+                        $getChapter = DB::table('chapter_master')->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapterId])->whereNull('deleted_at')->first();
+
+                        if (isset($chapterData['contents']) && count($chapterData['contents']) > 0) {
+                            foreach ($chapterData['contents'] as $contentKey => $contentData) {
+
+                                $contentController = new contentController;
+                                $content_request = [
+                                    'type' => 'API',
+                                    'sub_institute_id' => $sub_institute_id,
+                                    'user_id' => $user_id,
+                                    'syear' => $syear,
+                                    'token' => $token,
+                                    'toggle_basic_advanced' => 'Advanced',
+                                    'hid_standard_name' => $getstandard->name ?? '-',
+                                    'hid_subject_name' => $getcourse->display_name ?? '-',
+                                    'hid_chapter_name' => $getChapter->chapter_name ?? '-',
+                                    'hid_chapter_id' => $chapterId,
+                                    'title' => $contentData['content_title'] ?? '-',
+                                    'description' => $contentData['content_description'] ?? '-',
+                                    'content_category' => $contentData['content_category'] ?? '-',
+                                    'mapping_type' => isset($contentData['mapping_type']) ? $mappingTypes[$contentData['mapping_type']] ?? 0 : 0,
+                                    'mapping_value' => isset($contentData['mapping_value']) ? $mappingValues[$contentData['mapping_value']] ?? 0 : 0,
+                                    'contentType' => 'pdf',
+                                    'filename' => 'filename.pdf',
+                                    'show_hide' => 1,
+                                ];
+                                $content_request2 = Request::create('', 'POST', $content_request);
+                                $content_request2->merge($content_request);
+                                $contentStore = $contentController->store($content_request2);
+                            }
+                        }
+                        if (isset($chapterData['questions']) && count($chapterData['questions']) > 0) {
+                            foreach ($chapterData['questions'] as $questionKey => $questionData) {
+                                $questionController = new questionmasterController;
+                                $question_request = [
+                                    'type' => 'API',
+                                    'sub_institute_id' => $sub_institute_id,
+                                    'user_id' => $user_id,
+                                    'token' => $token,
+                                    'grade_id' => $grade,
+                                    'standard_id' => $standard,
+                                    'subject_id' => $courseId,
+                                    'chapter_id' => $chapterId,
+                                    'question_title' =>$questionData['question_title']?? '-',
+                                    'description' =>$questionData['description']?? '-',
+                                    'mapping_type' => isset($questionData['mapping_type']) ? array($mappingTypes[$questionData['mapping_type'] ?? 0]) : 0,
+                                    'mapping_value' => isset($questionData['mapping_value']) ? array($mappingValues[$questionData['mapping_value'] ?? 0]) : 0,
+                                    'reasons' => array($questionData['reason']?? '-'),
+                                    'question_type_id' => 1,
+                                    'points' => 1,
+                                    'multiple_answer' => 1,
+                                    'status' => 1,
+                                    'options' => [
+                                        "NEW" => array_map(function($answer) {
+                                            return $answer['answer'];
+                                        }, $questionData['answers'])
+                                    ],
+                                    'correct_answer' => [array_search(true, array_column($questionData['answers'], 'correct_answer')) => "1"],
+                                ];
+                                $question_request2 = Request::create('', 'POST', $question_request);
+                                $question_request2->merge($question_request);
+                                $questionStore = $questionController->store($question_request2);
+                            }
+                        }
+                        $i++;
+                    }
+                }
+            }
+        }
+        $res['status_code'] = 0;
+        $res['message'] = 'Failed Find Data from AI';
+        if ($i > 0) {
+            $res['status_code'] = 1;
+            $res['message'] = 'Successfully Find Data from AI and Added';
+        }
+        return response()->json($res);
     }
 }
