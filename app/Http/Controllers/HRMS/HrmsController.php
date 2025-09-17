@@ -53,16 +53,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $data['data'] = HrmsJobTitle::all();
-        //        return $data;
-        $type = $request->input('type');
-        return is_mobile($type, "HRMS.hrms_job_title.index", $data, "view");
-        //     return view('HRMS.hrms_job_title.index', ["data" => $data]);
+        
     }
 
     public function hrmsCreate(Request $request, $id = 0)
@@ -97,10 +88,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+        
         if ($id) {
             $res = HrmsJobTitle::find($id);
             return is_mobile($type, "HRMS.hrms_job_title.create", $res, "view");
@@ -145,10 +133,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+       
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $type = $request->input('type');
         $request->validate([
@@ -201,10 +186,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+     
 
         $type = $request->input('type');
         if ($id > 0) {
@@ -245,10 +227,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+        
 
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
@@ -335,10 +314,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+      
 
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
@@ -453,10 +429,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+       
 
         $type = $request->input('type');
 
@@ -598,10 +571,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+      
 
         $type = $request->input('type');
         // $hrmsAttendanceDetails = '';
@@ -798,10 +768,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+       
 
         $request->validate([
             'employee' => 'required',
@@ -809,13 +776,7 @@ class HrmsController extends Controller
             'intime' => 'required'
         ]);
 
-        $type = $request->input('type');
-
-        if (in_array($type, ['API', 'JSON'])) {
-            $sub_institute_id = $request->input('sub_institute_id');
-        } else {
-            $sub_institute_id = $request->session()->get('sub_institute_id');
-        }
+       
 
         $formattedDate = Carbon::parse($request->indate)->format('Y-m-d');
 
@@ -873,10 +834,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+     
 
         $request->validate([
             'employee' => 'required',
@@ -982,17 +940,9 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+ 
 
-        $type = $request->input('type');
-        if (in_array($type, ['API', 'JSON'])) {
-            $sub_institute_id = $request->input('sub_institute_id');
-        } else {
-            $sub_institute_id = $request->session()->get('sub_institute_id');
-        }
+       
 
         $res['employee_id'] = $employee_id = $request->get('employee_id');
         $res['department_id'] = $department_id = $request->get('department_id');
@@ -1038,10 +988,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+    
 
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $department_id = $request->input('department_id');
@@ -1084,17 +1031,9 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+       
 
-        $type = $request->input('type');
-        if (in_array($type, ['API', 'JSON'])) {
-            $sub_institute_id = $request->input('sub_institute_id');
-        } else {
-            $sub_institute_id = $request->session()->get('sub_institute_id');
-        }
+        
 
         $from_date = $request->get('from_date');
         $to_date = $request->get('to_date');
@@ -1243,17 +1182,8 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $type = $request->input('type');
-        if (in_array($type, ['API', 'JSON'])) {
-            $sub_institute_id = $request->input('sub_institute_id');
-        } else {
-            $sub_institute_id = $request->session()->get('sub_institute_id');
-        }
+        
+        
 
         $get_sandwich_leave_data = DB::table('general_data')->where(['fieldname' => 'sandwich_leave', 'sub_institute_id' => $sub_institute_id])->first();
 
@@ -1333,20 +1263,10 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+        
 
         // echo "<pre>";print_r($request->all());exit;        
-        $type = $request->input('type');
-        if (in_array($type, ['API', 'JSON'])) {
-            $userId = $request->input('user_id');
-            $sub_institute_id = $request->input('sub_institute_id');
-        } else {
-            $userId = $request->session()->get('user_id');
-            $sub_institute_id = $request->session()->get('sub_institute_id');
-        }
+       
 
         $sandwich_leave = $request->input('sandwich_leave');
         $casual_leave_at_one_time = $request->input('casual_leave_at_one_time');
@@ -1660,18 +1580,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $type = $request->input('type');
-        if (in_array($type, ['API', 'JSON'])) {
-            $sub_institute_id = $request->input('sub_institute_id');
-        } else {
-            $sub_institute_id = $request->session()->get('sub_institute_id');
-        }
-
+        
         $employee_id = $request->get('employee_id');
         $department_id = $request->get('department_id');
 
@@ -1718,34 +1627,30 @@ class HrmsController extends Controller
             }
        
             $sub_institute_id = $request->get('sub_institute_id');
+            
+        $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
+        $employee_id = ($request->employee_id != 0) ? implode(',', $request->employee_id) : 0;
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        // echo "<pre>";print_r($request->all());exit; 
-        $type = $request->input('type');
-        if (in_array($type, ['API', 'JSON'])) {
-            $sub_institute_id = $request->input('sub_institute_id');
-        } else {
-            $sub_institute_id = $request->session()->get('sub_institute_id');
-        }
-
+        else{
+            
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
         $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : 0;
+        }
+       
+        // echo "<pre>";print_r($request->all());exit; 
+
         $date = $request->date;
 
         $date_formatted = Carbon::createFromFormat('Y-m-d', $date)->format('Y-m-d');
         $timestamp = strtotime($date_formatted);
         $day = date('D', $timestamp);
 
-        $departments = hrmsDepartmentModel::where('status', true)->pluck('department', 'id');
+        $departments = hrmsDepartmentModel::where('status', true)->where('sub_institute_id',$sub_institute_id)->pluck('department', 'id');
 
         $employeeDep = DB::table('tbluser')->where('sub_institute_id', $sub_institute_id)->when($department_id != 0, function ($q) use ($department_id) {
             $q->whereRaw('department_id in (' . $department_id . ')');
         })->where('status', 1)->selectRaw('GROUP_CONCAT(DISTINCT id) as user_id')->groupBy('sub_institute_id')->first();
-        // echo "<pre>";print_r($employeeDep->user_id);exit;  
+        // echo "<pre>";print_r($departments);exit;  
 
         $hrmsList = HrmsAttendance::join('tbluser as u', 'u.id', '=', 'hrms_attendances.user_id')->where('hrms_attendances.sub_institute_id', $sub_institute_id);
 
@@ -1755,7 +1660,6 @@ class HrmsController extends Controller
                 $q->whereRaw('user_id in (' . $employee_id . ')');
             });
         } else if ($department_id != 0) {
-            echo "else";
 
             $hrmsList = $hrmsList->when(isset($employeeDep->user_id), function ($q) use ($employeeDep) {
                 $q->whereRaw('user_id in (' . $employeeDep->user_id . ')');
@@ -1808,15 +1712,15 @@ class HrmsController extends Controller
                 }
             }
             return $e;
-        })->where('is_late', 1);
+        });
 
         $res['employees'] = $employeeDep;
         $res['date_formatted'] = $date_formatted;
         $res['hrmsList'] = $hrmsList;
-        $res['employee_id'] = $employee_id;
-        $res['selEmp'] = $request->emp_id;
-        $res['department_id'] = $request->department_id;
-        $res['departments'] = $departments;
+        // $res['employee_id'] = $employee_id;
+        // $res['selEmp'] = $request->emp_id;
+        // $res['department_id'] = $request->department_id;
+        // $res['departments'] = $departments;
 
         //return view('HRMS.hrms_attendance_report.early_going_report', compact('employees', 'employee_id', 'date_formatted', 'hrmsList', 'type', 'departments', 'department_id'));
         return is_mobile($type, "HRMS/hrms_attendance_report/early_going_report", $res, "view");
@@ -1868,18 +1772,13 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
+        
+        
         if (in_array($type, ['API', 'JSON'])) {
             $sub_institute_id = $request->sub_institute_id;
         }
         $res['selDepartments'] = $department_ids = $request->department_id;
-        $res['emp_id'] = $emp_id = $request->emp_id;
+        $res['emp_id'] = $emp_id = $request->emp_id ?? $request->employee_id;
         $res['selectedFromDate'] = $from_date = $request->from_date;
         $res['selectedToDate'] = $to_date = $request->to_date;
 
@@ -2023,14 +1922,8 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $sub_institute_id = session()->get('sub_institute_id');
-        $data = DB::table('hrms_holidays')->where('sub_institute_id', $sub_institute_id)->where(['department_id' => $request->department_id, 'from_date' => $request->from_date, 'to_date' => $request->to_date])->get()->toArray();
-        return $data;
+        
+        
     }
 
     public function getPresentDays(Request $request)
@@ -2064,18 +1957,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $sub_institute_id = session()->get('sub_institute_id');
-        $data = DB::table('hrms_attendances as ha')
-            ->join('tbluser as tu', 'ha.user_id', '=', 'tu.id')
-            ->join('hrms_departments as hd', 'tu.department_id', '=', 'hd.id')
-            ->selectRaw('ha.*,hd.department,tu.employee_no,CONCAT_WS(" ", COALESCE(tu.first_name, "-"), COALESCE(tu.last_name, "-")) as full_name')
-            ->where('ha.user_id', $request->user_id)->whereBetween('ha.day', [$request->from_date, $request->to_date])->where(['ha.sub_institute_id' => $sub_institute_id, "ha.status" => 1])->get()->toArray();
-        return $data;
+        
     }
 
     public function getAbsentDays(Request $request)
@@ -2109,19 +1991,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $sub_institute_id = session()->get('sub_institute_id');
-        $data = DB::table('hrms_emp_leaves as hel')
-            ->join('tbluser as tu', 'hel.user_id', '=', 'tu.id')
-            ->join('hrms_departments as hd', 'tu.department_id', '=', 'hd.id')
-            ->join('hrms_leave_types as hlt', 'hel.leave_type_id', '=', 'hlt.id')
-            ->selectRaw('hel.*,hd.department,tu.employee_no,CONCAT_WS(" ", COALESCE(tu.first_name, "-"), COALESCE(tu.last_name, "-")) as full_name,hel.day_type,hlt.leave_type')
-            ->where('hel.user_id', $request->user_id)->where('hel.from_date', '>=', $request->from_date)->where('hel.to_date', '<=', $request->to_date)->where('hel.sub_institute_id', $sub_institute_id)->where('hel.status', 'approved')->get()->toArray();
-        return $data;
+        
     }
 
     public function getHalfDays(Request $request)
@@ -2155,25 +2025,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $sub_institute_id = session()->get('sub_institute_id');
-        $data = DB::table('hrms_emp_leaves as hel')
-            ->join('tbluser as tu', 'hel.user_id', '=', 'tu.id')
-            ->join('hrms_departments as hd', 'tu.department_id', '=', 'hd.id')
-            ->join('hrms_leave_types as hlt', 'hel.leave_type_id', '=', 'hlt.id')
-            ->join('hrms_attendances as ha', function ($q) use ($request) {
-                $q->on('ha.user_id', '=', 'hel.user_id')->whereRaw('ha.day BETWEEN hel.from_date AND hel.to_date')->where('ha.user_id', $request->user_id);
-            })
-            ->selectRaw('hel.*,ha.*,hd.department,tu.employee_no,CONCAT_WS(" ", COALESCE(tu.first_name, "-"), COALESCE(tu.last_name, "-")) as full_name,hel.day_type,hlt.leave_type')
-            ->where('hel.user_id', $request->user_id)->where('hel.from_date', '>=', $request->from_date)->where('hel.to_date', '<=', $request->to_date)->where('hel.sub_institute_id', $sub_institute_id)->where('hel.status', 'approved')
-            ->where('hel.day_type', '0.5')
-            ->get()->toArray();
-
-        return $data;
+        
     }
     // multi Employee Attendance Report
     public function multipleAttendanceReportIndex(Request $request)
@@ -2207,15 +2059,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-        $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
-        $syear = session()->get('syear');
-        $res = session()->get('data');
-        return is_mobile($type, "HRMS.hrms_attendance_report.multiEmpAttendanceReport", $res, 'view');
+        
     }
 
     public function multipleAttendanceReportCreate(Request $request)
@@ -2249,11 +2093,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
+        
 
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
@@ -2495,21 +2335,8 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-
-        $attId = isset($request->attId) ? explode(',', $request->attId) : [];
-        $sub_institute_id = session()->get('sub_institute_id');
-
-        $attData = DB::table('hrms_attendances as ha')
-            ->join('tbluser as u', 'u.id', '=', 'ha.user_id')
-            ->join('hrms_departments as hd', 'hd.id', '=', 'u.department_id')
-            ->selectRaw('ha.*,CONCAT_WS(" ", COALESCE(u.first_name, "-"), COALESCE(u.last_name, "-")) as full_name,hd.department')
-            ->where('ha.sub_institute_id', $sub_institute_id)->whereIn('ha.id', $attId)->get()->toArray();
-
-        return $attData;
+       
+       
     }
 
     // for employees day wise Attendance A/P/L/H 02-09-2024
@@ -2544,16 +2371,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-        $type = $request->type;
-        $res['from_date'] = Carbon::now()->startOfMonth()->toDateString();
-        $res['to_date'] = Carbon::now()->toDateString();
-        // echo "<pre>";print_r($res);exit;
-        return is_mobile($type, "HRMS.hrms_attendance_report.daywiseAttendanceReport", $res, 'view');
-    }
+           }
 
     public function DaywiseAttendanceportCreate(Request $request)
     {
@@ -2586,26 +2404,8 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-        $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
-        $syear = session()->get('syear');
-        if (in_array($type, ['API', 'JSON'])) {
-            $sub_institute_id = $request->get('sub_institute_id');
-            $syear = $request->get('syear');
-        }
-        $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : '';
-        $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : '';
-
-        $res['from_date'] = $from_date = $request->from_date;
-        $res['to_date'] = $to_date = $request->to_date;
-        $res['department_id'] = $request->department_id;
-        $res['employee_id'] = $request->emp_id;
-        // get users to get details
-        $getUsers = employeeDetails($sub_institute_id, $employee_id, '', $department_id);
+        
+        
 
         $get_hrms_holidays = DB::table('hrms_holidays')
             ->where('sub_institute_id', $sub_institute_id)
@@ -2739,14 +2539,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-        $attendance = DB::table('hrms_attendance')->where('id', $id)->first();
-        $employeeLists = DB::table('tbluser')->where('status', 1)->get();
-
-        return view('HRMS.hrms_attendance.edit', compact('attendance', 'employeeLists'));
+        
     }
 
     public function update(Request $request, $id)
@@ -2780,19 +2573,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-        DB::table('hrms_attendance')->where('id', $id)->update([
-            'user_id' => $request->employee,
-            'day' => $request->day,
-            'punchin_time' => $request->punchin_time,
-            'punchout_time' => $request->punchout_time,
-            'note' => $request->note,
-        ]);
-
-        return redirect()->route('hrms_attendance.index')->with('message', 'Attendance updated successfully.');
+        
     }
 
     public function destroy(Request $request, $id)
@@ -2826,15 +2607,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
-        DB::table('hrms_attendances')->where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
-        if ($request->type == 'API') {
-            return 1;
-        }
-        return redirect()->route('hrms_attendance.index')->with('message', 'Attendance deleted successfully.');
+        
     }
 
     public function updateUserAttendance(Request $request)
@@ -2868,10 +2641,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
-        // return view('payroll.payroll_type.index', ["data" => $data]);
-        $type = $request->input('type');
-        return is_mobile($type, "payroll.payroll_type.index", $data, "view");
+        
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
