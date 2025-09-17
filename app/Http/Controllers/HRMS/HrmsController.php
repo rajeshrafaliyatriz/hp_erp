@@ -53,7 +53,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
     }
 
     public function hrmsCreate(Request $request, $id = 0)
@@ -88,7 +88,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
         if ($id) {
             $res = HrmsJobTitle::find($id);
             return is_mobile($type, "HRMS.hrms_job_title.create", $res, "view");
@@ -156,7 +156,7 @@ class HrmsController extends Controller
     }
 
     public function hrmsDestroy(Request $request, $id)
-    {   
+    {  
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
           if($type=="API"){
@@ -227,7 +227,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
 
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
@@ -314,7 +314,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-      
+     
 
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
@@ -571,7 +571,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-      
+     
 
         $type = $request->input('type');
         // $hrmsAttendanceDetails = '';
@@ -988,7 +988,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-    
+   
 
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $department_id = $request->input('department_id');
@@ -1033,7 +1033,7 @@ class HrmsController extends Controller
         }
        
 
-        
+       
 
         $from_date = $request->get('from_date');
         $to_date = $request->get('to_date');
@@ -1182,8 +1182,8 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
-        
+       
+       
 
         $get_sandwich_leave_data = DB::table('general_data')->where(['fieldname' => 'sandwich_leave', 'sub_institute_id' => $sub_institute_id])->first();
 
@@ -1263,7 +1263,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
 
         // echo "<pre>";print_r($request->all());exit;        
        
@@ -1374,7 +1374,7 @@ class HrmsController extends Controller
                 $general_data->save();
             }
         }
-        // for parent communication 
+        // for parent communication
         if ($parent_communication !== "Y") {
             $parent_communication = 'N';
         }
@@ -1580,7 +1580,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
         $employee_id = $request->get('employee_id');
         $department_id = $request->get('department_id');
 
@@ -1627,24 +1627,30 @@ class HrmsController extends Controller
             }
        
             $sub_institute_id = $request->get('sub_institute_id');
+           
+        $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
+        $employee_id = ($request->employee_id != 0) ? implode(',', $request->employee_id) : 0;
         }
-       
-        // echo "<pre>";print_r($request->all());exit; 
-
+        else{
+           
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
         $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : 0;
+        }
+       
+        // echo "<pre>";print_r($request->all());exit;
+
         $date = $request->date;
 
         $date_formatted = Carbon::createFromFormat('Y-m-d', $date)->format('Y-m-d');
         $timestamp = strtotime($date_formatted);
         $day = date('D', $timestamp);
 
-        $departments = hrmsDepartmentModel::where('status', true)->pluck('department', 'id');
+        $departments = hrmsDepartmentModel::where('status', true)->where('sub_institute_id',$sub_institute_id)->pluck('department', 'id');
 
         $employeeDep = DB::table('tbluser')->where('sub_institute_id', $sub_institute_id)->when($department_id != 0, function ($q) use ($department_id) {
             $q->whereRaw('department_id in (' . $department_id . ')');
         })->where('status', 1)->selectRaw('GROUP_CONCAT(DISTINCT id) as user_id')->groupBy('sub_institute_id')->first();
-        // echo "<pre>";print_r($employeeDep->user_id);exit;  
+        // echo "<pre>";print_r($departments);exit;  
 
         $hrmsList = HrmsAttendance::join('tbluser as u', 'u.id', '=', 'hrms_attendances.user_id')->where('hrms_attendances.sub_institute_id', $sub_institute_id);
 
@@ -1706,15 +1712,15 @@ class HrmsController extends Controller
                 }
             }
             return $e;
-        })->where('is_late', 1);
+        });
 
         $res['employees'] = $employeeDep;
         $res['date_formatted'] = $date_formatted;
         $res['hrmsList'] = $hrmsList;
-        $res['employee_id'] = $employee_id;
-        $res['selEmp'] = $request->emp_id;
-        $res['department_id'] = $request->department_id;
-        $res['departments'] = $departments;
+        // $res['employee_id'] = $employee_id;
+        // $res['selEmp'] = $request->emp_id;
+        // $res['department_id'] = $request->department_id;
+        // $res['departments'] = $departments;
 
         //return view('HRMS.hrms_attendance_report.early_going_report', compact('employees', 'employee_id', 'date_formatted', 'hrmsList', 'type', 'departments', 'department_id'));
         return is_mobile($type, "HRMS/hrms_attendance_report/early_going_report", $res, "view");
@@ -1722,7 +1728,7 @@ class HrmsController extends Controller
 
     public function departmentAttendanceReport(Request $request)
     {
-        
+       
         $type = $request->type;
         $res = session()->get('data');
         $sub_institute_id = session()->get('sub_institute_id');
@@ -1766,13 +1772,13 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
-        
+       
+       
         if (in_array($type, ['API', 'JSON'])) {
             $sub_institute_id = $request->sub_institute_id;
         }
         $res['selDepartments'] = $department_ids = $request->department_id;
-        $res['emp_id'] = $emp_id = $request->emp_id;
+        $res['emp_id'] = $emp_id = $request->emp_id ?? $request->employee_id;
         $res['selectedFromDate'] = $from_date = $request->from_date;
         $res['selectedToDate'] = $to_date = $request->to_date;
 
@@ -1803,15 +1809,15 @@ class HrmsController extends Controller
         $newEmpData = [];
         foreach ($empData as $key => $value) {
             $newEmpData[] = $value;
-            // add half days 
+            // add half days
             $ab = $value->ab_days ?? 0;
             $totAb = $value->total_ab_day ?? 0;
             $getHlafDays = DB::table('hrms_emp_leaves')->whereRaw('id in (' . $ab . ')')->where('day_type', '0.5')->count();
             $newEmpData[$key]->half_day = $getHlafDays ?? 0;
-            // add late comes 
+            // add late comes
             $wkDay = $value->worked_days ?? 0;
             $getPunchTime = DB::table('hrms_attendances')->whereRaw('id in (' . $wkDay . ')')->get()->toArray();
-            // get user working time 
+            // get user working time
             $late = 0;
             $lateArr = $punchDates = [];
             foreach ($getPunchTime as $punchkey => $punchvalue) {
@@ -1838,7 +1844,7 @@ class HrmsController extends Controller
             $newEmpData[$key]->late = $late;
             $newEmpData[$key]->lateAtt = $lateArr;
 
-            // week off days sunday 
+            // week off days sunday
             $startDate = Carbon::parse($from_date);
             $endDate = Carbon::parse($to_date);
 
@@ -1916,8 +1922,8 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
-        
+       
+       
     }
 
     public function getPresentDays(Request $request)
@@ -1951,7 +1957,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
     }
 
     public function getAbsentDays(Request $request)
@@ -1985,7 +1991,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
     }
 
     public function getHalfDays(Request $request)
@@ -2019,7 +2025,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
     }
     // multi Employee Attendance Report
     public function multipleAttendanceReportIndex(Request $request)
@@ -2053,7 +2059,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
     }
 
     public function multipleAttendanceReportCreate(Request $request)
@@ -2087,7 +2093,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
 
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
@@ -2398,8 +2404,8 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
-        
+       
+       
 
         $get_hrms_holidays = DB::table('hrms_holidays')
             ->where('sub_institute_id', $sub_institute_id)
@@ -2432,7 +2438,7 @@ class HrmsController extends Controller
                 $leaveDates = date("Y-m-d", strtotime("+1 day", strtotime($leaveDates)));
             }
         }
-        // echo "<pre>";print_r($leaveUsers);exit; 
+        // echo "<pre>";print_r($leaveUsers);exit;
         $selDates = $selDays = [];
         foreach ($getUsers as $key => $value) {
             $attData = [];
@@ -2465,7 +2471,7 @@ class HrmsController extends Controller
                             $attData[$value['id']][$from_date_new] = "LT";
                         }
                     }
-                    // early going 
+                    // early going
                     if ($userPunchOut > $attPunchOut && $attPunchOut != null && $attPunchOut != '') {
                         $attData[$value['id']][$from_date_new] = "ED";
                     }
@@ -2533,7 +2539,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
     }
 
     public function update(Request $request, $id)
@@ -2567,7 +2573,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
     }
 
     public function destroy(Request $request, $id)
@@ -2601,7 +2607,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
     }
 
     public function updateUserAttendance(Request $request)
@@ -2635,7 +2641,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+       
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
