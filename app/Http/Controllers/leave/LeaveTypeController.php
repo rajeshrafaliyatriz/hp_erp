@@ -106,24 +106,53 @@ class LeaveTypeController extends Controller
             }
         }
         
-        try {
-            $objLeave = HrmsLeaveType::find($request->leave_id) ?? HrmsLeaveType::firstOrNew(['leave_type' => $request->leave_type_name, 'sub_institute_id' => $sub_institute_id]);
-            $objLeave->leave_type_id = $objLeave->leave_type_id ?? $objLeave->setLeaveTypeId($sub_institute_id);
-            $objLeave->leave_type = $request->leave_type_name;
-            $objLeave->sort_order = $request->sort_order;
-            $objLeave->status = $request->status;
-            $objLeave->sub_institute_id = $sub_institute_id;
-            $objLeave->created_by = $userId;
-            $objLeave->created_at = now();
-            $objLeave->deleted_at = null;
+           $leaveId   = $request->leave_id;
+            $leaveTypeId = $request->leave_type_id;
+            $leaveType = $request->leave_type_name;
+            $sortOrder = $request->sort_order;
+            $status    = $request->status;
 
-            if ($objLeave->save()) {
-                return response()->json(['message' => 'Leave type added successfully !!'], 200);
-            }
-            return response()->json(['message' => 'Something went wrong !!'], 500);
-        } catch (Exception $e) {
-            return response()->json($e->getMessage());
+            // check if record exists
+            $existingLeave = DB::table('hrms_leave_types')
+                ->where(function ($q) use ($leaveId, $leaveType, $sub_institute_id) {
+                    if (!empty($leaveId)) {
+                        $q->where('id', $leaveId);
+                    } else {
+                        $q->where('leave_type', $leaveType)
+                        ->where('sub_institute_id', $sub_institute_id);
+                    }
+                })
+                ->first();
+
+        $data = [
+            'leave_type_id'     => $leaveTypeId,
+            'leave_type'     => $leaveType,
+            'sort_order'     => $sortOrder,
+            'status'         => $status,
+            'sub_institute_id' => $sub_institute_id,
+            'created_by'     => $userId,
+            'created_at'     => now(),
+            'deleted_at'     => null,
+        ];
+
+        // If record exists → update, else insert
+        if ($existingLeave) {
+            DB::table('hrms_leave_types')
+                ->where('id', $existingLeave->id)
+                ->update($data);
+
+            $message = 'Leave type updated successfully !!';
+        } else {
+            // Generate leave_type_id if needed
+
+            DB::table('hrms_leave_types')->insert($data);
+
+            $message = 'Leave type added successfully !!';
         }
+
+        return response()->json(['message' => $message], 200);
+
+        
     }
 
     /**
@@ -203,15 +232,13 @@ class LeaveTypeController extends Controller
                 return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
             }
         }
-        try {
+       
             // HrmsLeaveType::find($id)->delete();
-            HrmsLeaveType::find($id)->update([
+            HrmsLeaveType::where('id',$id)->update([
                 'deleted_by' => $userId,
                 'deleted_at' => now(),
             ]);
             return response()->json(['message' => 'Leave type deleted successfully !!'], 200);
-        } catch (Exception $e) {
-            return response()->json($e->getMessage(), 500);
-        }
+       
     }
 }
