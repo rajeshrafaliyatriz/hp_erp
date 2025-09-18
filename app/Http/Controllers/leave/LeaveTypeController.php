@@ -8,6 +8,9 @@ use Exception;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
 use function App\Helpers\is_mobile;
+use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class LeaveTypeController extends Controller
 {
@@ -18,34 +21,37 @@ class LeaveTypeController extends Controller
      */
     public function index(Request $request)
     {
-        try {
-            $type = $request->type;
-            $sub_institute_id = session()->get('sub_institute_id');
-            $data = HrmsLeaveType::where('sub_institute_id',$sub_institute_id)->latest()->get();
-            
-            if ($request->ajax()) {
-               return DataTables::of($data)
-                    ->addIndexColumn()
-                    ->addColumn('status', function ($row) {
-                        return $row->status == 1 ? 'active' : 'inactive';
-                    })
-                    ->addColumn('action', function ($row) {
-                        $actionBtn = '<a href="javascript:void(0)" class="edit btn btn-success btn-edit btn-sm" data-id="' . $row->id . '">Edit</a> <a href="javascript:void(0)" class="delete btn btn-danger btn-delete btn-sm"data-id="' . $row->id . '">Delete</a>';
-                        return $actionBtn;
-                    })
-                    ->rawColumns(['action'])
-                    ->make(true);
-            }
-            // return view('leave.leave_type_master');
-            $maxSortOrder=HrmsLeaveType::where('sub_institute_id',$sub_institute_id)->max('sort_order');
-            $res['alldata'] = $data;
-            $res['maxSortOrder'] = ($maxSortOrder+1);
-            // echo "<pre>";print_r($res['maxSortOrder']);exit;
-            return is_mobile($type, "leave.leave_type_master", $res, "view");
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+        $userId = session()->get('user_id');
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
 
-        } catch (Exception $e) {
-            return response()->json($e->getMessage(), 500);
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+            $userId = $request->get('user_id');
+
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required|numeric',
+            ]);
+
+            if ($validator->fails()) {
+                $res['status'] = 0;
+                $res['message'] = $validator->messages()->first();
+                return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
+            }
         }
+        $res['LeaveTypeLists'] = HrmsLeaveType::where('sub_isntitute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        return response()->json($res);
     }
 
     /**
@@ -69,7 +75,9 @@ class LeaveTypeController extends Controller
         $request->validate([
             'leave_type_name' => 'required',
         ]);
+        $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
+        $userId = session()->get('user_id');
         if ($type == "API") {
             $token = $request->input('token');  // get token from input field 'token'
 
@@ -85,20 +93,10 @@ class LeaveTypeController extends Controller
             }
             $sub_institute_id = $request->get('sub_institute_id');
             $userId = $request->get('user_id');
-            $punchin_time = $request->input('punchin_time');
-            $address_in = $request->input('address_in');
-            // $photo_in = $request->input('photo_in');
-
-            $photo_in = null;
-
-            // echo "<pre>";print_r($request->all());exit;
 
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required|numeric',
                 'user_id' => 'required|numeric',
-                'punchin_time' => 'required|date_format:Y-m-d H:i:s',
-                'address_in' => 'required',
-                // 'photo_in' => 'required',
             ]);
 
             if ($validator->fails()) {
@@ -106,23 +104,27 @@ class LeaveTypeController extends Controller
                 $res['message'] = $validator->messages()->first();
                 return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
             }
+        }
+        
         try {
-            $objLeave = HrmsLeaveType::find($request->leave_id) ?? HrmsLeaveType::firstOrNew(['leave_type' => $request->leave_type_name,'sub_institute_id'=>$sub_institute_id]);
+            $objLeave = HrmsLeaveType::find($request->leave_id) ?? HrmsLeaveType::firstOrNew(['leave_type' => $request->leave_type_name, 'sub_institute_id' => $sub_institute_id]);
             $objLeave->leave_type_id = $objLeave->leave_type_id ?? $objLeave->setLeaveTypeId($sub_institute_id);
             $objLeave->leave_type = $request->leave_type_name;
             $objLeave->sort_order = $request->sort_order;
             $objLeave->status = $request->status;
             $objLeave->sub_institute_id = $sub_institute_id;
+            $objLeave->created_by = $userId;
+            $objLeave->created_at = now();
+            $objLeave->deleted_at = null;
+
             if ($objLeave->save()) {
                 return response()->json(['message' => 'Leave type added successfully !!'], 200);
-              
             }
             return response()->json(['message' => 'Something went wrong !!'], 500);
         } catch (Exception $e) {
             return response()->json($e->getMessage());
         }
     }
-}
 
     /**
      * Display the specified resource.
@@ -169,10 +171,44 @@ class LeaveTypeController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Request $request,$id)
     {
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+        $userId = session()->get('user_id');
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+            $userId = $request->get('user_id');
+
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required|numeric',
+                'user_id' => 'required|numeric',
+            ]);
+
+            if ($validator->fails()) {
+                $res['status'] = 0;
+                $res['message'] = $validator->messages()->first();
+                return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
+            }
+        }
         try {
-            HrmsLeaveType::find($id)->delete();
+            // HrmsLeaveType::find($id)->delete();
+            HrmsLeaveType::find($id)->update([
+                'deleted_by' => $userId,
+                'deleted_at' => now(),
+            ]);
             return response()->json(['message' => 'Leave type deleted successfully !!'], 200);
         } catch (Exception $e) {
             return response()->json($e->getMessage(), 500);
