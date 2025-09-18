@@ -70,6 +70,42 @@ class LeaveTypeController extends Controller
             'leave_type_name' => 'required',
         ]);
         $sub_institute_id = session()->get('sub_institute_id');
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+            $userId = $request->get('user_id');
+            $punchin_time = $request->input('punchin_time');
+            $address_in = $request->input('address_in');
+            // $photo_in = $request->input('photo_in');
+
+            $photo_in = null;
+
+            // echo "<pre>";print_r($request->all());exit;
+
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required|numeric',
+                'user_id' => 'required|numeric',
+                'punchin_time' => 'required|date_format:Y-m-d H:i:s',
+                'address_in' => 'required',
+                // 'photo_in' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                $res['status'] = 0;
+                $res['message'] = $validator->messages()->first();
+                return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
+            }
         try {
             $objLeave = HrmsLeaveType::find($request->leave_id) ?? HrmsLeaveType::firstOrNew(['leave_type' => $request->leave_type_name,'sub_institute_id'=>$sub_institute_id]);
             $objLeave->leave_type_id = $objLeave->leave_type_id ?? $objLeave->setLeaveTypeId($sub_institute_id);
@@ -86,6 +122,7 @@ class LeaveTypeController extends Controller
             return response()->json($e->getMessage());
         }
     }
+}
 
     /**
      * Display the specified resource.
