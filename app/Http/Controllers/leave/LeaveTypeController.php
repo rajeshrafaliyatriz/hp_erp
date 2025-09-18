@@ -50,7 +50,7 @@ class LeaveTypeController extends Controller
                 return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
             }
         }
-        $res['LeaveTypeLists'] = HrmsLeaveType::where('sub_isntitute_id',$sub_institute_id)->whereNull('deleted_at')->get();
+        $res['LeaveTypeLists'] = HrmsLeaveType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
         return response()->json($res);
     }
 
