@@ -4,7 +4,7 @@ namespace App\Http\Controllers\leave;
 
 use App\Http\Controllers\Controller;
 use App\Imports\LeaveImport;
-use App\Models\HrmsDepartment;
+use App\Models\HRMS\hrmsDepartmentModel;
 use App\Models\HrmsEmpLeave;
 use App\Models\HrmsLeaveType;
 use App\Models\user\tbluserModel;
@@ -14,12 +14,12 @@ use Yajra\DataTables\Facades\DataTables;
 use function App\Helpers\is_mobile;
 use DB;
 use Carbon\Carbon;
-use GenTux\Jwt\GetsJwtToken;
+// use GenTux\Jwt\GetsJwtToken;
 use App\Traits\Helpers;
 
 class ApplyLeaveController extends Controller
 {
-    use GetsJwtToken;
+    // use GetsJwtToken;
 
     /**
      * Display a listing of the resource.
@@ -41,7 +41,7 @@ class ApplyLeaveController extends Controller
 
         try {
             $res = session()->get('data');
-            $res['departments'] = HrmsDepartment::where('sub_institute_id',$sub_institute_id)->where('status', 1)->pluck('department', 'id');
+            $res['departments'] = hrmsDepartmentModel::where('sub_institute_id',$sub_institute_id)->where('status', 1)->pluck('department', 'id');
             $res['users'] = tbluserModel::where('sub_institute_id', $sub_institute_id)->where('status',1)->get();   // 23-04-24 by uma
             // echo("<pre>");print_r(session()->all());exit;
             $res['leave_types'] = HrmsLeaveType::where('sub_institute_id', $sub_institute_id)->where('status',1)->orderBy('sort_order')->get();
@@ -87,7 +87,7 @@ class ApplyLeaveController extends Controller
         $sub_institute_id = session()->get('sub_institute_id');
 
         try {
-            $departments = HrmsDepartment::where('status', true)->pluck('department', 'id');
+            $departments = hrmsDepartmentModel::where('status', true)->pluck('department', 'id');
             $users = tbluserModel::where('sub_institute_id', $sub_institute_id)->where('status',1)->get();  // 23-04-24 by uma
             $leave_types = HrmsLeaveType::where('sub_institute_id', $sub_institute_id)->where('status',1)->orderBy('sort_order')->get();
 

@@ -17,13 +17,17 @@ use App\Models\DynamicModel;
 use App\Models\school_setup\subjectModel;
 use App\Models\school_setup\standardModel;
 use App\Models\school_setup\academic_sectionModel;
-use Illuminate\Support\Facades\Schema; // Import the Schema facade
-use Illuminate\Database\Schema\Blueprint;
-use GuzzleHttp\Client;
+use App\Http\Controllers\school_setup\masterSetupController;
+use App\Http\Controllers\lms\questionmasterController;
+use App\Http\Controllers\lms\contentController;
+use App\Http\Controllers\lms\chapterController;
 use PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 class AJAXController extends Controller
 {
@@ -382,22 +386,16 @@ class AJAXController extends Controller
                 $checkstd = '1=1';
             }
             if ($checkstd && $classTeacherStdArr != "" && !in_array($module_name, $module_array)) {
-                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
-                    $query->where('id', $getClass->standard_id);
-                } else {
-                    $query->whereIn('id', $classTeacherStdArr);
-                }
+
+                $query->whereIn('id', $classTeacherStdArr);
             }
             //END Check for class teacher assigned standards
 
             //START Check for subject teacher assigned
             $subjectTeacherStdArr = session()->get('subjectTeacherStdArr');
             if ($subjectTeacherStdArr != "" && ($classTeacherStdArr == "" || in_array($module_name, $module_array))) {
-                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
-                    $query->where('id', $getClass->standard_id);
-                } else {
-                    $query->whereIn('id', $subjectTeacherStdArr);
-                }
+
+                $query->whereIn('id', $subjectTeacherStdArr);
             }
             //END Check for subject teacher assigned
             // for student 01-01-2025 start
@@ -418,22 +416,16 @@ class AJAXController extends Controller
                 $checkstd = '1=1';
             }
             if ($checkstd && $classTeacherStdArr != "" && !in_array($module_name, $module_array)) {
-                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher") {
-                    $query->where('id', $getClass->standard_id);
-                } else {
-                    $query->whereIn('id', $classTeacherStdArr);
-                }
+
+                $query->whereIn('id', $classTeacherStdArr);
             }
             //END Check for class teacher assigned standards
 
             //START Check for subject teacher assigned
             $subjectTeacherStdArr = session()->get('subjectTeacherStdArr');
             if ($subjectTeacherStdArr != "" && ($classTeacherStdArr == "" || in_array($module_name, $module_array))) {
-                if (in_array(session()->get('right_menu_id'), $menu_ids) && session()->get('user_profile_name') == "Teacher" && isset($getClass->standard_id)) {
-                    $query->where('id', $getClass->standard_id);
-                } else {
-                    $query->whereIn('id', $subjectTeacherStdArr);
-                }
+
+                $query->whereIn('id', $subjectTeacherStdArr);
             }
 
             // for student 01-01-2025 start
@@ -772,7 +764,7 @@ class AJAXController extends Controller
         $data = DB::table('s_skill_knowledge_ability as s')
             ->join('s_users_skills as u', function ($join) {
                 $join->on('u.id', '=', 's.skill_id')
-                     ->on('u.sub_institute_id', '=', 's.sub_institute_id');
+                    ->on('u.sub_institute_id', '=', 's.sub_institute_id');
             })
             ->join('s_user_skill_jobrole as us', function ($join) {
                 $join->on('us.skill', '=', 'u.title')
@@ -884,9 +876,33 @@ class AJAXController extends Controller
 
     public function geminiChat(Request $request)
     {
-        $apiKey = env('GEMINI_API_KEY'); // put your key in .env as GEMINI_API_KEY=xxxx
+        // get API key from database; AIzaSyBPtCAFtNtyfkaiBrE_jr3BXCCvUmptBfY
+        $apiKey = [];
+        $todayUsedKeys = DB::table('ai_daily_used_api')->where(['api_name' => 'gemini', 'date' => date('Y-m-d')])->whereNull('sub_institute_id')->get();
+        if (count($todayUsedKeys) === 0) {
+            $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1])->whereNull('sub_institute_id')->first();
+            if ($firstGeminiKey) {
+                $apiKey[] = $firstGeminiKey->key;
+                $insert = DB::table('ai_daily_used_api')->insert(['api_name' => 'gemini', 'key' => $firstGeminiKey->key, 'parent_id' => $firstGeminiKey->id, 'date' => date('Y-m-d'), 'count' => 1]);
+            }
+        } else {
+            foreach ($todayUsedKeys as $key => $value) {
+                $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1, 'id' => $value->parent_id])->whereNull('sub_institute_id')->first();
+                if ($value->count < $firstGeminiKey->limit) {
+                    $apiKey[] = $value->key;
+                    $update = DB::table('ai_daily_used_api')->where(['id' => $value->id])->update(['count' => $value->count + 1]);
+                    break;
+                }else{
+                    $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1])->where('id','!=', $value->parent_id)->whereNull('sub_institute_id')->first();
+                    $apiKey[] = $firstGeminiKey->key;
+                    $insert = DB::table('ai_daily_used_api')->insert(['api_name' => 'gemini', 'key' => $firstGeminiKey->key, 'parent_id' => $firstGeminiKey->id, 'date' => date('Y-m-d'), 'count' => 1]); 
+                    break;
+                }
+            }
+        }
+        $geminiKey = isset($apiKey[0]) ? $apiKey[0] : '';
         $prompt = $request->input('prompt');
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyBPtCAFtNtyfkaiBrE_jr3BXCCvUmptBfY";
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" . $geminiKey;
 
         $response = Http::withHeaders([
             'Content-Type' => 'application/json',
@@ -913,7 +929,484 @@ class AJAXController extends Controller
             // Success - now you can use $jsonData as array
             return response()->json($jsonData);
         } else {
-            return response()->json(['error' => $text, 'raw' => $response]);
+            return response()->json(['error' => $text, 'raw' => $response, 'Key' => $geminiKey]);
+        }
+    }
+
+    public function AICourseGeneration(Request $request)
+    {
+        // Get request variables
+        $sub_institute_id = $request->sub_institute_id;
+        $token = $request->token;
+        $user_id = $request->user_id;
+        $user_profile_name = $request->user_profile_name;
+        $syear = $request->syear;
+        $industry = $request->industry;
+        $skill_department = $request->department;
+        $skill_category = $request->skill_category;
+        $skill_sub_category = $request->skill_sub_category;
+        $skill_micro_category = $request->skill_micro_category;
+        $skill_name = $request->skill_name;
+        $skill_description = $request->skill_description;
+
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        // Find the token in the database
+        $accessToken = PersonalAccessToken::findToken($token);
+
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'sub_institute_id' => 'required',
+            'user_id' => 'required',
+            'user_profile_name' => 'required',
+            'syear' => 'required',
+            'industry' => 'required',
+            'department' => 'required',
+            'skill_category' => 'required',
+            'skill_sub_category' => 'required',
+            'skill_micro_category' => 'required',
+            'skill_name' => 'required',
+            'skill_description' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+        }
+
+        $getJobroles = DB::table('s_user_skill_jobrole')->where(['sub_institute_id' => $sub_institute_id, 'skill' => $skill_name])->whereNull('deleted_at')->groupBy('jobrole')->get();
+        // return $getJobroles;
+        $jobroleLists = $proficiencyLists = [];
+        foreach ($getJobroles as $key => $value) {
+            $jobroleLists[] = $value->jobrole;
+            $proficiencyLists[] = $value->proficiency_level;
+        }
+        $jobroleData = json_encode($jobroleLists);
+        $proficencyData = json_encode($proficiencyLists);
+        // check grade and add grade
+        $checkGrade = DB::table('academic_section')->where(['sub_institute_id' => $sub_institute_id, 'title' => $industry])->whereNull('deleted_at')->get();
+        if (count($checkGrade) > 0) {
+            $grade = $checkGrade[0]->id;
+        } else {
+            $gradeInsert = DB::table('academic_section')->insertGetId([
+                'sub_institute_id' => $sub_institute_id,
+                'title' => $industry,
+                'short_name' => $industry,
+                'sort_order' => '1',
+                'created_by' => $user_id,
+                'created_at' => now()
+            ]);
+            $grade = $gradeInsert;
+        }
+
+        $checkStandard = DB::table('standard')->where(['sub_institute_id' => $sub_institute_id, 'grade_id' => $grade, 'name' => $skill_department])->whereNull('deleted_at')->get();
+        if (count($checkStandard) > 0) {
+            $standard = $checkStandard[0]->id;
+        } else {
+            $standardInsert = DB::table('standard')->insertGetId([
+                'sub_institute_id' => $sub_institute_id,
+                'grade_id' => $grade,
+                'name' => $skill_department,
+                'short_name' => $skill_department,
+                'sort_order' => '1',
+                'created_by' => $user_id,
+                'created_at' => now()
+            ]);
+            $standard = $standardInsert;
+        }
+        $mappingTypes = DB::table('lms_mapping_type')->where('id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
+        $mappingValues = DB::table('lms_mapping_type')->where('parent_id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
+        $lms_content_category = DB::table('lms_content_category')->where('status', 2)->whereNull('deleted_at')->get()->pluck('category_name');
+        $course_category = DB::table('lms_content_category')->where('status', 1)->whereNull('deleted_at')->get()->pluck('category_name');
+        // return $mappingTypes;
+        $prompt = "I have Skills Name: '" . $skill_name . "' of 
+                    Industry: " . $industry . "
+                    I have Skills Description: " . $skill_description . "
+                    I have Skills Department: " . $skill_department . "
+                    I have Skills Category: " . $skill_category . "
+                    I have Skills Sub Category: " . $skill_sub_category;
+        if ($jobroleData == true) {
+            $prompt .= "
+                    I have Skills Jobrole: " . $jobroleData . "
+                    I have Skills Proficiency Level: " . $proficencyData;
+        }
+        $prompt .= "1.Understand the depth, complexity, and learning needs of the given skill.
+                    2.Break the skill into logical continuous chapters, each representing a key theme.
+                    3.For each chapter, create continuous content items with:
+                        title
+                        description
+                        content_category any 1 from (" . $lms_content_category . ")
+                        mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                        mapping_value (Easy/Medium/Hard)
+                    4. Create question items with:  
+                        question_title
+                        description
+                        mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                        mapping_value (Easy/Medium/Hard)
+                        reason (why above mapping_value selected)
+                    5. For each question item, create 4 answer item with:
+                        answer
+                        correct_answer (true/false)
+                        feedback
+                    6.Output Expectation:
+                    Generate and return a structured JSON with the following fields:
+                        - course_name
+                        - short_name
+                        - course_category any 1 of (" . $course_category . ")
+                        - course_code
+                        - course_type
+                        - short_name
+                        - chapters: list of chapters with:
+                           -- chapter_name
+                           -- chapter_description
+                           -- contents: list of content items with:
+                                --- content_title
+                                --- content_description
+                                --- content_html (Make Simple html[make label's bold and bg-color proper] with content title,content description,skill, skill description,skill category, skill sub category ,jobrole, jobrole description, list of tasks realted to content)
+                                --- content_category any 1 from (" . $lms_content_category . ")
+                                --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                                --- mapping_value (easy/medium/hard)
+                            -- questions: list of question items with (always MCQ question):
+                                --- question_title
+                                --- description
+                                --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                                --- mapping_value (easy/medium/hard)
+                                --- reason (why this mapping_value selected)
+                            -- answers: list of 4 corresponding answer items with only one correct answer:
+                                --- answer
+                                --- correct_answer (true as a 1/false as a 0)
+                                --- feedback
+                    Rules:
+                    Align everything tightly with the skill context fields.
+                    Use concise, engaging, and adult-learner-appropriate language.
+                    Do not add explanations — only output the structured JSON.
+                    provide me 3 course with atleast 3 content realted this skills > course > chapter. in JSON array";
+        $request->merge(['prompt' => $prompt]);
+        $gemeniJson = $this->geminiChat($request);
+        $gemeniData = json_decode(json_encode($gemeniJson->original), true);
+        // return $gemeniData;
+        $i = 0;
+        if (!isset($gemeniData['error'])) {
+            foreach ($gemeniData as $courseKey => $courseData) {
+
+                // Create course
+                $courseController = new masterSetupController;
+                $course_request = new Request([
+                    'type' => 'API',
+                    'sub_institute_id' => $sub_institute_id,
+                    'user_id' => $user_id,
+                    'token' => $token,
+                    'formType' => 'course',
+                    'subject_id' => 0,
+                    'standard_id' => $standard,
+                    'allow_grades' => 'Yes',
+                    'allow_content' => 'Yes',
+                    'sort_order' => '1',
+                    'elective_subject' => 'No',
+                    'add_content' => 'chapterwise',
+                    'display_name' => $courseData['course_name'] ?? '-',
+                    'display_image' => null,
+                    'subject_category' => $courseData['course_category'] ?? '-',
+                    'subject_code' => $courseData['course_code'] ?? '-',
+                    'subject_type' => $courseData['course_type'] ?? '-',
+                    'short_name' => $courseData['short_name'] ?? '-',
+                    'status' => 1,
+                ]);
+
+                $courseStore = $courseController->store($course_request);
+
+                $courseId = $courseStore->original['course_id'];
+
+                // Process chapters if they exist
+                if (isset($courseData['chapters'])) {
+                    foreach ($courseData['chapters'] as $chapterKey => $chapterData) {
+                        // Create chapter
+                        $moduleController = new chapterController;
+                        $chapter_request = new Request([
+                            'type' => 'API',
+                            'sub_institute_id' => $sub_institute_id,
+                            'user_id' => $user_id,
+                            'user_profile_name' => $user_profile_name,
+                            'token' => $token,
+                            'syear' => $syear,
+                            'grade' => $grade,
+                            'standard' => $standard,
+                            'subject' => $courseId,
+                            'chapter_name' => [$chapterData['chapter_name'] ?? '-'],
+                            'chapter_desc' => [$chapterData['chapter_description'] ?? '-'],
+                            'availability' => [1],
+                            'show_hide' => [1],
+                            'sort_order' => [1]
+                        ]);
+
+                        $chapterStore = $moduleController->store($chapter_request);
+                        $chapterId = $chapterStore->original['chapter_id'];
+                        // Get related data
+                        $getstandard = DB::table('standard')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        $getcourse = DB::table('sub_std_map')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $courseId])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        $getChapter = DB::table('chapter_master')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapterId])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        // echo "<pre>";print_r($chapterData['contents']);exit;
+                        // Process contents if they exist
+                        if (isset($chapterData['contents'])) {
+                            foreach ($chapterData['contents'] as $contentKey => $contentData) {
+                                $content_html = $contentData['content_html'];
+                                // Convert HTML content to PDF using DomPDF
+                                $options = new Options();
+                                $options->set('isHtml5ParserEnabled', true);
+                                $options->set('isRemoteEnabled', true);
+
+                                // Generate PDF
+                                $pdf = new Dompdf($options);
+                                $pdf->loadHtml($content_html);
+                                $pdf->setPaper('A4', 'portrait');
+                                $pdf->render();
+                                $pdfContent = $pdf->output();
+                                $newfilename = date('Ymd') . '-' . time() . '.pdf';
+                                // Store directly in DigitalOcean Spaces
+                                Storage::disk('digitalocean')->put(
+                                    "public/hp_lms_content_file/{$newfilename}",
+                                    $pdfContent,
+                                    'public' // visibility
+                                );
+                                // echo "<pre>";print_r($newfilename);exit;
+
+                                $contentController = new contentController;
+                                $content_request = new Request([
+                                    'type' => 'API',
+                                    'sub_institute_id' => $sub_institute_id,
+                                    'user_id' => $user_id,
+                                    'syear' => $syear,
+                                    'token' => $token,
+                                    'toggle_basic_advanced' => 'Advanced',
+                                    'hid_standard_name' => $getstandard->name ?? '-',
+                                    'hid_subject_name' => $getcourse->display_name ?? '-',
+                                    'hid_chapter_name' => $getChapter->chapter_name ?? '-',
+                                    'hid_chapter_id' => $chapterId,
+                                    'title' => $contentData['content_title'] ?? '-',
+                                    'description' => $contentData['content_description'] ?? '-',
+                                    'content_category' => $contentData['content_category'] ?? '-',
+                                    'contentType' => 'link',
+                                    'link' => 'https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/hp_lms_content_file/' . $newfilename,
+                                    'cross_curriculum_grade_topic' => $newfilename,
+                                    'mapping_type' => isset($contentData['mapping_type']) ? $mappingTypes[$contentData['mapping_type']] ?? 0 : 0,
+                                    'mapping_value' => isset($contentData['mapping_value']) ? $mappingValues[$contentData['mapping_value']] ?? 0 : 0,
+                                    'filename' => 'content_' . time() . '.pdf',
+                                    'show_hide' => 1
+                                ]);
+
+                                $contentStore = $contentController->store($content_request);
+                                // echo "<pre>";print_r($contentStore);exit;
+                            }
+                        }
+
+                        // Process questions if they exist
+                        if (isset($chapterData['questions'])) {
+                            foreach ($chapterData['questions'] as $questionData) {
+
+                                $questionController = new questionmasterController;
+                                $question_request = new Request([
+                                    'type' => 'API',
+                                    'sub_institute_id' => $sub_institute_id,
+                                    'user_id' => $user_id,
+                                    'token' => $token,
+                                    'grade_id' => $grade,
+                                    'standard_id' => $standard,
+                                    'subject_id' => $courseId,
+                                    'chapter_id' => $chapterId,
+                                    'question_title' => $questionData['question_title'] ?? '-',
+                                    'description' => $questionData['description'] ?? '-',
+                                    'mapping_type' => isset($questionData['mapping_type']) ? array($mappingTypes[$questionData['mapping_type']] ?? 0) : array(),
+                                    'mapping_value' => isset($questionData['mapping_value']) ? array($mappingValues[$questionData['mapping_value']] ?? 0) : array(),
+                                    'reasons' => array($questionData['reason'] ?? '-'),
+                                    'question_type_id' => 1,
+                                    'points' => 1,
+                                    'multiple_answer' => 1,
+                                    'status' => 1,
+                                    'options' => [
+                                        "NEW" => array_map(function ($answer) {
+                                            return $answer['answer'];
+                                        }, $questionData['answers'] ?? [])
+                                    ],
+                                    'correct_answer' => isset($questionData['answers']) ?
+                                        [array_search(true, array_column($questionData['answers'], 'correct_answer')) => "1"] :
+                                        [0 => "1"]
+                                ]);
+
+                                $questionStore = $questionController->store($question_request);
+                                // echo "<pre>";print_r($questionStore);exit;
+                            }
+                        }
+                    }
+                }
+                $i++;
+            }
+        }
+        $res['status_code'] = 0;
+        $res['message'] = 'Failed Find Data from AI';
+        if ($i > 0) {
+            $res['status_code'] = 1;
+            $res['message'] = 'Successfully Find Data from AI and Added';
+        }
+        $res['geminiData'] = $gemeniData;
+        return response()->json($res);
+    }
+
+    public function GammaContentGeneration(Request $request)
+    {
+        $industry   = $request->input('industry');
+        $department = $request->input('department');
+        $jobRole    = $request->input('jobrole');
+        $skill      = $request->input('skill');
+        $course     = $request->input('course');
+        $title      = $request->input('content_title');
+
+        $prompt = "Create a 10-slide professional presentation focused on upskilling employees in the {$industry} industry, within the Department: {$department}, specifically for the Job Role: {$jobRole}, emphasizing the Skill: {$skill}, under the Course: {$course}, Content Title: {$title}; use a formal, instructional tone with consistent formatting and terminology throughout, structuring each slide with 3–5 concise bullet points under 70 words each, strictly following this order: 
+        Slide 1 – Title slide titled “Upskilling for Industry: {$industry}, Department: {$department}, Job Role: {$jobRole}, Skill: {$skill}” with subtitle/visual; 
+        Slide 2 – Overview and objectives outlining 2–3 key goals of upskilling Skill: {$skill}; 
+        Slide 3 – Importance of Skill: {$skill} in Industry: {$industry} explained in 3 clear bullets; 
+        Slide 4 – Relevance of Skill: {$skill} to Job Role: {$jobRole} detailing specific daily impacts; 
+        Slide 5 – {$skill}-specific challenges and learning needs listed as top 3 points; 
+        Slide 6 – Expected learning outcomes stating what employees will achieve post-training; 
+        Slide 7 – Stepwise skill-building framework for Skill: {$skill}; 
+        Slide 8 – Tools and technologies essential for developing Skill: {$skill} briefly described; 
+        Slide 9 – Assessment methods of Skill: {$skill} proposing 2–3 measurable evaluation approaches; 
+        Slide 10 – Summary recapping key insights and outlining actionable next steps; 
+        Verify full adherence to tone, structure, clarity, and formatting before completion.";
+
+        $payload = [
+            "inputText" => $prompt,
+            "textMode"   => "generate",
+            "format"     => "presentation",
+            "themeName"  => "Oasis",
+            "numCards"   => 10,
+            "cardSplit"  => "auto",
+            "additionalInstructions" => "All slides must use clear, consistent formatting. Ensure a formal instructional tone.",
+            "exportAs"   => "pdf",
+            "textOptions" => [
+                "amount"     => "extensive",
+                "tone"       => "formal, instructional",
+                "audience"   => "employees, L&D managers, HR",
+                "language"   => "en"
+            ],
+            "imageOptions" => [
+                "source" => "aiGenerated",
+                "model"  => "imagen-4-pro",
+                "style"  => "minimal, professional"
+            ],
+            "cardOptions" => [
+                "dimensions" => "fluid"
+            ],
+            "sharingOptions" => [
+                "workspaceAccess" => "view",
+                "externalAccess" => "noAccess"
+            ]
+        ];
+
+        // Replace <correct-endpoint> with whatever Gamma’s actual endpoint is per their docs
+        $endpoint = 'https://public-api.gamma.app/v0.2/generations';
+
+        try {
+            $response = Http::withHeaders([
+                'X-API-KEY'     => "sk-gamma-g2Ny0homDeDYfhRIFbrQeSugMnuZUw4x9WtwNi87dA",
+                'Accept'        => 'application/json',
+                'Content-Type'  => 'application/json'
+            ])->timeout(30)->post($endpoint, $payload);
+
+            if ($response->status() == 404) {
+
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Endpoint not found. Please verify: 1) Correct API endpoint 2) API key permissions 3) Beta feature access'
+                ], 404);
+            }
+
+            // Handle other error responses
+            if (!$response->successful()) {
+                $errorBody = $response->json() ?? $response->body();
+
+                return response()->json([
+                    'status' => false,
+                    'error' => 'Gamma API error: ' . json_encode($errorBody),
+                    'status_code' => $response->status()
+                ], $response->status());
+            }
+
+            // Process successful response
+            $result = $response->json();
+
+            // Get generation ID from result
+            $generationId = $result['generationId'];
+            $newfilename = '';
+            // Poll the status endpoint until complete
+            $maxAttempts = 5;
+            $attempt = 0;
+            $timeout = 10; // Timeout in seconds
+
+            do {
+                try {
+                    $statusResponse = Http::timeout($timeout)
+                        ->get("https://public-api.gamma.app/v0.2/generations/" . $generationId);
+
+                    if ($statusResponse->successful()) {
+                        $status = $statusResponse->json();
+
+                        if (isset($status['status']) && $status['status'] === 'completed') {
+                            // Get file from export URL with timeout
+                            $exportUrl = $status['exportUrl'];
+                            $file = Http::timeout($timeout)->get($exportUrl)->body();
+
+                            // Generate unique filename
+                            $newfilename = uniqid() . '.pdf';
+
+                            // Store file on DigitalOcean
+                            Storage::disk('digitalocean')->putFileAs(
+                                'public/hp_lms_content_file/',
+                                $file,
+                                $newfilename,
+                                'public'
+                            );
+
+                            break;
+                        }
+                    }
+                } catch (\Exception $e) {
+
+                    $attempt++;
+                    if ($attempt >= $maxAttempts) {
+                        throw new \Exception('Maximum retry attempts reached');
+                    }
+                }
+
+                sleep(2); // Wait 2 seconds before retrying
+
+            } while ($attempt < $maxAttempts);
+
+            $result['stored_filename'] = $newfilename;
+
+            return response()->json([
+                'status' => true,
+                'data' => $result,
+                'generationId' => $generationId,
+                'newfilename' => $newfilename,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Request failed: ' . $e->getMessage(),
+            ], 500);
         }
     }
 }

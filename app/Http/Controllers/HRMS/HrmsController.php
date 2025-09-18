@@ -1720,7 +1720,7 @@ class HrmsController extends Controller
         // $res['employee_id'] = $employee_id;
         // $res['selEmp'] = $request->emp_id;
         // $res['department_id'] = $request->department_id;
-        // $res['departments'] = $departments;
+        $res['departments'] = $departments;
 
         //return view('HRMS.hrms_attendance_report.early_going_report', compact('employees', 'employee_id', 'date_formatted', 'hrmsList', 'type', 'departments', 'department_id'));
         return is_mobile($type, "HRMS/hrms_attendance_report/early_going_report", $res, "view");
@@ -1792,7 +1792,7 @@ class HrmsController extends Controller
             })
             ->join('hrms_departments as hd', 'tu.department_id', '=', 'hd.id')
             ->leftJoin('hrms_holidays as hh', function ($join) use ($from_date, $to_date, $sub_institute_id) {
-                $join->on('hh.department', '=', 'hd.id')->where('hh.from_date', '>=', $from_date)->where('hh.to_date', '<=', $to_date)->where(['hh.sub_institute_id' => $sub_institute_id]);
+                $join->on('hh.department', '=', 'hd.id')->where('hh.from_date', '=>', $from_date)->where('hh.to_date', '=>', $to_date)->where(['hh.sub_institute_id' => $sub_institute_id]);
             })
             ->selectRaw('tu.id as user_id, tu.employee_no, CONCAT_WS(" ", COALESCE(tu.first_name, "-"), COALESCE(tu.middle_name, "-"),COALESCE(tu.last_name, "-")) as full_name, tu.sub_institute_id, IFNULL(upm.name, "-") as user_profile, hd.department, COUNT(DISTINCT ha.id) as total_att_day, GROUP_CONCAT(DISTINCT ha.id) as worked_days, COUNT(DISTINCT hel.id) as total_ab_day, GROUP_CONCAT(DISTINCT hel.id) as ab_days, COUNT(DISTINCT hh.id) as total_holidays, GROUP_CONCAT(DISTINCT hh.id) as holidays,GROUP_CONCAT(DISTINCT hd.id) as department_id')
             ->where('tu.sub_institute_id', $sub_institute_id)
@@ -1922,7 +1922,7 @@ class HrmsController extends Controller
        
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        
+        return  $request;
         
     }
 

@@ -9,6 +9,8 @@ use App\Http\Controllers\leave\leaveEncashmentController;
 use App\Http\Controllers\HRMS\departmentController;
 use App\Http\Controllers\HRMS\shiftMasterController;
 use App\Http\Controllers\HRMS\bulkUserShiftUpdateController;
+use App\Http\Controllers\leave\HolidayController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -23,9 +25,12 @@ use App\Http\Controllers\HRMS\bulkUserShiftUpdateController;
 Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], function () {
 
     Route::resource('add_department', departmentController::class);
+    Route::resource('holiday', HolidayController::class);
     route::get('department-Emp-Lists', [departmentController::class, 'departmentEmpLists'])->name('departmentEmpLists');
     route::get('sub-department-list', [departmentController::class, 'subDepartmentList'])->name('subDepartmentList');
     route::get('department-employee-list', [departmentController::class, 'departmentEmployeeList'])->name('departmentEmployeeList');
+    Route::get('holiday_weekdays', [HolidayController::class,'getWeekdays'])->name('holiday.weekdays');
+    Route::post('holiday_weekdays', [HolidayController::class,'storeWeekdays'])->name('holiday.weekdays');
 });
 
 

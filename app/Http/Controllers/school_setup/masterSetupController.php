@@ -148,9 +148,9 @@ class masterSetupController extends Controller
             }
         } else if ($formType == 'course') {
             // sub_std_mapModel
-            $checkExists = sub_std_mapModel::where('sub_institute_id', $sub_institute_id)->where('display_name', $insertData['display_name'])->where('standard_id', $insertData['standard_id'])->whereNull('deleted_at')->count();
-            if ($checkExists > 0) {
-                return response()->json(['status_code' => 0, 'message' => 'Subject Already Exists!'], 400);
+            $checkExists = sub_std_mapModel::where('sub_institute_id', $sub_institute_id)->where('display_name', $insertData['display_name'])->where('standard_id', $insertData['standard_id'])->whereNull('deleted_at')->first();
+            if (isset($checkExists->id)) {
+                    return response()->json(['status_code' => 0, 'message' => 'Subject Already Exists!','course_id'=>$checkExists->id], 400);
             }
 
             if($request->hasFile('display_image')){
@@ -172,11 +172,12 @@ class masterSetupController extends Controller
             $insertData['sub_institute_id'] = $sub_institute_id;
             $insertData['created_by'] = $user_id;
             $insertData['created_at'] = now();
-            $insert = sub_std_mapModel::insert($insertData);
+            $insert = sub_std_mapModel::insertGetId($insertData);
             if ($insert) {
                 $res = [
                     'status_code' => 1,
                     'message' => 'Subject Added Successfully',
+                    'course_id' => $insert,
                 ];
             }
         }

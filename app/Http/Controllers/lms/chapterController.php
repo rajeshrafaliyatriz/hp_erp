@@ -261,10 +261,11 @@ class chapterController extends Controller
 
     public function store(Request $request)
     {
+        // return $request->all();
         $type=$request->type;
-        $sub_institute_id = $request->session()->get('sub_institute_id');
-        $syear = $request->session()->get('syear');
-        $user_id = $request->session()->get('user_id');
+        $sub_institute_id = session()->get('sub_institute_id');
+        $syear = session()->get('syear');
+        $user_id = session()->get('user_id');
         if($type=="API"){
             $token = $request->input('token');  // get token from input field 'token'
 
@@ -300,7 +301,7 @@ class chapterController extends Controller
         $availability = $request->get('availability');
         $sort_order = $request->get('sort_order');
         $show_hide = $request->get('show_hide');
-        $i = 0;
+        $i = $insertGetId = 0;
         foreach ($chapter_name as $key => $val) {
             $show_hide_val = $show_hide[$key] ?? '';
             $availability_val = $availability[$key] ?? '';
@@ -323,8 +324,8 @@ class chapterController extends Controller
                 'created_by'        => $user_id,
             ];
 
-            $insert = chapterModel::insert($ch);
-            if($insert){
+            $insertGetId = chapterModel::insertGetId($ch);
+            if($insertGetId){
                 $i++;
             }
         }
@@ -333,6 +334,7 @@ class chapterController extends Controller
             "status_code" => 1,
             "message"     => "Chapters Added Successfully",
             "subject_id"  => $request->get('subject'),
+            'chapter_id' => $insertGetId,
         ];
 
         }else{
