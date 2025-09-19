@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 use Yajra\DataTables\Facades\DataTables;
 use function App\Helpers\is_mobile;
+use Laravel\Sanctum\PersonalAccessToken;
 use DB;
 use Carbon\Carbon;
 // use GenTux\Jwt\GetsJwtToken;
@@ -136,22 +137,24 @@ class ApplyLeaveController extends Controller
     public function store(Request $request)
     {
         $type = $request->input('type');
+        // return $type;
         $subInstituteId = $request->session()->get('sub_institute_id');
         $total_days = $request->get('total_days');
         $day_type= ($request->day_type=="full") ? 1 : "0.5";
         $user_id = session()->get('user_id');
       
         if($type=="API"){
-            try {
-                if (!$this->jwtToken()->validate()) {
-                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
-    
-                    return response()->json($response, 401);
-                }
-            } catch (\Exception $e) {
-                $response = ['status' => '2', 'message' => $e->getMessage(), 'data' => []];
-    
-                return response()->json($response, 401);
+            $token = $request->input('token');  // get token from input field 'token'
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
             }
 
             $subInstituteId=$request->sub_institute_id;
@@ -159,15 +162,20 @@ class ApplyLeaveController extends Controller
             $user_id = $request->get('user_id');
         }
         $type="API";
-        $request->validate([
-            'type_leave' => 'required',
-            'leave_type' => 'required|exists:hrms_leave_types,id',
-            'day_type' => 'required|in:full,half',
-            'from_date' => 'required|date',
-            'to_date' => 'required_if:day_type,full|date|nullable|after_or_equal:from_date',
-            'slot' => 'required_if:day_type,half',
-            'comment' => 'required',
-        ]);
+        // $request->validate([
+        //     'type_leave' => 'required',
+        //     'leave_type' => 'required|exists:hrms_leave_types,id',
+        //     'day_type' => 'required|in:full,half',
+        //     'from_date' => 'required|date',
+        //     'to_date' => 'required_if:day_type,full|date|nullable|after_or_equal:from_date',
+        //     'slot' => 'required_if:day_type,half',
+        //     'comment' => 'required',
+        // ]);
+        //  if ($validator->fails()) {
+        //         $res['status'] = 0;
+        //         $res['message'] = $validator->messages()->first();
+        //         return is_mobile($type, "hrms_inout_time.index", $res, "redirect");
+        //     }
 
         // HrmsEmpLeave::updateOrCreate([
         //         'user_id' => ($request->emp_id!=0) ? $request->emp_id : $user_id,
@@ -197,9 +205,10 @@ class ApplyLeaveController extends Controller
                 'user_id' => ($request->emp_id!=0) ? $request->emp_id : $user_id,
                 'from_date' => $request->from_date,
             ];
+            // return $inData;
 
             $where = [
-                'user_id' => ($request->emp_id!=0) ? $request->emp_id : $user_id,
+                'user_id' => ($request->employee_id!=0) ? $request->employee_id : $user_id,
                 'from_date' => $request->from_date,
             ];
 
@@ -207,9 +216,13 @@ class ApplyLeaveController extends Controller
             $checkExists = HrmsEmpLeave::where($where)->where('status','pending')->first();
             // echo "<pre>";print_r($checkExists);exit;
             if(!empty($checkExists)){
+                  $inData['updated_at']=now();
+                $inData['upadated_by']=$user_id;
                 $update = HrmsEmpLeave::where($where)->where('id',$checkExists->id)->update($inData);
             }else{
                 $inData['created_at']=now();
+                $inData['created_by']=$user_id;
+
                 $insert = HrmsEmpLeave::insert($inData);
             }
             //16-10-2024 end
