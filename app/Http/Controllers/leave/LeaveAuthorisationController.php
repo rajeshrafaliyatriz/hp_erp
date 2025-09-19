@@ -129,43 +129,43 @@ class LeaveAuthorisationController extends Controller
         
         // echo "<pre>";print_r($checkedEmp);exit;
 
-        if($type == 'API')
-        {
+        // if($type == 'API')
+        // {
+        //     $user_name = DB::table('tbluser')
+        //     ->selectRaw("CONCAT_WS(' ',first_name,last_name) AS employee_name")
+        //     ->where('sub_institute_id', $sub_institute_id)
+        //     ->where('status',1)  // 23-04-24 by uma
+        //     ->where('id', $res_user_id)->first();
+        // }
+        // else
+        // {
             $user_name = DB::table('tbluser')
             ->selectRaw("CONCAT_WS(' ',first_name,last_name) AS employee_name")
             ->where('sub_institute_id', $sub_institute_id)
             ->where('status',1)  // 23-04-24 by uma
             ->where('id', $res_user_id)->first();
-        }
-        else
-        {
-            $user_name = DB::table('tbluser')
-            ->selectRaw("CONCAT_WS(' ',first_name,last_name) AS employee_name")
-            ->where('sub_institute_id', $sub_institute_id)
-            ->where('status',1)  // 23-04-24 by uma
-            ->where('id', $user_id)->first();
-        }
+        // }
         
-        if($type == 'API')
-        {
-            DB::table('hrms_emp_leaves')
-                ->where('id', $leave_id)
-                ->update([
-                    'hod_comment' => $hodComments,
-                    'hod_comment_date' => now(),
-                    'hr_remarks' => $hrRemarks,
-                    'hr_remark_date' => now(),
-                    'approved_by' => $user_name->employee_name,
-                    'status' => $leaveStatuses,
-                ]);
+        // if($type == 'API')
+        // {
+        //     DB::table('hrms_emp_leaves')
+        //         ->where('id', $leave_id)
+        //         ->update([
+        //             'hod_comment' => $hodComments,
+        //             'hod_comment_date' => now(),
+        //             'hr_remarks' => $hrRemarks,
+        //             'hr_remark_date' => now(),
+        //             'approved_by' => $user_name->employee_name,
+        //             'status' => $leaveStatuses,
+        //         ]);
 
-            // API response
-            $res['status_code'] = 1;
-            $res['message'] = "Leave update successfully";
-            return is_mobile($type, "leave-authorisation.index", $res);
-        }
-        else
-        {
+        //     // API response
+        //     $res['status_code'] = 1;
+        //     $res['message'] = "Leave update successfully";
+        //     return is_mobile($type, "leave-authorisation.index", $res);
+        // }
+        // else
+        // {
             foreach($checkedEmp as $id => $value)
             {
                 DB::table('hrms_emp_leaves')
@@ -176,12 +176,12 @@ class LeaveAuthorisationController extends Controller
                         'hr_remarks' => $hrRemarks[$id],
                         'hr_remark_date' => now(),
                         'approved_by' => $user_name->employee_name,
-                        'status' => $leaveStatuses[$id],
+                        'status' => $leaveStatuses[$id] ?? '',
                     ]);
             }
         
-        $request->session()->flash('success', 'Leave update successfully');
+        // $request->session()->flash('success', 'Leave update successfully');
         return is_mobile($type, "leave-authorisation.index", null, "redirect");
-        }
+        // }
     }
 }
