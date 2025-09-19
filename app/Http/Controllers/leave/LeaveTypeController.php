@@ -30,7 +30,8 @@ class LeaveTypeController extends Controller
                         return $row->status == 1 ? 'active' : 'inactive';
                     })
                     ->addColumn('action', function ($row) {
-                        $actionBtn = '<a href="javascript:void(0)" class="edit btn btn-success btn-edit btn-sm" data-id="' . $row->id . '">Edit</a> <a href="javascript:void(0)" class="delete btn btn-danger btn-delete btn-sm"data-id="' . $row->id . '">Delete</a>';
+                        $actionBtn = '<a href="javascript:void(0)" class="edit btn btn-success btn-edit btn-sm" data-id="' . $row->id . '">Edit</a> 
+                                    <a href="javascript:void(0)" class="delete btn btn-danger btn-delete btn-sm"data-id="' . $row->id . '">Delete</a>';
                         return $actionBtn;
                     })
                     ->rawColumns(['action'])
@@ -173,6 +174,7 @@ class LeaveTypeController extends Controller
     {
         try {
             HrmsLeaveType::find($id)->delete();
+            
             return response()->json(['message' => 'Leave type deleted successfully !!'], 200);
         } catch (Exception $e) {
             return response()->json($e->getMessage(), 500);
