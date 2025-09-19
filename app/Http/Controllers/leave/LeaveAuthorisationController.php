@@ -80,7 +80,7 @@ class LeaveAuthorisationController extends Controller
 
         $from_date_formatted = Carbon::createFromFormat('Y-m-d', $from_date)->format('Y-m-d');
         $to_date_formatted = Carbon::createFromFormat('Y-m-d', $to_date)->format('Y-m-d');
-
+        // DB::enableQueryLog();
         $get_employee_leave_lists = DB::table('hrms_emp_leaves as hel')
         ->selectRaw("hel.*, CONCAT_WS(' ',u.first_name,u.last_name) AS employee_name, hlt.leave_type,u.department_id")
         ->join('tbluser as u', 'u.id', '=', 'hel.user_id')
@@ -93,11 +93,12 @@ class LeaveAuthorisationController extends Controller
         ->where('hel.to_date', '<=', $to_date_formatted)
         // ->whereIn('hel.status', [$get_leave_status])
         ->when($type == "API", function ($query) use ($get_leave_status) {
-            return $query->whereIn('hel.status', [$get_leave_status]);
+            return $query->whereIn('hel.status', $get_leave_status);
         }, function ($query) use ($get_leave_status) {
             return $query->whereIn('hel.status', $get_leave_status);
         })
         ->get()->toArray();
+        // dd(db::getQueryLog($get_employee_leave_lists));
 
         $res['get_employee_leave_lists'] = $get_employee_leave_lists;
         $res['from_date_formatted'] = $from_date_formatted;
