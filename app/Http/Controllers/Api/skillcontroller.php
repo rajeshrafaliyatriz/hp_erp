@@ -85,7 +85,6 @@ class skillcontroller extends Controller
             $objSkill->sub_category = $request->sub_category;
             $objSkill->title = $request->title;
             $objSkill->description = $request->description;
-    
             $objSkill->related_skills = $request->related_skills;
             $objSkill->bussiness_links = $request->bussiness_links;
             $objSkill->custom_tags = $request->custom_tags;
