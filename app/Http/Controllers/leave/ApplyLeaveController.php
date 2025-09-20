@@ -43,7 +43,7 @@ class ApplyLeaveController extends Controller
         try {
             $res = session()->get('data');
             $res['departments'] = hrmsDepartmentModel::where('sub_institute_id',$sub_institute_id)->where('status', 1)->pluck('department', 'id');
-            $res['users'] = tbluserModel::where('sub_institute_id', $sub_institute_id)->where('status',1)->get();   // 23-04-24 by uma
+            // $res['users'] = tbluserModel::where('sub_institute_id', $sub_institute_id)->where('status',1)->get();   // 23-04-24 by uma
             // echo("<pre>");print_r(session()->all());exit;
             $res['leave_types'] = HrmsLeaveType::where('sub_institute_id', $sub_institute_id)->where('status',1)->orderBy('sort_order')->get();
             
@@ -339,7 +339,10 @@ class ApplyLeaveController extends Controller
         $sub_institute_id = session()->get('sub_institute_id');
         if($type=="API"){
             $user_id=$request->user_id;
+            $sub_institute_id=$request->sub_institute_id;
+            // $syear=$request->$year;
         }
+        
         $data = DB::table('hrms_emp_leaves as hel')->selectRaw("hel.*, hlt.leave_type as leave_type_name")
         ->join('hrms_leave_types as hlt', function($join) use ($sub_institute_id) {
             $join->on('hlt.id', '=', 'hel.leave_type_id')
