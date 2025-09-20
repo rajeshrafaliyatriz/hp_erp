@@ -138,7 +138,7 @@ Route::middleware(['auth','session','menu'])->group(function () {
 
     //Leave Authorisation
     Route::resource('leave-authorisation', LeaveAuthorisationController::class);
-    Route::post('show-leave-authorisation', [LeaveAuthorisationController::class,'leaveAuthorisation'])->name('leave.authorisation.index');
+    Route::get('show-leave-authorisation', [LeaveAuthorisationController::class,'leaveAuthorisation'])->name('leave.authorisation.index');
     Route::post('leave-authorisation-store', [LeaveAuthorisationController::class,'leaveAuthorisationStore'])->name('leave.authorisation.store');
 
     //Leave Report

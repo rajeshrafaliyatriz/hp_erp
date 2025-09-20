@@ -120,7 +120,7 @@ class dashboardController extends Controller
            $getTotalSkill = DB::table('s_users_skills')
            ->where(['sub_institute_id'=>$sub_institute_id,'status'=>'Active'])
            ->whereNull('deleted_at')
-           ->groupBy('title')
+        //    ->groupBy('title')
            ->count();
 
             foreach($department as $key=>$value){
