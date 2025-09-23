@@ -126,8 +126,9 @@ class LeaveAuthorisationController extends Controller
         $employee_ids = $request->get('employee_id');
         $checkedEmp = $request->checkedEmp;
         $leave_id = $request->get('id');
+        // echo 
         
-        // echo "<pre>";print_r($checkedEmp);exit;
+        // echo "<pre>";print_r($request->all());exit;
 
         // if($type == 'API')
         // {
@@ -144,28 +145,9 @@ class LeaveAuthorisationController extends Controller
             ->where('sub_institute_id', $sub_institute_id)
             ->where('status',1)  // 23-04-24 by uma
             ->where('id', $res_user_id)->first();
-        // }
         
-        // if($type == 'API')
-        // {
-        //     DB::table('hrms_emp_leaves')
-        //         ->where('id', $leave_id)
-        //         ->update([
-        //             'hod_comment' => $hodComments,
-        //             'hod_comment_date' => now(),
-        //             'hr_remarks' => $hrRemarks,
-        //             'hr_remark_date' => now(),
-        //             'approved_by' => $user_name->employee_name,
-        //             'status' => $leaveStatuses,
-        //         ]);
 
-        //     // API response
-        //     $res['status_code'] = 1;
-        //     $res['message'] = "Leave update successfully";
-        //     return is_mobile($type, "leave-authorisation.index", $res);
-        // }
-        // else
-        // {
+            $i=0;
             foreach($checkedEmp as $id => $value)
             {
                 DB::table('hrms_emp_leaves')
@@ -178,8 +160,16 @@ class LeaveAuthorisationController extends Controller
                         'approved_by' => $user_name->employee_name,
                         'status' => $leaveStatuses[$id] ?? '',
                     ]);
+
+                    $i++;
+                    if ($i > 0) {
+                    return response()->json(['message' => 'Leave updated successfully',], 200); } 
+                        else {
+                    return response()->json(['message' => 'No leave updated'], 400);}
+
+
             }
-        
+        return "1";
         // $request->session()->flash('success', 'Leave update successfully');
         return is_mobile($type, "leave-authorisation.index", null, "redirect");
         // }

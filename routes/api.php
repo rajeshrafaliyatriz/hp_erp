@@ -4,9 +4,10 @@ use App\Http\Controllers\Api\IndustryController;
 use App\Http\Controllers\Api\jobrolecontroller;
 use App\Http\Controllers\Api\skillcontroller;
 use App\Http\Controllers\libraries\jobroletexonomycontroller;
-use App\Http\Controllers\libraries\jobroletasktexonomycontroller;
+use App\Http\Controllers\libraries\jobroletaskcontroller;
 
-Route::resource('jobroletasktexonomies', jobroletasktexonomycontroller::class);
+Route::resource('job-role-tasks', jobroletaskcontroller::class);
+
 
 Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
 
