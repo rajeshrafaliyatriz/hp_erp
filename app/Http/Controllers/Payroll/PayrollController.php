@@ -212,12 +212,12 @@ if($type=="API"){
 
     public function employeeSalaryStructure(Request $request)
     {
-        $sub_institute_id = $request->session()->get('sub_institute_id');
+        // return $request;exit;
+        $sub_institute_id = $request->get('sub_institute_id');
         $type=$request->input('type');
         $status=$request->input('emp_status') ?? 1;
-        $sub_institute_id=session()->get('sub_institute_id');
-        $syear = session()->get('syear');
-        $employee_id= ($request->emp_id!=0) ? implode(',',$request->emp_id) : '';
+        $syear = $request->get('syear');
+        $employee_id= ($request->employee_id!=0) ? implode(',',$request->employee_id) : '';
         $department_id= ($request->department_id!=0) ? implode(',',$request->department_id) : '';
 
         if($type=="API"){
