@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
+        
             Schema::create('hrms_emp_payroll_deduction', function (Blueprint $table) {
+            $table->tinyInteger('deduction_type')->nullable()->after('employee_id');
             $table->bigIncrements('id');
             $table->string('month', 20)->nullable(); // month VARCHAR 20
             $table->year('year')->nullable(); // year INT 11 (using year type for better validation)
@@ -56,6 +58,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('hrms_emp_payroll_deduction');
+        //Schema::dropIfExists('hrms_emp_payroll_deduction');
+        Schema::table('hrms_emp_payroll_deduction', function (Blueprint $table) {
+            $table->dropColumn('deduction_type');
+        });
     }
 };

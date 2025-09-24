@@ -271,7 +271,7 @@ if($type=="API"){
         $res['payrollTypes']=$payrollTypes;
         $res['employeeSalaryStructures']=$employeeSalaryStructures;
         $res['employeeLists']=$employeeLists;
-        $res['selected_emp']=$request->emp_id;
+        $res['selected_emp']=$request->employee_id;
         $res['department_id']=$request->department_id;
         $res['emp_status'] = $status;
         // echo "<pre>";print_r($employeeSalaryStructures);exit;
@@ -289,19 +289,34 @@ if($type=="API"){
         $sub_institute_id =$request->session()->get('sub_institute_id');
         $type=$request->input('type');
         if($type=="API"){
-            try {
-                if (!$this->jwtToken()->validate()) {
-                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
-    
-                    return response()->json($response, 401);
-                }
-            } catch (\Exception $e) {
-                $response = ['status' => '2', 'message' => $e->getMessage(), 'data' => []];
-    
-                return response()->json($response, 401);
+            $token = $request->input('token');  // get token from input field 'token'
+
+            // Check if token is provided
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
             }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            // If token is invalid
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'syear' => 'required',
+            ]);
+
+            // If validation fails
+            if ($validator->fails()) {
+                return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+       
             $sub_institute_id = $request->get('sub_institute_id');
-            $year = Carbon::now()->format('Y');
+            $year = $request->get('syear');
+
         }
         
         $res['status_code']=0;
@@ -309,10 +324,10 @@ if($type=="API"){
         // remove datas with value 0
         $empDetails =[];
         $totalAllowance = 0;
-
+// echo '<pre>';print_r($request->emp);exit;
         if(!empty($request->emp)){
             // foreach for employees 
-            foreach ($request->emp as $emp_ids => $emp_values) {
+            foreach ($request->emp as $employee_ids => $emp_values) {
                 $gender="";
                 $totalAllowance = $totalSalary = $totalGrossSalary= 0;
                 $allData = $jsonData = [];
@@ -398,7 +413,7 @@ if($type=="API"){
                     // $getPT = ($hasPT == 2) ? Helpers::getPT($totalGrossSalary,$gender) : $getPTFlat; 
                 // }           
                 // echo "<pre>";print_r($getPT);
-                $employee = tbluserModel::where('id',$emp_ids)->first();
+                $employee = tbluserModel::where('id',$employee_ids)->first();
                 $pf_deduction = $employee->pf_deduction;
                 $pt_deduction = $employee->pt_deduction;
 
@@ -425,12 +440,12 @@ if($type=="API"){
                 // convert into json 
                 $encodeData = json_encode($jsonData);
                 // echo "<pre>";print_r($encodeData);
-                $find = EmployeeSalaryStructure::where(['employee_id' => $emp_ids, 'year' => $year], ['year' => $year,'sub_institute_id' => $sub_institute_id])->get()->toArray();
+                $find = EmployeeSalaryStructure::where(['employee_id' => $employee_ids, 'year' => $year], ['year' => $year,'sub_institute_id' => $sub_institute_id])->get()->toArray();
                 // update data
                 $res['status_code']=1;
                 if(!empty($find) && $totalSalary!=0){
-                    EmployeeSalaryStructure::where(['employee_id' => $emp_ids,'year' => $year,'sub_institute_id' => $sub_institute_id])->update([
-                        'employee_id' => $emp_ids, 
+                    EmployeeSalaryStructure::where(['employee_id' => $employee_ids,'year' => $year,'sub_institute_id' => $sub_institute_id])->update([
+                        'employee_id' => $employee_ids, 
                         'employee_salary_data' => $encodeData,
                         'year' => $year,
                         'sub_institute_id' => $sub_institute_id,
@@ -442,7 +457,7 @@ if($type=="API"){
                 else{
                     if($totalSalary!=0){
                         EmployeeSalaryStructure::insert([
-                            'employee_id' => $emp_ids, 
+                            'employee_id' => $employee_ids, 
                             'employee_salary_data' => $encodeData,
                             'year' => $year,
                             'sub_institute_id' => $sub_institute_id,
@@ -1000,18 +1015,19 @@ if($type=="API"){
     public function payrollDeductionStore(Request $request)
     {
         $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
+        //$sub_institute_id = session()->get('sub_institute_id');
+        $sub_institute_id = $request->get('sub_institute_id', session()->get('sub_institute_id'));
         $created_by = session()->get('user_id');
         $payroll_type = $request->payroll_type;
         $month = $request->month;
         $year = $request->year;
         $deductAmt = $request->deductAmt;
         $i=0;
-        foreach ($deductAmt as $emp_id => $amount) {
+        foreach ($deductAmt as $employee_id => $amount) {
             $checkArr = [
                 "month"=>$month,
                 "year"=>$year,
-                "employee_id"=>$emp_id,
+                "employee_id"=>$employee_id,
                 "deduction_type"=>$payroll_type,
                 "sub_institute_id"=>$sub_institute_id,
             ];
