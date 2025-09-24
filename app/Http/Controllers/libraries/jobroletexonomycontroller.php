@@ -47,7 +47,7 @@ class jobroletexonomycontroller extends Controller
                 // fetch jobrole data from table
                 $jobroles = DB::table('s_user_jobrole as a')
                             ->select('a.id', 'a.jobrole_category', 'a.sub_institute_id', 'a.status')
-                            ->where('a.sub_institute_id', 1)
+                            ->where('a.sub_institute_id',$sub_institute_id)
                             ->whereNotNull('a.jobrole_category')
                             ->whereNull('a.deleted_at')
                             ->groupBy('a.jobrole_category')

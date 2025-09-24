@@ -45,7 +45,7 @@ class jobroletaskcontroller extends Controller
                 // fetch jobrole data from table
                 $jobroles = DB::table('s_user_jobrole_task as a')
                             ->select('a.id', 'a.task_category', 'a.sub_institute_id',)
-                            ->where('a.sub_institute_id', 1)
+                            ->where('a.sub_institute_id', $sub_institute_id)
                             ->whereNotNull('a.task_category')
                             ->whereNull('a.deleted_at')
                             ->groupBy('a.task_category')
