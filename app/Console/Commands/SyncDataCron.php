@@ -119,7 +119,8 @@ class SyncDataCron extends Command
 
          try {
             // 5. Call your route (API)
-            $response = Route::get('skills/search', [jobrolecontroller::class, 'searchskills']); // adjust to your actual route
+            $response = Route::get('skills/search', [jobrolecontroller::class, 'searchskills']); 
+             // adjust to your actual route
 
             if ($response->successful()) {
                 $data = $response->json();
