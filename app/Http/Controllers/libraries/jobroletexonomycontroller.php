@@ -131,6 +131,81 @@ class jobroletexonomycontroller extends Controller
     }
 }
 
+public function storeskill(Request $request)
+    {
+    $type = $request->type;
+
+    if ($type == "API") {
+        $token = $request->input('token');
+
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+         if (!$accessToken) {
+                 return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $sub_institute_id = $request->get('sub_institute_id');
+
+
+          $validator = Validator::make($request->all(), [
+            'department' => 'required|string',
+             'status' => 'required|in:0,1',
+             'sub_institute_id' => 'required|numeric',
+            
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => $validator->messages()->first()
+            ], 422);
+        }
+
+        try {
+            $objjobrole = new jobroletexonomy();
+            $objjobrole->industries = $request->industries;
+            $objjobrole->department = $request->department;
+            $objjobrole->sub_department = $request->sub_department;
+            $objjobrole->jobrole = $request->jobrole;
+            $objjobrole->description = $request->description;
+            $objjobrole->jobrole_category = $request->jobrole_category;
+            $objjobrole->performance_expectation = $request->performance_expectation;
+            $objjobrole->status = $request->status;
+            $objjobrole->realated_jobrole = $request->realated_jobrole;
+            $objjobrole->required_skill_experience = $request->required_skill_experience;
+            $objjobrole->location = $request->location;
+            $objjobrole->salary_range = $request->salary_range;
+            $objjobrole->company_information = $request->company_information;
+            $objjobrole->benefits = $request->benefits;
+            $objjobrole->keyword_tags = $request->keyword_tags;
+            $objjobrole->job_posting_date = $request->job_posting_date;
+            $objjobrole->application_deadline = $request->application_deadline;
+            $objjobrole->contact_information = $request->contact_information;
+            $objjobrole->internal_tracking = $request->internal_tracking;
+            $objjobrole->education = $request->education;
+            $objjobrole->experience = $request->experience;
+            $objjobrole->training = $request->training;
+            $objjobrole->task_category = $request->task_category;
+            $objjobrole->sub_institute_id = $sub_institute_id;
+            // $objjobrole->created_by = $request->user_id;
+
+            if ($objjobrole->save()) {
+                return response()->json(['message' => 'Data added successfully !!','data' => $objjobrole], 200);
+            }
+
+            return response()->json(['message' => 'Something went wrong !!'], 500);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()]);
+        }
+    }
+}
+
  /**
      * Display the specified resource.
      *

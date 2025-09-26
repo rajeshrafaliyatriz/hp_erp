@@ -121,7 +121,7 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::get('/monthly-payroll/create', [PayrollController::class, 'monthlyPayrollCreate'])->name('monthly_payroll.create');
     Route::post('/monthly-payroll-store', [PayrollController::class, 'monthlyPayrollStore'])->name('monthly_payroll.store');
 
-    Route::post('/monthly-payroll-delete', [PayrollController::class, 'deleteMonthlyPayrolls'])->name('monthly_payroll.delete');
+    Route::post('/monthly-payroll-delete/{month}', [PayrollController::class, 'deleteMonthlyPayrolls'])->name('monthly_payroll.delete');
     Route::get('/getMonthlyData', [PayrollController::class, 'getEmpMonthlyData'])->name('getMonthlyData');
 
     Route::get('getTotalDays', [PayrollController::class, 'getTotalDays'])->name('getTotalDays');
