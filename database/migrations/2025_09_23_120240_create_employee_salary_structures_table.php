@@ -9,9 +9,9 @@ return new class extends Migration
     public function up()
     {
         Schema::create('employee_salary_structures', function (Blueprint $table) {
-            $table->id();
+             $table->bigIncrements('id');
             $table->unsignedBigInteger('employee_id');
-            $table->json('employee_salary_data')->nullable();
+            $table->text('employee_salary_data')->nullable();
             $table->year('year');
             $table->unsignedBigInteger('sub_institute_id');
             $table->unsignedBigInteger('created_by')->nullable();
@@ -20,11 +20,11 @@ return new class extends Migration
             $table->softDeletes();
             
             // Foreign key constraints
-            $table->foreign('employee_id')->references('id')->on('tbluser')->onDelete('cascade');
-            $table->foreign('sub_institute_id')->references('id')->on('school_setup')->onDelete('cascade');
+            // $table->foreign('employee_id')->references('id')->on('tbluser')->onDelete('cascade');
+            // $table->foreign('sub_institute_id')->references('id')->on('school_setup')->onDelete('cascade');
             
             // Unique constraint to prevent duplicate entries
-            $table->unique(['employee_id', 'year', 'sub_institute_id']);
+            // $table->unique(['employee_id', 'year', 'sub_institute_id']);
         });
     }
 

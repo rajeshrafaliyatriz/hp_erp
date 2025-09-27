@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('employee_monthly_salary_data', function (Blueprint $table) {
+       Schema::table('employee_monthly_salary_data', function (Blueprint $table) {
             if (!Schema::hasColumn('employee_monthly_salary_data', 'month')) {
                 $table->string('month', 20)->nullable()->after('id');
             }
