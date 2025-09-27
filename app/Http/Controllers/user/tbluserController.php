@@ -569,11 +569,15 @@ class tbluserController extends Controller
                     $classificationItems = DB::table('s_skill_knowledge_ability')
                         ->where('skill_id', $item->userSkills->id)
                         ->where('proficiency_level', $item->proficiency_level)
+                        ->where('sub_institute_id', $item->sub_institute_id)
+                        ->whereNull('deleted_at')
                         ->get()
                         ->groupBy('classification');
 
                     $classificationItems2 = DB::table('s_skill_knowledge_ability')
                         ->where('skill_id', $item->userSkills->id)
+                        ->where('sub_institute_id', $item->sub_institute_id)
+                        ->whereNull('deleted_at')
                         ->get()
                         ->groupBy('classification');
 
@@ -652,11 +656,15 @@ class tbluserController extends Controller
                     $classificationItems = DB::table('s_skill_knowledge_ability')
                         ->where('skill_id', $item->userSkills->id ?? null)
                         ->where('proficiency_level', $item->proficiency_level)
+                        ->where('sub_institute_id', $item->sub_institute_id)
+                        ->whereNull('deleted_at')
                         ->get()
                         ->groupBy('classification');
                     
                     $classificationItems2 = DB::table('s_skill_knowledge_ability')
                         ->where('skill_id', $item->userSkills->id ?? null)
+                        ->where('sub_institute_id', $item->sub_institute_id)
+                        ->whereNull('deleted_at')
                         // ->where('proficiency_level', $item->proficiency_level)
                         ->get()
                         ->groupBy('classification');
@@ -993,6 +1001,8 @@ class tbluserController extends Controller
                 $classificationItems = DB::table('s_skill_knowledge_ability')
                     ->where('skill_id', $item->skill_id)
                     ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
+                    ->where('sub_institute_id', $item->sub_institute_id)
+                        ->whereNull('deleted_at')
                     ->get()
                     ->groupBy('classification');
 
@@ -1048,6 +1058,8 @@ class tbluserController extends Controller
                     $classificationItems = DB::table('s_skill_knowledge_ability')
                         ->where('skill_id', $item->skill_id)
                         ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
+                        ->where('sub_institute_id', $item->sub_institute_id)
+                        ->whereNull('deleted_at')
                         ->get()
                         ->groupBy('classification');
 
@@ -1083,6 +1095,8 @@ class tbluserController extends Controller
                     $classificationItems = DB::table('s_skill_knowledge_ability')
                         ->where('skill_id', $item->skill_id)
                         ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
+                        ->where('sub_institute_id', $item->sub_institute_id)
+                        ->whereNull('deleted_at')
                         ->get()
                         ->groupBy('classification');
 
