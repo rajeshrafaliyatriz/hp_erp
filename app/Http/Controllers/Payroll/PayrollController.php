@@ -963,56 +963,124 @@ if($type=="API"){
         return $string;
     }
 
-    public function payrollDeduction(Request $request)
-    {
-        $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
-        $payrollTypes = [];
-        $res['selMonth'] = date('M');
-        $res['selYear'] = date('Y');
+    // public function payrollDeduction(Request $request)
+    // {
+    //     $type = $request->type;
+    //     $sub_institute_id = session()->get('sub_institute_id');
+    //     $payrollTypes = [];
+    //     $res['selMonth'] = date('M');
+    //     $res['selYear'] = date('Y');
 
-        // process to get all emp create
-        if($request->has('submit')){
-            // return $request->all();
+    //     // process to get all emp create
+    //     if($request->has('submit')){
+    //         // return $request->all();
             
-            $res['selDeduction'] =  $deduction_type= $request->deduction_type;
-            $res['selType'] =  $payroll_type= $request->payroll_type;
-            $res['selMonth'] = $month= $request->month;
-            $res['selYear'] = $year= $request->year;
+    //         $res['selDeduction'] =  $deduction_type= $request->deduction_type;
+    //         $res['selType'] =  $payroll_type= $request->payroll_type;
+    //         $res['selMonth'] = $month= $request->month;
+    //         $res['selYear'] = $year= $request->year;
 
-            $checkArr = [
-                "month"=>$month,
-                "year"=>$year,
-                "deduction_type"=>$payroll_type,
-                "sub_institute_id"=>$sub_institute_id,
-            ];
+    //         $checkArr = [
+    //             "month"=>$month,
+    //             "year"=>$year,
+    //             "deduction_type"=>$payroll_type,
+    //             "sub_institute_id"=>$sub_institute_id,
+    //         ];
 
-            $getDeduction = DB::table('hrms_emp_payroll_deduction')->where($checkArr)->get()->toArray();
-            $deductionArr= [];
-            foreach($getDeduction as $key=>$value){
-                $deductionArr[$value->employee_id]=$value->deduction_amount;
-            }
-           $res['all_emp'] = employeeDetails($sub_institute_id,'','','');
-           $res['deductionArr'] = $deductionArr;
-        }
-        // end process  get all emp
+    //         $getDeduction = DB::table('hrms_emp_payroll_deduction')->where($checkArr)->get()->toArray();
+    //         $deductionArr= [];
+    //         foreach($getDeduction as $key=>$value){
+    //             $deductionArr[$value->employee_id]=$value->deduction_amount;
+    //         }
+    //        $res['all_emp'] = employeeDetails($sub_institute_id,'','','');
+    //        $res['deductionArr'] = $deductionArr;
+    //     }
+    //     // end process  get all emp
 
-        $payrollType = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->get()->toArray();
-        $payrollTypeArr=[];
-        foreach($payrollType as $key=>$value){
-            $payrollTypeArr[$value['payroll_type']][]=[
-                "id"=>$value['id'],
-                "payroll_name"=>$value['payroll_name'],
-            ];
-        }
-        $res['payrollTypes'] =  $payrollTypeArr;
-        $res['months'] = Helpers::getMonths();
-        $res['years'] = Helpers::getYears();
+    //     $payrollType = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->get()->toArray();
+    //     $payrollTypeArr=[];
+    //     foreach($payrollType as $key=>$value){
+    //         $payrollTypeArr[$value['payroll_type']][]=[
+    //             "id"=>$value['id'],
+    //             "payroll_name"=>$value['payroll_name'],
+    //         ];
+    //     }
+    //     $res['payrollTypes'] =  $payrollTypeArr;
+    //     $res['months'] = Helpers::getMonths();
+    //     $res['years'] = Helpers::getYears();
         
-        // echo "<pre>";print_r($res['deductionArr']);exit;
-        // return view('payroll.payroll_deduction.index', $result);
-        return is_mobile($type, "payroll.payroll_deduction.index", $res, "view");
+    //     // echo "<pre>";print_r($res['deductionArr']);exit;
+    //     // return view('payroll.payroll_deduction.index', $result);
+    //     return is_mobile($type, "payroll.payroll_deduction.index", $res, "view");
+    // }
+
+    public function payrollDeduction(Request $request)
+{
+    $type = $request->type;
+
+    // ✅ Fix: get sub_institute_id correctly for API vs Web
+    if ($type == "API") {
+        $sub_institute_id = $request->sub_institute_id;
+    } else {
+        $sub_institute_id = session()->get('sub_institute_id');
     }
+
+    $res['selMonth'] = $request->month ?? date('M');   // ✅ use request month if given
+    $res['selYear']  = $request->year ?? date('Y');    // ✅ use request year if given
+
+    if ($request->has('submit') || $type == "API") {
+        $deduction_type = $request->deduction_type;
+        $payroll_type   = $request->payroll_type;
+        $month          = $request->month;
+        $year           = $request->year;
+
+        $res['selDeduction'] = $deduction_type;
+        $res['selType']      = $payroll_type;
+        $res['selMonth']     = $month ?? $res['selMonth'];
+        $res['selYear']      = $year ?? $res['selYear'];
+
+        $checkArr = [
+            "month"           => $month,
+            "year"            => $year,
+            "deduction_type"  => $deduction_type,
+            "sub_institute_id"=> $sub_institute_id,
+        ];
+
+        $getDeduction = DB::table('hrms_emp_payroll_deduction')
+                          ->where($checkArr)
+                          ->get()
+                          ->toArray();
+
+        $deductionArr = [];
+        foreach ($getDeduction as $value) {
+            $deductionArr[$value->employee_id] = $value->deduction_amount;
+        }
+
+        $res['all_emp']      = employeeDetails($sub_institute_id,'','','');
+        $res['deductionArr'] = $deductionArr;
+    }
+
+    // ✅ PayrollType fetch will now work because sub_institute_id is correct
+    $payrollType = PayrollType::where('sub_institute_id',$sub_institute_id)
+                              ->where('status', 1)
+                              ->get()
+                              ->toArray();
+
+    $payrollTypeArr = [];
+    foreach ($payrollType as $value) {
+        $payrollTypeArr[$value['payroll_type']][] = [
+            "id"           => $value['id'],
+            "payroll_name" => $value['payroll_name'],
+        ];
+    }
+
+    $res['payrollTypes'] = $payrollTypeArr;
+    $res['months']       = Helpers::getMonths();
+    $res['years']        = Helpers::getYears();
+
+    return is_mobile($type, "payroll.payroll_deduction.index", $res, "view");
+}
+
 
     public function payrollDeductionStore(Request $request)
     {
