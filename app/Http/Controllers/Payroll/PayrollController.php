@@ -2072,7 +2072,7 @@ public function payrollTypeReport(Request $request)
 
     function getEmpMonthlyData(Request $request){
         // echo "<pre>";print_r($request->all());exit;
-        $sub_institute_id = session()->get('sub_institute_id');
+        $sub_institute_id = $request->sub_institute_id;
         $totalDay = $request->totalDay;
         $searchedYear = $request->year;
         if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
