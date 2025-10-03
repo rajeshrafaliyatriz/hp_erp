@@ -6,27 +6,30 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
 use App\Traits\Helpers;
-use GenTux\Jwt\GetsJwtToken;
+//use GenTux\Jwt\GetsJwtToken;
+use Laravel\Sanctum\PersonalAccessToken;
 use DB;
 
 class HrmsLeaveController extends Controller
 {
     //
-    use GetsJwtToken;
+    //use GetsJwtToken;
 
     public function index(Request $request){
         $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
-        $syear = session()->get('syear');
+        $sub_institute_id = $request->sub_institute_id;
+        $syear = $request->year ?? $request->syear; // support both "year" and "syear"
+
     
         if($type=="API"){
             $sub_institute_id = $request->sub_institute_id;
-            $syear = $request->syear;
+         $syear = $request->year ?? $request->syear; // support both "year" and "syear"
+
         }
 
         $res['departmentData']=DB::table('hrms_leave_allocation as hla')
                         ->join('hrms_departments as hd',function($join) use($sub_institute_id){
-                            $join->on('hd.id','=','hla.department_id')->where('hd.sub_institute_id',$sub_institute_id)->where('status',1)->whereNull('deleted_at');
+                            $join->on('hd.id','=','hla.department_id')->where('hd.sub_institute_id',$sub_institute_id)->where('status',1)->whereNull('hd.deleted_at');
                         })
                         ->join('hrms_leave_types as hlt','hlt.id','=','hla.leave_type_id')
                         ->selectRaw('hla.*,hlt.*,hd.*,hla.id as id')
@@ -36,7 +39,7 @@ class HrmsLeaveController extends Controller
 
         $res['employeeData']=DB::table('hrms_leave_allocation as hla')
                         ->join('hrms_departments as hd',function($join) use($sub_institute_id){
-                            $join->on('hd.id','=','hla.department_id')->where('hd.sub_institute_id',$sub_institute_id)->where('status',1)->whereNull('deleted_at');
+                            $join->on('hd.id','=','hla.department_id')->where('hd.sub_institute_id',$sub_institute_id)->where('status',1)->whereNull('hd.deleted_at');
                         })
                         ->join('tbluser as tu','tu.id','=','hla.employee_id')
                         ->join('hrms_leave_types as hlt','hlt.id','=','hla.leave_type_id')
@@ -50,8 +53,8 @@ class HrmsLeaveController extends Controller
 
     public function create(Request $request){
         $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
-        $syear = session()->get('syear');
+        $sub_institute_id = $request->sub_institute_id;
+        $syear = $request->syear;
     
         if($type=="API"){
             $sub_institute_id = $request->sub_institute_id;
@@ -70,24 +73,14 @@ class HrmsLeaveController extends Controller
     public function store(Request $request){
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
-        $syear = session()->get('syear');
+        $sub_institute_id = $request->input('sub_institute_id');
+        $syear = $request->input('syear');
         $res['formType'] =  $formType = $request->formType;
 
         if($type=="API"){
-            try {
-                if (!$this->jwtToken()->validate()) {
-                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
-    
-                    return response()->json($response, 401);
-                }
-            } catch (\Exception $e) {
-                $response = ['status' => '2', 'message' => $e->getMessage(), 'data' => []];
-    
-                return response()->json($response, 401);
-            }
-            $sub_institute_id = $request->get('sub_institute_id');
-            $syear = $request->get('syear');            
+            
+            $sub_institute_id = $request->input('sub_institute_id');
+            $syear = $request->input('syear');            
         }
         $insert = 0;
         // for department wise starts
@@ -98,7 +91,7 @@ class HrmsLeaveController extends Controller
             $res['days'] = $days = $request->days;
 
             if($department_ids=="All"){
-                $departmentAll = DB::table('hrms_departments')->where('sub_institute_id',$sub_institute_id)->where('status',1)->whereNull('deleted_at')->get()->toArray();
+                $departmentAll = DB::table('hrms_leave_allocation')->where('sub_institute_id',$sub_institute_id)->where('status',1)->whereNull('deleted_at')->get()->toArray();
                 foreach($departmentAll as $key=>$value){
                     $insert = $this->insertData($value->id,$leave_type_ids,$year,$days,$sub_institute_id);
                 }
@@ -113,12 +106,12 @@ class HrmsLeaveController extends Controller
         // for employee wise starts
         elseif($formType=="employee"){
             $res['department_id'] = $department_ids = $request->department_id;
-            $res['emp_id'] = $emp_id = $request->emp_id;
+            $res['employee_id'] = $employee_id = $request->employee_id;
             $res['leave_type_ids'] = $leave_type_ids = $request->leave_type_ids;
             $res['year'] = $year = $request->year;
             $res['days'] = $days = $request->days;
 
-            $insert = $this->insertData($department_ids,$leave_type_ids,$year,$days,$sub_institute_id,$emp_id);
+            $insert = $this->insertData($department_ids,$leave_type_ids,$year,$days,$sub_institute_id,$employee_id);
         }
         // for employee wise end
 
@@ -194,31 +187,26 @@ class HrmsLeaveController extends Controller
 
     public function update(Request $request,$id){
         $type = $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
-        $syear = session()->get('syear');
+        $sub_institute_id = $request->sub_institute_id;
+         $syear = $request->year ?? $request->syear;
         $formType = $request->formType;
     
        if($type=="API"){
-            try {
-                if (!$this->jwtToken()->validate()) {
-                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
-    
-                    return response()->json($response, 401);
-                }
-            } catch (\Exception $e) {
-                $response = ['status' => '2', 'message' => $e->getMessage(), 'data' => []];
-    
-                return response()->json($response, 401);
-            }
-            $sub_institute_id = $request->get('sub_institute_id');
-            $syear = $request->get('syear');            
+            $sub_institute_id = $request->sub_institute_id;
+            $syear = $request->year ?? $request->syear;           
         }
 
         $res['department_ids'] = $department_ids = $request->department_id;
-        $res['leave_type_ids'] = $leave_type_ids = $request->leave_type_ids;
+        // $res['leave_type_ids'] = $leave_type_ids = $request->leave_type_ids;
+        $leave_type_ids = (int) (is_array($request->leave_type_ids) 
+                ? $request->leave_type_ids[0]   
+                : $request->leave_type_ids);
+
+
         $res['year'] = $year = $request->year;
         $res['days'] = $days = $request->days;
-
+          $update = false;
+        
         if($formType=="department"){
             $update = DB::table('hrms_leave_allocation')->where('id',$id)->update([
                 'department_id'=>$department_ids,
@@ -226,13 +214,14 @@ class HrmsLeaveController extends Controller
                 'year'=>$year,
                 'value'=>$days,
                 'sub_institute_id'=>$sub_institute_id,
-                'updated_at'=>now()
+                'updated_at'=>now(),
+                'updated_by' => $user_id,
             ]);
         }
         else if($formType=="employee"){
             $update = DB::table('hrms_leave_allocation')->where('id',$id)->update([
                 'department_id'=>$department_ids,
-                'employee_id'=>$request->emp_id ?? 0,
+                'employee_id'=>$request->employee_id ?? 0,
                 'leave_type_id'=>$leave_type_ids,
                 'year'=>$year,
                 'value'=>$days,
@@ -247,6 +236,7 @@ class HrmsLeaveController extends Controller
         }else{
             $res['status_code'] = 0;
             $res['message'] = "Failed to Update";
+            
         }
         return is_mobile($type, "designation_leave.index", $res);
     }
@@ -255,17 +245,6 @@ class HrmsLeaveController extends Controller
         $type=$request->type;
 
         if($type=="API"){
-            try {
-                if (!$this->jwtToken()->validate()) {
-                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
-    
-                    return response()->json($response, 401);
-                }
-            } catch (\Exception $e) {
-                $response = ['status' => '2', 'message' => $e->getMessage(), 'data' => []];
-    
-                return response()->json($response, 401);
-            }
             $sub_institute_id = $request->get('sub_institute_id');
             $syear = $request->get('syear');            
         }
@@ -273,6 +252,7 @@ class HrmsLeaveController extends Controller
         $delete = DB::table('hrms_leave_allocation')->where('id',$id)->delete();
         $res['status_code'] = 1;
         $res['message'] = "Deleted SuccessFully";
+        
         
         return is_mobile($type, "designation_leave.index", $res);
     }

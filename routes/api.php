@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\skillcontroller;
 use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
+use App\Http\Controllers\HRMS\HrmsController;
+Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
 
 Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
 
