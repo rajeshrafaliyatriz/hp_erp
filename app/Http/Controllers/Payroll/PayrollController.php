@@ -442,7 +442,9 @@ if($type=="API"){
                 // convert into json 
                 $encodeData = json_encode($jsonData);
                 // echo "<pre>";print_r($encodeData);
-                $find = EmployeeSalaryStructure::where(['employee_id' => $employee_ids, 'year' => $year], ['year' => $year,'sub_institute_id' => $sub_institute_id])->get()->toArray();
+                //$find = EmployeeSalaryStructure::where(['employee_id' => $employee_ids, 'year' => $year], ['year' => $year,'sub_institute_id' => $sub_institute_id])->get()->toArray();
+                $find = EmployeeSalaryStructure::where(['employee_id' => $employee_ids, 'year' => $year,'sub_institute_id' => $sub_institute_id])->get()->toArray();
+
                 // update data
                 $res['status_code']=1;
                 if(!empty($find) && $totalSalary!=0){
@@ -2072,7 +2074,7 @@ public function payrollTypeReport(Request $request)
 
     function getEmpMonthlyData(Request $request){
         // echo "<pre>";print_r($request->all());exit;
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = session()->get('sub_institute_id');
         $totalDay = $request->totalDay;
         $searchedYear = $request->year;
         if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
@@ -2204,87 +2206,199 @@ public function payrollTypeReport(Request $request)
         return $res;
     }
 
-    public function monthlyPayrollStore(Request $request){
-        $type=$request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
-        if($type=="API"){
-            $sub_institute_id=$request->sub_institute_id;
-        }
-        $payrollVal = $request->payrollVal;
-        $jsonVal=[];
-        // echo "<pre>";print_r($request->all());exit;
-        // make json
-        foreach ($payrollVal as $emp_id => $value) {
-            // Below IF condition hide by rajesh 17-12-2024 -> '0' also insert in table
-            //if($value['total_day']>0 && count(array_filter($value['payrollHead'])) > 0)
-            {
-                $jsonVal[$emp_id] = json_encode($value['payrollHead']);
-            } 
-        }
-        // add update value;
-        $i=0;
-        foreach ($payrollVal as $emp_id => $value) {
-         // Below IF condition hide by rajesh 17-12-2024 -> '0' also insert in table
-		// if($value['total_day'] > 0  && count(array_filter($value['payrollHead'])) > 0) 
-            {
-	            
-	            $employeeSalaryData = EmployeeMonthlySalaryData::where('employee_id', $emp_id)->where('month',$request->month)->where('year',$request->year)->where(['sub_institute_id'=> $sub_institute_id])->first();
-
-	            $dataArr = [
-	                'month' => $request->month,
-	                'year' => $request->year,
-	                'employee_id' => $emp_id,
-	                'sub_institute_id' => $sub_institute_id,
-	            ];
-
-	            $dataArr['total_deduction'] = $value['total_deduction'] ?? 0;
-	            $dataArr['total_payment'] = $value['total_payment'] ?? 0;
-	            $dataArr['received_by'] = $value['received_by'] ?? 0;
-	            $dataArr['total_day'] = $value['total_day'] ?? 0;
-	            $dataArr['employee_salary_data'] = $jsonVal[$emp_id];
-
-	            if(!empty($employeeSalaryData)){
-	                $dataArr['updated_at'] = now();
-	                // Update hide by rajesh 17-12-2024 for second time not update - Required only insert
-	                //$update = DB::table("employee_monthly_salary_data")->where('id',$employeeSalaryData->id)->update($dataArr);
-	                $i++;
-	            }else{
-	                $dataArr['created_at'] = now();
-	                $insert = DB::table("employee_monthly_salary_data")->insert($dataArr);
-	                $i++;
-	            }
-	            // store pdf 29-10-2024
-                if($dataArr['total_day']!=0){
-	            $pdfName = $this->monthlyPayrollPdf($request,$emp_id, $request->month, $request->year,'storeDoc');
-
-	            if(isset($pdfName)){
-	                $docTitle = 'Payslip '.$request->month.' '.$request->year;
-	                $checkDoc = DB::table('staff_document')->where(['sub_institute_id'=>$sub_institute_id,'document_type_id'=>56,'user_id'=>$emp_id,'file_name'=>$pdfName])->get()->first();
-
-	                $pdfData = ['document_title'=>$docTitle,'sub_institute_id'=>$sub_institute_id,'document_type_id'=>56,'user_id'=>$emp_id,'file_name'=>$pdfName];
-
-	                if(empty($checkDoc)){
-	                    $pdfData['created_at']=now();
-	                    $insertDoc = DB::table('staff_document')->insert($pdfData);
-	                }else{
-	                    $pdfData['updated_at']=now();
-	                    $updateDoc = DB::table('staff_document')->where(['sub_institute_id'=>$sub_institute_id,'document_type_id'=>56,'user_id'=>$emp_id,'file_name'=>$pdfName])->update($pdfData);
-	                }
-	            }
-            }
-            }
-         }
+//     public function monthlyPayrollStore(Request $request){
         
-        // store pdf 29-10-2024 end
-        if($i==0){
-            $res['status_code'] = 0;
-            $res['message'] = "Not able to add data";
-        }else{
-            $res['status_code'] = 1;
-            $res['message'] = "Inserted Successfully";
-        }
-        return is_mobile($type,'monthly_payroll.index',$res);
+//         $type=$request->type;
+//         $sub_institute_id = session()->get('sub_institute_id');
+//         if($type=="API"){
+//             $sub_institute_id=$request->sub_institute_id;
+//         }
+//         $payrollVal = $request->payrollVal;
+//         $jsonVal=[];
+//         // echo "<pre>";print_r($request->all());exit;
+//         // make json
+//         foreach ($payrollVal as $employee_id => $value) {
+//             // Below IF condition hide by rajesh 17-12-2024 -> '0' also insert in table
+//             //if($value['total_day']>0 && count(array_filter($value['payrollHead'])) > 0)
+//             {
+//                 $jsonVal[$employee_id] = json_encode($value['payrollHead']);
+//             } 
+//         }
+//         // add update value;
+//         $i=0;
+//         // foreach ($payrollVal as $employee_id => $value) {
+//         //  // Below IF condition hide by rajesh 17-12-2024 -> '0' also insert in table
+// 		// // if($value['total_day'] > 0  && count(array_filter($value['payrollHead'])) > 0) 
+//         //     {
+	            
+// 	    //         $employeeSalaryData = EmployeeMonthlySalaryData::where('employee_id', $employee_id)->where('month',$request->month)->where('year',$request->year)->where(['sub_institute_id'=> $sub_institute_id])->first();
+
+// 	    //         $dataArr = [
+// 	    //             'month' => $request->month,
+// 	    //             'year' => $request->year,
+// 	    //             'employee_id' => $employee_id,
+// 	    //             'sub_institute_id' => $sub_institute_id,
+// 	    //         ];
+
+// 	    //         $dataArr['total_deduction'] = $value['total_deduction'] ?? 0;
+// 	    //         $dataArr['total_payment'] = $value['total_payment'] ?? 0;
+// 	    //         $dataArr['received_by'] = $value['received_by'] ?? 0;
+// 	    //         $dataArr['total_day'] = $value['total_day'] ?? 0;
+// 	    //         $dataArr['employee_salary_data'] = $jsonVal[$employee_id];
+
+// 	    //         if(!empty($employeeSalaryData)){
+// 	    //             $dataArr['updated_at'] = now();
+// 	    //             // Update hide by rajesh 17-12-2024 for second time not update - Required only insert
+// 	    //             //$update = DB::table("employee_monthly_salary_data")->where('id',$employeeSalaryData->id)->update($dataArr);
+// 	    //             $i++;
+// 	    //         }else{
+// 	    //             $dataArr['created_at'] = now();
+// 	    //             $insert = DB::table("employee_monthly_salary_data")->insertGetId($dataArr);
+//         //         dd($insert, $dataArr);
+//     foreach ($payrollVal as $employee_id => $value) {
+//     $jsonVal[$employee_id] = json_encode($value['payrollHead']);
+
+//     $dataArr = [
+//         'month' => $request->month,
+//         'year' => $request->year,
+//         'employee_id' => $employee_id,
+//         'sub_institute_id' => $sub_institute_id,
+//         'total_deduction' => $value['total_deduction'] ?? 0,
+//         'total_payment' => $value['total_payment'] ?? 0,
+//         'received_by' => $value['received_by'] ?? 0,
+//         'total_day' => $value['total_day'] ?? 0,
+//         'employee_salary_data' => $jsonVal[$employee_id],
+//         'created_at' => now(),
+//     ];
+
+//     $insert = DB::table("employee_monthly_salary_data")->insert($dataArr);
+//     dd($insert, $dataArr); // Stop and check
+// }
+
+	               
+// 	            // store pdf 29-10-2024
+//                 if($dataArr['total_day']!=0){
+// 	            $pdfName = $this->monthlyPayrollPdf($request,$employee_id, $request->month, $request->year,'storeDoc');
+
+// 	            if(isset($pdfName)){
+// 	                $docTitle = 'Payslip '.$request->month.' '.$request->year;
+// 	                $checkDoc = DB::table('staff_document')->where(['sub_institute_id'=>$sub_institute_id,'document_type_id'=>56,'user_id'=>$employee_id,'file_name'=>$pdfName])->get()->first();
+
+// 	                $pdfData = ['document_title'=>$docTitle,'sub_institute_id'=>$sub_institute_id,'document_type_id'=>56,'user_id'=>$employee_id,'file_name'=>$pdfName];
+
+// 	                if(empty($checkDoc)){
+// 	                    $pdfData['created_at']=now();
+// 	                    $insertDoc = DB::table('staff_document')->insert($pdfData);
+// 	                }else{
+// 	                    $pdfData['updated_at']=now();
+// 	                    $updateDoc = DB::table('staff_document')->where(['sub_institute_id'=>$sub_institute_id,'document_type_id'=>56,'user_id'=>$employee_id,'file_name'=>$pdfName])->update($pdfData);
+// 	                }
+// 	            }
+//             }
+//         }
+//     }
+        
+//         // store pdf 29-10-2024 end
+//         if($i==0){
+//             $res['status_code'] = 0;
+//             $res['message'] = "Not able to add data";
+//         }else{
+//             $res['status_code'] = 1;
+//             $res['message'] = "Inserted Successfully";
+//         }
+//         return is_mobile($type,'monthly_payroll.index',$res);
+//     }
+
+public function monthlyPayrollStore(Request $request)
+{
+    $type = $request->type;
+    $sub_institute_id = session()->get('sub_institute_id');
+    if ($type == "API") {
+        $sub_institute_id = $request->sub_institute_id;
     }
+
+    $payrollVal = $request->payrollVal;
+    $jsonVal = [];
+
+    // make json for payroll head
+    foreach ($payrollVal as $employee_id => $value) {
+        $jsonVal[$employee_id] = json_encode($value['payrollHead']);
+    }
+
+    $i = 0;
+
+    // insert payroll data
+    foreach ($payrollVal as $employee_id => $value) {
+        $dataArr = [
+            'month' => $request->month,
+            'year' => $request->year,
+            'employee_id' => $employee_id,
+            'sub_institute_id' => $sub_institute_id,
+            'total_deduction' => $value['total_deduction'] ?? 0,
+            'total_payment' => $value['total_payment'] ?? 0,
+            'received_by' => $value['received_by'] ?? 0,
+            'total_day' => $value['total_day'] ?? 0,
+            'employee_salary_data' => $jsonVal[$employee_id],
+            'created_at' => now(),
+        ];
+
+        // insert into employee_monthly_salary_data
+        $insert = DB::table("employee_monthly_salary_data")->insert($dataArr);
+        $i++;
+
+        // generate PDF if total_day is not 0
+        if ($dataArr['total_day'] != 0) {
+            $pdfName = $this->monthlyPayrollPdf($request, $employee_id, $request->month, $request->year, 'storeDoc');
+
+            if (isset($pdfName)) {
+                $docTitle = 'Payslip ' . $request->month . ' ' . $request->year;
+
+                $checkDoc = DB::table('staff_document')
+                    ->where([
+                        'sub_institute_id' => $sub_institute_id,
+                        'document_type_id' => 56,
+                        'user_id' => $employee_id,
+                        'file_name' => $pdfName
+                    ])
+                    ->first();
+
+                $pdfData = [
+                    'document_title' => $docTitle,
+                    'sub_institute_id' => $sub_institute_id,
+                    'document_type_id' => 56,
+                    'user_id' => $employee_id,
+                    'file_name' => $pdfName
+                ];
+
+                if (empty($checkDoc)) {
+                    $pdfData['created_at'] = now();
+                    DB::table('staff_document')->insert($pdfData);
+                } else {
+                    $pdfData['updated_at'] = now();
+                    DB::table('staff_document')
+                        ->where([
+                            'sub_institute_id' => $sub_institute_id,
+                            'document_type_id' => 56,
+                            'user_id' => $employee_id,
+                            'file_name' => $pdfName
+                        ])
+                        ->update($pdfData);
+                }
+            }
+        }
+    }
+
+    // response
+    if ($i == 0) {
+        $res['status_code'] = 0;
+        $res['message'] = "Not able to add data";
+    } else {
+        $res['status_code'] = 1;
+        $res['message'] = "Inserted Successfully";
+    }
+
+    return is_mobile($type, 'monthly_payroll.index', $res);
+}
 
     function deleteMonthlyPayrolls(Request $request){
         $type= $request->type;
