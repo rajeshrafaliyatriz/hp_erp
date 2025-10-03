@@ -2,6 +2,22 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\IndustryController;
 use App\Http\Controllers\Api\jobrolecontroller;
+use App\Http\Controllers\Api\skillcontroller;
+use App\Http\Controllers\libraries\jobroletexonomycontroller;
+use App\Http\Controllers\libraries\jobroletaskcontroller;
+use App\Http\Controllers\libraries\jobroleskillcontroller;
+use App\Http\Controllers\HRMS\HrmsController;
+Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
+
+Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
+
+
+Route::resource('job-role-tasks', jobroletaskcontroller::class);
+
+
+Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
+
+Route::resource('skills', skillcontroller::class);
 
 Route::get('skills/search', [jobrolecontroller::class, 'searchskills']);
 
