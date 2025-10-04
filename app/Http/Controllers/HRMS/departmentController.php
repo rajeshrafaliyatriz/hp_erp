@@ -244,6 +244,93 @@ class departmentController extends Controller
                     $i = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$old_sub_department])->update($updateArray);
                 }
         }
+        elseif($formType=="import"){
+            $departments = $request->department;
+            $sub_departments= $request->sub_department;
+            foreach ($departments as $deptKey => $deptName) {
+
+            // 1) check if department exists
+            $department = DB::table('hrms_departments')
+                ->where('department', $deptName)
+                ->where('sub_institute_id',$sub_institute_id)
+                ->where('parent_id', 0)
+                ->first();
+
+            if ($department) {
+                $departmentId = $department->id;
+            } else {
+                // insert new department
+                $departmentId = DB::table('hrms_departments')->insertGetId([
+                    'department'           => $deptName,
+                    'parent_id'            => 0,
+                    'tasks'                => null,
+                    'roles_responsibility' => $deptName,
+                    'status'               => 1,
+                    'is_calculated'        => 0,
+                    'sub_institute_id'     => $sub_institute_id,
+                    'created_by'           => $user_id,
+                    'created_at'           => now(),
+                ]);
+                $i++;
+            }
+
+            // 2) insert sub-departments if not already exists
+            if (isset($sub_departments[$deptKey])) {
+                foreach ($sub_departments[$deptKey] as $subDeptName) {
+
+                    $subDept = DB::table('hrms_departments')
+                        ->where('department', $subDeptName)
+                        ->where('parent_id', $departmentId)
+                        ->where('sub_institute_id',$sub_institute_id)
+                        ->first();
+
+                    if (!$subDept) {
+                        DB::table('hrms_departments')->insert([
+                            'department'           => $subDeptName,
+                            'parent_id'            => $departmentId,
+                            'tasks'                => null,
+                            'roles_responsibility' => $subDeptName,
+                            'status'               => 1,
+                            'is_calculated'        => 0,
+                            'sub_institute_id'     => $sub_institute_id,
+                            'created_by'           => $user_id,
+                            'created_at'           => now(),
+                        ]);
+                    }
+                }
+                $i++;
+            }
+             $standard = DB::table('standard')
+                ->where('name', $deptName)
+                ->where('sub_institute_id', $sub_institute_id)
+                ->first();
+                if(empty($standard) && !isset($standard->id)){
+                    $checkGrade = DB::table('academic_section')->where(['sub_institute_id'=>$sub_institute_id,'title'=>$request->org_type])->first();
+                    if(isset($checkGrade->id)){
+                        $gradeId = $checkGrade->id;
+                    }
+                    else{
+                          $gradeId = DB::table('academic_section')->insertGetId([
+                            'title'           => $request->org_type,
+                            'short_name'            =>  $request->org_type,
+                            'sort_order'                => 1,
+                            'sub_institute_id'     => $sub_institute_id,
+                            'created_by'           => $user_id,
+                            'created_at'           => now(),
+                        ]);
+                    }
+                    DB::table('standard')->insert([
+                                'name'              => $deptName,
+                                'grade_id'          => $gradeId,
+                                'short_name'        => $deptName,
+                                'sort_order'        => 1,
+                                'sub_institute_id'  => $sub_institute_id,
+                                'created_by'        => $user_id,
+                                'created_at'        => now(),
+                        ]);
+                }
+        }
+        }
 
         if($i!=0){
             $res['status_code']=1;

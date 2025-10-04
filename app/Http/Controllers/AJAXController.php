@@ -902,7 +902,7 @@ class AJAXController extends Controller
         }
         $geminiKey = isset($apiKey[0]) ? $apiKey[0] : '';
         $prompt = $request->input('prompt');
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" . $geminiKey;
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $geminiKey;
 
         $response = Http::withHeaders([
             'Content-Type' => 'application/json',
@@ -935,14 +935,60 @@ class AJAXController extends Controller
 
     public function AICourseGeneration(Request $request)
     {
-        // Get request variables
-        $sub_institute_id = $request->sub_institute_id;
+        $type = 'webForm';
+        $skill_department = $request->department;
+   $sub_institute_id = $request->sub_institute_id;
         $token = $request->token;
         $user_id = $request->user_id;
         $user_profile_name = $request->user_profile_name;
         $syear = $request->syear;
         $industry = $request->industry;
-        $skill_department = $request->department;
+// check grade and add grade
+        $checkGrade = DB::table('academic_section')->where(['sub_institute_id' => $sub_institute_id, 'title' => $industry])->whereNull('deleted_at')->get();
+        if (count($checkGrade) > 0) {
+            $grade = $checkGrade[0]->id;
+        } else {
+            $gradeInsert = DB::table('academic_section')->insertGetId([
+                'sub_institute_id' => $sub_institute_id,
+                'title' => $industry,
+                'short_name' => $industry,
+                'sort_order' => '1',
+                'created_by' => $user_id,
+                'created_at' => now()
+            ]);
+            $grade = $gradeInsert;
+        }
+
+        $checkStandard = DB::table('standard')->where(['sub_institute_id' => $sub_institute_id, 'grade_id' => $grade, 'name' => $skill_department])->whereNull('deleted_at')->get();
+        if (count($checkStandard) > 0) {
+            $standard = $checkStandard[0]->id;
+        } else {
+            $standardInsert = DB::table('standard')->insertGetId([
+                'sub_institute_id' => $sub_institute_id,
+                'grade_id' => $grade,
+                'name' => $skill_department,
+                'short_name' => $skill_department,
+                'sort_order' => '1',
+                'created_by' => $user_id,
+                'created_at' => now()
+            ]);
+            $standard = $standardInsert;
+        }
+        $mappingTypes = DB::table('lms_mapping_type')->where('id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
+        $mappingValues = DB::table('lms_mapping_type')->where('parent_id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
+        $lms_content_category = DB::table('lms_content_category')->where('status', 2)->whereNull('deleted_at')->get()->pluck('category_name');
+        $course_category = DB::table('lms_content_category')->where('status', 1)->whereNull('deleted_at')->get()->pluck('category_name');
+        
+        // Get request variables
+        if($request->has('formType') && $request->formType == 'critical_work_function'){
+            $prompt = $request->prompt;
+        }elseif($request->has('formType') && $request->formType == 'task'){
+            $prompt = $request->prompt;
+        }elseif($request->has('formType') && $request->formType == 'skills'){
+            $prompt = $request->prompt;
+        }else{
+
+     
         $skill_category = $request->skill_category;
         $skill_sub_category = $request->skill_sub_category;
         $skill_micro_category = $request->skill_micro_category;
@@ -987,41 +1033,6 @@ class AJAXController extends Controller
         }
         $jobroleData = json_encode($jobroleLists);
         $proficencyData = json_encode($proficiencyLists);
-        // check grade and add grade
-        $checkGrade = DB::table('academic_section')->where(['sub_institute_id' => $sub_institute_id, 'title' => $industry])->whereNull('deleted_at')->get();
-        if (count($checkGrade) > 0) {
-            $grade = $checkGrade[0]->id;
-        } else {
-            $gradeInsert = DB::table('academic_section')->insertGetId([
-                'sub_institute_id' => $sub_institute_id,
-                'title' => $industry,
-                'short_name' => $industry,
-                'sort_order' => '1',
-                'created_by' => $user_id,
-                'created_at' => now()
-            ]);
-            $grade = $gradeInsert;
-        }
-
-        $checkStandard = DB::table('standard')->where(['sub_institute_id' => $sub_institute_id, 'grade_id' => $grade, 'name' => $skill_department])->whereNull('deleted_at')->get();
-        if (count($checkStandard) > 0) {
-            $standard = $checkStandard[0]->id;
-        } else {
-            $standardInsert = DB::table('standard')->insertGetId([
-                'sub_institute_id' => $sub_institute_id,
-                'grade_id' => $grade,
-                'name' => $skill_department,
-                'short_name' => $skill_department,
-                'sort_order' => '1',
-                'created_by' => $user_id,
-                'created_at' => now()
-            ]);
-            $standard = $standardInsert;
-        }
-        $mappingTypes = DB::table('lms_mapping_type')->where('id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
-        $mappingValues = DB::table('lms_mapping_type')->where('parent_id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
-        $lms_content_category = DB::table('lms_content_category')->where('status', 2)->whereNull('deleted_at')->get()->pluck('category_name');
-        $course_category = DB::table('lms_content_category')->where('status', 1)->whereNull('deleted_at')->get()->pluck('category_name');
         // return $mappingTypes;
         $prompt = "I have Skills Name: '" . $skill_name . "' of 
                     Industry: " . $industry . "
@@ -1085,6 +1096,8 @@ class AJAXController extends Controller
                     Use concise, engaging, and adult-learner-appropriate language.
                     Do not add explanations — only output the structured JSON.
                     provide me 3 course with atleast 3 content realted this skills > course > chapter. in JSON array";
+        }
+
         $request->merge(['prompt' => $prompt]);
         $gemeniJson = $this->geminiChat($request);
         $gemeniData = json_decode(json_encode($gemeniJson->original), true);

@@ -25,12 +25,12 @@ class jobrolecontroller extends Controller
 
 
     $jobRoles = DB::table('s_jobrole')
-        ->select('track')
-        ->where('sector', $id) 
-        ->groupBy('track')
+        ->select('jobrole')
+        ->where('track', $id) 
+        
         ->get();
 
-    return response()->json(['department_id' => $id,'job_roles' => $jobRoles], 200);
+    return response()->json(['department' => $id,'job_roles' => $jobRoles], 200);
 }
 
 
@@ -57,11 +57,13 @@ class jobrolecontroller extends Controller
                         ->where('a.sub_institute_id', $request->sub_institute_id)
                         ->whereNull('a.deleted_at')
                         ->where('a.jobrole', $id)
+                        ->select('a.skill')   
+                        // ->groupBy('a.skill', 'a.jobrole')
                         ->groupBy('a.skill')
                         ->get();
             
 
-         return response()->json(['status' => 1,'skills' => $skills]);
+         return response()->json(['jobRoles' =>$id,'skills' => $skills]);
 
     }
 
