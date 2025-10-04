@@ -966,12 +966,7 @@ class AJAXController extends Controller
             'user_profile_name' => 'required',
             'syear' => 'required',
             'industry' => 'required',
-            'department' => 'required',
-            'skill_category' => 'required',
-            'skill_sub_category' => 'required',
-            'skill_micro_category' => 'required',
-            'skill_name' => 'required',
-            'skill_description' => 'required',
+            'department' => 'required'
         ]);
 
         if ($validator->fails()) {
