@@ -21,6 +21,10 @@ use Illuminate\Support\Facades\DB;
 // use PDF;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
+
+
+use Illuminate\Support\Facades\Log;
+
 use DateTime;
 use DateInterval;
 use DatePeriod;
@@ -2400,60 +2404,94 @@ public function monthlyPayrollStore(Request $request)
     return is_mobile($type, 'monthly_payroll.index', $res);
 }
 
-    function deleteMonthlyPayrolls(Request $request){
-        $type= $request->type;
-        $sub_institute_id = session()->get('sub_institute_id');
+   
 
-        if($type=="API"){
-            $sub_institute_id = $request->sub_institute_id;
-        }
 
-        $validator = Validator::make($request->all(), [
-            'month' => 'required',
-            'year' => 'required',
-            'deleteId' => 'required',
-        ]);
-    
-        if ($validator->fails()) {
-            $response['status'] = '0';
-            $response['message'] = $validator->messages();
-        } else {
-            $month = $request->month;
-            $year = $request->year;
-            $deleteId = $request->deleteId;
+public function deleteMonthlyPayrolls(Request $request, $month)
+{
+    $type = $request->type;
+    $sub_institute_id = session()->get('sub_institute_id');
 
-            $i = 0;
-            foreach ($deleteId as $key => $value) {
-               $explodeIds = explode('###',$value);
-               $dataId =  isset($explodeIds[0]) ? $explodeIds[0] : 0;
-               $empId =  isset($explodeIds[1]) ? $explodeIds[1] : 0;
-               if($dataId !=0 && $empId !=0){
-                    $docTitle = 'Payslip '.$request->month.' '.$request->year;
-
-                    $checkInStaffDoc = DB::table('staff_document')->where(['user_id'=>$empId,'document_type_id'=>56,"document_title"=>$docTitle,'sub_institute_id'=>$sub_institute_id])->first();
-
-                    if(!empty($checkInStaffDoc)){
-                        $deleteDoc =  DB::table('staff_document')->where('id',$checkInStaffDoc->id)->delete();
-                    }
-
-                    $checkInMonthly = DB::table('employee_monthly_salary_data')->where('id',$dataId)->delete();
-                    
-               }
-               $i++;
-            }
-            EmployeeMonthlySalaryData::where('id', $dataId)
-            ->update(['deleted_by' => $request->user_id]);
-            if($i>0){
-                $response['status'] = '1';
-                $response['message'] = "Payroll Deleted Successfully";
-            }else{
-                $response['status'] = '0';
-                $response['message'] = "Failed to Delete Payroll";
-            }
-        }
-    
-        return $response;
+    if ($type == "API") {
+        $sub_institute_id = $request->sub_institute_id ?? $sub_institute_id;
     }
+
+    // Validation
+    $validator = Validator::make($request->all(), [
+        'year' => 'required',
+        'deleteId' => 'required|array',
+        'user_id' => 'sometimes|numeric'
+    ]);
+
+    if ($validator->fails()) {
+        return [
+            'status' => '0',
+            'message' => $validator->messages()
+        ];
+    }
+
+    $year = $request->year;
+    $deleteIds = $request->deleteId;
+    $deletedCount = 0;
+
+    try {
+        DB::transaction(function () use ($deleteIds, $month, $year, $sub_institute_id, $request, &$deletedCount) {
+            foreach ($deleteIds as $value) {
+                // Expecting format: dataId###empId
+                $explodeIds = explode('###', $value);
+                $dataId = $explodeIds[0] ?? 0;
+                $empId = $explodeIds[1] ?? ($request->user_id ?? 0);
+
+                if ($dataId && $empId) {
+                    $docTitle = 'Payslip ' . $month . ' ' . $year;
+
+                    // Debug logs
+                    Log::info("Attempting to delete staff document for user_id=$empId, title=$docTitle");
+
+                    // Delete staff document if exists
+                    DB::table('staff_document')->where([
+                        'user_id' => $empId,
+                        'document_type_id' => 56,
+                        'document_title' => $docTitle,
+                        'sub_institute_id' => $sub_institute_id
+                    ])->delete();
+
+                    // Delete monthly salary record
+                    $deleted = DB::table('employee_monthly_salary_data')->where('id', $dataId)->delete();
+
+                    if ($deleted) {
+                        $deletedCount++;
+                        Log::info("Deleted employee_monthly_salary_data id=$dataId successfully");
+                    } else {
+                        Log::warning("Failed to delete employee_monthly_salary_data id=$dataId");
+                    }
+                } else {
+                    Log::warning("Skipping delete, invalid dataId=$dataId or empId=$empId");
+                }
+            }
+        });
+
+        if ($deletedCount > 0) {
+            return [
+                'status' => '1',
+                'message' => 'Payroll Deleted Successfully'
+            ];
+        } else {
+            return [
+                'status' => '0',
+                'message' => 'No records were deleted'
+            ];
+        }
+
+    } catch (\Exception $e) {
+        Log::error("Payroll deletion failed: " . $e->getMessage());
+        return [
+            'status' => '0',
+            'message' => 'An error occurred while deleting payroll'
+        ];
+    }
+}
+
     // 2024-08-20 getTotal Days
     public function getTotalDays(Request $request){
         $sub_institute_id=$request->sub_institute_id;
