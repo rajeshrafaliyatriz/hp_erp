@@ -27,15 +27,33 @@ class HrmsLeaveController extends Controller
 
         }
 
-        $res['departmentData']=DB::table('hrms_leave_allocation as hla')
-                        ->join('hrms_departments as hd',function($join) use($sub_institute_id){
-                            $join->on('hd.id','=','hla.department_id')->where('hd.sub_institute_id',$sub_institute_id)->where('status',1)->whereNull('hd.deleted_at');
-                        })
-                        ->join('hrms_leave_types as hlt','hlt.id','=','hla.leave_type_id')
-                        ->selectRaw('hla.*,hlt.*,hd.*,hla.id as id')
-                        ->where('hla.sub_institute_id',$sub_institute_id)
-                        ->whereNull('hla.employee_id')
-                        ->where('hla.year',$syear)->get()->toArray();
+        // $res['departmentData']=DB::table('hrms_leave_allocation as hla')
+        //                 ->join('hrms_departments as hd',function($join) use($sub_institute_id){
+        //                     $join->on('hd.id','=','hla.department_id')->where('hd.sub_institute_id',$sub_institute_id)->where('status',1)->whereNull('hd.deleted_at');
+        //                 })
+        //                 ->join('hrms_leave_types as hlt','hlt.id','=','hla.leave_type_id')
+        //                 ->selectRaw('hla.*,hlt.*,hd.*,hla.id as id')
+        //                 ->where('hla.sub_institute_id',$sub_institute_id)
+        //                 ->whereNull('hla.employee_id')
+        //                 ->where('hla.year',$syear)->get()->toArray();
+
+        $res['departmentData'] = DB::table('hrms_leave_allocation as hla')
+    ->leftJoin('hrms_departments as hd', function($join) use($sub_institute_id) {
+        $join->on('hd.id','=','hla.department_id')
+             ->where('hd.sub_institute_id', $sub_institute_id)
+             ->where('hd.status',1)
+             ->whereNull('hd.deleted_at');
+                    })
+                    ->join('hrms_leave_types as hlt','hlt.id','=','hla.leave_type_id')
+                    ->selectRaw('hla.*, hlt.*, hd.*, hla.id as id')
+                    ->where('hla.sub_institute_id',$sub_institute_id)
+                    ->where(function($q){
+                        $q->whereNull('hla.employee_id')->orWhere('hla.employee_id',0);
+                    })
+                    ->where('hla.year',$syear)
+                    ->get()
+                    ->toArray();
+
 
         $res['employeeData']=DB::table('hrms_leave_allocation as hla')
                         ->join('hrms_departments as hd',function($join) use($sub_institute_id){
@@ -46,7 +64,8 @@ class HrmsLeaveController extends Controller
                         ->selectRaw('hla.*,hlt.*,hd.*,hla.id as id,concat_ws(" ",COALESCE(tu.first_name,"-"),COALESCE(tu.middle_name,"-"),COALESCE(tu.last_name,"-")) as employee_name,tu.employee_no')
                         ->where('hla.sub_institute_id',$sub_institute_id)
                         ->whereNotNull('hla.employee_id')
-                        ->where('hla.year',$syear)->get()->toArray();
+                       ->where('hla.year',$syear)
+                        ->get()->toArray();
 
         return is_mobile($type, "HRMS.hrms_leave.hrms_leave_allocation.show", $res, "view");
     }
@@ -195,7 +214,10 @@ class HrmsLeaveController extends Controller
             $sub_institute_id = $request->sub_institute_id;
             $syear = $request->year ?? $request->syear;           
         }
-
+            else
+        {
+            $user_id = session()->get('user_id');
+        }
         $res['department_ids'] = $department_ids = $request->department_id;
         // $res['leave_type_ids'] = $leave_type_ids = $request->leave_type_ids;
         $leave_type_ids = (int) (is_array($request->leave_type_ids) 
