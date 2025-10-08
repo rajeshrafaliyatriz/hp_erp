@@ -78,6 +78,7 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::post('/payroll-bank-wise-report', [PayrollController::class, 'payrollBankWiseReport'])->name('payroll.show_payroll_bankwise_report');
 
     Route::get('hrms-salary-certificate', [PayrollController::class, 'hrmsSalaryCertificateIndex'])->name('hrms_salary_certificate.index');
+    Route::post('/hrms-salary-certificate-report/{id}', [PayrollController::class, 'hrmsSalaryCertificateReport'])->name('hrms_salary_certificate.report');
     Route::post('/hrms-salary-certificate-report', [PayrollController::class, 'hrmsSalaryCertificateReport'])->name('hrms_salary_certificate.report');
     Route::get('salary-certificate-pdf-download', [PayrollController::class, 'SalaryCertificatePdfDownload'])->name('salary_certificate_pdf_download');
 
@@ -121,7 +122,8 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::get('/monthly-payroll/create', [PayrollController::class, 'monthlyPayrollCreate'])->name('monthly_payroll.create');
     Route::post('/monthly-payroll-store', [PayrollController::class, 'monthlyPayrollStore'])->name('monthly_payroll.store');
 
-    Route::post('/monthly-payroll-delete', [PayrollController::class, 'deleteMonthlyPayrolls'])->name('monthly_payroll.delete');
+    Route::post('/monthly-payroll-delete/{month}', [PayrollController::class, 'deleteMonthlyPayrolls'])->name('monthly_payroll.delete');
+
     Route::get('/getMonthlyData', [PayrollController::class, 'getEmpMonthlyData'])->name('getMonthlyData');
 
     Route::get('getTotalDays', [PayrollController::class, 'getTotalDays'])->name('getTotalDays');

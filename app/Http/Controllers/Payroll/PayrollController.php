@@ -18,9 +18,10 @@ use function App\Helpers\employeeDetails;
 use function App\Helpers\countDays;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\DB;
-// use PDF;
+use PDF;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
+//use App\Http\Controllers\Payroll\PDF;
 
 
 use Illuminate\Support\Facades\Log;
@@ -670,8 +671,8 @@ if($type=="API"){
     public function hrmsSalaryCertificateIndex(Request $request)
     {
         $type = $request->input('type');
-        $sub_institute_id = session()->get('sub_institute_id');
-        $res['employee_id'] = $request->get('employee_id');
+        $sub_institute_id = $request->input('sub_institute_id');
+        $res['employee_id'] = $request->input('employee_id');
         $res['month_ids'] = [1=>"Jan",2=>"Feb",3=>"Mar",4=>"Apr",5=>"May",6=>"Jun",7=>"Jul",8=>"Aug",9=>"Sep",10=>"Oct",11=>"Nov",12=>"Dec"];
 
         $res['departments'] = $departments = HrmsDepartment::where('status', true)->pluck('department', 'id');
@@ -693,13 +694,13 @@ if($type=="API"){
         }
 
         $department_id = $request->get('department_id');
-	    $employee_id = $request->get('emp_id');
+	    $employee_id = $request->get('employee_id');
 	    $year = $request->get('year');
 	    $month_ids = $request->get('month_id');
 	    $payroll_type_ids = $request->get('payroll_type_id');
 	    $reason = $request->get('reason');
         
-        $get_salaray_certificate = DB::table('hrms_salary_certificate')->where(['departement_id' => $department_id, 'employee_id' => $employee_id, 'sub_institute_id' => $sub_institute_id, 'year' => $year])->first();
+        $get_salaray_certificate = DB::table('hrms_salary_certificate')->where(['department_id' => $department_id, 'employee_id' => $employee_id, 'sub_institute_id' => $sub_institute_id, 'year' => $year])->first();
 
         $res['pdfName'] = $filename = 'SC' . '_' . $year . '_' . $employee_id.'.pdf';
         
@@ -709,7 +710,7 @@ if($type=="API"){
 
         if($get_salaray_certificate)
         {
-            DB::table('hrms_salary_certificate')->where(['departement_id' => $department_id, 'employee_id' => $employee_id, 'year' => $year,'sub_institute_id' => $sub_institute_id
+            DB::table('hrms_salary_certificate')->where(['department_id' => $department_id, 'employee_id' => $employee_id, 'year' => $year,'sub_institute_id' => $sub_institute_id
                 ])->update([
                     'month' => implode(',', $request->get('month_id')),
                     'payroll_type_id' => implode(',', $request->get('payroll_type_id')),
@@ -724,7 +725,7 @@ if($type=="API"){
         {
             // Record does not exist, insert a new one
             DB::table('hrms_salary_certificate')->insert([
-                'departement_id' => $department_id,
+                'department_id' => $department_id,
                 'employee_id' => $employee_id,
                 'year' => $year,
                 'month' => implode(',', $request->get('month_id')),
@@ -770,7 +771,7 @@ if($type=="API"){
 
     public function SalaryCertificatePdfDownload(Request $request)
     {
-        $employee_id = $request->get('emp_id');
+        $employee_id = $request->get('employee_id');
 	    $year = $request->get('year');
 	    $sub_institute_id = $request->get('sub_institute_id');
 
@@ -1155,25 +1156,84 @@ if($type=="API"){
         return view('payroll.employee_salary_structure.rollover', compact('employees', 'payrollTypes', 'employeeSalaryStructures'));
     }
 
+    // public function rolloverEmployeeSalaryStructure(Request $request)
+    // {
+    //     $type = $request->type;
+    //     $sub_institute_id = session()->get('sub_institute_id');
+    //     $year = Carbon::now()->format('Y');
+    //     echo "<pre>";
+    //     print_r('emp');
+    //     die();
+    //     // return $year;
+    //     if ($request->emp) {
+    //         foreach ($request->emp as $employee) {
+    //             $employeeDetails = [];
+    //             foreach ($employee as $key => $data) {
+    //                 if ($key == 0) $employeeDetails['id'] = $data;
+    //                 if ($key > 0) $employeeDetails['data'][$data[0]] = $data[1];
+    //             }
+    //             EmployeeSalaryStructure::updateOrCreate(['employee_id' => $employeeDetails['id'], 'year' => $employee['year'] + 1], [
+    //                 'employee_salary_data' => json_encode($employeeDetails['data']),
+    //                 'year' => $employee['year'] + 1
+    //             ]);
+    //         }
+    //     }
+    //     return redirect('roll-over');
+    // }
+
     public function rolloverEmployeeSalaryStructure(Request $request)
-    {
-        $year = Carbon::now()->format('Y');
-        // return $year;
-        if ($request->emp) {
-            foreach ($request->emp as $employee) {
-                $employeeDetails = [];
-                foreach ($employee as $key => $data) {
-                    if ($key == 0) $employeeDetails['id'] = $data;
-                    if ($key > 0) $employeeDetails['data'][$data[0]] = $data[1];
-                }
-                EmployeeSalaryStructure::updateOrCreate(['employee_id' => $employeeDetails['id'], 'year' => $employee['year'] + 1], [
-                    'employee_salary_data' => json_encode($employeeDetails['data']),
-                    'year' => $employee['year'] + 1
-                ]);
-            }
-        }
-        return redirect('roll-over');
+{
+    $sub_institute_id = $request->input('sub_institute_id') ?? session()->get('sub_institute_id');
+    $currentYear = $request->input('year') ?? Carbon::now()->format('Y');
+
+    $employeeIds = $request->input('employee_id', []);
+    $departmentIds = $request->input('department_id', []);
+
+    // Fetch selected employees
+    $query = EmployeeSalaryStructure::where('sub_institute_id', $sub_institute_id)
+        ->where('year', $currentYear);
+
+    if (!empty($employeeIds)) {
+        $query->whereIn('employee_id', $employeeIds);
     }
+
+    if (!empty($departmentIds)) {
+        $query->whereIn('department_id', $departmentIds);
+    }
+
+    $employees = $query->get();
+
+    if ($employees->isEmpty()) {
+        return response()->json([
+            'status' => 0,
+            'message' => 'No employee salary structures found for rollover'
+        ]);
+    }
+
+    // Rollover
+    foreach ($employees as $emp) {
+        $nextYear = $emp->year + 1;
+
+        EmployeeSalaryStructure::updateOrCreate(
+            [
+                'employee_id' => $emp->employee_id, // use object property
+                'year' => $nextYear,
+                'sub_institute_id' => $sub_institute_id
+            ],
+            [
+                'employee_salary_data' => $emp->employee_salary_data,
+                'year' => $nextYear,
+                'sub_institute_id' => $sub_institute_id
+            ]
+        );
+    }
+
+    return response()->json([
+        'status' => 1,
+        'message' => 'Selected Employees Salary Structures Rolled Over Successfully'
+    ]);
+}
+
 
     public function monthlyPayrollReport(Request $request)
     {
@@ -1299,7 +1359,7 @@ if($type=="API"){
         if($user_profile=="Teacher"){
             $employeeSalaryData = EmployeeMonthlySalaryData::where([['employee_id', $request->employee_id],['month', $request->month],['year',$request->year],[ 'sub_institute_id', $sub_institute_id]])->first();
 
-            $res = ['months'=> $request->month,'year' => $request->year,'employee_id'=>$request->emp_id];
+            $res = ['months'=> $request->month,'year' => $request->year,'employee_id'=>$request->employee_id];
             if(!empty($employeeSalaryData)){
                 $res['pdf_link'] = env('APP_URL')."/monthly-payroll-report/pdf/".$request->employee_id."/".$request->month.'/'.$request->year;
             }else{
