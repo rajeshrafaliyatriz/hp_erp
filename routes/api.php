@@ -7,6 +7,15 @@ use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
 use App\Http\Controllers\HRMS\HrmsController;
+
+use App\Http\Controllers\talent_management\talentmanagement_jobpostingController;
+use App\Http\Controllers\talent_management\talentmanagement_jobapplicationController;
+
+
+Route::Resource('job-applications', talentmanagement_jobapplicationController::class);
+
+
+Route::Resource('talents', talentmanagement_jobpostingController::class);
 Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
 
 Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
