@@ -166,60 +166,52 @@ class talent_jobpostingcontroller extends Controller
      */
     public function update(Request $request, string $id)
     {
-         $sub_institute_id = $request->sub_institute_id;
-         $department_id = $request->department_id;
-
-    // Get all talent records for this department
-    $getAllTalent =talent_jobposting::where([
-        'sub_institute_id' => $sub_institute_id,
-        'department_id' => $department_id
-    ])->get();
-
-    if($getAllTalent->isEmpty()){
+        $sub_institute_id = $request->sub_institute_id;
+    
+        // Check if record exists
+        $exists = talent_jobposting::where([
+            'sub_institute_id' => $sub_institute_id,
+            'id' => $id
+        ])->exists();
+    
+        if(!$exists){
+            return response()->json([
+                'message' => 'No talent record found for this department',
+                'data' => $id
+            ], 404);
+        }
+    
+        // Perform update
+        $updated = talent_jobposting::where([
+            'sub_institute_id' => $sub_institute_id,
+            'id' => $id
+        ])->update([
+            'title' => $request->title,
+            'location' => $request->location,
+            'employment_type' => $request->employment_type,
+            'experience' => $request->experience,
+            'department_id' => $request->department_id,
+            'education' => $request->education,
+            'priority_level' => $request->priority_level,
+            'positions' => $request->positions,
+            'min_salary' => $request->min_salary,
+            'max_salary' => $request->max_salary,
+            'deadline' => $request->deadline,
+            'skills' => $request->skills,
+            'certifications' => $request->certifications,
+            'benefits' => $request->benefits,
+            'description' => $request->description,
+            'status' => $request->status,
+            'updated_by' => $request->user_id,
+            'updated_at' => now()
+        ]);
+    
         return response()->json([
-            'message' => 'No talent records found for this department',
-            'data' => $department_id
-        ], 404);
+            'message' => $updated ? 'Updated successfully' : 'Failed to update',
+            'data' => $id
+        ], $updated ? 200 : 400);
     }
-
-    // Update all matching records
-    $update = talent_jobposting::where([
-        'sub_institute_id' => $sub_institute_id,
-        'department_id' => $department_id
-    ])->update([
-        'title' => $request->title,
-        'location' => $request->location,
-        'employment_type' => $request->employment_type,
-        'experience' => $request->experience,
-        'education' => $request->education,
-        'priority_level' => $request->priority_level,
-        'positions' => $request->positions,
-        'min_salary' => $request->min_salary,
-        'max_salary' => $request->max_salary,
-        'deadline' => $request->deadline,
-        'skills' => $request->skills,
-        'certifications' => $request->certifications,
-        'benefits' => $request->benefits,
-        'description' => $request->description,
-        'status' => $request->status,
-        'updated_by' => $request->user_id,
-        'updated_at' => now()
-    ]);
-
-    if($update){
-        return response()->json([
-            'message' => ' updated successfully',
-            'data' => $department_id
-        ], 200);
-    }
-
-    return response()->json([
-        'message' => 'Failed to update',
-        'data' => $department_id
-    ], 400);
-
-    }
-
+    
     /**
      * Remove the specified resource from storage.
      */

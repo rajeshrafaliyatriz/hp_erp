@@ -10,6 +10,9 @@ use App\Http\Controllers\HRMS\HrmsController;
 
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
+use App\Http\Controllers\talent\talent_interviewschedulescontroller;
+
+Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
 
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
 
