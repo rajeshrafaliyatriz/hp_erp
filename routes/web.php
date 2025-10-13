@@ -190,10 +190,10 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::post('/create-view-store/{id}',[CustomModuleController::class,'crudStore'])->name('custom_module_crud.store');
     Route::delete('/view-delete/{id}',[CustomModuleController::class,'viewDelete'])->name('custom_module_crud.delete');
     Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
-     Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
+    Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
 });
 
-    Route::post('/matrix/save', [SkillMatrixController::class, 'store'])->name('matrix.save');
+    Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->name('skill-matrix.store-bulk');
 
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 

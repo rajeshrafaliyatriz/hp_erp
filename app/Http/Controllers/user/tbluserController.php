@@ -537,6 +537,13 @@ class tbluserController extends Controller
             ->where('s_skill_matrix.user_id', $id)
             ->where('s_users_skills.sub_institute_id',$sub_institute_id)
             ->whereNull('s_users_skills.deleted_at')
+            ->select([
+                's_skill_matrix.*',
+                's_users_skills.title',
+                's_users_skills.category',
+                's_users_skills.sub_category',
+                's_users_skills.description'
+            ])
             ->get()->toArray();
         // echo "<pre>";print_r($res['userRatedSkills']);exit;
         $res['jobroleSkills'] = $res['jobroleTasks'] = [];
@@ -553,7 +560,10 @@ class tbluserController extends Controller
             }
             $res['skills'] = skillJobroleMap::with([
                     'userSkills' => function($query) use($ratedIds) {
-                        $query->whereNotIn('id', $ratedIds);
+                        $query->whereNotIn('id', $ratedIds)
+                        ->select(['id', 'title', 
+                        'category', 'sub_category', 
+                        'description']); // Add required fields
                     }
                 ])
                 ->where('jobrole', $assignedJobrole->jobrole)
@@ -1018,9 +1028,10 @@ class tbluserController extends Controller
             });
         // echo "<pre>";print_r($res['skills']);exit;
         $res['completedCount'] = $completedCount = matrix::where('user_id', $user_id)->count();
-        $res['totalSkills'] = $totalSkills = $skills->count();
+        $res['totalSkills'] = $totalSkills = skillJobroleMap::where('jobrole', $assignedJobrole->jobrole)->whereNull('deleted_at')->
+        where('sub_institute_id', $sub_institute_id)->count();            
         $progress = $totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
-        $res['progress'] = $progress;
+        $res['progress'] = $totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
         $res['userRatedSkills'] = matrix::join('s_users_skills', 's_users_skills.id', '=', 's_skill_matrix.skill_id')
             ->where('s_skill_matrix.user_id', $id)
             ->get()->toArray();
