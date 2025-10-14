@@ -215,9 +215,38 @@ class talent_jobpostingcontroller extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(request $request ,string $id)
     {
-        //
+        $type = $request->type;
+        $sub_institute_id = session()->get('sub_institute_id');
+        if ($type == "API") {
+            $token = $request->input('token');  // get token from input field 'token'
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+            $sub_institute_id = $request->get('sub_institute_id');
+        }
+        // try {
+            $delete=talent_jobposting::where('id',$id)->update([
+                'deleted_at' => now(),
+                'deleted_by' => $request->user_id,
+            ]);
+            if($delete){
+                return response()->json(['message' => 'skill deleted successfully !!'], 200);
+            }
+            return response()->json(['message' => 'Failed to delete !!'], 200);
+        // } catch (\Exception $e) {
+        //     return response()->json($e->getMessage(), 500);
+        // }
     }
+
 
 }

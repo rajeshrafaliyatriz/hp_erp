@@ -15,6 +15,9 @@ use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
 
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
+Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::class, 'updateStatus']);
+Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications']);
+
 
 Route::resource('job-postings', talent_jobpostingcontroller::class);
 

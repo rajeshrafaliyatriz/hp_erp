@@ -110,7 +110,7 @@ class talent_jobapplicationcontroller extends Controller
             'certifications'    => 'nullable|string',
             'resume_path'       => 'nullable|string|max:255',
             'applied_date'      => 'nullable|date',
-            'status'            => 'required|in:pending,accepted,rejected,active',
+            'status'            => 'required|in:pending,accepted,rejected,active,inactive',
             'sub_institute_id'  => 'required|integer',
             'user_id'           => 'required|integer'
                 ]);
@@ -160,10 +160,86 @@ class talent_jobapplicationcontroller extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
-    {
-        //
+    public function show(Request $request, $id)
+{
+    try {
+        $type = $request->type;
+
+        if ($type == 'API') {
+            // 🔒 Token validation
+            $token = $request->input('token');
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            // 🧾 Validate input
+            $validator = \Validator::make($request->all(), [
+                'sub_institute_id' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status_code' => 0,
+                    'message' => $validator->errors()->first()
+                ], 400);
+            }
+
+            $sub_institute_id = $request->sub_institute_id;
+
+            // 🧩 Fetch single application with job details
+            $application = DB::table('talent_job_applications as a')
+                
+                ->select(
+                    'a.id',
+                    'a.job_id',
+                    'a.first_name',
+                    'a.middle_name',
+                    'a.last_name',
+                    'a.email',
+                    'a.mobile',
+                    'a.current_location',
+                    'a.employment_type',
+                    'a.experience',
+                    'a.education',
+                    'a.expected_salary',
+                    'a.skills',
+                    'a.certifications',
+                    'a.resume_path',
+                    'a.applied_date',
+                    'a.status',
+                    'a.created_by',
+                    'a.updated_by'
+                )
+                ->where('a.sub_institute_id', $sub_institute_id)
+                ->where('a.id', $id)
+                ->first();
+
+            if (!$application) {
+                return response()->json([
+                    'message' => 'Job application not found.'
+                ], 404);
+            }
+
+            return response()->json([
+                'message' => 'Job application details fetched successfully!',
+                'data' => $application
+            ], 200);
+        }
+
+        // 🌐 Web version (optional view)
+        $res['application'] = talent_jobapplication::find($id);
+        return is_mobile($type, 'talent.application-detail', $res, 'view');
+
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
     }
+}
+
 
     /**
      * Update the specified resource in storage.
@@ -276,6 +352,151 @@ class talent_jobapplicationcontroller extends Controller
     }
 
     return response()->json(['message' => 'Invalid request type'], 400);
+}
+
+public function updateStatus(Request $request, $id)
+{
+    try {
+        $type = $request->type;
+
+        if ($type === 'API') {
+            // 🔒 Validate token
+            $token = $request->input('token');
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            // 🧾 Validate request
+            $validator = \Validator::make($request->all(), [
+                'sub_institute_id' => 'required|integer',
+                'user_id'          => 'required|integer',
+                'status'           => 'required|string|in:Pending Review,Under Review,Shortlisted,Interview Scheduled,Rejected,Hired,inactive'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status_code' => 0,
+                    'message' => $validator->errors()->first()
+                ], 400);
+            }
+
+            $sub_institute_id = $request->sub_institute_id;
+
+            // 🔍 Find the application
+            $application = \App\Models\talent\talent_jobapplication::where([
+                'id' => $id,
+                'sub_institute_id' => $sub_institute_id
+            ])->first();
+
+            if (!$application) {
+                return response()->json(['message' => 'Job application not found'], 404);
+            }
+
+            // 🧠 Update status only
+            $application->status = $request->status;
+            $application->updated_by = $request->user_id;
+
+            if ($application->save()) {
+                return response()->json([
+                    'message' => 'Application status updated successfully!',
+                    'data' => [
+                        'id' => $application->id,
+                        'status' => $application->status,
+                        'updated_by' => $application->updated_by
+                    ]
+                ], 200);
+            }
+
+            return response()->json(['message' => 'Failed to update status'], 500);
+        }
+
+        return response()->json(['message' => 'Invalid request type'], 400);
+
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
+
+public function getCandidateApplications(Request $request, $candidate_id)
+{
+    try {
+        $type = $request->type;
+
+        if ($type === 'API') {
+            // 🔒 Validate token
+            $token = $request->input('token');
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            // 🧾 Validate inputs
+            $validator = \Validator::make($request->all(), [
+                'sub_institute_id' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status_code' => 0,
+                    'message' => $validator->errors()->first()
+                ], 400);
+            }
+
+            $sub_institute_id = $request->sub_institute_id;
+
+            // 🧠 Fetch applications for the given candidate
+            $applications = DB::table('talent_job_applications as a')
+            ->join('talent_job_postings as j', 'a.job_id', '=', 'j.id')
+            ->select(
+                'a.id as application_id',
+                'a.job_id',
+                'j.title as job_title',
+                'j.location as job_location', // keep only existing columns
+                'a.status',
+                'a.applied_date',
+                'a.expected_salary',
+                'a.resume_path',
+                'a.education',
+                'a.experience'
+            )
+            ->where('a.sub_institute_id', $sub_institute_id)
+            ->where('a.created_by', $candidate_id)
+            ->orderBy('a.applied_date', 'desc')
+            ->get();
+
+            if ($applications->isEmpty()) {
+                return response()->json([
+                    'message' => 'No job applications found for this candidate.',
+                    'data' => []
+                ], 200);
+            }
+
+            return response()->json([
+                'message' => 'Candidate job applications fetched successfully!',
+                'count' => $applications->count(),
+                'data' => $applications
+            ], 200);
+        }
+
+        // 🌐 Web view (optional)
+        $res['applications'] = DB::table('talent_job_applications')
+            ->where('created_by', $candidate_id)
+            ->get();
+
+        return is_mobile($type, 'talent.candidate-applications', $res, 'view');
+
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
 }
 
     /**
