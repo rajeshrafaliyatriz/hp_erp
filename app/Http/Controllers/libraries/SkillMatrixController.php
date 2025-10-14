@@ -48,7 +48,7 @@ class SkillMatrixController extends Controller
         try {
             DB::beginTransaction();
             
-            $user_id = $request->userId;
+            $user_id = $request->user_id;
             $skills = $request->skills; // Array of skill ratings
             
             foreach ($skills as $skill) {
