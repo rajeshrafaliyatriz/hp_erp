@@ -11,6 +11,7 @@ use App\Models\lms\counselling\OnetCareerCluster;
 use Illuminate\Support\Facades\Auth;
 use GenTux\Jwt\GetsJwtToken;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use function App\Helpers\is_mobile;
 
 class SkillMatrixController extends Controller
@@ -33,11 +34,11 @@ class SkillMatrixController extends Controller
             $rules["skills.{$index}.skill_id"] = 'required|exists:s_users_skills,id';
             $rules["skills.{$index}.skill_level"] = 'required|integer|min:1|max:5';
             
-            // Optional attribute validations
-            $rules["skills.{$index}.knowledge"] = 'nullable|array';
-            $rules["skills.{$index}.ability"] = 'nullable|array';
-            $rules["skills.{$index}.behaviour"] = 'nullable|array';
-            $rules["skills.{$index}.attitude"] = 'nullable|array';
+            // Change from 'array' to allow objects/strings that can be JSON encoded
+            $rules["skills.{$index}.knowledge"] = 'nullable';
+            $rules["skills.{$index}.ability"] = 'nullable';
+            $rules["skills.{$index}.behaviour"] = 'nullable';
+            $rules["skills.{$index}.attitude"] = 'nullable';
         }
         
         return Validator::make(['skills' => $skills], $rules);
@@ -48,17 +49,26 @@ class SkillMatrixController extends Controller
         try {
             DB::beginTransaction();
             
-            $user_id = $request->user_id;
-            $skills = $request->skills; // Array of skill ratings
-            
+            $user_id = (int)$request->user_id;
+            $skills = $request->skills;
+
+            $validator = $this->validateSkillData($skills);
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
             foreach ($skills as $skill) {
                 $addUpdate = [
-                    'skill_level' => $skill['skill_level'],
+                    'skill_level' => (int)$skill['skill_level'],
                     'user_id' => $user_id,
-                    'skill_id' => $skill['skill_id']
+                    'skill_id' => (int)$skill['skill_id']
                 ];
 
-                // Handle additional attributes if present
+                // Handle additional attributes - accept objects and convert to JSON
                 $attributes = ['knowledge', 'ability', 'behaviour', 'attitude'];
                 foreach ($attributes as $attribute) {
                     if (isset($skill[$attribute]) && !empty($skill[$attribute])) {
@@ -69,7 +79,7 @@ class SkillMatrixController extends Controller
                 matrix::updateOrCreate(
                     ['user_id' => $user_id, 'skill_id' => $skill['skill_id']],
                     $addUpdate
-                );
+                );                
             }
 
             DB::commit();
