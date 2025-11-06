@@ -49,6 +49,7 @@ class talent_jobpostingcontroller extends Controller
                 $talent = DB::table('talent_job_postings as a')
                             ->select('*')
                             ->where('a.sub_institute_id',$sub_institute_id)
+                            ->whereNull('a.deleted_at')
                             ->get();
 
 
@@ -59,6 +60,7 @@ class talent_jobpostingcontroller extends Controller
             }
             $res['talent'] = DB::table('talent_job_postings')
                     ->select('id', 'sub_institute_id', 'status')
+                    ->whereNull('deleted_at')
                     ->get();
             return is_mobile($type, 'talent.index', $res, 'view');
 
