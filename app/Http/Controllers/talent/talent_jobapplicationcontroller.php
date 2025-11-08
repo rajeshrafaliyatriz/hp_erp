@@ -10,6 +10,7 @@ use function App\Helpers\is_mobile;
 use Illuminate\Support\Facades\Validator;
 use App\Models\talent\talent_jobapplication;
 use App\Models\talent\talent_jobposting;
+use Storage;
 
 class talent_jobapplicationcontroller extends Controller
 {
@@ -75,12 +76,15 @@ class talent_jobapplicationcontroller extends Controller
      */
     public function store(Request $request)
     {
-        {
-         $type = $request->type;
+        $type = $request->input('type');
 
-    if ($type == "API") {
+        // Allow execution only if request type is API
+        if ($type !== "API") {
+            return response()->json(['message' => 'Invalid request type'], 400);
+        }
+
+        // Check and validate token
         $token = $request->input('token');
-
         if (!$token) {
             return response()->json(['message' => 'Token not provided'], 401);
         }
@@ -90,11 +94,10 @@ class talent_jobapplicationcontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $request->input('sub_institute_id');
 
-      
-
-          $validator = \Validator::make($request->all(), [
+        // Validation rules
+        $validator = Validator::make($request->all(), [
             'job_id'            => 'required|exists:talent_job_postings,id',
             'first_name'        => 'required|string|max:255',
             'middle_name'       => 'nullable|string|max:255',
@@ -108,12 +111,12 @@ class talent_jobapplicationcontroller extends Controller
             'expected_salary'   => 'nullable|numeric|min:0',
             'skills'            => 'nullable|string',
             'certifications'    => 'nullable|string',
-            'resume_path'       => 'nullable|string|max:255',
             'applied_date'      => 'nullable|date',
-            'status'            => 'required|in:pending,accepted,rejected,active,inactive',
+            'status'            => 'required|in:Pending Review,Under Review,Shortlisted,Interview Scheduled,Rejected,Hired',
             'sub_institute_id'  => 'required|integer',
-            'user_id'           => 'required|integer'
-                ]);
+            'user_id'           => 'required|integer',
+            'resume_path'       => 'nullable|file|mimes:pdf,doc,docx|max:5120', // 5MB
+        ]);
 
         if ($validator->fails()) {
             return response()->json([
@@ -123,39 +126,61 @@ class talent_jobapplicationcontroller extends Controller
         }
 
         try {
-            $objtalent = new talent_jobapplication();
-            $objtalent->job_id = $request->job_id;
-            $objtalent->first_name = $request->first_name;
-            $objtalent->middle_name = $request->middle_name; 
-            $objtalent->last_name = $request->last_name; 
-            $objtalent->email = $request->email;
-            $objtalent->mobile = $request->mobile;
-            $objtalent->current_location = $request->current_location;
-            $objtalent->employment_type = $request->employment_type;
-            $objtalent->experience = $request->experience;
-            $objtalent->education = $request->education;
-            $objtalent->expected_salary = $request->expected_salary;
-            $objtalent->skills = $request->skills;
-            $objtalent->certifications = $request->certifications;
-            $objtalent->resume_path = $request->resume_path;
-            $objtalent->applied_date = $request->applied_date;
-            $objtalent->status = $request->status;
-            $objtalent->sub_institute_id = $sub_institute_id;
-            $objtalent->created_by = $request->user_id;
+            $resumeFileName = null;
 
-            if ($objtalent->save()) {
-                return response()->json(['message' => 'added successfully !!','data' => $objtalent], 200);
+            if ($request->hasFile('resume_path')) {
+                $file = $request->file('resume_path');
+                $extension = $file->getClientOriginalExtension();
+                $resumeFileName = 'resume_' . $request->first_name . '_' . $request->middle_name . '_' . $request->last_name . '.' . $extension;
+
+                // Upload file to DigitalOcean Spaces (or S3)
+                $filePath = 'public/hp_resume/' . $resumeFileName;
+
+                Storage::disk('digitalocean')->putFileAs('public/hp_resume/', $file, $resumeFileName, 'public');
+
+                // ✅ Generate full public URL
+                $resumeFullUrl = Storage::disk('digitalocean')->url($filePath);
             }
 
-            return response()->json(['message' => 'Something went wrong !!'], 500);
+            // Create new job application entry
+            $objtalent = new talent_jobapplication([
+                'job_id'           => $request->job_id,
+                'first_name'       => $request->first_name,
+                'middle_name'      => $request->middle_name,
+                'last_name'        => $request->last_name,
+                'email'            => $request->email,
+                'mobile'           => $request->mobile,
+                'current_location' => $request->current_location,
+                'employment_type'  => $request->employment_type,
+                'experience'       => $request->experience,
+                'education'        => $request->education,
+                'expected_salary'  => $request->expected_salary,
+                'skills'           => $request->skills,
+                'certifications'   => $request->certifications,
+                'resume_path'      => $resumeFullUrl,
+                'applied_date'     => $request->applied_date,
+                'status'           => $request->status,
+                'sub_institute_id' => $sub_institute_id,
+                'created_by'       => $request->user_id,
+            ]);
+
+            if ($objtalent->save()) {
+                return response()->json([
+                    'status' => 1,
+                    'message' => 'Job application added successfully!',
+                    'data' => $objtalent
+                ], 200);
+            }
+
+            return response()->json(['message' => 'Failed to save application'], 500);
 
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()]);
+            return response()->json([
+                'status' => 0,
+                'error' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
         }
-    }
-
-    }
-
     }
     /**
      * Display the specified resource.
