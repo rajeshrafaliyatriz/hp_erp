@@ -605,7 +605,9 @@ class taskController extends Controller
                 'ALLOCATOR',
                 'ALLOCATED_TO',
                 'method_field',
-                'repeat_days'
+                'repeat_days',
+                'department',
+                'jobrole'
             ]);
             foreach ($data as $key => $value) {
                 if ($value === 'null' || $value === '') {
@@ -637,7 +639,7 @@ class taskController extends Controller
                 $data['approved_on'] = null;
             }
         } else {
-            $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT', 'formName', 'selDepartment', 'selSubDepartment', 'selType', 'task_date', 'add', 'type', 'syear', 'sub_institute_id', 'user_id', 'manageby', 'KRA', 'KPA', 'skills']);
+            $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT', 'formName', 'selDepartment', 'selSubDepartment', 'selType', 'task_date', 'add', 'type', 'syear', 'sub_institute_id', 'user_id', 'manageby', 'KRA', 'KPA', 'skills','department','jobrole']);
 
             $data['kra'] = $KRA;
             $data['TASK_DATE'] = Carbon::parse($request->TASK_DATE)->format('Y-m-d');

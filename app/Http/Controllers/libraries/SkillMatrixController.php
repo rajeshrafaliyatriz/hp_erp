@@ -11,6 +11,7 @@ use App\Models\lms\counselling\OnetCareerCluster;
 use Illuminate\Support\Facades\Auth;
 use GenTux\Jwt\GetsJwtToken;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use function App\Helpers\is_mobile;
 
 class SkillMatrixController extends Controller
@@ -25,27 +26,75 @@ class SkillMatrixController extends Controller
 
         return view('skill.matrix.index', compact('skills', 'progress', 'completedCount', 'totalSkills'));
     }
-
-   public function store(Request $request)
+    
+    private function validateSkillData($skills)
     {
-        $user_id = $request->userId;
-        $addUpdate = ['skill_level' => $request->skill_level];
-
-        $attributes = ['knowledge', 'ability', 'behaviour', 'attitude'];
-
-        foreach ($attributes as $attribute) {
-            if ($request->has($attribute) && !empty($request->$attribute)) {
-                // Convert the array to JSON string before storing
-                $addUpdate[$attribute] = json_encode($request->$attribute);
-            }
+        $rules = [];
+        foreach ($skills as $index => $skill) {
+            $rules["skills.{$index}.skill_id"] = 'required|exists:s_users_skills,id';
+            $rules["skills.{$index}.skill_level"] = 'required|integer|min:1|max:5';
+            
+            // Change from 'array' to allow objects/strings that can be JSON encoded
+            $rules["skills.{$index}.knowledge"] = 'nullable';
+            $rules["skills.{$index}.ability"] = 'nullable';
+            $rules["skills.{$index}.behaviour"] = 'nullable';
+            $rules["skills.{$index}.attitude"] = 'nullable';
         }
-        // return $addUpdate;/
-        matrix::updateOrCreate(
-            ['user_id' => $user_id, 'skill_id' => $request->skill_id],
-            $addUpdate,
-        );
+        
+        return Validator::make(['skills' => $skills], $rules);
+    }
 
-        return response()->json(['success' => true]);
+    public function storeBulk(Request $request)
+    {
+        try {
+            DB::beginTransaction();
+            
+            $user_id = (int)$request->user_id;
+            $skills = $request->skills;
+
+            $validator = $this->validateSkillData($skills);
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            foreach ($skills as $skill) {
+                $addUpdate = [
+                    'skill_level' => (int)$skill['skill_level'],
+                    'user_id' => $user_id,
+                    'skill_id' => (int)$skill['skill_id']
+                ];
+
+                // Handle additional attributes - accept objects and convert to JSON
+                $attributes = ['knowledge', 'ability', 'behaviour', 'attitude'];
+                foreach ($attributes as $attribute) {
+                    if (isset($skill[$attribute]) && !empty($skill[$attribute])) {
+                        $addUpdate[$attribute] = json_encode($skill[$attribute]);
+                    }
+                }
+
+                matrix::updateOrCreate(
+                    ['user_id' => $user_id, 'skill_id' => $skill['skill_id']],
+                    $addUpdate
+                );                
+            }
+
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => 'Skills updated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating skills: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function JobRole()
@@ -53,7 +102,7 @@ class SkillMatrixController extends Controller
         $skills = DB::table('s_jobrole')
         ->select(
             'id',
-'industries',
+            'industries',
             'sector',
             'track',
             'jobrole',

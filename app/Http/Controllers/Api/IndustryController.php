@@ -14,11 +14,6 @@ class IndustryController extends Controller
      */
     public function index(request $request)
     {
-        $industries = DB::table('s_industries')      
-            ->groupBy('industries')           
-            ->get();  
-            
-        return response()->json(['data' => $industries], 200);
 
         $token = $request->input('token');
         if (!$token) {
@@ -29,6 +24,14 @@ class IndustryController extends Controller
         if (!$accessToken) {
             return response()->json(['message' => 'Invalid token'], 401);
         }
+        
+        $industries = DB::table('s_industries')      
+            ->groupBy('industries')           
+            ->get();  
+            
+        return response()->json(['data' => $industries], 200);
+
+        
         
     }
 
