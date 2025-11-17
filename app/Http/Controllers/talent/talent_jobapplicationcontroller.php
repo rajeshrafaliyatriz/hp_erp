@@ -115,7 +115,7 @@ class talent_jobapplicationcontroller extends Controller
             'status'            => 'required|in:Pending Review,Under Review,Shortlisted,Interview Scheduled,Rejected,Hired',
             'sub_institute_id'  => 'required|integer',
             'user_id'           => 'required|integer',
-            'resume_path'       => 'nullable|file|mimes:pdf,doc,docx|max:5120', // 5MB
+            'resume_path'       => 'required|file|mimes:pdf,doc,docx|max:5120', // 5MB
         ]);
 
         if ($validator->fails()) {
@@ -126,12 +126,12 @@ class talent_jobapplicationcontroller extends Controller
         }
 
         try {
-            $resumeFileName = null;
+            $resumeFileName = $resumeFullUrl = null;
 
             if ($request->hasFile('resume_path')) {
                 $file = $request->file('resume_path');
                 $extension = $file->getClientOriginalExtension();
-                $resumeFileName = 'resume_' . $request->first_name . '_' . $request->middle_name . '_' . $request->last_name . '.' . $extension;
+                $resumeFileName = 'resume_' . $sub_institute_id .'_'.$request->first_name . '_' . $request->middle_name . '_' . $request->last_name . '.' . $extension;
 
                 // Upload file to DigitalOcean Spaces (or S3)
                 $filePath = 'public/hp_resume/' . $resumeFileName;
@@ -298,7 +298,7 @@ class talent_jobapplicationcontroller extends Controller
             'mobile'           => 'nullable|string|max:20',
             'current_location' => 'nullable|string|max:255',
             'expected_salary'  => 'nullable|numeric|min:0',
-            'resume_path'      => 'nullable|string|max:255',
+            'resume_path'      => 'nullable|file|mimes:pdf,doc,docx|max:5120',
             'applied_date'     => 'nullable|date',
             'status'           => 'nullable|string|max:50',
             'sub_institute_id' => 'required|integer',
@@ -341,8 +341,29 @@ class talent_jobapplicationcontroller extends Controller
             $application->mobile = $request->mobile ?? $application->mobile;
             $application->current_location = $request->current_location ?? $application->current_location;
             $application->expected_salary = $request->expected_salary ?? $application->expected_salary;
-            $application->resume_path = $request->resume_path ?? $application->resume_path;
             $application->applied_date = $request->applied_date ?? $application->applied_date;
+
+            // 📂 If new resume file uploaded, replace existing one
+            if ($request->hasFile('resume_path')) {
+                $file = $request->file('resume_path');
+                $extension = $file->getClientOriginalExtension();
+
+                $resumeFileName = 'resume_' . $request->first_name . '_' . $request->middle_name . '_' . $request->last_name . '.' . $extension;
+
+                // Upload to DigitalOcean Spaces
+                $path = Storage::disk('digitalocean')->putFileAs(
+                    'public/hp_resume/',
+                    $file,
+                    $resumeFileName,
+                    'public'
+                );
+
+                // Generate full URL from Spaces
+                $resumeUrl = Storage::disk('digitalocean')->url('public/hp_resume/' . $resumeFileName);
+
+                // Update DB field with full link
+                $application->resume_path = $resumeUrl;
+            }
 
             // 🎯 Dynamic Status Validation
             $allowedStatuses = [
