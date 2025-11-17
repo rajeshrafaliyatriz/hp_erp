@@ -261,7 +261,7 @@ class chapterController extends Controller
 
     public function store(Request $request)
     {
-        // return $request->all();
+        //return $request->all();
         $type=$request->type;
         $sub_institute_id = session()->get('sub_institute_id');
         $syear = session()->get('syear');
@@ -640,8 +640,8 @@ class chapterController extends Controller
 
         //START for blank graph
         if ($data['graph_data'] == "[]") {
-            $data['graph_data'] = "[";
-            $data['graph_data'] .= "['".$data['subject_name']."','']";
+            $data['graph_data'] = "[";      
+            $data['graph_data'] .= "['" . ($data['subject_name'] ?? '') . "', '']";
             $data['graph_data'] .= "]";
         }
 

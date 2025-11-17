@@ -387,10 +387,19 @@ if($type=="API"){
     }
 
     public function storeChapter(Request $request){      
-        // echo "<pre>"; print_r($request->all()); exit;         
-        $sub_institute_id = $request->session()->get('sub_institute_id'); 		
-        $syear = $request->session()->get('syear'); 		
-        $user_id = $request->session()->get('user_id');
+        //echo "<pre>"; print_r($request->all()); exit;
+        $type = $request->input('type');
+        if($type == "API"){
+            $sub_institute_id = $request->input('sub_institute_id');
+            $syear = $request->input('syear');
+            $user_id = $request->input('user_id');
+        }
+        else{
+            $sub_institute_id = $request->session()->get('sub_institute_id');       
+            $syear = $request->session()->get('syear');         
+            $user_id = $request->session()->get('user_id');
+        }
+
         $show_hide = $request->get('show_hide');
         $show_hide_val = $show_hide ?? '';
 
@@ -406,10 +415,10 @@ if($type=="API"){
             $ext = $img->getClientOriginalExtension();
             $size = $img->getSize();
             $newfilename = 'lms_'.date('Y-m-d_h-i-s').'.'.$ext;             
-            $file_folder = '/hp_lms_content_file';
+            $file_folder = '/lms_content_file';
             //$img->move(public_path().'/lms_content_file/',$newfilename);
             // $img->storeAs('public/lms_content_file/',$newfilename);  20-05-24
-            Storage::disk('digitalocean')->putFileAs('public/hp_lms_content_file/', $img, $newfilename, 'public');
+            Storage::disk('digitalocean')->putFileAs('public/lms_content_file/', $img, $newfilename, 'public');
         }
 
         if($request->get('contentType') == "link")
@@ -465,8 +474,9 @@ if($type=="API"){
 
         // dd($content);
         //'sub_topic_id' => $request->get('subtopic'),  
-        DB::enableQueryLog();
+        //DB::enableQueryLog();
         contentModel::insert($content);
+//echo "RAJESH";print_r($content); exit;
         $last_id = DB::getPDO()->lastInsertId();
 
         $mapping_type = $request->get('mapping_type');
@@ -484,11 +494,13 @@ if($type=="API"){
 
         $res = array(
             "status_code" => 1,
-			"message" => "Content Added Successfully",
-		);
-        $type = $request->input('type');
-        //return is_mobile($type, "content_master.index", $res, "redirect");
-        return redirect()->route('chapter_master.index', ['standard_id' => $request->get('hid_standard_id'), 'subject_id' => $request->get('hid_subject_id'),'perm'=>$sub_institute_id]);
+            "message" => "Content Added Successfully",
+        );
+
+        if($type == "API")
+            return is_mobile($type, "content_master.index", $res, "redirect");
+        else
+            return redirect()->route('chapter_master.index', ['standard_id' => $request->get('hid_standard_id'), 'subject_id' => $request->get('hid_subject_id'),'perm'=>$sub_institute_id]);
     }
 		
     public function edit(Request $request,$id){
