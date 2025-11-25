@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\CompetencyDashboardController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
+use App\Http\Controllers\API\HRITDashboard\AttendanceApiController;
+use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
@@ -28,4 +30,8 @@ Route::get('/department/{id}/jobroles', [jobrolecontroller::class, 'getJobRolesB
 Route::get('/industry/{id}/departments', [IndustryController::class, 'departments']);
 Route::get('/industries', [IndustryController::class, 'index']);
 Route::get('/competency-dashboard', [CompetencyDashboardController::class, 'index']);
+//HRIT dashboard
+Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
+
+Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise']);
 ?>
