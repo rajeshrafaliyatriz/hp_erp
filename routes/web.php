@@ -166,6 +166,7 @@ Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','men
     Route::post('insert_data', [masterSetupController::class, 'insert_data'])->name('insert_data');
     Route::resource('sub_std_map', sub_std_mapController::class);
 });
+Route::get('/sub_std_map/store', [sub_std_mapController::class, 'store']);
 Route::post('collectsct', [AJAXController::class, 'collectsct'])->name('collectsct');
 
 Route::get('table_data',[AJAXController::class, 'GetTableData'])->name('table_data');

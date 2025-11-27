@@ -85,11 +85,18 @@ class sub_std_mapController extends Controller
 
     public function store(Request $request)
     {
-        // echo "<pre>";print_r($request->all());exit;
-        $sub_institute_id = $request->session()->get('sub_institute_id');
-        $syear = $request->session()->get('syear'); // added on 15-03-2025
-        $user_id = $request->session()->get('user_id'); // added on 15-03-2025
-        $standard_id = $request->get('standard_id');
+        //echo "<pre>";print_r($request->all());exit;
+        $type = $request->input('type');
+        if($type == "API"){
+            $sub_institute_id = $request->input('sub_institute_id');
+            $standard_id = $request->input('standard_id');
+
+        }else{
+            $sub_institute_id = $request->session()->get('sub_institute_id');
+            $syear = $request->session()->get('syear'); // added on 15-03-2025
+            $user_id = $request->session()->get('user_id'); // added on 15-03-2025
+            $standard_id = $request->get('standard_id');
+        }
 
         $file_folder = $ext = $size = $newfilename = "";
         if ($request->hasFile('display_image')) {
@@ -103,7 +110,7 @@ class sub_std_mapController extends Controller
             // $img->storeAs('public/SubStdMapping/', $newfilename); 20-05-24
             Storage::disk('digitalocean')->putFileAs('public/SubStdMapping/', $img, $newfilename, 'public');
         }
-        // echo "<pre>";print_r($request->optional_type);exit;
+        //echo "<pre>";print_r($request->type);exit;
 
         foreach ($standard_id as $key => $stdval) {
             sub_std_mapModel::updateOrCreate(
@@ -166,8 +173,6 @@ class sub_std_mapController extends Controller
             "status_code" => 1,
             "message"     => "Subject-Standard Mapping Added Successfully",
         ];
-
-        $type = $request->input('type');
 
         return is_mobile($type, "sub_std_map.index", $res, "redirect");
     }
