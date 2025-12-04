@@ -12,7 +12,7 @@ use App\Http\Controllers\Api\DBController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
-use App\Http\Controllers\API\HRITDashboard\AttendanceApiController;
+use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
 
