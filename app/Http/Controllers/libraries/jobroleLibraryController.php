@@ -285,6 +285,7 @@ class jobroleLibraryController extends Controller
         $insertData = [
                 'industries'=>$request->org_type,
                 'department' => $request->department,
+                'department_id' => $request->department_id,
                 'sub_department' => $request->sub_department,
                 'jobrole' => $request->jobrole,
                 'description' => $request->description,
