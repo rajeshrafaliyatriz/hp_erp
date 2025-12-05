@@ -215,7 +215,7 @@ class questionmasterController extends Controller
 
         $data['questionmaster_data'] = lmsQuestionMasterModel::select(
             'lms_question_master.*',
-            'standard.name as standard_name',
+            'hrms_departments.department as standard_name',
             'academic_section.title as grade_name',
             'subject_name',
             'chapter_name',
@@ -225,7 +225,7 @@ class questionmasterController extends Controller
             // , 't.id as type_id'
             // , 't1.name as value_name', 't1.id as value_id'
         )
-            ->join('standard', 'standard.id', '=', 'lms_question_master.standard_id')
+            ->join('hrms_departments', 'hrms_departments.id', '=', 'lms_question_master.standard_id')
             ->join('academic_section', 'academic_section.id', '=', 'lms_question_master.grade_id')
             ->join('subject', 'subject.id', '=', 'lms_question_master.subject_id')
             ->join('chapter_master as cm', 'cm.id', '=', 'lms_question_master.chapter_id')
