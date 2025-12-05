@@ -74,11 +74,11 @@ class questionpaperController extends Controller
                     DB::raw('date_format(close_date, "%Y-%m-%d") as close_date'),
                     DB::raw('if(now() between open_date and close_date, "yes", "no") as active_exam')
                 )
-                ->join('standard', 'standard.id', '=', 'question_paper.standard_id')
+                ->join('hrms_departments', 'hrms_departments.id', '=', 'question_paper.standard_id')
                 ->join('tbluser as se', function ($join) use ($student_id, $syear, $sub_institute_id) {
                     $join->on('se.id', '=', DB::raw($student_id))
                         ->on('se.sub_institute_id', '=', DB::raw($sub_institute_id));
-                })                
+                })
                 ->join('academic_section', 'academic_section.id', '=', 'question_paper.grade_id')
                 ->join('sub_std_map as ssm', function ($join) use ($sub_institute_id) {
                     $join->on('ssm.id', '=', 'question_paper.subject_id');
@@ -99,17 +99,19 @@ class questionpaperController extends Controller
         else
         {
             $data['questionpaper_data'] = questionpaperModel::select('question_paper.*',
-                'standard.name as standard_name',
-                'academic_section.title as grade_name', 'subject_name', DB::raw('date_format(open_date,"%Y-%m-%d") as open_date,
+                'hrms_departments.department as standard_name',
+                'academic_section.title as grade_name', 'ssm.display_name as subject_name', DB::raw('date_format(open_date,"%Y-%m-%d") as open_date,
                 date_format(close_date,"%Y-%m-%d") as close_date,if(now() between open_date and close_date,"yes","no") as active_exam'))
-                ->join('standard', function($join) use($marking_period_id){
-                    $join->on('standard.id', '=', 'question_paper.standard_id');
+                ->join('hrms_departments', function($join) use($marking_period_id){
+                    $join->on('hrms_departments.id', '=', 'question_paper.standard_id');
                     // ->when($marking_period_id,function($query) use($marking_period_id){
-                    //     $query->where('standard.marking_period_id',$marking_period_id);
+                    //     $query->where('hrms_departments.marking_period_id',$marking_period_id);
                     // });
                 })
                 ->join('academic_section', 'academic_section.id', '=', 'question_paper.grade_id')
-                ->join('subject', 'subject.id', '=', 'question_paper.subject_id')
+                ->join('sub_std_map as ssm', function ($join) use ($sub_institute_id) {
+                    $join->on('ssm.id', '=', 'question_paper.subject_id');
+                })
                 ->where('question_paper.sub_institute_id', $sub_institute_id)
                 ->where('question_paper.syear', $syear)
                 ->orderBy('question_paper.id', 'desc')
