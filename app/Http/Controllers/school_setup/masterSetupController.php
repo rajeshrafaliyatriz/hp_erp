@@ -8,6 +8,7 @@ use App\Models\school_setup\subjectModel;
 use App\Models\school_setup\standardModel;
 use App\Models\school_setup\academic_sectionModel;
 use App\Models\school_setup\sub_std_mapModel;
+use App\Models\HRMS\hrmsDepartmentModel;
 use function App\Helpers\is_mobile;
 use Illuminate\Support\Facades\DB;
 use function App\Helpers\ValidateInsertData;
@@ -148,6 +149,9 @@ class masterSetupController extends Controller
             }
         } else if ($formType == 'course') {
             // sub_std_mapModel
+            if (!hrmsDepartmentModel::where('id', $insertData['standard_id'])->where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->exists()) {
+                return response()->json(['status_code' => 0, 'message' => 'Invalid Department ID'], 400);
+            }
             $checkExists = sub_std_mapModel::where('sub_institute_id', $sub_institute_id)->where('display_name', $insertData['display_name'])->where('standard_id', $insertData['standard_id'])->whereNull('deleted_at')->first();
             if (isset($checkExists->id)) {
                     return response()->json(['status_code' => 0, 'message' => 'Subject Already Exists!','course_id'=>$checkExists->id], 400);
