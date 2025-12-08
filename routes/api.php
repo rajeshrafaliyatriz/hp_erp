@@ -15,9 +15,7 @@ use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
-use App\Http\Controllers\talent\talent_jobpostingcontroller;
-use App\Http\Controllers\talent\talent_jobapplicationcontroller;
-use App\Http\Controllers\talent\talent_interviewschedulescontroller;
+use App\Http\Controllers\HRMS\HrmsLeaveController;
 
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 
