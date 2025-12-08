@@ -7,10 +7,12 @@ use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
 use App\Http\Controllers\HRMS\HrmsController;
-<<<<<<< HEAD
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
+
+use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
+
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
 
@@ -29,12 +31,6 @@ Route::resource('job-role-tasks', jobroletaskcontroller::class);
 Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
 
 Route::resource('skills', skillcontroller::class);
-=======
-use App\Http\Controllers\Api\CompetencyDashboardController;
-use App\Http\Controllers\talent\talent_jobpostingcontroller;
-use App\Http\Controllers\talent\talent_jobapplicationcontroller;
-use App\Http\Controllers\talent\talent_interviewschedulescontroller;
->>>>>>> 0eb512e522ed17c88af193477931a4b38de53d87
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
@@ -52,4 +48,14 @@ Route::get('/department/{id}/jobroles', [jobrolecontroller::class, 'getJobRolesB
 Route::get('/industry/{id}/departments', [IndustryController::class, 'departments']);
 Route::get('/industries', [IndustryController::class, 'index']);
 Route::get('/competency-dashboard', [CompetencyDashboardController::class, 'index']);
+
+
+
+
+
+Route::get('/enroll', [LmsCourseEnrollController::class, 'index']);
+Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
+Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
+Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
+
 ?>
