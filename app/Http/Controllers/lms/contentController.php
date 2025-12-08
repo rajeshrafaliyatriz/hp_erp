@@ -39,16 +39,18 @@ class contentController extends Controller
         if($type=="API"){
             $sub_institute_id = $request->sub_institute_id;
         }
-        $data['content_data'] = contentModel::select('content_master.*','standard.name as standard_name','academic_section.title as grade_name',
-        'subject_name','chapter_name','tm.name as topic_name','stm.name as sub_topic_name')
-        ->join('standard', 'standard.id', '=', 'content_master.standard_id')
+        $data['content_data'] = contentModel::select('content_master.*','hrms_departments.department as standard_name','academic_section.title as grade_name',
+        'subject.subject_name','cm.chapter_name','tm.name as topic_name','stm.name as sub_topic_name')
+        ->join('hrms_departments', 'hrms_departments.id', '=', 'content_master.standard_id')
         ->join('academic_section', 'academic_section.id', '=', 'content_master.grade_id')
-        ->join('subject', 'subject.id', '=', 'content_master.subject_id')       
+        ->join('subject', 'subject.id', '=', 'content_master.subject_id')
         ->join('chapter_master as cm','cm.id','=','content_master.chapter_id')
         ->leftjoin('topic_master as tm','tm.id','=','content_master.topic_id')
         ->leftjoin('topic_master as stm','stm.id','=','content_master.sub_topic_id')
-        ->where('content_master.sub_institute_id',$sub_institute_id)                      
+        ->where('content_master.sub_institute_id',$sub_institute_id)
         ->get();
+
+        $data['content_category'] = lmsContentCategoryModel::where('status', '2')->get()->toArray();
 
         return $data;
     }
