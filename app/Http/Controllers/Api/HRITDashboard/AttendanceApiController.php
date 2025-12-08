@@ -30,12 +30,13 @@ class AttendanceApiController extends Controller
         }
 
         $subInstituteId = $request->sub_institute_id;
+        $departmentId   = $request->department_id;  // <── NEW FILTER VARIABLE
 
         if (!$subInstituteId) {
             return response()->json(["error" => "sub_institute_id is required"], 400);
         }
 
-        // ✅ DATE RANGE LOGIC
+        // DATE RANGE LOGIC
         if ($request->from_date && $request->to_date) {
             $start = Carbon::parse($request->from_date);
             $end   = Carbon::parse($request->to_date);
@@ -46,16 +47,23 @@ class AttendanceApiController extends Controller
         }
 
         // ============================================================
-        //  FETCH ATTENDANCE RECORDS (YOUR SQL QUERY CONVERTED)
+        //  FETCH ATTENDANCE RECORDS WITH OPTIONAL DEPARTMENT FILTER
         // ============================================================
-        $attendance = DB::table('hrms_attendances')
+        $attendanceQuery = DB::table('hrms_attendances')
             ->join('tbluser', 'hrms_attendances.user_id', '=', 'tbluser.id')
             ->where('hrms_attendances.sub_institute_id', $subInstituteId)
             ->whereBetween('hrms_attendances.day', [
                 $start->format('Y-m-d'),
                 $end->format('Y-m-d')
-            ])
-            ->select('hrms_attendances.*', 'tbluser.first_name', 'tbluser.monday_in_date')
+            ]);
+
+        // APPLY DEPARTMENT FILTER ONLY IF PASSED IN REQUEST
+        if ($request->filled('department_id')) {
+            $attendanceQuery->where('tbluser.department_id', $departmentId);
+        }
+
+        $attendance = $attendanceQuery
+            ->select('hrms_attendances.*', 'tbluser.first_name', 'tbluser.monday_in_date', 'tbluser.department_id')
             ->orderBy('hrms_attendances.day', 'ASC')
             ->get();
 
@@ -67,10 +75,17 @@ class AttendanceApiController extends Controller
         $late    = [];
         $dailyPunchData = [];
 
-        // Total users
-        $totalUsers = DB::table('tbluser')
-            ->where('sub_institute_id', $subInstituteId)
-            ->count();
+        // ============================================================
+        //  TOTAL USERS (ALSO FILTER BY DEPARTMENT WHEN SELECTED)
+        // ============================================================
+        $userQuery = DB::table('tbluser')->where('sub_institute_id', $subInstituteId);
+
+        // apply filter only when department_id is provided
+        if ($request->filled('department_id')) {
+            $userQuery->where('department_id', $departmentId);
+        }
+
+        $totalUsers = $userQuery->count();
 
         // ============================================================
         //  FOR EACH DAY — CALCULATE PRESENT, ABSENT, LATE
@@ -147,6 +162,7 @@ class AttendanceApiController extends Controller
                 "start" => $start->format('Y-m-d'),
                 "end"   => $end->format('Y-m-d')
             ],
+            "department_filter" => $departmentId ?? "All",  // just for info
             "labels"      => $labels,
             "present"     => $present,
             "absent"      => $absent,
