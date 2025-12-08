@@ -184,7 +184,7 @@ class questionmasterController extends Controller
             }
         }
         $data = $this->getChepterData($request);
-
+        
         $res['status_code'] = 1;
         $res['message'] = "SUCCESS";
         $res['data'] = $data['questionmaster_data'];
@@ -214,32 +214,31 @@ class questionmasterController extends Controller
         $where_condition['lms_question_master.sub_institute_id'] = $sub_institute_id;
 
         $data['questionmaster_data'] = lmsQuestionMasterModel::select(
-            'lms_question_master.*',
-            'hrms_departments.department as standard_name',
-            'academic_section.title as grade_name',
-            'subject_name',
-            'chapter_name',
-            'question_type',
-            DB::raw('group_concat(DISTINCT t1.name SEPARATOR "||") as type_name'),
-            DB::raw('IFNULL(loea.question_id,"0") as attempt_question')
-            // , 't.id as type_id'
-            // , 't1.name as value_name', 't1.id as value_id'
-        )
-            ->join('hrms_departments', 'hrms_departments.id', '=', 'lms_question_master.standard_id')
-            ->join('academic_section', 'academic_section.id', '=', 'lms_question_master.grade_id')
-            ->join('subject', 'subject.id', '=', 'lms_question_master.subject_id')
-            ->join('chapter_master as cm', 'cm.id', '=', 'lms_question_master.chapter_id')
-            ->join('question_type_master as tm', 'tm.id', '=', 'lms_question_master.question_type_id')
-            ->LeftJoin('lms_question_mapping as ltm', 'ltm.questionmaster_id', '=', 'lms_question_master.id')
-            ->LeftJoin('lms_mapping_type as t', 't.id', 'ltm.mapping_type_id')
-            ->LeftJoin('lms_mapping_type as t1', function ($query) {
-                $query->on('t1.id', 'ltm.mapping_value_id');
-            })
-            ->leftJoin('lms_online_exam_answer as loea', 'loea.question_id', '=', 'lms_question_master.id')
-            ->where($where_condition)
-            ->orderby('lms_question_master.id')
-            ->groupBy('lms_question_master.id')
-            ->get();
+        'lms_question_master.*',
+        'hrms_departments.department as standard_name',
+        'academic_section.title as grade_name',
+        'subject.subject_name as subject_name',
+        'cm.chapter_name',
+        'tm.question_type',
+        DB::raw('GROUP_CONCAT(DISTINCT t1.name SEPARATOR "||") as type_name'),
+        DB::raw('IFNULL(loea.question_id,"0") as attempt_question')
+    )
+
+    ->leftJoin('hrms_departments', 'hrms_departments.id', '=', 'lms_question_master.standard_id')
+    ->leftJoin('academic_section', 'academic_section.id', '=', 'lms_question_master.grade_id')
+    ->leftJoin('subject', 'subject.id', '=', 'lms_question_master.subject_id')
+    ->leftJoin('chapter_master as cm', 'cm.id', '=', 'lms_question_master.chapter_id')
+    ->leftJoin('question_type_master as tm', 'tm.id', '=', 'lms_question_master.question_type_id')
+    ->leftJoin('lms_question_mapping as ltm', 'ltm.questionmaster_id', '=', 'lms_question_master.id')
+    ->leftJoin('lms_mapping_type as t', 't.id', '=', 'ltm.mapping_type_id')
+    ->leftJoin('lms_mapping_type as t1', 't1.id', '=', 'ltm.mapping_value_id')
+    ->leftJoin('lms_online_exam_answer as loea', 'loea.question_id', '=', 'lms_question_master.id')
+
+    ->where($where_condition)       // keep your filters here
+    ->groupBy('lms_question_master.id')
+    ->orderBy('lms_question_master.id', 'asc')
+    ->get();
+
 
         // $data['breadcrum_data'] = $this->getBreadcrum($sub_institute_id, $request->get('chapter_id'));
 
