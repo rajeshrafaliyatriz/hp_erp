@@ -15,6 +15,30 @@ use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
+use App\Http\Controllers\talent\talent_jobpostingcontroller;
+use App\Http\Controllers\talent\talent_jobapplicationcontroller;
+use App\Http\Controllers\talent\talent_interviewschedulescontroller;
+
+use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
+
+
+Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
+
+Route::resource('job-applications', talent_jobapplicationcontroller::class);
+
+Route::resource('job-postings', talent_jobpostingcontroller::class);
+
+Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
+
+Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
+
+
+Route::resource('job-role-tasks', jobroletaskcontroller::class);
+
+
+Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
+
+Route::resource('skills', skillcontroller::class);
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
@@ -37,4 +61,15 @@ Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary
 
 Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise']);
 Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution']);
+
+
+
+
+
+
+Route::get('/enroll', [LmsCourseEnrollController::class, 'index']);
+Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
+Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
+Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
+
 ?>
