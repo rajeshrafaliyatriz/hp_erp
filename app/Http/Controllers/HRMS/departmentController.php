@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
 use Laravel\Sanctum\PersonalAccessToken;
 use Validator;
-use DB;
+use Illuminate\Support\Facades\DB;
 
 class departmentController extends Controller
 {
@@ -169,12 +169,25 @@ class departmentController extends Controller
 
         if($formType=="add department"){
             $department = $request->department;
-            $checkDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department])->whereNull('deleted_at')->first();
+            $checkDepartment = DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department, 'parent_id'=>0])->first();
 
-            if(empty($checkDepartment) && !isset($checkDepartment->id)){
+            if(empty($checkDepartment)){
+                $departmentId = DB::table('hrms_departments')->insertGetId([
+                    'department'=>$request->department,
+                    'parent_id'=>0,
+                    'tasks'=>null,
+                    'roles_responsibility'=>$request->department,
+                    'status'=>1,
+                    'is_calculated'=>0,
+                    'sub_institute_id'=>$sub_institute_id,
+                    'created_by'=>$user_id,
+                    'created_at'=>now(),
+                ]);
+
                 $i = DB::table('s_user_jobrole')->insert([
                     'sub_institute_id'=>$sub_institute_id,
                     'department'=>$request->department,
+                    'department_id'=>$departmentId,
                     'created_by'=>$user_id,
                     'created_at'=>now(),
                 ]);
@@ -185,10 +198,10 @@ class departmentController extends Controller
             $old_department = $request->old_department;
             $sub_department = $request->sub_department;
 
-            $checkDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department])->whereNull('deleted_at')->first();
+            $checkDepartment = DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department, 'parent_id'=>0])->first();
 
-            if(!empty($checkDepartment) && isset($checkDepartment->id) && $sub_department==''){
-                
+            if(!empty($checkDepartment) && $sub_department==''){
+
                 $updateArray = [
                     'sub_institute_id'=>$sub_institute_id,
                     'department'=>$request->department,
@@ -197,6 +210,8 @@ class departmentController extends Controller
                 ];
 
                 $i = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department])->update($updateArray);
+
+                DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department, 'parent_id'=>0])->update(['department'=>$request->department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
 
                 $checkSubDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$sub_department])->whereNull('deleted_at')->first();
 
@@ -218,6 +233,8 @@ class departmentController extends Controller
 
                 $i = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department])->update($updateArray);
 
+                DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department, 'parent_id'=>0])->update(['department'=>$request->department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
+
                 $checkSubDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$sub_department])->whereNull('deleted_at')->first();
 
                 if(empty($checkSubDepartment) && !isset($checkSubDepartment->id)){
@@ -226,6 +243,20 @@ class departmentController extends Controller
                     $updateArray['created_by'] = $user_id;
 
                      $i = DB::table('s_user_jobrole')->insert($updateArray);
+
+                     $parentId = DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department, 'parent_id'=>0])->value('id');
+                     $subDepartmentId = DB::table('hrms_departments')->insertGetId([
+                         'department'=>$sub_department,
+                         'parent_id'=>$parentId,
+                         'tasks'=>null,
+                         'roles_responsibility'=>$sub_department,
+                         'status'=>1,
+                         'is_calculated'=>0,
+                         'sub_institute_id'=>$sub_institute_id,
+                         'created_by'=>$user_id,
+                         'created_at'=>now(),
+                     ]);
+                     DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$sub_department])->update(['department_id'=>$parentId]);
                 }
             }
         }
@@ -237,11 +268,15 @@ class departmentController extends Controller
             $checkSubDepartment = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$old_sub_department])->whereNull('deleted_at')->first();
 
                 if(!empty($checkSubDepartment) && isset($checkSubDepartment->id)){
+                    $parentId = DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department, 'parent_id'=>0])->value('id');
                     $updateArray['sub_department'] = $sub_department;
+                    $updateArray['department_id'] = $parentId;
                     $updateArray['updated_at'] = now();
                     $updateArray['updated_by'] = $user_id;
 
                     $i = DB::table('s_user_jobrole')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department,'sub_department'=>$old_sub_department])->update($updateArray);
+
+                    DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$old_sub_department, 'parent_id'=>$parentId])->update(['department'=>$sub_department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
                 }
         }
         elseif($formType=="import"){
@@ -379,11 +414,12 @@ class departmentController extends Controller
     }
 
     public function destroy(Request $request,$id){
-        
+
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
 
         $delete = DB::table('hrms_departments')->where('id',$id)->delete();
+        DB::table('s_user_jobrole')->where('department_id',$id)->delete();
 
         if($delete){
             $res['status_code']=1;
