@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
 use Laravel\Sanctum\PersonalAccessToken;
-use Validator;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 
 class departmentController extends Controller

@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
 use App\Http\Controllers\HRMS\HrmsLeaveController;
+use App\Http\Controllers\HRMS\DepartmentManagementController;
 
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 
@@ -69,5 +70,7 @@ Route::get('/enroll', [LmsCourseEnrollController::class, 'index']);
 Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
 Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
 Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
+
+Route::resource('departments-management', DepartmentManagementController::class);
 
 ?>
