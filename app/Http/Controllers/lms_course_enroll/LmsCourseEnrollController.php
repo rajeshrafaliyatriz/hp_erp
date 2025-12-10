@@ -142,7 +142,7 @@ class LmsCourseEnrollController extends Controller
 
     // Find existing course enrollment record
     $courseEnroll = LmsCourseEnroll::where([
-        'course_id' => $id
+        'id' => $id
     ])->first();
 
     if (!$courseEnroll) {
