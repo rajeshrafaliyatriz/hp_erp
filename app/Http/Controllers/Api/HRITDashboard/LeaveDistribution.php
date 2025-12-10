@@ -43,25 +43,31 @@ class LeaveDistribution extends Controller
                 'message' => 'sub_institute_id is required'
             ], 400);
         }
+        $departmentId = $request->department_id ?? null;
 
         // Main query
-        $results = DB::table('tbluser as u')
-            ->leftJoin(DB::raw("(SELECT department_id, MIN(department) AS department 
-                                FROM s_user_jobrole 
+        $query = DB::table('tbluser as u')
+            ->leftJoin(DB::raw("(SELECT department_id, MIN(department) AS department
+                                FROM s_user_jobrole
                                 GROUP BY department_id) AS j"),
                     fn($join) => $join->on('j.department_id', '=', 'u.department_id'))
-            ->join(DB::raw("(SELECT * FROM hrms_emp_leaves 
+            ->join(DB::raw("(SELECT * FROM hrms_emp_leaves
                             WHERE id IN (
-                                SELECT MAX(id) 
-                                FROM hrms_emp_leaves 
+                                SELECT MAX(id)
+                                FROM hrms_emp_leaves
                                 GROUP BY user_id
                             )) AS l"),
                 fn($join) => $join->on('l.user_id', '=', 'u.id'))
             ->leftJoin('hrms_leave_types as lt', 'lt.leave_type_id', '=', 'l.leave_type_id')
-            ->where('u.sub_institute_id', $subInstituteId)
-            ->select(
+            ->where('u.sub_institute_id', $subInstituteId);
+
+        if ($departmentId) {
+            $query->where('u.department_id', $departmentId);
+        }
+
+        $results = $query->select(
                 'lt.leave_type AS leave_type_name',
-                DB::raw("CASE 
+                DB::raw("CASE
                             WHEN l.day_type = 1 THEN 'Full Day Leave'
                             WHEN l.day_type = 0.5 THEN 'Half Day Leave'
                             ELSE 'Unknown'
