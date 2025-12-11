@@ -61,7 +61,7 @@ class LmsCourseEnrollController extends Controller
     // ✅ VALIDATION
     $validator = \Validator::make($request->all(), [
         'user_id' => 'required|integer',
-        'course_id' => 'required|integer',
+        'course_id' => 'required|integer|exists:sub_std_map,id',
         'status' => 'required|in:completed,in-progress',
         'start_date' => 'nullable|date',
         'end_date' => 'nullable|date',
@@ -126,7 +126,7 @@ class LmsCourseEnrollController extends Controller
     // Validate required fields
     $validator = \Validator::make($request->all(), [
         'user_id' => 'required|integer',
-        'course_id' => 'required|integer',
+        'course_id' => 'required|integer|exists:sub_std_map,id',
         'status' => 'required|in:completed,in-progress',
         'start_date' => 'nullable|date',
         'end_date' => 'nullable|date',
@@ -142,7 +142,7 @@ class LmsCourseEnrollController extends Controller
 
     // Find existing course enrollment record
     $courseEnroll = LmsCourseEnroll::where([
-        'course_id' => $id
+        'id' => $id
     ])->first();
 
     if (!$courseEnroll) {
