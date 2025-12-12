@@ -111,12 +111,12 @@ class dashboardController extends Controller
         $currentLevel = $orgSkillLevel = 0;
         // get total skills
         if(in_array(strtoupper($user_profile_name),["ADMIN", "SUPER ADMIN"])){
-           $getTotalJobroles = DB::table('s_user_skill_jobrole')
+           $getTotalJobroles = DB::table('s_user_jobrole')
            ->where(['sub_institute_id'=>$sub_institute_id])
-           ->whereNull('deleted_at')
-           ->groupBy('jobrole')
+           ->whereNotNull('jobrole')
+           ->where('jobrole', '!=', '')
+           ->distinct('jobrole')
            ->count();
-
            $getTotalSkill = DB::table('s_users_skills')
            ->where(['sub_institute_id'=>$sub_institute_id,'status'=>'Active'])
            ->whereNull('deleted_at')
@@ -201,7 +201,10 @@ class dashboardController extends Controller
         }
 
         $res['totle_employees'] = count($empData->original['data']) ?? 0;
-        $res['umapped_employees'] = tbluserModel::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])
+        $res['mapped_jobrole'] = tbluserModel::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])
+        ->whereNotNull('allocated_standards')
+        ->count();
+        $res['unmapped_employees'] = tbluserModel::where(['sub_institute_id'=>$sub_institute_id,'status'=>1])
         ->whereNull('allocated_standards')
         ->count();
         $res['totle_skills'] = $getTotalSkill;
@@ -221,3 +224,4 @@ class dashboardController extends Controller
         return response()->json($res);
     }
 }
+

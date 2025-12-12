@@ -74,11 +74,11 @@ class tbluserController extends Controller
                 'tbluserprofilemaster.name as profile_name',
                 DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
                 DB::raw('IFNULL(hrms_departments.department,"-") as department_name'),
-                DB::raw('IFNULL(s_user_skill_jobrole.jobrole,"-") as jobrole'),
+                DB::raw('IFNULL(s_user_jobrole.jobrole,"-") as jobrole'),
             )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
             ->leftJoin('hrms_departments', 'tbluser.department_id', '=', 'hrms_departments.id')
-            ->leftJoin('s_user_skill_jobrole', 'tbluser.allocated_standards', '=', 's_user_skill_jobrole.id')
+            ->leftJoin('s_user_jobrole', 'tbluser.allocated_standards', '=', 's_user_jobrole.id')
             ->where(['tbluser.sub_institute_id' => $sub_institute_id]) //, 'tbluser.status' => "1"
             ->when((!in_array(strtoupper($user_profile), ['ADMIN', 'SUPER ADMIN']) && !$request->has('menu_type')), function ($q) use ($user_id) {
                 $q->where('tbluser.id', $user_id);
