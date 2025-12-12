@@ -643,6 +643,7 @@ class HrmsController extends Controller
                 ->whereNull('deleted_at')
                 ->whereMonth('day', Carbon::now()->month)
                 ->whereYear('day', Carbon::now()->year)
+                ->where('day', '<=', Carbon::now()->format('Y-m-d'))
                 ->get();
         } elseif ($request->has('formType') && $request->formType == 'UserAttendance') {
             $attendanceData = HrmsAttendance::with([
@@ -691,7 +692,7 @@ class HrmsController extends Controller
             $res['status_code'] = 1;
             $res['message'] = "Success to Find Data";
             if ($request->has('formType') && $request->formType == 'MyAttendance') {
-                $res['daysInMonth'] = $daysInMonth = Carbon::now()->daysInMonth;
+                $res['daysInMonth'] = $daysInMonth = Carbon::now()->day;
                 $res['presentDays'] = $presentDays = $monthAttendance->count();
                 $res['absentDays'] = $absentDays = $daysInMonth - $presentDays;
                 $res['percentege'] = $percentege = ($presentDays / $daysInMonth) * 100;
