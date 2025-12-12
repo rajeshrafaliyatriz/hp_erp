@@ -194,8 +194,8 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
 });
 
-    Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->name('skill-matrix.store-bulk');
-
+Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->name('skill-matrix.store-bulk');
+Route::get('/get-kaba', [SkillMatrixController::class, 'getKaba']);
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 
 Route::get('menuLevel2', [CustomModuleController::class, 'menuLevel2'])->name('menuLevel2.index');
