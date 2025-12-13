@@ -643,6 +643,7 @@ class HrmsController extends Controller
                 ->whereNull('deleted_at')
                 ->whereMonth('day', Carbon::now()->month)
                 ->whereYear('day', Carbon::now()->year)
+                ->where('day', '<=', Carbon::now()->format('Y-m-d'))
                 ->get();
         } elseif ($request->has('formType') && $request->formType == 'UserAttendance') {
             $attendanceData = HrmsAttendance::with([
@@ -691,7 +692,7 @@ class HrmsController extends Controller
             $res['status_code'] = 1;
             $res['message'] = "Success to Find Data";
             if ($request->has('formType') && $request->formType == 'MyAttendance') {
-                $res['daysInMonth'] = $daysInMonth = Carbon::now()->daysInMonth;
+                $res['daysInMonth'] = $daysInMonth = Carbon::now()->day;
                 $res['presentDays'] = $presentDays = $monthAttendance->count();
                 $res['absentDays'] = $absentDays = $daysInMonth - $presentDays;
                 $res['percentege'] = $percentege = ($presentDays / $daysInMonth) * 100;
@@ -2121,7 +2122,6 @@ class HrmsController extends Controller
                 'syear' => 'required',
                 'user_id'=>'required',
                 'user_profile_name'=>'required',
-                'department_id'=>'required',
                 'employee_id'=>'required',
             ]);
 
@@ -2134,7 +2134,7 @@ class HrmsController extends Controller
             $syear = $request->get('syear');
             $userId = $request->get('user_id');
             $userProfileName = $request->get('user_profile_name');
-            $department_id = implode(',',$request->department_id);
+            $department_id = $request->has('department_id') && !empty($request->department_id) ? implode(',',$request->department_id) : 0;
             $employee_id = implode(',',$request->employee_id);
         }else{
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
