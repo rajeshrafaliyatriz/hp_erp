@@ -38,6 +38,10 @@ class KabaMaster extends Model
                 $instance->table = 's_user_attitude';
                 break;
 
+            case 'skill':
+                $instance->table = 's_users_skills';
+                break;
+
             default:
                 throw new \Exception("Invalid KABA type: $type");
         }
