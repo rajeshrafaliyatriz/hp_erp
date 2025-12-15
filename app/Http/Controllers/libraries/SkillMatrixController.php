@@ -265,6 +265,7 @@ class SkillMatrixController extends Controller
 	    // -----------------------------------
 	    $models = [
 	        'jobrole'   => \App\Models\libraries\userJobroleModel::class,
+            'task'      => \App\Models\libraries\userJobroleTask::class,
 	        'knowledge' => \App\Models\libraries\KabaMaster::class,
 	        'ability'   => \App\Models\libraries\KabaMaster::class,
 	        'attitude'  => \App\Models\libraries\KabaMaster::class,
@@ -301,8 +302,8 @@ class SkillMatrixController extends Controller
 	    // -----------------------------------
 	    // 4. Fetch Basic Item Info
 	    // -----------------------------------
-	    $items = $mainModel::find($typeId);
-	    //dd(\App\Models\libraries\userJobroleModel::find(3154));
+	    //dd(\App\Models\libraries\userJobroleTask::find(61041));
+        $items = $mainModel::find($typeId);
 
 	    // -----------------------------------
 	    // 5. Helper to load full KABA objects
@@ -332,22 +333,30 @@ class SkillMatrixController extends Controller
 	    // -----------------------------------
 	    // 6. Build Response
 	    // -----------------------------------
+        function getDisplayName($items)
+        {
+            return $items->task
+                ?? $items->title
+                ?? $items->jobrole
+                ?? '-';
+        }
+
 	    $response = [
 	        'type'        => $map->type,
 	        'type_id'     => $map->type_id,
-	        'title'       => $items->title ?? $items->jobrole,
+	        'title'       => getDisplayName($items),
 	        'description' => $items->description ?? null,
+
+            // Only add if included in type
+	        'task'        => $type === 'task'   ? loadKaba($map->task_ids,'task')   : null,
+	        'skill'       => loadKaba($map->skill_ids,'skill'),
+	        'jobrole'     => $type === 'jobrole'? loadKaba($map->jobrole_ids,'jobrole'): null,
 
 	        // Auto convert IDs → full data
 	        'knowledge'   => loadKaba($map->knowledge_ids,'knowledge'),
 	        'ability'     => loadKaba($map->ability_ids,'ability'),
 	        'attitude'    => loadKaba($map->attitude_ids,'attitude'),
 	        'behaviour'   => loadKaba($map->behaviour_ids,'behaviour'),
-
-	        // Only add if included in type
-	        'task'        => $type === 'task'   ? loadKaba($map->task_ids,'task')   : null,
-	        'skill'       => $type === 'skill'  ? loadKaba($map->skill_ids,'skill')  : null,
-	        'jobrole'     => $type === 'jobrole'? loadKaba($map->jobrole_ids,'jobrole'): null,
 	    ];
 
 	    // Remove null or empty fields
