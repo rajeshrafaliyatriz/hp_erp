@@ -130,21 +130,6 @@ class DepartmentManagementController extends Controller
             'created_at' => now(),
         ]);
 
-        // Insert into s_user_jobrole
-        $jobRoleData = [
-            'sub_institute_id' => $sub_institute_id,
-            'department' => $parent_id == 0 ? $department : DB::table('hrms_departments')->where('id', $parent_id)->value('department'),
-            'department_id' => $parent_id == 0 ? $departmentId : $parent_id,
-            'created_by' => $user_id,
-            'created_at' => now(),
-        ];
-
-        if ($parent_id != 0) {
-            $jobRoleData['sub_department'] = $department;
-        }
-
-        DB::table('s_user_jobrole')->insert($jobRoleData);
-
         return response()->json([
             'status' => 1,
             'message' => 'Department added successfully',
@@ -203,19 +188,6 @@ class DepartmentManagementController extends Controller
             ]);
 
         if ($update) {
-            // Update s_user_jobrole as well
-            $dept = DB::table('hrms_departments')->where('id', $id)->first();
-            if ($dept->parent_id == 0) {
-                DB::table('s_user_jobrole')
-                    ->where('department_id', $id)
-                    ->update(['department' => $department, 'updated_at' => now(), 'updated_by' => $user_id]);
-            } else {
-                DB::table('s_user_jobrole')
-                    ->where('department_id', $dept->parent_id)
-                    ->where('sub_department', $dept->department)
-                    ->update(['sub_department' => $department, 'updated_at' => now(), 'updated_by' => $user_id]);
-            }
-
             return response()->json([
                 'status' => 1,
                 'message' => 'Department updated successfully'
