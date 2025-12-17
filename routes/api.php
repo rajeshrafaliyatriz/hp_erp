@@ -12,11 +12,13 @@ use App\Http\Controllers\Api\DBController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
+
 use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
 use App\Http\Controllers\HRMS\HrmsLeaveController;
 use App\Http\Controllers\HRMS\DepartmentManagementController;
+use App\Http\Controllers\build_with_AI\buildwithAIController;
 
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 
@@ -71,6 +73,9 @@ Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
 Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
 Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
 
+
 Route::resource('departments-management', DepartmentManagementController::class);
 
+Route::post('/save-generated-course', [buildwithAIController::class, 'store']);
+Route::get('/index', [buildwithAIController::class, 'index']);
 ?>
