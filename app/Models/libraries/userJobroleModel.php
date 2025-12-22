@@ -27,4 +27,10 @@ class userJobroleModel extends Model
     //         ->select(['id', 'first_name','middle_name','last_name']);
     // }
 
+    public function department()
+    {
+        return $this->belongsTo(\App\Models\HRMS\hrmsDepartmentModel::class, 'department_id', 'id')
+            ->select(['id', 'department']);
+    }
+
 }

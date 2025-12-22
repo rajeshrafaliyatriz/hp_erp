@@ -71,6 +71,7 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
     Route::resource('syllabus', syllabusController::class);
 	Route::get('generateSyllabus', [syllabusController::class, 'GenrateAISyllabus'])->name("generateSyllabus");
     Route::resource('chapter_master', chapterController::class);
+    Route::post('chapter_master/store', [chapterController::class, 'store']);
     Route::resource('course_master', courseController::class);
     Route::resource('topic_master', topicController::class);
     Route::resource('subtopic_master', subtopicController::class);
@@ -317,4 +318,4 @@ Route::get('/download-File', [contentLibraryController::class, 'downloadFile'])-
 // });
 // Route::get('/sync-neo4j', [Neo4jSyncController::class, 'sync']);
 Route::get('question_paper/search_question', [questionpaperController::class,'search_question2']);
-Route::get('/chapter_master/store', [chapterController::class, 'store']);
+Route::post('/chapter_master/store', [chapterController::class, 'store']);

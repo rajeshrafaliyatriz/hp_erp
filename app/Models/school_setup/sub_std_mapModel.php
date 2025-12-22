@@ -28,6 +28,7 @@ class sub_std_mapModel extends Model
         'sort_order',
         'sub_institute_id',
         'status',
+        'jobrole',
         'created_at',
         'updated_at'
     ];
