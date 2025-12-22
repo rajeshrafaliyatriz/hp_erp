@@ -106,6 +106,25 @@ class AJAXController extends Controller
                 }
             }
         }
+
+        // Apply item_type filter if provided
+        if ($request->has('item_type')) {
+            // Validate item_type column exists
+            try {
+                $itemTypeExists = DB::table('information_schema.columns')
+                    ->where('table_schema', DB::raw('DATABASE()'))
+                    ->where('table_name', $table)
+                    ->where('column_name', 'item_type')
+                    ->exists();
+
+                if ($itemTypeExists) {
+                    $query->where('item_type', $request->item_type);
+                }
+            } catch (\Exception $e) {
+                // Handle error if needed
+            }
+        }
+
         // get entry sort_order wise
         if ($request->has('sort_order') && $request->sort_order != '') {
             $query->orderBy($request->sort_order);
