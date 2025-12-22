@@ -281,26 +281,36 @@ class chapterController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
+
+            $user = $accessToken->tokenable;
+            $user_id = $user->id;
+
             // Validate required fields
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
-                'syear' => 'required',
-                'user_id' => 'required',
             ]);
 
             // If validation fails
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
-             $sub_institute_id = $request->get('sub_institute_id');
-            $syear = $request->get('syear');
-            $user_id = $request->get('user_id');
+              $sub_institute_id = $request->get('sub_institute_id');
         }
         $chapter_name = $request->get('chapter_name');
         $chapter_desc = $request->get('chapter_desc');
         $availability = $request->get('availability');
         $sort_order = $request->get('sort_order');
         $show_hide = $request->get('show_hide');
+
+        // Handle single chapter or multiple chapters
+        if (!is_array($chapter_name)) {
+            $chapter_name = [$chapter_name];
+            $chapter_desc = [$chapter_desc];
+            $availability = [$availability];
+            $sort_order = [$sort_order];
+            $show_hide = [$show_hide];
+        }
+
         $i = $insertGetId = 0;
         foreach ($chapter_name as $key => $val) {
             $show_hide_val = $show_hide[$key] ?? '';
@@ -394,11 +404,13 @@ class chapterController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
+
+            $user = $accessToken->tokenable;
+            $user_id = $user->id;
+
             // Validate required fields
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
-                'syear' => 'required',
-                'user_id' => 'required',
             ]);
 
             // If validation fails
@@ -407,7 +419,6 @@ class chapterController extends Controller
             }
             $sub_institute_id = $request->get('sub_institute_id');
             $syear = $request->get('syear');
-            $user_id = $request->get('user_id');
         }
 // print_r($request->get('show_hide')[0]);EXIT;
         $data = [
@@ -466,17 +477,19 @@ class chapterController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
+
+            $user = $accessToken->tokenable;
+            $user_id = $user->id;
+
             // Validate required fields
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
-                'user_id' => 'required',
             ]);
 
             // If validation fails
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
-            $user_id = $request->user_id;
             $delete = chapterModel::where(["id" => $id])->update(['deleted_by'=>$user_id,'deleted_at'=>now()]);
 
         }else{

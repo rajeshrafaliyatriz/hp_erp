@@ -155,7 +155,7 @@ class jobroleLibraryController extends Controller
         }
 
         $skillFields = ['id', 'category', 'sub_category', 'title', 'description'];
-        $jobroleFields = ['id', 'jobrole', 'description'];
+        $jobroleFields = ['id', 'jobrole', 'description', 'department_id'];
         $createdUser = ['id', 'first_name', 'middle_name', 'last_name'];
 
         // If formType is 'skills', fetch skill-jobrole mapping data
@@ -184,8 +184,9 @@ class jobroleLibraryController extends Controller
                     }
                     // Add jobrole fields if available
                     if ($item->userJobrole) {
-                        $data['jobrole'] = $item->userSkills->jobrole;
-                        $data['jobroleDescription'] = $item->userSkills->description;
+                        $data['jobrole'] = $item->userJobrole->jobrole;
+                        $data['jobroleDescription'] = $item->userJobrole->description;
+                        $data['department_id'] = $item->userJobrole->department_id;
                     }
 
                     // Add created user fields if available
@@ -220,8 +221,9 @@ class jobroleLibraryController extends Controller
                 ->map(function ($item) {
                     $data = $item->toArray();
                     if ($item->userJobrole) {
-                        $data['jobrole'] = $item->userSkills->jobrole;
-                        $data['jobroleDescription'] = $item->userSkills->description;
+                        $data['jobrole'] = $item->userJobrole->jobrole;
+                        $data['jobroleDescription'] = $item->userJobrole->description;
+                        $data['department_id'] = $item->userJobrole->department_id;
                     }
 
                     if ($item->createdUser) {

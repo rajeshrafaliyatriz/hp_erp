@@ -35,6 +35,7 @@ class sub_std_mapController extends Controller
         }else{
             $sub_institute_id = $request->session()->get('sub_institute_id');
         }
+        
         $data = sub_std_mapModel::where(['sub_institute_id' => $sub_institute_id])->get();
         $marking_period_id=session()->get('term_id');
         $data = sub_std_mapModel::select('sub_std_map.*', 'chapter_master.chapter_name as subject_name',
@@ -93,7 +94,7 @@ class sub_std_mapController extends Controller
         $type = $request->input('type');
         if($type == "API"){
             $sub_institute_id = $request->input('sub_institute_id');
-            $standard_id = $request->input('standard_id');
+            $standard_id = (array) $request->input('standard_id');
 
         }else{
             $sub_institute_id = $request->session()->get('sub_institute_id');
@@ -136,7 +137,8 @@ class sub_std_mapController extends Controller
                     'sort_order'       => $request->get('sort_order'),
                     'status'           => "1",
                     "load"             => $request->get('load'),
-                    'optional_type'    => ($request->optional_type!='') ? $request->optional_type : null,
+                    'optional_type'    => $request->get('optional_type') ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : null,
+                    'jobrole'          => $request->get('jobrole'),
                 ]
             );
 
@@ -147,7 +149,7 @@ class sub_std_mapController extends Controller
                     'syear'=>$syear,
                     'subject_id'=>$request->subject_id,
                     'standard_id'=>$stdval,
-                    'optional_type'=>$request->optional_type,
+                    'optional_type'=>$request->get('optional_type') ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : null,
                     'sub_institute_id'=>$sub_institute_id
                 ];
                 // check subject and standard already exists in table or not
@@ -248,7 +250,8 @@ class sub_std_mapController extends Controller
                 'sort_order'       => $request->get('sort_order'),
                 'status'           => "1",
                 'load'             => $request->get('load'),
-                'optional_type'    => ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? $request->get('optional_type') : null,
+                'optional_type'    => ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : null,
+                'jobrole'          => $request->get('jobrole'),
             ];
         } else {
             $data = [
@@ -265,7 +268,8 @@ class sub_std_mapController extends Controller
                 'add_content'      => $request->get('add_content'),
                 'status'           => "1",
                 'load'             => $request->get('load'),
-                'optional_type'    => ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? $request->get('optional_type') : null,
+                'optional_type'    => ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : null,
+                'jobrole'          => $request->get('jobrole'),
             ];
         }
 
@@ -284,7 +288,7 @@ class sub_std_mapController extends Controller
             $checkExists=[];
 
             if(!empty($checkExists) && isset($checkExists->optional_type)){
-                $updatedData['optional_type'] = ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? $request->get('optional_type') : 0;
+                $updatedData['optional_type'] = ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : 0;
                 $updatedData['updated_by'] = $user_id;
                 $updatedData['updated_at'] = now();
                 DB::table('subject_optional_type')->where($dataArr)->update($updatedData);
@@ -294,7 +298,7 @@ class sub_std_mapController extends Controller
                     'syear'=>$syear,
                     'subject_id'=>$request->subject_id,
                     'standard_id'=>$finalStdId,
-                    'optional_type'=>$request->optional_type,
+                    'optional_type'=>$request->get('optional_type') ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : null,
                     'sub_institute_id'=>$sub_institute_id,
                     'created_by'=>$user_id,
                     'created_at'=>now()
