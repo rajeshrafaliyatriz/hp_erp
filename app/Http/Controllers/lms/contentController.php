@@ -388,7 +388,7 @@ if($type=="API"){
         }
     }
 
-    public function storeChapter(Request $request){      
+    public function storeChapter(Request $request){
         //echo "<pre>"; print_r($request->all()); exit;
         $type = $request->input('type');
         if($type == "API"){
@@ -397,26 +397,26 @@ if($type=="API"){
             $user_id = $request->input('user_id');
         }
         else{
-            $sub_institute_id = $request->session()->get('sub_institute_id');       
-            $syear = $request->session()->get('syear');         
+            $sub_institute_id = $request->session()->get('sub_institute_id');
+            $syear = $request->session()->get('syear');
             $user_id = $request->session()->get('user_id');
         }
 
         $show_hide = $request->get('show_hide');
         $show_hide_val = $show_hide ?? '';
 
-        //Basic means 1 and advance means 0 
+        //Basic means 1 and advance means 0
         $basic_advanced = $request->get('toggle_basic_advanced');
         $basic_advanced_val = ! isset($basic_advanced) ? '0' : '1';
-        
+
         $file_folder = $ext = $size = $newfilename = "";
         if($request->hasFile('filename'))
-        {           
+        {
             $img = $request->file('filename');
             $filename = $img->getClientOriginalName();
             $ext = $img->getClientOriginalExtension();
             $size = $img->getSize();
-            $newfilename = 'lms_'.date('Y-m-d_h-i-s').'.'.$ext;             
+            $newfilename = 'lms_'.date('Y-m-d_h-i-s').'.'.$ext;
             $file_folder = '/lms_content_file';
             //$img->move(public_path().'/lms_content_file/',$newfilename);
             // $img->storeAs('public/lms_content_file/',$newfilename);  20-05-24
@@ -427,12 +427,41 @@ if($type=="API"){
         {
             $newfilename = $request->get('link');
             $ext = "link";
-        }       
-           
-        $chapter_data = chapterModel::select('*')        
-        ->where(['chapter_master.sub_institute_id'=>$sub_institute_id,'chapter_master.id'=>$request->get('hid_chapter_id')])         
-        ->get()->toArray(); 
-        $chapter_data = $chapter_data[0] ?? []; 
+        }
+
+        $chapter_id = $request->get('hid_chapter_id');
+        if($type == "API"){
+            $chapter_id = $request->get('chapter_id');
+        }
+
+        $chapter_data = [];
+        if(!empty($chapter_id)){
+            $chapter_data = chapterModel::select('*')
+            ->where(['chapter_master.sub_institute_id'=>$sub_institute_id,'chapter_master.id'=>$chapter_id])
+            ->get()->toArray();
+            $chapter_data = $chapter_data[0] ?? [];
+        }
+
+        if (empty($chapter_data) && !empty($chapter_id)) {
+            $res = [
+                "status_code" => 0,
+                "message"     => "Chapter not found",
+            ];
+            if($type=="API"){
+                return response()->json($res);
+            }
+            return redirect()->back()->with('error', 'Chapter not found');
+        }
+
+        // For API, if no chapter_id provided, use the grade_id, standard_id, subject_id from request
+        if(empty($chapter_data) && $type == "API" && empty($chapter_id)){
+            $chapter_data = [
+                'id' => null,
+                'grade_id' => $request->get('grade_id'),
+                'standard_id' => $request->get('standard_id'),
+                'subject_id' => $request->get('subject_id'),
+            ];
+        }
 
         $pre_topic = $post_topic = $cross_curriculum_topic = "";
         if($request->get('prechapter') != "")
@@ -452,7 +481,7 @@ if($type=="API"){
             'grade_id'                     => $chapter_data['grade_id'],
             'standard_id'                  => $chapter_data['standard_id'],
             'subject_id'                   => $chapter_data['subject_id'],
-            'chapter_id'                   => $request->get('hid_chapter_id'),
+            'chapter_id'                   => $chapter_id,
             'topic_id'                     => $request->get('hid_topic_id'),
             'title'                        => $request->get('title'),
             'description'                  => $request->get('description'),
@@ -466,7 +495,7 @@ if($type=="API"){
             'content_category'             => $request->get('content_category'),
             'created_by'                   => $user_id,
             'sub_institute_id'             => $sub_institute_id,
-            'restrict_date'                => date('Y-m-d', strtotime($request->get('restrict_date'))),
+            'restrict_date'                => $request->get('restrict_date') ? date('Y-m-d', strtotime($request->get('restrict_date'))) : null,
             'pre_grade_topic'              => $pre_topic,
             'post_grade_topic'             => $post_topic,
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,

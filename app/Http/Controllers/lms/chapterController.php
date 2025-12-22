@@ -23,7 +23,7 @@ class chapterController extends Controller
         $data = $this->getData($request);
         // echo "<pre>";print_r(session()->all());exit;
         $type = $request->input('type');
-        $res['sub_institute_id'] = $sub_institute_id = session()->get('sub_institute_id');
+        $res['sub_institute_id'] = $sub_institute_id = $request->input('perm', session()->get('sub_institute_id'));
 
         if($type=="API"){
             $token = $request->input('token');  // get token from input field 'token'
@@ -90,11 +90,11 @@ class chapterController extends Controller
         $res['data'] = $data['chapter_data'];
         $res['content_data'] = $data['content_data'];
         $res['all_resources'] = $allResources;
-        $res['grade'] = $data['basic_ids']['grade_id'] ?? [];
-        $res['standard'] = $data['basic_ids']['standard_id'] ?? [];
-        $res['subject'] = $data['basic_ids']['subject_id'] ?? [];
-        $res['subject_name'] = $data['basic_ids']['subject_name'] ?? [];
-        $res['show_content'] = $data['basic_ids']['add_content'] ?? [];
+        $res['grade'] = $data['basic_ids']['grade_id'] ?? '';
+        $res['standard'] = $data['basic_ids']['standard_id'] ?? '';
+        $res['subject'] = $data['basic_ids']['subject_id'] ?? '';
+        $res['subject_name'] = $data['basic_ids']['subject_name'] ?? '';
+        $res['show_content'] = $data['basic_ids']['add_content'] ?? '';
         $res['lms_mapping_type'] = $lms_mapping_type;  // added on 28-02-2025
         $res['lms_mapping_Values'] = $lms_mapping_Values;  // added on 28-02-2025
         $res['mapped_type'] = $request->mapping_type;  // added on 28-02-2025
