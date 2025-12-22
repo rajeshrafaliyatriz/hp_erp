@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
 use App\Models\build_with_AI\AiCourseOutline;
-use App\Models\build_with_AI\AiGeneratedCourse;
+
 
 
 
@@ -28,8 +28,8 @@ class buildwithAIController extends Controller
          }
  
          try {
-             // Fetch all course outlines with their generated courses
-             $outlines = AiCourseOutline::with('generatedCourses')->get();
+             // Fetch all course outlines
+             $outlines = AiCourseOutline::get();
  
              // Manually decode the input_fields for each outline
              $outlines->transform(function ($outline) {
@@ -42,7 +42,7 @@ class buildwithAIController extends Controller
  
              return response()->json([
                  'status' => true,
-                 'message' => 'AI Courses received successfully',
+                 'message' => 'AI Course Outlines received successfully',
                  'data' => $outlines
              ]);
  
@@ -79,12 +79,6 @@ class buildwithAIController extends Controller
             'input_fields'      => 'required|array',
             'configure_fields'  => 'required|array',
             'outline'           => 'required|array',
-            'title'             => 'nullable|string',
-            'description'       => 'nullable|string',
-            'export_url'        => 'nullable|string',
-            'presentation_platform' => 'nullable|string',
-            'course_pdf'        => 'nullable|string',
-            'status'           => 'required|in:completed,Incompleted',
         ]);
 
         if ($validator->fails()) {
@@ -106,30 +100,10 @@ class buildwithAIController extends Controller
                'created_by' => $user_id,
             ]);
 //dd($outline);
-            // -------------------------------
-            // Save Generated Course (Optional)
-            // -------------------------------
-            $generatedCourse = null;
-
-            if ($request->filled('title')) {
-                $generatedCourse = AiGeneratedCourse::create([
-                    'outline_id'            => $outline->id,
-                    'title'                 => $request->title,
-                    'description'           => $request->description,
-                    'export_url'            => $request->export_url,
-                    'presentation_platform' => $request->presentation_platform ?? 'Gamma',
-                    'status'                => $request->status,
-                    'course_pdf'            => $request->course_pdf,
-                    'sub_institute_id'      => $request->sub_institute_id,
-                    'created_by'            => $user_id,
-                ]);
-            }
-
             return response()->json([
                 'status' => true,
-                'message' => 'AI Course created successfully',
-                'outline' => $outline,
-                'course'  => $generatedCourse
+                'message' => 'outline saved successfully',
+                'outline' => $outline
             ]);
 
         } catch (\Exception $e) {
@@ -139,5 +113,5 @@ class buildwithAIController extends Controller
             ], 500);
         }
     }
-    }
+}
 }
