@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
 use App\Http\Controllers\HRMS\HrmsLeaveController;
 use App\Http\Controllers\HRMS\DepartmentManagementController;
 use App\Http\Controllers\build_with_AI\buildwithAIController;
+use App\Http\Controllers\Api\GammaApiController;
 
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 
@@ -78,4 +79,7 @@ Route::resource('departments-management', DepartmentManagementController::class)
 
 Route::post('/save-generated-course', [buildwithAIController::class, 'store']);
 Route::get('/index', [buildwithAIController::class, 'index']);
+
+Route::resource('gamma-api', GammaApiController::class);
+Route::get('gamma-api/sub-institute/{subInstituteId}', [GammaApiController::class, 'getBySubInstituteId']);
 ?>
