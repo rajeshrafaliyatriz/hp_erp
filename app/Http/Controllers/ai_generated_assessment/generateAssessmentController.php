@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Http\Controllers\ai_generated_assessment;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\lms\questionpaperModel;
+use App\Models\ai_generated_assessment\QuestionMaster;
+use App\Models\ai_generated_assessment\AnswerMaster;
+
+class generateAssessmentController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = questionpaperModel::query();
+
+        // Optional filters
+        if ($request->filled('standard_id')) {
+            $query->where('standard_id', $request->standard_id);
+        }
+
+        if ($request->filled('subject_id')) {
+            $query->where('subject_id', $request->subject_id);
+        }
+
+        if ($request->filled('sub_institute_id')) {
+            $query->where('sub_institute_id', $request->sub_institute_id);
+        }
+
+        $papers = $query->orderBy('created_on', 'desc')->get();
+
+        // Collect all question IDs
+        $questionIds = collect($papers)->pluck('question_ids')->map(function($ids) {
+            return $ids ? explode(',', $ids) : [];
+        })->flatten()->unique()->filter()->values()->toArray();
+
+        // Fetch questions with answers
+        $questions = QuestionMaster::whereIn('id', $questionIds)->with('answers')->get()->keyBy('id');
+
+        // Build data with nested questions
+        $data = $papers->map(function($paper) use ($questions) {
+            $paperArray = $paper->toArray();
+            $ids = $paper->question_ids ? explode(',', $paper->question_ids) : [];
+            $paperArray['questions'] = collect($ids)->map(function($id) use ($questions) {
+                $q = $questions->get((int)$id);
+                return $q ? $q->toArray() : null;
+            })->filter()->values()->toArray();
+            return $paperArray;
+        });
+
+        return response()->json([
+            'status' => true,
+            'data' => $data->toArray()
+        ], 200);
+    }
+    public function store(Request $request)
+    {
+        $request->validate([
+            'standard_id'        => 'required|integer',
+            'paper_name'         => 'required|string',
+            'paper_desc'         => 'nullable|string',
+            'open_date'          => 'required|date',
+            'close_date'         => 'required|date|after_or_equal:open_date',
+            'timelimit_enable'   => 'required|integer|in:0,1',
+            'time_allowed'       => 'nullable|integer',
+            'total_marks'        => 'required|integer',
+            'total_ques'         => 'required|integer',
+            'question_ids'       => 'required|string', // comma separated IDs
+            'shuffle_question'   => 'required|integer|in:0,1',
+            'attempt_allowed'    => 'required|integer',
+            'show_feedback'      => 'required|integer|in:0,1',
+            'show_hide'          => 'required|integer|in:0,1',
+            'result_show_ans'    => 'required|integer|in:0,1',
+            'created_by'         => 'required|integer',
+            'sub_institute_id'   => 'required|integer',
+            'exam_type'          => 'required|string'
+        ]);
+
+        try {
+            $paper = questionpaperModel::create($request->all());
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Assesment stored successfully',
+                'paper_id' => $paper->id
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+}
+}

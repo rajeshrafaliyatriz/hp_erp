@@ -3,6 +3,7 @@
 namespace App\Models\lms;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Http\Controllers\ai_generated_assessment\generateAssessmentController;
 
 class questionpaperModel extends Model
 {

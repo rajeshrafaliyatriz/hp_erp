@@ -21,6 +21,14 @@ use App\Http\Controllers\HRMS\DepartmentManagementController;
 use App\Http\Controllers\build_with_AI\buildwithAIController;
 
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
+use App\Http\Controllers\ai_generated_assessment\generateQuestionController;
+use App\Http\Controllers\ai_generated_assessment\generateAssessmentController;
+
+Route::post('/ai-generated-assessment/question/store',[generateQuestionController::class, 'store']);
+Route::get('/ai-generated-assessment/question/index',[generateQuestionController::class, 'index']);
+
+Route::post('/ai-generated-assessment/assessment/store', [generateAssessmentController::class, 'store']);
+Route::get('/ai-generated-assessment/assessment/index',[generateAssessmentController::class, 'index']);
 
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
