@@ -61,7 +61,7 @@ class generateQuestionController extends Controller
             'description'      => 'nullable|string',
             'points'           => 'required|integer',
             'paper_category'   => 'required|integer',
-            'multiple_answers' => 'required|integer',
+            'multiple_answer' => 'required|integer',
             'answers'          => 'required|array|min:1',
             'answers.*.answer'   => 'required|string',
             'answers.*.correct_answer' => 'required|integer|in:0,1'
@@ -76,8 +76,8 @@ class generateQuestionController extends Controller
                 'description'      => $request->description,
                 'points'           => $request->points,
                 'paper_category'   => $request->paper_category,
-                'multiple_answers' => $request->multiple_answers,
-                'sub_institute_id' => $request->sub_institute_id,
+                'multiple_answer' => $request->multiple_answer,
+                'sub_institute_id' => $subInstituteId,
             ]);
 
             // Store Answers
