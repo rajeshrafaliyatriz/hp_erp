@@ -332,7 +332,9 @@ class lmsActivityStreamController extends Controller
         // $res['proxyLecture'] = $proxyLecture;
         // $res['examMarks'] = $examMarks;
         // $res['studentAttendance'] = $studentAttendance;
-        $res['taskAssigned'] = $taskAssigned;
+        $res['taskAssigned'] = $taskAssigned['tasks'];
+
+        $res['jobRoleTasks'] = $taskAssigned['jobRoleTasks'];
         // $res['parentCommunication'] = $parentCommunication;
         // $res['studentLeave'] = $studentLeave;
         return $res;
@@ -596,7 +598,7 @@ class lmsActivityStreamController extends Controller
         return [];
     }
 
-    // task assigned 
+    // task assigned
     function getTaskAssigned($sub_institute_id, $syear, $searchDate, $user_id, $division_id, $standard_id, $activityType = '')
     {
         // return DB::table('task as t')
@@ -611,7 +613,7 @@ class lmsActivityStreamController extends Controller
         //     ->when($activityType == 'upcoming', function ($q) use ($searchDate) {
         //         $q->where('t.task_date', '>=', $searchDate);
         //         // ->where('t.status', 'PENDING');
-        //     }) 
+        //     })
         //     // for today
         //     ->when($activityType == 'today', function ($q) use ($searchDate) {
         //         $q->where('t.task_date', $searchDate);
@@ -645,9 +647,9 @@ class lmsActivityStreamController extends Controller
                 t.created_at,
                 CONCAT_WS(" ", COALESCE(tu.first_name,"-"), COALESCE(tu.middle_name,"-"), COALESCE(tu.last_name,"-")) as allocatedUser,
                 CONCAT_WS(" ", COALESCE(us.first_name,"-"), COALESCE(us.middle_name,"-"), COALESCE(us.last_name,"-")) as allocatedBy,
-                CASE WHEN tu.image IS NOT NULL 
+                CASE WHEN tu.image IS NOT NULL
                     THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", tu.image)
-                    ELSE NULL 
+                    ELSE NULL
                 END as image
             ')
             ->where(['t.sub_institute_id' => $sub_institute_id, 't.syear' => $syear])
@@ -668,12 +670,12 @@ class lmsActivityStreamController extends Controller
             ($userData->middle_name ?? '') . ' ' .
             $userData->last_name
         );
-        
+
         $jobRoleTaskQuery = DB::table('s_user_jobrole as suj')
             ->join('s_user_jobrole_task as sj', 'suj.jobrole', '=', 'sj.jobrole')
             ->selectRaw('
                 NULL as id,
-                sj.task as task_title, 
+                sj.task as task_title,
                 sj.task_type,
                 ? as task_date,
                 "PENDING" as status,
@@ -682,14 +684,14 @@ class lmsActivityStreamController extends Controller
                 ? as created_at,
                 ? as allocatedUser,
                 ? as allocatedBy,
-                CASE WHEN ? IS NOT NULL 
+                CASE WHEN ? IS NOT NULL
                     THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", ?)
-                    ELSE NULL 
+                    ELSE NULL
                 END as image
             ', [
                 now(),
                 now(),
-                $fullName, 
+                $fullName,
                 $fullName,
                 $userData->image,
                 $userData->image
@@ -698,8 +700,11 @@ class lmsActivityStreamController extends Controller
             ->where('suj.id', $userData->allocated_standards ?? 0)
             ->whereNull('sj.deleted_at');
 
-        // Union both queries
-        return $result = $taskQuery->union($jobRoleTaskQuery)->get()->toArray();
+        // Return separate arrays
+        return [
+            'tasks' => $taskQuery->get()->toArray(),
+            'jobRoleTasks' => $jobRoleTaskQuery->get()->toArray()
+        ];
     }
 
     // parent communication 
