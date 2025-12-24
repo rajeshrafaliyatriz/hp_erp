@@ -192,9 +192,11 @@ class dashboardController extends Controller
         foreach(['today', 'upcoming', 'recent'] as $period) {
             if(isset($taskListArray[$period]['taskAssigned'])) {
                 foreach($taskListArray[$period]['taskAssigned'] as $task) {
-                    $taskDate = \Carbon\Carbon::parse($task->task_date);
-                    if($taskDate->between($weekStart, $weekEnd)) {
-                        $weekTasks[] = $task;
+                    if(isset($task['task_date'])) {
+                        $taskDate = \Carbon\Carbon::parse($task['task_date']);
+                        if($taskDate->between($weekStart, $weekEnd)) {
+                            $weekTasks[] = $task;
+                        }
                     }
                 }
             }
