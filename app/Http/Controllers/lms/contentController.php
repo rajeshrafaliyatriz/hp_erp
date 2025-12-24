@@ -342,12 +342,12 @@ if($type=="API"){
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
             'basic_advance'                => $basic_advanced_val,
             'syear'                        => $syear,
-            'created_at'    =>now(),
             'created_by'=>$user_id,
         ];
-        //'sub_topic_id' => $request->get('subtopic'),                            
-        contentModel::insert($content);
-        $last_id = DB::getPDO()->lastInsertId();
+        //'sub_topic_id' => $request->get('subtopic'),
+        $contentModel = new contentModel($content);
+        $contentModel->save();
+        $last_id = $contentModel->id;
 
         $mapping_type = $request->get('mapping_type');
         $mapping_value = $request->get('mapping_value');
@@ -501,14 +501,15 @@ if($type=="API"){
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
             'basic_advance'                => $basic_advanced_val,
             'syear'                        => $syear,
+            'created_by'                   => $user_id,
         ];
 
         // dd($content);
-        //'sub_topic_id' => $request->get('subtopic'),  
+        //'sub_topic_id' => $request->get('subtopic'),
         //DB::enableQueryLog();
-        contentModel::insert($content);
-//echo "RAJESH";print_r($content); exit;
-        $last_id = DB::getPDO()->lastInsertId();
+        $contentModel = new contentModel($content);
+        $contentModel->save();
+        $last_id = $contentModel->id;
 
         $mapping_type = $request->get('mapping_type');
         $mapping_value = $request->get('mapping_value');
@@ -800,12 +801,17 @@ if($type=="API"){
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
             'syear'                        => $syear,
             'updated_by'=>$user_id,
-            'updated_at'=>now(),
         ];
         
-        $data = array_merge($data,$image_data);    
+        $data = array_merge($data,$image_data);
 
-		$update = contentModel::where(["id" => $id])->update($data);
+        $contentModel = contentModel::find($id);
+        if($contentModel){
+            $contentModel->fill($data);
+            $update = $contentModel->save();
+        }else{
+            $update = false;
+        }
         
         //START Delete and insert into content_mapping_Data
         contentmappingtypeModel::where(["content_id" => $id])->delete();

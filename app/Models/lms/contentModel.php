@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class contentModel extends Model
 {
     protected $table = "content_master";
-	public $timestamps = false;
+	public $timestamps = true;
 
     protected $fillable = [
         'id',
