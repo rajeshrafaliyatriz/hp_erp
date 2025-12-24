@@ -442,25 +442,18 @@ if($type=="API"){
             $chapter_data = $chapter_data[0] ?? [];
         }
 
-        if (empty($chapter_data) && !empty($chapter_id)) {
-            $res = [
-                "status_code" => 0,
-                "message"     => "Chapter not found",
-            ];
-            if($type=="API"){
-                return response()->json($res);
+        if(empty($chapter_data)){
+            if($type == "API"){
+                $chapter_data = [
+                    'id' => null,
+                    'grade_id' => $request->get('grade_id'),
+                    'standard_id' => $request->get('standard_id'),
+                    'subject_id' => $request->get('subject_id'),
+                ];
+                $chapter_id = null;
+            }else{
+                return redirect()->back()->with('error', 'Chapter not found');
             }
-            return redirect()->back()->with('error', 'Chapter not found');
-        }
-
-        // For API, if no chapter_id provided, use the grade_id, standard_id, subject_id from request
-        if(empty($chapter_data) && $type == "API" && empty($chapter_id)){
-            $chapter_data = [
-                'id' => null,
-                'grade_id' => $request->get('grade_id'),
-                'standard_id' => $request->get('standard_id'),
-                'subject_id' => $request->get('subject_id'),
-            ];
         }
 
         $pre_topic = $post_topic = $cross_curriculum_topic = "";
