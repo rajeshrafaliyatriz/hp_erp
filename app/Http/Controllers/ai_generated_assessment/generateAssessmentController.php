@@ -5,6 +5,7 @@ namespace App\Http\Controllers\ai_generated_assessment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\lms\questionpaperModel;
+use App\Models\lms\lmsQuestionMappingModel;
 use App\Models\ai_generated_assessment\QuestionMaster;
 use App\Models\ai_generated_assessment\AnswerMaster;
 
@@ -37,13 +38,21 @@ class generateAssessmentController extends Controller
         // Fetch questions with answers
         $questions = QuestionMaster::whereIn('id', $questionIds)->with('answers')->get()->keyBy('id');
 
-        // Build data with nested questions
-        $data = $papers->map(function($paper) use ($questions) {
+        // Fetch mappings for the questions
+        $mappings = lmsQuestionMappingModel::whereIn('questionmaster_id', $questionIds)->where('mapping_type_id', 7)->get()->groupBy('questionmaster_id');
+
+        // Build data with nested questions and mappings
+        $data = $papers->map(function($paper) use ($questions, $mappings) {
             $paperArray = $paper->toArray();
             $ids = $paper->question_ids ? explode(',', $paper->question_ids) : [];
-            $paperArray['questions'] = collect($ids)->map(function($id) use ($questions) {
+            $paperArray['questions'] = collect($ids)->map(function($id) use ($questions, $mappings) {
                 $q = $questions->get((int)$id);
-                return $q ? $q->toArray() : null;
+                if ($q) {
+                    $qArray = $q->toArray();
+                    $qArray['mappings'] = $mappings->get($id, collect())->toArray();
+                    return $qArray;
+                }
+                return null;
             })->filter()->values()->toArray();
             return $paperArray;
         });
@@ -78,6 +87,20 @@ class generateAssessmentController extends Controller
 
         try {
             $paper = questionpaperModel::create($request->all());
+
+            $questionIds = explode(',', $request->question_ids);
+            foreach ($questionIds as $qid) {
+                if (!empty(trim($qid))) {
+                    lmsQuestionMappingModel::create([
+                        'questionmaster_id' => trim($qid),
+                        'mapping_type_id' => 7,
+                        'mapping_value_id' => $paper->id,
+                        'reasons' => $request->reasons,
+                        'created_by' => $request->created_by,
+                        'sub_institute_id' => $request->sub_institute_id,
+                    ]); 
+                }
+            }
 
             return response()->json([
                 'status' => true,
