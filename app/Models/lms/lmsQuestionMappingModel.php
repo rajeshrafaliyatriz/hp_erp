@@ -13,6 +13,11 @@ class lmsQuestionMappingModel extends Model
         'id',
         'questionmaster_id',
         'mapping_type_id',
-        'mapping_value_id'
+        'mapping_value_id',
+        'reasons',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'sub_institute_id'
     ];
 }
