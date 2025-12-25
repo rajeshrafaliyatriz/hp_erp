@@ -332,9 +332,7 @@ class lmsActivityStreamController extends Controller
         // $res['proxyLecture'] = $proxyLecture;
         // $res['examMarks'] = $examMarks;
         // $res['studentAttendance'] = $studentAttendance;
-        $res['taskAssigned'] = $taskAssigned['tasks'];
-
-        $res['jobRoleTasks'] = $taskAssigned['jobRoleTasks'];
+        $res['taskAssigned'] = $taskAssigned;
         // $res['parentCommunication'] = $parentCommunication;
         // $res['studentLeave'] = $studentLeave;
         return $res;
@@ -625,8 +623,6 @@ class lmsActivityStreamController extends Controller
         //     ->where('t.task_allocated_to', $user_id)
         //     ->get()->toArray();
 
-        $userData = DB::table('tbluser')->where('id',$user_id)->first();
-
         $taskQuery = DB::table('task as t')
             ->join('tbluser as tu', function ($join) use ($sub_institute_id) {
                 $join->on('t.TASK_ALLOCATED_TO', '=', 'tu.id')
@@ -664,47 +660,8 @@ class lmsActivityStreamController extends Controller
             })
             ->where('t.task_allocated_to', $user_id);
 
-        // Second query for s_user_jobrole_task
-        $fullName = trim(
-            $userData->first_name . ' ' .
-            ($userData->middle_name ?? '') . ' ' .
-            $userData->last_name
-        );
-
-        $jobRoleTaskQuery = DB::table('s_user_jobrole as suj')
-            ->join('s_user_jobrole_task as sj', 'suj.jobrole', '=', 'sj.jobrole')
-            ->selectRaw('
-                NULL as id,
-                sj.task as task_title,
-                sj.task_type,
-                ? as task_date,
-                "PENDING" as status,
-                sj.sub_institute_id,
-                NULL as syear,
-                ? as created_at,
-                ? as allocatedUser,
-                ? as allocatedBy,
-                CASE WHEN ? IS NOT NULL
-                    THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", ?)
-                    ELSE NULL
-                END as image
-            ', [
-                now(),
-                now(),
-                $fullName,
-                $fullName,
-                $userData->image,
-                $userData->image
-            ])
-            ->where('sj.sub_institute_id', $sub_institute_id)
-            ->where('suj.id', $userData->allocated_standards ?? 0)
-            ->whereNull('sj.deleted_at');
-
-        // Return separate arrays
-        return [
-            'tasks' => $taskQuery->get()->toArray(),
-            'jobRoleTasks' => $jobRoleTaskQuery->get()->toArray()
-        ];
+        // Return tasks only
+        return $taskQuery->get()->toArray();
     }
 
     // parent communication 

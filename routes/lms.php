@@ -53,6 +53,7 @@ use App\Http\Controllers\lms\curriculum\curriculumLessonplanController;
 use App\Http\Controllers\lms\library\skillLibraryController1;
 use App\Http\Controllers\lms\library\H5PController;
 use App\Http\Controllers\front_desk\taskController;
+use App\Http\Controllers\front_desk\TaskUpdateController;
 use Illuminate\Support\Facades\Route;
 
 Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], function () {
@@ -264,6 +265,7 @@ Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], f
 });
 
 Route::resource('task', taskController::class);
+Route::match(['put', 'post'], 'task/update-status/{id}', [TaskUpdateController::class, 'updateStatusAndDescription'])->name('task.updateStatus');
 Route::get('task_analysis_report', [taskController::class,'taskAnalysisReport'])->name('task_analysis_report');
 
 Route::get('/upcoming', [lmsActivityStreamController::class, 'upcomingActivity'])->name('upcoming');
