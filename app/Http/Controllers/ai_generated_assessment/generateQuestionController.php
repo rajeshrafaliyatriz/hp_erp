@@ -36,6 +36,48 @@ class generateQuestionController extends Controller
         ]);
     }
 
+    public function bulkQuestion($questions, $subInstituteId)
+    {
+        try {
+            $createdQuestions = [];
+            foreach ($questions as $q) {
+                $question = QuestionMaster::create([
+                    'question_type_id' => $q['question_type_id'],
+                    'standard_id'      => $q['standard_id'],
+                    'question_title'   => $q['question_title'],
+                    'description'      => $q['description'],
+                    'points'           => $q['points'],
+                    'paper_category'   => $q['paper_category'],
+                    'multiple_answer' => $q['multiple_answer'],
+                    'sub_institute_id' => $subInstituteId,
+                ]);
+
+                $createdQuestions[] = $question;
+
+                foreach ($q['answers'] as $answer) {
+                    AnswerMaster::create([
+                        'question_id' => $question->id,
+                        'answer' => $answer['answer'],
+                        'correct_answer'  => $answer['correct_answer'],
+                        'sub_institute_id' => $subInstituteId,
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Questions and answers stored successfully',
+                'question_ids' => collect($createdQuestions)->pluck('id')->toArray()
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function store(Request $request)
     {
         $type = $request->type;
@@ -54,53 +96,74 @@ class generateQuestionController extends Controller
         }
         $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
 
-        $request->validate([
-            'question_type_id' => 'required|integer',
-            'standard_id'      => 'required|integer',
-            'question_title'   => 'required|string',
-            'description'      => 'nullable|string',
-            'points'           => 'required|integer',
-            'paper_category'   => 'required|integer',
-            'multiple_answer' => 'required|integer',
-            'answers'          => 'required|array|min:1',
-            'answers.*.answer'   => 'required|string',
-            'answers.*.correct_answer' => 'required|integer|in:0,1'
-        ]);
-
-        try {
-            // Store Question
-            $question = QuestionMaster::create([
-                'question_type_id' => $request->question_type_id,
-                'standard_id'      => $request->standard_id,
-                'question_title'   => $request->question_title,
-                'description'      => $request->description,
-                'points'           => $request->points,
-                'paper_category'   => $request->paper_category,
-                'multiple_answer' => $request->multiple_answer,
-                'sub_institute_id' => $subInstituteId,
+        // Check if it's bulk or single
+        if ($request->has('questions') && is_array($request->questions)) {
+            // Bulk insertion
+            $request->validate([
+                'questions' => 'required|array|min:1',
+                'questions.*.question_type_id' => 'required|integer',
+                'questions.*.standard_id'      => 'required|integer',
+                'questions.*.question_title'   => 'required|string',
+                'questions.*.description'      => 'nullable|string',
+                'questions.*.points'           => 'required|integer',
+                'questions.*.paper_category'   => 'required|integer',
+                'questions.*.multiple_answer' => 'required|integer',
+                'questions.*.answers'          => 'required|array|min:1',
+                'questions.*.answers.*.answer'   => 'required|string',
+                'questions.*.answers.*.correct_answer' => 'required|integer|in:0,1'
             ]);
 
-            // Store Answers
-            foreach ($request->answers as $answer) {
-                AnswerMaster::create([
-                    'question_id' => $question->id,
-                    'answer' => $answer['answer'],
-                    'correct_answer'  => $answer['correct_answer'],
-                    'sub_institute_id' => $request->sub_institute_id,
+            return $this->bulkQuestion($request->questions, $subInstituteId);
+        } else {
+            // Single question insertion
+            $request->validate([
+                'question_type_id' => 'required|integer',
+                'standard_id'      => 'required|integer',
+                'question_title'   => 'required|string',
+                'description'      => 'nullable|string',
+                'points'           => 'required|integer',
+                'paper_category'   => 'required|integer',
+                'multiple_answer' => 'required|integer',
+                'answers'          => 'required|array|min:1',
+                'answers.*.answer'   => 'required|string',
+                'answers.*.correct_answer' => 'required|integer|in:0,1'
+            ]);
+
+            try {
+                // Store Question
+                $question = QuestionMaster::create([
+                    'question_type_id' => $request->question_type_id,
+                    'standard_id'      => $request->standard_id,
+                    'question_title'   => $request->question_title,
+                    'description'      => $request->description,
+                    'points'           => $request->points,
+                    'paper_category'   => $request->paper_category,
+                    'multiple_answer' => $request->multiple_answer,
+                    'sub_institute_id' => $subInstituteId,
                 ]);
+
+                // Store Answers
+                foreach ($request->answers as $answer) {
+                    AnswerMaster::create([
+                        'question_id' => $question->id,
+                        'answer' => $answer['answer'],
+                        'correct_answer'  => $answer['correct_answer'],
+                        'sub_institute_id' => $subInstituteId,
+                    ]);
+                }
+
+                return response()->json([
+                    'status' => true,
+                    'message' => 'Question and answers stored successfully',
+                    'question_id' => $question->id
+                ], 201);
+
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status' => false,
+                    'message' => $e->getMessage()
+                ], 500);
             }
-
-            return response()->json([
-                'status' => true,
-                'message' => 'Question and answers stored successfully',
-                'question_id' => $question->id
-            ], 201);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage()
-            ], 500);
         }
     }
 }
