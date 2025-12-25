@@ -96,6 +96,8 @@ class generateAssessmentController extends Controller
                         'mapping_type_id' => $request->mapping_type_id,
                         'mapping_value_id' => $request->mapping_value_id,
                         'reasons' => $request->reasons,
+                        'created_at' => now(),
+                        'updated_at' => now(),
                         'created_by' => $request->created_by,
                         'sub_institute_id' => $request->sub_institute_id,
                     ]); 
