@@ -93,8 +93,8 @@ class generateAssessmentController extends Controller
                 if (!empty(trim($qid))) {
                     lmsQuestionMappingModel::create([
                         'questionmaster_id' => trim($qid),
-                        'mapping_type_id' => 7,
-                        'mapping_value_id' => $paper->id,
+                        'mapping_type_id' => $request->mapping_type_id,
+                        'mapping_value_id' => $request->mapping_value_id,
                         'reasons' => $request->reasons,
                         'created_by' => $request->created_by,
                         'sub_institute_id' => $request->sub_institute_id,
