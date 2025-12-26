@@ -40,7 +40,7 @@ class generateAssessmentController extends Controller
         $questions = QuestionMaster::whereIn('id', $questionIds)->with('answers')->get()->keyBy('id');
 
         // Fetch mappings for the questions
-        $mappings = lmsQuestionMappingModel::whereIn('questionmaster_id', $questionIds)->where('mapping_type_id', 7)->get()->groupBy('questionmaster_id');
+        $mappings = lmsQuestionMappingModel::whereIn('questionmaster_id', $questionIds)->get()->groupBy('questionmaster_id');
 
         // Build data with nested questions and mappings
         $data = $papers->map(function($paper) use ($questions, $mappings) {
@@ -83,36 +83,45 @@ class generateAssessmentController extends Controller
             'result_show_ans'    => 'required|integer|in:0,1',
             'created_by'         => 'required|integer',
             'sub_institute_id'   => 'required|integer',
-            'exam_type'          => 'required|string'
+            'exam_type'          => 'required|string',
+            'mappings'           => 'required|array'
         ]);
 
         try {
-            Log::info('mapping_type_id from request: ' . $request->mapping_type_id);
-            Log::info('mapping_value_id from request: ' . $request->mapping_value_id);
+            $questionIds = array_filter(array_map('trim', explode(',', $request->question_ids)));
+
+            // Validate that all question IDs exist
+            $existingQuestions = QuestionMaster::whereIn('id', $questionIds)->pluck('id')->toArray();
+            $missingQuestions = array_diff($questionIds, $existingQuestions);
+            if (!empty($missingQuestions)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Invalid question IDs: ' . implode(', ', $missingQuestions)
+                ], 400);
+            }
 
             $paper = questionpaperModel::create($request->all());
 
-            $questionIds = explode(',', $request->question_ids);
             foreach ($questionIds as $qid) {
-                if (!empty(trim($qid))) {
-                    Log::info('Creating mapping for qid ' . trim($qid) . ' with type: ' . $request->mapping_type_id . ' value: ' . $request->mapping_value_id);
-                    $mapping = lmsQuestionMappingModel::create([
-                        'questionmaster_id' => trim($qid),
-                        'mapping_type_id' => $request->mapping_type_id,
-                        'mapping_value_id' => $request->mapping_value_id,
-                        'reasons' => $request->reasons,
-                        'created_by' => $request->created_by,
-                        'sub_institute_id' => $request->sub_institute_id,
-                    ]);
-                    Log::info('Created mapping id: ' . $mapping->id . ' stored type: ' . $mapping->mapping_type_id . ' value: ' . $mapping->mapping_value_id);
-                    $check = lmsQuestionMappingModel::find($mapping->id);
-                    Log::info('DB values after creation: type ' . $check->mapping_type_id . ' value ' . $check->mapping_value_id);
+                if (isset($request->mappings[$qid])) {
+                    foreach ($request->mappings[$qid] as $mappingData) {
+                        Log::info('Creating mapping for qid ' . $qid . ' with type: ' . $mappingData['mapping_type_id'] . ' value: ' . $mappingData['mapping_value_id']);
+                        $mapping = lmsQuestionMappingModel::create([
+                            'questionmaster_id' => $qid,
+                            'mapping_type_id' => $mappingData['mapping_type_id'],
+                            'mapping_value_id' => $mappingData['mapping_value_id'],
+                            'reasons' => $mappingData['reasons'] ?? null,
+                            'created_by' => $request->created_by,
+                            'sub_institute_id' => $request->sub_institute_id,
+                        ]);
+                        Log::info('Created mapping id: ' . $mapping->id . ' stored type: ' . $mapping->mapping_type_id . ' value: ' . $mapping->mapping_value_id);
+                    }
                 }
             }
 
             return response()->json([
                 'status' => true,
-                'message' => 'Assesment stored successfully',
+                'message' => 'Assessment stored successfully',
                 'paper_id' => $paper->id
             ], 201);
 
@@ -122,5 +131,5 @@ class generateAssessmentController extends Controller
                 'message' => $e->getMessage()
             ], 500);
         }
-}
+    }
 }
