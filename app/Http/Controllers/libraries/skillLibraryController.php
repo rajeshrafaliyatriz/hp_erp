@@ -325,6 +325,7 @@ class skillLibraryController extends Controller
                 ];
                 $check = userSkills::where($insertArray)->first();
                 if (!$check) {
+                    $insertArray['department_id'] = $value['id'];
                     $insertArray['department'] = $value['department'];
                     $insertArray['sub_department'] = $value['sub_department'];
                     $insertArray['created_by'] = $user_id;
@@ -464,7 +465,7 @@ class skillLibraryController extends Controller
             }
         } else {
             // return [$request,'type'=>$request->formType];
-            $getIndustries = industryModel::where('department', $request->category)->first();
+            $getIndustries = $request->has('department_id') ? \App\Models\HRMS\hrmsDepartmentModel::find($request->department_id) : industryModel::where('department', $request->category)->first();
             $insertArray = [
                 "category" => $request->category,
                 "sub_category" => $request->sub_category,
@@ -476,6 +477,7 @@ class skillLibraryController extends Controller
 
             $check = userSkills::where($insertArray)->first();
             if (!$check) {
+                $insertArray['department_id'] = $request->department_id ?? $getIndustries->id ?? null;
                 $insertArray['department'] = $getIndustries->department ?? null;
                 $insertArray['sub_department'] = $getIndustries->sub_department ?? null;
                 $insertArray['created_by'] = $request->user_id;
@@ -672,6 +674,7 @@ class skillLibraryController extends Controller
                 "description" => $request->description,
                 "sub_institute_id" => $request->sub_institute_id,
             ];
+            $insertArray['department_id'] = $getIndustries->id ?? null;
             $insertArray['department'] = $getIndustries->department ?? null;
             $insertArray['sub_department'] = $getIndustries->sub_department ?? null;
             $insertArray['updated_by'] = $request->user_id;
