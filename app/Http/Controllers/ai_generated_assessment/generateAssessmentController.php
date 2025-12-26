@@ -4,6 +4,7 @@ namespace App\Http\Controllers\ai_generated_assessment;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use App\Models\lms\questionpaperModel;
 use App\Models\lms\lmsQuestionMappingModel;
 use App\Models\ai_generated_assessment\QuestionMaster;
@@ -86,19 +87,26 @@ class generateAssessmentController extends Controller
         ]);
 
         try {
+            Log::info('mapping_type_id from request: ' . $request->mapping_type_id);
+            Log::info('mapping_value_id from request: ' . $request->mapping_value_id);
+
             $paper = questionpaperModel::create($request->all());
 
             $questionIds = explode(',', $request->question_ids);
             foreach ($questionIds as $qid) {
                 if (!empty(trim($qid))) {
-                    lmsQuestionMappingModel::create([
+                    Log::info('Creating mapping for qid ' . trim($qid) . ' with type: ' . $request->mapping_type_id . ' value: ' . $request->mapping_value_id);
+                    $mapping = lmsQuestionMappingModel::create([
                         'questionmaster_id' => trim($qid),
                         'mapping_type_id' => $request->mapping_type_id,
                         'mapping_value_id' => $request->mapping_value_id,
                         'reasons' => $request->reasons,
                         'created_by' => $request->created_by,
                         'sub_institute_id' => $request->sub_institute_id,
-                    ]); 
+                    ]);
+                    Log::info('Created mapping id: ' . $mapping->id . ' stored type: ' . $mapping->mapping_type_id . ' value: ' . $mapping->mapping_value_id);
+                    $check = lmsQuestionMappingModel::find($mapping->id);
+                    Log::info('DB values after creation: type ' . $check->mapping_type_id . ' value ' . $check->mapping_value_id);
                 }
             }
 
