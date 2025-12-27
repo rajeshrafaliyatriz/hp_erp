@@ -50,6 +50,9 @@ class generateQuestionController extends Controller
                     'paper_category'   => $q['paper_category'],
                     'multiple_answer' => $q['multiple_answer'],
                     'sub_institute_id' => $subInstituteId,
+                    'domain_category' => $q['domainCategory'] ?? null,
+                    'source_dataset'  => $q['sourceItem']['dataset'] ?? null,
+                    'source_title'    => $q['sourceItem']['title'] ?? null,
                 ]);
 
                 $createdQuestions[] = $question;
@@ -110,7 +113,11 @@ class generateQuestionController extends Controller
                 'questions.*.multiple_answer' => 'required|integer',
                 'questions.*.answers'          => 'required|array|min:1',
                 'questions.*.answers.*.answer'   => 'required|string',
-                'questions.*.answers.*.correct_answer' => 'required|integer|in:0,1'
+                'questions.*.answers.*.correct_answer' => 'required|integer|in:0,1',
+                'questions.*.domainCategory'   => 'nullable|string',
+                'questions.*.sourceItem'       => 'nullable|array',
+                'questions.*.sourceItem.dataset' => 'nullable|string',
+                'questions.*.sourceItem.title'   => 'nullable|string'
             ]);
 
             return $this->bulkQuestion($request->questions, $subInstituteId);
@@ -126,7 +133,11 @@ class generateQuestionController extends Controller
                 'multiple_answer' => 'required|integer',
                 'answers'          => 'required|array|min:1',
                 'answers.*.answer'   => 'required|string',
-                'answers.*.correct_answer' => 'required|integer|in:0,1'
+                'answers.*.correct_answer' => 'required|integer|in:0,1',
+                'domainCategory'   => 'nullable|string',
+                'sourceItem'       => 'nullable|array',
+                'sourceItem.dataset' => 'nullable|string',
+                'sourceItem.title'   => 'nullable|string'
             ]);
 
             try {
@@ -140,6 +151,9 @@ class generateQuestionController extends Controller
                     'paper_category'   => $request->paper_category,
                     'multiple_answer' => $request->multiple_answer,
                     'sub_institute_id' => $subInstituteId,
+                    'domain_category' => $request->domainCategory,
+                    'source_dataset'  => $request->input('sourceItem.dataset'),
+                    'source_title'    => $request->input('sourceItem.title'),
                 ]);
 
                 // Store Answers
