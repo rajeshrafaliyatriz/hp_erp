@@ -18,6 +18,9 @@ class QuestionMaster extends Model
         'paper_category',
         'multiple_answer',
         'sub_institute_id',
+        'domain_category',
+        'source_dataset',
+        'source_title',
     ];
 
     public function answers()
