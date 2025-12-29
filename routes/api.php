@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\DBController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
+use App\Http\Controllers\talent\talent_screening_results_controller;
 
 use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
@@ -38,6 +39,9 @@ Route::resource('interview-schedules', talent_interviewschedulescontroller::clas
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
 
 Route::resource('job-postings', talent_jobpostingcontroller::class);
+
+Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store']);
+Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show']);
 
 Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
 
