@@ -3,7 +3,7 @@
 namespace App\Models\talent;
 
 use Illuminate\Database\Eloquent\Model;
-use app\Http\Controllers\talent\talent_jobpostingcontroller;
+use App\Http\Controllers\talent\talent_jobpostingcontroller;
 
 
 class talent_jobposting extends Model

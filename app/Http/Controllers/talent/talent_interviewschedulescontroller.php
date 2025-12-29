@@ -96,14 +96,18 @@ class talent_interviewschedulescontroller extends Controller
       
 
           $validator = Validator::make($request->all(), [
-            'job_id'            => 'required|exists:talent_job_postings,id',
+            'job_id'            => 'required|integer|exists:talent_job_postings,id',
             'applicant_id'      => 'required|string|max:255',
             'round_no'          => 'nullable|string|max:255',
             'interview_date'    => 'nullable|date|after_or_equal:today',
+            'time'              => 'nullable|string|max:255',
+            'duration'          => 'nullable|integer',
+            'location'          => 'nullable|string|max:255',
             'interviewer_id'    => 'required|string|max:255',
-            'status'            => 'required|in:pending,accepted,rejected,active',
+            'status'            => 'required|in:Scheduled,Completed,Under Review,Pending Review,Rejected,Selected,Accepted,active',
             'rating'            => 'nullable|string|max:255',
             'feedback'          => 'nullable|string|max:100',
+            'additional_notes'  => 'nullable|string|max:1000',
             'sub_institute_id'  => 'required|integer',
             'user_id'           => 'required|integer'
         ], [
@@ -121,12 +125,16 @@ class talent_interviewschedulescontroller extends Controller
             $objtalent = new talent_interviewschedules();
             $objtalent->job_id = $request->job_id;
             $objtalent->applicant_id = $request->applicant_id;
-            $objtalent->round_no = $request->round_no; 
-            $objtalent->interview_date = $request->interview_date; 
+            $objtalent->round_no = $request->round_no;
+            $objtalent->interview_date = $request->interview_date;
+            $objtalent->time = $request->time;
+            $objtalent->duration = $request->duration;
+            $objtalent->location = $request->location;
             $objtalent->interviewer_id = $request->interviewer_id;
             $objtalent->status = $request->status;
             $objtalent->rating = $request->rating;
             $objtalent->feedback = $request->feedback;
+            $objtalent->additional_notes = $request->additional_notes;
             $objtalent->sub_institute_id = $sub_institute_id;
             $objtalent->created_by = $request->user_id;
 
@@ -148,7 +156,7 @@ class talent_interviewschedulescontroller extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         //
     }
@@ -177,14 +185,18 @@ class talent_interviewschedulescontroller extends Controller
     
             // 🧾 Validation
             $validator = \Validator::make($request->all(), [
-                'job_id'            => 'required|exists:talent_job_postings,id',
+                'job_id'            => 'required|integer|exists:talent_job_postings,id',
                 'applicant_id'      => 'required|string|max:255',
                 'round_no'          => 'nullable|string|max:255',
                 'interview_date'    => 'nullable|date',
+                'time'              => 'nullable|string|max:255',
+                'duration'          => 'nullable|integer',
+                'location'          => 'nullable|string|max:255',
                 'interviewer_id'    => 'required|string|max:255',
-                'status'            => 'required|in:pending,accepted,rejected,active',
+                'status'            => 'required|in:Pending Review,Under Review,Shortlisted,Interview Scheduled,Rejected,Hired',
                 'rating'            => 'nullable|string|max:255',
                 'feedback'          => 'nullable|string|max:100',
+                'additional_notes'  => 'nullable|string|max:1000',
                 'sub_institute_id'  => 'required|integer',
                 'user_id'           => 'required|integer'
                 ]);
@@ -216,10 +228,14 @@ class talent_interviewschedulescontroller extends Controller
                 $interview_schedules->applicant_id = $request->applicant_id ?? $interview_schedules->applicant_id;
                 $interview_schedules->round_no = $request->round_no ?? $interview_schedules->round_no;
                 $interview_schedules->interview_date = $request->interview_date ?? $interview_schedules->interview_date;
+                $interview_schedules->time = $request->time ?? $interview_schedules->time;
+                $interview_schedules->duration = $request->duration ?? $interview_schedules->duration;
+                $interview_schedules->location = $request->location ?? $interview_schedules->location;
                 $interview_schedules->interviewer_id = $request->interviewer_id ?? $interview_schedules->interviewer_id;
                 $interview_schedules->status = $request->status ?? $interview_schedules->status;
                 $interview_schedules->rating = $request->rating ?? $interview_schedules->rating;
                 $interview_schedules->feedback = $request->feedback ?? $interview_schedules->feedback;
+                $interview_schedules->additional_notes = $request->additional_notes ?? $interview_schedules->additional_notes;
     
                 // 🎯 Dynamic Status Validation
                 $allowedStatuses = [
@@ -258,7 +274,7 @@ class talent_interviewschedulescontroller extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         //
     }
