@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('talent_screening_results', function (Blueprint $table) {
-            $table->uuid('id')->primary();
+            $table->id();
             $table->foreignId('candidate_id')->constrained('talent_job_applications')->onDelete('cascade');
             $table->integer('competency_match')->unsigned();
             $table->enum('cultural_fit', ['High', 'Medium', 'Low']);
