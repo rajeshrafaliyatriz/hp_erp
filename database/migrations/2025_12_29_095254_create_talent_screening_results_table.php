@@ -19,10 +19,10 @@ return new class extends Migration
             $table->enum('predicted_success', ['Highly Likely', 'Likely', 'Possible', 'Unlikely']);
             $table->integer('overall_fit_score')->unsigned();
             $table->integer('ranking_score')->unsigned();
-            $table->json('skill_gaps');
-            $table->json('strengths');
+            $table->longText('skill_gaps');
+            $table->longText('strengths');
             $table->text('recommendation');
-            $table->jsonb('deepseek_analysis');
+            $table->longText('deepseek_analysis');
             $table->foreignId('sub_institute_id')->constrained('school_setup');
             $table->bigInteger('created_by')->nullable();
             $table->bigInteger('updated_by')->nullable();
