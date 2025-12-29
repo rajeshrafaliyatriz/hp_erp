@@ -4,7 +4,8 @@ namespace App\Models\talent;
 
 use Illuminate\Database\Eloquent\Model;
 use app\Http\Controllers\talent\talent_jobapplicationcontroller;
-
+use app\Http\Controllers\talent\candidate\candidateController;
+use App\Http\Controllers\talent\feedback\feedbackController;
 class talent_jobapplication extends Model
 {
 	protected $table = 'talent_job_applications';

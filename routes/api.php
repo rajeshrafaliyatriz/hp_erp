@@ -25,6 +25,10 @@ use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 use App\Http\Controllers\ai_generated_assessment\generateQuestionController;
 use App\Http\Controllers\ai_generated_assessment\generateAssessmentController;
 use App\Http\Controllers\libraries\skillLibraryController;
+use App\Http\Controllers\talent\InterviewController;
+use App\Http\Controllers\talent\interview_panel\talent_interviewpanelController;
+use App\Http\Controllers\talent\feedback\feedbackController;
+use App\Http\Controllers\talent\candidate\candidateController;
 
 Route::post('/ai-generated-assessment/question/store',[generateQuestionController::class, 'store']);
 Route::get('/ai-generated-assessment/question/index',[generateQuestionController::class, 'index']);
@@ -93,4 +97,16 @@ Route::resource('gamma-api', GammaApiController::class);
 Route::get('gamma-api/sub-institute/{subInstituteId}', [GammaApiController::class, 'getBySubInstituteId']);
 
 Route::resource('skill_library', skillLibraryController::class);
-?>
+Route::get('/positions', [InterviewController::class, 'getPositions']);
+Route::get('/interviewers', [InterviewController::class, 'getInterviewers']);
+
+Route::get('/interview-panel/users', [talent_interviewpanelController::class, 'getInterviewers']);
+Route::post('/interview-panel/store', [talent_interviewpanelController::class, 'storeinterviewer']);
+Route::put('/interview-panel/update/{id}', [talent_interviewpanelController::class, 'update']);
+Route::delete('/interview-panel/delete/{id}', [talent_interviewpanelController::class, 'destroy']);
+Route::get('/interview-panel/list', [talent_interviewpanelController::class, 'getInterviewPanel']);
+Route::get('/candidate', [candidateController::class,'getCandidate']);
+Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
+Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
+
+

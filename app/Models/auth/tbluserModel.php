@@ -8,6 +8,7 @@ use App\Models\auth\tblclientModel;
 use App\Models\auth\academicSectionModel;
 use App\Models\auth\tbluserprofileMasterModel;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\talent\feedback\feedbackController;
 
 class tbluserModel extends Model
 {
