@@ -1017,7 +1017,6 @@ class skillLibraryController extends Controller
                 'org_type' => 'required',
                 'sub_institute_id' => 'required',
                 'user_id' => 'required',
-                'formType' => 'required',
             ]);
 
             if ($validator->fails()) {
@@ -1067,6 +1066,11 @@ class skillLibraryController extends Controller
 
         if ($request->has('formType') && $request->formType == "user") {
             $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            if ($delete) {
+                $i++;
+            }
+        } elseif ($request->has('formType') && $request->formType == "skills") {
+            $delete = skillLibraryModel::where('id', $id)->delete();
             if ($delete) {
                 $i++;
             }
@@ -1565,5 +1569,54 @@ class skillLibraryController extends Controller
         }
 
         return response()->json($res);
+    }
+
+    public function delete(Request $request)
+    {
+        $type = $request->type;
+        if ($type == 'API') {
+            $token = $request->input('token');
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+                'org_type' => 'required',
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+                'formType' => 'required',
+                'ids' => 'required|array',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
+        }
+        $i = 0;
+        $ids = json_decode($request->ids, true);
+        foreach ($ids as $id) {
+            if ($request->has('formType') && $request->formType == "user") {
+                $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+                if ($delete) {
+                    $i++;
+                }
+            }
+        }
+
+        if ($i > 0) {
+            $res['status_code'] = 1;
+            $res['message'] = 'Deleted data successfully !';
+        } else {
+            $res['status_code'] = 0;
+            $res['message'] = 'Failed to delete data';
+        }
+        return is_mobile($type, 'skill_library.index', $res, 'redirect');
     }
 }

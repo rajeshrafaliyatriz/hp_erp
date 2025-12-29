@@ -113,6 +113,8 @@ Route::middleware(['auth','session','menu'])->group(function () {
 
     Route::post('skill_library/attributes_taxonomy', [skillLibraryController::class, 'AddAttributeTaxonomy'])->name('attributes_taxonomy');
 
+    Route::post('skill_library/delete', [skillLibraryController::class, 'delete']);
+
     Route::get('search_data', [AJAXController::class, 'searchSkill'])->name('search_skill');
 
     Route::resource('jobrole', skillLibraryController::class);
