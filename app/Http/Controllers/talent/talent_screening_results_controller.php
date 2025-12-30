@@ -83,6 +83,22 @@ class talent_screening_results_controller extends Controller
 
         $deepseek = $result->deepseek_analysis ?? [];
 
+        // Compute skill_match_details from strengths
+        $skill_match_details = [];
+        foreach ($result->strengths ?? [] as $strength) {
+            if (preg_match('/^(.+) \((.+)\)$/', $strength, $matches)) {
+                $skill = trim($matches[1]);
+                $prof = trim($matches[2]);
+                $skill_match_details[] = [
+                    'competency' => $skill,
+                    'matched' => true,
+                    'extractedSkill' => $skill,
+                    'confidence' => 0.95,
+                    'proficiency' => $prof
+                ];
+            }
+        }
+
         // Construct the response format
         $response = [
             'success' => true,
@@ -117,44 +133,10 @@ class talent_screening_results_controller extends Controller
             'predicted_success' => $result->predicted_success,
             'summary' => $deepseek['summary'] ?? $result->recommendation,
             'skill_gaps' => $result->skill_gaps ?? [],
-            'strengths' => [
-                'React (Advanced)',
-                'Node.js (Advanced)',
-                'Leadership (Advanced)',
-                'Problem Solving (Advanced)'
-            ],
+            'strengths' => $result->strengths ?? [],
             'recommendation' => $result->recommendation,
             'ranking_score' => $result->ranking_score,
-            'skill_match_details' => [
-                [
-                    'competency' => 'React',
-                    'matched' => true,
-                    'extractedSkill' => 'React',
-                    'confidence' => 0.95,
-                    'proficiency' => 'Advanced'
-                ],
-                [
-                    'competency' => 'Node.js',
-                    'matched' => true,
-                    'extractedSkill' => 'Node.js',
-                    'confidence' => 0.92,
-                    'proficiency' => 'Advanced'
-                ],
-                [
-                    'competency' => 'PostgreSQL',
-                    'matched' => true,
-                    'extractedSkill' => 'PostgreSQL',
-                    'confidence' => 0.88,
-                    'proficiency' => 'Intermediate'
-                ],
-                [
-                    'competency' => 'Full Stack Development',
-                    'matched' => true,
-                    'extractedSkill' => 'Full Stack Development',
-                    'confidence' => 0.90,
-                    'proficiency' => 'Advanced'
-                ]
-            ]
+            'skill_match_details' => $skill_match_details
         ];
 
         return response()->json($response);
