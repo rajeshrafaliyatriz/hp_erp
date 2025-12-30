@@ -34,7 +34,8 @@ class SkillMatrixController extends Controller
         foreach ($skills as $index => $skill) {
             $rules["skills.{$index}.skill_id"] = 'required|exists:s_users_skills,id';
             $rules["skills.{$index}.skill_level"] = 'required|integer|min:1|max:5';
-            
+            $rules["skills.{$index}.type"] = 'nullable|string';
+
             // Change from 'array' to allow objects/strings that can be JSON encoded
             $rules["skills.{$index}.knowledge"] = 'nullable';
             $rules["skills.{$index}.ability"] = 'nullable';
@@ -66,7 +67,8 @@ class SkillMatrixController extends Controller
                 $addUpdate = [
                     'skill_level' => (int)$skill['skill_level'],
                     'user_id' => $user_id,
-                    'skill_id' => (int)$skill['skill_id']
+                    'skill_id' => (int)$skill['skill_id'],
+                    'type' => $skill['type'] ?? null
                 ];
 
                 // Handle additional attributes - accept objects and convert to JSON
