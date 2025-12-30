@@ -87,6 +87,16 @@ use App\Http\Controllers\DataMigrationController;
 use App\Http\Controllers\BlogController;
 use App\Http\Controllers\library\LostandDamage;
 
+use App\Services\Neo4jService;
+
+Route::get('/neo4j-test', function(Neo4jService $neo4j){
+    try {
+        $result = $neo4j->getClient()->run('RETURN "Connected to Neo4j" AS message');
+        return $result->first()->get('message');
+    } catch (\Exception $e) {
+        return "Connection failed: " . $e->getMessage();
+    }
+});
 
 
 
