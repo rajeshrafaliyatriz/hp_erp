@@ -109,7 +109,8 @@ class talent_interviewschedulescontroller extends Controller
             'feedback'          => 'nullable|string|max:100',
             'additional_notes'  => 'nullable|string|max:1000',
             'sub_institute_id'  => 'required|integer',
-            'user_id'           => 'required|integer'
+            'user_id'           => 'required|integer',
+            'panel_id'          => 'nullable|integer|exists:talent_interview_panel,id'
         ], [
             'interview_date.after_or_equal' => 'Previous date is not allowed. Please select today or a future date.'
         ]);
@@ -137,6 +138,7 @@ class talent_interviewschedulescontroller extends Controller
             $objtalent->additional_notes = $request->additional_notes;
             $objtalent->sub_institute_id = $sub_institute_id;
             $objtalent->created_by = $request->user_id;
+            $objtalent->panel_id = $request->panel_id;
 
             if ($objtalent->save()) {
                 return response()->json(['message' => 'added successfully !!','data' => $objtalent], 200);
@@ -198,7 +200,8 @@ class talent_interviewschedulescontroller extends Controller
                 'feedback'          => 'nullable|string|max:100',
                 'additional_notes'  => 'nullable|string|max:1000',
                 'sub_institute_id'  => 'required|integer',
-                'user_id'           => 'required|integer'
+                'user_id'           => 'required|integer',
+                'panel_id'          => 'nullable|integer|exists:talent_interview_panel,id'
                 ]);
     
             if ($validator->fails()) {
@@ -236,6 +239,7 @@ class talent_interviewschedulescontroller extends Controller
                 $interview_schedules->rating = $request->rating ?? $interview_schedules->rating;
                 $interview_schedules->feedback = $request->feedback ?? $interview_schedules->feedback;
                 $interview_schedules->additional_notes = $request->additional_notes ?? $interview_schedules->additional_notes;
+                $interview_schedules->panel_id = $request->panel_id ?? $interview_schedules->panel_id;
     
                 // 🎯 Dynamic Status Validation
                 $allowedStatuses = [

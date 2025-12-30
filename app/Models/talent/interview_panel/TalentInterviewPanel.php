@@ -10,7 +10,7 @@ class TalentInterviewPanel extends Model
 {
     use SoftDeletes;
 
-    protected $table = 'talent_Interview_Panel';
+    protected $table = 'talent_interview_panel';
 
     protected $fillable = [
         'sub_institute_id',
