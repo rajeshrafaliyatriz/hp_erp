@@ -28,12 +28,15 @@ class Neo4jService
         // Created a node with selected fields from the model
 
         $query = 'CREATE (n:Content {Organization : $Organization , Departments : $Departments , 
-                  JobRoles: $JobRoles}) RETURN n';
+                  JobRoles: $JobRoles, Skill: $Skill,EducationLevel: $EducationLevel,ExperienceLevel: $ExperienceLevel }) RETURN n';
 
         return $this->client->run($query, [
             'Organization'   => $data->Organization ,
-            'Departments'   => $data->Departments ,
-            'JobRoles'         => $data->JobRoles,
+            'Departments'    => $data->Departments ,
+            'JobRoles'       => $data->JobRoles,
+            'Skill'          => $data->Skill,
+            'EducationLevel' => $data->EducationLevel,  
+            'ExperienceLevel' => $data->ExperienceLevel,  
         ]);
          if ($result->count() > 0) {
         // Node was created successfully

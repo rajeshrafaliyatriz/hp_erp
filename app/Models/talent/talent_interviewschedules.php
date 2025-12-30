@@ -26,7 +26,8 @@ class talent_interviewschedules extends Model
         'feedback',
         'additional_notes',
         'sub_institute_id',
-        'created_by'
+        'created_by',
+        'panel_id'
     ];
 
     public function jobPosting()
