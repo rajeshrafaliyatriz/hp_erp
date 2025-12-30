@@ -100,6 +100,8 @@ class onlineExamController extends Controller
             'total_wrong'       => $result['total_wrong_ans'],
             'obtain_marks'      => $result['obtain_marks'],
             'start_time'        => $request->get('hid_session_quiz'),
+            'created_by'        => $user_id,
+            'created_at'        => now(),
         ];
 
 
@@ -126,6 +128,8 @@ class onlineExamController extends Controller
                     'question_id'       => $single_question_id,
                     'answer_id'         => $single_ans_arr[0],
                     'ans_status'        => $ans_status,
+                    'created_by'        => $user_id,
+                    'created_at'        => now(),
                 ];
                 $insert = lmsOnlineExamAnswerModel::insert($single);
                 if($insert){
@@ -151,6 +155,8 @@ class onlineExamController extends Controller
                             'question_id'       => $multiple_question_id,
                             'answer_id'         => $multiple_ans_arr[0],
                             'ans_status'        => $ans_status,
+                            'created_by'        => $user_id,
+                            'created_at'        => now(),
                         ];
                         $insert = lmsOnlineExamAnswerModel::insert($multiple);
                         if($insert){
@@ -171,6 +177,8 @@ class onlineExamController extends Controller
                     'question_id'       => $narrative_question_id,
                     'narrative_answer'  => $narrative_answer_ids,
                     'ans_status'        => $ans_status,
+                    'created_by'        => $user_id,
+                    'created_at'        => now(),
                 ];
                 $insert = lmsOnlineExamAnswerModel::insert($narrative);
                 if($insert){
