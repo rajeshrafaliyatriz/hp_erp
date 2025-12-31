@@ -5,6 +5,7 @@ namespace App\Http\Controllers\talent\candidate;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\PersonalAccessToken;
 use App\Models\talent\talent_interviewschedules;
 use App\Models\talent\talent_jobapplication;
 
@@ -35,7 +36,7 @@ class candidateController extends Controller
             })
             ->select(
                 // Candidate Name
-                DB::raw("CONCAT(tja.first_name,' ',tja.middle_name,' ',tja.last_name,' ',tja.email) AS candidate_name"),
+                DB::raw("CONCAT(tja.first_name,' ',tja.last_name,' ',tja.email) AS candidate_name"),
             
                 // Position / Job ID
                 'tja.job_id as position',
