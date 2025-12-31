@@ -59,7 +59,6 @@ class CompetencyDashboardController extends Controller
 
         return response()->json($results);
     }
-
     public function getRoleSimilarity(Request $request)
     {
         $threshold = $request->input('threshold', 0.5); // 50% default similarity
@@ -152,7 +151,6 @@ class CompetencyDashboardController extends Controller
             ], 500);
         }
     }
-
     public function getCoverageScorecards(Request $request)
     {
         $subInstituteId = $request->input('sub_institute_id', null);
@@ -313,7 +311,6 @@ class CompetencyDashboardController extends Controller
             ], 500);
         }
     }
-
     public function getHealthRadar(Request $request)
     {
         $subInstituteId = $request->input('sub_institute_id', null);
@@ -507,6 +504,176 @@ class CompetencyDashboardController extends Controller
             ], 500);
         }
     }
+    public function getSkillsManagementFunnel(Request $request)
+    {
+        $subInstituteId = $request->input('sub_institute_id', null);
 
-    
+        try {
+            // Base query for s_users_skills
+            $skillsQuery = DB::table('s_users_skills')->whereNull('deleted_at');
+            if ($subInstituteId) {
+                $skillsQuery->where('sub_institute_id', $subInstituteId);
+            }
+
+            // Identified Orphans: total skills
+            $total = (clone $skillsQuery)->count();
+
+            // In Review: skills with approve_status = 'Pending'
+            $inReview = (clone $skillsQuery)->where('approve_status', 'Pending')->count();
+
+            // Mapped Candidates: distinct skills mapped to users in s_skill_matrix
+            $mappedQuery = DB::table('s_skill_matrix')
+                ->join('s_users_skills', 's_skill_matrix.skill_id', '=', 's_users_skills.id')
+                ->whereNull('s_skill_matrix.deleted_at')
+                ->whereNull('s_users_skills.deleted_at');
+            if ($subInstituteId) {
+                $mappedQuery->where('s_users_skills.sub_institute_id', $subInstituteId);
+            }
+            $mapped = $mappedQuery->distinct('s_skill_matrix.skill_id')->count('s_skill_matrix.skill_id');
+
+            // Approved & Integrated: distinct skills in s_jobrole_skills for jobroles in sub_institute, joined to s_users_skills
+            $approvedQuery = DB::table('s_jobrole_skills')
+                ->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
+                ->join('s_users_skills', 's_jobrole_skills.skill', '=', 's_users_skills.title')
+                ->whereNull('s_user_jobrole.deleted_at')
+                ->whereNull('s_users_skills.deleted_at');
+            if ($subInstituteId) {
+                $approvedQuery->where('s_users_skills.sub_institute_id', $subInstituteId);
+            }
+            $approved = $approvedQuery->distinct('s_jobrole_skills.skill')->count('s_jobrole_skills.skill');
+
+            // Calculate filtered and percentages
+            $filteredIdentified = $total - $inReview;
+            $filteredIdentifiedPercentage = $total > 0 ? round(($filteredIdentified / $total) * 100, 0) : 0;
+
+            $filteredInReview = $inReview - $mapped;
+            $filteredInReviewPercentage = $inReview > 0 ? round(($filteredInReview / $inReview) * 100, 0) : 0;
+
+            $filteredMapped = $mapped - $approved;
+            $filteredMappedPercentage = $mapped > 0 ? round(($filteredMapped / $mapped) * 100, 0) : 0;
+
+            $completionRate = $total > 0 ? round(($approved / $total) * 100, 0) : 0;
+
+            $data = [
+                [
+                    'stage' => 'Identified Orphans',
+                    'count' => $total,
+                    'percentage' => '100% of total',
+                    'filtered' => -$filteredIdentified,
+                    'filteredPercentage' => '(' . min(100, $filteredIdentifiedPercentage) . '%)'
+                ],
+                [
+                    'stage' => 'In Review',
+                    'count' => $inReview,
+                    'percentage' => ($total > 0 ? min(100, round(($inReview / $total) * 100, 0)) : 0) . '% of total',
+                    'filtered' => -$filteredInReview,
+                    'filteredPercentage' => '(' . min(100, $filteredInReviewPercentage) . '%)'
+                ],
+                [
+                    'stage' => 'Mapped Candidates',
+                    'count' => $mapped,
+                    'percentage' => ($total > 0 ? min(100, round(($mapped / $total) * 100, 0)) : 0) . '% of total',
+                    'filtered' => -$filteredMapped,
+                    'filteredPercentage' => '(' . min(100, $filteredMappedPercentage) . '%)'
+                ],
+                [
+                    'stage' => 'Approved & Integrated',
+                    'count' => $approved,
+                    'percentage' => ($total > 0 ? min(100, round(($approved / $total) * 100, 0)) : 0) . '% of total'
+                ]
+            ];
+
+            return response()->json([
+                'title' => 'Skills Management Funnel',
+                'completionRate' => $completionRate . '%',
+                'data' => $data
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch skills management funnel data.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getAlignment(Request $request)
+    {
+        $type = $request->query('type', 'o'); // default type
+        $type = strtolower($type);
+        $subInstituteId = $request->input('sub_institute_id', null);
+
+        // Map type to framework
+        $frameworkMap = [
+            'o' => 'onet',
+            's' => 'singapore'
+        ];
+        $framework = $frameworkMap[$type] ?? 'onet';
+
+        try {
+            // Validate supported types
+            $validTypes = ['o', 's'];
+            if (!in_array($type, $validTypes)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid type. Supported: o (onet), s (skillsfuture).'
+                ], 400);
+            }
+
+            // Fetch aggregated alignment data from s_jobrole_skills
+            $result = DB::table('s_jobrole_skills')
+                ->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
+                ->whereNull('s_user_jobrole.deleted_at')
+                ->where('s_jobrole_skills.type', $type)
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('s_user_jobrole.sub_institute_id', $subInstituteId);
+                })
+                ->selectRaw('
+                    COUNT(DISTINCT s_jobrole_skills.skill) AS aligned,
+                    0 AS partial,
+                    0 AS not_aligned,
+                    COUNT(DISTINCT s_jobrole_skills.skill) AS total
+                ')
+                ->first();
+
+            if (!$result || $result->total == 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No data found for selected framework.',
+                ], 404);
+            }
+
+            // Calculate percentage aligned (including partial alignment)
+            $percentage = round((($result->aligned + $result->partial) / $result->total) * 100, 2);
+
+            // Framework meta versions
+            $frameworkVersions = [
+                'onet' => 'v28.0',
+                'singapore' => 'v2024',
+                'esco' => 'v2025'
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'framework' => strtoupper($framework),
+                    'version' => $frameworkVersions[$framework] ?? 'v1.0',
+                    'percentage' => $percentage,
+                    'aligned' => (int)$result->aligned,
+                    'partial' => (int)$result->partial,
+                    'notAligned' => (int)$result->not_aligned,
+                    'total' => (int)$result->total
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
 }
+
