@@ -314,4 +314,199 @@ class CompetencyDashboardController extends Controller
         }
     }
 
+    public function getHealthRadar(Request $request)
+    {
+        $subInstituteId = $request->input('sub_institute_id', null);
+
+        try {
+            // Base query for filtering by sub_institute_id if provided
+            $baseQuery = DB::table('s_user_jobrole as jr')->whereNull('jr.deleted_at');
+            if ($subInstituteId) {
+                $baseQuery->where('jr.sub_institute_id', $subInstituteId);
+            }
+
+            // Compute metrics
+            $totalRoles = (clone $baseQuery)->count();
+            $rolesWithTasks = (clone $baseQuery)
+                ->join('s_user_jobrole_task as jt', function($join) {
+                    $join->on('jr.jobrole', '=', 'jt.jobrole')
+                         ->whereNull('jt.deleted_at');
+                })
+                ->distinct('jr.id')
+                ->count();
+            $taskMappingCurrent = $totalRoles > 0 ? round(($rolesWithTasks / $totalRoles) * 100, 1) : 0;
+            $taskMappingTarget = 95;
+
+            $totalTasks = DB::table('s_user_jobrole_task')
+                ->whereNull('deleted_at')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->count();
+            $tasksWithSkills = DB::table('s_user_jobrole_task as t')
+                ->whereNull('t.deleted_at')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('t.sub_institute_id', $subInstituteId);
+                })
+                ->whereExists(function($query) {
+                    $query->select(DB::raw(1))
+                          ->from('s_jobrole_skills as s')
+                          ->whereRaw('t.jobrole = s.jobrole');
+                })
+                ->count();
+            $skillCoverageCurrent = $totalTasks > 0 ? round(($tasksWithSkills / $totalTasks) * 100, 1) : 0;
+            $skillCoverageTarget = 95;
+
+            // Behavior Mapping: skills with behaviour mapped
+            $totalSkillsForBehavior = DB::table('s_skill_knowledge_ability')
+                ->where('classification', 'behaviour')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->whereNull('deleted_at')
+                ->distinct('skill_id')
+                ->count('skill_id');
+            $skillsWithBehavior = DB::table('s_skill_knowledge_ability')
+                ->where('classification', 'behaviour')
+                ->whereNotNull('classification_item')
+                ->where('classification_item', '!=', '')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->whereNull('deleted_at')
+                ->distinct('skill_id')
+                ->count('skill_id');
+            $behaviorMappingCurrent = $totalSkillsForBehavior > 0 ? round(($skillsWithBehavior / $totalSkillsForBehavior) * 100, 1) : 0;
+            $behaviorMappingTarget = 70;
+
+            $externalAlignmentCurrent = 89; // Placeholder - needs actual logic for O*NET mapping
+            $externalAlignmentTarget = 90;
+
+            $totalSkills = DB::table('s_jobrole_skills')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
+                                 ->where('s_user_jobrole.sub_institute_id', $subInstituteId)
+                                 ->whereNull('s_user_jobrole.deleted_at');
+                })
+                ->count();
+            $skillsWithProficiency = DB::table('s_jobrole_skills as sjs')
+                ->whereNotNull('sjs.proficiency_level')
+                ->where('sjs.proficiency_level', '!=', '')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->join('s_user_jobrole as jr', 'sjs.jobrole', '=', 'jr.jobrole')
+                                 ->where('jr.sub_institute_id', $subInstituteId)
+                                 ->whereNull('jr.deleted_at');
+                })
+                ->count();
+            $riskAssessmentCurrent = $totalSkills > 0 ? round(($skillsWithProficiency / $totalSkills) * 100, 1) : 0;
+            $riskAssessmentTarget = 85;
+
+            $rolesWithDescription = (clone $baseQuery)
+                ->whereNotNull('description')
+                ->where('description', '!=', '')
+                ->count();
+            $futureReadinessCurrent = $totalRoles > 0 ? round(($rolesWithDescription / $totalRoles) * 100, 1) : 0;
+            $futureReadinessTarget = 95;
+
+            $overallCurrent = round(($taskMappingCurrent + $skillCoverageCurrent + $behaviorMappingCurrent + $externalAlignmentCurrent + $riskAssessmentCurrent + $futureReadinessCurrent) / 6, 1);
+            $overallTarget = 90;
+
+            $data = [
+                [
+                    'area' => 'Current vs Target Coverage',
+                    'current' => $overallCurrent,
+                    'target' => $overallTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Task Mapping',
+                    'current' => $taskMappingCurrent,
+                    'target' => $taskMappingTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Skill Coverage',
+                    'current' => $skillCoverageCurrent,
+                    'target' => $skillCoverageTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Behavior Mapping',
+                    'current' => $behaviorMappingCurrent,
+                    'target' => $behaviorMappingTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'External Alignment',
+                    'current' => $externalAlignmentCurrent,
+                    'target' => $externalAlignmentTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Risk Assessment',
+                    'current' => $riskAssessmentCurrent,
+                    'target' => $riskAssessmentTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Future Readiness',
+                    'current' => $futureReadinessCurrent,
+                    'target' => $futureReadinessTarget,
+                    'fullMark' => 100
+                ]
+            ];
+
+            // Process data to compute differences & classifications
+            $processed = collect($data)->map(function ($item) {
+                $difference = $item['current'] - $item['target'];
+                $classification = $difference >= 0 ? 'strength' : 'gap';
+
+                return [
+                    'area' => $item['area'],
+                    'current' => $item['current'],
+                    'target' => $item['target'],
+                    'fullMark' => $item['fullMark'],
+                    'difference' => $difference,
+                    'classification' => $classification
+                ];
+            });
+
+            // Separate strengths & coverage gaps
+            $strengths = $processed->where('classification', 'strength')
+                                   ->sortByDesc('current')
+                                   ->values()
+                                   ->take(3); // top 3 strengths
+            $gaps = $processed->where('classification', 'gap')
+                              ->sortBy('difference')
+                              ->values()
+                              ->take(3); // top 3 weakest
+
+            // Compute overall health score
+            $avgCurrent = round($processed->avg('current'), 2);
+            $avgTarget = round($processed->avg('target'), 2);
+            $healthScore = round(($avgCurrent / $avgTarget) * 100, 1);
+
+            // Return formatted JSON
+            return response()->json([
+                'status' => 'success',
+                'summary' => [
+                    'average_current' => $avgCurrent,
+                    'average_target' => $avgTarget,
+                    'health_score' => $healthScore,
+                ],
+                'data' => $processed,
+                'strengths' => $strengths,
+                'gaps' => $gaps
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch competency health radar data.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    
 }

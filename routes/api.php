@@ -79,6 +79,7 @@ Route::get('/competency-dashboard', [CompetencyDashboardController::class, 'inde
 Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
 Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity']);
 Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards']);
+Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar']);
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
 
