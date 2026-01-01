@@ -3,6 +3,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\IndustryController;
 use App\Http\Controllers\Api\jobrolecontroller;
 use App\Http\Controllers\Api\skillcontroller;
+use App\Http\Controllers\Api\SkillDevelopmentController;
 use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
@@ -76,9 +77,11 @@ Route::get('/department/{id}/jobroles', [jobrolecontroller::class, 'getJobRolesB
 Route::get('/industry/{id}/departments', [IndustryController::class, 'departments']);
 Route::get('/industries', [IndustryController::class, 'index']);
 Route::get('/competency-dashboard', [CompetencyDashboardController::class, 'index']);
+Route::get('/skill-development/progress', [SkillDevelopmentController::class, 'getSkillProgress']);
 Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
 Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity']);
 Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards']);
+
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
 
