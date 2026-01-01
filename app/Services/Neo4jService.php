@@ -2,7 +2,7 @@
 
 namespace App\Services;
 use Illuminate\Support\Facades\Log;
-
+use Laudis\Neo4j\Authentication\Authenticate;
 use Laudis\Neo4j\ClientBuilder;
 
 class Neo4jService
@@ -10,17 +10,34 @@ class Neo4jService
     protected $client;
 
     public function __construct()
-{
-    $uri = "bolt://".env('NEO4J_USER').":".env('NEO4J_PASSWORD')."@".env('NEO4J_HOST').":".env('NEO4J_PORT');
-
-    $this->client = ClientBuilder::create()
-        ->withDriver('bolt', $uri)
+      {
+        $this->client = ClientBuilder::create()
+        ->withDriver(
+            'neo4j',
+            env('NEO4J_URI'),
+            Authenticate::basic(
+                env('NEO4J_USERNAME'),
+                env('NEO4J_PASSWORD')
+            )
+        )
         ->build();
-}
+      }
 
     public function getClient()
     {
         return $this->client;
+    }
+
+    // ✅ ADD THIS METHOD
+    public function testConnection()
+    {
+        try {
+            $result = $this->client->run('RETURN 1 AS status');
+            return 'Neo4j Connected Successfully';
+        } catch (\Exception $e) {
+            Log::error('Neo4j Connection Error: ' . $e->getMessage());
+            return $e->getMessage();
+        }
     }
 
     public function createNode($data)

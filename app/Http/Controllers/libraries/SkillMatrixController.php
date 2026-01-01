@@ -32,16 +32,17 @@ class SkillMatrixController extends Controller
     {
         $rules = [];
         foreach ($skills as $index => $skill) {
-            $rules["skills.{$index}.skill_id"] = 'required|exists:s_users_skills,id';
+            $rules["skills.{$index}.skill_id"] = 'required|integer';
             $rules["skills.{$index}.skill_level"] = 'required|integer|min:1|max:5';
-            
+            $rules["skills.{$index}.type"] = 'nullable|string';
+
             // Change from 'array' to allow objects/strings that can be JSON encoded
             $rules["skills.{$index}.knowledge"] = 'nullable';
             $rules["skills.{$index}.ability"] = 'nullable';
             $rules["skills.{$index}.behaviour"] = 'nullable';
             $rules["skills.{$index}.attitude"] = 'nullable';
         }
-        
+
         return Validator::make(['skills' => $skills], $rules);
     }
 
@@ -66,7 +67,8 @@ class SkillMatrixController extends Controller
                 $addUpdate = [
                     'skill_level' => (int)$skill['skill_level'],
                     'user_id' => $user_id,
-                    'skill_id' => (int)$skill['skill_id']
+                    'skill_id' => (int)$skill['skill_id'],
+                    'type' => $skill['type'] ?? null
                 ];
 
                 // Handle additional attributes - accept objects and convert to JSON
@@ -80,7 +82,31 @@ class SkillMatrixController extends Controller
                 matrix::updateOrCreate(
                     ['user_id' => $user_id, 'skill_id' => $skill['skill_id']],
                     $addUpdate
-                );                
+                );
+            }
+
+            // Process KABA items from 'kaab' array
+            $kaabs = $request->kaab ?? [];
+            foreach ($kaabs as $kaba) {
+                $addUpdate = [
+                    'skill_level' => (int)$kaba['skill_level'],
+                    'user_id' => $user_id,
+                    'skill_id' => (int)$kaba['skill_id'],
+                    'type' => $kaba['type'] ?? null
+                ];
+
+                // KABA items may not have additional attributes, but if present, handle similarly
+                $attributes = ['knowledge', 'ability', 'behaviour', 'attitude'];
+                foreach ($attributes as $attribute) {
+                    if (isset($kaba[$attribute]) && !empty($kaba[$attribute])) {
+                        $addUpdate[$attribute] = json_encode($kaba[$attribute]);
+                    }
+                }
+
+                matrix::updateOrCreate(
+                    ['user_id' => $user_id, 'skill_id' => $kaba['skill_id']],
+                    $addUpdate
+                );
             }
 
             DB::commit();
