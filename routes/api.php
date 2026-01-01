@@ -119,5 +119,6 @@ Route::get('/interview-panel/list', [talent_interviewpanelController::class, 'ge
 Route::get('/candidate', [candidateController::class,'getCandidate']);
 Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
 Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
+Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
 
 

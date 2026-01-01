@@ -34,12 +34,20 @@ class candidateController extends Controller
                 $join->on('tja.id','=','tis.applicant_id')
                      ->whereRaw('tis.round_no = (SELECT MAX(round_no) FROM talent_interview_schedules WHERE applicant_id = tja.id)');
             })
+            ->leftJoin('talent_job_postings as tjp', 'tja.job_id', '=', 'tjp.id')
+            ->leftJoin('talent_interview_panel as tip', 'tis.panel_id', '=', 'tip.id')
             ->select(
+                // Candidate ID
+                'tja.id as candidate_id',
+
                 // Candidate Name
                 DB::raw("CONCAT(tja.first_name,' ',tja.last_name,' ',tja.email) AS candidate_name"),
 
-                // Position / Job ID
-                'tja.job_id as position',
+                // Position ID
+                'tjp.id as position_id',
+
+                // Position / Job Title
+                'tjp.title as position',
 
                 // Status
                 'tja.status',
@@ -57,7 +65,10 @@ class candidateController extends Controller
                 'tis.rating as score',
 
                 // Panel ID
-                'tis.panel_id'
+                'tis.panel_id',
+
+                // Panel Name
+                'tip.panel_name'
             )
             ->where('tja.sub_institute_id', $sub_institute_id)
             ->get();
@@ -69,5 +80,5 @@ class candidateController extends Controller
         ], 200);
     }
 
-    
+
 }
