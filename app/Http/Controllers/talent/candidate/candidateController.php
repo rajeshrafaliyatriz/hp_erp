@@ -37,7 +37,7 @@ class candidateController extends Controller
             ->select(
                 // Candidate Name
                 DB::raw("CONCAT(tja.first_name,' ',tja.last_name,' ',tja.email) AS candidate_name"),
-            
+
                 // Position / Job ID
                 'tja.job_id as position',
 
@@ -54,7 +54,10 @@ class candidateController extends Controller
                 DB::raw("CONCAT(tis.interview_date,' ',tis.time) AS next_interview"),
 
                 // Score / Rating
-                'tis.rating as score'
+                'tis.rating as score',
+
+                // Panel ID
+                'tis.panel_id'
             )
             ->where('tja.sub_institute_id', $sub_institute_id)
             ->get();

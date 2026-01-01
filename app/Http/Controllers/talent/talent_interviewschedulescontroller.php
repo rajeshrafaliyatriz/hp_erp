@@ -95,6 +95,16 @@ class talent_interviewschedulescontroller extends Controller
 
       
 
+          // Normalize interviewer_id to array
+          if (is_string($request->interviewer_id)) {
+              $decoded = json_decode($request->interviewer_id, true);
+              if (is_array($decoded)) {
+                  $request->merge(['interviewer_id' => array_map('intval', $decoded)]);
+              } else {
+                  $request->merge(['interviewer_id' => array_map('intval', array_map('trim', explode(',', $request->interviewer_id)))]);
+              }
+          }
+
           $validator = Validator::make($request->all(), [
             'job_id'            => 'required|integer|exists:talent_job_postings,id',
             'applicant_id'      => 'required|string|max:255',
@@ -103,7 +113,7 @@ class talent_interviewschedulescontroller extends Controller
             'time'              => 'nullable|string|max:255',
             'duration'          => 'nullable|integer',
             'location'          => 'nullable|string|max:255',
-            'interviewer_id'    => 'required|string|max:255',
+            'interviewer_id'    => 'required|array',
             'status'            => 'required|in:Scheduled,Completed,Under Review,Pending Review,Rejected,Selected,Accepted,active',
             'rating'            => 'nullable|string|max:255',
             'feedback'          => 'nullable|string|max:100',
@@ -184,7 +194,17 @@ class talent_interviewschedulescontroller extends Controller
             }
     
             $sub_institute_id = $request->get('sub_institute_id');
-    
+
+            // Normalize interviewer_id to array
+            if (is_string($request->interviewer_id)) {
+                $decoded = json_decode($request->interviewer_id, true);
+                if (is_array($decoded)) {
+                    $request->merge(['interviewer_id' => array_map('intval', $decoded)]);
+                } else {
+                    $request->merge(['interviewer_id' => array_map('intval', array_map('trim', explode(',', $request->interviewer_id)))]);
+                }
+            }
+
             // 🧾 Validation
             $validator = \Validator::make($request->all(), [
                 'job_id'            => 'required|integer|exists:talent_job_postings,id',
@@ -194,7 +214,7 @@ class talent_interviewschedulescontroller extends Controller
                 'time'              => 'nullable|string|max:255',
                 'duration'          => 'nullable|integer',
                 'location'          => 'nullable|string|max:255',
-                'interviewer_id'    => 'required|string|max:255',
+                'interviewer_id'    => 'required|array',
                 'status'            => 'required|in:Pending Review,Under Review,Shortlisted,Interview Scheduled,Rejected,Hired',
                 'rating'            => 'nullable|string|max:255',
                 'feedback'          => 'nullable|string|max:100',

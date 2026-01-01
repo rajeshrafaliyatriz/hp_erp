@@ -4,6 +4,7 @@ namespace App\Http\Controllers\talent\feedback;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\DB;
 use App\Models\auth\tbluserModel;
 use App\Models\talent\talent_interviewschedules;
@@ -14,7 +15,7 @@ use App\Models\talent\feedback\TalentEvaluationForm;
 
 class feedbackController extends Controller
 {
-     public function getFeedback($id)
+     public function getFeedback(Request $request, $id)
     {
             $type = $request->type;
 
@@ -60,48 +61,71 @@ class feedbackController extends Controller
         ], 200);
     }
     public function storeFeedback(Request $request)
-    {
-                $type = $request->type;
+{
+    $type = $request->type;
 
-        if ($type == "API") {
-
-            $token = $request->input('token');
-            if (!$token) {
-                return response()->json(['message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) {
-                return response()->json(['message' => 'Invalid token'], 401);
-            }
-        }
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
-        // Decode evaluation_criteria if it's a JSON string
-        if (is_string($request->evaluation_criteria)) {
-            $request->merge(['evaluation_criteria' => json_decode($request->evaluation_criteria, true)]);
+    // 🔐 API Token Validation
+    if ($type == "API") {
+        $token = $request->input('token');
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
         }
 
-        // Validation
-        $request->validate([
-            'job_id'               => 'required|integer',
-            'candidate_id'         => 'required|integer',
-            'interviewer_id'       => 'required|integer',
-            'evaluation_criteria'  => 'required|array',
-            'evaluation_criteria.*.name' => 'required|string|max:50',
-            'evaluation_criteria.*.score' => 'required|numeric|min:0|max:100',
-            'recommendation'       => 'required|string',  // ENUM: Hire, Maybe, Reject
-            'key_strengths'         => 'nullable|string|max:50',
-            'areas_of_concern'     => 'nullable|string|max:50',
-            'additional_comments'  => 'nullable|string|max:255',
-        ]);
-
-        // Store Data
-        $evaluation = TalentEvaluationForm::create($request->all());
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Evaluation submitted successfully',
-            'data' => $evaluation
-        ], 201);
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
     }
+
+    $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+
+    // 📥 Convert JSON string to array if needed
+    if (is_string($request->evaluation_criteria)) {
+        $request->merge(['evaluation_criteria' => json_decode($request->evaluation_criteria, true)]);
+    }
+
+    // ✅ Validation
+    $request->validate([
+        'job_id'                  => 'required|integer',
+        'candidate_id'            => 'required|integer',
+        'interviewer_id'          => 'required|integer',
+        'evaluation_criteria'     => 'required|array',
+        'evaluation_criteria.*.name'  => 'required|string|max:50',
+        'evaluation_criteria.*.score' => 'required|numeric|min:0|max:100',
+        'recommendation'          => 'required|string',
+        'key_strengths'           => 'nullable|string|max:50',
+        'areas_of_concern'        => 'nullable|string|max:50',
+        'additional_comments'     => 'nullable|string|max:255',
+    ]);
+
+    // 🛠️ Convert Evaluation Criteria Array → Comma Separated String
+    if (is_array($request->evaluation_criteria)) {
+        $formattedCriteria = collect($request->evaluation_criteria)->map(function ($item) {
+            return "{$item['name']}: {$item['score']}";
+        })->implode(', ');
+        // ⬇️ Update request data
+        $request->merge(['evaluation_criteria' => $formattedCriteria]);
+    }
+
+    // 💾 Save into database
+    $evaluation = TalentEvaluationForm::create([
+        'job_id'               => $request->job_id,
+        'candidate_id'         => $request->candidate_id,
+        'interviewer_id'       => $request->interviewer_id,
+        'evaluation_criteria'  => $request->evaluation_criteria,
+        'recommendation'       => $request->recommendation,
+        'key_strengths'        => $request->key_strengths,
+        'areas_of_concern'     => $request->areas_of_concern,
+        'additional_comments'  => $request->additional_comments,
+        'sub_institute_id'     => $subInstituteId,
+    ]);
+
+    // 📤 Response
+    return response()->json([
+        'status' => true,
+        'message' => 'Evaluation submitted successfully',
+        'data' => $evaluation
+    ], 201);
+}
+
 }

@@ -12,6 +12,9 @@ use App\Http\Controllers\talent\feedback\feedbackController;
 class talent_interviewschedules extends Model
 {
     protected $table = 'talent_interview_schedules';
+    protected $casts = [
+        'interviewer_id' => 'array',
+    ];
     protected $fillable = [
         'job_id',
         'applicant_id',
