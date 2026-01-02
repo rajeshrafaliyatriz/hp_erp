@@ -302,4 +302,72 @@ class talent_interviewschedulescontroller extends Controller
     {
         //
     }
+
+    /**
+     * Get interview details for frontend.
+     */
+    public function getInterviewDetails(Request $request)
+    {
+        try {
+            // Fetch interview schedules from database
+            $interviewSchedules = DB::table('talent_interview_schedules as a')
+                ->select(
+                    'a.id',
+                    'a.applicant_id',
+                    'a.round_no',
+                    'a.interview_date',
+                    'a.time',
+                    'a.duration',
+                    'a.location',
+                    'a.interviewer_id',
+                    'a.panel_id',
+                    'a.status',
+                    'a.rating',
+                    'a.feedback',
+                    'a.additional_notes',
+                    'jp.title as position',
+                    DB::raw("CONCAT(u.first_name, ' ', u.last_name) as candidate_name")
+                )
+                ->leftJoin('talent_job_postings as jp', 'a.job_id', '=', 'jp.id')
+                ->leftJoin('tbluser as u', 'a.applicant_id', '=', 'u.id')
+                ->where('a.status', 'Scheduled')
+                ->orderBy('a.interview_date', 'asc')
+                ->orderBy('a.time', 'asc')
+                ->get();
+
+            // Collect all interviewer IDs to fetch names in one query
+            $allInterviewerIds = [];
+            foreach ($interviewSchedules as $schedule) {
+                $interviewers = is_array($schedule->interviewer_id) ? $schedule->interviewer_id : json_decode($schedule->interviewer_id, true) ?? [];
+                $allInterviewerIds = array_merge($allInterviewerIds, $interviewers);
+            }
+            $allInterviewerIds = array_unique($allInterviewerIds);
+            $interviewerNames = DB::table('tbluser')->whereIn('id', $allInterviewerIds)->select('id', DB::raw("CONCAT(first_name, ' ', last_name) as name"))->pluck('name', 'id')->toArray();
+
+            // Format the data for frontend
+            $formattedData = $interviewSchedules->map(function ($schedule) use ($interviewerNames) {
+                $interviewers = is_array($schedule->interviewer_id) ? $schedule->interviewer_id : json_decode($schedule->interviewer_id, true) ?? [];
+                return [
+                    'id' => $schedule->id,
+                    'candidate' => ['candidate_id' => (int)$schedule->applicant_id, 'candidate_name' => $schedule->candidate_name ?? 'Unknown'],
+                    'position' => $schedule->position ?? 'Position not specified',
+                    'scheduled_time' => $schedule->time ?? 'Time not set',
+                    'duration' => $schedule->duration ? $schedule->duration . ' min' : 'Duration not set',
+                    'location' => $schedule->location ?? 'Location not set',
+                    'interviewers' => array_map(function($id) use ($interviewerNames) {
+                        return ['interviewer_id' => (int)$id, 'interviewer_name' => $interviewerNames[$id] ?? 'Unknown'];
+                    }, $interviewers),
+                    'panel_id' => $schedule->panel_id,
+                    'status' => $schedule->status
+                ];
+            });
+
+            return response()->json([
+                'message' => 'Interview details fetched successfully',
+                'data' => $formattedData
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }
