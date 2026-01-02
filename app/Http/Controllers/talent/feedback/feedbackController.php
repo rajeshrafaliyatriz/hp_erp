@@ -32,10 +32,19 @@ class feedbackController extends Controller
             }
         }
         $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
-        $data = DB::table('talent_evaluation_form')
-            ->select('*')
-            ->where('candidate_id', $id)
-            ->orderBy('created_at', 'DESC') // latest feedback
+        $data = DB::table('talent_evaluation_form as tef')
+            ->leftJoin('talent_job_postings as tjp', 'tef.job_id', '=', 'tjp.id')
+            ->leftJoin('talent_job_applications as tja', 'tef.candidate_id', '=', 'tja.id')
+            ->leftJoin('talent_interview_panel as tip', 'tef.panel_id', '=', 'tip.id')
+            ->select(
+                'tef.*',
+                'tjp.title as job_title',
+                DB::raw("CONCAT(tja.first_name, ' ', COALESCE(tja.middle_name, ''), ' ', tja.last_name) as candidate_name"),
+                'tja.email as candidate_email',
+                'tip.panel_name'
+            )
+            ->where('tef.candidate_id', $id)
+            ->orderBy('tef.created_at', 'DESC') // latest feedback
             ->first();
 
         if (!$data) {
