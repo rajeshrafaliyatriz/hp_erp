@@ -27,7 +27,7 @@ class JobRoleGraphController extends Controller
             RETURN jr, r1, n1, r2, n2;',
             ['jobRoleId' => is_numeric($jobRoleId) ? (int)$jobRoleId : $jobRoleId]
         );
-
+dd($result);
         $nodes = [];
         $relationships = [];
         $rootNode = null;
