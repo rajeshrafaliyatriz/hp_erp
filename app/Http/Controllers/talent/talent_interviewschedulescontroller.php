@@ -449,7 +449,6 @@ class talent_interviewschedulescontroller extends Controller
                     ->where('status', 'hired')
                     ->whereNull('deleted_at')
                     ->count();
-dd($hiredCount);
                 $conversionRate = $totalApplications > 0 ? round(($hiredCount / $totalApplications) * 100, 1) . '%' : '0%';
 
                 // Calculate average time to hire
