@@ -51,7 +51,7 @@ class talent_interviewschedulescontroller extends Controller
                             ->select('*')
                             ->where('a.sub_institute_id',$sub_institute_id)
                             ->get();
-
+dd($interview_schedules);
 
                 return response()->json([
                     'message' => ' fetched successfully',
