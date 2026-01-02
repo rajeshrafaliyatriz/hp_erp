@@ -32,9 +32,13 @@ use App\Http\Controllers\talent\InterviewController;
 use App\Http\Controllers\talent\interview_panel\talent_interviewpanelController;
 use App\Http\Controllers\talent\feedback\feedbackController;
 use App\Http\Controllers\talent\candidate\candidateController;
-use App\Http\Controllers\Neo4jSyncController;
+use App\Http\Controllers\JobRoleGraphController;
+use App\Http\Controllers\OrganizationGraphController;
+use App\Http\Controllers\DepartmentGraphController;
 
-Route::get('/jobroles/{jobRoleId}/graph', [Neo4jSyncController::class, 'show']);
+Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
+Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
+Route::get('/departments/{deptId}/graph', [DepartmentGraphController::class, 'show']);
 Route::post('/ai-generated-assessment/question/store',[generateQuestionController::class, 'store']);
 Route::get('/ai-generated-assessment/question/index',[generateQuestionController::class, 'index']);
 
