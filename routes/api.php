@@ -32,7 +32,9 @@ use App\Http\Controllers\talent\InterviewController;
 use App\Http\Controllers\talent\interview_panel\talent_interviewpanelController;
 use App\Http\Controllers\talent\feedback\feedbackController;
 use App\Http\Controllers\talent\candidate\candidateController;
+use App\Http\Controllers\Neo4jSyncController;
 
+Route::get('/jobroles/{jobRoleId}/graph', [Neo4jSyncController::class, 'show']);
 Route::post('/ai-generated-assessment/question/store',[generateQuestionController::class, 'store']);
 Route::get('/ai-generated-assessment/question/index',[generateQuestionController::class, 'index']);
 
@@ -41,10 +43,12 @@ Route::get('/ai-generated-assessment/assessment/index',[generateAssessmentContro
 
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
+Route::get('/candidate-pipeline', [talent_interviewschedulescontroller::class, 'candidatepipeline']);
 
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
 
 Route::resource('job-postings', talent_jobpostingcontroller::class);
+Route::get('/talent/team-overview', [talent_jobpostingcontroller::class, 'getHiringStatus']);
 
 Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store']);
 Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show']);
@@ -125,5 +129,6 @@ Route::get('/interview-panel/list', [talent_interviewpanelController::class, 'ge
 Route::get('/candidate', [candidateController::class,'getCandidate']);
 Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
 Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
+Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'getInterviewDetails']);
 
 

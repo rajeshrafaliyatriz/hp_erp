@@ -370,4 +370,112 @@ class talent_interviewschedulescontroller extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+     public function candidatepipeline(Request $request)
+    {
+        try {
+            $type = $request->type; // API or web
+
+            if ($type == 'API') {
+                // validate token
+                $token = $request->input('token');
+                if (!$token) {
+                    return response()->json(['message' => 'Token not provided'], 401);
+                }
+
+                $accessToken = PersonalAccessToken::findToken($token);
+                if (!$accessToken) {
+                    return response()->json(['message' => 'Invalid token'], 401);
+                }
+
+                // validate required params
+                $validator = Validator::make($request->all(), [
+                    'sub_institute_id' => 'required',
+                ]);
+
+                if ($validator->fails()) {
+                    return response()->json([
+                        'status_code' => 0,
+                        'message' => $validator->errors()->first()
+                    ], 400);
+                }
+
+                $sub_institute_id = $request->sub_institute_id;
+
+                // Define the pipeline stages
+                $stages = [
+                    'Application Review' => ['status' => ['applied', 'under_review']],
+                    'Phone Screening' => ['status' => ['shortlisted', 'phone_screening']],
+                    'Technical Interview' => ['round' => 'technical'],
+                    'Final Interview' => ['round' => 'final'],
+                    'Offer Extended' => ['status' => ['offered']],
+                ];
+
+                $data = [];
+                $totalApplications = DB::table('talent_job_applications')
+                    ->where('sub_institute_id', $sub_institute_id)
+                    ->whereNull('deleted_at')
+                    ->count();
+
+                foreach ($stages as $label => $criteria) {
+                    $query = DB::table('talent_job_applications as ja')
+                        ->where('ja.sub_institute_id', $sub_institute_id)
+                        ->whereNull('ja.deleted_at');
+
+                    if (isset($criteria['status'])) {
+                        $query->whereIn('ja.status', $criteria['status']);
+                    } elseif (isset($criteria['round'])) {
+                        $query->join('talent_interview_schedules as tis', 'ja.id', '=', 'tis.applicant_id')
+                              ->where('tis.round_no', $criteria['round'])
+                              ->where('tis.status', 'scheduled');
+                    }
+
+                    $count = $query->count();
+
+                    // Calculate trend (compare with previous week)
+                    $previousQuery = clone $query;
+                    $previousCount = $previousQuery->where('ja.created_at', '<', now()->subDays(7))->count();
+                    $change = $previousCount > 0 ? (($count - $previousCount) / $previousCount) * 100 : 0;
+
+                    $data[] = [
+                        'stage' => $label,
+                        'count' => $count,
+                        'change' => ($change > 0 ? '+' : '') . round($change, 1) . '%',
+                    ];
+                }
+
+                // Calculate conversion rate (hired / total applications)
+                $hiredCount = DB::table('talent_job_applications')
+                    ->where('sub_institute_id', $sub_institute_id)
+                    ->where('status', 'hired')
+                    ->whereNull('deleted_at')
+                    ->count();
+
+                $conversionRate = $totalApplications > 0 ? round(($hiredCount / $totalApplications) * 100, 1) . '%' : '0%';
+
+                // Calculate average time to hire
+                $avgTimeToHire = DB::select("
+                    SELECT AVG(DATEDIFF(ja.updated_at, ja.created_at)) as avg_days
+                    FROM talent_job_applications ja
+                    WHERE ja.sub_institute_id = ? AND ja.status = 'hired' AND ja.updated_at IS NOT NULL
+                ", [$sub_institute_id]);
+
+                $averageTimeToHire = $avgTimeToHire[0]->avg_days ? round($avgTimeToHire[0]->avg_days) . ' days' : 'N/A';
+
+                return response()->json([
+                    'message' => 'Candidate pipeline fetched successfully',
+                    'data' => [
+                        'pipeline' => $data,
+                        'conversion_rate' => $conversionRate,
+                        'average_time_to_hire' => $averageTimeToHire
+                    ]
+                ], 200);
+            }
+
+            return response()->json(['message' => 'Invalid type'], 400);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
 }
