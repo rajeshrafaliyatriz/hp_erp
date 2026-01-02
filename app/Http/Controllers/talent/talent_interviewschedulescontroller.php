@@ -51,7 +51,7 @@ class talent_interviewschedulescontroller extends Controller
                             ->select('*')
                             ->where('a.sub_institute_id',$sub_institute_id)
                             ->get();
-dd($interview_schedules);
+
 
                 return response()->json([
                     'message' => ' fetched successfully',
@@ -449,7 +449,7 @@ dd($interview_schedules);
                     ->where('status', 'hired')
                     ->whereNull('deleted_at')
                     ->count();
-
+dd($hiredCount);
                 $conversionRate = $totalApplications > 0 ? round(($hiredCount / $totalApplications) * 100, 1) . '%' : '0%';
 
                 // Calculate average time to hire
