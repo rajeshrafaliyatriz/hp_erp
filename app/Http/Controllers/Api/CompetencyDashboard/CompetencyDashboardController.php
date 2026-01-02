@@ -59,7 +59,6 @@ class CompetencyDashboardController extends Controller
 
         return response()->json($results);
     }
-
     public function getRoleSimilarity(Request $request)
     {
         $threshold = $request->input('threshold', 0.5); // 50% default similarity
@@ -152,7 +151,6 @@ class CompetencyDashboardController extends Controller
             ], 500);
         }
     }
-
     public function getCoverageScorecards(Request $request)
     {
         $subInstituteId = $request->input('sub_institute_id', null);
@@ -313,5 +311,369 @@ class CompetencyDashboardController extends Controller
             ], 500);
         }
     }
+    public function getHealthRadar(Request $request)
+    {
+        $subInstituteId = $request->input('sub_institute_id', null);
+
+        try {
+            // Base query for filtering by sub_institute_id if provided
+            $baseQuery = DB::table('s_user_jobrole as jr')->whereNull('jr.deleted_at');
+            if ($subInstituteId) {
+                $baseQuery->where('jr.sub_institute_id', $subInstituteId);
+            }
+
+            // Compute metrics
+            $totalRoles = (clone $baseQuery)->count();
+            $rolesWithTasks = (clone $baseQuery)
+                ->join('s_user_jobrole_task as jt', function($join) {
+                    $join->on('jr.jobrole', '=', 'jt.jobrole')
+                         ->whereNull('jt.deleted_at');
+                })
+                ->distinct('jr.id')
+                ->count();
+            $taskMappingCurrent = $totalRoles > 0 ? round(($rolesWithTasks / $totalRoles) * 100, 1) : 0;
+            $taskMappingTarget = 95;
+
+            $totalTasks = DB::table('s_user_jobrole_task')
+                ->whereNull('deleted_at')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->count();
+            $tasksWithSkills = DB::table('s_user_jobrole_task as t')
+                ->whereNull('t.deleted_at')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('t.sub_institute_id', $subInstituteId);
+                })
+                ->whereExists(function($query) {
+                    $query->select(DB::raw(1))
+                          ->from('s_jobrole_skills as s')
+                          ->whereRaw('t.jobrole = s.jobrole');
+                })
+                ->count();
+            $skillCoverageCurrent = $totalTasks > 0 ? round(($tasksWithSkills / $totalTasks) * 100, 1) : 0;
+            $skillCoverageTarget = 95;
+
+            // Behavior Mapping: skills with behaviour mapped
+            $totalSkillsForBehavior = DB::table('s_skill_knowledge_ability')
+                ->where('classification', 'behaviour')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->whereNull('deleted_at')
+                ->distinct('skill_id')
+                ->count('skill_id');
+            $skillsWithBehavior = DB::table('s_skill_knowledge_ability')
+                ->where('classification', 'behaviour')
+                ->whereNotNull('classification_item')
+                ->where('classification_item', '!=', '')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->whereNull('deleted_at')
+                ->distinct('skill_id')
+                ->count('skill_id');
+            $behaviorMappingCurrent = $totalSkillsForBehavior > 0 ? round(($skillsWithBehavior / $totalSkillsForBehavior) * 100, 1) : 0;
+            $behaviorMappingTarget = 70;
+
+            $externalAlignmentCurrent = 89; // Placeholder - needs actual logic for O*NET mapping
+            $externalAlignmentTarget = 90;
+
+            $totalSkills = DB::table('s_jobrole_skills')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
+                                 ->where('s_user_jobrole.sub_institute_id', $subInstituteId)
+                                 ->whereNull('s_user_jobrole.deleted_at');
+                })
+                ->count();
+            $skillsWithProficiency = DB::table('s_jobrole_skills as sjs')
+                ->whereNotNull('sjs.proficiency_level')
+                ->where('sjs.proficiency_level', '!=', '')
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->join('s_user_jobrole as jr', 'sjs.jobrole', '=', 'jr.jobrole')
+                                 ->where('jr.sub_institute_id', $subInstituteId)
+                                 ->whereNull('jr.deleted_at');
+                })
+                ->count();
+            $riskAssessmentCurrent = $totalSkills > 0 ? round(($skillsWithProficiency / $totalSkills) * 100, 1) : 0;
+            $riskAssessmentTarget = 85;
+
+            $rolesWithDescription = (clone $baseQuery)
+                ->whereNotNull('description')
+                ->where('description', '!=', '')
+                ->count();
+            $futureReadinessCurrent = $totalRoles > 0 ? round(($rolesWithDescription / $totalRoles) * 100, 1) : 0;
+            $futureReadinessTarget = 95;
+
+            $overallCurrent = round(($taskMappingCurrent + $skillCoverageCurrent + $behaviorMappingCurrent + $externalAlignmentCurrent + $riskAssessmentCurrent + $futureReadinessCurrent) / 6, 1);
+            $overallTarget = 90;
+
+            $data = [
+                [
+                    'area' => 'Current vs Target Coverage',
+                    'current' => $overallCurrent,
+                    'target' => $overallTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Task Mapping',
+                    'current' => $taskMappingCurrent,
+                    'target' => $taskMappingTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Skill Coverage',
+                    'current' => $skillCoverageCurrent,
+                    'target' => $skillCoverageTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Behavior Mapping',
+                    'current' => $behaviorMappingCurrent,
+                    'target' => $behaviorMappingTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'External Alignment',
+                    'current' => $externalAlignmentCurrent,
+                    'target' => $externalAlignmentTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Risk Assessment',
+                    'current' => $riskAssessmentCurrent,
+                    'target' => $riskAssessmentTarget,
+                    'fullMark' => 100
+                ],
+                [
+                    'area' => 'Future Readiness',
+                    'current' => $futureReadinessCurrent,
+                    'target' => $futureReadinessTarget,
+                    'fullMark' => 100
+                ]
+            ];
+
+            // Process data to compute differences & classifications
+            $processed = collect($data)->map(function ($item) {
+                $difference = $item['current'] - $item['target'];
+                $classification = $difference >= 0 ? 'strength' : 'gap';
+
+                return [
+                    'area' => $item['area'],
+                    'current' => $item['current'],
+                    'target' => $item['target'],
+                    'fullMark' => $item['fullMark'],
+                    'difference' => $difference,
+                    'classification' => $classification
+                ];
+            });
+
+            // Separate strengths & coverage gaps
+            $strengths = $processed->where('classification', 'strength')
+                                   ->sortByDesc('current')
+                                   ->values()
+                                   ->take(3); // top 3 strengths
+            $gaps = $processed->where('classification', 'gap')
+                              ->sortBy('difference')
+                              ->values()
+                              ->take(3); // top 3 weakest
+
+            // Compute overall health score
+            $avgCurrent = round($processed->avg('current'), 2);
+            $avgTarget = round($processed->avg('target'), 2);
+            $healthScore = round(($avgCurrent / $avgTarget) * 100, 1);
+
+            // Return formatted JSON
+            return response()->json([
+                'status' => 'success',
+                'summary' => [
+                    'average_current' => $avgCurrent,
+                    'average_target' => $avgTarget,
+                    'health_score' => $healthScore,
+                ],
+                'data' => $processed,
+                'strengths' => $strengths,
+                'gaps' => $gaps
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch competency health radar data.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getSkillsManagementFunnel(Request $request)
+    {
+        $subInstituteId = $request->input('sub_institute_id', null);
+
+        try {
+            // Base query for s_users_skills
+            $skillsQuery = DB::table('s_users_skills')->whereNull('deleted_at');
+            if ($subInstituteId) {
+                $skillsQuery->where('sub_institute_id', $subInstituteId);
+            }
+
+            // Identified Orphans: total skills
+            $total = (clone $skillsQuery)->count();
+
+            // In Review: skills with approve_status = 'Pending'
+            $inReview = (clone $skillsQuery)->where('approve_status', 'Pending')->count();
+
+            // Mapped Candidates: distinct skills mapped to users in s_skill_matrix
+            $mappedQuery = DB::table('s_skill_matrix')
+                ->join('s_users_skills', 's_skill_matrix.skill_id', '=', 's_users_skills.id')
+                ->whereNull('s_skill_matrix.deleted_at')
+                ->whereNull('s_users_skills.deleted_at');
+            if ($subInstituteId) {
+                $mappedQuery->where('s_users_skills.sub_institute_id', $subInstituteId);
+            }
+            $mapped = $mappedQuery->distinct('s_skill_matrix.skill_id')->count('s_skill_matrix.skill_id');
+
+            // Approved & Integrated: distinct skills in s_jobrole_skills for jobroles in sub_institute, joined to s_users_skills
+            $approvedQuery = DB::table('s_jobrole_skills')
+                ->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
+                ->join('s_users_skills', 's_jobrole_skills.skill', '=', 's_users_skills.title')
+                ->whereNull('s_user_jobrole.deleted_at')
+                ->whereNull('s_users_skills.deleted_at');
+            if ($subInstituteId) {
+                $approvedQuery->where('s_users_skills.sub_institute_id', $subInstituteId);
+            }
+            $approved = $approvedQuery->distinct('s_jobrole_skills.skill')->count('s_jobrole_skills.skill');
+
+            // Calculate filtered and percentages
+            $filteredIdentified = $total - $inReview;
+            $filteredIdentifiedPercentage = $total > 0 ? round(($filteredIdentified / $total) * 100, 0) : 0;
+
+            $filteredInReview = $inReview - $mapped;
+            $filteredInReviewPercentage = $inReview > 0 ? round(($filteredInReview / $inReview) * 100, 0) : 0;
+
+            $filteredMapped = $mapped - $approved;
+            $filteredMappedPercentage = $mapped > 0 ? round(($filteredMapped / $mapped) * 100, 0) : 0;
+
+            $completionRate = $total > 0 ? round(($approved / $total) * 100, 0) : 0;
+
+            $data = [
+                [
+                    'stage' => 'Identified Orphans',
+                    'count' => $total,
+                    'percentage' => '100% of total',
+                    'filtered' => -$filteredIdentified,
+                    'filteredPercentage' => '(' . min(100, $filteredIdentifiedPercentage) . '%)'
+                ],
+                [
+                    'stage' => 'In Review',
+                    'count' => $inReview,
+                    'percentage' => ($total > 0 ? min(100, round(($inReview / $total) * 100, 0)) : 0) . '% of total',
+                    'filtered' => -$filteredInReview,
+                    'filteredPercentage' => '(' . min(100, $filteredInReviewPercentage) . '%)'
+                ],
+                [
+                    'stage' => 'Mapped Candidates',
+                    'count' => $mapped,
+                    'percentage' => ($total > 0 ? min(100, round(($mapped / $total) * 100, 0)) : 0) . '% of total',
+                    'filtered' => -$filteredMapped,
+                    'filteredPercentage' => '(' . min(100, $filteredMappedPercentage) . '%)'
+                ],
+                [
+                    'stage' => 'Approved & Integrated',
+                    'count' => $approved,
+                    'percentage' => ($total > 0 ? min(100, round(($approved / $total) * 100, 0)) : 0) . '% of total'
+                ]
+            ];
+
+            return response()->json([
+                'title' => 'Skills Management Funnel',
+                'completionRate' => $completionRate . '%',
+                'data' => $data
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch skills management funnel data.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    public function getAlignment(Request $request)
+    {
+        $type = $request->query('type', 'o'); // default type
+        $type = strtolower($type);
+        $subInstituteId = $request->input('sub_institute_id', null);
+
+        // Map type to framework
+        $frameworkMap = [
+            'o' => 'onet',
+            's' => 'singapore'
+        ];
+        $framework = $frameworkMap[$type] ?? 'onet';
+
+        try {
+            // Validate supported types
+            $validTypes = ['o', 's'];
+            if (!in_array($type, $validTypes)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid type. Supported: o (onet), s (skillsfuture).'
+                ], 400);
+            }
+
+            // Fetch aggregated alignment data from s_jobrole_skills
+            $result = DB::table('s_jobrole_skills')
+                ->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
+                ->whereNull('s_user_jobrole.deleted_at')
+                ->where('s_jobrole_skills.type', $type)
+                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                    return $query->where('s_user_jobrole.sub_institute_id', $subInstituteId);
+                })
+                ->selectRaw('
+                    COUNT(DISTINCT s_jobrole_skills.skill) AS aligned,
+                    0 AS partial,
+                    0 AS not_aligned,
+                    COUNT(DISTINCT s_jobrole_skills.skill) AS total
+                ')
+                ->first();
+
+            if (!$result || $result->total == 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No data found for selected framework.',
+                ], 404);
+            }
+
+            // Calculate percentage aligned (including partial alignment)
+            $percentage = round((($result->aligned + $result->partial) / $result->total) * 100, 2);
+
+            // Framework meta versions
+            $frameworkVersions = [
+                'onet' => 'v28.0',
+                'singapore' => 'v2024',
+                'esco' => 'v2025'
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'framework' => strtoupper($framework),
+                    'version' => $frameworkVersions[$framework] ?? 'v1.0',
+                    'percentage' => $percentage,
+                    'aligned' => (int)$result->aligned,
+                    'partial' => (int)$result->partial,
+                    'notAligned' => (int)$result->not_aligned,
+                    'total' => (int)$result->total
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Server Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 
 }
+

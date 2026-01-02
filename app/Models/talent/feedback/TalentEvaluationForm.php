@@ -12,12 +12,13 @@ class TalentEvaluationForm extends Model
     protected $fillable = [
         'job_id',
         'candidate_id',
-        'interviewer_id',
+        'panel_id',
         'evaluation_criteria',
         'recommendation',
         'key_strengths',
         'areas_of_concern',
         'additional_comments',
+        'sub_institute_id',
     ];
 
     protected $casts = [

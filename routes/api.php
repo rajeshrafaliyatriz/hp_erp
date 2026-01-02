@@ -91,6 +91,9 @@ Route::get('/skill-development/calendar', [SkillDevelopmentController::class, 'g
 Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
 Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity']);
 Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards']);
+Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar']);
+Route::get('/competency/skills-management-funnel', [SubCompetencyDashboardController::class, 'getSkillsManagementFunnel']);
+Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'getAlignment']);
 
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
@@ -130,5 +133,7 @@ Route::get('/candidate', [candidateController::class,'getCandidate']);
 Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
 Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
 Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'getInterviewDetails']);
+Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
+
 
 
