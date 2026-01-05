@@ -32,6 +32,7 @@ use App\Http\Controllers\talent\InterviewController;
 use App\Http\Controllers\talent\interview_panel\talent_interviewpanelController;
 use App\Http\Controllers\talent\feedback\feedbackController;
 use App\Http\Controllers\talent\candidate\candidateController;
+use App\Http\Controllers\Reports\KpiController;
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
@@ -139,6 +140,10 @@ Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
 Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
 Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'getInterviewDetails']);
 Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
+
+Route::group(['prefix' => 'reports'], function () {
+    Route::get('/kpi', [KpiController::class, 'index']);
+});
 
 
 
