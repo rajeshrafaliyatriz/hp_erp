@@ -322,7 +322,7 @@ class talent_interviewschedulescontroller extends Controller
                     return response()->json(['message' => 'Invalid token'], 401);
                 }
 
-                $validator = \Validator::make($request->all(), [
+                $validator = Validator::make($request->all(), [
                     'sub_institute_id' => 'required',
                 ]);
 
@@ -348,7 +348,8 @@ class talent_interviewschedulescontroller extends Controller
                 ->leftJoin('talent_interview_panel as tip', 'tis.panel_id', '=', 'tip.id')
                 ->select(
                     'tja.id as candidate_id',
-                    DB::raw("CONCAT(tja.first_name,' ',tja.last_name,' ',tja.email) AS candidate_name"),
+                    DB::raw("CONCAT(tja.first_name,' ',tja.last_name) AS candidate_name"),
+                    'tja.email',
                     'tjp.id as position_id',
                     'tjp.title as position',
                     'tja.status',
@@ -357,9 +358,13 @@ class talent_interviewschedulescontroller extends Controller
                     DB::raw("CONCAT(tis.interview_date,' ',tis.time) AS next_interview"),
                     'tis.rating as score',
                     'tis.panel_id',
-                    'tip.panel_name'
+                    'tip.panel_name',
+                    'tis.location',
+                    'tis.duration'
                 )
                 ->where('tja.sub_institute_id', $sub_institute_id)
+                ->where('tis.status', 'Scheduled')
+                ->where('tja.status', '!=', 'Hired')
                 ->get();
 
             return response()->json([
