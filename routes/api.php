@@ -36,6 +36,8 @@ use App\Http\Controllers\Reports\KpiController;
 use App\Http\Controllers\Reports\HiringAnalyticsController;
 use App\Http\Controllers\Reports\DepartmentDistributionController;
 use App\Http\Controllers\Reports\DepartmentSizeController;
+use App\Http\Controllers\Reports\EmployeeLifecycleController;
+use App\Http\Controllers\Reports\OrganizationGrowthController;
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
@@ -148,7 +150,10 @@ Route::group(['prefix' => 'reports'], function () {
     Route::get('/kpi', [KpiController::class, 'index']);
     Route::get('/hiring-analytics', [HiringAnalyticsController::class, 'getHiringTrends']);
     Route::get('/departments/distribution', [DepartmentDistributionController::class, 'index']);
+    Route::get('/departments/summary', [DepartmentDistributionController::class, 'getDepartmentSummary']);
     Route::get('/departments/sizes', [DepartmentSizeController::class, 'getDepartmentSizes']);
+    Route::get('/employees/lifecycle', [EmployeeLifecycleController::class, 'getEmployeeLifecycle']);
+    Route::get('/organization/growth', [OrganizationGrowthController::class, 'index']);
 });
 
 
