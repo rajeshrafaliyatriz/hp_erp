@@ -38,6 +38,7 @@ use App\Http\Controllers\Reports\DepartmentDistributionController;
 use App\Http\Controllers\Reports\DepartmentSizeController;
 use App\Http\Controllers\Reports\EmployeeLifecycleController;
 use App\Http\Controllers\Reports\OrganizationGrowthController;
+use App\Http\Controllers\Reports\EmployeeSkillCoverageMatrix\EmployeeSkillCoverageMatrixController;
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
@@ -147,6 +148,9 @@ Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
 Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'index']);
 Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
 
+Route::get('/kpis', [EmployeeSkillCoverageMatrixController::class, 'getKpiMetrics']);
+Route::get('/skill-gaps', [EmployeeSkillCoverageMatrixController::class, 'skillGaps']);
+
 Route::group(['prefix' => 'reports'], function () {
     Route::get('/kpi', [KpiController::class, 'index']);
     Route::get('/hiring-analytics', [HiringAnalyticsController::class, 'getHiringTrends']);
@@ -155,6 +159,7 @@ Route::group(['prefix' => 'reports'], function () {
     Route::get('/departments/sizes', [DepartmentSizeController::class, 'getDepartmentSizes']);
     Route::get('/employees/lifecycle', [EmployeeLifecycleController::class, 'getEmployeeLifecycle']);
     Route::get('/organization/growth', [OrganizationGrowthController::class, 'index']);
+    Route::get('/skill-coverage/matrix', [EmployeeSkillCoverageMatrixController::class, 'index']);
 });
 
 
