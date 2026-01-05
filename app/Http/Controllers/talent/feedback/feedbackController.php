@@ -15,6 +15,52 @@ use App\Models\talent\feedback\TalentEvaluationForm;
 
 class feedbackController extends Controller
 {
+    public function getAllFeedback(Request $request)
+    {
+        $type = $request->type;
+
+        if ($type == "API") {
+
+            $token = $request->input('token');
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+        }
+        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $data = DB::table('talent_evaluation_form as tef')
+            ->leftJoin('talent_job_postings as tjp', 'tef.job_id', '=', 'tjp.id')
+            ->leftJoin('talent_job_applications as tja', 'tef.candidate_id', '=', 'tja.id')
+            ->leftJoin('talent_interview_panel as tip', 'tef.panel_id', '=', 'tip.id')
+            ->select(
+                'tef.*',
+                'tjp.title as job_title',
+                DB::raw("CONCAT(tja.first_name, ' ', COALESCE(tja.middle_name, ''), ' ', tja.last_name) as candidate_name"),
+                'tja.email as candidate_email',
+                'tip.panel_name'
+            )
+            ->where('tef.sub_institute_id', $subInstituteId)
+            ->orderBy('tef.created_at', 'DESC')
+            ->get();
+
+        if ($data->isEmpty()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'No feedback found'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Feedback Found',
+            'data' => $data
+        ], 200);
+    }
+
     public function getFeedback(Request $request, $id)
     {
         $type = $request->type;
