@@ -50,6 +50,7 @@ class talent_interviewschedulescontroller extends Controller
                 $interview_schedules = DB::table('talent_interview_schedules as a')
                             ->select('*')
                             ->where('a.sub_institute_id',$sub_institute_id)
+                            ->where('a.status', 'Scheduled')
                             ->get();
 
 
