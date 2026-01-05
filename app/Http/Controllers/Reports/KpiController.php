@@ -27,26 +27,38 @@ class KpiController extends Controller
         }
 
         $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $departmentId = $request->department_id;
 
         try {
 
             // Total current employees
-            $totalEmployees = DB::table('tbluser')
+            $totalEmployeesQuery = DB::table('tbluser')
                 ->whereNull('terminated_date')
-                ->where('sub_institute_id', $subInstituteId)
-                ->count();
+                ->where('sub_institute_id', $subInstituteId);
+            if ($departmentId) {
+                $totalEmployeesQuery->where('department_id', $departmentId);
+            }
+            $totalEmployees = $totalEmployeesQuery->count();
 
             // New hires in the last quarter
-            $newHires = DB::table('tbluser')
-                ->where('joined_date', '>=', DB::raw('DATE_SUB(CURDATE(), INTERVAL 3 MONTH)'))
-                ->where('sub_institute_id', $subInstituteId)
-                ->count();
+            $newHiresQuery = DB::table('talent_job_applications as tja')
+                ->leftJoin('talent_job_postings as tjp', 'tja.job_id', '=', 'tjp.id')
+                ->where('tja.status', 'hired')
+                ->where('tja.applied_date', '>=', DB::raw('DATE_SUB(CURDATE(), INTERVAL 3 MONTH)'))
+                ->where('tja.sub_institute_id', $subInstituteId);
+            if ($departmentId) {
+                $newHiresQuery->where('tjp.department_id', $departmentId);
+            }
+            $newHires = $newHiresQuery->count();
 
             // Employees who left in the last quarter
-            $exits = DB::table('tbluser')
+            $exitsQuery = DB::table('tbluser')
                 ->where('terminated_date', '>=', DB::raw('DATE_SUB(CURDATE(), INTERVAL 3 MONTH)'))
-                ->where('sub_institute_id', $subInstituteId)
-                ->count();
+                ->where('sub_institute_id', $subInstituteId);
+            if ($departmentId) {
+                $exitsQuery->where('department_id', $departmentId);
+            }
+            $exits = $exitsQuery->count();
 
             // Previous quarter employee count estimate
             $previousEmployees = max($totalEmployees - ($newHires - $exits), 1);
