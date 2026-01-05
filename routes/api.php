@@ -134,6 +134,7 @@ Route::put('/interview-panel/update/{id}', [talent_interviewpanelController::cla
 Route::delete('/interview-panel/delete/{id}', [talent_interviewpanelController::class, 'destroy']);
 Route::get('/interview-panel/list', [talent_interviewpanelController::class, 'getInterviewPanel']);
 Route::get('/candidate', [candidateController::class,'getCandidate']);
+Route::get('/feedback', [feedbackController::class, 'getAllFeedback']);
 Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
 Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
 Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'getInterviewDetails']);
