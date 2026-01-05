@@ -144,7 +144,7 @@ Route::get('/candidate', [candidateController::class,'getCandidate']);
 Route::get('/feedback', [feedbackController::class, 'getAllFeedback']);
 Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
 Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
-Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'getInterviewDetails']);
+Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'index']);
 Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
 
 Route::group(['prefix' => 'reports'], function () {
