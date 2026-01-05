@@ -206,7 +206,7 @@ class talent_interviewschedulescontroller extends Controller
             }
 
             // 🧾 Validation
-            $validator = \Validator::make($request->all(), [
+            $validator = Validator::make($request->all(), [
                 'job_id'            => 'required|integer|exists:talent_job_postings,id',
                 'applicant_id'      => 'required|string|max:255',
                 'round_no'          => 'nullable|string|max:255',
@@ -304,67 +304,67 @@ class talent_interviewschedulescontroller extends Controller
     }
 
     /**
-     * Get interview details for frontend.
+     * Get candidate details for frontend.
      */
     public function getInterviewDetails(Request $request)
     {
         try {
-            // Fetch interview schedules from database
-            $interviewSchedules = DB::table('talent_interview_schedules as a')
+            $type = $request->type;
+
+            if ($type == "API") {
+                $token = $request->input('token');
+                if (!$token) {
+                    return response()->json(['message' => 'Token not provided'], 401);
+                }
+
+                $accessToken = PersonalAccessToken::findToken($token);
+                if (!$accessToken) {
+                    return response()->json(['message' => 'Invalid token'], 401);
+                }
+
+                $validator = \Validator::make($request->all(), [
+                    'sub_institute_id' => 'required',
+                ]);
+
+                if ($validator->fails()) {
+                    return response()->json([
+                        'status_code' => 0,
+                        'message' => $validator->errors()->first()
+                    ], 400);
+                }
+
+                $sub_institute_id = $request->sub_institute_id;
+            } else {
+                $sub_institute_id = $request->sub_institute_id ?? null;
+            }
+
+            // Fetch candidate details from database
+            $candidates = DB::table('talent_job_applications as tja')
+                ->leftJoin('talent_interview_schedules as tis', function($join){
+                    $join->on('tja.id','=','tis.applicant_id')
+                         ->whereRaw('tis.round_no = (SELECT MAX(round_no) FROM talent_interview_schedules WHERE applicant_id = tja.id)');
+                })
+                ->leftJoin('talent_job_postings as tjp', 'tja.job_id', '=', 'tjp.id')
+                ->leftJoin('talent_interview_panel as tip', 'tis.panel_id', '=', 'tip.id')
                 ->select(
-                    'a.id',
-                    'a.applicant_id',
-                    'a.round_no',
-                    'a.interview_date',
-                    'a.time',
-                    'a.duration',
-                    'a.location',
-                    'a.interviewer_id',
-                    'a.panel_id',
-                    'a.status',
-                    'a.rating',
-                    'a.feedback',
-                    'a.additional_notes',
-                    'jp.title as position',
-                    DB::raw("CONCAT(u.first_name, ' ', u.last_name) as candidate_name")
+                    'tja.id as candidate_id',
+                    DB::raw("CONCAT(tja.first_name,' ',tja.last_name,' ',tja.email) AS candidate_name"),
+                    'tjp.id as position_id',
+                    'tjp.title as position',
+                    'tja.status',
+                    'tis.status as stage',
+                    'tja.applied_date',
+                    DB::raw("CONCAT(tis.interview_date,' ',tis.time) AS next_interview"),
+                    'tis.rating as score',
+                    'tis.panel_id',
+                    'tip.panel_name'
                 )
-                ->leftJoin('talent_job_postings as jp', 'a.job_id', '=', 'jp.id')
-                ->leftJoin('tbluser as u', 'a.applicant_id', '=', 'u.id')
-                ->where('a.status', 'Scheduled')
-                ->orderBy('a.interview_date', 'asc')
-                ->orderBy('a.time', 'asc')
+                ->where('tja.sub_institute_id', $sub_institute_id)
                 ->get();
 
-            // Collect all interviewer IDs to fetch names in one query
-            $allInterviewerIds = [];
-            foreach ($interviewSchedules as $schedule) {
-                $interviewers = is_array($schedule->interviewer_id) ? $schedule->interviewer_id : json_decode($schedule->interviewer_id, true) ?? [];
-                $allInterviewerIds = array_merge($allInterviewerIds, $interviewers);
-            }
-            $allInterviewerIds = array_unique($allInterviewerIds);
-            $interviewerNames = DB::table('tbluser')->whereIn('id', $allInterviewerIds)->select('id', DB::raw("CONCAT(first_name, ' ', last_name) as name"))->pluck('name', 'id')->toArray();
-
-            // Format the data for frontend
-            $formattedData = $interviewSchedules->map(function ($schedule) use ($interviewerNames) {
-                $interviewers = is_array($schedule->interviewer_id) ? $schedule->interviewer_id : json_decode($schedule->interviewer_id, true) ?? [];
-                return [
-                    'id' => $schedule->id,
-                    'candidate' => ['candidate_id' => (int)$schedule->applicant_id, 'candidate_name' => $schedule->candidate_name ?? 'Unknown'],
-                    'position' => $schedule->position ?? 'Position not specified',
-                    'scheduled_time' => $schedule->time ?? 'Time not set',
-                    'duration' => $schedule->duration ? $schedule->duration . ' min' : 'Duration not set',
-                    'location' => $schedule->location ?? 'Location not set',
-                    'interviewers' => array_map(function($id) use ($interviewerNames) {
-                        return ['interviewer_id' => (int)$id, 'interviewer_name' => $interviewerNames[$id] ?? 'Unknown'];
-                    }, $interviewers),
-                    'panel_id' => $schedule->panel_id,
-                    'status' => $schedule->status
-                ];
-            });
-
             return response()->json([
-                'message' => 'Interview details fetched successfully',
-                'data' => $formattedData
+                'message' => 'Candidate details fetched successfully',
+                'data' => $candidates
             ], 200);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
