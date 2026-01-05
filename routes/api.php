@@ -33,6 +33,11 @@ use App\Http\Controllers\talent\interview_panel\talent_interviewpanelController;
 use App\Http\Controllers\talent\feedback\feedbackController;
 use App\Http\Controllers\talent\candidate\candidateController;
 use App\Http\Controllers\Reports\KpiController;
+use App\Http\Controllers\Reports\HiringAnalyticsController;
+use App\Http\Controllers\Reports\DepartmentDistributionController;
+use App\Http\Controllers\Reports\DepartmentSizeController;
+use App\Http\Controllers\Reports\EmployeeLifecycleController;
+use App\Http\Controllers\Reports\OrganizationGrowthController;
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
@@ -71,6 +76,7 @@ Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
 Route::resource('skills', skillcontroller::class);
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
+Route::put('/interview-schedules', [talent_interviewschedulescontroller::class, 'customUpdate']);
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
 Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::class, 'updateStatus']);
 Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications']);
@@ -143,7 +149,15 @@ Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
 
 Route::group(['prefix' => 'reports'], function () {
     Route::get('/kpi', [KpiController::class, 'index']);
+    Route::get('/hiring-analytics', [HiringAnalyticsController::class, 'getHiringTrends']);
+    Route::get('/departments/distribution', [DepartmentDistributionController::class, 'index']);
+    Route::get('/departments/summary', [DepartmentDistributionController::class, 'getDepartmentSummary']);
+    Route::get('/departments/sizes', [DepartmentSizeController::class, 'getDepartmentSizes']);
+    Route::get('/employees/lifecycle', [EmployeeLifecycleController::class, 'getEmployeeLifecycle']);
+    Route::get('/organization/growth', [OrganizationGrowthController::class, 'index']);
 });
+
+
 
 
 

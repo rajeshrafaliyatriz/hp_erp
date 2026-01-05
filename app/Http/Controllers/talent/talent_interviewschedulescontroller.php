@@ -207,15 +207,15 @@ class talent_interviewschedulescontroller extends Controller
 
             // 🧾 Validation
             $validator = Validator::make($request->all(), [
-                'job_id'            => 'required|integer|exists:talent_job_postings,id',
-                'applicant_id'      => 'required|string|max:255',
+                'job_id'            => 'nullable|integer|exists:talent_job_postings,id',
+                'applicant_id'      => 'nullable|string|max:255',
                 'round_no'          => 'nullable|string|max:255',
                 'interview_date'    => 'nullable|date',
                 'time'              => 'nullable|string|max:255',
                 'duration'          => 'nullable|integer',
                 'location'          => 'nullable|string|max:255',
                 'interviewer_id'    => 'required|array',
-                'status'            => 'required|in:Pending Review,Under Review,Shortlisted,Interview Scheduled,Rejected,Hired',
+                'status' => 'required|in:Scheduled,Completed,Under Review,Pending Review,Rejected,Selected,Accepted,active',
                 'rating'            => 'nullable|string|max:255',
                 'feedback'          => 'nullable|string|max:100',
                 'additional_notes'  => 'nullable|string|max:1000',
@@ -263,12 +263,14 @@ class talent_interviewschedulescontroller extends Controller
     
                 // 🎯 Dynamic Status Validation
                 $allowedStatuses = [
-                    'Pending Review',
+                    'Scheduled',
+                    'Completed',
                     'Under Review',
-                    'Shortlisted',
-                    'Interview Scheduled',
+                    'Pending Review',
                     'Rejected',
-                    'Hired'
+                    'Selected',
+                    'Accepted',
+                    'active'
                 ];
     
                 if ($request->filled('status') && in_array($request->status, $allowedStatuses)) {
@@ -293,6 +295,118 @@ class talent_interviewschedulescontroller extends Controller
             }
         }
     
+        return response()->json(['message' => 'Invalid request type'], 400);
+    }
+
+    public function customUpdate(Request $request)
+    {
+        $type = $request->type;
+
+        if ($type == "API") {
+            $token = $request->input('token');
+
+            // 🔒 Validate token
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            $sub_institute_id = $request->get('sub_institute_id');
+
+            // Normalize interviewer_id to array
+            if (is_string($request->interviewer_id)) {
+                $decoded = json_decode($request->interviewer_id, true);
+                if (is_array($decoded)) {
+                    $request->merge(['interviewer_id' => array_map('intval', $decoded)]);
+                } else {
+                    $request->merge(['interviewer_id' => array_map('intval', array_map('trim', explode(',', $request->interviewer_id)))]);
+                }
+            }
+
+            // 🧾 Validation
+            $validator = Validator::make($request->all(), [
+                'id'                => 'required|integer',
+                'round_no'          => 'nullable|string|max:255',
+                'interview_date'    => 'nullable|date',
+                'time'              => 'nullable|string|max:255',
+                'duration'          => 'nullable|integer',
+                'location'          => 'nullable|string|max:255',
+                'interviewer_id'    => 'required|array',
+                'status'            => 'required|in:Scheduled,Completed,Under Review,Pending Review,Rejected,Selected,Accepted,active',
+                'rating'            => 'nullable|string|max:255',
+                'feedback'          => 'nullable|string|max:100',
+                'additional_notes'  => 'nullable|string|max:1000',
+                'sub_institute_id'  => 'required|integer',
+                'user_id'           => 'required|integer',
+                'panel_id'          => 'nullable|integer|exists:talent_interview_panel,id'
+                ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => $validator->messages()->first()
+                ], 422);
+            }
+
+            try {
+                // 🧠 Find existing application
+                $interview_schedules = talent_interviewschedules::find($request->id);
+
+                if (!$interview_schedules) {
+                    return response()->json(['message' => 'Interview schedule not found'], 404);
+                }
+
+                // 🧱 Update editable fields
+                $interview_schedules->round_no = $request->round_no ?? $interview_schedules->round_no;
+                $interview_schedules->interview_date = $request->interview_date ?? $interview_schedules->interview_date;
+                $interview_schedules->time = $request->time ?? $interview_schedules->time;
+                $interview_schedules->duration = $request->duration ?? $interview_schedules->duration;
+                $interview_schedules->location = $request->location ?? $interview_schedules->location;
+                $interview_schedules->interviewer_id = $request->interviewer_id ?? $interview_schedules->interviewer_id;
+                $interview_schedules->status = $request->status ?? $interview_schedules->status;
+                $interview_schedules->rating = $request->rating ?? $interview_schedules->rating;
+                $interview_schedules->feedback = $request->feedback ?? $interview_schedules->feedback;
+                $interview_schedules->additional_notes = $request->additional_notes ?? $interview_schedules->additional_notes;
+                $interview_schedules->panel_id = $request->panel_id ?? $interview_schedules->panel_id;
+
+                // 🎯 Dynamic Status Validation
+                $allowedStatuses = [
+                    'Scheduled',
+                    'Completed',
+                    'Under Review',
+                    'Pending Review',
+                    'Rejected',
+                    'Selected',
+                    'Accepted',
+                    'active'
+                ];
+
+                if ($request->filled('status') && in_array($request->status, $allowedStatuses)) {
+                    $interview_schedules->status = $request->status;
+                }
+
+                $interview_schedules->updated_by = $request->user_id;
+                $interview_schedules->sub_institute_id = $sub_institute_id;
+
+                // 💾 Save update
+                if ($interview_schedules->save()) {
+                    return response()->json([
+                        'message' => 'Interview schedule updated successfully!',
+                        'data' => $interview_schedules
+                    ], 200);
+                }
+
+                return response()->json(['message' => 'Update failed!'], 500);
+
+            } catch (\Exception $e) {
+                return response()->json(['error' => $e->getMessage()], 500);
+            }
+        }
+
         return response()->json(['message' => 'Invalid request type'], 400);
     }
     /**
@@ -348,7 +462,7 @@ class talent_interviewschedulescontroller extends Controller
                 ->leftJoin('talent_interview_panel as tip', 'tis.panel_id', '=', 'tip.id')
                 ->select(
                     'tja.id as candidate_id',
-                    DB::raw("CONCAT(tja.first_name,' ',tja.last_name) AS candidate_name"),
+                    DB::raw("CONCAT_WS(' ', tja.first_name, tja.middle_name, tja.last_name) AS candidate_name"),
                     'tja.email',
                     'tjp.id as position_id',
                     'tjp.title as position',
@@ -358,6 +472,7 @@ class talent_interviewschedulescontroller extends Controller
                     DB::raw("CONCAT(tis.interview_date,' ',tis.time) AS next_interview"),
                     'tis.rating as score',
                     'tis.panel_id',
+                    'tis.id as scheduled_id',
                     'tip.panel_name',
                     'tis.location',
                     'tis.duration'
