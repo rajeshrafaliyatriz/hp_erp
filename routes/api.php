@@ -57,6 +57,7 @@ Route::get('/ai-generated-assessment/assessment/index',[generateAssessmentContro
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
 Route::get('/candidate-pipeline', [talent_interviewschedulescontroller::class, 'candidatepipeline']);
 
+Route::get('job-applications/shortlisted', [talent_jobapplicationcontroller::class, 'getShortlistedCandidates']);
 Route::resource('job-applications', talent_jobapplicationcontroller::class);
 
 Route::resource('job-postings', talent_jobpostingcontroller::class);
@@ -79,7 +80,6 @@ Route::resource('skills', skillcontroller::class);
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
 Route::put('/interview-schedules', [talent_interviewschedulescontroller::class, 'customUpdate']);
-Route::resource('job-applications', talent_jobapplicationcontroller::class);
 Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::class, 'updateStatus']);
 Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications']);
 Route::resource('job-postings', talent_jobpostingcontroller::class);

@@ -342,6 +342,7 @@ class talent_jobapplicationcontroller extends Controller
             $application->current_location = $request->current_location ?? $application->current_location;
             $application->expected_salary = $request->expected_salary ?? $application->expected_salary;
             $application->applied_date = $request->applied_date ?? $application->applied_date;
+            $application->status = $request->status ?? $application->status;
 
             // 📂 If new resume file uploaded, replace existing one
             if ($request->hasFile('resume_path')) {
@@ -539,6 +540,57 @@ public function getCandidateApplications(Request $request, $candidate_id)
             ->get();
 
         return is_mobile($type, 'talent.candidate-applications', $res, 'view');
+
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+}
+
+public function getShortlistedCandidates(Request $request)
+{
+    try {
+        $type = $request->type;
+
+        if ($type === 'API') {
+            // 🔒 Validate token
+            $token = $request->input('token');
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            // 🧾 Validate inputs
+            $validator = \Validator::make($request->all(), [
+                'sub_institute_id' => 'required|integer',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status_code' => 0,
+                    'message' => $validator->errors()->first()
+                ], 400);
+            }
+
+            $sub_institute_id = $request->sub_institute_id;
+
+            // 🧠 Fetch shortlisted applications
+            $applications = DB::table('talent_job_applications as a')
+                ->select('*')
+                ->where('a.sub_institute_id', $sub_institute_id)
+                ->where('a.status', 'Shortlisted')
+                ->get();
+
+            return response()->json([
+                'message' => 'Shortlisted candidates fetched successfully!',
+                'data' => $applications
+            ], 200);
+        }
+
+        return response()->json(['message' => 'Invalid request type'], 400);
 
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()], 500);
