@@ -164,6 +164,14 @@ class feedbackController extends Controller
             'sub_institute_id'     => $subInstituteId,
         ]);
 
+        // Update status in talent_job_applications
+        talent_jobapplication::where('id', $request->candidate_id)->update(['status' => 'Completed']);
+
+        // Update status in talent_interview_schedules
+        talent_interviewschedules::where('applicant_id', $request->candidate_id)
+            ->where('job_id', $request->job_id)
+            ->update(['status' => 'Completed']);
+
         // 📤 Response
         return response()->json([
             'status' => true,
