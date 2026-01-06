@@ -39,6 +39,7 @@ use App\Http\Controllers\Reports\DepartmentSizeController;
 use App\Http\Controllers\Reports\EmployeeLifecycleController;
 use App\Http\Controllers\Reports\OrganizationGrowthController;
 use App\Http\Controllers\Reports\EmployeeSkillCoverageMatrix\EmployeeSkillCoverageMatrixController;
+use App\Http\Controllers\Reports\EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController;
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
@@ -160,6 +161,15 @@ Route::group(['prefix' => 'reports'], function () {
     Route::get('/employees/lifecycle', [EmployeeLifecycleController::class, 'getEmployeeLifecycle']);
     Route::get('/organization/growth', [OrganizationGrowthController::class, 'index']);
     Route::get('/skill-coverage/matrix', [EmployeeSkillCoverageMatrixController::class, 'index']);
+    Route::get('/skill-trends', [EmployeeSkillCoverageMatrixController::class, 'skillTrends']);
+    Route::get('/employee-directory-analytics', [EmployeeDirectoryAnalyticsController::class, 'getKPIs']);
+    Route::get('/employee-directory/growth', [EmployeeDirectoryAnalyticsController::class, 'getGrowthData']);
+    Route::get('/employee-directory/growth/stacked', [EmployeeDirectoryAnalyticsController::class, 'getStackedGrowth']);
+    Route::get('/employee-directory/departments/distribution', [EmployeeDirectoryAnalyticsController::class, 'getDepartmentDistribution']);
+    Route::get('/employee-directory/job-roles/distribution', [EmployeeDirectoryAnalyticsController::class, 'getJobRoleDistribution']);
+    Route::get('/employee-directory/lifecycle', [EmployeeDirectoryAnalyticsController::class, 'getLifecycle']);
+    Route::get('/employee-directory/attrition', [EmployeeDirectoryAnalyticsController::class, 'getAttritionBreakdown']);
+    Route::get('/employee-directory/skills/matrix', [EmployeeDirectoryAnalyticsController::class, 'getSkillMatrix']);
 });
 
 

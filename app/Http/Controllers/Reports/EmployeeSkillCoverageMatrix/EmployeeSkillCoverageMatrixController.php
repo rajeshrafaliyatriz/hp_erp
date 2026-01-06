@@ -149,6 +149,70 @@ class EmployeeSkillCoverageMatrixController extends Controller
         }
     }
 
+    public function skillTrends(Request $request)
+    {
+        $type = $request->type;
+
+        if ($type == "API") {
+            $token = $request->input('token');
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+        }
+
+        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+
+        try {
+            $department = $request->query('department');
+            $period = $request->query('period'); // optional (e.g., "Q1 2025")
+
+            $query = DB::table('employee_skill_assessments as esa')
+                ->join('tbluser as e', 'esa.employee_id', '=', 'e.id')
+                ->whereNull('e.terminated_date')
+                ->where('e.sub_institute_id', $subInstituteId)
+                ->select(
+                    'esa.period',
+                    DB::raw("
+                        ROUND(
+                            (SUM(CASE WHEN esa.actual_level >= esa.required_level THEN 1 ELSE 0 END) / COUNT(*)) * 100,
+                            2
+                        ) AS coverage
+                    "),
+                    DB::raw("
+                        ROUND(
+                            AVG(GREATEST(esa.required_level - esa.actual_level, 0)),
+                            2
+                        ) AS avgGap
+                    ")
+                )
+                ->groupBy('esa.period')
+                ->orderBy('esa.period');
+
+            // Apply filters dynamically
+            if ($department) {
+                $query->where('esa.department', $department);
+            }
+
+            if ($period) {
+                $query->where('esa.period', '>=', $period);
+            }
+
+            $results = $query->get();
+
+            return response()->json($results, 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Unable to fetch skill trend data',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function getKpiMetrics(Request $request)
     {
         $type = $request->type;
