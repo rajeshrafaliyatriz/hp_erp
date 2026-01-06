@@ -41,7 +41,8 @@ class feedbackController extends Controller
                 'tjp.title as job_title',
                 DB::raw("CONCAT(tja.first_name, ' ', COALESCE(tja.middle_name, ''), ' ', tja.last_name) as candidate_name"),
                 'tja.email as candidate_email',
-                'tip.panel_name'
+                'tip.panel_name',
+                'tja.status as status'
             )
             ->where('tef.sub_institute_id', $subInstituteId)
             ->orderBy('tef.created_at', 'DESC')
@@ -87,7 +88,8 @@ class feedbackController extends Controller
                 'tjp.title as job_title',
                 DB::raw("CONCAT(tja.first_name, ' ', COALESCE(tja.middle_name, ''), ' ', tja.last_name) as candidate_name"),
                 'tja.email as candidate_email',
-                'tip.panel_name'
+                'tip.panel_name',
+                'tja.status as status'
             )
             ->where('tef.candidate_id', $id)
             ->orderBy('tef.created_at', 'DESC') // latest feedback
