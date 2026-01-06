@@ -253,4 +253,56 @@ class feedbackController extends Controller
             'message' => 'Feedback updated successfully'
         ], 200);
     }
+
+    public function getPendingFeedback(Request $request)
+    {
+        $type = $request->type;
+
+        if ($type == "API") {
+            $token = $request->input('token');
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+        }
+
+        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+
+        $data = DB::table('talent_interview_schedules as tis')
+            ->leftJoin('talent_job_postings as tjp', 'tis.job_id', '=', 'tjp.id')
+            ->leftJoin('talent_job_applications as tja', 'tis.applicant_id', '=', 'tja.id')
+            ->leftJoin('talent_interview_panel as tip', 'tis.panel_id', '=', 'tip.id')
+            ->select(
+                'tis.*',
+                'tjp.title as job_title',
+                DB::raw("CONCAT(tja.first_name, ' ', COALESCE(tja.middle_name, ''), ' ', tja.last_name) as candidate_name"),
+                'tja.email as candidate_email',
+                'tip.panel_name'
+            )
+            ->where('tis.sub_institute_id', $subInstituteId)
+            ->where('tis.status', '!=', 'Completed')
+            ->orderBy('tis.created_at', 'DESC')
+            ->get();
+
+        $count = $data->count();
+
+        if ($data->isEmpty()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'No pending feedback found',
+                'count' => 0
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Pending feedback found',
+            'count' => $count,
+            'data' => $data
+        ], 200);
+    }
 }
