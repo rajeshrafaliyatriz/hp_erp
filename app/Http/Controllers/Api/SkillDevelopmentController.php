@@ -27,7 +27,7 @@ class SkillDevelopmentController extends Controller
                 ], 422);
             }
 
-            // Get user's skills grouped by category
+            // Get user's skills grouped by category and sub_category
             $userSkills = DB::table('s_skill_matrix as sm')
                 ->join('s_users_skills as sus', 'sus.id', '=', 'sm.skill_id')
                 ->leftJoin('lms_course_enroll as lce', function($join) use ($userId) {
@@ -46,6 +46,7 @@ class SkillDevelopmentController extends Controller
                 })
                 ->select([
                     'sus.category as skill_category',
+                    'sus.sub_category as sub_category',
                     DB::raw('COUNT(DISTINCT sus.id) as total_skills_in_category'),
                     DB::raw('AVG(sm.skill_level) as avg_skill_level'),
                     DB::raw('COUNT(CASE WHEN lce.status = "completed" THEN 1 END) as courses_completed'),
@@ -54,7 +55,7 @@ class SkillDevelopmentController extends Controller
                     DB::raw('MAX(sm.updated_at) as updated_at'),
                     DB::raw('MAX(sm.deleted_at) as deleted_at')
                 ])
-                ->groupBy('sus.category')
+                ->groupBy(['sus.category', 'sus.sub_category'])
                 ->get();
 
             $skillProgress = [];
@@ -82,6 +83,7 @@ class SkillDevelopmentController extends Controller
 
                 $skillProgress[] = [
                     'skill_name' => $skillName,
+                    'sub_category' => $skill->sub_category,
                     'progress_percentage' => round($progressPercentage),
                     'proficiency_level' => $proficiencyLevel,
                     'courses_completed' => $coursesCompleted,
@@ -665,7 +667,7 @@ class SkillDevelopmentController extends Controller
                 $formattedEvents[] = [
                     'title' => $event->title,
                     'description' => $event->description,
-                    'date' => $event->school_date,
+                    'current_datetime' => now()->format('M d \a\t g:i A'),
                     'priority' => $event->event_type ?? 'medium', // Assuming event_type maps to priority
                     'event_type' => $event->event_type,
                     'standard' => $event->standard,
