@@ -25,7 +25,11 @@ class JobRoleGraphController extends Controller
          OPTIONAL MATCH (jr)-[r1]->(n1)
          OPTIONAL MATCH (n1)-[r2]->(n2)
          OPTIONAL MATCH (jr)-[rs:REQUIRES_SKILL]->(s:Skill)
-         RETURN jr, r1, n1, r2, n2, rs, s;',
+         OPTIONAL MATCH (s)-[rb:REQUIRES_BEHAVIOUR]->(b:Behaviour)
+         OPTIONAL MATCH (jr)-[r_know:REQUIRES_KNOWLEDGE]->(k:Knowledge)
+         OPTIONAL MATCH (jr)-[r_abil:REQUIRES_ABILITY]->(ab:Ability)
+         OPTIONAL MATCH (jr)-[r_att:REQUIRES_ATTITUDE]->(at:Attitude)
+         RETURN jr, r1, n1, r2, n2, rs, s, rb, b, r_know, k, r_abil, ab, r_att, at;',
         ['jobRoleId' => (int) $jobRoleId]
     );
 
@@ -59,8 +63,32 @@ class JobRoleGraphController extends Controller
             $nodes[$node['id']] = $node;
         }
 
+        /* ✅ Behaviour node */
+        if ($record->get('b')) {
+            $node = $this->formatNode($record->get('b'));
+            $nodes[$node['id']] = $node;
+        }
+
+        /* Knowledge node */
+        if ($record->get('k')) {
+            $node = $this->formatNode($record->get('k'));
+            $nodes[$node['id']] = $node;
+        }
+
+        /* Ability node */
+        if ($record->get('ab')) {
+            $node = $this->formatNode($record->get('ab'));
+            $nodes[$node['id']] = $node;
+        }
+
+        /* Attitude node */
+        if ($record->get('at')) {
+            $node = $this->formatNode($record->get('at'));
+            $nodes[$node['id']] = $node;
+        }
+
         /* Relationships */
-        foreach (['r1', 'r2', 'rs'] as $relKey) {
+        foreach (['r1', 'r2', 'rs', 'rb', 'r_know', 'r_abil', 'r_att'] as $relKey) {
             if ($record->get($relKey)) {
                 $rel = $record->get($relKey);
                 $relationships[$rel->getId()] = $this->formatRelationship($rel);
