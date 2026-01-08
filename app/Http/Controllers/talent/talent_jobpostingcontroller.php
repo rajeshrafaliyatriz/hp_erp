@@ -152,9 +152,130 @@ class talent_jobpostingcontroller extends Controller
             return response()->json(['error' => $e->getMessage()]);
         }
     }
+    }
+    public function getHiringStatus(Request $request)
+    {
+        try {
+            $type = $request->type; // API or web
 
+            if ($type == 'API') {
+                // validate token
+                $token = $request->input('token');
+                if (!$token) {
+                    return response()->json(['message' => 'Token not provided'], 401);
+                }
+
+                $accessToken = PersonalAccessToken::findToken($token);
+                if (!$accessToken) {
+                    return response()->json(['message' => 'Invalid token'], 401);
+                }
+
+                // validate required params
+                $validator = Validator::make($request->all(), [
+                    'sub_institute_id' => 'required',
+                ]);
+
+                if ($validator->fails()) {
+                    return response()->json([
+                        'status_code' => 0,
+                        'message' => $validator->errors()->first()
+                    ], 400);
+                }
+
+                $sub_institute_id = $request->sub_institute_id;
+
+                // Execute the query
+                $data = DB::select("
+                    SELECT
+                        d.department AS department_name,
+                        COUNT(DISTINCT jp.id) AS total_positions,
+                        COUNT(CASE WHEN ja.status = 'hired' THEN ja.id END) AS hired
+                    FROM talent_job_postings jp
+                    LEFT JOIN hrms_departments d
+                        ON jp.department_id = d.id
+                    LEFT JOIN talent_job_applications ja
+                        ON ja.job_id = jp.id
+                    WHERE jp.sub_institute_id = ?
+                    GROUP BY d.id, d.department
+                ", [$sub_institute_id]);
+
+                // Fetch recent team updates dynamically
+                $recentTeamUpdates = [];
+
+                // Recent hires
+                $recentHires = DB::select("
+                    SELECT CONCAT(ja.first_name, ' ', ja.last_name) as candidate_name, d.department
+                    FROM talent_job_applications ja
+                    JOIN talent_job_postings jp ON ja.job_id = jp.id
+                    JOIN hrms_departments d ON jp.department_id = d.id
+                    WHERE ja.status = 'hired' AND ja.sub_institute_id = ? AND ja.updated_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                    ORDER BY ja.updated_at DESC
+                    LIMIT 5
+                ", [$sub_institute_id]);
+
+                foreach ($recentHires as $hire) {
+                    $recentTeamUpdates[] = $hire->candidate_name . ' joined ' . $hire->department . ' team';
+                }
+
+                // Open positions
+                $openPositionsCount = DB::select("
+                    SELECT COUNT(*) as count FROM talent_job_postings
+                    WHERE status = 'active' AND sub_institute_id = ? AND deleted_at IS NULL
+                ", [$sub_institute_id])[0]->count;
+
+                if ($openPositionsCount > 0) {
+                    $recentTeamUpdates[] = $openPositionsCount . ' position(s) still open';
+                }
+
+                // Positions needing attention (deadline within 7 days)
+                $attentionPositions = DB::select("
+                    SELECT title FROM talent_job_postings
+                    WHERE status = 'active' AND sub_institute_id = ? AND deadline <= DATE_ADD(NOW(), INTERVAL 7 DAY) AND deleted_at IS NULL
+                    LIMIT 3
+                ", [$sub_institute_id]);
+
+                foreach ($attentionPositions as $pos) {
+                    $recentTeamUpdates[] = $pos->title . ' role needs attention';
+                }
+
+                // Upcoming interviews
+                $upcomingInterviews = DB::select("
+                    SELECT COUNT(*) as count FROM talent_interview_schedules
+                    WHERE sub_institute_id = ? AND interview_date >= CURDATE() AND status = 'scheduled'
+                ", [$sub_institute_id])[0]->count;
+
+                if ($upcomingInterviews > 0) {
+                    $recentTeamUpdates[] = $upcomingInterviews . ' interview(s) scheduled';
+                }
+
+                // Tomorrow's interviews
+                $tomorrowInterviews = DB::select("
+                    SELECT jp.title FROM talent_interview_schedules tis
+                    JOIN talent_job_postings jp ON tis.job_id = jp.id
+                    WHERE tis.sub_institute_id = ? AND tis.interview_date = DATE_ADD(CURDATE(), INTERVAL 1 DAY) AND tis.status = 'scheduled'
+                    LIMIT 3
+                ", [$sub_institute_id]);
+
+                foreach ($tomorrowInterviews as $interview) {
+                    $recentTeamUpdates[] = $interview->title . ' candidate tomorrow';
+                }
+
+                return response()->json([
+                    'message' => 'Hiring status fetched successfully',
+                    'data' => $data,
+                    'recent_team_updates' => $recentTeamUpdates
+                ], 200);
+            }
+
+            // For web, perhaps return view or something, but since it's API focused, maybe just API
+            return response()->json(['message' => 'Invalid type'], 400);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
+    /**
     /**
      * Display the specified resource.
      */

@@ -13,6 +13,7 @@ use GenTux\Jwt\GetsJwtToken;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use function App\Helpers\is_mobile;
+use App\Models\libraries\SLibraryMap;
 
 class SkillMatrixController extends Controller
 {
@@ -31,16 +32,17 @@ class SkillMatrixController extends Controller
     {
         $rules = [];
         foreach ($skills as $index => $skill) {
-            $rules["skills.{$index}.skill_id"] = 'required|exists:s_users_skills,id';
+            $rules["skills.{$index}.skill_id"] = 'required|integer';
             $rules["skills.{$index}.skill_level"] = 'required|integer|min:1|max:5';
-            
+            $rules["skills.{$index}.type"] = 'nullable|string';
+
             // Change from 'array' to allow objects/strings that can be JSON encoded
             $rules["skills.{$index}.knowledge"] = 'nullable';
             $rules["skills.{$index}.ability"] = 'nullable';
             $rules["skills.{$index}.behaviour"] = 'nullable';
             $rules["skills.{$index}.attitude"] = 'nullable';
         }
-        
+
         return Validator::make(['skills' => $skills], $rules);
     }
 
@@ -65,7 +67,8 @@ class SkillMatrixController extends Controller
                 $addUpdate = [
                     'skill_level' => (int)$skill['skill_level'],
                     'user_id' => $user_id,
-                    'skill_id' => (int)$skill['skill_id']
+                    'skill_id' => (int)$skill['skill_id'],
+                    'type' => $skill['type'] ?? null
                 ];
 
                 // Handle additional attributes - accept objects and convert to JSON
@@ -79,7 +82,31 @@ class SkillMatrixController extends Controller
                 matrix::updateOrCreate(
                     ['user_id' => $user_id, 'skill_id' => $skill['skill_id']],
                     $addUpdate
-                );                
+                );
+            }
+
+            // Process KABA items from 'kaab' array
+            $kaabs = $request->kaab ?? [];
+            foreach ($kaabs as $kaba) {
+                $addUpdate = [
+                    'skill_level' => (int)$kaba['skill_level'],
+                    'user_id' => $user_id,
+                    'skill_id' => (int)$kaba['skill_id'],
+                    'type' => $kaba['type'] ?? null
+                ];
+
+                // KABA items may not have additional attributes, but if present, handle similarly
+                $attributes = ['knowledge', 'ability', 'behaviour', 'attitude'];
+                foreach ($attributes as $attribute) {
+                    if (isset($kaba[$attribute]) && !empty($kaba[$attribute])) {
+                        $addUpdate[$attribute] = json_encode($kaba[$attribute]);
+                    }
+                }
+
+                matrix::updateOrCreate(
+                    ['user_id' => $user_id, 'skill_id' => $kaba['skill_id']],
+                    $addUpdate
+                );
             }
 
             DB::commit();
@@ -251,4 +278,119 @@ class SkillMatrixController extends Controller
         //$assessments = AssessmentLibrary::inRandomOrder()->get();
         return view('skill.assessment.assessment_library', compact('assessments'));
     }
+	
+	public function getKaba(Request $request)
+	{
+	    $sub_institute_id = $request->sub_institute_id;
+	    $type = $request->type;
+	    $typeId = $request->type_id;
+	    $titleSearch = $request->title;
+
+	    // -----------------------------------
+	    // 1. Detect Model According to Type
+	    // -----------------------------------
+	    $models = [
+	        'jobrole'   => \App\Models\libraries\userJobroleModel::class,
+            'task'      => \App\Models\libraries\userJobroleTask::class,
+	        'knowledge' => \App\Models\libraries\KabaMaster::class,
+	        'ability'   => \App\Models\libraries\KabaMaster::class,
+	        'attitude'  => \App\Models\libraries\KabaMaster::class,
+	        'behaviour' => \App\Models\libraries\KabaMaster::class,
+	    ];
+
+	    if (!isset($models[$type])) {
+	        return response()->json(['error' => 'Invalid type'], 400);
+	    }
+
+	    $mainModel = $models[$type];
+
+	    // -----------------------------------
+	    // 2. Find by Title if Provided
+	    // -----------------------------------
+	    if ($titleSearch) {
+	        $items = $mainModel::where('sub_institute_id', $sub_institute_id)->where('jobrole', $titleSearch)->first();
+	        if (!$items) return response()->json(['error' => 'Title not found'], 404);
+	        $typeId = $items->id;
+	    }
+
+	    // -----------------------------------
+	    // 3. Get Mapping
+	    // -----------------------------------
+	    $map = SLibraryMap::where('type', $type)
+	        ->where('type_id', $typeId)
+	        ->where('sub_institute_id', $sub_institute_id)
+	        ->first();
+
+	    if (!$map) {
+	        return response()->json(['error' => 'Mapping not found'], 404);
+	    }
+
+	    // -----------------------------------
+	    // 4. Fetch Basic Item Info
+	    // -----------------------------------
+	    //dd(\App\Models\libraries\userJobroleTask::find(61041));
+        $items = $mainModel::find($typeId);
+
+	    // -----------------------------------
+	    // 5. Helper to load full KABA objects
+	    // -----------------------------------
+	    function loadKaba($ids, $type)
+		{
+		    if (!$ids) return [];
+
+		    $idList = array_filter(explode(',', $ids));
+
+		    // Use ONE MODEL but dynamic table
+		    $model = \App\Models\libraries\KabaMaster::fromType($type);
+
+		    return $model->whereIn('id', $idList)->get()->map(function ($item) {
+		        return array_filter([
+		            'id'           => $item->id,
+		            'category'     => $item->category,
+		            'sub_category' => $item->sub_category,
+		            'title'        => $item->title,
+		            'description'  => $item->description,
+		        ], function ($v) {
+		            return !is_null($v) && $v !== "";
+		        });
+		    })->toArray();
+		}
+
+	    // -----------------------------------
+	    // 6. Build Response
+	    // -----------------------------------
+        function getDisplayName($items)
+        {
+            return $items->task
+                ?? $items->title
+                ?? $items->jobrole
+                ?? '-';
+        }
+
+	    $response = [
+	        'type'        => $map->type,
+	        'type_id'     => $map->type_id,
+	        'title'       => getDisplayName($items),
+	        'description' => $items->description ?? null,
+
+            // Only add if included in type
+	        'task'        => $type === 'task'   ? loadKaba($map->task_ids,'task')   : null,
+	        'skill'       => loadKaba($map->skill_ids,'skill'),
+	        'jobrole'     => $type === 'jobrole'? loadKaba($map->jobrole_ids,'jobrole'): null,
+
+	        // Auto convert IDs → full data
+	        'knowledge'   => loadKaba($map->knowledge_ids,'knowledge'),
+	        'ability'     => loadKaba($map->ability_ids,'ability'),
+	        'attitude'    => loadKaba($map->attitude_ids,'attitude'),
+	        'behaviour'   => loadKaba($map->behaviour_ids,'behaviour'),
+	    ];
+
+	    // Remove null or empty fields
+	    $response = array_filter($response, function ($v) {
+	        return !is_null($v) && $v !== [] && $v !== "";
+	    });
+
+	    return response()->json($response, 200);
+	}
+
 }

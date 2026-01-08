@@ -23,7 +23,7 @@ class chapterController extends Controller
         $data = $this->getData($request);
         // echo "<pre>";print_r(session()->all());exit;
         $type = $request->input('type');
-        $res['sub_institute_id'] = $sub_institute_id = session()->get('sub_institute_id');
+        $res['sub_institute_id'] = $sub_institute_id = $request->input('perm', session()->get('sub_institute_id'));
 
         if($type=="API"){
             $token = $request->input('token');  // get token from input field 'token'
@@ -90,11 +90,11 @@ class chapterController extends Controller
         $res['data'] = $data['chapter_data'];
         $res['content_data'] = $data['content_data'];
         $res['all_resources'] = $allResources;
-        $res['grade'] = $data['basic_ids']['grade_id'] ?? [];
-        $res['standard'] = $data['basic_ids']['standard_id'] ?? [];
-        $res['subject'] = $data['basic_ids']['subject_id'] ?? [];
-        $res['subject_name'] = $data['basic_ids']['subject_name'] ?? [];
-        $res['show_content'] = $data['basic_ids']['add_content'] ?? [];
+        $res['grade'] = $data['basic_ids']['grade_id'] ?? '';
+        $res['standard'] = $data['basic_ids']['standard_id'] ?? '';
+        $res['subject'] = $data['basic_ids']['subject_id'] ?? '';
+        $res['subject_name'] = $data['basic_ids']['subject_name'] ?? '';
+        $res['show_content'] = $data['basic_ids']['add_content'] ?? '';
         $res['lms_mapping_type'] = $lms_mapping_type;  // added on 28-02-2025
         $res['lms_mapping_Values'] = $lms_mapping_Values;  // added on 28-02-2025
         $res['mapped_type'] = $request->mapping_type;  // added on 28-02-2025
@@ -261,7 +261,7 @@ class chapterController extends Controller
 
     public function store(Request $request)
     {
-        // return $request->all();
+        //return $request->all();
         $type=$request->type;
         $sub_institute_id = session()->get('sub_institute_id');
         $syear = session()->get('syear');
@@ -281,26 +281,36 @@ class chapterController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
+
+            $user = $accessToken->tokenable;
+            $user_id = $user->id;
+
             // Validate required fields
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
-                'syear' => 'required',
-                'user_id' => 'required',
             ]);
 
             // If validation fails
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
-             $sub_institute_id = $request->get('sub_institute_id');
-            $syear = $request->get('syear');
-            $user_id = $request->get('user_id');
+              $sub_institute_id = $request->get('sub_institute_id');
         }
         $chapter_name = $request->get('chapter_name');
         $chapter_desc = $request->get('chapter_desc');
         $availability = $request->get('availability');
         $sort_order = $request->get('sort_order');
         $show_hide = $request->get('show_hide');
+
+        // Handle single chapter or multiple chapters
+        if (!is_array($chapter_name)) {
+            $chapter_name = [$chapter_name];
+            $chapter_desc = [$chapter_desc];
+            $availability = [$availability];
+            $sort_order = [$sort_order];
+            $show_hide = [$show_hide];
+        }
+
         $i = $insertGetId = 0;
         foreach ($chapter_name as $key => $val) {
             $show_hide_val = $show_hide[$key] ?? '';
@@ -394,11 +404,13 @@ class chapterController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
+
+            $user = $accessToken->tokenable;
+            $user_id = $user->id;
+
             // Validate required fields
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
-                'syear' => 'required',
-                'user_id' => 'required',
             ]);
 
             // If validation fails
@@ -407,7 +419,6 @@ class chapterController extends Controller
             }
             $sub_institute_id = $request->get('sub_institute_id');
             $syear = $request->get('syear');
-            $user_id = $request->get('user_id');
         }
 // print_r($request->get('show_hide')[0]);EXIT;
         $data = [
@@ -466,17 +477,19 @@ class chapterController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
+
+            $user = $accessToken->tokenable;
+            $user_id = $user->id;
+
             // Validate required fields
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
-                'user_id' => 'required',
             ]);
 
             // If validation fails
             if ($validator->fails()) {
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
-            $user_id = $request->user_id;
             $delete = chapterModel::where(["id" => $id])->update(['deleted_by'=>$user_id,'deleted_at'=>now()]);
 
         }else{
@@ -640,8 +653,8 @@ class chapterController extends Controller
 
         //START for blank graph
         if ($data['graph_data'] == "[]") {
-            $data['graph_data'] = "[";
-            $data['graph_data'] .= "['".$data['subject_name']."','']";
+            $data['graph_data'] = "[";      
+            $data['graph_data'] .= "['" . ($data['subject_name'] ?? '') . "', '']";
             $data['graph_data'] .= "]";
         }
 

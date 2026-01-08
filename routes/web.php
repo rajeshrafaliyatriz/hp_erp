@@ -86,13 +86,13 @@ use App\Http\Controllers\library\itemScanController;
 use App\Http\Controllers\DataMigrationController;
 use App\Http\Controllers\BlogController;
 use App\Http\Controllers\library\LostandDamage;
+use App\Services\Neo4jService;
 
-
-
+Route::get('/neo4j-test', function (Neo4jService $neo4j) {
+    return $neo4j->testConnection();
+});
 
 Route::resource('skill_dashboard', SkillDashboardController::class);
-
-
 
 Route::get('/', function () {
     return view('welcome');
@@ -112,6 +112,8 @@ Route::middleware(['auth','session','menu'])->group(function () {
     Route::post('skill_library/add_category', [skillLibraryController::class, 'AddCategory'])->name('add_category');
 
     Route::post('skill_library/attributes_taxonomy', [skillLibraryController::class, 'AddAttributeTaxonomy'])->name('attributes_taxonomy');
+
+    Route::post('skill_library/delete', [skillLibraryController::class, 'delete']);
 
     Route::get('search_data', [AJAXController::class, 'searchSkill'])->name('search_skill');
 
@@ -166,6 +168,7 @@ Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','men
     Route::post('insert_data', [masterSetupController::class, 'insert_data'])->name('insert_data');
     Route::resource('sub_std_map', sub_std_mapController::class);
 });
+Route::post('/sub_std_map/store', [sub_std_mapController::class, 'store']);
 Route::post('collectsct', [AJAXController::class, 'collectsct'])->name('collectsct');
 
 Route::get('table_data',[AJAXController::class, 'GetTableData'])->name('table_data');
@@ -193,8 +196,8 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
 });
 
-    Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->name('skill-matrix.store-bulk');
-
+Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->name('skill-matrix.store-bulk');
+Route::get('/get-kaba', [SkillMatrixController::class, 'getKaba']);
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 
 Route::get('menuLevel2', [CustomModuleController::class, 'menuLevel2'])->name('menuLevel2.index');

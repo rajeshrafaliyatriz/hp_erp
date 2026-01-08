@@ -596,7 +596,7 @@ class lmsActivityStreamController extends Controller
         return [];
     }
 
-    // task assigned 
+    // task assigned
     function getTaskAssigned($sub_institute_id, $syear, $searchDate, $user_id, $division_id, $standard_id, $activityType = '')
     {
         // return DB::table('task as t')
@@ -611,7 +611,7 @@ class lmsActivityStreamController extends Controller
         //     ->when($activityType == 'upcoming', function ($q) use ($searchDate) {
         //         $q->where('t.task_date', '>=', $searchDate);
         //         // ->where('t.status', 'PENDING');
-        //     }) 
+        //     })
         //     // for today
         //     ->when($activityType == 'today', function ($q) use ($searchDate) {
         //         $q->where('t.task_date', $searchDate);
@@ -622,8 +622,6 @@ class lmsActivityStreamController extends Controller
         //     })
         //     ->where('t.task_allocated_to', $user_id)
         //     ->get()->toArray();
-
-        $userData = DB::table('tbluser')->where('id',$user_id)->first();
 
         $taskQuery = DB::table('task as t')
             ->join('tbluser as tu', function ($join) use ($sub_institute_id) {
@@ -645,9 +643,9 @@ class lmsActivityStreamController extends Controller
                 t.created_at,
                 CONCAT_WS(" ", COALESCE(tu.first_name,"-"), COALESCE(tu.middle_name,"-"), COALESCE(tu.last_name,"-")) as allocatedUser,
                 CONCAT_WS(" ", COALESCE(us.first_name,"-"), COALESCE(us.middle_name,"-"), COALESCE(us.last_name,"-")) as allocatedBy,
-                CASE WHEN tu.image IS NOT NULL 
+                CASE WHEN tu.image IS NOT NULL
                     THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", tu.image)
-                    ELSE NULL 
+                    ELSE NULL
                 END as image
             ')
             ->where(['t.sub_institute_id' => $sub_institute_id, 't.syear' => $syear])
@@ -662,44 +660,8 @@ class lmsActivityStreamController extends Controller
             })
             ->where('t.task_allocated_to', $user_id);
 
-        // Second query for s_user_jobrole_task
-        $fullName = trim(
-            $userData->first_name . ' ' .
-            ($userData->middle_name ?? '') . ' ' .
-            $userData->last_name
-        );
-        
-        $jobRoleTaskQuery = DB::table('s_user_jobrole as suj')
-            ->join('s_user_jobrole_task as sj', 'suj.jobrole', '=', 'sj.jobrole')
-            ->selectRaw('
-                NULL as id,
-                sj.task as task_title, 
-                sj.task_type,
-                ? as task_date,
-                "PENDING" as status,
-                sj.sub_institute_id,
-                NULL as syear,
-                ? as created_at,
-                ? as allocatedUser,
-                ? as allocatedBy,
-                CASE WHEN ? IS NOT NULL 
-                    THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", ?)
-                    ELSE NULL 
-                END as image
-            ', [
-                now(),
-                now(),
-                $fullName, 
-                $fullName,
-                $userData->image,
-                $userData->image
-            ])
-            ->where('sj.sub_institute_id', $sub_institute_id)
-            ->where('suj.id', $userData->allocated_standards ?? 0)
-            ->whereNull('sj.deleted_at');
-
-        // Union both queries
-        return $result = $taskQuery->union($jobRoleTaskQuery)->get()->toArray();
+        // Return tasks only
+        return $taskQuery->get()->toArray();
     }
 
     // parent communication 

@@ -39,16 +39,18 @@ class contentController extends Controller
         if($type=="API"){
             $sub_institute_id = $request->sub_institute_id;
         }
-        $data['content_data'] = contentModel::select('content_master.*','standard.name as standard_name','academic_section.title as grade_name',
-        'subject_name','chapter_name','tm.name as topic_name','stm.name as sub_topic_name')
-        ->join('standard', 'standard.id', '=', 'content_master.standard_id')
+        $data['content_data'] = contentModel::select('content_master.*','hrms_departments.department as standard_name','academic_section.title as grade_name',
+        'subject.subject_name','cm.chapter_name','tm.name as topic_name','stm.name as sub_topic_name')
+        ->join('hrms_departments', 'hrms_departments.id', '=', 'content_master.standard_id')
         ->join('academic_section', 'academic_section.id', '=', 'content_master.grade_id')
-        ->join('subject', 'subject.id', '=', 'content_master.subject_id')       
+        ->join('subject', 'subject.id', '=', 'content_master.subject_id')
         ->join('chapter_master as cm','cm.id','=','content_master.chapter_id')
         ->leftjoin('topic_master as tm','tm.id','=','content_master.topic_id')
         ->leftjoin('topic_master as stm','stm.id','=','content_master.sub_topic_id')
-        ->where('content_master.sub_institute_id',$sub_institute_id)                      
+        ->where('content_master.sub_institute_id',$sub_institute_id)
         ->get();
+
+        $data['content_category'] = lmsContentCategoryModel::where('status', '2')->get()->toArray();
 
         return $data;
     }
@@ -340,12 +342,12 @@ if($type=="API"){
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
             'basic_advance'                => $basic_advanced_val,
             'syear'                        => $syear,
-            'created_at'    =>now(),
             'created_by'=>$user_id,
         ];
-        //'sub_topic_id' => $request->get('subtopic'),                            
-        contentModel::insert($content);
-        $last_id = DB::getPDO()->lastInsertId();
+        //'sub_topic_id' => $request->get('subtopic'),
+        $contentModel = new contentModel($content);
+        $contentModel->save();
+        $last_id = $contentModel->id;
 
         $mapping_type = $request->get('mapping_type');
         $mapping_value = $request->get('mapping_value');
@@ -386,42 +388,73 @@ if($type=="API"){
         }
     }
 
-    public function storeChapter(Request $request){      
-        // echo "<pre>"; print_r($request->all()); exit;         
-        $sub_institute_id = $request->session()->get('sub_institute_id'); 		
-        $syear = $request->session()->get('syear'); 		
-        $user_id = $request->session()->get('user_id');
+    public function storeChapter(Request $request){
+        //echo "<pre>"; print_r($request->all()); exit;
+        $type = $request->input('type');
+        if($type == "API"){
+            $sub_institute_id = $request->input('sub_institute_id');
+            $syear = $request->input('syear');
+            $user_id = $request->input('user_id');
+        }
+        else{
+            $sub_institute_id = $request->session()->get('sub_institute_id');
+            $syear = $request->session()->get('syear');
+            $user_id = $request->session()->get('user_id');
+        }
+
         $show_hide = $request->get('show_hide');
         $show_hide_val = $show_hide ?? '';
 
-        //Basic means 1 and advance means 0 
+        //Basic means 1 and advance means 0
         $basic_advanced = $request->get('toggle_basic_advanced');
         $basic_advanced_val = ! isset($basic_advanced) ? '0' : '1';
-        
+
         $file_folder = $ext = $size = $newfilename = "";
         if($request->hasFile('filename'))
-        {           
+        {
             $img = $request->file('filename');
             $filename = $img->getClientOriginalName();
             $ext = $img->getClientOriginalExtension();
             $size = $img->getSize();
-            $newfilename = 'lms_'.date('Y-m-d_h-i-s').'.'.$ext;             
-            $file_folder = '/hp_lms_content_file';
+            $newfilename = 'lms_'.date('Y-m-d_h-i-s').'.'.$ext;
+            $file_folder = '/lms_content_file';
             //$img->move(public_path().'/lms_content_file/',$newfilename);
             // $img->storeAs('public/lms_content_file/',$newfilename);  20-05-24
-            Storage::disk('digitalocean')->putFileAs('public/hp_lms_content_file/', $img, $newfilename, 'public');
+            Storage::disk('digitalocean')->putFileAs('public/lms_content_file/', $img, $newfilename, 'public');
         }
 
         if($request->get('contentType') == "link")
         {
             $newfilename = $request->get('link');
             $ext = "link";
-        }       
-           
-        $chapter_data = chapterModel::select('*')        
-        ->where(['chapter_master.sub_institute_id'=>$sub_institute_id,'chapter_master.id'=>$request->get('hid_chapter_id')])         
-        ->get()->toArray(); 
-        $chapter_data = $chapter_data[0] ?? []; 
+        }
+
+        $chapter_id = $request->get('hid_chapter_id');
+        if($type == "API"){
+            $chapter_id = $request->get('chapter_id');
+        }
+
+        $chapter_data = [];
+        if(!empty($chapter_id)){
+            $chapter_data = chapterModel::select('*')
+            ->where(['chapter_master.sub_institute_id'=>$sub_institute_id,'chapter_master.id'=>$chapter_id])
+            ->get()->toArray();
+            $chapter_data = $chapter_data[0] ?? [];
+        }
+
+        if(empty($chapter_data)){
+            if($type == "API"){
+                $chapter_data = [
+                    'id' => null,
+                    'grade_id' => $request->get('grade_id'),
+                    'standard_id' => $request->get('standard_id'),
+                    'subject_id' => $request->get('subject_id'),
+                ];
+                $chapter_id = null;
+            }else{
+                return redirect()->back()->with('error', 'Chapter not found');
+            }
+        }
 
         $pre_topic = $post_topic = $cross_curriculum_topic = "";
         if($request->get('prechapter') != "")
@@ -441,7 +474,7 @@ if($type=="API"){
             'grade_id'                     => $chapter_data['grade_id'],
             'standard_id'                  => $chapter_data['standard_id'],
             'subject_id'                   => $chapter_data['subject_id'],
-            'chapter_id'                   => $request->get('hid_chapter_id'),
+            'chapter_id'                   => $chapter_id,
             'topic_id'                     => $request->get('hid_topic_id'),
             'title'                        => $request->get('title'),
             'description'                  => $request->get('description'),
@@ -455,19 +488,21 @@ if($type=="API"){
             'content_category'             => $request->get('content_category'),
             'created_by'                   => $user_id,
             'sub_institute_id'             => $sub_institute_id,
-            'restrict_date'                => date('Y-m-d', strtotime($request->get('restrict_date'))),
+            'restrict_date'                => $request->get('restrict_date') ? date('Y-m-d', strtotime($request->get('restrict_date'))) : null,
             'pre_grade_topic'              => $pre_topic,
             'post_grade_topic'             => $post_topic,
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
             'basic_advance'                => $basic_advanced_val,
             'syear'                        => $syear,
+            'created_by'                   => $user_id,
         ];
 
         // dd($content);
-        //'sub_topic_id' => $request->get('subtopic'),  
-        DB::enableQueryLog();
-        contentModel::insert($content);
-        $last_id = DB::getPDO()->lastInsertId();
+        //'sub_topic_id' => $request->get('subtopic'),
+        //DB::enableQueryLog();
+        $contentModel = new contentModel($content);
+        $contentModel->save();
+        $last_id = $contentModel->id;
 
         $mapping_type = $request->get('mapping_type');
         $mapping_value = $request->get('mapping_value');
@@ -484,11 +519,13 @@ if($type=="API"){
 
         $res = array(
             "status_code" => 1,
-			"message" => "Content Added Successfully",
-		);
-        $type = $request->input('type');
-        //return is_mobile($type, "content_master.index", $res, "redirect");
-        return redirect()->route('chapter_master.index', ['standard_id' => $request->get('hid_standard_id'), 'subject_id' => $request->get('hid_subject_id'),'perm'=>$sub_institute_id]);
+            "message" => "Content Added Successfully",
+        );
+
+        if($type == "API")
+            return is_mobile($type, "content_master.index", $res, "redirect");
+        else
+            return redirect()->route('chapter_master.index', ['standard_id' => $request->get('hid_standard_id'), 'subject_id' => $request->get('hid_subject_id'),'perm'=>$sub_institute_id]);
     }
 		
     public function edit(Request $request,$id){
@@ -757,12 +794,17 @@ if($type=="API"){
             'cross_curriculum_grade_topic' => $cross_curriculum_topic,
             'syear'                        => $syear,
             'updated_by'=>$user_id,
-            'updated_at'=>now(),
         ];
         
-        $data = array_merge($data,$image_data);    
+        $data = array_merge($data,$image_data);
 
-		$update = contentModel::where(["id" => $id])->update($data);
+        $contentModel = contentModel::find($id);
+        if($contentModel){
+            $contentModel->fill($data);
+            $update = $contentModel->save();
+        }else{
+            $update = false;
+        }
         
         //START Delete and insert into content_mapping_Data
         contentmappingtypeModel::where(["content_id" => $id])->delete();

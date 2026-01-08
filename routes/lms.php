@@ -53,6 +53,7 @@ use App\Http\Controllers\lms\curriculum\curriculumLessonplanController;
 use App\Http\Controllers\lms\library\skillLibraryController1;
 use App\Http\Controllers\lms\library\H5PController;
 use App\Http\Controllers\front_desk\taskController;
+use App\Http\Controllers\front_desk\TaskUpdateController;
 use Illuminate\Support\Facades\Route;
 
 Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], function () {
@@ -71,6 +72,7 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
     Route::resource('syllabus', syllabusController::class);
 	Route::get('generateSyllabus', [syllabusController::class, 'GenrateAISyllabus'])->name("generateSyllabus");
     Route::resource('chapter_master', chapterController::class);
+    Route::post('chapter_master/store', [chapterController::class, 'store']);
     Route::resource('course_master', courseController::class);
     Route::resource('topic_master', topicController::class);
     Route::resource('subtopic_master', subtopicController::class);
@@ -263,6 +265,7 @@ Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], f
 });
 
 Route::resource('task', taskController::class);
+Route::match(['put', 'post'], 'task/update-status/{id}', [TaskUpdateController::class, 'updateStatusAndDescription'])->name('task.updateStatus');
 Route::get('task_analysis_report', [taskController::class,'taskAnalysisReport'])->name('task_analysis_report');
 
 Route::get('/upcoming', [lmsActivityStreamController::class, 'upcomingActivity'])->name('upcoming');
@@ -316,4 +319,5 @@ Route::get('/download-File', [contentLibraryController::class, 'downloadFile'])-
 //     return view('recommend');
 // });
 // Route::get('/sync-neo4j', [Neo4jSyncController::class, 'sync']);
-    Route::get('question_paper/search_question', [questionpaperController::class,'search_question2']);
+Route::get('question_paper/search_question', [questionpaperController::class,'search_question2']);
+Route::post('/chapter_master/store', [chapterController::class, 'store']);

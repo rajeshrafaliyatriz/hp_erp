@@ -3,11 +3,12 @@
 namespace App\Models\lms;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Http\Controllers\ai_generated_assessment\generateAssessmentController;
 
 class questionpaperModel extends Model
 {
     protected $table = "question_paper";
-	public $timestamps = false;
+ public $timestamps = true;
 
     protected $fillable = [
         'id',
@@ -29,7 +30,11 @@ class questionpaperModel extends Model
         'show_hide',
         'result_show_ans',
         'created_on',
+        'created_at',
+        'updated_at',
         'created_by',
+        'updated_by',
+        'deleted_by',
         'sub_institute_id',
         'syear',
         'exam_type'

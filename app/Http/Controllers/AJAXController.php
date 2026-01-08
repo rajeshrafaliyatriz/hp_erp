@@ -33,6 +33,32 @@ class AJAXController extends Controller
 {
     public function GetTableData(Request $request)
     {
+        if($request->has('all_tables') && $request->all_tables==1){
+            // Get all tables
+            $tables = DB::select('SHOW TABLES');
+
+            $dbNameKey = 'Tables_in_' . env('DB_DATABASE'); // key name differs by MySQL version
+            $result = [];
+
+            foreach ($tables as $table) {
+                $tableName = $table->$dbNameKey;
+
+                // Get table columns
+                //$columns = Schema::getColumnListing($tableName);
+                $columns = array_map(
+                    fn($col) => $col->Field,
+                    DB::select("SHOW COLUMNS FROM `$tableName`")
+                );
+
+                $result[] = [
+                    'table' => $tableName,
+                    'columns'    => $columns,
+                ];
+            }
+
+            return response()->json($result);
+        }
+
         // 1. Basic validation for table name presence
         if (!$request->has('table')) {
             return response()->json(['error' => 'Table name is required'], 400);
@@ -106,6 +132,25 @@ class AJAXController extends Controller
                 }
             }
         }
+
+        // Apply item_type filter if provided
+        if ($request->has('item_type')) {
+            // Validate item_type column exists
+            try {
+                $itemTypeExists = DB::table('information_schema.columns')
+                    ->where('table_schema', DB::raw('DATABASE()'))
+                    ->where('table_name', $table)
+                    ->where('column_name', 'item_type')
+                    ->exists();
+
+                if ($itemTypeExists) {
+                    $query->where('item_type', $request->item_type);
+                }
+            } catch (\Exception $e) {
+                // Handle error if needed
+            }
+        }
+
         // get entry sort_order wise
         if ($request->has('sort_order') && $request->sort_order != '') {
             $query->orderBy($request->sort_order);

@@ -56,10 +56,10 @@ class courseController extends Controller
 
 	  
 	        $arr = DB::table('sub_std_map as s')
-	            ->selectRaw("STD.name AS standard_name,s.display_name AS subject_name,s.subject_code,s.short_name,s.subject_type,s.id as subject_id,STD.id AS standard_id,
-	                s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))SEPARATOR '#') AS chapter_list,
-	                IFNULL(s.subject_category,'My Course') AS content_category,s.sub_institute_id")
-	            ->join('standard AS STD', 'STD.id', '=', 's.standard_id')
+	                ->selectRaw("D.department AS standard_name,s.display_name AS subject_name,s.subject_code,s.short_name,s.subject_type,s.id as subject_id,D.id AS standard_id,
+	                    s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))SEPARATOR '#') AS chapter_list,
+	                    IFNULL(s.subject_category,'My Course') AS content_category,s.sub_institute_id,s.jobrole")
+	            ->join('hrms_departments AS D', 'D.id', '=', 's.standard_id')
 				// ->join('subject AS ss', 'ss.id', '=', 's.subject_id')
 	            ->leftJoin('chapter_master AS cp', function ($join) {
 	                $join->on('cp.subject_id', '=', 's.id')
