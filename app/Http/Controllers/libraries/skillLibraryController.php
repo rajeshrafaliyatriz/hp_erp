@@ -1268,7 +1268,8 @@ class skillLibraryController extends Controller
         $validator = Validator::make($request->all(), [
             'sub_institute_id' => 'required|numeric',
             'user_id'          => 'required|numeric',
-            'formType'         => 'required'
+            'formType'         => 'required',
+            'variableType'     => 'required|in:Knowledge,Ability,Behaviour,Attitude'
         ]);
 
         if ($validator->fails()) {
@@ -1420,22 +1421,31 @@ class skillLibraryController extends Controller
         $user_id = $request->user_id;
         $formType = $request->formType;
         $attribute = $request->attribute;
+        $variableType = $request->input('variableType');
+
+        $tables = [
+            'Knowledge' => 's_user_knowledge',
+            'Ability' => 's_user_ability',
+            'Behaviour' => 's_user_behvaiour',
+            'Attitude' => 's_user_attitude',
+        ];
+
+        $table = $tables[$variableType];
 
         if ($formType == "add category") {
-            $checkCategory = DB::table('s_skill_knowledge_ability')
+            $checkCategory = DB::table($table)
                 ->where([
                     'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->classification_category,
-                    'classification'=>$attribute
+                    'category' => $request->classification_category,
                 ])
                 ->whereNull('deleted_at')
                 ->first();
 
             if (empty($checkCategory) && !isset($checkCategory->id)) {
-                $i = DB::table('s_skill_knowledge_ability')->insert([
+                $i = DB::table($table)->insert([
                     'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->classification_category,
-                    'classification'=>$attribute,
+                    'category' => $request->classification_category,
+                    'title' => $request->classification_category,
                     'created_by' => $user_id,
                     'created_at' => now(),
                 ]);
@@ -1446,83 +1456,84 @@ class skillLibraryController extends Controller
             $old_classification_category = $request->old_classification_category;
             $classification_sub_category = $request->classification_sub_category;
 
-            $checkCategory = DB::table('s_skill_knowledge_ability')
+            $checkCategory = DB::table($table)
                 ->where([
                     'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->old_classification_category,
-                    'classification'=>$attribute
+                    'category' => $request->old_classification_category,
                 ])
                 ->whereNull('deleted_at')
                 ->first();
 
             if (!empty($checkCategory) && isset($checkCategory->id) && $classification_sub_category == '') {
                 $updateArray = [
-                    'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->classification_category,
-                    'classification'=>$attribute,
+                    'category' => $request->classification_category,
                     'updated_at' => now(),
                     'updated_by' => $user_id
                 ];
 
-                $i = DB::table('s_skill_knowledge_ability')
+                $i = DB::table($table)
                     ->where([
                         'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $request->old_classification_category,
-                        'classification'=>$attribute,
+                        'category' => $request->old_classification_category,
                     ])
                     ->update($updateArray);
 
-                $checkSubCategory = DB::table('s_skill_knowledge_ability')
+                $checkSubCategory = DB::table($table)
                     ->where([
                         'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $request->classification_category,
-                        'classification_sub_category' => $classification_sub_category,
-                        'classification'=>$attribute,
-                    ])
-                    ->whereNull('deleted_at')
-                    ->first();
-
-                if (empty($checkCategory) && !isset($checkCategory->id)) {
-                    $updateArray['classification_sub_category'] = $classification_sub_category;
-                    $updateArray['created_at'] = now();
-                    $updateArray['created_by'] = $user_id;
-
-                    $i = DB::table('s_skill_knowledge_ability')->insert($updateArray);
-                }
-            }
-            else if ($request->has('classification_sub_category')) {
-                $updateArray = [
-                    'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $request->classification_category,
-                    'classification'=>$attribute,
-                    'updated_at' => now(),
-                    'updated_by' => $user_id
-                ];
-
-                $i = DB::table('s_skill_knowledge_ability')
-                    ->where([
-                        'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $request->old_classification_category,
-                        'classification'=>$attribute,
-                    ])
-                    ->update($updateArray);
-
-                $checkSubCategory = DB::table('s_skill_knowledge_ability')
-                    ->where([
-                        'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $request->classification_category,
-                        'classification_sub_category' => $classification_sub_category,
-                        'classification'=>$attribute,
+                        'category' => $request->classification_category,
+                        'sub_category' => $classification_sub_category,
                     ])
                     ->whereNull('deleted_at')
                     ->first();
 
                 if (empty($checkSubCategory) && !isset($checkSubCategory->id)) {
-                    $updateArray['classification_sub_category'] = $classification_sub_category;
-                    $updateArray['created_at'] = now();
-                    $updateArray['created_by'] = $user_id;
+                    $insertArray = [
+                        'sub_institute_id' => $sub_institute_id,
+                        'category' => $request->classification_category,
+                        'sub_category' => $classification_sub_category,
+                        'title' => $request->classification_category . ' - ' . $classification_sub_category,
+                        'created_at' => now(),
+                        'created_by' => $user_id,
+                    ];
 
-                    $i = DB::table('s_skill_knowledge_ability')->insert($updateArray);
+                    $i = DB::table($table)->insert($insertArray);
+                }
+            }
+            else if ($request->has('classification_sub_category')) {
+                $updateArray = [
+                    'category' => $request->classification_category,
+                    'updated_at' => now(),
+                    'updated_by' => $user_id
+                ];
+
+                $i = DB::table($table)
+                    ->where([
+                        'sub_institute_id' => $sub_institute_id,
+                        'category' => $request->old_classification_category,
+                    ])
+                    ->update($updateArray);
+
+                $checkSubCategory = DB::table($table)
+                    ->where([
+                        'sub_institute_id' => $sub_institute_id,
+                        'category' => $request->classification_category,
+                        'sub_category' => $classification_sub_category,
+                    ])
+                    ->whereNull('deleted_at')
+                    ->first();
+
+                if (empty($checkSubCategory) && !isset($checkSubCategory->id)) {
+                    $insertArray = [
+                        'sub_institute_id' => $sub_institute_id,
+                        'category' => $request->classification_category,
+                        'sub_category' => $classification_sub_category,
+                        'title' => $request->classification_category . ' - ' . $classification_sub_category,
+                        'created_at' => now(),
+                        'created_by' => $user_id,
+                    ];
+
+                    $i = DB::table($table)->insert($insertArray);
                 }
             }
         }
@@ -1531,30 +1542,27 @@ class skillLibraryController extends Controller
             $old_classification_sub_category = $request->old_classification_sub_category;
             $classification_sub_category = $request->classification_sub_category;
 
-            $checkSubCategory = DB::table('s_skill_knowledge_ability')
+            $checkSubCategory = DB::table($table)
                 ->where([
                     'sub_institute_id' => $sub_institute_id,
-                    'classification_category' => $classification_category,
-                    'classification_sub_category' => $old_classification_sub_category,
-                    'classification'=>$attribute,
+                    'category' => $classification_category,
+                    'sub_category' => $old_classification_sub_category,
                 ])
                 ->whereNull('deleted_at')
                 ->first();
 
             if (!empty($checkSubCategory) && isset($checkSubCategory->id)) {
                 $updateArray = [
-                    'classification_sub_category' => $classification_sub_category,
-                    'classification'=>$attribute,
+                    'sub_category' => $classification_sub_category,
                     'updated_at' => now(),
                     'updated_by' => $user_id
                 ];
 
-                $i = DB::table('s_skill_knowledge_ability')
+                $i = DB::table($table)
                     ->where([
                         'sub_institute_id' => $sub_institute_id,
-                        'classification_category' => $classification_category,
-                        'classification_sub_category' => $old_classification_sub_category,
-                        'classification'=>$attribute,
+                        'category' => $classification_category,
+                        'sub_category' => $old_classification_sub_category,
                     ])
                     ->update($updateArray);
             }
