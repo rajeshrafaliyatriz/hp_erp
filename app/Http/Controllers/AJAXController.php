@@ -951,7 +951,7 @@ class AJAXController extends Controller
 
         $response = Http::withHeaders([
             'Content-Type' => 'application/json',
-        ])->post($url, [
+        ])->withoutVerifying()->timeout(120)->post($url, [
             "contents" => [
                 [
                     "parts" => [
@@ -1135,7 +1135,7 @@ class AJAXController extends Controller
                     Align everything tightly with the skill context fields.
                     Use concise, engaging, and adult-learner-appropriate language.
                     Do not add explanations — only output the structured JSON.
-                    provide me 3 course with atleast 3 content realted this skills > course > chapter. in JSON array";
+                    provide me 1 course with atleast 3 content realted this skills > course > chapter. in JSON array";
         }
 
         $request->merge(['prompt' => $prompt]);
@@ -1144,168 +1144,167 @@ class AJAXController extends Controller
         // return $gemeniData;
         $i = 0;
         if (!isset($gemeniData['error'])) {
-            foreach ($gemeniData as $courseKey => $courseData) {
+            $courseData = $gemeniData;
 
-                // Create course
-                $courseController = new masterSetupController;
-                $course_request = new Request([
-                    'type' => 'API',
-                    'sub_institute_id' => $sub_institute_id,
-                    'user_id' => $user_id,
-                    'token' => $token,
-                    'formType' => 'course',
-                    'subject_id' => 0,
-                    'standard_id' => $standard,
-                    'allow_grades' => 'Yes',
-                    'allow_content' => 'Yes',
-                    'sort_order' => '1',
-                    'elective_subject' => 'No',
-                    'add_content' => 'chapterwise',
-                    'display_name' => $courseData['course_name'] ?? '-',
-                    'display_image' => null,
-                    'subject_category' => $courseData['course_category'] ?? '-',
-                    'subject_code' => $courseData['course_code'] ?? '-',
-                    'subject_type' => $courseData['course_type'] ?? '-',
-                    'short_name' => $courseData['short_name'] ?? '-',
-                    'status' => 1,
-                ]);
+            // Create course
+            $courseController = new masterSetupController;
+            $course_request = new Request([
+                'type' => 'API',
+                'sub_institute_id' => $sub_institute_id,
+                'user_id' => $user_id,
+                'token' => $token,
+                'formType' => 'course',
+                'subject_id' => 0,
+                'standard_id' => $standard,
+                'allow_grades' => 'Yes',
+                'allow_content' => 'Yes',
+                'sort_order' => '1',
+                'elective_subject' => 'No',
+                'add_content' => 'chapterwise',
+                'display_name' => $courseData['course_name'],
+                'display_image' => null,
+                'subject_category' => $courseData['course_category'] ?? '-',
+                'subject_code' => $courseData['course_code'] ?? '-',
+                'subject_type' => $courseData['course_type'] ?? '-',
+                'short_name' => $courseData['short_name'] ?? '-',
+                'status' => 1,
+            ]);
 
-                $courseStore = $courseController->store($course_request);
+            $courseStore = $courseController->store($course_request);
 
-                $courseId = $courseStore->original['course_id'];
+            $courseId = $courseStore->original['course_id'];
 
-                // Process chapters if they exist
-                if (isset($courseData['chapters'])) {
-                    foreach ($courseData['chapters'] as $chapterKey => $chapterData) {
-                        // Create chapter
-                        $moduleController = new chapterController;
-                        $chapter_request = new Request([
-                            'type' => 'API',
-                            'sub_institute_id' => $sub_institute_id,
-                            'user_id' => $user_id,
-                            'user_profile_name' => $user_profile_name,
-                            'token' => $token,
-                            'syear' => $syear,
-                            'grade' => $grade,
-                            'standard' => $standard,
-                            'subject' => $courseId,
-                            'chapter_name' => [$chapterData['chapter_name'] ?? '-'],
-                            'chapter_desc' => [$chapterData['chapter_description'] ?? '-'],
-                            'availability' => [1],
-                            'show_hide' => [1],
-                            'sort_order' => [1]
-                        ]);
+            // Process chapters if they exist
+            if (isset($courseData['chapters'])) {
+                foreach ($courseData['chapters'] as $chapterKey => $chapterData) {
+                    // Create chapter
+                    $moduleController = new chapterController;
+                    $chapter_request = new Request([
+                        'type' => 'API',
+                        'sub_institute_id' => $sub_institute_id,
+                        'user_id' => $user_id,
+                        'user_profile_name' => $user_profile_name,
+                        'token' => $token,
+                        'syear' => $syear,
+                        'grade' => $grade,
+                        'standard' => $standard,
+                        'subject' => $courseId,
+                        'chapter_name' => [$chapterData['chapter_name'] ?? '-'],
+                        'chapter_desc' => [$chapterData['chapter_description'] ?? '-'],
+                        'availability' => [1],
+                        'show_hide' => [1],
+                        'sort_order' => [1]
+                    ]);
 
-                        $chapterStore = $moduleController->store($chapter_request);
-                        $chapterId = $chapterStore->original['chapter_id'];
-                        // Get related data
-                        $getstandard = DB::table('standard')
-                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard])
-                            ->whereNull('deleted_at')
-                            ->first();
-                        $getcourse = DB::table('sub_std_map')
-                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $courseId])
-                            ->whereNull('deleted_at')
-                            ->first();
-                        $getChapter = DB::table('chapter_master')
-                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapterId])
-                            ->whereNull('deleted_at')
-                            ->first();
-                        // echo "<pre>";print_r($chapterData['contents']);exit;
-                        // Process contents if they exist
-                        if (isset($chapterData['contents'])) {
-                            foreach ($chapterData['contents'] as $contentKey => $contentData) {
-                                $content_html = $contentData['content_html'];
-                                // Convert HTML content to PDF using DomPDF
-                                $options = new Options();
-                                $options->set('isHtml5ParserEnabled', true);
-                                $options->set('isRemoteEnabled', true);
+                    $chapterStore = $moduleController->store($chapter_request);
+                    $chapterId = $chapterStore->original['chapter_id'];
+                    // Get related data
+                    $getstandard = DB::table('standard')
+                        ->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard])
+                        ->whereNull('deleted_at')
+                        ->first();
+                    $getcourse = DB::table('sub_std_map')
+                        ->where(['sub_institute_id' => $sub_institute_id, 'id' => $courseId])
+                        ->whereNull('deleted_at')
+                        ->first();
+                    $getChapter = DB::table('chapter_master')
+                        ->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapterId])
+                        ->whereNull('deleted_at')
+                        ->first();
+                    // echo "<pre>";print_r($chapterData['contents']);exit;
+                    // Process contents if they exist
+                    if (isset($chapterData['contents'])) {
+                        foreach ($chapterData['contents'] as $contentKey => $contentData) {
+                            $content_html = $contentData['content_html'];
+                            // Convert HTML content to PDF using DomPDF
+                            $options = new Options();
+                            $options->set('isHtml5ParserEnabled', true);
+                            $options->set('isRemoteEnabled', true);
 
-                                // Generate PDF
-                                $pdf = new Dompdf($options);
-                                $pdf->loadHtml($content_html);
-                                $pdf->setPaper('A4', 'portrait');
-                                $pdf->render();
-                                $pdfContent = $pdf->output();
-                                $newfilename = date('Ymd') . '-' . time() . '.pdf';
-                                // Store directly in DigitalOcean Spaces
-                                Storage::disk('digitalocean')->put(
-                                    "public/hp_lms_content_file/{$newfilename}",
-                                    $pdfContent,
-                                    'public' // visibility
-                                );
-                                // echo "<pre>";print_r($newfilename);exit;
+                            // Generate PDF
+                            $pdf = new Dompdf($options);
+                            $pdf->loadHtml($content_html);
+                            $pdf->setPaper('A4', 'portrait');
+                            $pdf->render();
+                            $pdfContent = $pdf->output();
+                            $newfilename = date('Ymd') . '-' . time() . '.pdf';
+                            // Store directly in DigitalOcean Spaces
+                            Storage::disk('digitalocean')->put(
+                                "public/hp_lms_content_file/{$newfilename}",
+                                $pdfContent,
+                                'public' // visibility
+                            );
+                            // echo "<pre>";print_r($newfilename);exit;
 
-                                $contentController = new contentController;
-                                $content_request = new Request([
-                                    'type' => 'API',
-                                    'sub_institute_id' => $sub_institute_id,
-                                    'user_id' => $user_id,
-                                    'syear' => $syear,
-                                    'token' => $token,
-                                    'toggle_basic_advanced' => 'Advanced',
-                                    'hid_standard_name' => $getstandard->name ?? '-',
-                                    'hid_subject_name' => $getcourse->display_name ?? '-',
-                                    'hid_chapter_name' => $getChapter->chapter_name ?? '-',
-                                    'hid_chapter_id' => $chapterId,
-                                    'title' => $contentData['content_title'] ?? '-',
-                                    'description' => $contentData['content_description'] ?? '-',
-                                    'content_category' => $contentData['content_category'] ?? '-',
-                                    'contentType' => 'link',
-                                    'link' => 'https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/hp_lms_content_file/' . $newfilename,
-                                    'cross_curriculum_grade_topic' => $newfilename,
-                                    'mapping_type' => isset($contentData['mapping_type']) ? $mappingTypes[$contentData['mapping_type']] ?? 0 : 0,
-                                    'mapping_value' => isset($contentData['mapping_value']) ? $mappingValues[$contentData['mapping_value']] ?? 0 : 0,
-                                    'filename' => 'content_' . time() . '.pdf',
-                                    'show_hide' => 1
-                                ]);
+                            $contentController = new contentController;
+                            $content_request = new Request([
+                                'type' => 'API',
+                                'sub_institute_id' => $sub_institute_id,
+                                'user_id' => $user_id,
+                                'syear' => $syear,
+                                'token' => $token,
+                                'toggle_basic_advanced' => 'Advanced',
+                                'hid_standard_name' => $getstandard->name ?? '-',
+                                'hid_subject_name' => $getcourse->display_name ?? '-',
+                                'hid_chapter_name' => $getChapter->chapter_name ?? '-',
+                                'hid_chapter_id' => $chapterId,
+                                'title' => $contentData['content_title'] ?? '-',
+                                'description' => $contentData['content_description'] ?? '-',
+                                'content_category' => $contentData['content_category'] ?? '-',
+                                'contentType' => 'link',
+                                'link' => 'https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/hp_lms_content_file/' . $newfilename,
+                                'cross_curriculum_grade_topic' => $newfilename,
+                                'mapping_type' => isset($contentData['mapping_type']) ? $mappingTypes[$contentData['mapping_type']] ?? 0 : 0,
+                                'mapping_value' => isset($contentData['mapping_value']) ? $mappingValues[$contentData['mapping_value']] ?? 0 : 0,
+                                'filename' => 'content_' . time() . '.pdf',
+                                'show_hide' => 1
+                            ]);
 
-                                $contentStore = $contentController->store($content_request);
-                                // echo "<pre>";print_r($contentStore);exit;
-                            }
+                            $contentStore = $contentController->store($content_request);
+                            // echo "<pre>";print_r($contentStore);exit;
                         }
+                    }
 
-                        // Process questions if they exist
-                        if (isset($chapterData['questions'])) {
-                            foreach ($chapterData['questions'] as $questionData) {
+                    // Process questions if they exist
+                    if (isset($chapterData['questions'])) {
+                        foreach ($chapterData['questions'] as $questionData) {
 
-                                $questionController = new questionmasterController;
-                                $question_request = new Request([
-                                    'type' => 'API',
-                                    'sub_institute_id' => $sub_institute_id,
-                                    'user_id' => $user_id,
-                                    'token' => $token,
-                                    'grade_id' => $grade,
-                                    'standard_id' => $standard,
-                                    'subject_id' => $courseId,
-                                    'chapter_id' => $chapterId,
-                                    'question_title' => $questionData['question_title'] ?? '-',
-                                    'description' => $questionData['description'] ?? '-',
-                                    'mapping_type' => isset($questionData['mapping_type']) ? array($mappingTypes[$questionData['mapping_type']] ?? 0) : array(),
-                                    'mapping_value' => isset($questionData['mapping_value']) ? array($mappingValues[$questionData['mapping_value']] ?? 0) : array(),
-                                    'reasons' => array($questionData['reason'] ?? '-'),
-                                    'question_type_id' => 1,
-                                    'points' => 1,
-                                    'multiple_answer' => 1,
-                                    'status' => 1,
-                                    'options' => [
-                                        "NEW" => array_map(function ($answer) {
-                                            return $answer['answer'];
-                                        }, $questionData['answers'] ?? [])
-                                    ],
-                                    'correct_answer' => isset($questionData['answers']) ?
-                                        [array_search(true, array_column($questionData['answers'], 'correct_answer')) => "1"] :
-                                        [0 => "1"]
-                                ]);
+                            $questionController = new questionmasterController;
+                            $question_request = new Request([
+                                'type' => 'API',
+                                'sub_institute_id' => $sub_institute_id,
+                                'user_id' => $user_id,
+                                'token' => $token,
+                                'grade_id' => $grade,
+                                'standard_id' => $standard,
+                                'subject_id' => $courseId,
+                                'chapter_id' => $chapterId,
+                                'question_title' => $questionData['question_title'] ?? '-',
+                                'description' => $questionData['description'] ?? '-',
+                                'mapping_type' => isset($questionData['mapping_type']) ? array($mappingTypes[$questionData['mapping_type']] ?? 0) : array(),
+                                'mapping_value' => isset($questionData['mapping_value']) ? array($mappingValues[$questionData['mapping_value']] ?? 0) : array(),
+                                'reasons' => array($questionData['reason'] ?? '-'),
+                                'question_type_id' => 1,
+                                'points' => 1,
+                                'multiple_answer' => 1,
+                                'status' => 1,
+                                'options' => [
+                                    "NEW" => array_map(function ($answer) {
+                                        return $answer['answer'];
+                                    }, $questionData['answers'] ?? [])
+                                ],
+                                'correct_answer' => isset($questionData['answers']) ?
+                                    [array_search(true, array_column($questionData['answers'], 'correct_answer')) => "1"] :
+                                    [0 => "1"]
+                            ]);
 
-                                $questionStore = $questionController->store($question_request);
-                                // echo "<pre>";print_r($questionStore);exit;
-                            }
+                            $questionStore = $questionController->store($question_request);
+                            // echo "<pre>";print_r($questionStore);exit;
                         }
                     }
                 }
-                $i++;
             }
+            $i = 1;
         }
         $res['status_code'] = 0;
         $res['message'] = 'Failed Find Data from AI';
