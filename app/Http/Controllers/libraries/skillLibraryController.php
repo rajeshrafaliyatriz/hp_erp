@@ -1445,7 +1445,6 @@ class skillLibraryController extends Controller
                 $i = DB::table($table)->insert([
                     'sub_institute_id' => $sub_institute_id,
                     'category' => $request->classification_category,
-                    'title' => $request->classification_category,
                     'created_by' => $user_id,
                     'created_at' => now(),
                 ]);
@@ -1492,7 +1491,6 @@ class skillLibraryController extends Controller
                         'sub_institute_id' => $sub_institute_id,
                         'category' => $request->classification_category,
                         'sub_category' => $classification_sub_category,
-                        'title' => $request->classification_category . ' - ' . $classification_sub_category,
                         'created_at' => now(),
                         'created_by' => $user_id,
                     ];
@@ -1528,7 +1526,6 @@ class skillLibraryController extends Controller
                         'sub_institute_id' => $sub_institute_id,
                         'category' => $request->classification_category,
                         'sub_category' => $classification_sub_category,
-                        'title' => $request->classification_category . ' - ' . $classification_sub_category,
                         'created_at' => now(),
                         'created_by' => $user_id,
                     ];
