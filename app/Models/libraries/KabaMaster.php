@@ -42,6 +42,14 @@ class KabaMaster extends Model
                 $instance->table = 's_users_skills';
                 break;
 
+            case 'task':
+                $instance->table = 's_user_jobrole_task';
+                break;
+
+            case 'jobrole':
+                $instance->table = 's_user_jobrole';
+                break;
+
             default:
                 throw new \Exception("Invalid KABA type: $type");
         }
