@@ -100,6 +100,7 @@ class onlineExamController extends Controller
             'total_wrong'       => $result['total_wrong_ans'],
             'obtain_marks'      => $result['obtain_marks'],
             'start_time'        => $request->get('hid_session_quiz'),
+            'sub_institute_id'  => $sub_institute_id,
             'created_by'        => $user_id,
             'created_at'        => now(),
         ];
