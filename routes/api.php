@@ -120,6 +120,7 @@ Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution'
 
 
 Route::get('/enroll', [LmsCourseEnrollController::class, 'index']);
+Route::get('/enrolled_courses', [LmsCourseEnrollController::class, 'index']);
 Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
 Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
 Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
