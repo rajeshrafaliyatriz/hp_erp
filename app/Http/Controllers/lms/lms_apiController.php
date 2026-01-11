@@ -558,6 +558,7 @@ class lms_apiController extends Controller
                 "total_wrong"       => $wrong_ans,
                 "obtain_marks"      => $tot_marks,//$total_marks 08/06/2022 RAJESH
                 "start_time"        => now(),
+                "sub_institute_id"  => $sub_institute_id,
             ];
 
             lmsOnlineExamModel::insert($lms_online_data);
