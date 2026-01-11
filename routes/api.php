@@ -15,7 +15,7 @@ use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\talent\talent_screening_results_controller;
-
+use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
@@ -136,6 +136,7 @@ Route::get('gamma-api/sub-institute/{subInstituteId}', [GammaApiController::clas
 Route::resource('skill_library', skillLibraryController::class);
 Route::get('/positions', [InterviewController::class, 'getPositions']);
 Route::get('/interviewers', [InterviewController::class, 'getInterviewers']);
+Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings']);
 
 Route::get('/interview-panel/users', [talent_interviewpanelController::class, 'getInterviewers']);
 Route::post('/interview-panel/store', [talent_interviewpanelController::class, 'storeinterviewer']);
@@ -172,8 +173,3 @@ Route::group(['prefix' => 'reports'], function () {
     Route::get('/employee-directory/attrition', [EmployeeDirectoryAnalyticsController::class, 'getAttritionBreakdown']);
     Route::get('/employee-directory/skills/matrix', [EmployeeDirectoryAnalyticsController::class, 'getSkillMatrix']);
 });
-
-
-
-
-

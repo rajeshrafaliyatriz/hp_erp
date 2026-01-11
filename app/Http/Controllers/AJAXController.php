@@ -564,13 +564,17 @@ class AJAXController extends Controller
 
     public function getUsersMappings(Request $request)
     {
-        $emp_id = $request->emp_id;
-        $getType = $request->getType; // skills or tasks
+        $emp_id = $request->user_id ?? $request->emp_id;
+        $sub_institute_id = $request->sub_institute_id;
+        $getType = $request->getType ?? 'tasks'; // skills or tasks, default to tasks
         $res['status_code'] = 0;
         $res['message'] = 'User not found';
         $getEmp = DB::table('tbluser as u')
             ->join('tbluserprofilemaster as upm', 'upm.id', '=', 'u.user_profile_id')
             ->where('u.id', $emp_id)
+            ->where('u.sub_institute_id', $sub_institute_id)
+            ->where('u.status', 1)
+            ->whereNull('u.deleted_at')
             ->first();
 
         if ($getEmp && $getType == "skills") {
@@ -591,10 +595,10 @@ class AJAXController extends Controller
             }
         } else if ($getEmp && $getType == "tasks") {
             $getTasks = DB::table('task as t')
-                ->join('tbluser as u', 'u.id', '=', 't.user_id')
+                ->join('tbluser as u', 'u.id', '=', 't.task_allocated_to')
                 ->join('tbluserprofilemaster as upm', 'upm.id', '=', 'u.user_profile_id')
-                ->where('t.user_id', $emp_id)
-                ->select('t.id as task_id', 't.task_name', 't.status', 'u.first_name', 'u.last_name', 'upm.name as user_role')
+                ->where('t.task_allocated_to', $emp_id)
+                ->select('t.id as task_id', 't.task_title', 't.status', 'u.first_name', 'u.last_name', 'upm.name as user_role')
                 ->get();
 
             if ($getTasks->isNotEmpty()) {
@@ -933,15 +937,17 @@ class AJAXController extends Controller
         } else {
             foreach ($todayUsedKeys as $key => $value) {
                 $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1, 'id' => $value->parent_id])->whereNull('sub_institute_id')->first();
-                if ($value->count < $firstGeminiKey->limit) {
+                if ($firstGeminiKey && $value->count < $firstGeminiKey->limit) {
                     $apiKey[] = $value->key;
                     $update = DB::table('ai_daily_used_api')->where(['id' => $value->id])->update(['count' => $value->count + 1]);
                     break;
                 }else{
                     $firstGeminiKey = DB::table('gemini_api')->where(['status' => 1])->where('id','!=', $value->parent_id)->whereNull('sub_institute_id')->first();
-                    $apiKey[] = $firstGeminiKey->key;
-                    $insert = DB::table('ai_daily_used_api')->insert(['api_name' => 'gemini', 'key' => $firstGeminiKey->key, 'parent_id' => $firstGeminiKey->id, 'date' => date('Y-m-d'), 'count' => 1]); 
-                    break;
+                    if ($firstGeminiKey) {
+                        $apiKey[] = $firstGeminiKey->key;
+                        $insert = DB::table('ai_daily_used_api')->insert(['api_name' => 'gemini', 'key' => $firstGeminiKey->key, 'parent_id' => $firstGeminiKey->id, 'date' => date('Y-m-d'), 'count' => 1]);
+                        break;
+                    }
                 }
             }
         }
@@ -1161,7 +1167,7 @@ class AJAXController extends Controller
                 'sort_order' => '1',
                 'elective_subject' => 'No',
                 'add_content' => 'chapterwise',
-                'display_name' => $courseData['course_name'],
+                'display_name' => $courseData['course_name'] ?? '-',
                 'display_image' => null,
                 'subject_category' => $courseData['course_category'] ?? '-',
                 'subject_code' => $courseData['course_code'] ?? '-',
