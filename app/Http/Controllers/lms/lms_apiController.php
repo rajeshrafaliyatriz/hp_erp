@@ -69,10 +69,10 @@ class lms_apiController extends Controller
         if ($student_id != "" && $sub_institute_id != "" && $syear != "") {
             $data = DB::table('lms_portfolio as p')
                 ->leftJoin('tbluser as u', function ($join) {
-                    $join->whereRaw('p.feedback_by = u.id')->where('u.status',1);   // 23-04-24 by uma
+                    $join->whereRaw('p.feedback_by = u.id')->where('u.status', 1);   // 23-04-24 by uma
                 })
                 ->selectRaw("p.*, CONCAT_WS(' ',u.first_name,u.middle_name,u.last_name) AS teacher_name,
-                    if(p.file_name = '','',concat('https://".$_SERVER['SERVER_NAME']."/storage/lms_portfolio/',p.file_name))
+                    if(p.file_name = '','',concat('https://" . $_SERVER['SERVER_NAME'] . "/storage/lms_portfolio/',p.file_name))
                     as file_name, DATE_FORMAT(p.created_at,'%d-%m-%Y') AS created_at")
                 ->where('p.user_id', $student_id)
                 ->where('p.syear', $syear)
@@ -233,8 +233,8 @@ class lms_apiController extends Controller
 
             $attempted = DB::table('lms_online_exam as le')
                 ->join('question_paper as qp', function ($join) use ($sub_institute_id, $syear) {
-                    $join->whereRaw("qp.id = le.question_paper_id AND qp.sub_institute_id = '".
-                        $sub_institute_id."' AND qp.syear = '".$syear."'");
+                    $join->whereRaw("qp.id = le.question_paper_id AND qp.sub_institute_id = '" .
+                        $sub_institute_id . "' AND qp.syear = '" . $syear . "'");
                 })->selectRaw('count(le.id)+1 as count_attempted')
                 ->where('student_id', $student_id)
                 ->where('question_paper_id', $question_paper_id)->get()->toArray();
@@ -299,53 +299,52 @@ class lms_apiController extends Controller
 
             $data['attempted_data'] = DB::table('lms_online_exam as le')
                 ->join('question_paper as qp', function ($join) use ($sub_institute_id, $syear) {
-                    $join->whereRaw("qp.id = le.question_paper_id AND qp.sub_institute_id = '".
-                        $sub_institute_id."' AND qp.syear = '".$syear."'");
+                    $join->whereRaw("qp.id = le.question_paper_id AND qp.sub_institute_id = '" .
+                        $sub_institute_id . "' AND qp.syear = '" . $syear . "'");
                 })->selectRaw('le.id,le.student_id,le.question_paper_id,le.total_right,le.total_wrong,
-                    (le.total_right) as obtain_marks,le.start_time,le.created_at,le.id as online_exam_id,qp.paper_name')
+(le.total_right) as obtain_marks,le.start_time,le.created_at,le.id as online_exam_id,qp.paper_name')
                 ->where('student_id', $student_id)
                 ->where('question_paper_id', $question_paper_id)
                 ->orderBy('start_time')->get()->toArray();
-                
-                // Check if $data['attempted_data'] is empty
-                if (empty($data['attempted_data'])) {
-                    $res['status'] = 0;
-                    $res['message'] = "No attempted data found for the specified parameters.";
-                } else{
-                    $data['attempted_data'] = json_decode(json_encode($data['attempted_data']), true);
-        //Rajesh = Hide PROGRESSBAR_DATA because API take too much time, and not required in mobile app....future perpective data display 
-        /*
-                    foreach ($data['attempted_data'] as $key => $val) {
-                        $pdata = DB::select("SELECT *,'100' as total_percentage,
-                            round(((a.right_answer*100)/total_question),2) as obtained_percentage from (
-                            SELECT lt.parent_id,plt.name as parent_name,lt.id,lt.name,COUNT(mapping_type_id) as total_question,group_concat(e.question_id) as ques_list,
-                            sum((case when e.ans_status = 'right' then '1' end)) as right_answer
-                            FROM lms_question_mapping l
-                            INNER JOIN lms_mapping_type lt ON lt.id = l.mapping_value_id
-                            INNER JOIN lms_mapping_type plt ON plt.id = lt.parent_id
-                            LEFT JOIN lms_online_exam_answer e on e.question_id = l.questionmaster_id and e.question_paper_id = '" . $val['question_paper_id'] . "' AND
-                            e.student_id = '" . $val['student_id'] . "' and e.online_exam_id = '" . $val['id'] . "'
-                            WHERE questionmaster_id IN (
-                                    SELECT question_id
-                                    FROM lms_online_exam_answer
-                                    WHERE question_paper_id = '" . $val['question_paper_id'] . "' AND student_id = '" . $val['student_id'] . "'
-                                    AND online_exam_id = '".$val['id']."'
-                                )
-                            GROUP BY mapping_value_id
-                            ORDER BY mapping_type_id,mapping_value_id) as a
-                        ");
 
-                        $pdata_new = json_decode(json_encode($pdata), true);
-                        foreach ($pdata_new as $pkey => $pval) {
-                            $data['attempted_data'][$key]['PROGRESSBAR_DATA'][$pval['parent_name']][] = $pval;
-                        }
-                    }
-        */
-                    $res['status'] = 1;
-                    $res['message'] = "Success";
-                    $res['data'] = $data;
-                }
+            // Check if $data['attempted_data'] is empty
+            if (empty($data['attempted_data'])) {
+                $res['status'] = 0;
+                $res['message'] = "No attempted data found for the specified parameters.";
+            } else {
+                $data['attempted_data'] = json_decode(json_encode($data['attempted_data']), true);
+                //Rajesh = Hide PROGRESSBAR_DATA because API take too much time, and not required in mobile app....future perpective data display 
+                /*
+foreach ($data['attempted_data'] as $key => $val) {
+$pdata = DB::select("SELECT *,'100' as total_percentage,
+round(((a.right_answer*100)/total_question),2) as obtained_percentage from (
+SELECT lt.parent_id,plt.name as parent_name,lt.id,lt.name,COUNT(mapping_type_id) as total_question,group_concat(e.question_id) as ques_list,
+sum((case when e.ans_status = 'right' then '1' end)) as right_answer
+FROM lms_question_mapping l
+INNER JOIN lms_mapping_type lt ON lt.id = l.mapping_value_id
+INNER JOIN lms_mapping_type plt ON plt.id = lt.parent_id
+LEFT JOIN lms_online_exam_answer e on e.question_id = l.questionmaster_id and e.question_paper_id = '" . $val['question_paper_id'] . "' AND
+e.student_id = '" . $val['student_id'] . "' and e.online_exam_id = '" . $val['id'] . "'
+WHERE questionmaster_id IN (
+SELECT question_id
+FROM lms_online_exam_answer
+WHERE question_paper_id = '" . $val['question_paper_id'] . "' AND student_id = '" . $val['student_id'] . "'
+AND online_exam_id = '".$val['id']."'
+)
+GROUP BY mapping_value_id
+ORDER BY mapping_type_id,mapping_value_id) as a
+");
 
+$pdata_new = json_decode(json_encode($pdata), true);
+foreach ($pdata_new as $pkey => $pval) {
+$data['attempted_data'][$key]['PROGRESSBAR_DATA'][$pval['parent_name']][] = $pval;
+}
+}
+*/
+                $res['status'] = 1;
+                $res['message'] = "Success";
+                $res['data'] = $data;
+            }
         } else {
             $res['status'] = 0;
             $res['message'] = "Parameter Missing";
@@ -373,9 +372,9 @@ class lms_apiController extends Controller
         $type = $request->input("type");
         $sub_institute_id = $request->input("sub_institute_id");
         $syear = $request->input("syear");
-            $res['status'] = 0;
-            $res['message'] = "Parameter Missing";
-    
+        $res['status'] = 0;
+        $res['message'] = "Parameter Missing";
+
         return json_encode($res);
     }
 
@@ -414,8 +413,8 @@ class lms_apiController extends Controller
                     $join->whereRaw('t_st.id = s.to_stop AND t_st.sub_institute_id = s.sub_institute_id');
                 })
                 ->selectRaw('s.id,s.student_id,
-                    f_ss.shift_title AS from_shift ,f_v.title AS from_bus ,f_st.stop_name AS from_stop_name,
-                    t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_name')
+f_ss.shift_title AS from_shift ,f_v.title AS from_bus ,f_st.stop_name AS from_stop_name,
+t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_name')
                 ->where('s.student_id', $student_id)
                 ->where('s.syear', $syear)
                 ->where('s.sub_institute_id', $sub_institute_id)->get()->toArray();
@@ -450,10 +449,10 @@ class lms_apiController extends Controller
         $sub_institute_id = $request->input("sub_institute_id");
         $syear = $request->input("syear");
 
-        
-            $res['status'] = 0;
-            $res['message'] = "Parameter Missing";
-        
+
+        $res['status'] = 0;
+        $res['message'] = "Parameter Missing";
+
 
         return json_encode($res);
     }
@@ -476,10 +475,10 @@ class lms_apiController extends Controller
         $sub_institute_id = $request->input("sub_institute_id");
         $syear = $request->input("syear");
 
-        
-            $res['status'] = 0;
-            $res['message'] = "Parameter Missing";
-        
+
+        $res['status'] = 0;
+        $res['message'] = "Parameter Missing";
+
 
         return json_encode($res);
     }
@@ -502,10 +501,10 @@ class lms_apiController extends Controller
         $sub_institute_id = $request->input("sub_institute_id");
         $syear = $request->input("syear");
 
-        
-            $res['status'] = 0;
-            $res['message'] = "Parameter Missing";
-        
+
+        $res['status'] = 0;
+        $res['message'] = "Parameter Missing";
+
 
         //return  \App\Helpers\is_mobile($type, "implementation", $res);
         return json_encode($res);
@@ -535,8 +534,10 @@ class lms_apiController extends Controller
         $original_ans = $request->input("original_ans");
         $total_marks = $request->input("total_marks");
 
-        if ($student_id != "" && $sub_institute_id != "" && $syear != "" && $question_paper_id != "" && $question_list != "" &&
-            $given_ans != "" && $original_ans != "" && $total_marks != "") {
+        if (
+            $student_id != "" && $sub_institute_id != "" && $syear != "" && $question_paper_id != "" && $question_list != "" &&
+            $given_ans != "" && $original_ans != "" && $total_marks != ""
+        ) {
             $given_ans_array = explode(",", $given_ans);
             $original_ans_array = explode(",", $original_ans);
             $question_list_array = explode(",", $question_list);
@@ -556,7 +557,7 @@ class lms_apiController extends Controller
                 "question_paper_id" => $question_paper_id,
                 "total_right"       => $correct_ans,
                 "total_wrong"       => $wrong_ans,
-                "obtain_marks"      => $tot_marks,//$total_marks 08/06/2022 RAJESH
+                "obtain_marks"      => $tot_marks, //$total_marks 08/06/2022 RAJESH
                 "start_time"        => now(),
                 "sub_institute_id"  => $sub_institute_id,
             ];
@@ -582,6 +583,7 @@ class lms_apiController extends Controller
                     'question_id'       => $qval,
                     'answer_id'         => $given_ans_array[$qkey],
                     'ans_status'        => $ans_status,
+                    'sub_institute_id'  => $sub_institute_id,
                 );
                 lmsOnlineExamAnswerModel::insert($lms_answer_data);
             }
@@ -622,30 +624,30 @@ class lms_apiController extends Controller
         if ($student_id != "" && $sub_institute_id != "" && $syear != "" && $online_exam_id != "") {
 
             $data['attempted_data'] = DB::SELECT("SELECT le.id,le.student_id,le.question_paper_id,le.total_right,le.total_wrong,(le.total_right+le.total_wrong) as obtain_marks,le.start_time,le.created_at,le.id as online_exam_id,qp.paper_name
-                 FROM lms_online_exam le
-                 INNER JOIN question_paper qp ON qp.id = le.question_paper_id AND qp.sub_institute_id = '".$sub_institute_id."' AND qp.syear = '".$syear."'
-                 WHERE student_id = '".$student_id."' AND le.id = '".$online_exam_id."'");
+FROM lms_online_exam le
+INNER JOIN question_paper qp ON qp.id = le.question_paper_id AND qp.sub_institute_id = '" . $sub_institute_id . "' AND qp.syear = '" . $syear . "'
+WHERE student_id = '" . $student_id . "' AND le.id = '" . $online_exam_id . "'");
 
 
             $online_answer_data = DB::select("SELECT a.*, GROUP_CONCAT(am.answer) AS actual_answer,q.question_type_id,q.multiple_answer,
-                (
-                CASE
-                WHEN question_type_id = 2 THEN IF(given_answer is null,'wrong','right')
-                WHEN question_type_id = 1 AND multiple_answer = 0 THEN IF(given_answer=GROUP_CONCAT(am.answer),'right','wrong')
-                WHEN question_type_id = 1 AND multiple_answer = 1 THEN IF(given_answer=GROUP_CONCAT(am.answer),'right','wrong')
-                END
-                ) AS right_wrong ,q.question_title
-                FROM (
-                SELECT loem.question_id,loem.ans_status,IFNULL(loem.narrative_answer, GROUP_CONCAT(IFNULL(lam.answer,'Not Attempted'))) AS given_answer
-                FROM lms_online_exam_answer loem
-                LEFT JOIN answer_master lam ON lam.question_id = loem.question_id AND lam.id = loem.answer_id
-                WHERE loem.online_exam_id = '".$online_exam_id."' AND loem.student_id = '".$student_id."'
-                GROUP BY loem.question_id) AS a
-                INNER JOIN lms_question_master q ON q.id = a.question_id and q.status = 1
-                LEFT JOIN answer_master am ON a.question_id = am.question_id AND correct_answer = 1
-                GROUP BY am.question_id,a.question_id
-            ");
-            
+(
+CASE
+WHEN question_type_id = 2 THEN IF(given_answer is null,'wrong','right')
+WHEN question_type_id = 1 AND multiple_answer = 0 THEN IF(given_answer=GROUP_CONCAT(am.answer),'right','wrong')
+WHEN question_type_id = 1 AND multiple_answer = 1 THEN IF(given_answer=GROUP_CONCAT(am.answer),'right','wrong')
+END
+) AS right_wrong ,q.question_title
+FROM (
+SELECT loem.question_id,loem.ans_status,IFNULL(loem.narrative_answer, GROUP_CONCAT(IFNULL(lam.answer,'Not Attempted'))) AS given_answer
+FROM lms_online_exam_answer loem
+LEFT JOIN answer_master lam ON lam.question_id = loem.question_id AND lam.id = loem.answer_id
+WHERE loem.online_exam_id = '" . $online_exam_id . "' AND loem.student_id = '" . $student_id . "'
+GROUP BY loem.question_id) AS a
+INNER JOIN lms_question_master q ON q.id = a.question_id and q.status = 1
+LEFT JOIN answer_master am ON a.question_id = am.question_id AND correct_answer = 1
+GROUP BY am.question_id,a.question_id
+");
+
             $data1 = []; // Define $data1 as an empty array before the loop
             foreach ($online_answer_data as $key => $val) {
                 $new = array();
@@ -660,15 +662,14 @@ class lms_apiController extends Controller
             $data['online_answer_data'] = $data1;
 
             // Check if $data['attempted_data'] is empty
-                if (empty($data['attempted_data']) || empty($data['online_answer_data'])) {
-                    $res['status'] = 0;
-                    $res['message'] = "No attempted data found for the specified parameters.";
-                } else{
-                    $res['status'] = 1;
-                    $res['message'] = "Success";
-                    $res['data'] = $data;
-                }
-
+            if (empty($data['attempted_data']) || empty($data['online_answer_data'])) {
+                $res['status'] = 0;
+                $res['message'] = "No attempted data found for the specified parameters.";
+            } else {
+                $res['status'] = 1;
+                $res['message'] = "Success";
+                $res['data'] = $data;
+            }
         } else {
             $res['status'] = 0;
             $res['message'] = "Parameter Missing";
@@ -697,10 +698,10 @@ class lms_apiController extends Controller
         $sub_institute_id = $request->input("sub_institute_id");
         $syear = $request->input("syear");
 
-        
-            $res['status'] = 0;
-            $res['message'] = "Parameter Missing";
-        
+
+        $res['status'] = 0;
+        $res['message'] = "Parameter Missing";
+
 
         //return  \App\Helpers\is_mobile($type, "implementation", $res);
         return json_encode($res);
@@ -721,5 +722,4 @@ class lms_apiController extends Controller
 
         return json_encode($res);
     }
-
 }
