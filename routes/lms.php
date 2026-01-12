@@ -229,6 +229,7 @@ Route::post('show_question_wise_report',
     //Route::post('show_question_wise_report', 'student\questionWiseReportController@show_question_wise_report')->name('show_question_wise_report');
     // H5p Library
     Route::resource('h5p',H5PController::class);
+    Route::get('assessment_master', [lms_apiController::class, 'assessment_master']);
 });
 
 Route::controller(lms_apiController::class)->group(function () {

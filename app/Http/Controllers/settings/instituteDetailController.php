@@ -11,8 +11,8 @@ use function App\Helpers\employeeDetails;
 use App\Http\Controllers\HRMS\departmentController;
 use App\Http\Controllers\front_desk\taskController;
 use Illuminate\Support\Facades\Storage;
-use Validator;
-use DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class instituteDetailController extends Controller
 {
