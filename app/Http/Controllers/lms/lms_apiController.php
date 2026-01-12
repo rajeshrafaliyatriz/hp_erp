@@ -10,7 +10,8 @@ use App\Models\lms\lmsQuestionMasterModel;
 use App\Models\lms\questionpaperModel;
 use App\Models\lms\topicModel;
 use App\Models\lms\contentModel;
-use GenTux\Jwt\GetsJwtToken;
+// use App\Models\skill\AssessmentLibrary;
+// use GenTux\Jwt\GetsJwtToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use function App\Helpers\aut_token;
@@ -18,7 +19,7 @@ use function App\Helpers\aut_token;
 
 class lms_apiController extends Controller
 {
-    use GetsJwtToken;
+    // use GetsJwtToken;
 
     public function studentVirtualClassroomAPI(Request $request)
     {
@@ -719,6 +720,29 @@ GROUP BY am.question_id,a.question_id
         $res['status'] = 1;
         $res['message'] = "Success";
         $res['data'] = $data;
+
+        return json_encode($res);
+    }
+
+    public function assessment_master(Request $request)
+    {
+        $sub_institute_id = $request->input("sub_institute_id");
+        $syear = $request->input("syear");
+        $user_id = $request->input("user_id");
+        $user_profile_name = $request->input("user_profile_name");
+        $jobrole = $request->input("jobrole");
+        $department = $request->input("department");
+
+        if ($sub_institute_id != "" && $syear != "") {
+            $assessments = questionpaperModel::where('sub_institute_id', $sub_institute_id)->where('syear', $syear)->get()->toArray();
+
+            $res['status'] = 1;
+            $res['message'] = "Success";
+            $res['data'] = $assessments;
+        } else {
+            $res['status'] = 0;
+            $res['message'] = "Parameter Missing";
+        }
 
         return json_encode($res);
     }
