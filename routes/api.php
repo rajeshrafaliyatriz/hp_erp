@@ -151,6 +151,7 @@ Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
 Route::get('/pending-feedback', [feedbackController::class, 'getPendingFeedback']);
 Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'index']);
 Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
+Route::post('/interviews/{id}/decision', [InterviewController::class, 'recordDecision']);
 
 Route::get('/kpis', [EmployeeSkillCoverageMatrixController::class, 'getKpiMetrics']);
 Route::get('/skill-gaps', [EmployeeSkillCoverageMatrixController::class, 'skillGaps']);

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\DB;
 use App\Models\talent\talent_jobapplication;
+use App\Models\talent\feedback\TalentEvaluationForm;
 
 class InterviewController extends Controller
 {
@@ -75,5 +76,73 @@ class InterviewController extends Controller
             'status' => 1,
             'data' => $candidates
         ]);
+    }
+
+    public function recordDecision(Request $request, $id)
+    {
+        $type = $request->type;
+
+        if ($type == "API") {
+            $token = $request->bearerToken() ?? $request->input('token');
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+        }
+
+        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+
+        // Validate the request
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:Under Review,Hired,Rejected',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Find the evaluation form
+        $evaluation = TalentEvaluationForm::where('id', $id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->first();
+
+        if (!$evaluation) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Evaluation form not found'
+            ], 404);
+        }
+
+        // Update evaluation form status
+        $evaluationStatus = '';
+        if ($request->status === 'Hired') {
+            $evaluationStatus = 'Hired';
+        } elseif ($request->status === 'Rejected') {
+            $evaluationStatus = 'Rejected';
+        } elseif ($request->status === 'Completed') {
+            $evaluationStatus = 'Completed';
+        }
+        $updateData = ['status' => $evaluationStatus];
+        if ($request->has('notes')) {
+            $updateData['notes'] = $request->notes;
+        }
+        $evaluation->update($updateData);
+
+        // Update job application status
+        talent_jobapplication::where('id', $evaluation->candidate_id)->update(['status' => $request->status]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Hiring decision recorded successfully'
+        ], 200);
     }
 }

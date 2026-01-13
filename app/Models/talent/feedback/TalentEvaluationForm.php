@@ -19,6 +19,8 @@ class TalentEvaluationForm extends Model
         'areas_of_concern',
         'additional_comments',
         'sub_institute_id',
+        'notes',
+        'status',
     ];
 
     protected $casts = [
