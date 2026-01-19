@@ -5,7 +5,9 @@ namespace App\Http\Controllers\talent;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use App\Models\talent\TalentOffer;
@@ -80,6 +82,26 @@ class TalentOfferController extends Controller
                 // Set updated_at to null for new records
                 DB::table('talent_offers')->where('id', $offer->id)->update(['updated_at' => null]);
 
+                // Delete old offer letters from DigitalOcean for the same application
+                $existingOffers = TalentOffer::where('application_id', $request->application_id)
+                    ->whereNotNull('offer_letter_url')
+                    ->where('id', '!=', $offer->id)
+                    ->get();
+                foreach ($existingOffers as $existingOffer) {
+                    $url = $existingOffer->offer_letter_url;
+                    $baseUrl = 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION') . '.digitaloceanspaces.com/';
+                    if (str_starts_with($url, $baseUrl)) {
+                        $file_path = str_replace($baseUrl, '', $url);
+                        try {
+                            Storage::disk('digitalocean')->delete($file_path);
+                            Log::info('Deleted old offer letter: ' . $file_path);
+                            $existingOffer->delete(); // Delete the old offer record
+                        } catch (\Exception $e) {
+                            Log::error('Failed to delete old offer letter: ' . $e->getMessage());
+                        }
+                    }
+                }
+
                 // Send offer letter email with PDF attachment
                 $application = talent_jobapplication::find($offer->application_id);
                 if ($application && $application->email) {
@@ -117,9 +139,29 @@ class TalentOfferController extends Controller
                             // Generate PDF
                             $pdf = PDF::loadHTML($html);
                             // ... continue with save and mail ...
-                            $fileName = 'offer_letter_' . $offer->id . '.pdf';
+                            $fileName = 'offer_letter_' . $offer->id . '_' . str_replace(' ', '_', $userName) . '.pdf';
                             $pdfPath = storage_path('app/public/' . $fileName);
                             $pdf->save($pdfPath);
+
+                            // Store PDF in DigitalOcean Space
+                            try {
+                                $file_path = 'public/offerLetter/' . $fileName;
+                                Log::info('Attempting to store offer letter: ' . $file_path);
+                                $result = Storage::disk('digitalocean')->put($file_path, file_get_contents($pdfPath), 'public', [
+                                    'Cache-Control' => 'max-age=0, no-cache, no-store'
+                                ]);
+                                Log::info('Storage result: ' . ($result ? 'success' : 'failed'));
+                            } catch (\Exception $e) {
+                                // Log the error if storage fails
+                                Log::error('Failed to store offer letter in DigitalOcean: ' . $e->getMessage());
+                            }
+
+                            // Save the offer letter URL to the database if storage was successful
+                            if (isset($result) && $result) {
+                                $url = 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION') . '.digitaloceanspaces.com/' . $file_path;
+                                $offer->offer_letter_url = $url;
+                                $offer->save();
+                            }
                         }
                     }
                     Mail::to($application->email)->send(new OfferLetterMail($offer, $pdfPath));
