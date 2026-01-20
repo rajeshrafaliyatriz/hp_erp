@@ -68,6 +68,8 @@ Route::post('talent-screening-results', [talent_screening_results_controller::cl
 Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show']);
 
 Route::post('talent-offers', [TalentOfferController::class, 'store']);
+Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
+Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
 
 Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
 
