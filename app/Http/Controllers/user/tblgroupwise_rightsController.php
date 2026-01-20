@@ -37,6 +37,7 @@ class tblgroupwise_rightsController extends Controller
         // Validate required fields
         $validator = Validator::make($request->all(), [
             'sub_institute_id' => 'required',
+            'profile_id' => 'required',
         ]);
 
         // If validation fails
@@ -44,6 +45,7 @@ class tblgroupwise_rightsController extends Controller
             return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
         }
         $sub_institute_id = $request->get('sub_institute_id');
+        $profile_id = $request->get('profile_id');
         // }
         $user_data = tblgroupwise_rightsModel::select('tblgroupwise_rights.*', 'tbluserprofilemaster.name as profile_name', 'tblmenumaster.menu_name')
             ->join('tbluserprofilemaster', 'tblgroupwise_rights.profile_id', '=', 'tbluserprofilemaster.id')
