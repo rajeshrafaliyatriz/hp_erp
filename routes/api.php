@@ -67,6 +67,7 @@ Route::get('/talent/team-overview', [talent_jobpostingcontroller::class, 'getHir
 Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store']);
 Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show']);
 
+Route::get('offers', [TalentOfferController::class, 'index']);
 Route::post('talent-offers', [TalentOfferController::class, 'store']);
 Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
 Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);

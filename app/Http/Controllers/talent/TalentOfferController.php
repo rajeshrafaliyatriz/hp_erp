@@ -110,6 +110,7 @@ class TalentOfferController extends Controller
                             Log::error('Failed to delete old offer letter: ' . $e->getMessage());
                         }
                     }
+                
                 }
 
                 // Send offer letter email with PDF attachment
@@ -175,6 +176,53 @@ class TalentOfferController extends Controller
             }
 
             return response()->json(['message' => 'Failed to save offer'], 500);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'error' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(Request $request)
+    {
+        $type = $request->input('type');
+
+        // Allow execution only if request type is API
+        if ($type !== "API") {
+            return response()->json(['message' => 'Invalid request type'], 400);
+        }
+
+        // Check and validate token
+        $token = $request->input('token');
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $user = $accessToken->tokenable;
+        $sub_institute_id = $request->input('sub_institute_id') ?? $user->sub_institute_id;
+
+        if (!$sub_institute_id) {
+            return response()->json(['message' => 'sub_institute_id not provided'], 400);
+        }
+
+        try {
+            $offers = TalentOffer::where('sub_institute_id', $sub_institute_id)->get();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Offers retrieved successfully!',
+                'data' => $offers
+            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 0,

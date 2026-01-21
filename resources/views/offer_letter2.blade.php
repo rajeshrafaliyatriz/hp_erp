@@ -234,16 +234,16 @@
                     <td class="value">{{ $start_date ?? 'March 01, 2026' }}</td>
                 </tr>
                 <tr>
-                    <td class="label">Annual Salary</td>
+                    <td class="label">Monthly Salary</td>
                     <td class="value">{{ $salary ?? '$85,000 USD' }}</td>
                 </tr>
-                <tr>
+                {{-- <tr>
                     <td class="label">Probation Period</td>
                     <td class="value">3 Months</td>
-                </tr>
+                </tr> --}}
                 <tr>
                     <td class="label">Office Location</td>
-                    <td class="value">Creative Tower, Floor 4</td>
+                    <td class="value">{{ $company_address ?? 'Address' }}</td>
                 </tr>
             </table>
         </div>
