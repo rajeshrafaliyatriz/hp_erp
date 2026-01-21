@@ -193,15 +193,23 @@
             <div class="contact-group">
                 <div class="contact-label">Contact</div>
                 <div class="contact-value">
-                    +1 (555) 123-4567<br>
-                    hr@studioshodwe.com
+                    @if($mobile_no)
+                        {{ $country_code ?? '+91' }} {{ $mobile_no }}<br>
+                    @endif
+                    @if($email)
+                        {{ $email }}
+                    @endif
                 </div>
             </div>
 
             <div class="contact-group">
                 <div class="contact-label">Website</div>
                 <div class="contact-value">
-                    www.studioshodwe.com
+                    @if($website)
+                        {{ $website }}
+                    @else
+                        www.example.com
+                    @endif
                 </div>
             </div>
 

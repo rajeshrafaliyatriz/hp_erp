@@ -134,6 +134,10 @@ class TalentOfferController extends Controller
                         'company_address' => $org->registered_address ?? 'Address',
                         'cin' => $org->cin ?? 'CIN',
                         'signer_name' => $signerName,
+                        'mobile_no' => $org->mobile_no ?? null,
+                        'country_code' => $org->country_code ?? '+91',
+                        'email' => $org->email ?? null,
+                        'website' => $org->website ?? null,
                     ];
 
                     // Render blade view to HTML
