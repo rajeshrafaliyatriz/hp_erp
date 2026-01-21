@@ -62,7 +62,7 @@ class LmsCourseEnrollController extends Controller
     $validator = \Validator::make($request->all(), [
         'user_id' => 'required|integer',
         'course_id' => 'required|integer|exists:sub_std_map,id',
-        'status' => 'required|in:completed,in-progress',
+        'status' => 'required|in:completed,in-progress,enrolled',
         'start_date' => 'nullable|date',
         'end_date' => 'nullable|date',
         'sub_institute_id' => 'nullable|integer'
