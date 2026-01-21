@@ -12,7 +12,9 @@ use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use App\Models\talent\TalentOffer;
 use App\Models\talent\talent_jobapplication;
-use App\Models\talent\TalentOfferTemplate;
+use App\Models\talent\talent_jobposting;
+use App\Models\settings\organizationDetails;
+use App\Models\auth\tbluserModel;
 use App\Mail\OfferLetterMail;
 use Barryvdh\DomPDF\Facade\Pdf as PDF;
 
@@ -43,6 +45,16 @@ class TalentOfferController extends Controller
 
         $sub_institute_id = $request->input('sub_institute_id');
 
+        // Fetch organization details
+        $org = organizationDetails::where('sub_institute_id', $sub_institute_id)->first();
+
+        // Fetch job posting to get created_by
+        $job = talent_jobposting::find($request->job_id);
+        $signerUser = null;
+        if ($job && $job->created_by) {
+            $signerUser = tbluserModel::find($job->created_by);
+        }
+
         // Validation rules
         $validator = Validator::make($request->all(), [
             'application_id' => 'required|exists:talent_job_applications,id',
@@ -50,7 +62,6 @@ class TalentOfferController extends Controller
             'position' => 'required|string|max:255',
             'salary' => 'nullable|string|max:100',
             'start_date' => 'nullable|date',
-            'template_id' => 'nullable|string|max:50',
             'notes' => 'nullable|string',
             'sub_institute_id' => 'required|integer',
             'user_id' => 'required|integer',
@@ -71,7 +82,6 @@ class TalentOfferController extends Controller
                 'position' => $request->position,
                 'salary' => $request->salary,
                 'start_date' => $request->start_date,
-                'template_id' => $request->template_id,
                 'notes' => $request->notes,
                 'sub_institute_id' => $sub_institute_id,
                 'created_by' => $request->user_id,
@@ -100,70 +110,65 @@ class TalentOfferController extends Controller
                             Log::error('Failed to delete old offer letter: ' . $e->getMessage());
                         }
                     }
+                
                 }
 
                 // Send offer letter email with PDF attachment
                 $application = talent_jobapplication::find($offer->application_id);
                 if ($application && $application->email) {
                     $pdfPath = null;
-                    if ($offer->template_id) {
-                        $template = TalentOfferTemplate::find($offer->template_id);
-                        if ($template) {
-                            // ... inside your if($template) block ...
 
-                            $html = $template->html_content;
+                    // Prepare data for blade view
+                    $userName = $application->first_name . ' ' . $application->last_name;
+                    $todayDate = now()->format('F j, Y');
+                    $deadlineDate = now()->addDays(7)->format('F j, Y');
+                    $signerName = $signerUser ? ($signerUser->first_name . ' ' . ($signerUser->middle_name ? $signerUser->middle_name . ' ' : '') . $signerUser->last_name) : 'Signer Name';
 
-                            // Prepare formatting
-                            $userName = $application->first_name . ' ' . $application->last_name;
-                            $todayDate = now()->format('F j, Y');
-                            // Calculate a deadline (e.g., 7 days from now)
-                            $deadlineDate = now()->addDays(7)->format('F j, Y');
+                    $data = [
+                        'candidate_name' => $userName,
+                        'position' => $offer->position,
+                        'start_date' => $offer->start_date ? \Carbon\Carbon::parse($offer->start_date)->format('F d, Y') : null,
+                        'salary' => $offer->salary,
+                        'deadline' => $deadlineDate,
+                        'company_name' => $org->legal_name ?? 'Company Name',
+                        'company_address' => $org->registered_address ?? 'Address',
+                        'cin' => $org->cin ?? 'CIN',
+                        'signer_name' => $signerName,
+                        'mobile_no' => $org->mobile_no ?? null,
+                        'country_code' => $org->country_code ?? '+91',
+                        'email' => $org->email ?? null,
+                        'website' => $org->website ?? null,
+                    ];
 
-                            // Define the clean replacements
-                            $replacements = [
-                                '{{candidate_name}}'    => $userName,
-                                '{{position}}'          => $offer->position,
-                                '{{start_date}}'        => $offer->start_date,
-                                '{{salary}}'            => $offer->salary,
-                                '{{current_date}}'      => $todayDate,
-                                '{{acceptance_deadline}}' => $deadlineDate,
+                    // Render blade view to HTML
+                    $html = view('offer_letter2', $data)->render();
 
-                                // KEEP OLD ONES just in case you have mixed templates in DB
-                                'Adeline Palmerston'    => $userName,
-                                'Graphic Designer'      => $offer->position,
-                            ];
+                    // Generate PDF
+                    $pdf = PDF::loadHTML($html);
+                    $fileName = 'offer_letter_' . $offer->id . '_' . str_replace(' ', '_', $userName) . '.pdf';
+                    $pdfPath = storage_path('app/public/' . $fileName);
+                    $pdf->save($pdfPath);
 
-                            // Perform the replacement
-                            $html = str_replace(array_keys($replacements), array_values($replacements), $html);
-
-                            // Generate PDF
-                            $pdf = PDF::loadHTML($html);
-                            // ... continue with save and mail ...
-                            $fileName = 'offer_letter_' . $offer->id . '_' . str_replace(' ', '_', $userName) . '.pdf';
-                            $pdfPath = storage_path('app/public/' . $fileName);
-                            $pdf->save($pdfPath);
-
-                            // Store PDF in DigitalOcean Space
-                            try {
-                                $file_path = 'public/offerLetter/' . $fileName;
-                                Log::info('Attempting to store offer letter: ' . $file_path);
-                                $result = Storage::disk('digitalocean')->put($file_path, file_get_contents($pdfPath), 'public', [
-                                    'Cache-Control' => 'max-age=0, no-cache, no-store'
-                                ]);
-                                Log::info('Storage result: ' . ($result ? 'success' : 'failed'));
-                            } catch (\Exception $e) {
-                                // Log the error if storage fails
-                                Log::error('Failed to store offer letter in DigitalOcean: ' . $e->getMessage());
-                            }
-
-                            // Save the offer letter URL to the database if storage was successful
-                            if (isset($result) && $result) {
-                                $url = 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION') . '.digitaloceanspaces.com/' . $file_path;
-                                $offer->offer_letter_url = $url;
-                                $offer->save();
-                            }
-                        }
+                    // Store PDF in DigitalOcean Space
+                    try {
+                        $file_path = 'public/offerLetter/' . $fileName;
+                        Log::info('Attempting to store offer letter: ' . $file_path);
+                        $result = Storage::disk('digitalocean')->put($file_path, file_get_contents($pdfPath), 'public', [
+                            'Cache-Control' => 'max-age=0, no-cache, no-store'
+                        ]);
+                        Log::info('Storage result: ' . ($result ? 'success' : 'failed'));
+                    } catch (\Exception $e) {
+                        // Log the error if storage fails
+                        Log::error('Failed to store offer letter in DigitalOcean: ' . $e->getMessage());
                     }
+
+                    // Save the offer letter URL to the database if storage was successful
+                    if (isset($result) && $result) {
+                        $url = 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION') . '.digitaloceanspaces.com/' . $file_path;
+                        $offer->offer_letter_url = $url;
+                        $offer->save();
+                    }
+
                     Mail::to($application->email)->send(new OfferLetterMail($offer, $pdfPath));
                 }
 
@@ -175,6 +180,53 @@ class TalentOfferController extends Controller
             }
 
             return response()->json(['message' => 'Failed to save offer'], 500);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'error' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(Request $request)
+    {
+        $type = $request->input('type');
+
+        // Allow execution only if request type is API
+        if ($type !== "API") {
+            return response()->json(['message' => 'Invalid request type'], 400);
+        }
+
+        // Check and validate token
+        $token = $request->input('token');
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $user = $accessToken->tokenable;
+        $sub_institute_id = $request->input('sub_institute_id') ?? $user->sub_institute_id;
+
+        if (!$sub_institute_id) {
+            return response()->json(['message' => 'sub_institute_id not provided'], 400);
+        }
+
+        try {
+            $offers = TalentOffer::where('sub_institute_id', $sub_institute_id)->get();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Offers retrieved successfully!',
+                'data' => $offers
+            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 0,
