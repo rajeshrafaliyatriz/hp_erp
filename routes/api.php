@@ -124,6 +124,7 @@ Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'g
 
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
+Route::get('/KPI-HRITDashboard', [AttendanceApiController::class, 'KPI']);
 
 Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise']);
 Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution']);
