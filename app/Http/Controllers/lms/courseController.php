@@ -56,28 +56,32 @@ class courseController extends Controller
 
 	  
 	        $arr = DB::table('sub_std_map as s')
-	                ->selectRaw("D.department AS standard_name,s.display_name AS subject_name,s.subject_code,s.short_name,s.subject_type,s.id as subject_id,D.id AS standard_id,
-	                    s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))SEPARATOR '#') AS chapter_list,
-	                    IFNULL(s.subject_category,'My Course') AS content_category,s.sub_institute_id,s.jobrole")
-	            ->join('hrms_departments AS D', 'D.id', '=', 's.standard_id')
-				// ->join('subject AS ss', 'ss.id', '=', 's.subject_id')
-	            ->leftJoin('chapter_master AS cp', function ($join) {
-	                $join->on('cp.subject_id', '=', 's.id')
-	                    ->on('cp.standard_id', '=', 's.standard_id');
-	            })
-	            ->leftJoin('content_master AS c', function ($join) use ($sub_institute_id) {
-	                $join->on('c.subject_id', '=', 's.id')
-	                    ->on('c.standard_id', '=', 's.standard_id')
-	                    ->on('c.sub_institute_id', '=', 's.sub_institute_id')
-	                    ->where('c.sub_institute_id', '=', $sub_institute_id);
-	            })
-	            ->whereRaw($sub_institute_id_by_lms)
-	            ->where('s.allow_content', '=', 'Yes')
-	            // ->whereRaw($extra)
-	            ->whereRaw(ltrim($extra, ' AND '))
-	            ->groupBy('s.id', 's.standard_id', 's.subject_category')
-	            ->orderBy('s.sort_order')
-	            ->get();
+	                    ->selectRaw("D.department AS standard_name,s.display_name AS subject_name,s.subject_code,s.short_name,s.subject_type,s.id as subject_id,D.id AS standard_id,
+	                        s.display_image,GROUP_CONCAT(DISTINCT(CONCAT_WS('/',cp.chapter_name,cp.id))SEPARATOR '#') AS chapter_list,
+	                        IFNULL(s.subject_category,'My Course') AS content_category,s.sub_institute_id,s.jobrole, e.status as enrollment_status")
+	                ->join('hrms_departments AS D', 'D.id', '=', 's.standard_id')
+	       // ->join('subject AS ss', 'ss.id', '=', 's.subject_id')
+	                ->leftJoin('chapter_master AS cp', function ($join) {
+	                    $join->on('cp.subject_id', '=', 's.id')
+	                        ->on('cp.standard_id', '=', 's.standard_id');
+	                })
+	                ->leftJoin('content_master AS c', function ($join) use ($sub_institute_id) {
+	                    $join->on('c.subject_id', '=', 's.id')
+	                        ->on('c.standard_id', '=', 's.standard_id')
+	                        ->on('c.sub_institute_id', '=', 's.sub_institute_id')
+	                        ->where('c.sub_institute_id', '=', $sub_institute_id);
+	                })
+	                ->leftJoin('lms_course_enroll as e', function ($join) use ($user_id) {
+	                    $join->on('e.course_id', '=', 's.id')
+	                        ->where('e.user_id', '=', $user_id);
+	                })
+	                ->whereRaw($sub_institute_id_by_lms)
+	                ->where('s.allow_content', '=', 'Yes')
+	                // ->whereRaw($extra)
+	                ->whereRaw(ltrim($extra, ' AND '))
+	                ->groupBy('s.id', 's.standard_id', 's.subject_category')
+	                ->orderBy('s.sort_order')
+	                ->get();
 	    
 
 	    $arr = $arr->toArray();
