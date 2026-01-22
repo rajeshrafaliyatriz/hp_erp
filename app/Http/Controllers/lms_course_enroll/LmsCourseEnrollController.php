@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\lms_course_enroll\LmsCourseEnroll;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class LmsCourseEnrollController extends Controller
 {
@@ -27,7 +29,11 @@ class LmsCourseEnrollController extends Controller
         }
         $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
         $userId = $request->user_id ?? $request->header('user_id');
-        $course = LmsCourseEnroll::where('user_id', $userId)->get();
+        $course = DB::table('lms_course_enroll as e')
+            ->join('sub_std_map as s', 'e.course_id', '=', 's.id')
+            ->where('e.user_id', $userId)
+            ->select('s.*', 'e.status as enrollment_status', 'e.start_date', 'e.end_date', 'e.created_at as enrolled_at')
+            ->get();
 
         if (!$userId) {
             return response()->json([
@@ -59,7 +65,7 @@ class LmsCourseEnrollController extends Controller
     }
  $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
     // ✅ VALIDATION
-    $validator = \Validator::make($request->all(), [
+    $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer',
         'course_id' => 'required|integer|exists:sub_std_map,id',
         'status' => 'required|in:completed,in-progress,enrolled',
@@ -124,7 +130,7 @@ class LmsCourseEnrollController extends Controller
     $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
 
     // Validate required fields
-    $validator = \Validator::make($request->all(), [
+    $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer',
         'course_id' => 'required|integer|exists:sub_std_map,id',
         'status' => 'required|in:completed,in-progress',
@@ -201,7 +207,7 @@ class LmsCourseEnrollController extends Controller
     // --------------------------
     // 🛂 Required Validation
     // --------------------------
-    $validator = \Validator::make($request->all(), [
+    $validator = Validator::make($request->all(), [
         'user_id'           => 'required|integer',
         'sub_institute_id'  => 'required|integer'
     ]);
