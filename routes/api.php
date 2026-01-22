@@ -17,6 +17,7 @@ use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\talent\talent_screening_results_controller;
 use App\Http\Controllers\talent\TalentOfferController;
 use App\Http\Controllers\talent\TalentAcquisition\TalentAcquisitionController;
+use App\Http\Controllers\talent\TalentAcquisition\CandidateDropoffController;
 use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
@@ -75,6 +76,9 @@ Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getO
 Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
 
 Route::get('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis']);
+Route::get('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
+Route::get('/talent-acquisition/funnel', [CandidateDropoffController::class, 'getFunnelData']);
+Route::get('/talent-acquisition/requisitions', [CandidateDropoffController::class, 'getRequisitions']);
 
 Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
 
