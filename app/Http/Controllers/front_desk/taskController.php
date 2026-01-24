@@ -99,7 +99,7 @@ class taskController extends Controller
         }
 
         // Only apply user filter for non-admin users (when not using API)
-        if (strtoupper($user_profile_name) != 'ADMIN' && $type != "API") {
+        if (strtoupper($user_profile_name) != 'ADMIN') {
             $data = $data->where(function($query) use ($user_id) {
                 $query->where('t.TASK_ALLOCATED_TO', $user_id)
                     ->orWhere('t.TASK_ALLOCATED', $user_id);
