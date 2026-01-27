@@ -28,7 +28,6 @@ class taskController extends Controller
      */
     public function index(Request $request)
     {
-        // return $request;
         $type = $request->input("type");
         $from_date = $request->input("from_date");
         $to_date = $request->input("to_date");
@@ -45,52 +44,77 @@ class taskController extends Controller
             $user_id = $request->get("user_id");
         }
 
-        // DB::enableQueryLog();
+        // Build query with LEFT JOINs to include ALL tasks
         $data = DB::table("task as t")
-            ->join('tbluser as u', function ($join) use ($sub_institute_id) {
-                $join->whereRaw("t.TASK_ALLOCATED = u.id AND u.sub_institute_id = '" . $sub_institute_id . "'")->where('u.status', 1); // 23-04-24 by uma
+            ->leftJoin('tbluser as u', function ($join) use ($sub_institute_id) {
+                $join->on('t.TASK_ALLOCATED', '=', 'u.id')
+                    ->where('u.sub_institute_id', $sub_institute_id)
+                    ->where('u.status', 1);
             })
-            ->join('tbluser as u1', function ($join) use ($sub_institute_id) {
-                $join->whereRaw("t.CREATED_BY = u1.id AND u1.sub_institute_id = '" . $sub_institute_id . "'")->where('u1.status', 1); // 23-04-24 by uma
+            ->leftJoin('tbluser as u1', function ($join) use ($sub_institute_id) {
+                $join->on('t.CREATED_BY', '=', 'u1.id')
+                    ->where('u1.sub_institute_id', $sub_institute_id)
+                    ->where('u1.status', 1);
             })
-            ->join('tbluser as u2', function ($join) use ($sub_institute_id) {
-                $join->whereRaw("t.TASK_ALLOCATED_TO = u2.id AND u2.sub_institute_id = '" . $sub_institute_id . "'")->where('u2.status', 1); // 23-04-24 by uma
+            ->leftJoin('tbluser as u2', function ($join) use ($sub_institute_id) {
+                $join->on('t.TASK_ALLOCATED_TO', '=', 'u2.id')
+                    ->where('u2.sub_institute_id', $sub_institute_id)
+                    ->where('u2.status', 1);
             })
-            ->leftJoin('hrms_departments as hd','hd.id','=','u2.department_id')
-            ->leftJoin('s_user_jobrole as uj','uj.id','=','u2.allocated_standards')
+            ->leftJoin('hrms_departments as hd', function ($join) {
+                $join->on('hd.id', '=', 'u2.department_id');
+            })
+            ->leftJoin('s_user_jobrole as uj', function ($join) {
+                $join->on('uj.id', '=', 'u2.allocated_standards');
+            })
             ->leftJoin('tbluser as u3', function ($join) use ($sub_institute_id) {
-                $join->whereRaw("t.approved_by = u3.id AND u3.sub_institute_id = '" . $sub_institute_id . "'")->where('u3.status', 1); // 23-04-24 by uma
+                $join->on('t.approved_by', '=', 'u3.id')
+                    ->where('u3.sub_institute_id', $sub_institute_id)
+                    ->where('u3.status', 1);
             })
-            ->selectRaw("t.*, CONCAT_WS(' ',u.first_name,u.middle_name,u.last_name) AS manageby, 
-            CONCAT_WS(' ',u1.first_name,u1.middle_name,u1.last_name) AS ALLOCATOR,
-            CONCAT_WS(' ',u2.first_name,u2.middle_name,u2.last_name) AS ALLOCATED_TO,
-            CONCAT_WS(' ',u3.first_name,u3.middle_name,u3.last_name) AS approved_by,
-            hd.department,uj.jobrole")
-            ->where("t.SYEAR", "=", $syear)->where("t.sub_institute_id", "=", $sub_institute_id)
+            ->selectRaw("t.*, 
+                COALESCE(CONCAT_WS(' ',u.first_name,u.middle_name,u.last_name), 'User Not Found/Inactive') AS manageby, 
+                COALESCE(CONCAT_WS(' ',u1.first_name,u1.middle_name,u1.last_name), 'Creator Not Found/Inactive') AS ALLOCATOR,
+                COALESCE(CONCAT_WS(' ',u2.first_name,u2.middle_name,u2.last_name), 'Assignee Not Found/Inactive') AS ALLOCATED_TO,
+                COALESCE(CONCAT_WS(' ',u3.first_name,u3.middle_name,u3.last_name), 'Not Approved') AS approved_by,
+                hd.department, uj.jobrole")
+            ->where("t.SYEAR", "=", $syear)
+            ->where("t.sub_institute_id", "=", $sub_institute_id)
             ->whereNull('t.deleted_at');
 
+        // Apply date filters
         if (isset($from_date)) {
             $data = $data->where('t.TASK_DATE', '>=', $from_date);
             $res['from_date'] = $from_date;
         }
 
         if (isset($to_date)) {
-            $data = $data->where('t.TASK_DATE', '<=', $from_date);
+            $data = $data->where('t.TASK_DATE', '<=', $to_date);
             $res['to_date'] = $to_date;
         }
+        
         if (isset($taskType)) {
             $data = $data->where('t.task_type', $taskType);
             $res['taskType'] = $taskType;
         }
 
+        // Only apply user filter for non-admin users (when not using API)
         if (strtoupper($user_profile_name) != 'ADMIN') {
-            $data = $data->whereRaw("(t.TASK_ALLOCATED_TO = '" . $user_id . "' OR t.TASK_ALLOCATED = '" . $user_id . "')");
+            $data = $data->where(function($query) use ($user_id) {
+                $query->where('t.TASK_ALLOCATED_TO', $user_id)
+                    ->orWhere('t.TASK_ALLOCATED', $user_id);
+            });
         }
+
         $data = $data->orderBy('t.TASK_DATE', 'desc');
         $data = $data->get()->toArray();
-        // dd(DB::getQueryLog($data));
 
-        $res['checkList'] = DB::table('task')->selectRaw('*,' . $user_id . ' as user_id')->whereRaw("(TASK_ALLOCATED_TO = '" . $user_id . "' OR TASK_ALLOCATED = '" . $user_id . "')")->where('task_type', '=', 'High')->where('TASK_DATE', date('Y-m-d'))->get()->toArray();
+        $res['checkList'] = DB::table('task')
+            ->selectRaw('*,' . $user_id . ' as user_id')
+            ->whereRaw("(TASK_ALLOCATED_TO = '" . $user_id . "' OR TASK_ALLOCATED = '" . $user_id . "')")
+            ->where('task_type', '=', 'High')
+            ->where('TASK_DATE', date('Y-m-d'))
+            ->get()->toArray();
 
         $res['status_code'] = 1;
         $res['message'] = "Success";
@@ -98,6 +122,7 @@ class taskController extends Controller
 
         return is_mobile($type, "front_desk.show_task", $res, "view");
     }
+
 
     /**
      * Show the form for creating a new resource.

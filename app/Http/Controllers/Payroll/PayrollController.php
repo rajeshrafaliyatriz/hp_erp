@@ -1238,8 +1238,8 @@ if($type=="API"){
     public function monthlyPayrollReport(Request $request)
     {
         $type= $request->type;
-        $sub_institute_id = $request->session()->get('sub_institute_id');
-        $user_profile = $request->session()->get('user_profile_name');
+        $sub_institute_id = $request->get('sub_institute_id');
+        $user_profile = $request->get('user_profile_name');
         if($type=="API"){
             $sub_institute_id = $request->sub_institute_id;
             $user_profile = $request->user_profile_name;
@@ -2068,7 +2068,10 @@ public function payrollTypeReport(Request $request)
             # store all details of employee
             $newData[$key] = $value;
             // get monthly salary Data and add into newData array
+            // db::enableQueryLog();
             $newData[$key]['monthlyData'] = DB::table('employee_monthly_salary_data')->where(['sub_institute_id'=>$sub_institute_id,'year'=>$searchedYear])->where('employee_id',$value['id'])->where('month',$month)->first();
+            // dd(db::getQueryLog( $newData[$key]['monthlyData']));
+
             if(isset($newData[$key]['monthlyData']->total_day)){
                 $newData[$key]['totalDay'] = round($newData[$key]['monthlyData']->total_day,2);
                 $newData[$key]['json'] = '';
@@ -2138,17 +2141,19 @@ public function payrollTypeReport(Request $request)
 
     function getEmpMonthlyData(Request $request){
         // echo "<pre>";print_r($request->all());exit;
-        $sub_institute_id = session()->get('sub_institute_id');
+        $sub_institute_id = $request->get('sub_institute_id');
         $totalDay = $request->totalDay;
         $searchedYear = $request->year;
         if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
             $searchedYear = ($request->year+1);
         }
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->orderBy('sort_order')->get();
-        $employeeSalaryDetails = EmployeeSalaryStructure::where(['employee_id'=> $request->emp_id, 'sub_institute_id'=>$sub_institute_id,'year'=>$searchedYear])->first();
-
+        // db::enableQueryLog();
+        $employeeSalaryDetails = EmployeeSalaryStructure::where(['employee_id'=> $request->emp_id,'year'=>$searchedYear])->where('sub_institute_id',$sub_institute_id)->first();
+        // dd(db::getQueryLog($employeeSalaryDetails));
         if(empty($employeeSalaryDetails)){
             $res['status_code']=0;
+            $res['message']="Salary Structure Not Found !!";
             return $res;
         }
         $employeeSalaryDetails = json_decode($employeeSalaryDetails->employee_salary_data, true);
@@ -2391,11 +2396,16 @@ public function monthlyPayrollStore(Request $request)
 
     $i = 0;
 
+      $searchedYear = $request->year;
+        if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
+            $searchedYear = ($request->year+1);
+        }
+
     // insert payroll data
     foreach ($payrollVal as $employee_id => $value) {
         $dataArr = [
             'month' => $request->month,
-            'year' => $request->year,
+            'year' => $searchedYear,
             'employee_id' => $employee_id,
             'sub_institute_id' => $sub_institute_id,
             'total_deduction' => $value['total_deduction'] ?? 0,
@@ -2412,10 +2422,10 @@ public function monthlyPayrollStore(Request $request)
 
         // generate PDF if total_day is not 0
         if ($dataArr['total_day'] != 0) {
-            $pdfName = $this->monthlyPayrollPdf($request, $employee_id, $request->month, $request->year, 'storeDoc');
+            $pdfName = $this->monthlyPayrollPdf($request, $employee_id, $request->month, $searchedYear, 'storeDoc');
 
             if (isset($pdfName)) {
-                $docTitle = 'Payslip ' . $request->month . ' ' . $request->year;
+                $docTitle = 'Payslip ' . $request->month . ' ' . $searchedYear;
 
                 $checkDoc = DB::table('staff_document')
                     ->where([
@@ -2554,6 +2564,7 @@ public function deleteMonthlyPayrolls(Request $request, $month)
 
     // 2024-08-20 getTotal Days
     public function getTotalDays(Request $request){
+        
         $sub_institute_id=$request->sub_institute_id;
         $syear=$request->syear;
 
@@ -2632,7 +2643,7 @@ public function deleteMonthlyPayrolls(Request $request, $month)
         // echo "<br>Attendance<br>";
         // echo "<pre>";print_r($attArr);
         // echo "<br>No Att<br>";
-        // echo "<pre>";print_r($noAtt);
+        // echo "<pre>";print_r($noAtt);exit;
         // get users leave
         $userLeaves = DB::table('hrms_emp_leaves as hel')
         // ->where('hel.user_id',$user_id)

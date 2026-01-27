@@ -16,6 +16,8 @@ use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\talent\talent_screening_results_controller;
 use App\Http\Controllers\talent\TalentOfferController;
+use App\Http\Controllers\talent\TalentAcquisition\TalentAcquisitionController;
+use App\Http\Controllers\talent\TalentAcquisition\CandidateDropoffController;
 use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
@@ -24,6 +26,7 @@ use App\Http\Controllers\HRMS\HrmsLeaveController;
 use App\Http\Controllers\HRMS\DepartmentManagementController;
 use App\Http\Controllers\build_with_AI\buildwithAIController;
 use App\Http\Controllers\Api\GammaApiController;
+use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
 
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 use App\Http\Controllers\ai_generated_assessment\generateQuestionController;
@@ -67,7 +70,15 @@ Route::get('/talent/team-overview', [talent_jobpostingcontroller::class, 'getHir
 Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store']);
 Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show']);
 
+Route::get('offers', [TalentOfferController::class, 'index']);
 Route::post('talent-offers', [TalentOfferController::class, 'store']);
+Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
+Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
+
+Route::get('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis']);
+Route::get('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
+Route::get('/talent-acquisition/funnel', [CandidateDropoffController::class, 'getFunnelData']);
+Route::get('/talent-acquisition/requisitions', [CandidateDropoffController::class, 'getRequisitions']);
 
 Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
 
@@ -113,6 +124,7 @@ Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'g
 
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
+Route::get('/KPI-HRITDashboard', [AttendanceApiController::class, 'KPI']);
 
 Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise']);
 Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution']);
@@ -178,3 +190,5 @@ Route::group(['prefix' => 'reports'], function () {
     Route::get('/employee-directory/attrition', [EmployeeDirectoryAnalyticsController::class, 'getAttritionBreakdown']);
     Route::get('/employee-directory/skills/matrix', [EmployeeDirectoryAnalyticsController::class, 'getSkillMatrix']);
 });
+
+Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze']);

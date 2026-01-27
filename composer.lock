@@ -62,16 +62,16 @@
         },
         {
             "name": "aws/aws-sdk-php",
-            "version": "3.369.20",
+            "version": "3.369.16",
             "source": {
                 "type": "git",
                 "url": "https://github.com/aws/aws-sdk-php.git",
-                "reference": "f53d8fc6cdbc1e64e7d14e72d1e315d05003b2b4"
+                "reference": "f7ae10a0b691d40075c801e3ae8735a722debfac"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/aws/aws-sdk-php/zipball/f53d8fc6cdbc1e64e7d14e72d1e315d05003b2b4",
-                "reference": "f53d8fc6cdbc1e64e7d14e72d1e315d05003b2b4",
+                "url": "https://api.github.com/repos/aws/aws-sdk-php/zipball/f7ae10a0b691d40075c801e3ae8735a722debfac",
+                "reference": "f7ae10a0b691d40075c801e3ae8735a722debfac",
                 "shasum": ""
             },
             "require": {
@@ -153,9 +153,9 @@
             "support": {
                 "forum": "https://github.com/aws/aws-sdk-php/discussions",
                 "issues": "https://github.com/aws/aws-sdk-php/issues",
-                "source": "https://github.com/aws/aws-sdk-php/tree/3.369.20"
+                "source": "https://github.com/aws/aws-sdk-php/tree/3.369.16"
             },
-            "time": "2026-01-26T19:14:05+00:00"
+            "time": "2026-01-20T19:44:30+00:00"
         },
         {
             "name": "barryvdh/laravel-dompdf",
@@ -7133,7 +7133,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-01-01T22:13:48+00:00"
+            "time": "2025-12-18T07:04:31+00:00"
         },
         {
             "name": "thecodingmachine/safe",
@@ -8711,16 +8711,16 @@
         },
         {
             "name": "phpunit/phpunit",
-            "version": "11.5.49",
+            "version": "11.5.48",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sebastianbergmann/phpunit.git",
-                "reference": "4f1750675ba411dd6c2d5fa8a3cca07f6742020e"
+                "reference": "fe3665c15e37140f55aaf658c81a2eb9030b6d89"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/4f1750675ba411dd6c2d5fa8a3cca07f6742020e",
-                "reference": "4f1750675ba411dd6c2d5fa8a3cca07f6742020e",
+                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/fe3665c15e37140f55aaf658c81a2eb9030b6d89",
+                "reference": "fe3665c15e37140f55aaf658c81a2eb9030b6d89",
                 "shasum": ""
             },
             "require": {
@@ -8792,7 +8792,7 @@
             "support": {
                 "issues": "https://github.com/sebastianbergmann/phpunit/issues",
                 "security": "https://github.com/sebastianbergmann/phpunit/security/policy",
-                "source": "https://github.com/sebastianbergmann/phpunit/tree/11.5.49"
+                "source": "https://github.com/sebastianbergmann/phpunit/tree/11.5.48"
             },
             "funding": [
                 {
@@ -8816,7 +8816,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-01-24T16:09:28+00:00"
+            "time": "2026-01-16T16:26:27+00:00"
         },
         {
             "name": "sebastian/cli-parser",
