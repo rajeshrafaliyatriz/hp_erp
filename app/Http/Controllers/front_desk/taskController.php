@@ -331,6 +331,7 @@ class taskController extends Controller
 
                 $extraData['TASK_ALLOCATED_TO'] = $request->input("TASK_ALLOCATED_TO");
                 $extraData['required_skills'] = $request->input("skills");
+                $extraData['skill_id'] = $request->input("skill_id");
 
                 if ($task_type == "High") {
                     $dates = $this->getDatesWithoutSundays("High", $request->task_date, (int)$request->repeat_days);
@@ -366,6 +367,7 @@ class taskController extends Controller
                     if (!empty($allocatedUser)) {
                         $extraData['TASK_ALLOCATED_TO'] = $allocatedUser;
                         $extraData['required_skills'] = $request->input("skills");
+                        $extraData['skill_id'] = $request->input("skill_id");
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->task_date ?? now()]);
                         $data['created_by'] = $user_id;
                         taskModel::insert($data);
@@ -456,12 +458,13 @@ class taskController extends Controller
                     $res['message']     = "Added successfully";
                 }
 
-            } 
+            }
              else {
                 foreach ($request->input("TASK_ALLOCATED_TO", []) as $value) {
                     $extraData['TASK_ALLOCATED_TO'] = $value;
                     // 'required_skills' => $request->has('skills') ? implode(',', $request->skills) : '',
                     $extraData['required_skills'] = $request->has('skills') ? implode(',', $request->skills) : '';
+                    $extraData['skill_id'] = $request->input("skill_id");
                     if ($task_type == "High") {
                         foreach ($dates as $date) {
                             $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
