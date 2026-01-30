@@ -121,7 +121,7 @@ class TalentOfferController extends Controller
                     // Prepare data for blade view
                     $userName = $application->first_name . ' ' . $application->last_name;
                     $todayDate = now()->format('F j, Y');
-                    $deadlineDate = now()->addDays(7)->format('F j, Y');
+                    $deadlineDate = $offer->start_date ? \Carbon\Carbon::parse($offer->start_date)->subDays(3)->format('F j, Y') : now()->addDays(7)->format('F j, Y');
                     $signerName = $signerUser ? ($signerUser->first_name . ' ' . ($signerUser->middle_name ? $signerUser->middle_name . ' ' : '') . $signerUser->last_name) : 'Signer Name';
 
                     $data = [
@@ -173,6 +173,7 @@ class TalentOfferController extends Controller
 
                     // Update status to 'sent' after successful email send
                     $offer->status = 'sent';
+                    $offer->sent_at = now();
                     $offer->save();
                 }
 
@@ -230,6 +231,60 @@ class TalentOfferController extends Controller
                 'status' => 1,
                 'message' => 'Offers retrieved successfully!',
                 'data' => $offers
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'error' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Reject a talent offer.
+     */
+    public function reject(Request $request, $id)
+    {
+        $type = $request->input('type');
+
+        // Allow execution only if request type is API
+        if ($type !== "API") {
+            return response()->json(['message' => 'Invalid request type'], 400);
+        }
+
+        // Check and validate token
+        $token = $request->input('token');
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        try {
+            $offer = TalentOffer::find($id);
+
+            if (!$offer) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Offer not found'
+                ], 404);
+            }
+
+            $offer->status = 'rejected';
+            DB::table('talent_job_applications')
+                ->where('id', $offer->application_id)
+                ->update(['status' => 'rejected']);
+            $offer->rejected_at = now();
+            $offer->save();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Offer rejected successfully!',
+                'data' => $offer
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
