@@ -9,6 +9,10 @@ use Laravel\Sanctum\PersonalAccessToken;
 use function App\Helpers\is_mobile;
 use Illuminate\Support\Facades\Validator;
 use App\Models\talent\talent_jobposting;
+use App\Models\talent\talent_jobapplication;
+use App\Models\talent\talent_interviewschedules;
+use App\Models\talent\TalentOffer;
+use App\Models\talent\feedback\TalentEvaluationForm;
 
 
 class talent_jobpostingcontroller extends Controller
@@ -357,18 +361,48 @@ class talent_jobpostingcontroller extends Controller
             }
             $sub_institute_id = $request->get('sub_institute_id');
         }
-        // try {
-            $delete=talent_jobposting::where('id',$id)->update([
+
+        try {
+            // Check if the job posting exists and belongs to the sub_institute and not already deleted
+            $exists = talent_jobposting::where([
+                'id' => $id,
+                'sub_institute_id' => $sub_institute_id
+            ])->whereNull('deleted_at')->exists();
+
+            if (!$exists) {
+                return response()->json(['message' => 'Job posting not found or already deleted'], 404);
+            }
+
+            // Soft delete related records
+            TalentEvaluationForm::where('job_id', $id)->whereNull('deleted_at')->update([
+                'deleted_at' => now(),
+            ]);
+
+            talent_interviewschedules::where('job_id', $id)->whereNull('deleted_at')->update([
+                'deleted_at' => now(),
+            ]);
+
+            talent_jobapplication::where('job_id', $id)->whereNull('deleted_at')->update([
+                'deleted_at' => now(),
+            ]);
+
+            TalentOffer::where('job_id', $id)->whereNull('deleted_at')->update([
+                'deleted_at' => now(),
+            ]);
+
+            $delete = talent_jobposting::where('id', $id)->update([
                 'deleted_at' => now(),
                 'deleted_by' => $request->user_id,
             ]);
-            if($delete){
-                return response()->json(['message' => 'skill deleted successfully !!'], 200);
+
+            if ($delete) {
+                return response()->json(['message' => 'Job posting and related data deleted successfully'], 200);
             }
-            return response()->json(['message' => 'Failed to delete !!'], 200);
-        // } catch (\Exception $e) {
-        //     return response()->json($e->getMessage(), 500);
-        // }
+
+            return response()->json(['message' => 'Failed to delete job posting'], 400);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
 
