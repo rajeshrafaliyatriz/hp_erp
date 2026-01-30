@@ -121,7 +121,7 @@ class TalentOfferController extends Controller
                     // Prepare data for blade view
                     $userName = $application->first_name . ' ' . $application->last_name;
                     $todayDate = now()->format('F j, Y');
-                    $deadlineDate = now()->addDays(7)->format('F j, Y');
+                    $deadlineDate = $offer->start_date ? \Carbon\Carbon::parse($offer->start_date)->subDays(3)->format('F j, Y') : now()->addDays(7)->format('F j, Y');
                     $signerName = $signerUser ? ($signerUser->first_name . ' ' . ($signerUser->middle_name ? $signerUser->middle_name . ' ' : '') . $signerUser->last_name) : 'Signer Name';
 
                     $data = [
