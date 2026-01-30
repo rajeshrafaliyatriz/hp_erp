@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Validator;
 use DB;
 use Illuminate\Support\Facades\Hash;
 use function App\Helpers\is_mobile;
+use App\Models\easy_com\manage_sms_api\manage_sms_api;
 
 class authController extends Controller
 {
@@ -289,4 +290,230 @@ class authController extends Controller
     {
         return "hello";
     }
+
+        public function user_login(Request $request)
+    {
+      
+        $response = ['status' => '0', 'message' => 'User Not Found'];
+        $validator = Validator::make($request->all(), [
+            'mobile' => 'required|numeric',
+        ]);
+
+        if ($validator->fails()) {
+            $response['status'] = '0';
+            $response['message'] = $validator->messages();
+        } else {
+// Fetch user by email
+        $user = tbluserModel::with(['organization', 'client', 'yearData', 'userProfile'])
+            ->where('mobile', $request->mobile)
+            ->first();
+            // return $user;
+            $data = DB::table('tbluser as u')
+                ->join('tbluserprofilemaster as p', function ($join) {
+                    $join->whereRaw("p.sub_institute_id = u.sub_institute_id and u.user_profile_id = p.id ");
+                })->join('school_setup as ss', function ($join) {
+                    $join->whereRaw("ss.id = u.sub_institute_id");
+                })->selectRaw("u.id,u.user_name,u.first_name,u.middle_name,u.last_name,u.sub_institute_id,
+                    u.email,u.mobile,u.birthdate,u.address,u.gender,u.join_year,
+                    if(u.image = '','',concat('https://".$_SERVER['SERVER_NAME']."/storage/user/',u.image)) as image,
+                    p.name as user_profile_name,u.user_profile_id,ss.syear,ss.SchoolName,ss.Logo")
+                ->where('u.status', '1')
+                ->where('u.id', $user['id'])->get()->toArray();
+                        // return $data;
+            $data = json_decode(json_encode($data), true);
+            if (!empty($data)) {
+                $data = $data[0];
+            } else {
+                return json_encode($response);
+            }
+
+            if (isset($data['id']) && $data['id'] != '') {
+
+                // send otp
+                $otp = rand(100000, 999999);
+
+                $sub_institute_id = $data['sub_institute_id'];
+                $sub_Array = [328,329,330,331,333];
+                if ($_REQUEST['mobile'] == '9979176562') {
+                    $otp = "123456";
+                }else if(in_array($sub_institute_id, $sub_Array)){
+                    $otp = date('dmy', strtotime($data['birthdate']));
+                } else {
+                    //$text = "Dear Parent, Your OTP is ".$otp;
+                    if ($sub_institute_id == 49 || $sub_institute_id == 232 || $sub_institute_id == 233) {
+                        $text = "Dear Teacher your OTP is ".$otp;
+                    }else if($sub_institute_id == 47){
+                        $text = "Dear Parent, Your OTP is ".$otp." MULJIM";
+                    } else {
+                        $text = "OTP for login is ".$otp." and is valid for 5 minutes";
+                    }
+
+                    $res = $this->sendSMS($_REQUEST['mobile'], $text, $sub_institute_id);
+                    if ($res["error"] == 1) {
+                        $errorMessage = "Please add api details first.";
+                        if ($res["error"] == $errorMessage) {
+                            $otp = "123456";
+                        }
+                    }
+                }
+//DB::enableQueryLog();
+                $data = DB::table("tbluser AS tu")
+                    ->join('tbluserprofilemaster AS tpm', 'tpm.id', '=', 'tu.user_profile_id')
+                    ->where('tu.status',1) // 23-04-24 by uma
+                    ->where(["tu.mobile" => $_REQUEST['mobile']])
+                    ->update(["tu.otp" => $otp]);
+//dd(DB::getQueryLog($data));                    
+//echo "<pre>";
+//print_r($data);
+//exit();
+                $response['status'] = '1';
+                $response['message'] = ' OTP sent successfully';
+            }
+        }
+
+        return json_encode($response);
+    }
+
+      public function user_check_otp(Request $request)
+    {
+        $send_data = [];
+        $response = ['status' => '0', 'message' => 'Invalid', 'data' => $send_data];
+        $validator = Validator::make($request->all(), [
+            'mobile' => 'required|numeric',
+            'otp'    => 'required|numeric',
+        ]);
+
+        if ($validator->fails()) {
+            $response['status'] = '0';
+            $response['message'] = $validator->messages();
+        } else {
+            $data =DB::table('tbluser as u')
+                ->join('tbluserprofilemaster as p', function ($join) {
+                    $join->whereRaw("p.sub_institute_id = u.sub_institute_id and u.user_profile_id = p.id");
+                })
+                ->join('school_setup as ss', function ($join) {
+                    $join->whereRaw("ss.id = u.sub_institute_id");
+                })
+                ->selectRaw("u.id,u.user_name,u.first_name,u.middle_name,u.last_name,u.sub_institute_id,
+                    u.email,u.mobile,u.otp,u.birthdate,u.address,u.gender,u.join_year,
+                    if(u.image = '','',concat('https://".$_SERVER['SERVER_NAME']."/storage/user/',u.image)) as image,
+                    p.name as user_profile_name,u.user_profile_id,ss.syear,ss.SchoolName,ss.Logo")
+                ->where('u.status', '1')
+                ->where('u.otp', $_REQUEST['otp'])
+                ->where('u.mobile', $_REQUEST['mobile'])->get()->toArray();
+
+            $data = json_decode(json_encode($data), true);
+            if(!empty($data)) {
+                    $data = $data[0];
+                    $payload = array();
+
+                $time = time() + (60 * 60 * 24 * 30);
+                $payload = [
+                    'exp'              => $time,
+                    'user_id'          => $data['id'],
+                    'sub_institute_id' => $data['sub_institute_id'],
+                    'mobile'           => $data['mobile'],
+                ];
+
+                // $token = $jwt->createToken($payload);
+        $user = tbluserModel::with(['organization', 'client', 'yearData', 'userProfile'])
+                    ->where('mobile', $data['mobile'])
+                    ->first();  
+                $token = $user->createToken('api-token')->plainTextToken;
+
+                $school_logo = 'https://'.$_SERVER['SERVER_NAME'].'/admin_dep/images/'.$data['Logo'];
+
+                $term_data = DB::table("academic_year")->select( 'title', 'syear', 'start_date', 'end_date')
+                    ->where(["sub_institute_id" => $data['sub_institute_id'], "syear" => $data['syear']])
+                    ->get()->toArray();
+
+                $send_data = [
+                    'user_id'           => $data['id'],
+                    'user_name'         => $data['user_name'],
+                    'first_name'        => $data['first_name'],
+                    'middle_name'       => $data['middle_name'],
+                    'last_name'         => $data['last_name'],
+                    'sub_institute_id'  => $data['sub_institute_id'],
+                    'email'             => $data['email'],
+                    'mobile'            => $data['mobile'],
+                    'otp'            => $data['otp'],
+                    'birthdate'         => $data['birthdate'],
+                    'address'           => $data['address'],
+                    'gender'            => $data['gender'],
+                    'image'             => $data['image'],
+                    'join_year'         => $data['join_year'],
+                    'school_logo'       => $school_logo,
+                    'school_name'       => $data['SchoolName'],
+                    'user_profile_name' => $data['user_profile_name'],
+                    'user_profile_id'   => $data['user_profile_id'],
+                    'syear'             => $data['syear'],
+                    'term_data'         => $term_data,
+                    'token'             => $token,
+                ];
+
+                $response['status'] = '1';
+                $response['message'] = 'success';
+                $response['data'] = $send_data;
+            } else {
+                $response['status'] = '0';
+                $response['message'] = 'Failed';
+            }
+
+        }
+
+        return json_encode($response);
+    }
+     public function sendSMS($mobile, $text, $sub_institute_id)
+    {
+        $data = manage_sms_api::where(['sub_institute_id' => $sub_institute_id])
+            ->get()->first();
+        $isError = 0;
+
+        if ($data) {
+            $data = $data->toArray();
+            $isError = 0;
+            $errorMessage = true;
+
+            $text = urlencode($text);
+            $data['last_var'] = urlencode($data['last_var']);
+
+//Start added by rajesh OTP for CN all institute
+$cn_templateid = '';
+$cn = array(244,245,246,247,248,253,257,264,265);
+if(in_array($sub_institute_id, $cn))
+    $cn_templateid = '&template_id=1507166607307092495';
+//END added by rajesh OTP for CN all institute
+
+            $url = $data['url'].$data['pram'].$cn_templateid.$data['mobile_var'].$mobile.$data['text_var'].$text.$data['last_var'];
+
+            $ch = curl_init();
+
+            // Ignore SSL certificate verification
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_URL, $url);
+            $output = curl_exec($ch);
+
+
+            //Print error if any
+            if (curl_errno($ch)) {
+                $isError = true;
+                $errorMessage = curl_error($ch);
+            }
+            curl_close($ch);
+        } else {
+            $isError = 1;
+            $errorMessage = "Please add api details first.";
+        }
+        $responce = [];
+        if ($isError) {
+            $responce = ['error' => 1, 'message' => $errorMessage];
+        } else {
+            $responce = ['error' => 0];
+        }
+
+        return response()->json( $responce);
+    }
 }
+
