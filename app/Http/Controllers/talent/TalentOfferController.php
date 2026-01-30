@@ -170,6 +170,10 @@ class TalentOfferController extends Controller
                     }
 
                     Mail::to($application->email)->send(new OfferLetterMail($offer, $pdfPath));
+
+                    // Update status to 'sent' after successful email send
+                    $offer->status = 'sent';
+                    $offer->save();
                 }
 
                 return response()->json([
