@@ -240,4 +240,58 @@ class TalentOfferController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Reject a talent offer.
+     */
+    public function reject(Request $request, $id)
+    {
+        $type = $request->input('type');
+
+        // Allow execution only if request type is API
+        if ($type !== "API") {
+            return response()->json(['message' => 'Invalid request type'], 400);
+        }
+
+        // Check and validate token
+        $token = $request->input('token');
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        try {
+            $offer = TalentOffer::find($id);
+
+            if (!$offer) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => 'Offer not found'
+                ], 404);
+            }
+
+            $offer->status = 'rejected';
+            DB::table('talent_job_applications')
+                ->where('id', $offer->application_id)
+                ->update(['status' => 'rejected']);
+            $offer->rejected_at = now();
+            $offer->save();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Offer rejected successfully!',
+                'data' => $offer
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 0,
+                'error' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
+        }
+    }
 }

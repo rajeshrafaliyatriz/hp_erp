@@ -73,6 +73,7 @@ Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screenin
 
 Route::get('offers', [TalentOfferController::class, 'index']);
 Route::post('talent-offers', [TalentOfferController::class, 'store']);
+Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject']);
 Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
 Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
 
