@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
 use App\Models\settings\organizationDetails;
 use App\Models\settings\organizationSisterDetails;
+use App\Models\school_setupModel;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
@@ -136,6 +137,8 @@ public function store(Request $request)
 
         // Save to DB
         $orgDetail->logo = $file_name;
+        // Update school_setup table
+        school_setupModel::where('Id', $request->sub_institute_id)->update(['Logo' => $file_name]);
         // $orgDetail->logo = $file_name; // assuming you have a logo column
     }
 
