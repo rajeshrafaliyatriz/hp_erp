@@ -173,6 +173,7 @@ class TalentOfferController extends Controller
 
                     // Update status to 'sent' after successful email send
                     $offer->status = 'sent';
+                    $offer->sent_at = now();
                     $offer->save();
                 }
 
