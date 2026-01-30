@@ -195,4 +195,5 @@ Route::group(['prefix' => 'reports'], function () {
 
 Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze']);
 
+Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks']);
 Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills']);
