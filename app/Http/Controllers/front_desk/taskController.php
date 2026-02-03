@@ -18,6 +18,7 @@ use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Http;
 
 class taskController extends Controller
 {
@@ -680,7 +681,25 @@ class taskController extends Controller
             }
         }
 
-        $data = taskModel::where(['id' => $id])->update($data);
+        $updateStatus = taskModel::where(['id' => $id])->update($data);
+
+        // Webhook Trigger
+        try {
+            $updatedTask = taskModel::find($id);
+            if ($updatedTask) {
+                $webhookUrl = 'https://dev.triz.co.in/webhook/449cab91-32ac-4c27-ab77-b6a9389185c4';
+                
+                $webhookPayload = $updatedTask->toArray();
+                $webhookPayload['updated_at'] = now()->toIso8601String();
+                $webhookPayload['updated_by'] = $user_id;
+                $webhookPayload['sub_institute_id'] = $sub_institute_id;
+                
+                Http::timeout(5)->post($webhookUrl, $webhookPayload);
+            }
+        } catch (\Exception $e) {
+            // Silently fail or log if needed, ensuring main flow isn't interrupted
+            // \Log::error('Webhook error: ' . $e->getMessage());
+        }
 
         $res['status_code'] = "1";
         $res['message'] = "Updated successfully";
