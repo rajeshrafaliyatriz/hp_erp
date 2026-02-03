@@ -9,18 +9,17 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-   public function up(): void
-{
-    Schema::table('suggested_course', function (Blueprint $table) {
-        $table->renameColumn('skill_id', 'task_id');
-    });
-}
+    public function up(): void
+    {
+        Schema::table('suggested_course', function (Blueprint $table) {
+            $table->dropColumn('skill_id');
+        });
+    }
 
-public function down(): void
-{
-    Schema::table('suggested_course', function (Blueprint $table) {
-        $table->renameColumn('task_id', 'skill_id');
-    });
-
+    public function down(): void
+    {
+        Schema::table('suggested_course', function (Blueprint $table) {
+            $table->integer('skill_id')->nullable();
+        });
     }
 };

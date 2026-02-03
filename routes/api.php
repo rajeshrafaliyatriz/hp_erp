@@ -28,6 +28,7 @@ use App\Http\Controllers\build_with_AI\buildwithAIController;
 use App\Http\Controllers\Api\GammaApiController;
 use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
 use App\Http\Controllers\Api\SkillMatchingController;
+use App\Http\Controllers\Api\SuggestedCourseController;
 
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 use App\Http\Controllers\ai_generated_assessment\generateQuestionController;
@@ -197,3 +198,5 @@ Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze']);
 
 Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks']);
 Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills']);
+
+Route::post('/employee/course-suggestions', [SuggestedCourseController::class, 'store']);
