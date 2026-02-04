@@ -63,7 +63,6 @@ class LmsCourseEnrollController extends Controller
         return response()->json([
             'status' => true,
             'data' => $course,
-            'jobrole' => $userJobrole->jobrole ?? null
         ]);
     }
 
