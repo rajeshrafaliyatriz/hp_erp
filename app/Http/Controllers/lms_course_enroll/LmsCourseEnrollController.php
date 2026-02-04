@@ -37,6 +37,13 @@ class LmsCourseEnrollController extends Controller
             ], 422);
         }
         
+        // Get user's jobrole
+        $userJobrole = DB::table('tbluser as u')
+            ->leftJoin('s_user_jobrole as j', 'u.allocated_standards', '=', 'j.id')
+            ->where('u.id', $userId)
+            ->select('j.jobrole')
+            ->first();
+        
         // Get the latest enrollment for each course
         $latestEnrollments = DB::table('lms_course_enroll')
             ->select('course_id', DB::raw('MAX(created_at) as latest_enrolled_at'))
@@ -55,7 +62,8 @@ class LmsCourseEnrollController extends Controller
         
         return response()->json([
             'status' => true,
-            'data' => $course
+            'data' => $course,
+            'jobrole' => $userJobrole->jobrole ?? null
         ]);
     }
 
