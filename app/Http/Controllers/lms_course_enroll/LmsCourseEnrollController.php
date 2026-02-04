@@ -29,18 +29,30 @@ class LmsCourseEnrollController extends Controller
         }
         $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
         $userId = $request->user_id ?? $request->header('user_id');
-        $course = DB::table('lms_course_enroll as e')
-            ->join('sub_std_map as s', 'e.course_id', '=', 's.id')
-            ->where('e.user_id', $userId)
-            ->select('s.*', 'e.status as enrollment_status', 'e.start_date', 'e.end_date', 'e.created_at as enrolled_at')
-            ->get();
-
+        
         if (!$userId) {
             return response()->json([
                 'status' => false,
                 'message' => 'user_id is required'
             ], 422);
         }
+        
+        // Get the latest enrollment for each course
+        $latestEnrollments = DB::table('lms_course_enroll')
+            ->select('course_id', DB::raw('MAX(created_at) as latest_enrolled_at'))
+            ->where('user_id', $userId)
+            ->groupBy('course_id');
+        
+        $course = DB::table('lms_course_enroll as e')
+            ->join('sub_std_map as s', 'e.course_id', '=', 's.id')
+            ->joinSub($latestEnrollments, 'latest', function ($join) {
+                $join->on('e.course_id', '=', 'latest.course_id')
+                     ->on('e.created_at', '=', 'latest.latest_enrolled_at');
+            })
+            ->where('e.user_id', $userId)
+            ->select('s.*', 'e.status as enrollment_status', 'e.start_date', 'e.end_date', 'e.created_at as enrolled_at')
+            ->get();
+        
         return response()->json([
             'status' => true,
             'data' => $course
