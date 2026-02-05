@@ -28,6 +28,7 @@ use App\Http\Controllers\build_with_AI\buildwithAIController;
 use App\Http\Controllers\Api\GammaApiController;
 use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
 use App\Http\Controllers\Api\SkillMatchingController;
+use App\Http\Controllers\Api\SuggestedCourseController;
 
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 use App\Http\Controllers\ai_generated_assessment\generateQuestionController;
@@ -48,6 +49,7 @@ use App\Http\Controllers\Reports\EmployeeDirectoryAnalytics\EmployeeDirectoryAna
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
+use App\Http\Controllers\Api\TaskController;
 
 Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
 Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
@@ -197,3 +199,11 @@ Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze']);
 
 Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks']);
 Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills']);
+
+Route::post('/employee/course-suggestions', [SuggestedCourseController::class, 'store']);
+
+// Task API Routes
+Route::get('/tasks/counts', [TaskController::class, 'getTaskCounts']);
+Route::get('/tasks/daily', [TaskController::class, 'getDailyTasks']);
+Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
+Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
