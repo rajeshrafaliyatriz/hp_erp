@@ -25,38 +25,32 @@ class AnalyzeJDController extends Controller
             $subInstituteId = session()->get('sub_institute_id') ?? $request->sub_institute_id ?? 3;
 
             /* ===============================
-             * 2️⃣ Fetch Gemini API Key (Direct DB)
+             * 2️⃣ Fetch Gemini API Keys (MULTIPLE – Fallback Support)
              * =============================== */
-            $geminiApiRow = Cache::remember(
-                "gemini_api_row_{$subInstituteId}",
+            $geminiApiRows = Cache::remember(
+                "gemini_api_rows_{$subInstituteId}",
                 now()->addHours(6),
                 function () use ($subInstituteId) {
                     return DB::table('gemini_api')
                         ->where('status', 1)
                         ->where(function ($query) use ($subInstituteId) {
                             $query->where('sub_institute_id', $subInstituteId)
-                                ->orWhereNull('sub_institute_id');
+                                  ->orWhereNull('sub_institute_id');
                         })
-                        ->first();
+                        ->where(function ($q) {
+                            $q->whereNull('limit')->orWhere('limit', '>', 0);
+                        })
+                        ->orderByRaw('sub_institute_id IS NULL') // institute-specific first
+                        ->get();
                 }
             );
 
-            if (!$geminiApiRow || empty($geminiApiRow->key)) {
+            if ($geminiApiRows->isEmpty()) {
                 return response()->json([
                     'success' => false,
                     'error' => 'Gemini API key not found or inactive'
                 ], 500);
             }
-
-            // Optional usage limit check
-            if (!is_null($geminiApiRow->limit) && $geminiApiRow->limit <= 0) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Gemini API usage limit exceeded'
-                ], 429);
-            }
-
-            $geminiApiKey = $geminiApiRow->key;
 
             /* ===============================
              * 3️⃣ Fetch ICF Competency Framework
@@ -79,51 +73,75 @@ class AnalyzeJDController extends Controller
              * 4️⃣ Gemini Prompt
              * =============================== */
             $prompt = <<<PROMPT
-                Analyze this job description and extract:
-                1. Core technical skills (5-8 specific skills)
-                2. Behavioral traits (3-5 soft skills)
-                3. Competency level required for each skill (Beginner/Intermediate/Advanced/Expert)
+Analyze this job description and extract:
+1. Core technical skills (5-8 specific skills)
+2. Behavioral traits (3-5 soft skills)
+3. Competency level required for each skill (Beginner/Intermediate/Advanced/Expert)
 
-                Job Description:
-                {$jd}
+Job Description:
+{$jd}
 
-                Respond strictly in valid JSON:
-                {
-                "core_skills": [],
-                "behavioral_traits": [],
-                "competency_level": {}
-                }
-            PROMPT;
+Respond strictly in valid JSON:
+{
+  "core_skills": [],
+  "behavioral_traits": [],
+  "competency_level": {}
+}
+PROMPT;
 
             /* ===============================
-             * 5️⃣ Call Gemini API
+             * 5️⃣ Call Gemini API (WITH FALLBACK)
              * =============================== */
-            $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$geminiApiKey}";
+            $response = null;
+            $usedApiRow = null;
 
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-            ])->withoutVerifying()->timeout(120)->post($url, [
-                "contents" => [
-                    [
-                        "parts" => [
-                            ["text" => $prompt]
+            foreach ($geminiApiRows as $geminiApiRow) {
+
+                // Optional usage limit check (OLD LOGIC PRESERVED)
+                if (!is_null($geminiApiRow->limit) && $geminiApiRow->limit <= 0) {
+                    continue;
+                }
+
+                try {
+                    $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$geminiApiRow->key}";
+
+                    $apiResponse = Http::withHeaders([
+                        'Content-Type' => 'application/json',
+                    ])->withoutVerifying()->timeout(120)->post($url, [
+                        "contents" => [
+                            [
+                                "parts" => [
+                                    ["text" => $prompt]
+                                ]
+                            ]
                         ]
-                    ]
-                ]
-            ])->json();
+                    ]);
 
-            if (isset($response['error'])) {
+                    $json = $apiResponse->json();
+
+                    if ($apiResponse->successful() && !isset($json['error'])) {
+                        $response = $json;
+                        $usedApiRow = $geminiApiRow;
+                        break; // ✅ Stop at first success
+                    }
+
+                } catch (\Exception $e) {
+                    // Try next API key
+                    continue;
+                }
+            }
+
+            if (!$response) {
                 return response()->json([
                     'success' => false,
-                    'error' => 'Gemini API request failed',
-                    'details' => $response
+                    'error' => 'All Gemini API keys failed'
                 ], 500);
             }
 
             $textResponse = $response['candidates'][0]['content']['parts'][0]['text'] ?? '{}';
 
             /* ===============================
-             * 6️⃣ Safe JSON Parsing
+             * 6️⃣ Safe JSON Parsing (OLD LOGIC PRESERVED)
              * =============================== */
             try {
                 $parsed = json_decode($textResponse, true, 512, JSON_THROW_ON_ERROR);
@@ -139,7 +157,7 @@ class AnalyzeJDController extends Controller
             $competencyLevels = $parsed['competency_level'] ?? [];
 
             /* ===============================
-             * 7️⃣ Map Skills with ICF Framework
+             * 7️⃣ Map Skills with ICF Framework (OLD LOGIC PRESERVED)
              * =============================== */
             $mappedCompetencies = [];
 
@@ -165,11 +183,11 @@ class AnalyzeJDController extends Controller
                 : 0;
 
             /* ===============================
-             * 8️⃣ Decrease API Usage Limit
+             * 8️⃣ Decrease API Usage Limit (ONLY SUCCESSFUL KEY)
              * =============================== */
-            if (!is_null($geminiApiRow->limit)) {
+            if ($usedApiRow && !is_null($usedApiRow->limit)) {
                 DB::table('gemini_api')
-                    ->where('id', $geminiApiRow->id)
+                    ->where('id', $usedApiRow->id)
                     ->decrement('limit');
             }
 
@@ -184,6 +202,7 @@ class AnalyzeJDController extends Controller
                 'mapped_competencies' => $mappedCompetencies,
                 'framework_coverage' => round($frameworkCoverage, 2)
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
