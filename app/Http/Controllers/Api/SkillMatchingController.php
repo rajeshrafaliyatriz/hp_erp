@@ -100,7 +100,7 @@ class SkillMatchingController extends Controller
                         }
 
                         // ───────────────────────────────────────────────
-                        // Find courses — prioritize display_name
+                        // Find courses from sub_std_map only
                         // ───────────────────────────────────────────────
                         $courses = collect();
 
@@ -115,40 +115,19 @@ class SkillMatchingController extends Controller
                                 'type' => 'like_display',
                                 'closure' => fn($q) => $q->where(DB::raw('LOWER(ssm.display_name)'), 'like', "%{$normalizedSkill}%")
                             ],
-                            // 2: Exact subject_name
-                            // [
-                            //     'type' => 'exact_subject',
-                            //     'closure' => fn($q) => $q->where(DB::raw('LOWER(TRIM(s.subject_name))'), $normalizedSkill)
-                            // ],
-                            // 3: Contains subject_name
-                            // [
-                            //     'type' => 'like_subject',
-                            //     'closure' => fn($q) => $q->where(DB::raw('LOWER(s.subject_name)'), 'like', "%{$normalizedSkill}%")
-                            // ],
                         ];
 
                         foreach ($searchStrategies as $strategy) {
                             if ($courses->isNotEmpty()) break;
 
-                            $query = DB::table('content_master as cm')
-                                ->join('sub_std_map as ssm', function ($join) {
-                                    $join->on('cm.standard_id', '=', 'ssm.standard_id')
-                                         ->on('cm.subject_id', '=', 'ssm.id');
-                                })
-                                ->leftJoin('subject as s', 'ssm.subject_id', '=', 's.id')
-                                ->where('cm.sub_institute_id', $subInstituteId)
-                                ->where('cm.show_hide', 1)
-                                ->whereNull('cm.deleted_at')
+                            $query = DB::table('sub_std_map as ssm')
+                                ->where('ssm.sub_institute_id', $subInstituteId)
+                                ->whereNull('ssm.deleted_at')
                                 ->select([
-                                    'cm.id',
                                     'ssm.id as course_id',
+                                    'ssm.standard_id',
+                                    'ssm.subject_id',
                                     'ssm.display_name as title',
-                                    'cm.description',
-                                    'cm.content_category',
-                                    'cm.syear',
-                                    'cm.sub_institute_id',
-                                    'cm.show_hide',
-                                    'ssm.display_name',
                                 ]);
 
                             $query->where(function ($q) use ($strategy) {
@@ -166,26 +145,15 @@ class SkillMatchingController extends Controller
 
                         // Very last resort: if numeric skill ID and no match yet → try as subject_id
                         if ($courses->isEmpty() && is_numeric($skillId) && $skillDbId) {
-                            $courses = DB::table('content_master as cm')
-                                ->join('sub_std_map as ssm', function ($join) {
-                                    $join->on('cm.standard_id', '=', 'ssm.standard_id')
-                                         ->on('cm.subject_id', '=', 'ssm.id');
-                                })
+                            $courses = DB::table('sub_std_map as ssm')
                                 ->where('ssm.subject_id', $skillDbId)
-                                ->where('cm.sub_institute_id', $subInstituteId)
-                                ->where('cm.show_hide', 1)
-                                ->whereNull('cm.deleted_at')
+                                ->where('ssm.sub_institute_id', $subInstituteId)
+                                ->whereNull('ssm.deleted_at')
                                 ->select([
-                                    'cm.id',
-                                    'cm.subject_id',
+                                    'ssm.id as course_id',
+                                    'ssm.standard_id',
+                                    'ssm.subject_id',
                                     'ssm.display_name as title',
-                                    'cm.description',
-                                    'cm.content_category',
-                                    'cm.syear',
-                                    'cm.sub_institute_id',
-                                    'cm.show_hide',
-                                    'ssm.display_name',
-                                    //'s.subject_name as subject_table_name',
                                 ])
                                 ->get();
 
@@ -204,11 +172,11 @@ class SkillMatchingController extends Controller
                 $matchedCount = count($matchedSkills);
                 $matchPercentage = $totalSkills > 0 ? round(($matchedCount / $totalSkills) * 100, 2) : 0;
 
-                $task->skill_details = $skillDetails;
-                $task->matched_skills = $matchedSkills;
-                $task->unmatched_skills = $unmatchedSkills;
-                $task->skill_match_percentage = $matchPercentage;
-                $task->courses = $foundCourses->unique('id'); // avoid duplicates if same course matches multiple skills
+                // $task->skill_details = $skillDetails;
+                // $task->matched_skills = $matchedSkills;
+                // $task->unmatched_skills = $unmatchedSkills;
+                // $task->skill_match_percentage = $matchPercentage;
+                $task->courses = $foundCourses->unique('course_id');
                 $task->total_courses_found = $task->courses->count();
             }
 
@@ -271,9 +239,18 @@ class SkillMatchingController extends Controller
                 ], 400);
             }
 
-            $courses = contentModel::whereIn('subject_id', $allSkillIds)
-                ->get()
-                ->makeHidden(['created_by', 'updated_by', 'deleted_by', 'created_at', 'updated_at', 'deleted_at']);
+            $courses = DB::table('sub_std_map as ssm')
+                ->whereIn('ssm.subject_id', $allSkillIds)
+                ->where('ssm.sub_institute_id', $subInstituteId)
+                ->whereNull('ssm.deleted_at')
+                ->select([
+                    'ssm.id as course_id',
+                    'ssm.standard_id',
+                    'ssm.subject_id',
+                    'ssm.display_name as title',
+                ])
+                ->get();
+
             if ($courses->isEmpty()) {
                 return response()->json([
                     'status' => 0,
