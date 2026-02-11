@@ -29,7 +29,7 @@ use App\Http\Controllers\Api\GammaApiController;
 use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
 use App\Http\Controllers\Api\SkillMatchingController;
 use App\Http\Controllers\Api\SuggestedCourseController;
-
+use App\Http\Controllers\user\UserSkillController;
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 use App\Http\Controllers\ai_generated_assessment\generateQuestionController;
 use App\Http\Controllers\ai_generated_assessment\generateAssessmentController;
@@ -207,3 +207,4 @@ Route::get('/tasks/counts', [TaskController::class, 'getTaskCounts']);
 Route::get('/tasks/daily', [TaskController::class, 'getDailyTasks']);
 Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
 Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
+Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills']);
