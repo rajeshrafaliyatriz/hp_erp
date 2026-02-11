@@ -417,11 +417,13 @@ class AJAXController extends Controller
 
         $getClass = [];
 
-        $query = DB::table('standard');
+        $query = DB::table('hrms_departments')
+            ->where(['sub_institute_id' => $sub_institute_id, 'is_active' => 1])
+            ->whereNull('deleted_at');
         // $query->where("grade_id", $request->grade_id);
 
         if (count($explode) > 1) {
-            $query->whereIn("grade_id", $explode);
+            //$query->whereIn("grade_id", $explode);
             //START Check for class teacher assigned standards
             $classTeacherStdArr = session()->get('classTeacherStdArr');
 
@@ -452,7 +454,7 @@ class AJAXController extends Controller
 
         } else {
 
-            $query->where("grade_id", $request->grade_id);
+           // $query->where("grade_id", $request->grade_id);
             //START Check for class teacher assigned standards
             $classTeacherStdArr = session()->get('classTeacherStdArr');
             if (is_array($classTeacherStdArr)) {
@@ -1074,173 +1076,266 @@ class AJAXController extends Controller
 
     public function AICourseGeneration(Request $request)
     {
-        $type = 'webForm';
-        $skill_department = $request->department;
-   $sub_institute_id = $request->sub_institute_id;
-        $token = $request->token;
-        $user_id = $request->user_id;
-        $user_profile_name = $request->user_profile_name;
-        $syear = $request->syear;
-        $industry = $request->industry;
-// check grade and add grade
-        $checkGrade = DB::table('academic_section')->where(['sub_institute_id' => $sub_institute_id, 'title' => $industry])->whereNull('deleted_at')->get();
-        if (count($checkGrade) > 0) {
-            $grade = $checkGrade[0]->id;
-        } else {
-            $gradeInsert = DB::table('academic_section')->insertGetId([
-                'sub_institute_id' => $sub_institute_id,
-                'title' => $industry,
-                'short_name' => $industry,
-                'sort_order' => '1',
-                'created_by' => $user_id,
-                'created_at' => now()
+        try {
+            \Log::info('AICourseGeneration started', ['request_data' => $request->all()]);
+            
+            $type = 'webForm';
+            $skill_department = $request->department;
+            $sub_institute_id = $request->sub_institute_id;
+            $token = $request->token;
+            $user_id = $request->user_id;
+            $user_profile_name = $request->user_profile_name;
+            $syear = $request->syear;
+            $industry = $request->industry;
+            $skill_id = $request->subject_id; // Get skill_id from request
+            $subject_id = $request->subject_id; // Get subject_id from request
+
+            // Validate required fields
+            $validator = Validator::make($request->all(), [
+                'sub_institute_id' => 'required',
+                'user_id' => 'required',
+                'user_profile_name' => 'required',
+                'syear' => 'required',
+                'industry' => 'required',
+                'department' => 'required',
+                'subject_id' => 'required', // Add subject_id validation
             ]);
-            $grade = $gradeInsert;
-        }
 
-        $checkStandard = DB::table('standard')->where(['sub_institute_id' => $sub_institute_id, 'grade_id' => $grade, 'name' => $skill_department])->whereNull('deleted_at')->get();
-        if (count($checkStandard) > 0) {
-            $standard = $checkStandard[0]->id;
-        } else {
-            $standardInsert = DB::table('standard')->insertGetId([
-                'sub_institute_id' => $sub_institute_id,
-                'grade_id' => $grade,
-                'name' => $skill_department,
-                'short_name' => $skill_department,
-                'sort_order' => '1',
-                'created_by' => $user_id,
-                'created_at' => now()
-            ]);
-            $standard = $standardInsert;
-        }
-        $mappingTypes = DB::table('lms_mapping_type')->where('id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
-        $mappingValues = DB::table('lms_mapping_type')->where('parent_id', 1)->whereNull('deleted_at')->get()->pluck('name', 'id');
-        $lms_content_category = DB::table('lms_content_category')->where('status', 2)->whereNull('deleted_at')->get()->pluck('category_name');
-        $course_category = DB::table('lms_content_category')->where('status', 1)->whereNull('deleted_at')->get()->pluck('category_name');
-        
-        // Get request variables
-        if($request->has('formType') && $request->formType == 'critical_work_function'){
-            $prompt = $request->prompt;
-        }elseif($request->has('formType') && $request->formType == 'task'){
-            $prompt = $request->prompt;
-        }elseif($request->has('formType') && $request->formType == 'skills'){
-            $prompt = $request->prompt;
-        }else{
+            if ($validator->fails()) {
+                \Log::error('Validation failed', ['errors' => $validator->errors()]);
+                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            }
 
-     
-        $skill_category = $request->skill_category;
-        $skill_sub_category = $request->skill_sub_category;
-        $skill_micro_category = $request->skill_micro_category;
-        $skill_name = $request->skill_name;
-        $skill_description = $request->skill_description;
+            if (!$token) {
+                \Log::error('Token not provided');
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
 
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
+            // Find the token in the database
+            $accessToken = PersonalAccessToken::findToken($token);
+            if (!$accessToken) {
+                \Log::error('Invalid token', ['token' => $token]);
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
 
-        // Find the token in the database
-        $accessToken = PersonalAccessToken::findToken($token);
+            \Log::info('Using subject_id from request', ['subject_id' => $subject_id]);
 
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
+            // First, check if a course already exists for this skill and subject in sub_std_map
+            $existingCourse = DB::table('sub_std_map')
+                ->where([
+                    'sub_institute_id' => $sub_institute_id,
+                    'subject_id' => $subject_id,
+                    //'subject_id' => $skill_id
+                ])
+                ->whereNull('deleted_at')
+                ->first();
 
-        $validator = Validator::make($request->all(), [
-            'sub_institute_id' => 'required',
-            'user_id' => 'required',
-            'user_profile_name' => 'required',
-            'syear' => 'required',
-            'industry' => 'required',
-            'department' => 'required'
-        ]);
+            if ($existingCourse) {
+                \Log::info('Course already exists for skill and subject', [
+                    //'skill_id' => $skill_id, 
+                    'subject_id' => $subject_id,
+                    'existing_course_id' => $existingCourse->id
+                ]);
+                
+                // Return existing course info
+                return response()->json([
+                    'status_code' => 2,
+                    'message' => 'Course already exists for this skill and subject',
+                    'course_id' => $existingCourse->id,
+                    'subject_id' => $subject_id,
+                    //'skill_id' => $skill_id
+                ]);
+            }
 
-        if ($validator->fails()) {
-            return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
-        }
+            // Check and create grade if needed
+            $checkGrade = DB::table('academic_section')
+                ->where(['sub_institute_id' => $sub_institute_id, 'title' => $industry])
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if ($checkGrade) {
+                $grade = $checkGrade->id;
+                \Log::info('Grade found', ['grade_id' => $grade]);
+            } else {
+                $gradeInsert = DB::table('academic_section')->insertGetId([
+                    'sub_institute_id' => $sub_institute_id,
+                    'title' => $industry,
+                    'short_name' => $industry,
+                    'sort_order' => '1',
+                    'created_by' => $user_id,
+                    'created_at' => now()
+                ]);
+                $grade = $gradeInsert;
+                \Log::info('Grade created', ['grade_id' => $grade]);
+            }
 
-        $getJobroles = DB::table('s_user_skill_jobrole')->where(['sub_institute_id' => $sub_institute_id, 'skill' => $skill_name])->whereNull('deleted_at')->groupBy('jobrole')->get();
-        // return $getJobroles;
-        $jobroleLists = $proficiencyLists = [];
-        foreach ($getJobroles as $key => $value) {
-            $jobroleLists[] = $value->jobrole;
-            $proficiencyLists[] = $value->proficiency_level;
-        }
-        $jobroleData = json_encode($jobroleLists);
-        $proficencyData = json_encode($proficiencyLists);
-        // return $mappingTypes;
-        $prompt = "I have Skills Name: '" . $skill_name . "' of 
-                    Industry: " . $industry . "
-                    I have Skills Description: " . $skill_description . "
-                    I have Skills Department: " . $skill_department . "
-                    I have Skills Category: " . $skill_category . "
-                    I have Skills Sub Category: " . $skill_sub_category;
-        if ($jobroleData == true) {
-            $prompt .= "
-                    I have Skills Jobrole: " . $jobroleData . "
-                    I have Skills Proficiency Level: " . $proficencyData;
-        }
-        $prompt .= "1.Understand the depth, complexity, and learning needs of the given skill.
-                    2.Break the skill into logical continuous chapters, each representing a key theme.
-                    3.For each chapter, create continuous content items with:
-                        title
-                        description
-                        content_category any 1 from (" . $lms_content_category . ")
-                        mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
-                        mapping_value (Easy/Medium/Hard)
-                    4. Create question items with:  
-                        question_title
-                        description
-                        mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
-                        mapping_value (Easy/Medium/Hard)
-                        reason (why above mapping_value selected)
-                    5. For each question item, create 4 answer item with:
-                        answer
-                        correct_answer (true/false)
-                        feedback
-                    6.Output Expectation:
-                    Generate and return a structured JSON with the following fields:
-                        - course_name
-                        - short_name
-                        - course_category any 1 of (" . $course_category . ")
-                        - course_code
-                        - course_type
-                        - short_name
-                        - chapters: list of chapters with:
-                           -- chapter_name
-                           -- chapter_description
-                           -- contents: list of content items with:
-                                --- content_title
-                                --- content_description
-                                --- content_html (Make Simple html[make label's bold and bg-color proper] with content title,content description,skill, skill description,skill category, skill sub category ,jobrole, jobrole description, list of tasks realted to content)
-                                --- content_category any 1 from (" . $lms_content_category . ")
-                                --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
-                                --- mapping_value (easy/medium/hard)
-                            -- questions: list of question items with (always MCQ question):
-                                --- question_title
-                                --- description
-                                --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
-                                --- mapping_value (easy/medium/hard)
-                                --- reason (why this mapping_value selected)
-                            -- answers: list of 4 corresponding answer items with only one correct answer:
-                                --- answer
-                                --- correct_answer (true as a 1/false as a 0)
-                                --- feedback
-                    Rules:
-                    Align everything tightly with the skill context fields.
-                    Use concise, engaging, and adult-learner-appropriate language.
-                    Do not add explanations — only output the structured JSON.
-                    provide me 1 course with atleast 3 content realted this skills > course > chapter. in JSON array";
-        }
+            // Check and create standard if needed
+            $checkStandard = DB::table('hrms_departments')
+                ->where(['sub_institute_id' => $sub_institute_id, 'department' => $skill_department])
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if ($checkStandard) {
+                $standard = $checkStandard->id;
+                \Log::info('Standard found', ['standard_id' => $standard]);
+            } else {
+                $standardInsert = DB::table('hrms_departments')->insertGetId([
+                    'sub_institute_id' => $sub_institute_id,
+                    'name' => $skill_department,
+                    'short_name' => $skill_department,
+                    'sort_order' => '1',
+                    'created_by' => $user_id,
+                    'created_at' => now()
+                ]);
+                $standard = $standardInsert;
+                \Log::info('Standard created', ['standard_id' => $standard]);
+            }
 
-        $request->merge(['prompt' => $prompt]);
-        $gemeniJson = $this->geminiChat($request);
-        $gemeniData = json_decode(json_encode($gemeniJson->original), true);
-        // return $gemeniData;
-        $i = 0;
-        if (!isset($gemeniData['error'])) {
-            $courseData = $gemeniData;
+            // Get mapping types and values
+            $mappingTypes = DB::table('lms_mapping_type')
+                ->where('id', 1)
+                ->whereNull('deleted_at')
+                ->get()
+                ->keyBy('id');
+            
+            $mappingValues = DB::table('lms_mapping_type')
+                ->where('parent_id', 1)
+                ->whereNull('deleted_at')
+                ->get()
+                ->keyBy('id');
+            
+            $lms_content_category = DB::table('lms_content_category')
+                ->where('status', 2)
+                ->whereNull('deleted_at')
+                ->pluck('category_name', 'id');
+            
+            $course_category = DB::table('lms_content_category')
+                ->where('status', 1)
+                ->whereNull('deleted_at')
+                ->pluck('category_name', 'id');
 
-            // Create course
+            // Prepare prompt based on form type
+            $prompt = '';
+            if ($request->has('formType')) {
+                $prompt = $request->prompt;
+            } else {
+                $skill_category = $request->skill_category;
+                $skill_sub_category = $request->skill_sub_category;
+                $skill_micro_category = $request->skill_micro_category;
+                $skill_name = $request->skill_name;
+                $skill_description = $request->skill_description;
+
+                // Get job roles
+                $getJobroles = DB::table('s_user_skill_jobrole')
+                    ->where(['sub_institute_id' => $sub_institute_id, 'skill' => $skill_name])
+                    ->whereNull('deleted_at')
+                    ->groupBy('jobrole')
+                    ->get();
+                
+                $jobroleLists = $proficiencyLists = [];
+                foreach ($getJobroles as $value) {
+                    $jobroleLists[] = $value->jobrole;
+                    $proficiencyLists[] = $value->proficiency_level;
+                }
+                
+                $jobroleData = json_encode($jobroleLists);
+                $proficencyData = json_encode($proficiencyLists);
+
+                $prompt = "I have Skills Name: '" . $skill_name . "' of 
+                        Industry: " . $industry . "
+                        I have Skills Description: " . $skill_description . "
+                        I have Skills Department: " . $skill_department . "
+                        I have Skills Category: " . $skill_category . "
+                        I have Skills Sub Category: " . $skill_sub_category;
+                
+                if (!empty($jobroleLists)) {
+                    $prompt .= "
+                        I have Skills Jobrole: " . $jobroleData . "
+                        I have Skills Proficiency Level: " . $proficencyData;
+                }
+                
+                $prompt .= "1.Understand the depth, complexity, and learning needs of the given skill.
+                        2.Break the skill into logical continuous chapters, each representing a key theme.
+                        3.For each chapter, create continuous content items with:
+                            title
+                            description
+                            content_category any 1 from (" . $lms_content_category->implode(', ') . ")
+                            mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                            mapping_value (Easy/Medium/Hard)
+                        4. Create question items with:  
+                            question_title
+                            description
+                            mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                            mapping_value (Easy/Medium/Hard)
+                            reason (why above mapping_value selected)
+                        5. For each question item, create 4 answer item with:
+                            answer
+                            correct_answer (true/false)
+                            feedback
+                        6.Output Expectation:
+                        Generate and return a structured JSON with the following fields:
+                            - course_name
+                            - short_name
+                            - course_category any 1 of (" . $course_category->implode(', ') . ")
+                            - course_code
+                            - course_type
+                            - chapters: list of chapters with:
+                            -- chapter_name
+                            -- chapter_description
+                            -- contents: list of content items with:
+                                    --- content_title
+                                    --- content_description
+                                    --- content_html (Make Simple html[make label's bold and bg-color proper] with content title,content description,skill, skill description,skill category, skill sub category ,jobrole, jobrole description, list of tasks realted to content)
+                                    --- content_category any 1 from (" . $lms_content_category->implode(', ') . ")
+                                    --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                                    --- mapping_value (easy/medium/hard)
+                                -- questions: list of question items with (always MCQ question):
+                                    --- question_title
+                                    --- description
+                                    --- mapping_type only (Depth of Knowledge (Easy, Medium, Hard))
+                                    --- mapping_value (easy/medium/hard)
+                                    --- reason (why this mapping_value selected)
+                                -- answers: list of 4 corresponding answer items with only one correct answer:
+                                    --- answer
+                                    --- correct_answer (true as a 1/false as a 0)
+                                    --- feedback
+                        Rules:
+                        Align everything tightly with the skill context fields.
+                        Use concise, engaging, and adult-learner-appropriate language.
+                        Do not add explanations — only output the structured JSON.
+                        provide me 1 course with atleast 3 content realted this skills > course > chapter. in JSON array";
+            }
+
+            \Log::info('Prompt prepared', ['prompt_length' => strlen($prompt)]);
+            $request->merge(['prompt' => $prompt]);
+
+            // Get AI response
+            $gemeniJson = $this->geminiChat($request);
+            $gemeniData = json_decode(json_encode($gemeniJson->original), true);
+            
+            \Log::info('Gemini response received', ['has_error' => isset($gemeniData['error']), 'response_keys' => array_keys($gemeniData)]);
+
+            if (isset($gemeniData['error'])) {
+                \Log::error('Gemini API error', ['error' => $gemeniData['error']]);
+                return response()->json([
+                    'status_code' => 0,
+                    'message' => 'AI API Error: ' . ($gemeniData['error']['message'] ?? 'Unknown error'),
+                    'geminiData' => $gemeniData
+                ]);
+            }
+
+            // Check if response is an array (not single object)
+            if (isset($gemeniData[0])) {
+                $courseData = $gemeniData[0];
+                \Log::info('Course data extracted from array', ['course_name' => $courseData['course_name'] ?? 'N/A']);
+            } else {
+                $courseData = $gemeniData;
+                \Log::info('Course data is single object', ['course_name' => $courseData['course_name'] ?? 'N/A']);
+            }
+
+            $successCount = 0;
+
+            // Create course - Use the subject_id from request
             $courseController = new masterSetupController;
             $course_request = new Request([
                 'type' => 'API',
@@ -1248,166 +1343,386 @@ class AJAXController extends Controller
                 'user_id' => $user_id,
                 'token' => $token,
                 'formType' => 'course',
-                'subject_id' => $request->subject_id ?? 0,
+                'subject_id' => $subject_id, // Use subject_id from request
                 'standard_id' => $standard,
                 'allow_grades' => 'Yes',
                 'allow_content' => 'Yes',
                 'sort_order' => '1',
                 'elective_subject' => 'No',
                 'add_content' => 'chapterwise',
-                'display_name' => $courseData['course_name'] ?? '-',
+                'display_name' => $courseData['course_name'] ?? 'AI Generated Course - ' . $skill_name,
                 'display_image' => null,
-                'subject_category' => $courseData['course_category'] ?? '-',
-                'subject_code' => $courseData['course_code'] ?? '-',
-                'subject_type' => $courseData['course_type'] ?? '-',
-                'short_name' => $courseData['short_name'] ?? '-',
+                'subject_category' => $courseData['course_category'] ?? 'Functional',
+                'subject_code' => $courseData['course_code'] ?? 'AI-GEN-' . time() . '-' . $skill_id,
+                'subject_type' => $courseData['course_type'] ?? 'Skill Development',
+                'short_name' => $courseData['short_name'] ?? substr($courseData['course_name'] ?? 'AI Course', 0, 20),
                 'status' => 1,
+                //'subject_id' => $skill_id // Add skill_id to the request
             ]);
 
+            \Log::info('Creating course with subject_id from request', [
+                'subject_id' => $subject_id,
+                'skill_id' => $skill_id,
+                'display_name' => $courseData['course_name'] ?? 'N/A'
+            ]);
+            
             $courseStore = $courseController->store($course_request);
 
+            if (!isset($courseStore->original['course_id'])) {
+                \Log::error('Failed to create course', ['response' => $courseStore]);
+                return response()->json([
+                    'status_code' => 0,
+                    'message' => 'Failed to create course in masterSetupController',
+                    'geminiData' => $gemeniData
+                ]);
+            }
+
             $courseId = $courseStore->original['course_id'];
+            
+            // After creating course, update the sub_std_map with skill_id if not already set
+            DB::table('sub_std_map')
+                ->where('id', $courseId)
+                ->update([
+                    'subject_id' => $skill_id,
+                    'updated_at' => now(),
+                    'updated_by' => $user_id
+                ]);
+            
+            \Log::info('Course created successfully', [
+                'course_id' => $courseId, 
+                'subject_id' => $subject_id,
+                //'skill_id' => $skill_id,
+                'display_name' => $courseData['course_name'] ?? 'N/A'
+            ]);
+            
+            $successCount++;
 
             // Process chapters if they exist
-            if (isset($courseData['chapters'])) {
-                foreach ($courseData['chapters'] as $chapterKey => $chapterData) {
-                    // Create chapter
-                    $moduleController = new chapterController;
-                    $chapter_request = new Request([
-                        'type' => 'API',
-                        'sub_institute_id' => $sub_institute_id,
-                        'user_id' => $user_id,
-                        'user_profile_name' => $user_profile_name,
-                        'token' => $token,
-                        'syear' => $syear,
-                        'grade' => $grade,
-                        'standard' => $standard,
-                        'subject' => $courseId,
-                        'chapter_name' => [$chapterData['chapter_name'] ?? '-'],
-                        'chapter_desc' => [$chapterData['chapter_description'] ?? '-'],
-                        'availability' => [1],
-                        'show_hide' => [1],
-                        'sort_order' => [1]
-                    ]);
+            if (isset($courseData['chapters']) && is_array($courseData['chapters'])) {
+                \Log::info('Processing chapters', ['chapter_count' => count($courseData['chapters'])]);
+                
+                foreach ($courseData['chapters'] as $chapterIndex => $chapterData) {
+                    try {
+                        // Create chapter
+                        $moduleController = new chapterController;
+                        $chapter_request = new Request([
+                            'type' => 'API',
+                            'sub_institute_id' => $sub_institute_id,
+                            'user_id' => $user_id,
+                            'user_profile_name' => $user_profile_name,
+                            'token' => $token,
+                            'syear' => $syear,
+                            'grade' => $grade,
+                            'standard' => $standard,
+                            'subject' => $courseId,
+                            'chapter_name' => [$chapterData['chapter_name'] ?? 'Chapter ' . ($chapterIndex + 1)],
+                            'chapter_desc' => [$chapterData['chapter_description'] ?? 'AI Generated Chapter'],
+                            'availability' => [1],
+                            'show_hide' => [1],
+                            'sort_order' => [$chapterIndex + 1]
+                        ]);
 
-                    $chapterStore = $moduleController->store($chapter_request);
-                    $chapterId = $chapterStore->original['chapter_id'];
-                    // Get related data
-                    $getstandard = DB::table('standard')
-                        ->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard])
-                        ->whereNull('deleted_at')
-                        ->first();
-                    $getcourse = DB::table('sub_std_map')
-                        ->where(['sub_institute_id' => $sub_institute_id, 'id' => $courseId])
-                        ->whereNull('deleted_at')
-                        ->first();
-                    $getChapter = DB::table('chapter_master')
-                        ->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapterId])
-                        ->whereNull('deleted_at')
-                        ->first();
-                    // echo "<pre>";print_r($chapterData['contents']);exit;
-                    // Process contents if they exist
-                    if (isset($chapterData['contents'])) {
-                        foreach ($chapterData['contents'] as $contentKey => $contentData) {
-                            $content_html = $contentData['content_html'];
-                            // Convert HTML content to PDF using DomPDF
-                            $options = new Options();
-                            $options->set('isHtml5ParserEnabled', true);
-                            $options->set('isRemoteEnabled', true);
+                        \Log::info('Creating chapter', [
+                            'chapter_index' => $chapterIndex, 
+                            'chapter_name' => $chapterData['chapter_name'] ?? 'N/A',
+                            'course_id' => $courseId
+                        ]);
+                        
+                        $chapterStore = $moduleController->store($chapter_request);
 
-                            // Generate PDF
-                            $pdf = new Dompdf($options);
-                            $pdf->loadHtml($content_html);
-                            $pdf->setPaper('A4', 'portrait');
-                            $pdf->render();
-                            $pdfContent = $pdf->output();
-                            $newfilename = date('Ymd') . '-' . time() . '.pdf';
-                            // Store directly in DigitalOcean Spaces
-                            Storage::disk('digitalocean')->put(
-                                "public/hp_lms_content_file/{$newfilename}",
-                                $pdfContent,
-                                'public' // visibility
-                            );
-                            // echo "<pre>";print_r($newfilename);exit;
-
-                            $contentController = new contentController;
-                            $content_request = new Request([
-                                'type' => 'API',
-                                'sub_institute_id' => $sub_institute_id,
-                                'user_id' => $user_id,
-                                'syear' => $syear,
-                                'token' => $token,
-                                'toggle_basic_advanced' => 'Advanced',
-                                'hid_standard_name' => $getstandard->name ?? '-',
-                                'hid_subject_name' => $getcourse->display_name ?? '-',
-                                'hid_chapter_name' => $getChapter->chapter_name ?? '-',
-                                'hid_chapter_id' => $chapterId,
-                                'title' => $contentData['content_title'] ?? '-',
-                                'description' => $contentData['content_description'] ?? '-',
-                                'content_category' => $contentData['content_category'] ?? '-',
-                                'contentType' => 'link',
-                                'link' => 'https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/hp_lms_content_file/' . $newfilename,
-                                'cross_curriculum_grade_topic' => $newfilename,
-                                'mapping_type' => isset($contentData['mapping_type']) ? $mappingTypes[$contentData['mapping_type']] ?? 0 : 0,
-                                'mapping_value' => isset($contentData['mapping_value']) ? $mappingValues[$contentData['mapping_value']] ?? 0 : 0,
-                                'filename' => 'content_' . time() . '.pdf',
-                                'show_hide' => 1
-                            ]);
-
-                            $contentStore = $contentController->store($content_request);
-                            // echo "<pre>";print_r($contentStore);exit;
+                        if (!isset($chapterStore->original['chapter_id'])) {
+                            \Log::error('Failed to create chapter', ['response' => $chapterStore, 'chapter_index' => $chapterIndex]);
+                            continue;
                         }
-                    }
 
-                    // Process questions if they exist
-                    if (isset($chapterData['questions'])) {
-                        foreach ($chapterData['questions'] as $questionData) {
+                        $chapterId = $chapterStore->original['chapter_id'];
+                        \Log::info('Chapter created successfully', ['chapter_id' => $chapterId]);
+                        $successCount++;
 
-                            $questionController = new questionmasterController;
-                            $question_request = new Request([
-                                'type' => 'API',
-                                'sub_institute_id' => $sub_institute_id,
-                                'user_id' => $user_id,
-                                'token' => $token,
-                                'grade_id' => $grade,
-                                'standard_id' => $standard,
-                                'subject_id' => $courseId,
+                        // Get related data
+                        $getstandard = DB::table('hrms_departments')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        
+                        $getcourse = DB::table('sub_std_map')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $courseId])
+                            ->whereNull('deleted_at')
+                            ->first();
+                        
+                        $getChapter = DB::table('chapter_master')
+                            ->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapterId])
+                            ->whereNull('deleted_at')
+                            ->first();
+
+                        // Process contents
+                        if (isset($chapterData['contents']) && is_array($chapterData['contents'])) {
+                            \Log::info('Processing contents', [
+                                'content_count' => count($chapterData['contents']), 
                                 'chapter_id' => $chapterId,
-                                'question_title' => $questionData['question_title'] ?? '-',
-                                'description' => $questionData['description'] ?? '-',
-                                'mapping_type' => isset($questionData['mapping_type']) ? array($mappingTypes[$questionData['mapping_type']] ?? 0) : array(),
-                                'mapping_value' => isset($questionData['mapping_value']) ? array($mappingValues[$questionData['mapping_value']] ?? 0) : array(),
-                                'reasons' => array($questionData['reason'] ?? '-'),
-                                'question_type_id' => 1,
-                                'points' => 1,
-                                'multiple_answer' => 1,
-                                'status' => 1,
-                                'options' => [
-                                    "NEW" => array_map(function ($answer) {
-                                        return $answer['answer'];
-                                    }, $questionData['answers'] ?? [])
-                                ],
-                                'correct_answer' => isset($questionData['answers']) ?
-                                    [array_search(true, array_column($questionData['answers'], 'correct_answer')) => "1"] :
-                                    [0 => "1"]
+                                'chapter_name' => $chapterData['chapter_name'] ?? 'N/A'
                             ]);
+                            
+                            foreach ($chapterData['contents'] as $contentIndex => $contentData) {
+                                try {
+                                    $content_html = $contentData['content_html'] ?? '<div>No content provided</div>';
+                                    
+                                    // Convert HTML content to PDF using DomPDF
+                                    $options = new Options();
+                                    $options->set('isHtml5ParserEnabled', true);
+                                    $options->set('isRemoteEnabled', true);
+                                    $options->set('defaultFont', 'Arial');
 
-                            $questionStore = $questionController->store($question_request);
-                            // echo "<pre>";print_r($questionStore);exit;
+                                    // Generate PDF
+                                    $pdf = new Dompdf($options);
+                                    $pdf->loadHtml($content_html);
+                                    $pdf->setPaper('A4', 'portrait');
+                                    $pdf->render();
+                                    
+                                    $pdfContent = $pdf->output();
+                                    $newfilename = 'content_' . $courseId . '_' . $chapterId . '_' . date('Ymd') . '_' . time() . '_' . $contentIndex . '.pdf';
+                                    
+                                    // Store in DigitalOcean Spaces
+                                    $storagePath = "public/hp_lms_content_file/{$newfilename}";
+                                    Storage::disk('digitalocean')->put(
+                                        $storagePath,
+                                        $pdfContent,
+                                        'public'
+                                    );
+
+                                    \Log::info('PDF created and stored', [
+                                        'filename' => $newfilename,
+                                        'storage_path' => $storagePath
+                                    ]);
+
+                                    // Find mapping type and value IDs
+                                    $mappingTypeId = null;
+                                    $mappingValueId = null;
+                                    
+                                    if (isset($contentData['mapping_type']) && isset($contentData['mapping_value'])) {
+                                        // Try to find mapping type
+                                        $mappingType = $mappingTypes->first(function ($item) use ($contentData) {
+                                            return strpos(strtolower($item->name), strtolower($contentData['mapping_type'])) !== false;
+                                        });
+                                        
+                                        if ($mappingType) {
+                                            $mappingTypeId = $mappingType->id;
+                                            
+                                            // Find mapping value under this type
+                                            $mappingValue = $mappingValues->first(function ($item) use ($contentData, $mappingTypeId) {
+                                                return $item->parent_id == $mappingTypeId && 
+                                                    strpos(strtolower($item->name), strtolower($contentData['mapping_value'])) !== false;
+                                            });
+                                            
+                                            if ($mappingValue) {
+                                                $mappingValueId = $mappingValue->id;
+                                            }
+                                        }
+                                    }
+
+                                    // Find content category ID
+                                    $contentCategoryId = null;
+                                    if (isset($contentData['content_category'])) {
+                                        $category = $lms_content_category->first(function ($name, $id) use ($contentData) {
+                                            return strpos(strtolower($name), strtolower($contentData['content_category'])) !== false;
+                                        });
+                                        
+                                        if ($category) {
+                                            $contentCategoryId = $lms_content_category->search($category);
+                                        }
+                                    }
+
+                                    // If not found, use defaults
+                                    if (!$contentCategoryId) {
+                                        $contentCategoryId = $lms_content_category->keys()->first();
+                                    }
+
+                                    $contentController = new contentController;
+                                    $content_request = new Request([
+                                        'type' => 'API',
+                                        'sub_institute_id' => $sub_institute_id,
+                                        'user_id' => $user_id,
+                                        'syear' => $syear,
+                                        'token' => $token,
+                                        'toggle_basic_advanced' => 'Advanced',
+                                        'hid_standard_name' => $getstandard->name ?? $skill_department,
+                                        'hid_subject_name' => $getcourse->display_name ?? $courseData['course_name'] ?? 'AI Course',
+                                        'hid_chapter_name' => $getChapter->chapter_name ?? ($chapterData['chapter_name'] ?? 'Chapter'),
+                                        'hid_chapter_id' => $chapterId,
+                                        'title' => $contentData['content_title'] ?? 'Content ' . ($contentIndex + 1),
+                                        'description' => $contentData['content_description'] ?? 'AI Generated Content',
+                                        'content_category' => $contentCategoryId,
+                                        'contentType' => 'link',
+                                        'link' => 'https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/hp_lms_content_file/' . $newfilename,
+                                        'cross_curriculum_grade_topic' => $newfilename,
+                                        'mapping_type' => $mappingTypeId ?? 0,
+                                        'mapping_value' => $mappingValueId ?? 0,
+                                        'filename' => $newfilename,
+                                        'show_hide' => 1
+                                    ]);
+
+                                    \Log::info('Creating content', [
+                                        'content_index' => $contentIndex, 
+                                        'title' => $contentData['content_title'] ?? 'N/A',
+                                        'chapter_id' => $chapterId
+                                    ]);
+                                    
+                                    $contentStore = $contentController->store($content_request);
+                                    
+                                    if (isset($contentStore->original['content_id'])) {
+                                        \Log::info('Content created successfully', [
+                                            'content_id' => $contentStore->original['content_id'],
+                                            'title' => $contentData['content_title'] ?? 'N/A'
+                                        ]);
+                                        $successCount++;
+                                    } else {
+                                        \Log::error('Failed to create content', ['response' => $contentStore, 'content_index' => $contentIndex]);
+                                    }
+                                } catch (\Exception $e) {
+                                    \Log::error('Error creating content', [
+                                        'error' => $e->getMessage(),
+                                        'trace' => $e->getTraceAsString(),
+                                        'content_index' => $contentIndex,
+                                        'chapter_id' => $chapterId
+                                    ]);
+                                }
+                            }
                         }
+
+                        // Process questions
+                        if (isset($chapterData['questions']) && is_array($chapterData['questions'])) {
+                            \Log::info('Processing questions', [
+                                'question_count' => count($chapterData['questions']), 
+                                'chapter_id' => $chapterId
+                            ]);
+                            
+                            foreach ($chapterData['questions'] as $questionIndex => $questionData) {
+                                try {
+                                    // Prepare answers
+                                    $answers = isset($chapterData['answers']) ? $chapterData['answers'] : [];
+                                    $questionAnswers = array_slice($answers, $questionIndex * 4, 4);
+                                    
+                                    if (empty($questionAnswers)) {
+                                        // Create default answers if not provided
+                                        $questionAnswers = [
+                                            ['answer' => 'True', 'correct_answer' => 1, 'feedback' => 'Correct answer'],
+                                            ['answer' => 'False', 'correct_answer' => 0, 'feedback' => 'Incorrect answer'],
+                                            ['answer' => 'Maybe', 'correct_answer' => 0, 'feedback' => 'Incorrect answer'],
+                                            ['answer' => 'Not sure', 'correct_answer' => 0, 'feedback' => 'Incorrect answer']
+                                        ];
+                                    }
+
+                                    // Find correct answer index
+                                    $correctAnswerIndex = null;
+                                    foreach ($questionAnswers as $index => $answer) {
+                                        if (isset($answer['correct_answer']) && $answer['correct_answer']) {
+                                            $correctAnswerIndex = $index;
+                                            break;
+                                        }
+                                    }
+
+                                    // If no correct answer found, set first as correct
+                                    if ($correctAnswerIndex === null) {
+                                        $correctAnswerIndex = 0;
+                                        $questionAnswers[0]['correct_answer'] = 1;
+                                    }
+
+                                    $questionController = new questionmasterController;
+                                    $question_request = new Request([
+                                        'type' => 'API',
+                                        'sub_institute_id' => $sub_institute_id,
+                                        'user_id' => $user_id,
+                                        'token' => $token,
+                                        'standard_id' => $standard,
+                                        'subject_id' => $courseId,
+                                        'chapter_id' => $chapterId,
+                                        'question_title' => $questionData['question_title'] ?? 'Question ' . ($questionIndex + 1),
+                                        'description' => $questionData['description'] ?? 'AI Generated Question',
+                                        'mapping_type' => isset($questionData['mapping_type']) ? [1] : [],
+                                        'mapping_value' => isset($questionData['mapping_value']) ? [1] : [],
+                                        'reasons' => isset($questionData['reason']) ? [$questionData['reason']] : ['AI Generated'],
+                                        'question_type_id' => 1,
+                                        'points' => 1,
+                                        'multiple_answer' => 0,
+                                        'status' => 1,
+                                        'options' => [
+                                            "NEW" => array_column($questionAnswers, 'answer')
+                                        ],
+                                        'correct_answer' => [$correctAnswerIndex => "1"]
+                                    ]);
+
+                                    \Log::info('Creating question', [
+                                        'question_index' => $questionIndex, 
+                                        'title' => $questionData['question_title'] ?? 'N/A',
+                                        'chapter_id' => $chapterId
+                                    ]);
+                                    
+                                    $questionStore = $questionController->store($question_request);
+                                    
+                                    if (isset($questionStore->original['question_id'])) {
+                                        \Log::info('Question created successfully', [
+                                            'question_id' => $questionStore->original['question_id'],
+                                            'title' => $questionData['question_title'] ?? 'N/A'
+                                        ]);
+                                        $successCount++;
+                                    } else {
+                                        \Log::error('Failed to create question', ['response' => $questionStore, 'question_index' => $questionIndex]);
+                                    }
+                                } catch (\Exception $e) {
+                                    \Log::error('Error creating question', [
+                                        'error' => $e->getMessage(),
+                                        'trace' => $e->getTraceAsString(),
+                                        'question_index' => $questionIndex,
+                                        'chapter_id' => $chapterId
+                                    ]);
+                                }
+                            }
+                        }
+
+                    } catch (\Exception $e) {
+                        \Log::error('Error processing chapter', [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                            'chapter_index' => $chapterIndex,
+                            'course_id' => $courseId
+                        ]);
                     }
                 }
             }
-            $i = 1;
+
+            \Log::info('AICourseGeneration completed successfully', [
+                'success_count' => $successCount,
+                'course_id' => $courseId,
+                'subject_id' => $subject_id,
+                'skill_id' => $skill_id
+            ]);
+
+            $response = [
+                'status_code' => 1,
+                'message' => 'Successfully generated AI course and stored all data',
+                'total_items_created' => $successCount,
+                'course_id' => $courseId,
+                'subject_id' => $subject_id,
+                'skill_id' => $skill_id,
+                'course_name' => $courseData['course_name'] ?? 'AI Generated Course',
+                'geminiData' => $gemeniData
+            ];
+
+            return response()->json($response);
+
+        } catch (\Exception $e) {
+            \Log::error('AICourseGeneration fatal error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
+            ]);
+            
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'Internal server error: ' . $e->getMessage(),
+                'error_details' => config('app.debug') ? $e->getTraceAsString() : null
+            ], 500);
         }
-        $res['status_code'] = 0;
-        $res['message'] = 'Failed Find Data from AI';
-        if ($i > 0) {
-            $res['status_code'] = 1;
-            $res['message'] = 'Successfully Find Data from AI and Added';
-        }
-        $res['geminiData'] = $gemeniData;
-        return response()->json($res);
     }
 
     public function GammaContentGeneration(Request $request)
