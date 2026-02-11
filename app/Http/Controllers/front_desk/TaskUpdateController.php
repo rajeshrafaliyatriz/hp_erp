@@ -29,7 +29,7 @@ class TaskUpdateController extends Controller
         // Validate inputs
         $validator = Validator::make($request->all(), [
             'row.data.status' => 'required|string',
-            'row.data.task_description' => 'required|string',
+            'row.data.taskcompletation_remarks' => 'required|string',
         ]);
 
         if ($validator->fails()) {
@@ -46,6 +46,7 @@ class TaskUpdateController extends Controller
         $task->update([
             'status' => $request->input('row.data.status'),
             'task_description' => $request->input('row.data.task_description'),
+            'taskcompletation_remarks' => $request->input('row.data.taskcompletation_remarks'),
             'updated_at' => now(),
             'updated_by' => $user_id,
         ]);
