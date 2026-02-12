@@ -20,7 +20,7 @@ class SuggestedCourseController extends Controller
             'created_by' => 'nullable|integer',
         ]);
 
-        $courseSuggestion = SuggestedCourse::updateOrCreate(
+        $courseSuggestion = SuggestedCourse::firstOrCreate(
             [
                 'employee_id' => $request->employee_id,
                 'task_id'     => $request->task_id,
@@ -37,7 +37,7 @@ class SuggestedCourseController extends Controller
             'status' => true,
             'message' => $courseSuggestion->wasRecentlyCreated
                 ? 'Course suggestion saved successfully'
-                : 'Course suggestion updated successfully',
+                : 'Course suggestion Already exist',
             'data' => $courseSuggestion,
         ], 201);
     }
