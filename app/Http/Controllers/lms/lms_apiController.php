@@ -766,7 +766,14 @@ GROUP BY am.question_id,a.question_id
             return json_encode($res);
         }
 
-        $suggestedCourses = SuggestedCourse::where('employee_id', $user_id)->where('sub_institute_id', $sub_institute_id)->get();
+        $suggestedCourses = SuggestedCourse::leftJoin('task as t', 't.id', '=', 'suggested_course.task_id') // 👈 adjust table & column names
+            ->where('suggested_course.employee_id', $user_id)
+            ->where('suggested_course.sub_institute_id', $sub_institute_id)
+            ->select(
+                'suggested_course.*',
+                't.task_title'
+            )
+            ->get();
 
         if ($suggestedCourses->isNotEmpty()) {
             $res['status'] = 1;
@@ -780,4 +787,5 @@ GROUP BY am.question_id,a.question_id
 
         return $res;
     }
+
 }
