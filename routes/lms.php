@@ -250,6 +250,7 @@ Route::controller(lms_apiController::class)->group(function () {
     Route::post('/studentAssessmentDetailAPI', 'studentAssessmentDetailAPI');
     Route::post('/lmsCategorywiseSubjectAPI', 'lmsCategorywiseSubjectAPI');
     Route::post('/trizStandardAPI', 'trizStandardAPI');
+    Route::get('/getSuggestedCoursesByUser', 'getSuggestedCoursesByUser');
 });
 
 Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], function () {
