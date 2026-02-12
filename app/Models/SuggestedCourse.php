@@ -26,6 +26,8 @@ class SuggestedCourse extends Model
         'task_id',
         'course_id',
         'course_name',
+        'sub_institute_id',
+        'created_by',
     ];
 
     /**
@@ -38,5 +40,7 @@ class SuggestedCourse extends Model
         'task_id' => 'integer',
         'course_id' => 'integer',
         'course_name' => 'string',
+        'sub_institute_id' => 'integer',
+        'created_by' => 'integer',
     ];
 }
