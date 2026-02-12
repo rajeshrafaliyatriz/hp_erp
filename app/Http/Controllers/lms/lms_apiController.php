@@ -9,6 +9,7 @@ use App\Models\lms\lmsOnlineExamModel;
 use App\Models\lms\lmsQuestionMasterModel;
 use App\Models\lms\questionpaperModel;
 use App\Models\lms\topicModel;
+use App\Models\SuggestedCourse;
 use App\Models\lms\contentModel;
 // use App\Models\skill\AssessmentLibrary;
 // use GenTux\Jwt\GetsJwtToken;
@@ -745,5 +746,38 @@ GROUP BY am.question_id,a.question_id
         }
 
         return json_encode($res);
+    }
+
+    /**
+     * Get suggested courses by user_id
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getSuggestedCoursesByUser(Request $request)
+    {
+        $user_id = $request->input('user_id');
+        $sub_institute_id = $request->input('sub_institute_id');
+
+        if (empty($user_id) || empty($sub_institute_id)) {
+            $res['status'] = 0;
+            $res['message'] = 'User ID and Sub-Institute ID are required';
+            $res['data'] = [];
+            return json_encode($res);
+        }
+
+        $suggestedCourses = SuggestedCourse::where('employee_id', $user_id)->where('sub_institute_id', $sub_institute_id)->get();
+
+        if ($suggestedCourses->isNotEmpty()) {
+            $res['status'] = 1;
+            $res['message'] = 'Success';
+            $res['data'] = $suggestedCourses;
+        } else {
+            $res['status'] = 0;
+            $res['message'] = 'No suggested courses found for this user';
+            $res['data'] = [];
+        }
+
+        return $res;
     }
 }
