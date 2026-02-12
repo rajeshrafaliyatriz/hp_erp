@@ -18,7 +18,7 @@ class SuggestedCourseController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'employee_id' => 'required|integer',
+            'employee_id' => 'required|integer|exists:tbluser,id'',
             'task_id' => 'required|integer',
             'course_id' => 'required|integer',
             'course_name' => 'required|string',
@@ -26,19 +26,26 @@ class SuggestedCourseController extends Controller
             'created_by' => 'nullable|integer',
         ]);
 
-        $courseSuggestion = SuggestedCourse::create([
-            'employee_id' => $request->employee_id,
-            'task_id' => $request->task_id,
-            'course_id' => $request->course_id,
-            'course_name' => $request->course_name,
-            'sub_institute_id' => $request->sub_institute_id,
-            'created_by' => $request->created_by,
-        ]);
+        $courseSuggestion = SuggestedCourse::updateOrCreate(
+    [
+        'employee_id' => $request->employee_id,
+        'task_id'     => $request->task_id,
+        'course_id'   => $request->course_id,
+    ],
+    [
+        'course_name'      => $request->course_name,
+        'sub_institute_id' => $request->sub_institute_id,
+        'created_by'       => $request->created_by,
+    ]
+);
 
-        return response()->json([
+
+         return response()->json([
             'status' => true,
-            'message' => 'Course suggestion saved successfully',
-            'data' => $courseSuggestion,
-        ], 200);
+            'message' => $suggestedCourse->wasRecentlyCreated 
+                ? 'Course suggestion saved successfully' 
+                : 'Course suggestion already exists',
+            'data' => $suggestedCourse,
+        ], 201);
     }
 }
