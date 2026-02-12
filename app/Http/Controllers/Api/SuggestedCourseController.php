@@ -9,16 +9,10 @@ use Illuminate\Http\JsonResponse;
 
 class SuggestedCourseController extends Controller
 {
-    /**
-     * Store a newly created course suggestion.
-     *
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'employee_id' => 'required|integer|exists:tbluser,id'',
+            'employee_id' => 'required|integer|exists:tbluser,id',
             'task_id' => 'required|integer',
             'course_id' => 'required|integer',
             'course_name' => 'required|string',
@@ -27,25 +21,24 @@ class SuggestedCourseController extends Controller
         ]);
 
         $courseSuggestion = SuggestedCourse::updateOrCreate(
-    [
-        'employee_id' => $request->employee_id,
-        'task_id'     => $request->task_id,
-        'course_id'   => $request->course_id,
-    ],
-    [
-        'course_name'      => $request->course_name,
-        'sub_institute_id' => $request->sub_institute_id,
-        'created_by'       => $request->created_by,
-    ]
-);
+            [
+                'employee_id' => $request->employee_id,
+                'task_id'     => $request->task_id,
+                'course_id'   => $request->course_id,
+            ],
+            [
+                'course_name'      => $request->course_name,
+                'sub_institute_id' => $request->sub_institute_id,
+                'created_by'       => $request->created_by,
+            ]
+        );
 
-
-         return response()->json([
+        return response()->json([
             'status' => true,
-            'message' => $suggestedCourse->wasRecentlyCreated 
-                ? 'Course suggestion saved successfully' 
-                : 'Course suggestion already exists',
-            'data' => $suggestedCourse,
+            'message' => $courseSuggestion->wasRecentlyCreated
+                ? 'Course suggestion saved successfully'
+                : 'Course suggestion updated successfully',
+            'data' => $courseSuggestion,
         ], 201);
     }
 }
