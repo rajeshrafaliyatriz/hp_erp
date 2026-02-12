@@ -343,14 +343,21 @@ class SkillMatrixController extends Controller
 		    // Use ONE MODEL but dynamic table
 		    $model = \App\Models\libraries\KabaMaster::fromType($type);
 
-		    return $model->whereIn('id', $idList)->get()->map(function ($item) {
-		        return array_filter([
+		    return $model->whereIn('id', $idList)->get()->map(function ($item) use ($type) {
+		        $data = [
 		            'id'           => $item->id,
-		            'category'     => $item->category,
-		            'sub_category' => $item->sub_category,
-		            'title'        => $item->title,
-		            'description'  => $item->description,
-		        ], function ($v) {
+		            'category'     => $item->category ?? $item->track,
+		            'sub_category' => $item->sub_category ?? $item->critical_work_function,
+		            'title'        => $item->title ?? $item->task ?? $item->jobrole,
+		            'description'  => $item->description ?? $item->critical_work_function.' - '.$item->task,
+		        ];
+
+		        // Add proficiency_level only if type is 'skill'
+		        if ($type === 'skill') {
+		            $data['proficiency_level'] = $item->proficiency_level ?? null;
+		        }
+
+		        return array_filter($data, function ($v) {
 		            return !is_null($v) && $v !== "";
 		        });
 		    })->toArray();
@@ -374,9 +381,9 @@ class SkillMatrixController extends Controller
 	        'description' => $items->description ?? null,
 
             // Only add if included in type
-	        'task'        => $type === 'task'   ? loadKaba($map->task_ids,'task')   : null,
+	        'task'        => loadKaba($map->task_ids,'task'),
 	        'skill'       => loadKaba($map->skill_ids,'skill'),
-	        'jobrole'     => $type === 'jobrole'? loadKaba($map->jobrole_ids,'jobrole'): null,
+	        'jobrole'     => loadKaba($map->jobrole_ids,'jobrole'),
 
 	        // Auto convert IDs → full data
 	        'knowledge'   => loadKaba($map->knowledge_ids,'knowledge'),

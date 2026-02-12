@@ -15,7 +15,10 @@ use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\talent\talent_screening_results_controller;
-
+use App\Http\Controllers\talent\TalentOfferController;
+use App\Http\Controllers\talent\TalentAcquisition\TalentAcquisitionController;
+use App\Http\Controllers\talent\TalentAcquisition\CandidateDropoffController;
+use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\Api\HRITDashboard\AttendanceApiController;
 use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
@@ -23,7 +26,10 @@ use App\Http\Controllers\HRMS\HrmsLeaveController;
 use App\Http\Controllers\HRMS\DepartmentManagementController;
 use App\Http\Controllers\build_with_AI\buildwithAIController;
 use App\Http\Controllers\Api\GammaApiController;
-
+use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
+use App\Http\Controllers\Api\SkillMatchingController;
+use App\Http\Controllers\Api\SuggestedCourseController;
+use App\Http\Controllers\user\UserSkillController;
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 use App\Http\Controllers\ai_generated_assessment\generateQuestionController;
 use App\Http\Controllers\ai_generated_assessment\generateAssessmentController;
@@ -43,6 +49,7 @@ use App\Http\Controllers\Reports\EmployeeDirectoryAnalytics\EmployeeDirectoryAna
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
+use App\Http\Controllers\Api\TaskController;
 
 Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
 Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
@@ -65,6 +72,17 @@ Route::get('/talent/team-overview', [talent_jobpostingcontroller::class, 'getHir
 
 Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store']);
 Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show']);
+
+Route::get('offers', [TalentOfferController::class, 'index']);
+Route::post('talent-offers', [TalentOfferController::class, 'store']);
+Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject']);
+Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
+Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
+
+Route::get('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis']);
+Route::get('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
+Route::get('/talent-acquisition/funnel', [CandidateDropoffController::class, 'getFunnelData']);
+Route::get('/talent-acquisition/requisitions', [CandidateDropoffController::class, 'getRequisitions']);
 
 Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
 
@@ -110,6 +128,7 @@ Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'g
 
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
+Route::get('/KPI-HRITDashboard', [AttendanceApiController::class, 'KPI']);
 
 Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise']);
 Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution']);
@@ -120,6 +139,7 @@ Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution'
 
 
 Route::get('/enroll', [LmsCourseEnrollController::class, 'index']);
+Route::get('/enrolled_courses', [LmsCourseEnrollController::class, 'index']);
 Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
 Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
 Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
@@ -136,6 +156,7 @@ Route::get('gamma-api/sub-institute/{subInstituteId}', [GammaApiController::clas
 Route::resource('skill_library', skillLibraryController::class);
 Route::get('/positions', [InterviewController::class, 'getPositions']);
 Route::get('/interviewers', [InterviewController::class, 'getInterviewers']);
+Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings']);
 
 Route::get('/interview-panel/users', [talent_interviewpanelController::class, 'getInterviewers']);
 Route::post('/interview-panel/store', [talent_interviewpanelController::class, 'storeinterviewer']);
@@ -149,6 +170,7 @@ Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
 Route::get('/pending-feedback', [feedbackController::class, 'getPendingFeedback']);
 Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'index']);
 Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
+Route::post('/interviews/{id}/decision', [InterviewController::class, 'recordDecision']);
 
 Route::get('/kpis', [EmployeeSkillCoverageMatrixController::class, 'getKpiMetrics']);
 Route::get('/skill-gaps', [EmployeeSkillCoverageMatrixController::class, 'skillGaps']);
@@ -173,7 +195,16 @@ Route::group(['prefix' => 'reports'], function () {
     Route::get('/employee-directory/skills/matrix', [EmployeeDirectoryAnalyticsController::class, 'getSkillMatrix']);
 });
 
+Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze']);
 
+Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks']);
+Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills']);
 
+Route::post('/employee/course-suggestions', [SuggestedCourseController::class, 'store']);
 
-
+// Task API Routes
+Route::get('/tasks/counts', [TaskController::class, 'getTaskCounts']);
+Route::get('/tasks/daily', [TaskController::class, 'getDailyTasks']);
+Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
+Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
+Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills']);

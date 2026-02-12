@@ -88,6 +88,7 @@ use App\Http\Controllers\BlogController;
 use App\Http\Controllers\library\LostandDamage;
 use App\Services\Neo4jService;
 
+
 Route::get('/neo4j-test', function (Neo4jService $neo4j) {
     return $neo4j->testConnection();
 });
@@ -99,7 +100,8 @@ Route::get('/', function () {
 });
 
 Route::resource('login', authController::class);
-
+Route::post('user_login', [authController::class, 'user_login']);
+Route::post('user_check_otp', [authController::class, 'user_check_otp']);
 Route::middleware(['auth','session','menu'])->group(function () {
     Route::resource('dashboard', dashboardController::class);
     Route::resource('organization_dashboard', orgDashboardContorller::class);

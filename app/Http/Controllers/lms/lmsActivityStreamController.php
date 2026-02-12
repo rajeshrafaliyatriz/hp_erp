@@ -69,6 +69,17 @@ class lmsActivityStreamController extends Controller
             ->where('t.SYEAR', $syear)
             ->get()
             ->toArray();
+
+        $res['allCompliance'] = DB::table('master_compliance as mc')
+            ->join('tbluser as tu', 'mc.assigned_to', '=', 'tu.id')
+            ->selectRaw('mc.*, CONCAT_WS(" ",COALESCE(tu.first_name,"-"),COALESCE(tu.middle_name,"-"),COALESCE(tu.last_name,"-")) as assignedUser')
+            ->where('mc.sub_institute_id', $sub_institute_id)
+            ->where('mc.assigned_to', $user_id)
+            ->whereBetween('mc.duedate', [$currentMonthStart, $currentMonthEnd])
+            ->where('mc.duedate', '>=', date('Y-m-d'))
+            ->whereNull('mc.deleted_at')
+            ->get()
+            ->toArray();
         // echo "<pre>";print_r($res);exit;
         return is_mobile($type, 'lms/newActivityStream', $res, "view");
     }
@@ -124,13 +135,16 @@ class lmsActivityStreamController extends Controller
         $lessonPlan = $this->getLessonPlan($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $classStdId, $classDivId, 'upcoming');
 
         // Not for students
-        $hrmsPunchInOut = $proxyLecture = $examMarks = $studentAttendance = $taskAssigned = $parentCommunication = $studentLeave = [];
+        $hrmsPunchInOut = $proxyLecture = $examMarks = $studentAttendance = $taskAssigned = $complianceAssigned = $parentCommunication = $studentLeave = [];
         if ($profileName != "Student") {
             $hrmsPunchInOut = $this->getHrmsPunchInOut($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $profileId, 'upcoming');
             $proxyLecture = $this->getProxyLecture($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $profileId, $dayOfWeek, 'upcoming');
             $examMarks = $this->getExamMarks($sub_institute_id, $syear, $searchDate, $user_id, $term_id, $classStdId, 'upcoming');
             $studentAttendance = $this->getStudentAttendance($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'upcoming');
             $taskAssigned = $this->getTaskAssigned($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'upcoming');
+            $complianceAssigned = $this->getComplianceAssigned($sub_institute_id, $searchDate, $user_id, 'upcoming');
+            $complianceToday = $this->getComplianceAssigned($sub_institute_id, $searchDate, $user_id, 'today');
+            $complianceAssigned = array_merge($complianceAssigned, $complianceToday);
             $parentCommunication = $this->getParentCommunication($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'upcoming');
             $studentLeave = $this->getStudentLeave($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'upcoming');
         }
@@ -147,6 +161,7 @@ class lmsActivityStreamController extends Controller
         // $res['examMarks'] = $examMarks;
         // $res['studentAttendance'] = $studentAttendance;
         $res['taskAssigned'] = $taskAssigned;
+        $res['complianceAssigned'] = $complianceAssigned;
         // $res['parentCommunication'] = $parentCommunication;
         // $res['studentLeave'] = $studentLeave;
 
@@ -231,13 +246,16 @@ class lmsActivityStreamController extends Controller
         $lessonPlan = $this->getLessonPlan($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $classStdId, $classDivId, 'today');
 
         // Not for students
-        $hrmsPunchInOut = $proxyLecture = $examMarks = $studentAttendance = $taskAssigned = $parentCommunication = $studentLeave = [];
+        $hrmsPunchInOut = $proxyLecture = $examMarks = $studentAttendance = $taskAssigned = $complianceAssigned = $parentCommunication = $studentLeave = [];
         if ($profileName != "Student") {
             $hrmsPunchInOut = $this->getHrmsPunchInOut($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $profileId, 'today');
             $proxyLecture = $this->getProxyLecture($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $profileId, $dayOfWeek, 'today');
             $examMarks = $this->getExamMarks($sub_institute_id, $syear, $searchDate, $user_id, $term_id, $classStdId, 'today');
             $studentAttendance = $this->getStudentAttendance($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'today');
             $taskAssigned = $this->getTaskAssigned($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'today');
+            $complianceAssigned = $this->getComplianceAssigned($sub_institute_id, $searchDate, $user_id, 'today');
+            $complianceUpcoming = $this->getComplianceAssigned($sub_institute_id, $searchDate, $user_id, 'upcoming');
+            $complianceAssigned = array_merge($complianceAssigned, $complianceUpcoming);
             $parentCommunication = $this->getParentCommunication($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'today');
             $studentLeave = $this->getStudentLeave($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'today');
         }
@@ -254,6 +272,7 @@ class lmsActivityStreamController extends Controller
         // $res['examMarks'] = $examMarks;
         // $res['studentAttendance'] = $studentAttendance;
         $res['taskAssigned'] = $taskAssigned;
+        $res['complianceAssigned'] = $complianceAssigned;
         // $res['parentCommunication'] = $parentCommunication;
         // $res['studentLeave'] = $studentLeave;
         return $res;
@@ -310,13 +329,14 @@ class lmsActivityStreamController extends Controller
         $lessonPlan = $this->getLessonPlan($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $classStdId, $classDivId, 'recent');
 
         // Not for students
-        $hrmsPunchInOut = $proxyLecture = $examMarks = $studentAttendance = $taskAssigned = $parentCommunication = $studentLeave = [];
+        $hrmsPunchInOut = $proxyLecture = $examMarks = $studentAttendance = $taskAssigned = $complianceAssigned = $parentCommunication = $studentLeave = [];
         if ($profileName != "Student") {
             $hrmsPunchInOut = $this->getHrmsPunchInOut($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $profileId, 'recent');
             $proxyLecture = $this->getProxyLecture($sub_institute_id, $syear, $searchDate, $user_id, $profileName, $profileId, $dayOfWeek, 'recent');
             $examMarks = $this->getExamMarks($sub_institute_id, $syear, $searchDate, $user_id, $term_id, $classStdId, 'recent');
             $studentAttendance = $this->getStudentAttendance($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'recent');
             $taskAssigned = $this->getTaskAssigned($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'recent');
+            $complianceAssigned = $this->getComplianceAssigned($sub_institute_id, $searchDate, $user_id, 'recent');
             $parentCommunication = $this->getParentCommunication($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'recent');
             $studentLeave = $this->getStudentLeave($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'recent');
         }
@@ -333,6 +353,7 @@ class lmsActivityStreamController extends Controller
         // $res['examMarks'] = $examMarks;
         // $res['studentAttendance'] = $studentAttendance;
         $res['taskAssigned'] = $taskAssigned;
+        $res['complianceAssigned'] = $complianceAssigned;
         // $res['parentCommunication'] = $parentCommunication;
         // $res['studentLeave'] = $studentLeave;
         return $res;
@@ -638,6 +659,7 @@ class lmsActivityStreamController extends Controller
                 t.task_type,
                 t.task_date,
                 t.status,
+                t.approve_status,
                 t.sub_institute_id,
                 t.syear,
                 t.created_at,
@@ -662,6 +684,45 @@ class lmsActivityStreamController extends Controller
 
         // Return tasks only
         return $taskQuery->get()->toArray();
+    }
+
+    // compliance assigned
+    function getComplianceAssigned($sub_institute_id, $searchDate, $user_id, $activityType = '')
+    {
+        $complianceQuery = DB::table('master_compliance as mc')
+            ->join('tbluser as tu', function ($join) use ($sub_institute_id) {
+                $join->on('mc.assigned_to', '=', 'tu.id')
+                    ->where(['tu.sub_institute_id' => $sub_institute_id]);
+            })
+            ->selectRaw('
+                mc.id,
+                mc.name as task_title,
+                "Compliance" as task_type,
+                mc.duedate as task_date,
+                "PENDING" as status,
+                mc.sub_institute_id,
+                mc.created_at,
+                CONCAT_WS(" ", COALESCE(tu.first_name,"-"), COALESCE(tu.middle_name,"-"), COALESCE(tu.last_name,"-")) as allocatedUser,
+                "" as allocatedBy,
+                CASE WHEN tu.image IS NOT NULL
+                    THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", tu.image)
+                    ELSE NULL
+                END as image
+            ')
+            ->where(['mc.sub_institute_id' => $sub_institute_id])
+            ->whereNull('mc.deleted_at')
+            ->when($activityType == 'upcoming', function ($q) use ($searchDate) {
+                $q->where('mc.duedate', '>', date('Y-m-d', strtotime($searchDate . ' +1 day')));
+            })
+            ->when($activityType == 'today', function ($q) use ($searchDate) {
+                $q->whereBetween('mc.duedate', [$searchDate, date('Y-m-d', strtotime($searchDate . ' +1 day'))]);
+            })
+            ->when($activityType == 'recent', function ($q) use ($searchDate) {
+                $q->where('mc.duedate', '<', $searchDate);
+            })
+            ->where('mc.assigned_to', $user_id);
+
+        return $complianceQuery->get()->toArray();
     }
 
     // parent communication 

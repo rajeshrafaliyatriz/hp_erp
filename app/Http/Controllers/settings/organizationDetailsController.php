@@ -7,10 +7,11 @@ use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
 use App\Models\settings\organizationDetails;
 use App\Models\settings\organizationSisterDetails;
+use App\Models\school_setupModel;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
-use Validator;
-use DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class organizationDetailsController extends Controller
 {
@@ -84,7 +85,9 @@ public function store(Request $request)
 
     $validator = Validator::make($request->all(), [
         'sub_institute_id' => 'required|numeric',
-        'formType'         => 'required'
+        'formType'         => 'required',
+        'email'            => 'nullable|email',
+        'website'          => 'nullable|url'
     ]);
 
     if ($validator->fails()) {
@@ -105,6 +108,10 @@ public function store(Request $request)
             'industry'           => $request->industry,
             'employee_count'     => $request->employee_count,
             'work_week'          => $request->work_week,
+            'mobile_no'          => $request->mobile_no,
+            'country_code'       => $request->country_code,
+            'email'              => $request->email,
+            'website'            => $request->website,
         ]
     );
 
@@ -130,6 +137,8 @@ public function store(Request $request)
 
         // Save to DB
         $orgDetail->logo = $file_name;
+        // Update school_setup table
+        school_setupModel::where('Id', $request->sub_institute_id)->update(['Logo' => $file_name]);
         // $orgDetail->logo = $file_name; // assuming you have a logo column
     }
 
@@ -153,6 +162,10 @@ public function store(Request $request)
                 'industry'          => $sisterCompany['industry'],
                 'employee_count'    => $sisterCompany['employee_count'],
                 'work_week'         => $sisterCompany['work_week'],
+                'mobile_no'         => $sisterCompany['mobile_no'] ?? null,
+                'country_code'      => $sisterCompany['country_code'] ?? '+91',
+                'email'             => $sisterCompany['email'] ?? null,
+                'website'           => $sisterCompany['website'] ?? null,
             ]);
 
             // Sister company logo upload

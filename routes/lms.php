@@ -229,6 +229,7 @@ Route::post('show_question_wise_report',
     //Route::post('show_question_wise_report', 'student\questionWiseReportController@show_question_wise_report')->name('show_question_wise_report');
     // H5p Library
     Route::resource('h5p',H5PController::class);
+    Route::get('assessment_master', [lms_apiController::class, 'assessment_master']);
 });
 
 Route::controller(lms_apiController::class)->group(function () {
@@ -249,6 +250,7 @@ Route::controller(lms_apiController::class)->group(function () {
     Route::post('/studentAssessmentDetailAPI', 'studentAssessmentDetailAPI');
     Route::post('/lmsCategorywiseSubjectAPI', 'lmsCategorywiseSubjectAPI');
     Route::post('/trizStandardAPI', 'trizStandardAPI');
+    Route::get('/getSuggestedCoursesByUser', 'getSuggestedCoursesByUser');
 });
 
 Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], function () {

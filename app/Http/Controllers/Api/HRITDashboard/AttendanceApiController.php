@@ -78,7 +78,10 @@ class AttendanceApiController extends Controller
         // ============================================================
         //  TOTAL USERS (ALSO FILTER BY DEPARTMENT WHEN SELECTED)
         // ============================================================
-        $userQuery = DB::table('tbluser')->where('sub_institute_id', $subInstituteId);
+        $userQuery = DB::table('tbluser')
+            ->where('sub_institute_id', $subInstituteId)
+            ->where('status', 1)
+            ->whereNull('terminated_date');
 
         // apply filter only when department_id is provided
         if ($request->filled('department_id')) {
@@ -168,6 +171,109 @@ class AttendanceApiController extends Controller
             "absent"      => $absent,
             "late"        => $late,
             "punch_times" => $dailyPunchData
+        ]);
+
+    }
+
+    public function KPI(Request $request)
+    {
+        $type = $request->input('type');
+
+        // ============================================================
+        // TOKEN VALIDATION (ONLY FOR API TYPE)
+        // ============================================================
+        if ($type === "API") {
+            $token = $request->input('token');
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+        }
+
+        $subInstituteId = $request->sub_institute_id;
+        $departmentId   = $request->department_id;
+
+        if (!$subInstituteId) {
+            return response()->json(['error' => 'sub_institute_id is required'], 400);
+        }
+
+        $today = Carbon::today()->format('Y-m-d');
+
+        // ============================================================
+        // TOTAL USERS (OPTIONAL DEPARTMENT FILTER)
+        // ============================================================
+        $userQuery = DB::table('tbluser')
+            ->where('sub_institute_id', $subInstituteId);
+
+        if ($request->filled('department_id')) {
+            $userQuery->where('department_id', $departmentId);
+        }
+
+        $totalUsers = $userQuery->count();
+
+        // ============================================================
+        // PRESENT EMPLOYEES TODAY
+        // ============================================================
+        $attendanceQuery = DB::table('hrms_attendances')
+            ->join('tbluser', 'hrms_attendances.user_id', '=', 'tbluser.id')
+            ->where('hrms_attendances.sub_institute_id', $subInstituteId)
+            ->where('hrms_attendances.day', $today)
+            ->where('hrms_attendances.status', 1);
+
+        if ($request->filled('department_id')) {
+            $attendanceQuery->where('tbluser.department_id', $departmentId);
+        }
+
+        $presentCount = $attendanceQuery
+            ->distinct()
+            ->count('hrms_attendances.user_id');
+
+        $presentPercentage = $totalUsers
+            ? round(($presentCount / $totalUsers) * 100, 1)
+            : 0;
+
+        // ============================================================
+        // LEAVE UTILIZATION
+        // ============================================================
+        $currentYear = Carbon::now()->year;
+        $startDate   = $currentYear . '-04-01';
+        $endDate     = ($currentYear + 1) . '-03-31';
+
+        $leaveQuery = DB::table('hrms_emp_leaves')
+            ->join('tbluser', 'hrms_emp_leaves.user_id', '=', 'tbluser.id')
+            ->where('hrms_emp_leaves.sub_institute_id', $subInstituteId)
+            ->where('hrms_emp_leaves.status', 'approved')
+            ->where('hrms_emp_leaves.from_date', '>=', $startDate)
+            ->where('hrms_emp_leaves.to_date', '<=', $endDate);
+
+        if ($request->filled('department_id')) {
+            $leaveQuery->where('tbluser.department_id', $departmentId);
+        }
+
+        $totalLeaveDaysTaken = $leaveQuery
+            ->selectRaw('SUM((DATEDIFF(to_date, from_date) + 1) * day_type) as total_days')
+            ->value('total_days') ?? 0;
+
+        // ASSUMING 30 LEAVE DAYS PER EMPLOYEE PER YEAR
+        $totalAllocatedDays = $totalUsers * 30;
+
+        $leaveUtilization = $totalAllocatedDays
+            ? round(($totalLeaveDaysTaken / $totalAllocatedDays) * 100, 1)
+            : 0;
+
+        // ============================================================
+        // FINAL RESPONSE
+        // ============================================================
+        return response()->json([
+            "present_today"     => $presentPercentage . "%",
+            "leave_utilization" => $leaveUtilization . "%",
+            "active_employees"  => $totalUsers
         ]);
     }
 }

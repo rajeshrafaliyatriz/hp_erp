@@ -706,7 +706,7 @@ class tbluserController extends Controller
                 });
 
 
-            $res['totalSkills'] = skillJobroleMap::where('jobrole', $assignedJobrole->jobrole)->count();
+            $res['totalSkills'] = skillJobroleMap::where('jobrole', $assignedJobrole->jobrole)->where('sub_institute_id', $sub_institute_id)->count();
                 // DB::enableQueryLog();
             // $res['jobroleTasks'] = DB::table('s_user_jobrole_task as a')
             //     ->join('s_user_skill_jobrole as b', 'b.jobrole', '=', 'a.jobrole')
@@ -715,7 +715,7 @@ class tbluserController extends Controller
             //     ->groupBy('task')
             //     ->get();
             $res['jobroleTasks'] = userJobroleTask::with('jobroleSkillModel')
-             ->where('jobrole', $assignedJobrole->jobrole)
+             ->where('jobrole', $assignedJobrole->jobrole)->where('sub_institute_id', $sub_institute_id)
                 ->whereNull('deleted_at')
                 ->groupBy('task')
                 ->get();

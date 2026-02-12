@@ -150,6 +150,8 @@ class feedbackController extends Controller
             'key_strengths'               => 'nullable|string',
             'areas_of_concern'            => 'nullable|string',
             'additional_comments'         => 'nullable|string',
+            'notes'                       => 'nullable|string',
+            'status'                      => 'nullable|in:draft,submitted,approved,rejected',
         ]);
         // No conversion needed, store as array (will be JSON in DB due to cast)
 
@@ -164,6 +166,8 @@ class feedbackController extends Controller
             'areas_of_concern'     => $request->areas_of_concern,
             'additional_comments'  => $request->additional_comments,
             'sub_institute_id'     => $subInstituteId,
+            'notes'                => $request->notes,
+            'status'               => $request->status ?? 'draft',
         ]);
 
         // Update status in talent_job_applications
@@ -223,6 +227,8 @@ class feedbackController extends Controller
             'key_strengths'               => 'nullable|string',
             'areas_of_concern'            => 'nullable|string',
             'additional_comments'         => 'nullable|string',
+            'notes'                       => 'nullable|string',
+            'status'                      => 'nullable|in:draft,submitted,approved,rejected',
         ]);
 
         // Find the feedback record
@@ -245,6 +251,8 @@ class feedbackController extends Controller
             'areas_of_concern'     => $request->areas_of_concern,
             'additional_comments'  => $request->additional_comments,
             'sub_institute_id'     => $subInstituteId,
+            'notes'                => $request->notes,
+            'status'               => $request->status,
         ]);
 
         // 📤 Response

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\lms_course_enroll\LmsCourseEnroll;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class LmsCourseEnrollController extends Controller
 {
@@ -27,17 +29,40 @@ class LmsCourseEnrollController extends Controller
         }
         $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
         $userId = $request->user_id ?? $request->header('user_id');
-        $course = LmsCourseEnroll::where('user_id', $userId)->get();
-
+        
         if (!$userId) {
             return response()->json([
                 'status' => false,
                 'message' => 'user_id is required'
             ], 422);
         }
+        
+        // Get user's jobrole
+        $userJobrole = DB::table('tbluser as u')
+            ->leftJoin('s_user_jobrole as j', 'u.allocated_standards', '=', 'j.id')
+            ->where('u.id', $userId)
+            ->select('j.jobrole')
+            ->first();
+        
+        // Get the latest enrollment for each course
+        $latestEnrollments = DB::table('lms_course_enroll')
+            ->select('course_id', DB::raw('MAX(created_at) as latest_enrolled_at'))
+            ->where('user_id', $userId)
+            ->groupBy('course_id');
+        
+        $course = DB::table('lms_course_enroll as e')
+            ->join('sub_std_map as s', 'e.course_id', '=', 's.id')
+            ->joinSub($latestEnrollments, 'latest', function ($join) {
+                $join->on('e.course_id', '=', 'latest.course_id')
+                     ->on('e.created_at', '=', 'latest.latest_enrolled_at');
+            })
+            ->where('e.user_id', $userId)
+            ->select('s.*', 'e.status as enrollment_status', 'e.start_date', 'e.end_date', 'e.created_at as enrolled_at')
+            ->get();
+        
         return response()->json([
             'status' => true,
-            'data' => $course
+            'data' => $course,
         ]);
     }
 
@@ -59,10 +84,10 @@ class LmsCourseEnrollController extends Controller
     }
  $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
     // ✅ VALIDATION
-    $validator = \Validator::make($request->all(), [
+    $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer',
         'course_id' => 'required|integer|exists:sub_std_map,id',
-        'status' => 'required|in:completed,in-progress',
+        'status' => 'required|in:completed,in-progress,enrolled',
         'start_date' => 'nullable|date',
         'end_date' => 'nullable|date',
         'sub_institute_id' => 'nullable|integer'
@@ -124,7 +149,7 @@ class LmsCourseEnrollController extends Controller
     $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
 
     // Validate required fields
-    $validator = \Validator::make($request->all(), [
+    $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer',
         'course_id' => 'required|integer|exists:sub_std_map,id',
         'status' => 'required|in:completed,in-progress',
@@ -201,7 +226,7 @@ class LmsCourseEnrollController extends Controller
     // --------------------------
     // 🛂 Required Validation
     // --------------------------
-    $validator = \Validator::make($request->all(), [
+    $validator = Validator::make($request->all(), [
         'user_id'           => 'required|integer',
         'sub_institute_id'  => 'required|integer'
     ]);
