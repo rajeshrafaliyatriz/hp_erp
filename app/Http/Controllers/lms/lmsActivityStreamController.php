@@ -659,6 +659,7 @@ class lmsActivityStreamController extends Controller
                 t.task_type,
                 t.task_date,
                 t.status,
+                t.approve_status,
                 t.sub_institute_id,
                 t.syear,
                 t.created_at,
