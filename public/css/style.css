@@ -59,11 +59,11 @@ section.tbl__container table tbody {
 }
 
 section.tbl__container table tbody tr:nth-child(even) td {
-  background-color: #ff00;
+  background-color: #ff0000;
 }
 
 section.tbl__container table thead tr:first-child th {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(0, 0, 0, 0.15);
 }
 
 section.tbl__container table thead tr:first-child th div {
@@ -109,14 +109,14 @@ img {
 
 .accordion-item {
   width: 100%;
-  border: 1px solid #ccc;
+  border: 1px solid #999999;
   border-radius: 5px;
   overflow: hidden;
   margin-bottom: 10px;
 }
 
 .accordion-header {
-  background-color: #f2f2f2;
+  background-color: #d0d0d0;
   padding: 1rem;
   cursor: pointer;
   position: relative;
