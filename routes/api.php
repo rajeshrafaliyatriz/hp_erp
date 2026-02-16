@@ -120,6 +120,7 @@ Route::get('/skill-development/peer-comparison', [SkillDevelopmentController::cl
 Route::get('/skill-development/calendar', [SkillDevelopmentController::class, 'getLearningCalendar']);
 
 Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
+Route::get('/competency/kpi', [SubCompetencyDashboardController::class, 'getKPI']);
 Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity']);
 Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards']);
 Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar']);
