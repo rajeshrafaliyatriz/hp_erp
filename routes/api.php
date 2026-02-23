@@ -51,6 +51,7 @@ use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
 use App\Http\Controllers\Api\TaskController;
 
+
 Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
 Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
 Route::get('/departments/{deptId}/graph', [DepartmentGraphController::class, 'show']);
@@ -209,3 +210,6 @@ Route::get('/tasks/daily', [TaskController::class, 'getDailyTasks']);
 Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
 Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
 Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills']);
+
+// Course Recommendation API - Get courses based on logged-in user's job role
+
