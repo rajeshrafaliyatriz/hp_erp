@@ -91,7 +91,7 @@ class CompetencyDashboardController extends Controller
             }
 
             // Order by skill count descending and take top 10
-            $rolesWithSkills = $rolesWithSkillsQuery->orderByDesc('skill_count')->limit(10)->get();
+            $rolesWithSkills = $rolesWithSkillsQuery->orderByDesc('skill_count')->limit(20)->get();
 
             // If no roles found with skills, try to get any roles
             if ($rolesWithSkills->isEmpty()) {
@@ -99,7 +99,7 @@ class CompetencyDashboardController extends Controller
                     ->leftJoin('hrms_departments as hd', 'jr.department_id', '=', 'hd.id')
                     ->select('jr.id', 'jr.jobrole as name', 'hd.department as department_name', 'jr.department')
                     ->whereNull('jr.deleted_at')
-                    ->limit(10);
+                    ->limit(20);
 
                 if ($subInstituteId) {
                     $rolesQuery->where('jr.sub_institute_id', $subInstituteId);
