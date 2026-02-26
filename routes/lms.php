@@ -54,8 +54,11 @@ use App\Http\Controllers\lms\library\skillLibraryController1;
 use App\Http\Controllers\lms\library\H5PController;
 use App\Http\Controllers\front_desk\taskController;
 use App\Http\Controllers\front_desk\TaskUpdateController;
+use App\Http\Controllers\courseRecommandation;
+use App\Http\Controllers\lms\blukCourseandQuetionGeneration;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/courses-recommendation', [courseRecommandation::class, 'index']);
 Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], function () {
     Route::get('o-net-data-category',[\App\Http\Controllers\lms\ONetOnlineDataController::class,'index'])->name('o-net-data-category.index');
     Route::get('o-net-data-list',[\App\Http\Controllers\lms\ONetOnlineDataController::class,'ONetDataTable'])->name('o-net-data-table.show-list');
@@ -230,7 +233,10 @@ Route::post('show_question_wise_report',
     // H5p Library
     Route::resource('h5p',H5PController::class);
     Route::get('assessment_master', [lms_apiController::class, 'assessment_master']);
+    Route::post('blukCourseAndQuestion/store', [blukCourseandQuetionGeneration::class, 'store']);
+
 });
+
 
 Route::controller(lms_apiController::class)->group(function () {
     Route::post('/studentVirtualClassroomAPI', 'studentVirtualClassroomAPI');
@@ -250,6 +256,7 @@ Route::controller(lms_apiController::class)->group(function () {
     Route::post('/studentAssessmentDetailAPI', 'studentAssessmentDetailAPI');
     Route::post('/lmsCategorywiseSubjectAPI', 'lmsCategorywiseSubjectAPI');
     Route::post('/trizStandardAPI', 'trizStandardAPI');
+    Route::get('/getSuggestedCoursesByUser', 'getSuggestedCoursesByUser');
 });
 
 Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], function () {
@@ -322,3 +329,5 @@ Route::get('/download-File', [contentLibraryController::class, 'downloadFile'])-
 // Route::get('/sync-neo4j', [Neo4jSyncController::class, 'sync']);
 Route::get('question_paper/search_question', [questionpaperController::class,'search_question2']);
 Route::post('/chapter_master/store', [chapterController::class, 'store']);
+
+// Course Recommendation API - Get courses based on logged-in user's job role

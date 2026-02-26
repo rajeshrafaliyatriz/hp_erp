@@ -36,18 +36,23 @@ class CompetencyDashboardController extends Controller
                 ->where('sub_institute_id', $subInstituteId)
                 ->whereNull('deleted_at')
                 ->count();
-
-            // Fetch workloadIndex from s_user_skill_jobrole (count of skills)
-            $workloadIndex = DB::table('s_user_skill_jobrole')
+            
+            // Count skills for this jobrole
+            $skills = DB::table('s_user_skill_jobrole')
                 ->where('jobrole', $jr->jobrole)
                 ->where('sub_institute_id', $subInstituteId)
                 ->whereNull('deleted_at')
                 ->count();
+            
+            // Calculate workloadIndex as (tasks / skills) * 100
+            $workloadIndex = $skills > 0 ? round(($tasks / $skills) * 10,2) : 0;
+        
 
             $results[] = [
                 'role' => $jr->jobrole,
                 'workloadIndex' => $workloadIndex,
-                'tasks' => $tasks
+                'tasks' => $tasks,
+                'skills' => $skills
             ];
         }
 
@@ -67,23 +72,47 @@ class CompetencyDashboardController extends Controller
         $limit = $request->input('limit', 50); // Limit nodes to prevent large responses
 
         try {
-            // 1️⃣ Fetch jobroles with department names (with limits and filters)
-            $rolesQuery = DB::table('s_user_jobrole as jr')
+            // 1️⃣ First get jobroles with their skill counts and take top 10
+            $rolesWithSkillsQuery = DB::table('s_jobrole_skills as sjs')
+                ->join('s_user_jobrole as jr', 'sjs.jobrole', '=', 'jr.jobrole')
                 ->leftJoin('hrms_departments as hd', 'jr.department_id', '=', 'hd.id')
-                ->select('jr.id', 'jr.jobrole as name', 'hd.department as department_name', 'jr.department')
-                ->whereNull('jr.deleted_at');
+                ->select('jr.id', 'jr.jobrole as name', 'hd.department as department_name', 'jr.department',
+                    DB::raw('COUNT(DISTINCT sjs.skill) as skill_count'))
+                ->whereNull('jr.deleted_at')
+                ->groupBy('jr.id', 'jr.jobrole', 'hd.department', 'jr.department');
 
             // Add sub_institute_id filter if provided
             if ($subInstituteId) {
-                $rolesQuery->where('jr.sub_institute_id', $subInstituteId);
+                $rolesWithSkillsQuery->where('jr.sub_institute_id', $subInstituteId);
             }
 
             if ($department && $department !== 'All') {
-                $rolesQuery->where('hd.department', $department);
+                $rolesWithSkillsQuery->where('hd.department', $department);
             }
 
-            // Limit the number of roles to prevent large responses
-            $roles = $rolesQuery->limit($limit)->get();
+            // Order by skill count descending and take top 10
+            $rolesWithSkills = $rolesWithSkillsQuery->orderByDesc('skill_count')->limit(20)->get();
+
+            // If no roles found with skills, try to get any roles
+            if ($rolesWithSkills->isEmpty()) {
+                $rolesQuery = DB::table('s_user_jobrole as jr')
+                    ->leftJoin('hrms_departments as hd', 'jr.department_id', '=', 'hd.id')
+                    ->select('jr.id', 'jr.jobrole as name', 'hd.department as department_name', 'jr.department')
+                    ->whereNull('jr.deleted_at')
+                    ->limit(20);
+
+                if ($subInstituteId) {
+                    $rolesQuery->where('jr.sub_institute_id', $subInstituteId);
+                }
+
+                if ($department && $department !== 'All') {
+                    $rolesQuery->where('hd.department', $department);
+                }
+
+                $roles = $rolesQuery->get();
+            } else {
+                $roles = $rolesWithSkills;
+            }
 
             // 2️⃣ Fetch jobrole-skill mappings only for the selected roles
             $roleNames = $roles->pluck('name')->toArray();
@@ -128,13 +157,25 @@ class CompetencyDashboardController extends Controller
                 }
             }
 
-            // 5️⃣ Format nodes
-            $nodes = $roles->map(function ($role) {
+            // 5️⃣ Format nodes with colors based on department
+            $departmentColors = [];
+            $colorPalette = ['#1A5276', '#922B21', '#1B4F72', '#7D3C98', '#196F3D', '#B7950B', '#784212', '#5D6D7E', '#C0392B', '#2E86C1'];
+            $colorIndex = 0;
+
+            $nodes = $roles->map(function ($role) use (&$departmentColors, &$colorPalette, &$colorIndex) {
+                $deptName = $role->department_name ?? $role->department ?? 'Unknown';
+
+                if (!isset($departmentColors[$deptName])) {
+                    $departmentColors[$deptName] = $colorPalette[$colorIndex % count($colorPalette)];
+                    $colorIndex++;
+                }
+
                 return [
-                    'id' => $role->name, // Use jobrole name as ID since we're using names for edges
+                    'id' => $role->name,
                     'label' => $role->name,
-                    'department' => $role->department_name ?? $role->department,
-                    'importance' => rand(1, 5) // Random importance since we don't have this field
+                    'department' => $deptName,
+                    'color' => $departmentColors[$deptName],
+                    'importance' => rand(1, 5)
                 ];
             });
 
@@ -674,6 +715,44 @@ class CompetencyDashboardController extends Controller
         }
     }
 
+    public function getKPI(Request $request)
+    {
+        $subInstituteId = $request->input('sub_institute_id');
+        $userId = $request->input('user_id');
+
+        try {
+            // Base query for s_user_jobrole
+            $rolesQuery = DB::table('s_user_jobrole')->whereNull('deleted_at');
+            if ($subInstituteId) {
+                $rolesQuery->where('sub_institute_id', $subInstituteId);
+            }
+
+            // Total roles count
+            $totalRoles = $rolesQuery->count();
+
+            // Count distinct departments from hrms_departments via s_user_jobrole
+            $departmentsCount = DB::table('hrms_departments as d')
+                ->join('s_user_jobrole as jr', 'd.id', '=', 'jr.department_id')
+                ->whereNull('jr.deleted_at')
+                ->when($subInstituteId, function ($q) use ($subInstituteId) {
+                    return $q->where('jr.sub_institute_id', $subInstituteId);
+                })
+                ->distinct('d.id')
+                ->count('d.id');
+            return response()->json([
+                'status' => 'success',
+                'total_roles' => $totalRoles,
+                'total_departments' => $departmentsCount,   
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch KPI data.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
 }
 

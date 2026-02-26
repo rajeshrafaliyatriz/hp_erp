@@ -29,7 +29,7 @@ use App\Http\Controllers\Api\GammaApiController;
 use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
 use App\Http\Controllers\Api\SkillMatchingController;
 use App\Http\Controllers\Api\SuggestedCourseController;
-
+use App\Http\Controllers\user\UserSkillController;
 use App\Http\Controllers\lms_course_enroll\LmsCourseEnrollController;
 use App\Http\Controllers\ai_generated_assessment\generateQuestionController;
 use App\Http\Controllers\ai_generated_assessment\generateAssessmentController;
@@ -50,6 +50,7 @@ use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
 use App\Http\Controllers\Api\TaskController;
+
 
 Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
 Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
@@ -120,6 +121,7 @@ Route::get('/skill-development/peer-comparison', [SkillDevelopmentController::cl
 Route::get('/skill-development/calendar', [SkillDevelopmentController::class, 'getLearningCalendar']);
 
 Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
+Route::get('/competency/kpi', [SubCompetencyDashboardController::class, 'getKPI']);
 Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity']);
 Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards']);
 Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar']);
@@ -207,3 +209,7 @@ Route::get('/tasks/counts', [TaskController::class, 'getTaskCounts']);
 Route::get('/tasks/daily', [TaskController::class, 'getDailyTasks']);
 Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
 Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
+Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills']);
+
+// Course Recommendation API - Get courses based on logged-in user's job role
+
