@@ -180,8 +180,8 @@ class blukCourseandQuetionGeneration extends Controller
         $courseInfo = $result['course'] ?? [];
         $contentId = DB::table('content_master')->insertGetId([
             'grade_id' => $rowData['departmentId'] ?? 1,
-            'standard_id' => 1,
-            'subject_id' => 1,
+            'standard_id' => $rowData['departmentId'],
+            'subject_id' => $rowData['jobId'],
             'chapter_id' => $chapterId,
             'topic_id' => null,
             'sub_topic_id' => null,
@@ -239,8 +239,8 @@ class blukCourseandQuetionGeneration extends Controller
             $questionId = DB::table('lms_question_master')->insertGetId([
                 'question_type_id' => 1,
                 'grade_id' => 1,
-                'standard_id' => 1,
-                'subject_id' => 1,
+                'standard_id' => $q['departmentId'],
+                'subject_id' => $q['jobId'],
                 'chapter_id' => $chapterId,
                 'question_title' => $q['question_title'] ?? 'Untitled Question',
                 'description' => $q['reason'] ?? '',
