@@ -99,7 +99,6 @@ class buildwithAIController extends Controller
                 'sub_institute_id'  => $request->sub_institute_id,
                'created_by' => $user_id,
             ]);
-//dd($outline);
             return response()->json([
                 'status' => true,
                 'message' => 'outline saved successfully',
