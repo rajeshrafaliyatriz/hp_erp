@@ -164,9 +164,9 @@ class blukCourseandQuetionGeneration extends Controller
         $chapterId = DB::table('chapter_master')->insertGetId([
             'syear' => date('Y'),
             'sub_institute_id' => $subInstituteId,
-            'grade_id' => $rowData['departmentId'] ?? 1,
-            'standard_id' => 1,
-            'subject_id' => 1,
+            'grade_id' => 1,
+            'standard_id' => $rowData['departmentId'],
+            'subject_id' => $rowData['jobId'],
             'chapter_name' => $result['topic'] ?? $rowData['chapterName'] ?? 'Untitled Chapter',
             'chapter_desc' => $result['topic'] ?? $rowData['chapterName'] ?? '',
             'availability' => 1,
