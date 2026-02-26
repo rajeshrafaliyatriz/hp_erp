@@ -926,159 +926,157 @@ class AJAXController extends Controller
     }
 
     public function geminiChat(Request $request)
-{
-    $prompt = $request->input('prompt');
+    {
+        $prompt = $request->input('prompt');
 
-    // Fallback model list - ordered from preferred → fallback (Feb 2026 reality)
-    $modelsToTry = [
-        'gemini-2.5-flash',         // Fast, cheap, stable GA
-        'gemini-flash-latest',      // Alias to newest Flash (good longevity)
-        'gemini-2.5-pro',           // Stronger reasoning when needed
-        'gemini-3-flash-preview',   // Newer preview (if your project allows)
-        // Add more previews/experimental if needed: 'gemini-3-pro-preview', etc.
-    ];
+        // Fallback model list - ordered from preferred → fallback (Feb 2026 reality)
+        $modelsToTry = [
+            'gemini-2.5-flash',         // Fast, cheap, stable GA
+            'gemini-flash-latest',      // Alias to newest Flash (good longevity)
+            'gemini-2.5-pro',           // Stronger reasoning when needed
+            'gemini-3-flash-preview',   // Newer preview (if your project allows)
+            // Add more previews/experimental if needed: 'gemini-3-pro-preview', etc.
+        ];
 
-    // Collect usable keys (with quota left)
-    $availableKeys = [];
+        // Collect usable keys (with quota left)
+        $availableKeys = [];
 
-    $todayUsed = DB::table('ai_daily_used_api')
-        ->where('api_name', 'gemini')
-        ->where('date', date('Y-m-d'))
-        ->whereNull('sub_institute_id')
-        ->get()
-        ->keyBy('parent_id');
+        $todayUsed = DB::table('ai_daily_used_api')
+            ->where('api_name', 'gemini')
+            ->where('date', date('Y-m-d'))
+            ->whereNull('sub_institute_id')
+            ->get()
+            ->keyBy('parent_id');
 
-    $allActiveKeys = DB::table('gemini_api')
-        ->where('status', 1)
-        ->whereNull('sub_institute_id')
-        ->orderBy('id')
-        ->get();
+        $allActiveKeys = DB::table('gemini_api')
+            ->where('status', 1)
+            ->whereNull('sub_institute_id')
+            ->orderBy('id')
+            ->get();
 
-    foreach ($allActiveKeys as $keyRow) {
-        $usage = $todayUsed->get($keyRow->id);
-        $currentCount = $usage ? $usage->count : 0;
+        foreach ($allActiveKeys as $keyRow) {
+            $usage = $todayUsed->get($keyRow->id);
+            $currentCount = $usage ? $usage->count : 0;
 
-        if ($currentCount < $keyRow->limit) {
-            $availableKeys[] = [
-                'key'       => $keyRow->key,
-                'parent_id' => $keyRow->id,
-                'count'     => $currentCount,
-                'usage_id'  => $usage ? $usage->id : null,
-            ];
+            if ($currentCount < $keyRow->limit) {
+                $availableKeys[] = [
+                    'key'       => $keyRow->key,
+                    'parent_id' => $keyRow->id,
+                    'count'     => $currentCount,
+                    'usage_id'  => $usage ? $usage->id : null,
+                ];
+            }
         }
-    }
 
-    if (empty($availableKeys)) {
-        return response()->json([
-            'error' => 'No available Gemini API keys (all at limit or none active)',
-        ], 503);
-    }
+        if (empty($availableKeys)) {
+            return response()->json([
+                'error' => 'No available Gemini API keys (all at limit or none active)',
+            ], 503);
+        }
 
-    $lastError = null;
-    $attemptKey = 0;
+        $lastError = null;
+        $attemptKey = 0;
 
-    foreach ($availableKeys as $keyEntry) {
-        $attemptKey++;
-        $geminiKey = $keyEntry['key'];
-        $attemptModel = 0;
+        foreach ($availableKeys as $keyEntry) {
+            $attemptKey++;
+            $geminiKey = $keyEntry['key'];
+            $attemptModel = 0;
 
-        foreach ($modelsToTry as $model) {
-            $attemptModel++;
+            foreach ($modelsToTry as $model) {
+                $attemptModel++;
 
-            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . $geminiKey;
+                $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . $geminiKey;
 
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-            ])
-            ->withoutVerifying()
-            ->timeout(120)
-            ->post($url, [
-                "contents" => [
-                    [
-                        "parts" => [
-                            ["text" => $prompt]
+                $response = Http::withHeaders([
+                    'Content-Type' => 'application/json',
+                ])
+                ->withoutVerifying()
+                ->timeout(120)
+                ->post($url, [
+                    "contents" => [
+                        [
+                            "parts" => [
+                                ["text" => $prompt]
+                            ]
                         ]
                     ]
-                ]
-            ]);
+                ]);
 
-            $httpStatus = $response->status();
-            $data = $response->json();
+                $httpStatus = $response->status();
+                $data = $response->json();
 
-            $text = $data['candidates'][0]['content']['parts'][0]['text']
-                ?? $data['error']['message']
-                ?? 'No content returned';
+                $text = $data['candidates'][0]['content']['parts'][0]['text']
+                    ?? $data['error']['message']
+                    ?? 'No content returned';
 
-            // Clean markdown if present
-            $cleanText = trim($text);
-            $cleanText = preg_replace('/^```json\s*|\s*```$/m', '', $cleanText);
+                // Clean markdown if present
+                $cleanText = trim($text);
+                $cleanText = preg_replace('/^```json\s*|\s*```$/m', '', $cleanText);
 
-            $jsonData = json_decode($cleanText, true);
+                $jsonData = json_decode($cleanText, true);
 
-            // Success condition
-            if (json_last_error() === JSON_ERROR_NONE && !empty($jsonData)) {
-                // Update usage only on real success
-                if ($keyEntry['usage_id']) {
-                    DB::table('ai_daily_used_api')
-                        ->where('id', $keyEntry['usage_id'])
-                        ->increment('count');
-                } else {
-                    DB::table('ai_daily_used_api')->insert([
-                        'api_name'   => 'gemini',
-                        'key'        => $geminiKey,
-                        'parent_id'  => $keyEntry['parent_id'],
-                        'date'       => date('Y-m-d'),
-                        'count'      => 1,
-                    ]);
+                // Success condition
+                if (json_last_error() === JSON_ERROR_NONE && !empty($jsonData)) {
+                    // Update usage only on real success
+                    if ($keyEntry['usage_id']) {
+                        DB::table('ai_daily_used_api')
+                            ->where('id', $keyEntry['usage_id'])
+                            ->increment('count');
+                    } else {
+                        DB::table('ai_daily_used_api')->insert([
+                            'api_name'   => 'gemini',
+                            'key'        => $geminiKey,
+                            'parent_id'  => $keyEntry['parent_id'],
+                            'date'       => date('Y-m-d'),
+                            'count'      => 1,
+                        ]);
+                    }
+
+                    // Optional: log success
+                    // \Log::info("Gemini success", ['key' => substr($geminiKey,0,10).'...', 'model' => $model]);
+
+                    return response()->json($jsonData);
                 }
 
-                // Optional: log success
-                // \Log::info("Gemini success", ['key' => substr($geminiKey,0,10).'...', 'model' => $model]);
+                // Handle failure
+                $errorMsg = json_last_error() !== JSON_ERROR_NONE
+                    ? 'JSON decode failed: ' . json_last_error_msg()
+                    : ($data['error']['message'] ?? 'Unknown response');
 
-                return response()->json($jsonData);
+                $lastError = [
+                    'key_attempt' => $attemptKey,
+                    'model_attempt' => $attemptModel,
+                    'model'       => $model,
+                    'key_prefix'  => substr($geminiKey, 0, 10) . '...',
+                    'http_status' => $httpStatus,
+                    'message'     => $errorMsg,
+                ];
+
+                // Optional logging
+                // \Log::warning("Gemini attempt failed", $lastError);
+
+                // Early exit on clear "model not found" to save time
+                if ($httpStatus === 404) {
+                    continue; // next model
+                }
+
+                // You could break here if error is non-recoverable (e.g. 401 auth), but for now continue
             }
 
-            // Handle failure
-            $errorMsg = json_last_error() !== JSON_ERROR_NONE
-                ? 'JSON decode failed: ' . json_last_error_msg()
-                : ($data['error']['message'] ?? 'Unknown response');
-
-            $lastError = [
-                'key_attempt' => $attemptKey,
-                'model_attempt' => $attemptModel,
-                'model'       => $model,
-                'key_prefix'  => substr($geminiKey, 0, 10) . '...',
-                'http_status' => $httpStatus,
-                'message'     => $errorMsg,
-            ];
-
-            // Optional logging
-            // \Log::warning("Gemini attempt failed", $lastError);
-
-            // Early exit on clear "model not found" to save time
-            if ($httpStatus === 404) {
-                continue; // next model
-            }
-
-            // You could break here if error is non-recoverable (e.g. 401 auth), but for now continue
+            // If all models failed for this key → try next key
         }
 
-        // If all models failed for this key → try next key
+        // All keys + all models failed
+        return response()->json([
+            'error'      => 'All available Gemini API keys and fallback models failed',
+            'last_error' => $lastError,
+            'attempts_keys'   => $attemptKey,
+        ], 503);
     }
-
-    // All keys + all models failed
-    return response()->json([
-        'error'      => 'All available Gemini API keys and fallback models failed',
-        'last_error' => $lastError,
-        'attempts_keys'   => $attemptKey,
-    ], 503);
-}
 
     public function AICourseGeneration(Request $request)
     {
         try {
-            \Log::info('AICourseGeneration started', ['request_data' => $request->all()]);
-            
             $type = 'webForm';
             $skill_department = $request->department;
             $sub_institute_id = $request->sub_institute_id;
@@ -1102,23 +1100,19 @@ class AJAXController extends Controller
             ]);
 
             if ($validator->fails()) {
-                \Log::error('Validation failed', ['errors' => $validator->errors()]);
                 return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
             }
 
             if (!$token) {
-                \Log::error('Token not provided');
                 return response()->json(['message' => 'Token not provided'], 401);
             }
 
             // Find the token in the database
             $accessToken = PersonalAccessToken::findToken($token);
             if (!$accessToken) {
-                \Log::error('Invalid token', ['token' => $token]);
+                
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-
-            \Log::info('Using subject_id from request', ['subject_id' => $subject_id]);
 
             // First, check if a course already exists for this skill and subject in sub_std_map
             $existingCourse = DB::table('sub_std_map')
@@ -1131,11 +1125,6 @@ class AJAXController extends Controller
                 ->first();
 
             if ($existingCourse) {
-                \Log::info('Course already exists for skill and subject', [
-                    //'skill_id' => $skill_id, 
-                    'subject_id' => $subject_id,
-                    'existing_course_id' => $existingCourse->id
-                ]);
                 
                 // Return existing course info
                 return response()->json([
@@ -1155,7 +1144,6 @@ class AJAXController extends Controller
             
             if ($checkGrade) {
                 $grade = $checkGrade->id;
-                \Log::info('Grade found', ['grade_id' => $grade]);
             } else {
                 $gradeInsert = DB::table('academic_section')->insertGetId([
                     'sub_institute_id' => $sub_institute_id,
@@ -1166,7 +1154,6 @@ class AJAXController extends Controller
                     'created_at' => now()
                 ]);
                 $grade = $gradeInsert;
-                \Log::info('Grade created', ['grade_id' => $grade]);
             }
 
             // Check and create standard if needed
@@ -1177,7 +1164,6 @@ class AJAXController extends Controller
             
             if ($checkStandard) {
                 $standard = $checkStandard->id;
-                \Log::info('Standard found', ['standard_id' => $standard]);
             } else {
                 $standardInsert = DB::table('hrms_departments')->insertGetId([
                     'sub_institute_id' => $sub_institute_id,
@@ -1188,7 +1174,6 @@ class AJAXController extends Controller
                     'created_at' => now()
                 ]);
                 $standard = $standardInsert;
-                \Log::info('Standard created', ['standard_id' => $standard]);
             }
 
             // Get mapping types and values
@@ -1305,18 +1290,13 @@ class AJAXController extends Controller
                         Do not add explanations — only output the structured JSON.
                         provide me 1 course with atleast 3 content realted this skills > course > chapter. in JSON array";
             }
-
-            \Log::info('Prompt prepared', ['prompt_length' => strlen($prompt)]);
             $request->merge(['prompt' => $prompt]);
 
             // Get AI response
             $gemeniJson = $this->geminiChat($request);
             $gemeniData = json_decode(json_encode($gemeniJson->original), true);
-            
-            \Log::info('Gemini response received', ['has_error' => isset($gemeniData['error']), 'response_keys' => array_keys($gemeniData)]);
 
             if (isset($gemeniData['error'])) {
-                \Log::error('Gemini API error', ['error' => $gemeniData['error']]);
                 return response()->json([
                     'status_code' => 0,
                     'message' => 'AI API Error: ' . ($gemeniData['error']['message'] ?? 'Unknown error'),
@@ -1327,10 +1307,8 @@ class AJAXController extends Controller
             // Check if response is an array (not single object)
             if (isset($gemeniData[0])) {
                 $courseData = $gemeniData[0];
-                \Log::info('Course data extracted from array', ['course_name' => $courseData['course_name'] ?? 'N/A']);
             } else {
                 $courseData = $gemeniData;
-                \Log::info('Course data is single object', ['course_name' => $courseData['course_name'] ?? 'N/A']);
             }
 
             $successCount = 0;
@@ -1359,17 +1337,10 @@ class AJAXController extends Controller
                 'status' => 1,
                 //'subject_id' => $skill_id // Add skill_id to the request
             ]);
-
-            \Log::info('Creating course with subject_id from request', [
-                'subject_id' => $subject_id,
-                'skill_id' => $skill_id,
-                'display_name' => $courseData['course_name'] ?? 'N/A'
-            ]);
             
             $courseStore = $courseController->store($course_request);
 
             if (!isset($courseStore->original['course_id'])) {
-                \Log::error('Failed to create course', ['response' => $courseStore]);
                 return response()->json([
                     'status_code' => 0,
                     'message' => 'Failed to create course in masterSetupController',
@@ -1388,19 +1359,10 @@ class AJAXController extends Controller
                     'updated_by' => $user_id
                 ]);
             
-            \Log::info('Course created successfully', [
-                'course_id' => $courseId, 
-                'subject_id' => $subject_id,
-                //'skill_id' => $skill_id,
-                'display_name' => $courseData['course_name'] ?? 'N/A'
-            ]);
-            
             $successCount++;
 
             // Process chapters if they exist
-            if (isset($courseData['chapters']) && is_array($courseData['chapters'])) {
-                \Log::info('Processing chapters', ['chapter_count' => count($courseData['chapters'])]);
-                
+            if (isset($courseData['chapters']) && is_array($courseData['chapters'])) {                
                 foreach ($courseData['chapters'] as $chapterIndex => $chapterData) {
                     try {
                         // Create chapter
@@ -1422,21 +1384,14 @@ class AJAXController extends Controller
                             'sort_order' => [$chapterIndex + 1]
                         ]);
 
-                        \Log::info('Creating chapter', [
-                            'chapter_index' => $chapterIndex, 
-                            'chapter_name' => $chapterData['chapter_name'] ?? 'N/A',
-                            'course_id' => $courseId
-                        ]);
                         
                         $chapterStore = $moduleController->store($chapter_request);
 
                         if (!isset($chapterStore->original['chapter_id'])) {
-                            \Log::error('Failed to create chapter', ['response' => $chapterStore, 'chapter_index' => $chapterIndex]);
                             continue;
                         }
 
                         $chapterId = $chapterStore->original['chapter_id'];
-                        \Log::info('Chapter created successfully', ['chapter_id' => $chapterId]);
                         $successCount++;
 
                         // Get related data
@@ -1457,12 +1412,6 @@ class AJAXController extends Controller
 
                         // Process contents
                         if (isset($chapterData['contents']) && is_array($chapterData['contents'])) {
-                            \Log::info('Processing contents', [
-                                'content_count' => count($chapterData['contents']), 
-                                'chapter_id' => $chapterId,
-                                'chapter_name' => $chapterData['chapter_name'] ?? 'N/A'
-                            ]);
-                            
                             foreach ($chapterData['contents'] as $contentIndex => $contentData) {
                                 try {
                                     $content_html = $contentData['content_html'] ?? '<div>No content provided</div>';
@@ -1489,11 +1438,6 @@ class AJAXController extends Controller
                                         $pdfContent,
                                         'public'
                                     );
-
-                                    \Log::info('PDF created and stored', [
-                                        'filename' => $newfilename,
-                                        'storage_path' => $storagePath
-                                    ]);
 
                                     // Find mapping type and value IDs
                                     $mappingTypeId = null;
@@ -1561,40 +1505,20 @@ class AJAXController extends Controller
                                         'show_hide' => 1
                                     ]);
 
-                                    \Log::info('Creating content', [
-                                        'content_index' => $contentIndex, 
-                                        'title' => $contentData['content_title'] ?? 'N/A',
-                                        'chapter_id' => $chapterId
-                                    ]);
-                                    
+                                                                       
                                     $contentStore = $contentController->store($content_request);
                                     
                                     if (isset($contentStore->original['content_id'])) {
-                                        \Log::info('Content created successfully', [
-                                            'content_id' => $contentStore->original['content_id'],
-                                            'title' => $contentData['content_title'] ?? 'N/A'
-                                        ]);
                                         $successCount++;
                                     } else {
-                                        \Log::error('Failed to create content', ['response' => $contentStore, 'content_index' => $contentIndex]);
                                     }
                                 } catch (\Exception $e) {
-                                    \Log::error('Error creating content', [
-                                        'error' => $e->getMessage(),
-                                        'trace' => $e->getTraceAsString(),
-                                        'content_index' => $contentIndex,
-                                        'chapter_id' => $chapterId
-                                    ]);
                                 }
                             }
                         }
 
                         // Process questions
                         if (isset($chapterData['questions']) && is_array($chapterData['questions'])) {
-                            \Log::info('Processing questions', [
-                                'question_count' => count($chapterData['questions']), 
-                                'chapter_id' => $chapterId
-                            ]);
                             
                             foreach ($chapterData['questions'] as $questionIndex => $questionData) {
                                 try {
@@ -1651,19 +1575,9 @@ class AJAXController extends Controller
                                         'correct_answer' => [$correctAnswerIndex => "1"]
                                     ]);
 
-                                    \Log::info('Creating question', [
-                                        'question_index' => $questionIndex, 
-                                        'title' => $questionData['question_title'] ?? 'N/A',
-                                        'chapter_id' => $chapterId
-                                    ]);
-                                    
                                     $questionStore = $questionController->store($question_request);
                                     
                                     if (isset($questionStore->original['question_id'])) {
-                                        \Log::info('Question created successfully', [
-                                            'question_id' => $questionStore->original['question_id'],
-                                            'title' => $questionData['question_title'] ?? 'N/A'
-                                        ]);
                                         $successCount++;
                                     } else {
                                         \Log::error('Failed to create question', ['response' => $questionStore, 'question_index' => $questionIndex]);
@@ -1690,13 +1604,7 @@ class AJAXController extends Controller
                 }
             }
 
-            \Log::info('AICourseGeneration completed successfully', [
-                'success_count' => $successCount,
-                'course_id' => $courseId,
-                'subject_id' => $subject_id,
-                'skill_id' => $skill_id
-            ]);
-
+           
             $response = [
                 'status_code' => 1,
                 'message' => 'Successfully generated AI course and stored all data',
@@ -1726,78 +1634,636 @@ class AJAXController extends Controller
     }
 
     public function GammaContentGeneration(Request $request)
+{
+    // Validate required fields including slide_count
+    $validator = Validator::make($request->all(), [
+        'industry' => 'required|string',
+        'department' => 'required|string',
+        'jobrole' => 'required|string',
+        'skill' => 'required|string',
+        // 'course' => 'required|string', // Removed - will be auto-generated
+        'content_title' => 'required|string',
+        'slide_count' => 'required|integer|min:1|max:50',
+        'sub_institute_id' => 'required',
+        'user_id' => 'required',
+        'user_profile_name' => 'required',
+        'token' => 'required',
+        'syear' => 'required',
+        // Optional - if linking to existing course/chapter
+        'course_id' => 'sometimes|required',
+        'chapter_id' => 'sometimes|required'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => false,
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    $industry   = $request->input('industry');
+    $department = $request->input('department');
+    $jobRole    = $request->input('jobrole');
+    $skill      = $request->input('skill');
+    // $course  = $request->input('course'); // Removed
+    $title      = $request->input('content_title');
+    $slideCount = (int) $request->input('slide_count');
+    $sub_institute_id = $request->input('sub_institute_id');
+    $user_id = $request->input('user_id');
+    $user_profile_name = $request->input('user_profile_name');
+    $token = $request->input('token');
+    $syear = $request->input('syear');
+    $course_id = $request->input('course_id');
+    $chapter_id = $request->input('chapter_id');
+
+    // Verify token
+    $accessToken = PersonalAccessToken::findToken($token);
+    if (!$accessToken) {
+        return response()->json(['message' => 'Invalid token'], 401);
+    }
+
+    // ===== FETCH SKILL_ID FROM SKILL NAME =====
+    $skillRecord = DB::table('s_user_skill_jobrole')
+        ->where('skill', $skill)
+        ->whereNull('deleted_at')
+        ->first();
+
+    if (!$skillRecord) {
+        return response()->json([
+            'status' => false,
+            'error' => 'Skill not found in database',
+            'skill_name' => $skill
+        ], 404);
+    }
+
+    $skill_id = $skillRecord->id;
+    
+    \Log::info('Skill found', [
+        'skill_name' => $skill,
+        'skill_id' => $skill_id
+    ]);
+    // ===== END FETCH SKILL_ID =====
+
+    // ===== AUTO-GENERATE COURSE NAME USING GEMINI =====
+    $coursePrompt = "Generate a professional, concise course name for a training program with the following details:
+    - Industry: {$industry}
+    - Department: {$department}
+    - Job Role: {$jobRole}
+    - Skill: {$skill}
+    - Content Title: {$title}
+    
+    The course name should be:
+    - Professional and instructional in tone
+    - Maximum 100 characters
+    - Relevant to upskilling employees in this context
+    - Include the key skill or topic
+    
+    Return ONLY the course name as a plain string, no additional text, no JSON, no explanations.";
+
+    // Create a new request for geminiChat
+    $geminiRequest = new Request([
+        'prompt' => $coursePrompt
+    ]);
+    
+    $geminiResponse = $this->geminiChat($geminiRequest);
+    $geminiData = json_decode(json_encode($geminiResponse->original), true);
+
+    // Check if geminiChat returned an error
+    if (isset($geminiData['error'])) {
+        // Fallback course name if Gemini fails
+        $course = "Upskilling in {$skill} for {$jobRole} - {$industry}";
+        \Log::warning('Gemini course generation failed, using fallback', [
+            'error' => $geminiData['error'],
+            'fallback_course' => $course
+        ]);
+    } else {
+        // Extract course name from Gemini response
+        if (is_array($geminiData) && isset($geminiData[0])) {
+            $course = trim($geminiData[0]);
+        } elseif (is_string($geminiData)) {
+            $course = trim($geminiData);
+        } else {
+            // Try to extract string from response
+            $course = trim(json_encode($geminiData));
+        }
+        
+        // Clean up the course name
+        $course = str_replace(['"', "'", "\n", "\r"], '', $course);
+        $course = substr($course, 0, 100); // Limit to 100 characters
+        
+        // If empty, use fallback
+        if (empty($course)) {
+            $course = "Upskilling in {$skill} for {$jobRole} - {$industry}";
+        }
+    }
+    
+    \Log::info('Generated course name', [
+        'course' => $course,
+        'from_gemini' => !isset($geminiData['error'])
+    ]);
+    // ===== END AUTO-GENERATE COURSE NAME =====
+
+    // Get mapping types and values
+    $mappingTypes = DB::table('lms_mapping_type')
+        ->where('id', 1)
+        ->whereNull('deleted_at')
+        ->get()
+        ->keyBy('id');
+    
+    $mappingValues = DB::table('lms_mapping_type')
+        ->where('parent_id', 1)
+        ->whereNull('deleted_at')
+        ->get()
+        ->keyBy('id');
+    
+    $lms_content_category = DB::table('lms_content_category')
+        ->where('status', 2)
+        ->whereNull('deleted_at')
+        ->pluck('category_name', 'id');
+
+    // Generate slides dynamically based on count
+    $slideStructure = $this->generateSlideStructure($slideCount, $industry, $department, $jobRole, $skill, $course, $title);
+
+    $prompt = "Create a {$slideCount}-slide professional presentation focused on upskilling employees in the {$industry} industry, within the Department: {$department}, specifically for the Job Role: {$jobRole}, emphasizing the Skill: {$skill}, under the Course: {$course}, Content Title: {$title}; use a formal, instructional tone with consistent formatting and terminology throughout, structuring each slide with 3–5 concise bullet points under 70 words each, strictly following this slide structure: {$slideStructure}";
+
+    // Payload structure for Gamma API
+    $payload = [
+        "inputText" => $prompt,
+        "textMode"   => "generate",
+        "format"     => "presentation",
+        "numCards"   => $slideCount,
+        "cardSplit"  => "auto",
+        "additionalInstructions" => "All slides must use clear, consistent formatting. Ensure a formal instructional tone.",
+        "exportAs"   => "pdf",
+        "textOptions" => [
+            "amount"     => "extensive",
+            "tone"       => "formal, instructional",
+            "audience"   => "employees, L&D managers, HR",
+            "language"   => "en"
+        ],
+        "imageOptions" => [
+            "source" => "aiGenerated",
+            "style"  => "minimal, professional"
+        ],
+        "cardOptions" => [
+            "dimensions" => "fluid"
+        ],
+        "sharingOptions" => [
+            "workspaceAccess" => "view",
+            "externalAccess" => "noAccess"
+        ]
+    ];
+
+    // Remove any null or empty values from the payload
+    $payload = array_filter($payload, function($value) {
+        return $value !== null && $value !== '';
+    });
+
+    $endpoint = 'https://public-api.gamma.app/v1.0/generations';
+
+    try {
+        \Log::info('Sending request to Gamma API', [
+            'endpoint' => $endpoint,
+            'slide_count' => $slideCount,
+            'course_name' => $course,
+            'payload' => json_encode($payload)
+        ]);
+
+        $response = Http::withHeaders([
+            'X-API-KEY' => "sk-gamma-g2Ny0homDeDYfhRIFbrQeSugMnuZUw4x9WtwNi87dA",
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json'
+        ])->timeout(60)->post($endpoint, $payload);
+
+        // Log response for debugging
+        \Log::info('Gamma API Response', [
+            'status' => $response->status(),
+            'body' => $response->json() ?? $response->body()
+        ]);
+
+        // Handle 410 Gone specifically
+        if ($response->status() == 410) {
+            return response()->json([
+                'status' => false,
+                'error' => 'API version deprecated. Please update to latest API version.',
+                'details' => $response->json()
+            ], 410);
+        }
+
+        // Handle other error responses
+        if (!$response->successful()) {
+            $errorBody = $response->json() ?? $response->body();
+
+            return response()->json([
+                'status' => false,
+                'error' => 'Gamma API error: ' . json_encode($errorBody),
+                'status_code' => $response->status()
+            ], $response->status());
+        }
+
+        // Process successful response
+        $result = $response->json();
+        
+        // Get generation ID from result
+        $generationId = $result['generationId'] ?? $result['id'] ?? $result['generation_id'] ?? null;
+        
+        if (!$generationId) {
+            return response()->json([
+                'status' => false,
+                'error' => 'Invalid response from Gamma API: No generation ID found',
+                'response' => $result
+            ], 500);
+        }
+
+        $newfilename = '';
+        $filePath = '';
+        
+        // Poll the status endpoint until complete
+        $maxAttempts = 60;
+        $attempt = 0;
+        $timeout = 15;
+
+        do {
+            try {
+                $statusResponse = Http::timeout($timeout)
+                    ->withHeaders([
+                        'X-API-KEY' => "sk-gamma-g2Ny0homDeDYfhRIFbrQeSugMnuZUw4x9WtwNi87dA",
+                        'Accept' => 'application/json'
+                    ])
+                    ->get("https://public-api.gamma.app/v1.0/generations/" . $generationId);
+
+                if ($statusResponse->successful()) {
+                    $status = $statusResponse->json();
+
+                    // Log status for debugging
+                    \Log::info('Generation status check', [
+                        'attempt' => $attempt + 1,
+                        'status' => $status
+                    ]);
+
+                    // Check status
+                    $currentStatus = $status['status'] ?? $status['state'] ?? $status['generationStatus'] ?? '';
+                    
+                    if (in_array(strtolower($currentStatus), ['completed', 'done', 'succeeded', 'complete'])) {
+                        // Get file from export URL
+                        $exportUrl = $status['exportUrl'] ?? $status['url'] ?? $status['file_url'] ?? $status['downloadUrl'] ?? null;
+                        
+                        if ($exportUrl) {
+                            \Log::info('Downloading file from: ' . $exportUrl);
+                            
+                            // Download the file
+                            $fileResponse = Http::timeout($timeout)->get($exportUrl);
+                            
+                            if ($fileResponse->successful()) {
+                                $fileContent = $fileResponse->body();
+
+                                // Generate unique filename
+                                $newfilename = 'presentation_' . uniqid() . '.pdf';
+                                $filePath = 'public/hp_lms_content_file/' . $newfilename;
+
+                                // Store file on DigitalOcean using put() method
+                                Storage::disk('digitalocean')->put(
+                                    $filePath,
+                                    $fileContent,
+                                    'public'
+                                );
+                                
+                                \Log::info('File stored successfully: ' . $newfilename);
+                                
+                                break;
+                            } else {
+                                \Log::error('Failed to download file from export URL', [
+                                    'url' => $exportUrl,
+                                    'status' => $fileResponse->status()
+                                ]);
+                            }
+                        } else {
+                            \Log::warning('No export URL found in response', ['status' => $status]);
+                        }
+                    } elseif (in_array(strtolower($currentStatus), ['failed', 'error'])) {
+                        throw new \Exception('Generation failed: ' . ($status['error'] ?? 'Unknown error'));
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::error('Status check error', [
+                    'attempt' => $attempt + 1,
+                    'error' => $e->getMessage()
+                ]);
+                
+                $attempt++;
+                if ($attempt >= $maxAttempts) {
+                    throw new \Exception('Maximum retry attempts reached: ' . $e->getMessage());
+                }
+                continue;
+            }
+
+            $attempt++;
+            
+            // Exponential backoff
+            $sleepTime = min(30, pow(2, $attempt));
+            sleep($sleepTime);
+
+        } while ($attempt < $maxAttempts);
+
+        // If we have a stored filename, save to database using existing tables
+        if (!empty($newfilename)) {
+            
+            // ===== STORE IN EXISTING TABLES =====
+            
+            // 1. Get or create grade (academic_section)
+            $checkGrade = DB::table('academic_section')
+                ->where(['sub_institute_id' => $sub_institute_id, 'title' => $industry])
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if ($checkGrade) {
+                $grade = $checkGrade->id;
+            } else {
+                $grade = DB::table('academic_section')->insertGetId([
+                    'sub_institute_id' => $sub_institute_id,
+                    'title' => $industry,
+                    'short_name' => $industry,
+                    'sort_order' => '1',
+                    'created_by' => $user_id,
+                    'created_at' => now()
+                ]);
+            }
+
+            // 2. Get or create department (hrms_departments) - THIS IS THE STANDARD
+            $checkDepartment = DB::table('hrms_departments')
+                ->where(['sub_institute_id' => $sub_institute_id, 'department' => $department])
+                ->whereNull('deleted_at')
+                ->first();
+            
+            if ($checkDepartment) {
+                $standard_id = $checkDepartment->id;
+            } else {
+                $standard_id = DB::table('hrms_departments')->insertGetId([
+                    'sub_institute_id' => $sub_institute_id,
+                    'department' => $department,
+                    'status' => '1',
+                    'created_by' => $user_id,
+                    'created_at' => now()
+                ]);
+            }
+
+            // 3. Get or create course (sub_std_map) with subject_id = skill_id
+            $checkCourse = DB::table('sub_std_map')
+                ->where([
+                    'sub_institute_id' => $sub_institute_id,
+                    'display_name' => $course
+                ])
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (!$checkCourse && $course_id) {
+                // Use provided course_id
+                $checkCourse = DB::table('sub_std_map')
+                    ->where(['sub_institute_id' => $sub_institute_id, 'id' => $course_id])
+                    ->whereNull('deleted_at')
+                    ->first();
+            }
+
+            if ($checkCourse) {
+                $final_course_id = $checkCourse->id;
+                
+                // Update the course to set subject_id = skill_id if not already set
+                DB::table('sub_std_map')
+                    ->where('id', $final_course_id)
+                    ->update([
+                        'subject_id' => $skill_id,
+                        'standard_id' => $standard_id,
+                        'updated_at' => now(),
+                        'updated_by' => $user_id
+                    ]);
+                    
+                \Log::info('Updated existing course with skill_id and standard_id', [
+                    'course_id' => $final_course_id,
+                    'skill_id' => $skill_id,
+                    'standard_id' => $standard_id
+                ]);
+                
+            } else {
+                // Create new course with subject_id = skill_id and standard_id
+                $final_course_id = DB::table('sub_std_map')->insertGetId([
+                    'sub_institute_id' => $sub_institute_id,
+                    'standard_id' => $standard_id,
+                    'display_name' => $course,
+                    'short_name' => substr($course, 0, 20),
+                    'subject_code' => 'AI-GEN-' . time(),
+                    'subject_category' => 'Functional',
+                    'subject_type' => 'Skill Development',
+                    'allow_grades' => 'Yes',
+                    'allow_content' => 'Yes',
+                    'sort_order' => '1',
+                    'elective_subject' => 'No',
+                    'add_content' => 'chapterwise',
+                    'status' => 1,
+                    'subject_id' => $skill_id,
+                    'created_by' => $user_id,
+                    'created_at' => now()
+                ]);
+                
+                \Log::info('Created new course with skill_id and standard_id', [
+                    'course_id' => $final_course_id,
+                    'skill_id' => $skill_id,
+                    'standard_id' => $standard_id
+                ]);
+            }
+
+            // 4. Get or create chapter (chapter_master) with standard_id
+            $chapterName = $title;
+            $checkChapter = DB::table('chapter_master')
+                ->where([
+                    'sub_institute_id' => $sub_institute_id,
+                    'subject_id' => $final_course_id,
+                    'chapter_name' => $chapterName
+                ])
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (!$checkChapter && $chapter_id) {
+                $checkChapter = DB::table('chapter_master')
+                    ->where(['sub_institute_id' => $sub_institute_id, 'id' => $chapter_id])
+                    ->whereNull('deleted_at')
+                    ->first();
+            }
+
+            if ($checkChapter) {
+                $final_chapter_id = $checkChapter->id;
+                
+                DB::table('chapter_master')
+                    ->where('id', $final_chapter_id)
+                    ->update([
+                        'standard_id' => $standard_id,
+                        'updated_at' => now(),
+                        'updated_by' => $user_id
+                    ]);
+                    
+            } else {
+                $final_chapter_id = DB::table('chapter_master')->insertGetId([
+                    'sub_institute_id' => $sub_institute_id,
+                    'standard_id' => $standard_id,
+                    'subject_id' => $final_course_id,
+                    'chapter_name' => $chapterName,
+                    'chapter_desc' => "AI Generated presentation for {$skill} skill",
+                    'availability' => 1,
+                    'show_hide' => 1,
+                    'sort_order' => 1,
+                    'created_by' => $user_id,
+                    'created_at' => now()
+                ]);
+            }
+
+            // 5. Get course and chapter details for content creation
+            $getstandard = DB::table('hrms_departments')
+                ->where(['sub_institute_id' => $sub_institute_id, 'id' => $standard_id])
+                ->whereNull('deleted_at')
+                ->first();
+            
+            $getcourse = DB::table('sub_std_map')
+                ->where(['sub_institute_id' => $sub_institute_id, 'id' => $final_course_id])
+                ->whereNull('deleted_at')
+                ->first();
+            
+            $getChapter = DB::table('chapter_master')
+                ->where(['sub_institute_id' => $sub_institute_id, 'id' => $final_chapter_id])
+                ->whereNull('deleted_at')
+                ->first();
+
+            // 6. Store in content_details table (via contentController) with standard_id
+            $contentCategoryId = $lms_content_category->keys()->first();
+
+            $contentController = new contentController;
+            $content_request = new Request([
+                'type' => 'API',
+                'sub_institute_id' => $sub_institute_id,
+                'user_id' => $user_id,
+                'syear' => $syear,
+                'token' => $token,
+                'toggle_basic_advanced' => 'Advanced',
+                'hid_standard_name' => $getstandard->name ?? $department,
+                'hid_subject_name' => $getcourse->display_name ?? $course,
+                'hid_chapter_name' => $getChapter->chapter_name ?? $title,
+                'hid_chapter_id' => $final_chapter_id,
+                'title' => $title,
+                'description' => "AI Generated presentation for {$skill} skill in {$industry} industry",
+                'content_category' => $contentCategoryId,
+                'contentType' => 'link',
+                'link' => Storage::disk('digitalocean')->url($filePath),
+                'cross_curriculum_grade_topic' => $newfilename,
+                'mapping_type' => 0,
+                'mapping_value' => 0,
+                'filename' => $newfilename,
+                'show_hide' => 1,
+                'standard_id' => $standard_id
+            ]);
+
+            $contentStore = $contentController->store($content_request);
+            
+            $content_id = null;
+            if (isset($contentStore->original['content_id'])) {
+                $content_id = $contentStore->original['content_id'];
+                
+                DB::table('content_details')
+                    ->where('id', $content_id)
+                    ->update([
+                        'standard_id' => $standard_id,
+                        'updated_at' => now()
+                    ]);
+            }
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Presentation generated and stored successfully',
+                'data' => [
+                    'course_id' => $final_course_id,
+                    'course_name' => $course, // Return generated course name
+                    'chapter_id' => $final_chapter_id,
+                    'content_id' => $content_id,
+                    'file_name' => $newfilename,
+                    'file_url' => Storage::disk('digitalocean')->url($filePath),
+                    'slide_count' => $slideCount,
+                    'skill_id' => $skill_id,
+                    'standard_id' => $standard_id
+                ],
+                'generationId' => $generationId,
+                'gemini_generated_course' => !isset($geminiData['error']) // Indicate if Gemini was used
+            ]);
+        } else {
+            return response()->json([
+                'status' => false,
+                'error' => 'File generation completed but file could not be downloaded',
+                'generationId' => $generationId
+            ], 500);
+        }
+        
+    } catch (\Exception $e) {
+        \Log::error('Gamma content generation failed', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'status' => false,
+            'error' => 'Request failed: ' . $e->getMessage(),
+        ], 500);
+    }
+}
+
+    // Alternative simplified version if the above still doesn't work
+    public function GammaContentGenerationSimplified(Request $request)
     {
+        // Validate required fields
+        $validator = Validator::make($request->all(), [
+            'industry' => 'required|string',
+            'department' => 'required|string',
+            'jobrole' => 'required|string',
+            'skill' => 'required|string',
+            'course' => 'required|string',
+            'content_title' => 'required|string',
+            'slide_count' => 'required|integer|min:1|max:50'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
         $industry   = $request->input('industry');
         $department = $request->input('department');
         $jobRole    = $request->input('jobrole');
         $skill      = $request->input('skill');
         $course     = $request->input('course');
         $title      = $request->input('content_title');
+        $slideCount = (int) $request->input('slide_count');
 
-        $prompt = "Create a 10-slide professional presentation focused on upskilling employees in the {$industry} industry, within the Department: {$department}, specifically for the Job Role: {$jobRole}, emphasizing the Skill: {$skill}, under the Course: {$course}, Content Title: {$title}; use a formal, instructional tone with consistent formatting and terminology throughout, structuring each slide with 3–5 concise bullet points under 70 words each, strictly following this order: 
-        Slide 1 – Title slide titled “Upskilling for Industry: {$industry}, Department: {$department}, Job Role: {$jobRole}, Skill: {$skill}” with subtitle/visual; 
-        Slide 2 – Overview and objectives outlining 2–3 key goals of upskilling Skill: {$skill}; 
-        Slide 3 – Importance of Skill: {$skill} in Industry: {$industry} explained in 3 clear bullets; 
-        Slide 4 – Relevance of Skill: {$skill} to Job Role: {$jobRole} detailing specific daily impacts; 
-        Slide 5 – {$skill}-specific challenges and learning needs listed as top 3 points; 
-        Slide 6 – Expected learning outcomes stating what employees will achieve post-training; 
-        Slide 7 – Stepwise skill-building framework for Skill: {$skill}; 
-        Slide 8 – Tools and technologies essential for developing Skill: {$skill} briefly described; 
-        Slide 9 – Assessment methods of Skill: {$skill} proposing 2–3 measurable evaluation approaches; 
-        Slide 10 – Summary recapping key insights and outlining actionable next steps; 
-        Verify full adherence to tone, structure, clarity, and formatting before completion.";
+        // Generate slide structure
+        $slideStructure = $this->generateSlideStructure($slideCount, $industry, $department, $jobRole, $skill, $course, $title);
 
+        $prompt = "Create a {$slideCount}-slide professional presentation focused on upskilling employees in the {$industry} industry, within the Department: {$department}, specifically for the Job Role: {$jobRole}, emphasizing the Skill: {$skill}, under the Course: {$course}, Content Title: {$title}; use a formal, instructional tone with consistent formatting and terminology throughout, structuring each slide with 3–5 concise bullet points under 70 words each, strictly following this slide structure: {$slideStructure}";
+
+        // Minimal payload structure for v1.0 API
         $payload = [
             "inputText" => $prompt,
-            "textMode"   => "generate",
-            "format"     => "presentation",
-            "themeName"  => "Oasis",
-            "numCards"   => 10,
-            "cardSplit"  => "auto",
-            "additionalInstructions" => "All slides must use clear, consistent formatting. Ensure a formal instructional tone.",
-            "exportAs"   => "pdf",
-            "textOptions" => [
-                "amount"     => "extensive",
-                "tone"       => "formal, instructional",
-                "audience"   => "employees, L&D managers, HR",
-                "language"   => "en"
-            ],
-            "imageOptions" => [
-                "source" => "aiGenerated",
-                "model"  => "imagen-4-pro",
-                "style"  => "minimal, professional"
-            ],
-            "cardOptions" => [
-                "dimensions" => "fluid"
-            ],
-            "sharingOptions" => [
-                "workspaceAccess" => "view",
-                "externalAccess" => "noAccess"
-            ]
+            "textMode" => "generate",
+            "format" => "presentation",
+            "numCards" => $slideCount
         ];
 
-        // Replace <correct-endpoint> with whatever Gamma’s actual endpoint is per their docs
-        $endpoint = 'https://public-api.gamma.app/v0.2/generations';
+        $endpoint = 'https://public-api.gamma.app/v1.0/generations';
 
         try {
             $response = Http::withHeaders([
-                'X-API-KEY'     => "sk-gamma-g2Ny0homDeDYfhRIFbrQeSugMnuZUw4x9WtwNi87dA",
-                'Accept'        => 'application/json',
-                'Content-Type'  => 'application/json'
-            ])->timeout(30)->post($endpoint, $payload);
+                'X-API-KEY' => "sk-gamma-g2Ny0homDeDYfhRIFbrQeSugMnuZUw4x9WtwNi87dA",
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json'
+            ])->timeout(60)->post($endpoint, $payload);
 
-            if ($response->status() == 404) {
-
-                return response()->json([
-                    'status' => false,
-                    'error' => 'Endpoint not found. Please verify: 1) Correct API endpoint 2) API key permissions 3) Beta feature access'
-                ], 404);
-            }
-
-            // Handle other error responses
             if (!$response->successful()) {
                 $errorBody = $response->json() ?? $response->body();
-
                 return response()->json([
                     'status' => false,
                     'error' => 'Gamma API error: ' . json_encode($errorBody),
@@ -1805,69 +2271,86 @@ class AJAXController extends Controller
                 ], $response->status());
             }
 
-            // Process successful response
-            $result = $response->json();
-
-            // Get generation ID from result
-            $generationId = $result['generationId'];
-            $newfilename = '';
-            // Poll the status endpoint until complete
-            $maxAttempts = 5;
-            $attempt = 0;
-            $timeout = 10; // Timeout in seconds
-
-            do {
-                try {
-                    $statusResponse = Http::timeout($timeout)
-                        ->get("https://public-api.gamma.app/v0.2/generations/" . $generationId);
-
-                    if ($statusResponse->successful()) {
-                        $status = $statusResponse->json();
-
-                        if (isset($status['status']) && $status['status'] === 'completed') {
-                            // Get file from export URL with timeout
-                            $exportUrl = $status['exportUrl'];
-                            $file = Http::timeout($timeout)->get($exportUrl)->body();
-
-                            // Generate unique filename
-                            $newfilename = uniqid() . '.pdf';
-
-                            // Store file on DigitalOcean
-                            Storage::disk('digitalocean')->putFileAs(
-                                'public/hp_lms_content_file/',
-                                $file,
-                                $newfilename,
-                                'public'
-                            );
-
-                            break;
-                        }
-                    }
-                } catch (\Exception $e) {
-
-                    $attempt++;
-                    if ($attempt >= $maxAttempts) {
-                        throw new \Exception('Maximum retry attempts reached');
-                    }
-                }
-
-                sleep(2); // Wait 2 seconds before retrying
-
-            } while ($attempt < $maxAttempts);
-
-            $result['stored_filename'] = $newfilename;
-
             return response()->json([
                 'status' => true,
-                'data' => $result,
-                'generationId' => $generationId,
-                'newfilename' => $newfilename,
+                'data' => $response->json()
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
                 'error' => 'Request failed: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Generate dynamic slide structure based on slide count
+     */
+    private function generateSlideStructure($slideCount, $industry, $department, $jobRole, $skill, $course, $title)
+    {
+        // Base slides that are always included (10 essential slides)
+        $baseSlides = [
+            1 => "Title slide titled \"Upskilling for Industry: {$industry}, Department: {$department}, Job Role: {$jobRole}, Skill: {$skill}\" with subtitle/visual",
+            2 => "Overview and objectives outlining 2–3 key goals of upskilling Skill: {$skill}",
+            3 => "Importance of Skill: {$skill} in Industry: {$industry} explained in 3 clear bullets",
+            4 => "Relevance of Skill: {$skill} to Job Role: {$jobRole} detailing specific daily impacts",
+            5 => "Skill-specific challenges and learning needs listed as top 3 points",
+            6 => "Expected learning outcomes stating what employees will achieve post-training",
+            7 => "Stepwise skill-building framework for Skill: {$skill}",
+            8 => "Tools and technologies essential for developing Skill: {$skill} briefly described",
+            9 => "Assessment methods of Skill: {$skill} proposing 2–3 measurable evaluation approaches",
+            10 => "Summary recapping key insights and outlining actionable next steps"
+        ];
+
+        // Additional slides for longer presentations
+        $additionalSlides = [
+            "Industry trends related to {$skill} in {$industry}",
+            "Case studies of successful skill implementation in {$jobRole}",
+            "ROI analysis of upskilling in {$skill}",
+            "Best practices for {$skill} development",
+            "Common pitfalls and how to avoid them when learning {$skill}",
+            "Integration of {$skill} with existing workflows",
+            "Future scope and evolution of {$skill} in {$industry}",
+            "Success metrics and KPIs for {$skill} mastery",
+            "Resource recommendations for continuous learning in {$skill}",
+            "Peer learning and collaboration strategies for {$skill}",
+            "Time management tips for {$skill} development",
+            "Mentorship opportunities in {$skill} domain",
+            "Certification paths for {$skill}",
+            "Industry recognition and standards for {$skill}",
+            "Cross-functional applications of {$skill}"
+        ];
+
+        $slideStructure = "";
+        
+        if ($slideCount == 1) {
+            // Single slide - just title and key points
+            $slideStructure = "Slide 1 – Title slide titled \"Upskilling for Industry: {$industry}, Department: {$department}, Job Role: {$jobRole}, Skill: {$skill}\" with 3-5 key bullet points summarizing the upskilling program";
+        } elseif ($slideCount <= 10) {
+            // Use only first N base slides
+            for ($i = 1; $i <= $slideCount; $i++) {
+                if (isset($baseSlides[$i])) {
+                    $slideStructure .= "Slide {$i} – {$baseSlides[$i]}; ";
+                }
+            }
+        } else {
+            // Include all base slides plus additional slides
+            $extraSlidesNeeded = $slideCount - 10;
+            
+            // Add all base slides
+            for ($i = 1; $i <= 10; $i++) {
+                $slideStructure .= "Slide {$i} – {$baseSlides[$i]}; ";
+            }
+            
+            // Add additional slides
+            for ($i = 0; $i < $extraSlidesNeeded; $i++) {
+                $slideNumber = 11 + $i;
+                $slideContent = $additionalSlides[$i % count($additionalSlides)];
+                $slideStructure .= "Slide {$slideNumber} – {$slideContent}; ";
+            }
+        }
+        
+        return rtrim($slideStructure, '; ');
     }
 }

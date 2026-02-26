@@ -55,6 +55,7 @@ use App\Http\Controllers\lms\library\H5PController;
 use App\Http\Controllers\front_desk\taskController;
 use App\Http\Controllers\front_desk\TaskUpdateController;
 use App\Http\Controllers\courseRecommandation;
+use App\Http\Controllers\lms\blukCourseandQuetionGeneration;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/courses-recommendation', [courseRecommandation::class, 'index']);
@@ -232,7 +233,10 @@ Route::post('show_question_wise_report',
     // H5p Library
     Route::resource('h5p',H5PController::class);
     Route::get('assessment_master', [lms_apiController::class, 'assessment_master']);
+    Route::post('blukCourseAndQuestion/store', [blukCourseandQuetionGeneration::class, 'store']);
+
 });
+
 
 Route::controller(lms_apiController::class)->group(function () {
     Route::post('/studentVirtualClassroomAPI', 'studentVirtualClassroomAPI');
