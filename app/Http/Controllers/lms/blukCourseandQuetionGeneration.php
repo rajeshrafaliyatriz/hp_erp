@@ -220,7 +220,7 @@ class blukCourseandQuetionGeneration extends Controller
         // 4. Create standard-subject mapping in sub_std_map
         DB::table('sub_std_map')->insert([
             'standard_id' => $rowData['departmentId'] ?? 1,
-            'subject_id' => $chapterId,
+            'subject_id' => $rowData['jobId'] ?? 1,
             'display_name' => $result['topic'] ?? $rowData['chapterName'] ?? 'Untitled Chapter',
             'allow_grades' => '',
             'elective_subject' => 'No',
