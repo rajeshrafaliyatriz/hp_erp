@@ -108,6 +108,7 @@ class blukCourseandQuetionGeneration extends Controller
                     $assessmentData = $this->storeAssessmentData(
                         $result, 
                         $courseData['chapter_id'], 
+                        $rowData,
                         $subInstituteId, 
                         $createdBy
                     );
@@ -225,7 +226,7 @@ class blukCourseandQuetionGeneration extends Controller
     /**
      * Store assessment/question data (question_master, answer_master, lms_question_mapping)
      */
-    private function storeAssessmentData($result, $chapterId, $subInstituteId, $createdBy)
+    private function storeAssessmentData($result, $chapterId, $rowData, $subInstituteId, $createdBy)
     {
         $questionIds = [];
         $assessment = $result['assessment'] ?? null;
@@ -239,8 +240,8 @@ class blukCourseandQuetionGeneration extends Controller
             $questionId = DB::table('lms_question_master')->insertGetId([
                 'question_type_id' => 1,
                 'grade_id' => 1,
-                'standard_id' => $q['departmentId'],
-                'subject_id' => $q['jobId'],
+                'standard_id' => $rowData['departmentId'],
+                'subject_id' => $rowData['jobId'],
                 'chapter_id' => $chapterId,
                 'question_title' => $q['question_title'] ?? 'Untitled Question',
                 'description' => $q['reason'] ?? '',
