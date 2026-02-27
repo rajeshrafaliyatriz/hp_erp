@@ -224,7 +224,7 @@ class blukCourseandQuetionGeneration extends Controller
             'display_name' => $result['topic'] ?? $rowData['chapterName'] ?? 'Untitled Chapter',
             'allow_grades' => '',
             'elective_subject' => 'No',
-            'allow_content' => $rowData['contentType'] ?? 'both',
+            'allow_content' => 'yes',
             'subject_category' => $rowData['contentType'] ?? 'both',
             'display_image' => '',
             'sub_institute_id' => $subInstituteId,
