@@ -264,7 +264,7 @@ class taskController extends Controller
             //     $manageby = $user_id;
             // }
 
-            $dates = $this->getDatesWithoutSundays("High");
+            $dates = $this->getDatesWithoutSundays("High", null, 1, $request->repeat_until);
             $task_type = $request->input('selType', ''); // fallback if not present
 
             // Prepare file upload
@@ -335,28 +335,28 @@ class taskController extends Controller
                 $extraData['skill_id'] = $request->input("skill_id");
 
                 if ($task_type == "High") {
-                    $dates = $this->getDatesWithoutSundays("High", $request->task_date, (int)$request->repeat_days);
+                    $dates = $this->getDatesWithoutSundays("High", $request->task_date, (int)$request->repeat_days, $request->repeat_until);
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
                         taskModel::insert($data);
                     }
                 } else if ($task_type == "Medium") {
-                    $dates = $this->getDatesWithoutSundays('Medium', $request->task_date, (int)$request->repeat_days);
+                    $dates = $this->getDatesWithoutSundays('Medium', $request->task_date, (int)$request->repeat_days, $request->repeat_until);
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
                         taskModel::insert($data);
                     }
                 } else if ($task_type == "Low") {
-                    $dates = $this->getDatesWithoutSundays('Low', $request->task_date, (int)$request->repeat_days);
+                    $dates = $this->getDatesWithoutSundays('Low', $request->task_date, (int)$request->repeat_days, $request->repeat_until);
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
                         taskModel::insert($data);
                     }
                 } else {
-                    $data = array_merge($baseData, $extraData, ['TASK_DATE' => now()]);
+                    $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? now()]);
                     $data['created_by'] = $user_id;
                     taskModel::insert($data);
                 }
@@ -369,7 +369,7 @@ class taskController extends Controller
                         $extraData['TASK_ALLOCATED_TO'] = $allocatedUser;
                         $extraData['required_skills'] = $request->input("skills");
                         $extraData['skill_id'] = $request->input("skill_id");
-                        $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->task_date ?? now()]);
+                        $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? now()]);
                         $data['created_by'] = $user_id;
                         taskModel::insert($data);
                     }
@@ -411,7 +411,8 @@ class taskController extends Controller
                             $task_date = $taskValue['TASK_DATE'] ?? now()->format('Y-m-d');
 
                             // Get dates based on task type
-                                $dates = $this->getDatesWithoutSundays($task_type, $task_date, (int)$taskValue['repeat_days'] ?? 1);
+                            $repeat_until = $taskValue['repeat_until'] ?? null;
+                            $dates = $this->getDatesWithoutSundays($task_type, $task_date, (int)$taskValue['repeat_days'] ?? 1, $repeat_until);
                           
                             // return $dates;
                             if(!empty($dates)){
@@ -467,13 +468,14 @@ class taskController extends Controller
                     $extraData['required_skills'] = $request->has('skills') ? implode(',', $request->skills) : '';
                     $extraData['skill_id'] = $request->input("skill_id");
                     if ($task_type == "High") {
+                        $dates = $this->getDatesWithoutSundays("High", $request->task_date, (int)$request->repeat_days, $request->repeat_until);
                         foreach ($dates as $date) {
                             $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                             $data['created_by'] = $user_id;
                             taskModel::insert($data);
                         }
                     } else {
-                        $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->get('TASK_DATE')]);
+                        $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? $request->get('TASK_DATE')]);
                         $data['created_by'] = $user_id;
                         taskModel::insert($data);
                     }
@@ -773,10 +775,10 @@ class taskController extends Controller
     //     return $dates;
     // }
 
-    function getDatesWithoutSundays($type = "", $task_date = '', $repeat_days = 1)
+    function getDatesWithoutSundays($type = "", $task_date = '', $repeat_days = 1, $repeat_until = null)
     {
         $startDate = $task_date ? Carbon::parse($task_date) : Carbon::now();
-        $endDate = $task_date ? Carbon::parse($task_date)->addDay() : Carbon::create($startDate->year, $startDate->month)->endOfMonth();
+        $endDate = $repeat_until ? Carbon::parse($repeat_until) : ($task_date ? Carbon::parse($task_date)->addDay() : Carbon::create($startDate->year, $startDate->month)->endOfMonth());
         $dates = [];
         // return $task_date;
         if ($type == "High" || $type == "Medium" || $type == "Low") {
