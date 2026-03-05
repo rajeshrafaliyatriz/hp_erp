@@ -50,6 +50,7 @@ use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
 use App\Http\Controllers\Api\TaskController;
+use App\Http\Controllers\Api\UserJourneyLogController;
 
 
 Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
@@ -210,6 +211,10 @@ Route::get('/tasks/daily', [TaskController::class, 'getDailyTasks']);
 Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
 Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
 Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills']);
+
+// User Journey Log API Routes
+Route::post('/user-journey-logs', [UserJourneyLogController::class, 'store']);
+Route::post('/user-journey-logs/bulk', [UserJourneyLogController::class, 'storeBulk']);
 
 // Course Recommendation API - Get courses based on logged-in user's job role
 

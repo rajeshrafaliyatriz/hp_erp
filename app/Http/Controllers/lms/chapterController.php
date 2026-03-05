@@ -99,6 +99,10 @@ class chapterController extends Controller
         $res['lms_mapping_Values'] = $lms_mapping_Values;  // added on 28-02-2025
         $res['mapped_type'] = $request->mapping_type;  // added on 28-02-2025
         $res['mapped_value'] = $request->mapped_value;  // added on 28-02-2025
+        $res['content_category']=DB::table('lms_content_category')
+                ->where('status', 2)
+                ->whereNull('deleted_at')
+                ->pluck('category_name', 'id');
         // echo "<pre>";print_r($data['chapter_data']);exit;
         return is_mobile($type, 'lms/show_chapter', $res, "view");
     }
@@ -246,7 +250,6 @@ class chapterController extends Controller
         $data['content_data'] = $content_data_array;
 
         $data['basic_ids'] = $data['basic_ids'][0] ?? [];
-
         return $data;
     }
 
