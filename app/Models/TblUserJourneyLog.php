@@ -16,6 +16,13 @@ class TblUserJourneyLog extends Model
     protected $table = 'tbl_user_journey_logs';
 
     /**
+     * Indicates if the model should be timestamped.
+     *
+     * @var bool
+     */
+    public $timestamps = false;
+
+    /**
      * The primary key associated with the table.
      *
      * @var string
