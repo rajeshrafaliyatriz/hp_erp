@@ -139,6 +139,7 @@ class sub_std_mapController extends Controller
                     "load"             => $request->get('load'),
                     'optional_type'    => $request->get('optional_type') ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : null,
                     'jobrole'          => $request->get('jobrole'),
+                    'proficiency'      => $request->get('proficiency'),
                 ]
             );
 
@@ -252,8 +253,8 @@ class sub_std_mapController extends Controller
                 'load'             => $request->get('load'),
                 'optional_type'    => ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : null,
                 'jobrole'          => $request->get('jobrole'),
+                'proficiency'      => $request->get('proficiency'),
             ];
-        } else {
             $data = [
                 'standard_id'      => $finalStdId,
                 'subject_id'       => $request->get('subject_id'),
@@ -270,6 +271,7 @@ class sub_std_mapController extends Controller
                 'load'             => $request->get('load'),
                 'optional_type'    => ($request->get('optional_type') !=null && $request->get('elective_subject') != "") ? (is_array($request->get('optional_type')) ? $request->get('optional_type')[0] : $request->get('optional_type')) : null,
                 'jobrole'          => $request->get('jobrole'),
+                'proficiency'      => $request->get('proficiency'),
             ];
         }
 
