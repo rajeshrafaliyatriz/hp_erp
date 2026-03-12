@@ -29,6 +29,7 @@ class sub_std_mapModel extends Model
         'sub_institute_id',
         'status',
         'jobrole',
+        'proficiency',
         'created_at',
         'updated_at'
     ];
