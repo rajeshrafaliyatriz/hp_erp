@@ -51,6 +51,7 @@ use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UserJourneyLogController;
+use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\signupOtpController;
 
 
@@ -219,6 +220,9 @@ Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills
 // User Journey Log API Routes
 Route::post('/user-journey-logs', [UserJourneyLogController::class, 'store']);
 Route::post('/user-journey-logs/bulk', [UserJourneyLogController::class, 'storeBulk']);
+
+// School Setup API Routes
+Route::post('/school-setup', [SchoolSetupController::class, 'store']);
 
 // Course Recommendation API - Get courses based on logged-in user's job role
 
