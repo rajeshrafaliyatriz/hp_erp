@@ -51,7 +51,11 @@ use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UserJourneyLogController;
+use App\Http\Controllers\signupOtpController;
 
+
+Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
+Route::post('/verify-otp', [signupOtpController::class, 'verifyOtp']);
 
 Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
 Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
