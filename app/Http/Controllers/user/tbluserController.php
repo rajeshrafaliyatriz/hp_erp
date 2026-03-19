@@ -172,6 +172,29 @@ class tbluserController extends Controller
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $type = $request->input('type');
 
+        // Validate email format
+        $email = $request->input('email');
+        if ($email) {
+            // Check for valid email format
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $res['status_code'] = "0";
+                $res['message'] = "Invalid email address format";
+                $res['data'] = null;
+                return is_mobile($type, "add_user.index", $res);
+            }
+
+            // Check for duplicate email (globally unique across the system)
+            $existingUser = tbluserModel::where('email', $email)
+                ->first();
+            
+            if ($existingUser) {
+                $res['status_code'] = "0";
+                $res['message'] = "Email address already exists";
+                $res['data'] = null;
+                return is_mobile($type, "add_user.index", $res);
+            }
+        }
+
         $file_name = "";
         if ($request->hasFile('user_image')) {
             $file = $request->file('user_image');
@@ -770,6 +793,30 @@ class tbluserController extends Controller
         }
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $type = $request->input('type');
+
+        // Validate email format
+        $email = $request->input('email');
+        if ($email) {
+            // Check for valid email format
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $res['status_code'] = "0";
+                $res['message'] = "Invalid email address format";
+                $res['data'] = null;
+                return is_mobile($type, "add_user.index", $res);
+            }
+
+            // Check for duplicate email (globally unique across the system) - exclude current user
+            $existingUser = tbluserModel::where('email', $email)
+                ->where('id', '!=', $id)
+                ->first();
+            
+            if ($existingUser) {
+                $res['status_code'] = "0";
+                $res['message'] = "Email address already exists";
+                $res['data'] = null;
+                return is_mobile($type, "add_user.index", $res);
+            }
+        }
         // echo "<pre>";print_r($request->all());exit;
         $file_name = "";
         if ($request->hasFile('user_image')) {
