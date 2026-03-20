@@ -281,6 +281,8 @@ class SkillMatrixController extends Controller
 	
 	public function getKaba(Request $request)
 	{
+
+    // return $request;
 	    $sub_institute_id = $request->sub_institute_id;
 	    $type = $request->type;
 	    $typeId = $request->type_id;
@@ -334,7 +336,7 @@ class SkillMatrixController extends Controller
 	    // -----------------------------------
 	    // 5. Helper to load full KABA objects
 	    // -----------------------------------
-	    $loadKaba = function($ids, $type, $jobroleTitle = null) use ($sub_institute_id)
+	    function loadKaba($ids, $type)
 		{
 		    if (!$ids) return [];
 
@@ -343,42 +345,7 @@ class SkillMatrixController extends Controller
 		    // Use ONE MODEL but dynamic table
 		    $model = \App\Models\libraries\KabaMaster::fromType($type);
 
-		    // Get skills data
-		    $skillsData = $model->whereIn('id', $idList)->get();
-
-		    // If type is 'skill' and jobroleTitle is provided, get proficiency_level from s_user_skill_jobrole
-		    $proficiencyLevels = [];
-		    if ($type === 'skill' && $jobroleTitle && !empty($idList)) {
-		        // First get the skill titles from s_users_skills for the given IDs
-		        $skillTitles = DB::table('s_users_skills')
-		            ->whereIn('id', $idList)
-		            ->pluck('title')
-		            ->toArray();
-		        
-		        if (!empty($skillTitles)) {
-		            // Then get proficiency_level from s_user_skill_jobrole using skill titles
-		            $proficiencyData = DB::table('s_user_skill_jobrole')
-		                ->where('jobrole', $jobroleTitle)
-		                ->where('sub_institute_id', $sub_institute_id)
-		                ->whereIn('skill', $skillTitles)
-		                ->pluck('proficiency_level', 'skill')
-		                ->toArray();
-		            
-		            // Map back to skill IDs
-		            $skillIdToTitle = DB::table('s_users_skills')
-		                ->whereIn('id', $idList)
-		                ->pluck('title', 'id')
-		                ->toArray();
-		            
-		            foreach ($skillIdToTitle as $id => $title) {
-		                if (isset($proficiencyData[$title])) {
-		                    $proficiencyLevels[$id] = $proficiencyData[$title];
-		                }
-		            }
-		        }
-		    }
-
-		    return $skillsData->map(function ($item) use ($type, $proficiencyLevels) {
+		    return $model->whereIn('id', $idList)->get()->map(function ($item) use ($type) {
 		        $data = [
 		            'id'           => $item->id,
 		            'category'     => $item->category ?? $item->track,
@@ -388,15 +355,16 @@ class SkillMatrixController extends Controller
 		        ];
 
 		        // Add proficiency_level only if type is 'skill'
-		        if ($type === 'skill') {
-		            $data['proficiency_level'] = $proficiencyLevels[$item->id] ?? null;
+		        if ($type=="skill"){
+                    // return $item;
+		            $data['proficiency_level'] = $item->proficiency_level ?? "0";
 		        }
 
 		        return array_filter($data, function ($v) {
 		            return !is_null($v) && $v !== "";
 		        });
 		    })->toArray();
-		};
+		}
 
 	    // -----------------------------------
 	    // 6. Build Response
@@ -416,15 +384,15 @@ class SkillMatrixController extends Controller
 	        'description' => $items->description ?? null,
 
             // Only add if included in type
-	        'task'        => $loadKaba($map->task_ids,'task', $titleSearch),
-	        'skill'       => $loadKaba($map->skill_ids,'skill', $titleSearch),
-	        'jobrole'     => $loadKaba($map->jobrole_ids,'jobrole', $titleSearch),
+	        'task'        => loadKaba($map->task_ids,'task'),
+	        'skill'       => loadKaba($map->skill_ids,'skill'),
+	        'jobrole'     => loadKaba($map->jobrole_ids,'jobrole'),
 
 	        // Auto convert IDs → full data
-	        'knowledge'   => $loadKaba($map->knowledge_ids,'knowledge', $titleSearch),
-	        'ability'     => $loadKaba($map->ability_ids,'ability', $titleSearch),
-	        'attitude'    => $loadKaba($map->attitude_ids,'attitude', $titleSearch),
-	        'behaviour'   => $loadKaba($map->behaviour_ids,'behaviour', $titleSearch),
+	        'knowledge'   => loadKaba($map->knowledge_ids,'knowledge'),
+	        'ability'     => loadKaba($map->ability_ids,'ability'),
+	        'attitude'    => loadKaba($map->attitude_ids,'attitude'),
+	        'behaviour'   => loadKaba($map->behaviour_ids,'behaviour'),
 	    ];
 
 	    // Remove null or empty fields
