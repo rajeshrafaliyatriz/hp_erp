@@ -292,6 +292,223 @@ class SchoolSetupController extends Controller
             }
         }
 
+        // ✅ Insert Job Role Tasks (similar to the SQL query provided)
+        $industriesType = $validatedData['institute_type'];
+        
+        if (!empty($industriesType)) {
+            // Get jobrole tasks from master table and insert for the school
+            $jobRoleTaskData = DB::table('s_jobrole_task as t')
+                ->select(
+                    't.sector',
+                    't.track',
+                    't.jobrole',
+                    DB::raw("IF(t.critical_work_function='','General Task',t.critical_work_function) AS critical_work_function"),
+                    't.task',
+                    't.task_type'
+                )
+                ->join('s_user_jobrole as uj', function($join) {
+                    $join->on('uj.sub_department', '=', 't.track')
+                        ->on('uj.jobrole', '=', 't.jobrole');
+                })
+                ->where('uj.industries', $industriesType)
+                ->groupBy('t.id')
+                ->orderBy('t.track')
+                ->orderBy('t.jobrole')
+                ->orderBy('critical_work_function')
+                ->orderBy('t.task')
+                ->get();
+
+            if ($jobRoleTaskData->isNotEmpty()) {
+                $taskInsertData = [];
+                
+                foreach ($jobRoleTaskData as $task) {
+                    $taskRecord = [
+                        'sector' => $task->sector,
+                        'track' => $task->track,
+                        'jobrole' => $task->jobrole,
+                        'critical_work_function' => $task->critical_work_function,
+                        'task' => $task->task,
+                        'task_type' => $task->task_type,
+                        'sub_institute_id' => $schoolSetup->id,
+                        'created_at' => now(),
+                    ];
+                    
+                    // Only add created_by if it has a valid value
+                    if ($createdBy !== null) {
+                        $taskRecord['created_by'] = $createdBy;
+                    }
+                    
+                    $taskInsertData[] = $taskRecord;
+                }
+
+                // Bulk insert into s_user_jobrole_task
+                if (!empty($taskInsertData)) {
+                    DB::table('s_user_jobrole_task')->insert($taskInsertData);
+                }
+            }
+        }
+
+        // ✅ Insert Job Role Skills (similar to the SQL query provided)
+        $industriesType = $validatedData['institute_type'];
+        
+        if (!empty($industriesType)) {
+            // Get jobrole skills from master table and insert for the school
+            $jobRoleSkillData = DB::table('s_jobrole_skills as t')
+                ->select(
+                    't.sector',
+                    't.track',
+                    't.jobrole',
+                    't.skill',
+                    't.type',
+                    't.proficiency_level',
+                    't.skill_code'
+                )
+                ->join('s_user_jobrole as uj', function($join) {
+                    $join->on('uj.sub_department', '=', 't.track')
+                        ->on('uj.jobrole', '=', 't.jobrole');
+                })
+                ->where('uj.industries', $industriesType)
+                ->groupBy('t.id')
+                ->orderBy('t.track')
+                ->orderBy('t.jobrole')
+                ->orderBy('t.skill')
+                ->get();
+
+            if ($jobRoleSkillData->isNotEmpty()) {
+                $skillJobroleInsertData = [];
+                
+                foreach ($jobRoleSkillData as $skill) {
+                    $skillJobroleRecord = [
+                        'sector' => $skill->sector,
+                        'track' => $skill->track,
+                        'jobrole' => $skill->jobrole,
+                        'skill' => $skill->skill,
+                        'type' => $skill->type,
+                        'proficiency_level' => $skill->proficiency_level,
+                        'skill_code' => $skill->skill_code,
+                        'sub_institute_id' => $schoolSetup->id,
+                        'created_at' => now(),
+                    ];
+                    
+                    // Only add created_by if it has a valid value
+                    if ($createdBy !== null) {
+                        $skillJobroleRecord['created_by'] = $createdBy;
+                    }
+                    
+                    $skillJobroleInsertData[] = $skillJobroleRecord;
+                }
+
+                // Bulk insert into s_user_skill_jobrole
+                if (!empty($skillJobroleInsertData)) {
+                    DB::table('s_user_skill_jobrole')->insert($skillJobroleInsertData);
+                }
+            }
+        }
+
+        // ✅ Insert Departments from s_user_jobrole (similar to the SQL queries provided)
+        $industriesType = $validatedData['institute_type'];
+        
+        if (!empty($industriesType)) {
+            // First: Insert distinct departments as parent departments
+            $departmentsData = DB::table('s_user_jobrole as a')
+                ->select(
+                    'a.department',
+                    DB::raw('0 AS parent_id'),
+                    'a.sub_institute_id',
+                    DB::raw('1 AS status'),
+                    DB::raw('1 AS is_calculated')
+                )
+                ->where('a.sub_institute_id', $schoolSetup->id)
+                ->whereNotNull('a.department')
+                ->where('a.department', '!=', '')
+                ->distinct()
+                ->get();
+
+            if ($departmentsData->isNotEmpty()) {
+                $departmentInsertData = [];
+                
+                foreach ($departmentsData as $dept) {
+                    $departmentInsertData[] = [
+                        'department' => $dept->department,
+                        'parent_id' => 0,
+                        'sub_institute_id' => $dept->sub_institute_id,
+                        'status' => 1,
+                        'is_calculated' => 1,
+                        'created_at' => now(),
+                    ];
+                }
+
+                // Bulk insert into hrms_departments
+                if (!empty($departmentInsertData)) {
+                    DB::table('hrms_departments')->insert($departmentInsertData);
+                }
+            }
+
+            // Second: Insert sub_departments as child departments with parent_id linking
+            $subDepartmentsData = DB::table('s_user_jobrole as a')
+                ->select(
+                    'a.sub_department',
+                    'b.id AS parent_id',
+                    'a.sub_institute_id',
+                    DB::raw('1 AS status'),
+                    DB::raw('1 AS is_calculated')
+                )
+                ->join('hrms_departments as b', function($join) {
+                    $join->on('b.department', '=', 'a.department')
+                        ->on('b.sub_institute_id', '=', 'a.sub_institute_id');
+                })
+                ->where('a.sub_institute_id', $schoolSetup->id)
+                ->whereNotNull('a.sub_department')
+                ->where('a.sub_department', '!=', '')
+                ->distinct()
+                ->get();
+
+            if ($subDepartmentsData->isNotEmpty()) {
+                $subDepartmentInsertData = [];
+                
+                foreach ($subDepartmentsData as $subDept) {
+                    $subDepartmentInsertData[] = [
+                        'department' => $subDept->sub_department,
+                        'parent_id' => $subDept->parent_id,
+                        'sub_institute_id' => $subDept->sub_institute_id,
+                        'status' => 1,
+                        'is_calculated' => 1,
+                        'created_at' => now(),
+                    ];
+                }
+
+                // Bulk insert into hrms_departments
+                if (!empty($subDepartmentInsertData)) {
+                    DB::table('hrms_departments')->insert($subDepartmentInsertData);
+                }
+            }
+        }
+
+        // ✅ Update department_id in s_users_skills and s_user_jobrole
+        $industriesType = $validatedData['institute_type'];
+        
+        if (!empty($industriesType)) {
+            // Update s_users_skills - set department_id from hrms_departments
+            DB::table('s_users_skills as s')
+                ->join('hrms_departments as d', function($join) {
+                    $join->on('d.department', '=', 's.sub_department')
+                        ->on('d.sub_institute_id', '=', 's.sub_institute_id');
+                })
+                ->where('s.sub_institute_id', $schoolSetup->id)
+                ->where('d.parent_id', '!=', 0)
+                ->update(['s.department_id' => DB::raw('d.id')]);
+
+            // Update s_user_jobrole - set department_id from hrms_departments
+            DB::table('s_user_jobrole as s')
+                ->join('hrms_departments as d', function($join) {
+                    $join->on('d.department', '=', 's.sub_department')
+                        ->on('d.sub_institute_id', '=', 's.sub_institute_id');
+                })
+                ->where('s.sub_institute_id', $schoolSetup->id)
+                ->where('d.parent_id', '!=', 0)
+                ->update(['s.department_id' => DB::raw('d.id')]);
+        }
+
         // ✅ Refresh Data
         $schoolSetup->refresh();
 
