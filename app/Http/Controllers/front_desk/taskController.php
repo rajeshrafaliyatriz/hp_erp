@@ -38,41 +38,64 @@ class taskController extends Controller
         $user_id = $request->session()->get("user_id");
         $taskType = $request->taskType;
 
+        // Token validation for API requests
         if ($type == "API") {
+            $token = $request->input('token');
+            
+            // If token is provided, validate it
+            if ($token) {
+                $accessToken = PersonalAccessToken::findToken($token);
+                if (!$accessToken) {
+                    return response()->json([
+                        'status_code' => 0,
+                        'message' => 'Invalid token'
+                    ], 401);
+                }
+            }
+            
             $sub_institute_id = $request->get("sub_institute_id");
             $syear = $request->get("syear");
             $user_profile_name = $request->get("user_profile_name");
             $user_id = $request->get("user_id");
         }
 
-        // Build query with LEFT JOINs to include ALL tasks
+        // Validate required parameters for API
+        if ($type == "API" && (empty($sub_institute_id) || empty($syear))) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'Missing required parameters: sub_institute_id and syear are required'
+            ], 400);
+        }
+
+        // Check if data exists for given syear, if not use current year
+        if ($type == "API") {
+            $check_syear = DB::table('task')
+                ->where('sub_institute_id', $sub_institute_id)
+                ->where('SYEAR', $syear)
+                ->count();
+            
+            // If no data for given syear, try current year
+            if ($check_syear == 0) {
+                $current_year = date('Y');
+                $check_current = DB::table('task')
+                    ->where('sub_institute_id', $sub_institute_id)
+                    ->where('SYEAR', $current_year)
+                    ->count();
+                
+                if ($check_current > 0) {
+                    $syear = $current_year;
+                }
+            }
+        }
+
+        // Build query - use simple LEFT JOINs to get all tasks
         $data = DB::table("task as t")
-            ->leftJoin('tbluser as u', function ($join) use ($sub_institute_id) {
-                $join->on('t.TASK_ALLOCATED', '=', 'u.id')
-                    ->where('u.sub_institute_id', $sub_institute_id)
-                    ->where('u.status', 1);
-            })
-            ->leftJoin('tbluser as u1', function ($join) use ($sub_institute_id) {
-                $join->on('t.CREATED_BY', '=', 'u1.id')
-                    ->where('u1.sub_institute_id', $sub_institute_id)
-                    ->where('u1.status', 1);
-            })
-            ->leftJoin('tbluser as u2', function ($join) use ($sub_institute_id) {
-                $join->on('t.TASK_ALLOCATED_TO', '=', 'u2.id')
-                    ->where('u2.sub_institute_id', $sub_institute_id)
-                    ->where('u2.status', 1);
-            })
-            ->leftJoin('hrms_departments as hd', function ($join) {
-                $join->on('hd.id', '=', 'u2.department_id');
-            })
-            ->leftJoin('s_user_jobrole as uj', function ($join) {
-                $join->on('uj.id', '=', 'u2.allocated_standards');
-            })
-            ->leftJoin('tbluser as u3', function ($join) use ($sub_institute_id) {
-                $join->on('t.approved_by', '=', 'u3.id')
-                    ->where('u3.sub_institute_id', $sub_institute_id)
-                    ->where('u3.status', 1);
-            })
+            ->leftJoin('tbluser as u', 't.TASK_ALLOCATED', '=', 'u.id')
+            ->leftJoin('tbluser as u1', 't.CREATED_BY', '=', 'u1.id')
+            ->leftJoin('tbluser as u2', 't.TASK_ALLOCATED_TO', '=', 'u2.id')
+            ->leftJoin('hrms_departments as hd', 'hd.id', '=', 'u2.department_id')
+            ->leftJoin('s_user_jobrole as uj', 'uj.id', '=', 'u2.allocated_standards')
+            ->leftJoin('tbluser as u3', 't.approved_by', '=', 'u3.id')
             ->selectRaw("t.*, 
                 COALESCE(CONCAT_WS(' ',u.first_name,u.middle_name,u.last_name), 'User Not Found/Inactive') AS manageby, 
                 COALESCE(CONCAT_WS(' ',u1.first_name,u1.middle_name,u1.last_name), 'Creator Not Found/Inactive') AS ALLOCATOR,
@@ -80,8 +103,7 @@ class taskController extends Controller
                 COALESCE(CONCAT_WS(' ',u3.first_name,u3.middle_name,u3.last_name), 'Not Approved') AS approved_by,
                 hd.department, uj.jobrole")
             ->where("t.SYEAR", "=", $syear)
-            ->where("t.sub_institute_id", "=", $sub_institute_id)
-            ->whereNull('t.deleted_at');
+            ->where("t.sub_institute_id", "=", $sub_institute_id);
 
         // Apply date filters
         if (isset($from_date)) {

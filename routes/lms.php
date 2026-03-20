@@ -328,6 +328,5 @@ Route::get('/download-File', [contentLibraryController::class, 'downloadFile'])-
 // });
 // Route::get('/sync-neo4j', [Neo4jSyncController::class, 'sync']);
 Route::get('question_paper/search_question', [questionpaperController::class,'search_question2']);
-Route::post('/chapter_master/store', [chapterController::class, 'store']);
 
 // Course Recommendation API - Get courses based on logged-in user's job role
