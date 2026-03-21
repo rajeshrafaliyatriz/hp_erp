@@ -8,4 +8,8 @@ class academicSectionModel extends Model
 {
     //
     protected $table = 'academic_year';
+    protected $fillable = [
+        'syear',
+        'sub_institute_id',
+    ];
 }

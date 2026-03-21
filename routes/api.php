@@ -52,6 +52,7 @@ use App\Http\Controllers\DepartmentGraphController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UserJourneyLogController;
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
+use App\Http\Controllers\Api\signup_api\UserSignupController;
 use App\Http\Controllers\signupOtpController;
 
 
@@ -223,6 +224,12 @@ Route::post('/user-journey-logs/bulk', [UserJourneyLogController::class, 'storeB
 
 // School Setup API Routes
 Route::post('/school-setup', [SchoolSetupController::class, 'store']);
+
+
+Route::post('/user-signup', [UserSignupController::class, 'store']);
+Route::get('/user-signup/{id}', [UserSignupController::class, 'show']);
+Route::put('/user-signup/{id}', [UserSignupController::class, 'update']);
+Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy']);
 
 // Course Recommendation API - Get courses based on logged-in user's job role
 
