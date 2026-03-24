@@ -15,6 +15,22 @@ class tbluserModel extends Model
     //
     use HasApiTokens;
     protected $table = 'tbluser';
+    protected $fillable = [
+        'user_name',
+        'password',
+        'first_name',
+        'last_name',
+        'email',
+        'mobile',
+        'user_profile_id',
+        'sub_institute_id',
+        'client_id',
+        'is_admin',
+        'status',
+        'allocated_standard',
+        'department_id',
+        'employee_id',
+    ];
     public function organization()
     {
         return $this->belongsTo(schoolSetupModel::class, 'sub_institute_id', 'id');

@@ -281,6 +281,8 @@ class SkillMatrixController extends Controller
 	
 	public function getKaba(Request $request)
 	{
+
+    // return $request;
 	    $sub_institute_id = $request->sub_institute_id;
 	    $type = $request->type;
 	    $typeId = $request->type_id;
@@ -353,8 +355,9 @@ class SkillMatrixController extends Controller
 		        ];
 
 		        // Add proficiency_level only if type is 'skill'
-		        if ($type === 'skill') {
-		            $data['proficiency_level'] = $item->proficiency_level ?? null;
+		        if ($type=="skill"){
+                    // return $item;
+		            $data['proficiency_level'] = $item->proficiency_level ?? "0";
 		        }
 
 		        return array_filter($data, function ($v) {

@@ -13,7 +13,8 @@ class KabaMaster extends Model
         'category',
         'sub_category',
         'title',
-        'description'
+        'description',
+        'proficiency_level'
     ];
 
     // Set table dynamically
