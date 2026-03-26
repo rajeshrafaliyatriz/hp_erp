@@ -235,7 +235,10 @@ Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy']);
 // Skill Heatmap API Routes
 Route::prefix('skill-heatmap')->group(function () {
     // Main heatmap data — departments × skills matrix
-    Route::get('/', [SkillHeatmapController::class, 'index']);
+    Route::get('/', [SkillHeatmapController::class, 'heatmap']);
+
+    // Drill-down detail for a heatmap cell
+    Route::get('/drill', [SkillHeatmapController::class, 'drill']);
 
 });
 
