@@ -53,6 +53,7 @@ use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UserJourneyLogController;
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
+use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
 
 
@@ -230,6 +231,16 @@ Route::post('/user-signup', [UserSignupController::class, 'store']);
 Route::get('/user-signup/{id}', [UserSignupController::class, 'show']);
 Route::put('/user-signup/{id}', [UserSignupController::class, 'update']);
 Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy']);
+
+// Skill Heatmap API Routes
+Route::prefix('skill-heatmap')->group(function () {
+    // Main heatmap data — departments × skills matrix
+    Route::get('/', [SkillHeatmapController::class, 'heatmap']);
+
+    // Drill-down detail for a heatmap cell
+    Route::get('/drill', [SkillHeatmapController::class, 'drill']);
+
+});
 
 // Course Recommendation API - Get courses based on logged-in user's job role
 
