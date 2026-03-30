@@ -55,6 +55,7 @@ use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
 use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
+use App\Http\Controllers\Api\UserImportController;
 
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
@@ -239,5 +240,6 @@ Route::prefix('skill-heatmap')->group(function () {
 
 });
 
+Route::post('/import-users', [UserImportController::class, 'importUsers']);
 // Course Recommendation API - Get courses based on logged-in user's job role
 
