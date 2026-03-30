@@ -56,6 +56,7 @@ use App\Http\Controllers\Api\signup_api\UserSignupController;
 use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
 use App\Http\Controllers\Api\UserImportController;
+use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
 
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
@@ -245,4 +246,7 @@ Route::prefix('skill-heatmap')->group(function () {
 
 Route::post('/import-users', [UserImportController::class, 'importUsers']);
 // Course Recommendation API - Get courses based on logged-in user's job role
+
+// Department Job Role Export API - Export department and job role data to CSV
+Route::get('/export-department-jobroles/{subInstituteId}', [DepartmentJobRoleExportController::class, 'exportToCsv']);
 
