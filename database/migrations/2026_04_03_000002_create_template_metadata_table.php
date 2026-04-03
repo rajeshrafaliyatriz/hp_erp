@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('template_metadata', function (Blueprint $table) {
             $table->id();
-            $table->char('template_id', 36)->index();
+            $table->unsignedBigInteger('template_id')->index();
             $table->string('category', 100)->nullable();
             $table->json('tags')->nullable();
             $table->boolean('is_active')->default(true);

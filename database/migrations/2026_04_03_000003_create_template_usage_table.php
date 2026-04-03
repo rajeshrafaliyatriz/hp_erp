@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('template_usage', function (Blueprint $table) {
             $table->id();
-            $table->char('template_id', 36)->index();
+            $table->unsignedBigInteger('template_id')->index();
             $table->unsignedBigInteger('user_id')->index();
             $table->timestamp('used_at')->useCurrent();
             $table->unsignedBigInteger('sub_institute_id')->index();

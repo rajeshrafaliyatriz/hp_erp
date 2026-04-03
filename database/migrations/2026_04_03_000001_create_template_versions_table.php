@@ -10,12 +10,13 @@ return new class extends Migration
     {
         Schema::create('template_versions', function (Blueprint $table) {
             $table->id();
-            $table->uuid('template_id'); 
+            $table->unsignedBigInteger('template_id'); 
             $table->longText('content');
             $table->integer('version');
             $table->unsignedBigInteger('sub_institute_id')->nullable();
             $table->unsignedBigInteger('created_by')->nullable();
             $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
 
             $table->foreign('template_id')->references('id')->on('templates')->onDelete('cascade');
             $table->foreign('sub_institute_id')->references('id')->on('school_setup')->nullOnDelete();
