@@ -58,6 +58,7 @@ use App\Http\Controllers\signupOtpController;
 use App\Http\Controllers\Api\UserImportController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
 use App\Http\Controllers\HRMS\DepartmentSkillController;
+use App\Http\Controllers\HRTemplates\TemplateController;
 
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
@@ -254,3 +255,7 @@ Route::post('/import-users', [UserImportController::class, 'importUsers']);
 // Department Job Role Export API - Export department and job role data to CSV
 Route::get('/export-department-jobroles/{subInstituteId}', [DepartmentJobRoleExportController::class, 'exportToCsv']);
 
+// Template API Routes
+Route::resource('templates', TemplateController::class);
+Route::get('templates/{id}/versions', [TemplateController::class, 'versions']);
+Route::post('templates/{id}/restore/{version}', [TemplateController::class, 'restore']);
