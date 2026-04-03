@@ -57,6 +57,7 @@ use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
 use App\Http\Controllers\Api\UserImportController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
+use App\Http\Controllers\HRMS\DepartmentSkillController;
 
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
@@ -158,6 +159,9 @@ Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
 
 
 Route::resource('departments-management', DepartmentManagementController::class);
+
+// Department Skills API Routes
+Route::get('/department-skills', [DepartmentSkillController::class, 'index']);
 
 Route::post('/save-generated-course', [buildwithAIController::class, 'store']);
 Route::get('/index', [buildwithAIController::class, 'index']);
