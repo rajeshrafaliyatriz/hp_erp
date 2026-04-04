@@ -60,10 +60,12 @@ use App\Http\Controllers\Api\UserImportController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
 use App\Http\Controllers\HRMS\DepartmentSkillController;
 use App\Http\Controllers\HRTemplates\TemplateController;
+use App\Http\Controllers\NewsletterController;
 
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
 Route::post('/verify-otp', [signupOtpController::class, 'verifyOtp']);
+Route::post('/newsletter/send', [NewsletterController::class, 'sendNewsletter']);
 
 Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
 Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
