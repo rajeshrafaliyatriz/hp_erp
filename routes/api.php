@@ -55,6 +55,10 @@ use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
 use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
+use App\Http\Controllers\Api\UserImportController;
+use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
+use App\Http\Controllers\HRMS\DepartmentSkillController;
+use App\Http\Controllers\HRTemplates\TemplateController;
 
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
@@ -157,6 +161,9 @@ Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
 
 Route::resource('departments-management', DepartmentManagementController::class);
 
+// Department Skills API Routes
+Route::get('/department-skills', [DepartmentSkillController::class, 'index']);
+
 Route::post('/save-generated-course', [buildwithAIController::class, 'store']);
 Route::get('/index', [buildwithAIController::class, 'index']);
 
@@ -242,5 +249,13 @@ Route::prefix('skill-heatmap')->group(function () {
 
 });
 
+Route::post('/import-users', [UserImportController::class, 'importUsers']);
 // Course Recommendation API - Get courses based on logged-in user's job role
 
+// Department Job Role Export API - Export department and job role data to CSV
+Route::get('/export-department-jobroles/{subInstituteId}', [DepartmentJobRoleExportController::class, 'exportToCsv']);
+
+// Template API Routes
+Route::resource('templates', TemplateController::class);
+Route::get('templates/{id}/versions', [TemplateController::class, 'versions']);
+Route::post('templates/{id}/restore/{version}', [TemplateController::class, 'restore']);

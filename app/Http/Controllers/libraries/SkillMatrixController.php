@@ -334,9 +334,48 @@ class SkillMatrixController extends Controller
         $items = $mainModel::find($typeId);
 
 	    // -----------------------------------
-	    // 5. Helper to load full KABA objects
+	    // 5. Helper to fetch rating_levels
 	    // -----------------------------------
-	    function loadKaba($ids, $type)
+	    function getRatingLevels($type, $itemId, $subInstituteId)
+	    {
+	        $tableMap = [
+	            'skill'     => 's_proficiency_levels',
+	            'knowledge' => 's_proficiency_knowledge',
+	            'ability'   => 's_proficiency_ability',
+	            'behaviour' => 's_proficiency_behaviour',
+	            'attitude'  => 's_proficiency_attitude',
+	        ];
+
+	        if (!isset($tableMap[$type])) return [];
+
+	        $table = $tableMap[$type];
+	        $rows = DB::table($table)->where('sub_institute_id', $subInstituteId);
+
+	        if ($type === 'skill') {
+	            $rows = (clone $rows)->where('skill_id', $itemId)->get();
+	            if ($rows->isEmpty()) {
+	                $rows = DB::table($table)
+	                    ->where('sub_institute_id', $subInstituteId)
+	                    ->whereNull('skill_id')
+	                    ->get();
+	            }
+	        } else {
+	            $rows = $rows->get();
+	        }
+
+	        return $rows->map(function ($row) {
+	            return [
+	                'level'       => $row->proficiency_type ?? $row->level ?? '',
+	                'descriptor'  => $row->type_description ?? $row->descriptor ?? '',
+	                'indicators'  => $row->description ?? $row->indicators ?? '',
+	            ];
+	        })->toArray();
+	    }
+
+	    // -----------------------------------
+	    // 6. Helper to load full KABA objects
+	    // -----------------------------------
+	    function loadKaba($ids, $type, $subInstituteId)
 		{
 		    if (!$ids) return [];
 
@@ -345,20 +384,17 @@ class SkillMatrixController extends Controller
 		    // Use ONE MODEL but dynamic table
 		    $model = \App\Models\libraries\KabaMaster::fromType($type);
 
-		    return $model->whereIn('id', $idList)->get()->map(function ($item) use ($type) {
+		    return $model->whereIn('id', $idList)->get()->map(function ($item) use ($type, $subInstituteId) {
 		        $data = [
 		            'id'           => $item->id,
 		            'category'     => $item->category ?? $item->track,
 		            'sub_category' => $item->sub_category ?? $item->critical_work_function,
 		            'title'        => $item->title ?? $item->task ?? $item->jobrole,
 		            'description'  => $item->description ?? $item->critical_work_function.' - '.$item->task,
+                    'proficiency_level' => $item->proficiency_level ?? "5",
 		        ];
-
-		        // Add proficiency_level only if type is 'skill'
-		        if ($type=="skill"){
-                    // return $item;
-		            $data['proficiency_level'] = $item->proficiency_level ?? "0";
-		        }
+		        
+                $data['rating_levels'] = getRatingLevels($type, $item->id, $subInstituteId);
 
 		        return array_filter($data, function ($v) {
 		            return !is_null($v) && $v !== "";
@@ -367,7 +403,7 @@ class SkillMatrixController extends Controller
 		}
 
 	    // -----------------------------------
-	    // 6. Build Response
+	    // 7. Build Response
 	    // -----------------------------------
         function getDisplayName($items)
         {
@@ -384,15 +420,15 @@ class SkillMatrixController extends Controller
 	        'description' => $items->description ?? null,
 
             // Only add if included in type
-	        'task'        => loadKaba($map->task_ids,'task'),
-	        'skill'       => loadKaba($map->skill_ids,'skill'),
-	        'jobrole'     => loadKaba($map->jobrole_ids,'jobrole'),
+	        'task'        => loadKaba($map->task_ids,'task', $sub_institute_id),
+	        'skill'       => loadKaba($map->skill_ids,'skill', $sub_institute_id),
+	        'jobrole'     => loadKaba($map->jobrole_ids,'jobrole', $sub_institute_id),
 
 	        // Auto convert IDs → full data
-	        'knowledge'   => loadKaba($map->knowledge_ids,'knowledge'),
-	        'ability'     => loadKaba($map->ability_ids,'ability'),
-	        'attitude'    => loadKaba($map->attitude_ids,'attitude'),
-	        'behaviour'   => loadKaba($map->behaviour_ids,'behaviour'),
+	        'knowledge'   => loadKaba($map->knowledge_ids,'knowledge', $sub_institute_id),
+	        'ability'     => loadKaba($map->ability_ids,'ability', $sub_institute_id),
+	        'attitude'    => loadKaba($map->attitude_ids,'attitude', $sub_institute_id),
+	        'behaviour'   => loadKaba($map->behaviour_ids,'behaviour', $sub_institute_id),
 	    ];
 
 	    // Remove null or empty fields
