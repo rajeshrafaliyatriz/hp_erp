@@ -89,6 +89,14 @@ class SaveJDController extends Controller
                     'attitude' => $this->newSummary(),
                     'behavior' => $this->newSummary(),
                 ];
+                $mappedIds = [
+                    'task_ids' => [],
+                    'skill_ids' => [],
+                    'knowledge_ids' => [],
+                    'ability_ids' => [],
+                    'attitude_ids' => [],
+                    'behaviour_ids' => [],
+                ];
 
                 foreach ($this->normalizeTasks($payload['cwf_items'] ?? [], $industry, $subDepartment) as $task) {
                     $summary['tasks']['total']++;
@@ -115,6 +123,7 @@ class SaveJDController extends Controller
                     );
 
                     $this->bumpSummary($summary['tasks'], $taskResult['action']);
+                    $mappedIds['task_ids'][] = $taskResult['id'];
                 }
 
                 foreach ($payload['skills'] ?? [] as $skill) {
@@ -154,15 +163,24 @@ class SaveJDController extends Controller
                     );
 
                     $this->bumpSummary($summary['skills'], $skillResult['action']);
+                    $mappedIds['skill_ids'][] = $skillResult['id'];
                 }
 
-                $this->saveKabaItems('s_user_knowledge', $payload['knowledge'] ?? [], $subInstituteId, $userId, $now, $summary['knowledge']);
-                $this->saveKabaItems('s_user_ability', $payload['ability'] ?? [], $subInstituteId, $userId, $now, $summary['ability']);
-                $this->saveKabaItems('s_user_attitude', $payload['attitude'] ?? [], $subInstituteId, $userId, $now, $summary['attitude']);
-                $this->saveKabaItems('s_user_behaviour', $payload['behavior'] ?? [], $subInstituteId, $userId, $now, $summary['behavior']);
+                $mappedIds['knowledge_ids'] = $this->saveKabaItems('s_user_knowledge', $payload['knowledge'] ?? [], $subInstituteId, $userId, $now, $summary['knowledge']);
+                $mappedIds['ability_ids'] = $this->saveKabaItems('s_user_ability', $payload['ability'] ?? [], $subInstituteId, $userId, $now, $summary['ability']);
+                $mappedIds['attitude_ids'] = $this->saveKabaItems('s_user_attitude', $payload['attitude'] ?? [], $subInstituteId, $userId, $now, $summary['attitude']);
+                $mappedIds['behaviour_ids'] = $this->saveKabaItems('s_user_behaviour', $payload['behavior'] ?? [], $subInstituteId, $userId, $now, $summary['behavior']);
+
+                $libraryMapResult = $this->saveLibraryMap(
+                    $jobRoleResult['id'],
+                    $subInstituteId,
+                    $mappedIds,
+                    $now
+                );
 
                 return [
                     'jobrole' => $jobRoleResult,
+                    'library_map' => $libraryMapResult,
                     'summary' => $summary,
                     'department_id' => $departmentId,
                     'sub_department' => $subDepartment,
@@ -175,6 +193,8 @@ class SaveJDController extends Controller
                 'data' => [
                     'jobrole_id' => $result['jobrole']['id'],
                     'jobrole_action' => $result['jobrole']['action'],
+                    'library_map_id' => $result['library_map']['id'],
+                    'library_map_action' => $result['library_map']['action'],
                     'department_id' => $result['department_id'],
                     'sub_department' => $result['sub_department'],
                     'summary' => $result['summary'],
@@ -268,7 +288,9 @@ class SaveJDController extends Controller
         ?int $userId,
         $now,
         array &$summary
-    ): void {
+    ): array {
+        $ids = [];
+
         foreach ($items as $item) {
             $title = $this->cleanString($item['title'] ?? null);
             if ($title === null) {
@@ -298,7 +320,10 @@ class SaveJDController extends Controller
             );
 
             $this->bumpSummary($summary, $result['action']);
+            $ids[] = $result['id'];
         }
+
+        return $ids;
     }
 
     private function storeRecord(string $table, array $lookup, array $values, ?int $userId, $now): array
@@ -374,6 +399,58 @@ class SaveJDController extends Controller
         return $departmentRow->id ?? null;
     }
 
+    private function saveLibraryMap(int $jobRoleId, int $subInstituteId, array $mappedIds, $now): array
+    {
+        if (!Schema::hasTable('s_library_map')) {
+            return [
+                'id' => null,
+                'action' => 'skipped',
+            ];
+        }
+
+        $mapData = $this->filterForTable('s_library_map', [
+            'type' => 'jobrole',
+            'type_id' => $jobRoleId,
+            'task_ids' => $this->implodeIds($mappedIds['task_ids'] ?? []),
+            'skill_ids' => $this->implodeIds($mappedIds['skill_ids'] ?? []),
+            'knowledge_ids' => $this->implodeIds($mappedIds['knowledge_ids'] ?? []),
+            'ability_ids' => $this->implodeIds($mappedIds['ability_ids'] ?? []),
+            'attitude_ids' => $this->implodeIds($mappedIds['attitude_ids'] ?? []),
+            'behaviour_ids' => $this->implodeIds($mappedIds['behaviour_ids'] ?? []),
+            'sub_institute_id' => $subInstituteId,
+        ]);
+
+        $query = DB::table('s_library_map')
+            ->where('type', 'jobrole')
+            ->where('type_id', $jobRoleId)
+            ->where('sub_institute_id', $subInstituteId);
+
+        $existing = $query->first();
+
+        if ($existing) {
+            DB::table('s_library_map')
+                ->where('id', $existing->id)
+                ->update(array_merge($mapData, [
+                    'updated_at' => $now,
+                ]));
+
+            return [
+                'id' => $existing->id,
+                'action' => 'updated',
+            ];
+        }
+
+        $id = DB::table('s_library_map')->insertGetId(array_merge($mapData, [
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]));
+
+        return [
+            'id' => $id,
+            'action' => 'created',
+        ];
+    }
+
     private function applyLookup(Builder $query, array $lookup): void
     {
         foreach ($lookup as $column => $value) {
@@ -413,6 +490,15 @@ class SaveJDController extends Controller
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function implodeIds(array $ids): ?string
+    {
+        $ids = array_values(array_unique(array_filter(array_map(function ($id) {
+            return $id === null ? null : (string) $id;
+        }, $ids))));
+
+        return empty($ids) ? null : implode(',', $ids);
     }
 
     private function newSummary(): array
