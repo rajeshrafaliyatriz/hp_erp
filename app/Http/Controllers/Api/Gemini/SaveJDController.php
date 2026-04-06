@@ -59,6 +59,9 @@ class SaveJDController extends Controller
                 $department = trim((string) $payload['department']);
                 $subDepartment = $this->cleanString($payload['sub_department'] ?? $department);
                 $industry = trim((string) $payload['industry']);
+                $defaultSector = $this->cleanString($payload['sector'] ?? $industry ?? $department);
+                $defaultTrack = $this->cleanString($payload['track'] ?? $subDepartment ?? $department);
+                $defaultSkillType = $this->cleanString($payload['type'] ?? null);
                 $departmentId = $payload['department_id'] ?? $this->resolveDepartmentId($subInstituteId, $department, $subDepartment);
 
                 $jobRoleResult = $this->storeRecord(
@@ -164,6 +167,17 @@ class SaveJDController extends Controller
 
                     $this->bumpSummary($summary['skills'], $skillResult['action']);
                     $mappedIds['skill_ids'][] = $skillResult['id'];
+
+                    $this->saveSkillJobroleMap(
+                        $skill,
+                        $jobRoleName,
+                        $subInstituteId,
+                        $userId,
+                        $now,
+                        $defaultSector,
+                        $defaultTrack,
+                        $defaultSkillType
+                    );
                 }
 
                 $mappedIds['knowledge_ids'] = $this->saveKabaItems('s_user_knowledge', $payload['knowledge'] ?? [], $subInstituteId, $userId, $now, $summary['knowledge']);
@@ -324,6 +338,47 @@ class SaveJDController extends Controller
         }
 
         return $ids;
+    }
+
+    private function saveSkillJobroleMap(
+        array $skill,
+        string $jobRoleName,
+        int $subInstituteId,
+        ?int $userId,
+        $now,
+        ?string $defaultSector,
+        ?string $defaultTrack,
+        ?string $defaultSkillType
+    ): ?array {
+        if (!Schema::hasTable('s_user_skill_jobrole')) {
+            return null;
+        }
+
+        $title = $this->cleanString($skill['title'] ?? $skill['skill'] ?? null);
+        if ($title === null) {
+            return null;
+        }
+
+        return $this->storeRecord(
+            's_user_skill_jobrole',
+            [
+                'sub_institute_id' => $subInstituteId,
+                'jobrole' => $jobRoleName,
+                'skill' => $title,
+            ],
+            [
+                'sector' => $this->cleanString($skill['sector'] ?? $defaultSector),
+                'track' => $this->cleanString($skill['track'] ?? $defaultTrack),
+                'jobrole' => $jobRoleName,
+                'skill' => $title,
+                'type' => $this->cleanString($skill['type'] ?? $skill['source_type'] ?? $defaultSkillType),
+                'proficiency_level' => isset($skill['proficiency_level']) ? (string) $skill['proficiency_level'] : null,
+                'proficiency_description' => $this->cleanString($skill['proficiency_description'] ?? null),
+                'skill_code' => $this->cleanString($skill['skill_code'] ?? $skill['code'] ?? null),
+            ],
+            $userId,
+            $now
+        );
     }
 
     private function storeRecord(string $table, array $lookup, array $values, ?int $userId, $now): array
