@@ -57,6 +57,7 @@ use App\Http\Controllers\Api\signup_api\UserSignupController;
 use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
 use App\Http\Controllers\Api\UserImportController;
+use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
 use App\Http\Controllers\HRMS\DepartmentSkillController;
 use App\Http\Controllers\HRTemplates\TemplateController;
@@ -66,6 +67,7 @@ use App\Http\Controllers\NewsletterController;
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
 Route::post('/verify-otp', [signupOtpController::class, 'verifyOtp']);
 Route::post('/newsletter/send', [NewsletterController::class, 'sendNewsletter']);
+Route::match(['get', 'post'], '/user/profile', [UserProfileController::class, 'show']);
 
 Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
 Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
