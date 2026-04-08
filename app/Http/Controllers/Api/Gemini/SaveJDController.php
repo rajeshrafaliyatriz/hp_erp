@@ -25,6 +25,10 @@ class SaveJDController extends Controller
                     'department' => 'required|string|max:255',
                     'industry' => 'required|string|max:255',
                     'description' => 'nullable|string',
+                    'job_level' => 'nullable|string|max:255',
+                    'has_vertical_progression' => 'nullable',
+                    'has_lateral_movement' => 'nullable',
+                    'progression_type' => 'nullable|string|max:255',
                     'sub_department' => 'nullable|string|max:255',
                     'department_id' => 'nullable|integer',
                     'jobrole_category' => 'nullable|string|max:255',
@@ -77,6 +81,10 @@ class SaveJDController extends Controller
                         'department_id' => $departmentId,
                         'jobrole' => $jobRoleName,
                         'description' => $payload['description'] ?? null,
+                        'job_level' => $this->cleanString($payload['job_level'] ?? null),
+                        'has_vertical_progression' => $this->cleanBoolean($payload['has_vertical_progression'] ?? null),
+                        'has_lateral_movement' => $this->cleanBoolean($payload['has_lateral_movement'] ?? null),
+                        'progression_type' => $this->cleanString($payload['progression_type'] ?? null),
                         'jobrole_category' => $payload['jobrole_category'] ?? 'AI Generated',
                         'status' => $payload['status'] ?? 'Active',
                     ],
@@ -545,6 +553,29 @@ class SaveJDController extends Controller
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function cleanBoolean($value): ?bool
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return $value === 1 ? true : ($value === 0 ? false : null);
+        }
+
+        $normalized = strtolower(trim((string) $value));
+
+        return match ($normalized) {
+            '1', 'true', 'yes', 'on' => true,
+            '0', 'false', 'no', 'off' => false,
+            default => null,
+        };
     }
 
     private function implodeIds(array $ids): ?string
