@@ -16,6 +16,7 @@ class Jobroleskill extends Model
         'jobrole',
         'description',
         'job_level',
+        'sequence_order',
         'has_vertical_progression',
         'has_lateral_movement',
         'progression_type',

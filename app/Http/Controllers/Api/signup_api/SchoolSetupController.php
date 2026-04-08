@@ -167,6 +167,7 @@ class SchoolSetupController extends Controller
                         'jobrole' => $jobRole->jobrole,
                         'description' => $jobRole->description,
                         'job_level' => $jobRole->job_level,
+                        'sequence_order' => $jobRole->sequence_order,
                         'has_vertical_progression' => $jobRole->has_vertical_progression,
                         'has_lateral_movement' => $jobRole->has_lateral_movement,
                         'progression_type' => $jobRole->progression_type,

@@ -63,6 +63,7 @@ class jobroleskillcontroller extends Controller
             $objjobrole->jobrole = $request->jobrole;
             $objjobrole->description = $request->description;
             $objjobrole->job_level = $request->job_level;
+            $objjobrole->sequence_order = $request->sequence_order;
             $objjobrole->has_vertical_progression = $request->has_vertical_progression;
             $objjobrole->has_lateral_movement = $request->has_lateral_movement;
             $objjobrole->progression_type = $request->progression_type;

@@ -26,6 +26,7 @@ class SaveJDController extends Controller
                     'industry' => 'required|string|max:255',
                     'description' => 'nullable|string',
                     'job_level' => 'nullable|string|max:255',
+                    'sequence_order' => 'nullable|integer',
                     'has_vertical_progression' => 'nullable',
                     'has_lateral_movement' => 'nullable',
                     'progression_type' => 'nullable|string|max:255',
@@ -82,6 +83,7 @@ class SaveJDController extends Controller
                         'jobrole' => $jobRoleName,
                         'description' => $payload['description'] ?? null,
                         'job_level' => $this->cleanString($payload['job_level'] ?? null),
+                        'sequence_order' => $this->cleanInteger($payload['sequence_order'] ?? null),
                         'has_vertical_progression' => $this->cleanBoolean($payload['has_vertical_progression'] ?? null),
                         'has_lateral_movement' => $this->cleanBoolean($payload['has_lateral_movement'] ?? null),
                         'progression_type' => $this->cleanString($payload['progression_type'] ?? null),
@@ -553,6 +555,15 @@ class SaveJDController extends Controller
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    private function cleanInteger($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return is_numeric($value) ? (int) $value : null;
     }
 
     private function cleanBoolean($value): ?bool

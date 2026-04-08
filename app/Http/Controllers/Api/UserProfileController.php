@@ -66,6 +66,7 @@ class UserProfileController extends Controller
                 u.allocated_standards as jobrole_id,
                 IFNULL(jr.jobrole, '-') as jobrole_name,
                 jr.job_level,
+                jr.sequence_order,
                 jr.has_vertical_progression,
                 jr.has_lateral_movement,
                 jr.progression_type,
