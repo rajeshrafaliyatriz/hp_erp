@@ -722,9 +722,9 @@ class CompetencyDashboardController extends Controller
 
         try {
             // Base query for s_user_jobrole
-            $rolesQuery = DB::table('s_user_jobrole')->whereNull('deleted_at');
+            $rolesQuery = DB::table('s_user_jobrole as jr')->whereNull('jr.deleted_at');
             if ($subInstituteId) {
-                $rolesQuery->where('sub_institute_id', $subInstituteId);
+                $rolesQuery->where('jr.sub_institute_id', $subInstituteId);
             }
 
             // Total roles count
@@ -739,10 +739,59 @@ class CompetencyDashboardController extends Controller
                 })
                 ->distinct('d.id')
                 ->count('d.id');
+
+            // Total mapped tasks count from s_user_jobrole_task
+            $totalTasks = DB::table('s_user_jobrole_task')
+                ->whereNull('deleted_at')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->count();
+
+            // Total mapped skills count from s_user_skill_jobrole
+            $totalSkills = DB::table('s_user_skill_jobrole')
+                ->whereNull('deleted_at')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->count();
+
+            // Roles with mapped tasks
+            $rolesWithTasks = (clone $rolesQuery)
+                ->join('s_user_jobrole_task as jt', function($join) {
+                    $join->on('jr.jobrole', '=', 'jt.jobrole')
+                         ->whereNull('jt.deleted_at');
+                })
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('jt.sub_institute_id', $subInstituteId);
+                })
+                ->distinct('jr.id')
+                ->count();
+
+            $taskCoveragePercentage = $totalRoles > 0 ? round(($rolesWithTasks / $totalRoles) * 100, 1) : 0;
+
+            // Roles with mapped skills
+            $rolesWithSkills = (clone $rolesQuery)
+                ->join('s_user_skill_jobrole as sj', function($join) {
+                    $join->on('jr.jobrole', '=', 'sj.jobrole')
+                         ->whereNull('sj.deleted_at');
+                })
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sj.sub_institute_id', $subInstituteId);
+                })
+                ->distinct('jr.id')
+                ->count();
+
+            $skillCoveragePercentage = $totalRoles > 0 ? round(($rolesWithSkills / $totalRoles) * 100, 1) : 0;
+
             return response()->json([
                 'status' => 'success',
                 'total_roles' => $totalRoles,
-                'total_departments' => $departmentsCount,   
+                'total_departments' => $departmentsCount,
+                'total_mapped_tasks' => $totalTasks,
+                'task_coverage_percentage' => $taskCoveragePercentage,
+                'total_mapped_skills' => $totalSkills,
+                'skill_coverage_percentage' => $skillCoveragePercentage,
             ], 200);
 
         } catch (\Exception $e) {
