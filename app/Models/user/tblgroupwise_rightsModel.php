@@ -17,6 +17,7 @@ class tblgroupwise_rightsModel extends Model
         'can_add',
         'can_edit',
         'can_delete',
+        'is_mobile',
         'created_at',
         'sub_institute_id'
     ];
