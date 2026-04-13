@@ -129,6 +129,7 @@ class tblgroupwise_rightsController extends Controller
         $deleteRights = $request->input('delete');
         $viewRights = $request->input('view');
         $dashboardRights = $request->input('dashboard');
+        $is_mobile = $request->input('is_mobile');
 
         if (!isset($addRights)) {
             $addRights = array();
@@ -144,6 +145,9 @@ class tblgroupwise_rightsController extends Controller
         }
          if (!isset($dashboardRights)) {
             $dashboardRights = array();
+        }
+        if (!isset($is_mobile)) {
+            $is_mobile = array();
         }
 
         $arrayKeys = array_replace($addRights, $editRights, $deleteRights, $viewRights,$dashboardRights);
@@ -173,6 +177,9 @@ class tblgroupwise_rightsController extends Controller
             }
               if (isset($dashboardRights[$key])) {
                 $finalArray['dashboard_right'] = 1;
+            }
+            if (isset($is_mobile[$key])) {
+                $finalArray['is_mobile'] = 1;
             }
             $insert = tblgroupwise_rightsModel::insert($finalArray);
             if ($insert) {
