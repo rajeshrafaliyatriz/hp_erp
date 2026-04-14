@@ -57,6 +57,7 @@ use App\Http\Controllers\Api\signup_api\UserSignupController;
 use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
 use App\Http\Controllers\Api\UserImportController;
+use App\Http\Controllers\Api\ExcelAutomationAgentController;
 use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
 use App\Http\Controllers\HRMS\DepartmentSkillController;
@@ -256,6 +257,10 @@ Route::prefix('skill-heatmap')->group(function () {
 });
 
 Route::post('/import-users', [UserImportController::class, 'importUsers']);
+Route::get('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'credentialStatus']);
+Route::post('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'saveCredentials']);
+Route::post('/excel-agent/test-connection', [ExcelAutomationAgentController::class, 'testConnection']);
+Route::post('/excel-agent/upload', [ExcelAutomationAgentController::class, 'upload']);
 // Course Recommendation API - Get courses based on logged-in user's job role
 
 // Department Job Role Export API - Export department and job role data to CSV
