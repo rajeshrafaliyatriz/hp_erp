@@ -76,6 +76,7 @@ class UserProfileController extends Controller
                 ss.syear
             ")
             ->where('u.id', $tokenUser->id)
+            ->whereNotNull('u.sub_institute_id')
             ->first();
 
         if (!$profile) {

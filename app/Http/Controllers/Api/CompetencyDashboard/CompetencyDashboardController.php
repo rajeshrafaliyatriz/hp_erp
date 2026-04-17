@@ -12,10 +12,10 @@ class CompetencyDashboardController extends Controller
     {
         $subInstituteId = $request->sub_institute_id;
 
-        if (!$subInstituteId) {
+        if (! $subInstituteId) {
             return response()->json([
-                "status" => false,
-                "message" => "sub_institute_id is required"
+                'status' => false,
+                'message' => 'sub_institute_id is required',
             ], 400);
         }
 
@@ -36,34 +36,34 @@ class CompetencyDashboardController extends Controller
                 ->where('sub_institute_id', $subInstituteId)
                 ->whereNull('deleted_at')
                 ->count();
-            
+
             // Count skills for this jobrole
             $skills = DB::table('s_user_skill_jobrole')
                 ->where('jobrole', $jr->jobrole)
                 ->where('sub_institute_id', $subInstituteId)
                 ->whereNull('deleted_at')
                 ->count();
-            
+
             // Calculate workloadIndex as (tasks / skills) * 100
-            $workloadIndex = $skills > 0 ? round(($tasks / $skills) * 10,2) : 0;
-        
+            $workloadIndex = $skills > 0 ? round(($tasks / $skills) * 10, 2) : 0;
 
             $results[] = [
                 'role' => $jr->jobrole,
                 'workloadIndex' => $workloadIndex,
                 'tasks' => $tasks,
-                'skills' => $skills
+                'skills' => $skills,
             ];
         }
 
         // Sort by workloadIndex descending and take top 10
-        usort($results, function($a, $b) {
+        usort($results, function ($a, $b) {
             return $b['workloadIndex'] <=> $a['workloadIndex'];
         });
         $results = array_slice($results, 0, 10);
 
         return response()->json($results);
     }
+
     public function getRoleSimilarity(Request $request)
     {
         $threshold = $request->input('threshold', 0.5); // 50% default similarity
@@ -138,7 +138,9 @@ class CompetencyDashboardController extends Controller
                     $skills1 = $roleSkillMap[$r1] ?? [];
                     $skills2 = $roleSkillMap[$r2] ?? [];
 
-                    if (empty($skills1) || empty($skills2)) continue;
+                    if (empty($skills1) || empty($skills2)) {
+                        continue;
+                    }
 
                     $intersection = count(array_intersect($skills1, $skills2));
                     $union = count(array_unique(array_merge($skills1, $skills2)));
@@ -148,11 +150,13 @@ class CompetencyDashboardController extends Controller
                         $edges[] = [
                             'source' => $r1,
                             'target' => $r2,
-                            'similarity' => round($similarity * 100, 2)
+                            'similarity' => round($similarity * 100, 2),
                         ];
 
                         // Break if we've reached the edge limit
-                        if (count($edges) >= $maxEdges) break 2;
+                        if (count($edges) >= $maxEdges) {
+                            break 2;
+                        }
                     }
                 }
             }
@@ -165,7 +169,7 @@ class CompetencyDashboardController extends Controller
             $nodes = $roles->map(function ($role) use (&$departmentColors, &$colorPalette, &$colorIndex) {
                 $deptName = $role->department_name ?? $role->department ?? 'Unknown';
 
-                if (!isset($departmentColors[$deptName])) {
+                if (! isset($departmentColors[$deptName])) {
                     $departmentColors[$deptName] = $colorPalette[$colorIndex % count($colorPalette)];
                     $colorIndex++;
                 }
@@ -175,23 +179,24 @@ class CompetencyDashboardController extends Controller
                     'label' => $role->name,
                     'department' => $deptName,
                     'color' => $departmentColors[$deptName],
-                    'importance' => rand(1, 5)
+                    'importance' => rand(1, 5),
                 ];
             });
 
             // 6️⃣ Final response
             return response()->json([
                 'nodes' => $nodes,
-                'edges' => $edges
+                'edges' => $edges,
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Failed to fetch role similarity data',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
+
     public function getCoverageScorecards(Request $request)
     {
         $subInstituteId = $request->input('sub_institute_id', null);
@@ -206,9 +211,9 @@ class CompetencyDashboardController extends Controller
             // 1. Roles with Mapped Tasks (87% / 95%)
             $totalRoles = (clone $baseQuery)->count();
             $rolesWithTasks = (clone $baseQuery)
-                ->join('s_user_jobrole_task as jt', function($join) {
+                ->join('s_user_jobrole_task as jt', function ($join) {
                     $join->on('jr.jobrole', '=', 'jt.jobrole')
-                         ->whereNull('jt.deleted_at');
+                        ->whereNull('jt.deleted_at');
                 })
                 ->distinct('jr.id')
                 ->count();
@@ -219,20 +224,20 @@ class CompetencyDashboardController extends Controller
             // 2. Tasks with Mapped Skills (92% / 95%)
             $totalTasks = DB::table('s_user_jobrole_task')
                 ->whereNull('deleted_at')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->where('sub_institute_id', $subInstituteId);
                 })
                 ->count();
 
             $tasksWithSkills = DB::table('s_user_jobrole_task as t')
                 ->whereNull('t.deleted_at')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->where('t.sub_institute_id', $subInstituteId);
                 })
-                ->whereExists(function($query) {
+                ->whereExists(function ($query) {
                     $query->select(DB::raw(1))
-                          ->from('s_jobrole_skills as s')
-                          ->whereRaw('t.jobrole = s.jobrole');
+                        ->from('s_jobrole_skills as s')
+                        ->whereRaw('t.jobrole = s.jobrole');
                 })
                 ->count();
 
@@ -241,37 +246,27 @@ class CompetencyDashboardController extends Controller
 
             // 3. Skills with Proficiency Levels (74% / 85%)
             $totalSkills = DB::table('s_jobrole_skills')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
-                                 ->where('s_user_jobrole.sub_institute_id', $subInstituteId)
-                                 ->whereNull('s_user_jobrole.deleted_at');
+                        ->where('s_user_jobrole.sub_institute_id', $subInstituteId)
+                        ->whereNull('s_user_jobrole.deleted_at');
                 })
                 ->count();
 
             $skillsWithProficiency = DB::table('s_jobrole_skills as sjs')
                 ->whereNotNull('sjs.proficiency_level')
                 ->where('sjs.proficiency_level', '!=', '')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->join('s_user_jobrole as jr', 'sjs.jobrole', '=', 'jr.jobrole')
-                                 ->where('jr.sub_institute_id', $subInstituteId)
-                                 ->whereNull('jr.deleted_at');
+                        ->where('jr.sub_institute_id', $subInstituteId)
+                        ->whereNull('jr.deleted_at');
                 })
                 ->count();
 
             $skillsWithProficiencyPercentage = $totalSkills > 0 ? min(100, round(($skillsWithProficiency / $totalSkills) * 100, 1)) : 0;
             $skillsWithProficiencyTarget = 85;
 
-            // 4. Attitudes/Behavior Mapped (45% / 70%)
-            // This might be stored in a separate table or field - using placeholder for now
-            $attitudesBehaviorPercentage = 45; // Placeholder - needs actual table/field
-            $attitudesBehaviorTarget = 70;
-
-            // 5. External Framework Alignment (89% / 90%)
-            // This might involve checking if skills are mapped to external standards
-            $externalFrameworkPercentage = 89; // Placeholder - needs actual logic
-            $externalFrameworkTarget = 90;
-
-            // 6. Competency Documentation (91% / 95%)
+            // 4. Competency Documentation (91% / 95%)
             $rolesWithDescription = (clone $baseQuery)
                 ->whereNotNull('description')
                 ->where('description', '!=', '')
@@ -280,6 +275,34 @@ class CompetencyDashboardController extends Controller
             $competencyDocumentationPercentage = $totalRoles > 0 ? min(100, round(($rolesWithDescription / $totalRoles) * 100, 1)) : 0;
             $competencyDocumentationTarget = 95;
 
+            // 5. Attitudes/Behavior Mapped (70% / 85%)
+            $totalSkillsForBehavior = DB::table('s_skill_knowledge_ability')
+                ->where('classification', 'behaviour')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->whereNull('deleted_at')
+                ->distinct('skill_id')
+                ->count('skill_id');
+
+            $skillsWithBehavior = DB::table('s_skill_knowledge_ability')
+                ->where('classification', 'behaviour')
+                ->whereNotNull('classification_item')
+                ->where('classification_item', '!=', '')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->whereNull('deleted_at')
+                ->distinct('skill_id')
+                ->count('skill_id');
+
+            $attitudesBehaviorPercentage = $totalSkillsForBehavior > 0 ? min(100, round(($skillsWithBehavior / $totalSkillsForBehavior) * 100, 1)) : 0;
+            $attitudesBehaviorTarget = 85;
+
+            // 6. External Framework Alignment (89% / 90%)
+            $externalFrameworkPercentage = 89; // Placeholder - needs actual logic for O*NET mapping
+            $externalFrameworkTarget = 90;
+
             // Calculate overall percentage (ensure it's also capped at 100%)
             $metrics = [
                 $rolesWithTasksPercentage,
@@ -287,7 +310,7 @@ class CompetencyDashboardController extends Controller
                 $skillsWithProficiencyPercentage,
                 $attitudesBehaviorPercentage,
                 $externalFrameworkPercentage,
-                $competencyDocumentationPercentage
+                $competencyDocumentationPercentage,
             ];
 
             $overallPercentage = min(100, round(array_sum($metrics) / count($metrics), 1));
@@ -299,38 +322,38 @@ class CompetencyDashboardController extends Controller
                         'name' => 'Roles with Mapped Tasks',
                         'current' => $rolesWithTasksPercentage,
                         'target' => $rolesWithTasksTarget,
-                        'display' => $rolesWithTasksPercentage . '% / ' . $rolesWithTasksTarget . '%'
+                        'display' => $rolesWithTasksPercentage.'% / '.$rolesWithTasksTarget.'%',
                     ],
                     [
                         'name' => 'Tasks with Mapped Skills',
                         'current' => $tasksWithSkillsPercentage,
                         'target' => $tasksWithSkillsTarget,
-                        'display' => $tasksWithSkillsPercentage . '% / ' . $tasksWithSkillsTarget . '%'
+                        'display' => $tasksWithSkillsPercentage.'% / '.$tasksWithSkillsTarget.'%',
                     ],
                     [
                         'name' => 'Skills with Proficiency Levels',
                         'current' => $skillsWithProficiencyPercentage,
                         'target' => $skillsWithProficiencyTarget,
-                        'display' => $skillsWithProficiencyPercentage . '% / ' . $skillsWithProficiencyTarget . '%'
+                        'display' => $skillsWithProficiencyPercentage.'% / '.$skillsWithProficiencyTarget.'%',
                     ],
                     [
                         'name' => 'Attitudes/Behavior Mapped',
                         'current' => $attitudesBehaviorPercentage,
                         'target' => $attitudesBehaviorTarget,
-                        'display' => $attitudesBehaviorPercentage . '% / ' . $attitudesBehaviorTarget . '%'
+                        'display' => $attitudesBehaviorPercentage.'% / '.$attitudesBehaviorTarget.'%',
                     ],
                     [
                         'name' => 'External Framework Alignment',
                         'current' => $externalFrameworkPercentage,
                         'target' => $externalFrameworkTarget,
-                        'display' => $externalFrameworkPercentage . '% / ' . $externalFrameworkTarget . '%'
+                        'display' => $externalFrameworkPercentage.'% / '.$externalFrameworkTarget.'%',
                     ],
                     [
                         'name' => 'Competency Documentation',
                         'current' => $competencyDocumentationPercentage,
                         'target' => $competencyDocumentationTarget,
-                        'display' => $competencyDocumentationPercentage . '% / ' . $competencyDocumentationTarget . '%'
-                    ]
+                        'display' => $competencyDocumentationPercentage.'% / '.$competencyDocumentationTarget.'%',
+                    ],
                 ],
                 'raw_data' => [
                     'total_roles' => $totalRoles,
@@ -339,8 +362,8 @@ class CompetencyDashboardController extends Controller
                     'tasks_with_skills' => $tasksWithSkills,
                     'total_skills' => $totalSkills,
                     'skills_with_proficiency' => $skillsWithProficiency,
-                    'roles_with_description' => $rolesWithDescription
-                ]
+                    'roles_with_description' => $rolesWithDescription,
+                ],
             ];
 
             return response()->json($response);
@@ -348,10 +371,11 @@ class CompetencyDashboardController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Failed to fetch coverage scorecards',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
+
     public function getHealthRadar(Request $request)
     {
         $subInstituteId = $request->input('sub_institute_id', null);
@@ -366,9 +390,9 @@ class CompetencyDashboardController extends Controller
             // Compute metrics
             $totalRoles = (clone $baseQuery)->count();
             $rolesWithTasks = (clone $baseQuery)
-                ->join('s_user_jobrole_task as jt', function($join) {
+                ->join('s_user_jobrole_task as jt', function ($join) {
                     $join->on('jr.jobrole', '=', 'jt.jobrole')
-                         ->whereNull('jt.deleted_at');
+                        ->whereNull('jt.deleted_at');
                 })
                 ->distinct('jr.id')
                 ->count();
@@ -377,19 +401,19 @@ class CompetencyDashboardController extends Controller
 
             $totalTasks = DB::table('s_user_jobrole_task')
                 ->whereNull('deleted_at')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->where('sub_institute_id', $subInstituteId);
                 })
                 ->count();
             $tasksWithSkills = DB::table('s_user_jobrole_task as t')
                 ->whereNull('t.deleted_at')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->where('t.sub_institute_id', $subInstituteId);
                 })
-                ->whereExists(function($query) {
+                ->whereExists(function ($query) {
                     $query->select(DB::raw(1))
-                          ->from('s_jobrole_skills as s')
-                          ->whereRaw('t.jobrole = s.jobrole');
+                        ->from('s_jobrole_skills as s')
+                        ->whereRaw('t.jobrole = s.jobrole');
                 })
                 ->count();
             $skillCoverageCurrent = $totalTasks > 0 ? round(($tasksWithSkills / $totalTasks) * 100, 1) : 0;
@@ -398,7 +422,7 @@ class CompetencyDashboardController extends Controller
             // Behavior Mapping: skills with behaviour mapped
             $totalSkillsForBehavior = DB::table('s_skill_knowledge_ability')
                 ->where('classification', 'behaviour')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->where('sub_institute_id', $subInstituteId);
                 })
                 ->whereNull('deleted_at')
@@ -408,7 +432,7 @@ class CompetencyDashboardController extends Controller
                 ->where('classification', 'behaviour')
                 ->whereNotNull('classification_item')
                 ->where('classification_item', '!=', '')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->where('sub_institute_id', $subInstituteId);
                 })
                 ->whereNull('deleted_at')
@@ -421,19 +445,19 @@ class CompetencyDashboardController extends Controller
             $externalAlignmentTarget = 90;
 
             $totalSkills = DB::table('s_jobrole_skills')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
-                                 ->where('s_user_jobrole.sub_institute_id', $subInstituteId)
-                                 ->whereNull('s_user_jobrole.deleted_at');
+                        ->where('s_user_jobrole.sub_institute_id', $subInstituteId)
+                        ->whereNull('s_user_jobrole.deleted_at');
                 })
                 ->count();
             $skillsWithProficiency = DB::table('s_jobrole_skills as sjs')
                 ->whereNotNull('sjs.proficiency_level')
                 ->where('sjs.proficiency_level', '!=', '')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->join('s_user_jobrole as jr', 'sjs.jobrole', '=', 'jr.jobrole')
-                                 ->where('jr.sub_institute_id', $subInstituteId)
-                                 ->whereNull('jr.deleted_at');
+                        ->where('jr.sub_institute_id', $subInstituteId)
+                        ->whereNull('jr.deleted_at');
                 })
                 ->count();
             $riskAssessmentCurrent = $totalSkills > 0 ? round(($skillsWithProficiency / $totalSkills) * 100, 1) : 0;
@@ -454,44 +478,44 @@ class CompetencyDashboardController extends Controller
                     'area' => 'Current vs Target Coverage',
                     'current' => $overallCurrent,
                     'target' => $overallTarget,
-                    'fullMark' => 100
+                    'fullMark' => 100,
                 ],
                 [
                     'area' => 'Task Mapping',
                     'current' => $taskMappingCurrent,
                     'target' => $taskMappingTarget,
-                    'fullMark' => 100
+                    'fullMark' => 100,
                 ],
                 [
                     'area' => 'Skill Coverage',
                     'current' => $skillCoverageCurrent,
                     'target' => $skillCoverageTarget,
-                    'fullMark' => 100
+                    'fullMark' => 100,
                 ],
                 [
                     'area' => 'Behavior Mapping',
                     'current' => $behaviorMappingCurrent,
                     'target' => $behaviorMappingTarget,
-                    'fullMark' => 100
+                    'fullMark' => 100,
                 ],
                 [
                     'area' => 'External Alignment',
                     'current' => $externalAlignmentCurrent,
                     'target' => $externalAlignmentTarget,
-                    'fullMark' => 100
+                    'fullMark' => 100,
                 ],
                 [
                     'area' => 'Risk Assessment',
                     'current' => $riskAssessmentCurrent,
                     'target' => $riskAssessmentTarget,
-                    'fullMark' => 100
+                    'fullMark' => 100,
                 ],
                 [
                     'area' => 'Future Readiness',
                     'current' => $futureReadinessCurrent,
                     'target' => $futureReadinessTarget,
-                    'fullMark' => 100
-                ]
+                    'fullMark' => 100,
+                ],
             ];
 
             // Process data to compute differences & classifications
@@ -505,19 +529,19 @@ class CompetencyDashboardController extends Controller
                     'target' => $item['target'],
                     'fullMark' => $item['fullMark'],
                     'difference' => $difference,
-                    'classification' => $classification
+                    'classification' => $classification,
                 ];
             });
 
             // Separate strengths & coverage gaps
             $strengths = $processed->where('classification', 'strength')
-                                   ->sortByDesc('current')
-                                   ->values()
-                                   ->take(3); // top 3 strengths
+                ->sortByDesc('current')
+                ->values()
+                ->take(3); // top 3 strengths
             $gaps = $processed->where('classification', 'gap')
-                              ->sortBy('difference')
-                              ->values()
-                              ->take(3); // top 3 weakest
+                ->sortBy('difference')
+                ->values()
+                ->take(3); // top 3 weakest
 
             // Compute overall health score
             $avgCurrent = round($processed->avg('current'), 2);
@@ -534,17 +558,18 @@ class CompetencyDashboardController extends Controller
                 ],
                 'data' => $processed,
                 'strengths' => $strengths,
-                'gaps' => $gaps
+                'gaps' => $gaps,
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch competency health radar data.',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
     public function getSkillsManagementFunnel(Request $request)
     {
         $subInstituteId = $request->input('sub_institute_id', null);
@@ -601,43 +626,44 @@ class CompetencyDashboardController extends Controller
                     'count' => $total,
                     'percentage' => '100% of total',
                     'filtered' => -$filteredIdentified,
-                    'filteredPercentage' => '(' . min(100, $filteredIdentifiedPercentage) . '%)'
+                    'filteredPercentage' => '('.min(100, $filteredIdentifiedPercentage).'%)',
                 ],
                 [
                     'stage' => 'In Review',
                     'count' => $inReview,
-                    'percentage' => ($total > 0 ? min(100, round(($inReview / $total) * 100, 0)) : 0) . '% of total',
+                    'percentage' => ($total > 0 ? min(100, round(($inReview / $total) * 100, 0)) : 0).'% of total',
                     'filtered' => -$filteredInReview,
-                    'filteredPercentage' => '(' . min(100, $filteredInReviewPercentage) . '%)'
+                    'filteredPercentage' => '('.min(100, $filteredInReviewPercentage).'%)',
                 ],
                 [
                     'stage' => 'Mapped Candidates',
                     'count' => $mapped,
-                    'percentage' => ($total > 0 ? min(100, round(($mapped / $total) * 100, 0)) : 0) . '% of total',
+                    'percentage' => ($total > 0 ? min(100, round(($mapped / $total) * 100, 0)) : 0).'% of total',
                     'filtered' => -$filteredMapped,
-                    'filteredPercentage' => '(' . min(100, $filteredMappedPercentage) . '%)'
+                    'filteredPercentage' => '('.min(100, $filteredMappedPercentage).'%)',
                 ],
                 [
                     'stage' => 'Approved & Integrated',
                     'count' => $approved,
-                    'percentage' => ($total > 0 ? min(100, round(($approved / $total) * 100, 0)) : 0) . '% of total'
-                ]
+                    'percentage' => ($total > 0 ? min(100, round(($approved / $total) * 100, 0)) : 0).'% of total',
+                ],
             ];
 
             return response()->json([
                 'title' => 'Skills Management Funnel',
-                'completionRate' => $completionRate . '%',
-                'data' => $data
+                'completionRate' => $completionRate.'%',
+                'data' => $data,
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch skills management funnel data.',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
     public function getAlignment(Request $request)
     {
         $type = $request->query('type', 'o'); // default type
@@ -647,17 +673,17 @@ class CompetencyDashboardController extends Controller
         // Map type to framework
         $frameworkMap = [
             'o' => 'onet',
-            's' => 'singapore'
+            's' => 'singapore',
         ];
         $framework = $frameworkMap[$type] ?? 'onet';
 
         try {
             // Validate supported types
             $validTypes = ['o', 's'];
-            if (!in_array($type, $validTypes)) {
+            if (! in_array($type, $validTypes)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Invalid type. Supported: o (onet), s (skillsfuture).'
+                    'message' => 'Invalid type. Supported: o (onet), s (skillsfuture).',
                 ], 400);
             }
 
@@ -666,7 +692,7 @@ class CompetencyDashboardController extends Controller
                 ->join('s_user_jobrole', 's_jobrole_skills.jobrole', '=', 's_user_jobrole.jobrole')
                 ->whereNull('s_user_jobrole.deleted_at')
                 ->where('s_jobrole_skills.type', $type)
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
                     return $query->where('s_user_jobrole.sub_institute_id', $subInstituteId);
                 })
                 ->selectRaw('
@@ -677,7 +703,7 @@ class CompetencyDashboardController extends Controller
                 ')
                 ->first();
 
-            if (!$result || $result->total == 0) {
+            if (! $result || $result->total == 0) {
                 return response()->json([
                     'success' => false,
                     'message' => 'No data found for selected framework.',
@@ -691,7 +717,7 @@ class CompetencyDashboardController extends Controller
             $frameworkVersions = [
                 'onet' => 'v28.0',
                 'singapore' => 'v2024',
-                'esco' => 'v2025'
+                'esco' => 'v2025',
             ];
 
             return response()->json([
@@ -700,17 +726,83 @@ class CompetencyDashboardController extends Controller
                     'framework' => strtoupper($framework),
                     'version' => $frameworkVersions[$framework] ?? 'v1.0',
                     'percentage' => $percentage,
-                    'aligned' => (int)$result->aligned,
-                    'partial' => (int)$result->partial,
-                    'notAligned' => (int)$result->not_aligned,
-                    'total' => (int)$result->total
-                ]
+                    'aligned' => (int) $result->aligned,
+                    'partial' => (int) $result->partial,
+                    'notAligned' => (int) $result->not_aligned,
+                    'total' => (int) $result->total,
+                ],
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Server Error: ' . $e->getMessage(),
+                'message' => 'Server Error: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function getAttitudeBehaviourMapping(Request $request)
+    {
+        $subInstituteId = $request->input('sub_institute_id', null);
+
+        try {
+            // Base query for s_library_map
+            $libraryMapQuery = DB::table('s_library_map')->whereNull('deleted_at');
+            if ($subInstituteId) {
+                $libraryMapQuery->where('sub_institute_id', $subInstituteId);
+            }
+
+            // Total mapped skills in s_library_map
+            $totalMappedSkills = (clone $libraryMapQuery)->count();
+
+            // Skills with attitudes mapped (attitude_ids not null and not empty)
+            $skillsWithAttitudes = (clone $libraryMapQuery)
+                ->whereNotNull('attitude_ids')
+                ->where('attitude_ids', '!=', '')
+                ->count();
+
+            $attitudeMappingPercentage = $totalMappedSkills > 0 ? round(($skillsWithAttitudes / $totalMappedSkills) * 100, 1) : 0;
+
+            // Skills with behaviours mapped (behaviour_ids not null and not empty)
+            $skillsWithBehaviours = (clone $libraryMapQuery)
+                ->whereNotNull('behaviour_ids')
+                ->where('behaviour_ids', '!=', '')
+                ->count();
+
+            $behaviourMappingPercentage = $totalMappedSkills > 0 ? round(($skillsWithBehaviours / $totalMappedSkills) * 100, 1) : 0;
+
+            // Total attitudes in s_user_attitude
+            $totalAttitudes = DB::table('s_user_attitude')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->whereNull('deleted_at')
+                ->count();
+
+            // Total behaviours in s_user_behaviour
+            $totalBehaviours = DB::table('s_user_behaviour')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->whereNull('deleted_at')
+                ->count();
+
+            return response()->json([
+                'status' => 'success',
+                'total_mapped_skills' => $totalMappedSkills,
+                'skills_with_attitudes' => $skillsWithAttitudes,
+                'attitude_mapping_percentage' => $attitudeMappingPercentage,
+                'skills_with_behaviours' => $skillsWithBehaviours,
+                'behaviour_mapping_percentage' => $behaviourMappingPercentage,
+                'total_attitudes' => $totalAttitudes,
+                'total_behaviours' => $totalBehaviours,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch attitude behaviour mapping data.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -722,9 +814,9 @@ class CompetencyDashboardController extends Controller
 
         try {
             // Base query for s_user_jobrole
-            $rolesQuery = DB::table('s_user_jobrole')->whereNull('deleted_at');
+            $rolesQuery = DB::table('s_user_jobrole as jr')->whereNull('jr.deleted_at');
             if ($subInstituteId) {
-                $rolesQuery->where('sub_institute_id', $subInstituteId);
+                $rolesQuery->where('jr.sub_institute_id', $subInstituteId);
             }
 
             // Total roles count
@@ -739,20 +831,67 @@ class CompetencyDashboardController extends Controller
                 })
                 ->distinct('d.id')
                 ->count('d.id');
+
+            // Total mapped tasks count from s_user_jobrole_task
+            $totalTasks = DB::table('s_user_jobrole_task')
+                ->whereNull('deleted_at')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->count();
+
+            // Total mapped skills count from s_user_skill_jobrole
+            $totalSkills = DB::table('s_user_skill_jobrole')
+                ->whereNull('deleted_at')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->count();
+
+            // Roles with mapped tasks
+            $rolesWithTasks = (clone $rolesQuery)
+                ->join('s_user_jobrole_task as jt', function ($join) {
+                    $join->on('jr.jobrole', '=', 'jt.jobrole')
+                        ->whereNull('jt.deleted_at');
+                })
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('jt.sub_institute_id', $subInstituteId);
+                })
+                ->distinct('jr.id')
+                ->count();
+
+            $taskCoveragePercentage = $totalRoles > 0 ? round(($rolesWithTasks / $totalRoles) * 100, 1) : 0;
+
+            // Roles with mapped skills
+            $rolesWithSkills = (clone $rolesQuery)
+                ->join('s_user_skill_jobrole as sj', function ($join) {
+                    $join->on('jr.jobrole', '=', 'sj.jobrole')
+                        ->whereNull('sj.deleted_at');
+                })
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sj.sub_institute_id', $subInstituteId);
+                })
+                ->distinct('jr.id')
+                ->count();
+
+            $skillCoveragePercentage = $totalRoles > 0 ? round(($rolesWithSkills / $totalRoles) * 100, 1) : 0;
+
             return response()->json([
                 'status' => 'success',
                 'total_roles' => $totalRoles,
-                'total_departments' => $departmentsCount,   
+                'total_departments' => $departmentsCount,
+                'total_mapped_tasks' => $totalTasks,
+                'task_coverage_percentage' => $taskCoveragePercentage,
+                'total_mapped_skills' => $totalSkills,
+                'skill_coverage_percentage' => $skillCoveragePercentage,
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch KPI data.',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 }
-

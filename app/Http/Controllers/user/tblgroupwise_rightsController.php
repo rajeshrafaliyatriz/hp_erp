@@ -129,6 +129,7 @@ class tblgroupwise_rightsController extends Controller
         $deleteRights = $request->input('delete');
         $viewRights = $request->input('view');
         $dashboardRights = $request->input('dashboard');
+        $is_mobile = $request->input('is_mobile');
 
         if (!isset($addRights)) {
             $addRights = array();
@@ -145,6 +146,9 @@ class tblgroupwise_rightsController extends Controller
          if (!isset($dashboardRights)) {
             $dashboardRights = array();
         }
+        if (!isset($is_mobile)) {
+            $is_mobile = array();
+        }
 
         $arrayKeys = array_replace($addRights, $editRights, $deleteRights, $viewRights,$dashboardRights);
 
@@ -155,6 +159,7 @@ class tblgroupwise_rightsController extends Controller
                 'menu_id' => $key,
                 'profile_id' => $request->input('profile_id'),
                 'sub_institute_id' => $sub_institute_id,
+                'is_mobile' => $request->input('is_mobile', 0),
                 'created_at' => now(),
             );
 
@@ -172,6 +177,9 @@ class tblgroupwise_rightsController extends Controller
             }
               if (isset($dashboardRights[$key])) {
                 $finalArray['dashboard_right'] = 1;
+            }
+            if (isset($is_mobile[$key])) {
+                $finalArray['is_mobile'] = 1;
             }
             $insert = tblgroupwise_rightsModel::insert($finalArray);
             if ($insert) {
@@ -224,25 +232,40 @@ class tblgroupwise_rightsController extends Controller
             return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
         }
         $sub_institute_id = $request->get('sub_institute_id');
+        $is_mobile = $request->input('is_mobile');
         // }
 
-        $data = tblmenumasterModel::where(['LEVEL' => 1, 'status' => 1])
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
-            ->groupBy('tblmenumaster.id')
+        $allowed_menu_ids = null;
+        if ($is_mobile !== null) {
+            $allowed_menu_ids = tblgroupwise_rightsModel::where(['profile_id' => $profile_id, 'is_mobile' => $is_mobile])->pluck('menu_id')->toArray();
+        }
+
+        $dataQuery = tblmenumasterModel::where(['LEVEL' => 1, 'status' => 1])
+            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id]);
+        if ($allowed_menu_ids) {
+            $dataQuery->whereIn('id', $allowed_menu_ids);
+        }
+        $data = $dataQuery->groupBy('tblmenumaster.id')
             ->orderBy('tblmenumaster.sort_order', 'ASC')
             ->get()
             ->toArray();
 
 
-        $subMenuData = tblmenumasterModel::where(['LEVEL' => 2, 'status' => 1])
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
-            ->orderBy('tblmenumaster.sort_order', 'ASC')
+        $subMenuQuery = tblmenumasterModel::where(['LEVEL' => 2, 'status' => 1])
+            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id]);
+        if ($allowed_menu_ids) {
+            $subMenuQuery->whereIn('id', $allowed_menu_ids);
+        }
+        $subMenuData = $subMenuQuery->orderBy('tblmenumaster.sort_order', 'ASC')
             ->get()
             ->toArray();
 
-        $SubsubMenuData = tblmenumasterModel::where(['LEVEL' => 3, 'status' => 1])
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
-            ->orderBy('tblmenumaster.sort_order', 'ASC')
+        $SubsubMenuQuery = tblmenumasterModel::where(['LEVEL' => 3, 'status' => 1])
+            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id]);
+        if ($allowed_menu_ids) {
+            $SubsubMenuQuery->whereIn('id', $allowed_menu_ids);
+        }
+        $SubsubMenuData = $SubsubMenuQuery->orderBy('tblmenumaster.sort_order', 'ASC')
             ->get()
             ->toArray();
 
@@ -256,6 +279,7 @@ class tblgroupwise_rightsController extends Controller
             $data[$i]['can_edit'] = $rights->can_edit ?? 0;
             $data[$i]['can_delete'] = $rights->can_delete ?? 0;
             $data[$i]['dashboard_right'] = $rights->dashboard_right ?? 0;
+            $data[$i]['is_mobile'] = $rights->is_mobile ?? 0;
             $i++;
         }
 
@@ -269,6 +293,7 @@ class tblgroupwise_rightsController extends Controller
             $finalSubMenu[$value['parent_id']][$i]['can_edit'] = $rights->can_edit ?? 0;
             $finalSubMenu[$value['parent_id']][$i]['can_delete'] = $rights->can_delete ?? 0;
             $finalSubMenu[$value['parent_id']][$i]['dashboard_right'] = $rights->dashboard_right ?? 0;
+            $finalSubMenu[$value['parent_id']][$i]['is_mobile'] = $rights->is_mobile ?? 0;
             $i++;
         }
 
@@ -282,6 +307,7 @@ class tblgroupwise_rightsController extends Controller
             $finalSubSubMenu[$value['parent_id']][$i]['can_edit'] = $rights->can_edit ?? 0;
             $finalSubSubMenu[$value['parent_id']][$i]['can_delete'] = $rights->can_delete ?? 0;
             $finalSubSubMenu[$value['parent_id']][$i]['dashboard_right'] = $rights->dashboard_right ?? 0;
+            $finalSubSubMenu[$value['parent_id']][$i]['is_mobile'] = $rights->is_mobile ?? 0;
             $i++;
         }
 
