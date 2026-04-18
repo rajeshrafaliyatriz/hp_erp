@@ -12,59 +12,56 @@ class CareerJourneyController extends Controller
         $userId = $request->user_id;
         $subInstituteId = $request->sub_institute_id;
 
-        // 1. Get user's current jobrole
+        // 1. Get user
         $user = DB::table('tbluser')
             ->where('id', $userId)
             ->first();
 
         if (!$user) {
-            return response()->json(['status' => false, 'message' => 'User not found']);
+            return response()->json([
+                'status' => false,
+                'message' => 'User not found'
+            ]);
         }
 
-        $currentJobRoleId = $user->allocated_standards;
-
-        // 2. Get all career journey steps for that sub institute
-        $journeys = DB::table('career_journey')
-            ->where('sub_institute_id', $subInstituteId)
-            ->orderBy('id')
-            ->get();
+        $currentRoleId = $user->allocated_standards;
 
         $result = [];
+        $visited = []; // avoid infinite loop
 
-        foreach ($journeys as $journey) {
+        // 2. Start from current role
+        while ($currentRoleId) {
 
-            // Get TO job role details
-            $toRole = DB::table('s_user_jobrole')
-                ->where('id', $journey->to_jobrole_id)
+            // prevent loop
+            if (in_array($currentRoleId, $visited)) break;
+            $visited[] = $currentRoleId;
+
+            // get next journey step
+            $journey = DB::table('career_journey as cj')
+                ->join('s_user_jobrole as jr', 'jr.id', '=', 'cj.to_jobrole_id')
+                ->where('cj.sub_institute_id', $subInstituteId)
+                ->where('cj.jobrole_id', $currentRoleId)
+                ->orderByDesc('cj.vertical_lateral_movement') // vertical first (optional)
                 ->first();
 
-            if (!$toRole) continue;
-
-            // Status logic
-            $status = 'upcoming';
-
-            if ($journey->jobrole_id == $currentJobRoleId) {
-                $status = 'current';
-            } elseif ($journey->jobrole_id < $currentJobRoleId) {
-                $status = 'completed';
-            }
+            if (!$journey) break;
 
             $result[] = [
                 'id' => $journey->id,
                 'from_jobrole_id' => $journey->jobrole_id,
                 'to_jobrole_id' => $journey->to_jobrole_id,
 
-                'role_name' => $toRole->jobrole,
-                'job_level' => $toRole->job_level, // MID / SENIOR
+                'role_name' => $journey->jobrole,
+                'job_level' => $journey->job_level,
 
                 'movement_type' => $journey->vertical_lateral_movement == 1 ? 'vertical' : 'lateral',
 
-                'status' => $status,
-
-                // Optional UI percentage
-                'progress' => $status == 'current' ? '100%' :
-                              ($status == 'completed' ? '100%' : '0%')
+                'status' => count($result) == 0 ? 'current' : 'upcoming',
+                'progress' => count($result) == 0 ? '100%' : '0%'
             ];
+
+            // move to next role
+            $currentRoleId = $journey->to_jobrole_id;
         }
 
         return response()->json([
