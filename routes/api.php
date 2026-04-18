@@ -63,6 +63,7 @@ use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
 use App\Http\Controllers\HRMS\DepartmentSkillController;
 use App\Http\Controllers\HRTemplates\TemplateController;
 use App\Http\Controllers\NewsletterController;
+use App\Http\Controllers\CareerJourneyController;
 
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
@@ -270,3 +271,5 @@ Route::get('/export-department-jobroles/{subInstituteId}', [DepartmentJobRoleExp
 Route::resource('templates', TemplateController::class);
 Route::get('templates/{id}/versions', [TemplateController::class, 'versions']);
 Route::post('templates/{id}/restore/{version}', [TemplateController::class, 'restore']);
+
+Route::get('/career-journey', [CareerJourneyController::class, 'getCareerJourney']);
