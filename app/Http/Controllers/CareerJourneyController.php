@@ -58,8 +58,6 @@ class CareerJourneyController extends Controller
             ], 404);
         }
 
-        $result = [];
-        $visited = []; // avoid infinite loop
         [$progressionTable, $progressionMap] = $this->resolveProgressionSchema();
 
         if (!$progressionTable) {
@@ -70,27 +68,73 @@ class CareerJourneyController extends Controller
             ], 500);
         }
 
-        // 2. Start from the resolved current role and walk the progression chain
+        $verticalData = $this->buildJourneyData(
+            $progressionTable,
+            $progressionMap,
+            $subInstituteId,
+            $currentRoleId,
+            'vertical'
+        );
+
+        $lateralData = $this->buildLateralJourneyData(
+            $progressionTable,
+            $progressionMap,
+            $subInstituteId,
+            $currentRoleId,
+        );
+
+        return response()->json([
+            'status' => true,
+            'current_jobrole' => [
+                'id' => $currentJobRole->id,
+                'jobrole' => $currentJobRole->jobrole,
+                'job_level' => $currentJobRole->job_level ?? null,
+                'sequence_order' => $currentJobRole->sequence_order ?? null,
+            ],
+            'data' => [
+                'vertical' => $verticalData,
+                'lateral' => $lateralData,
+            ],
+            'vertical_data' => $verticalData,
+            'lateral_data' => $lateralData,
+        ]);
+    }
+
+    private function buildJourneyData(string $progressionTable, array $progressionMap, int $subInstituteId, int $startRoleId, string $movementType): array
+    {
+        $result = [];
+        $visited = [];
+        $currentRoleId = $startRoleId;
+
         while ($currentRoleId) {
-            // prevent loop
-            if (in_array($currentRoleId, $visited)) break;
+            if (in_array($currentRoleId, $visited, true)) {
+                break;
+            }
+
             $visited[] = $currentRoleId;
 
-            // get next journey step
-            $journey = DB::table($progressionTable . ' as cj')
+            $journeyQuery = DB::table($progressionTable . ' as cj')
                 ->join('s_user_jobrole as jr', 'jr.id', '=', 'cj.' . $progressionMap['to'])
                 ->where('cj.sub_institute_id', $subInstituteId)
-                ->where('cj.' . $progressionMap['from'], $currentRoleId)
-                ->orderByRaw(
-                    $progressionTable === 'role_progressions'
-                        ? "CASE WHEN cj.type = 'vertical' THEN 0 ELSE 1 END"
-                        : "CASE WHEN cj.vertical_lateral_movement = 1 THEN 0 ELSE 1 END"
-                )
+                ->where('cj.' . $progressionMap['from'], $currentRoleId);
+
+            if ($progressionTable === 'role_progressions') {
+                $journeyQuery->where('cj.type', $movementType);
+            } else {
+                $journeyQuery->where(
+                    'cj.vertical_lateral_movement',
+                    $movementType === 'vertical' ? 1 : 0
+                );
+            }
+
+            $journey = $journeyQuery
                 ->orderBy('jr.sequence_order')
                 ->orderBy('cj.id')
                 ->first();
 
-            if (!$journey) break;
+            if (!$journey) {
+                break;
+            }
 
             $result[] = [
                 'id' => $journey->id,
@@ -102,23 +146,60 @@ class CareerJourneyController extends Controller
                     ? $journey->type
                     : ($journey->vertical_lateral_movement == 1 ? 'vertical' : 'lateral'),
                 'status' => 'upcoming',
-                'progress' => '0%'
+                'progress' => '0%',
             ];
 
-            // move to next role
             $currentRoleId = $journey->{$progressionMap['to']};
         }
 
-        return response()->json([
-            'status' => true,
-            'current_jobrole' => [
-                'id' => $currentJobRole->id,
-                'jobrole' => $currentJobRole->jobrole,
-                'job_level' => $currentJobRole->job_level ?? null,
-                'sequence_order' => $currentJobRole->sequence_order ?? null,
-            ],
-            'data' => $result
-        ]);
+        return $result;
+    }
+
+    private function buildLateralJourneyData(string $progressionTable, array $progressionMap, int $subInstituteId, int $currentRoleId): array
+    {
+        $journeyQuery = DB::table($progressionTable . ' as cj')
+            ->join('s_user_jobrole as jr', 'jr.id', '=', 'cj.' . $progressionMap['to'])
+            ->where('cj.sub_institute_id', $subInstituteId)
+            ->where('cj.' . $progressionMap['from'], $currentRoleId);
+
+        if ($progressionTable === 'role_progressions') {
+            $journeyQuery->where('cj.type', 'lateral');
+        } else {
+            $journeyQuery->where('cj.vertical_lateral_movement', 0);
+        }
+
+        $journeys = $journeyQuery
+            ->orderBy('jr.sequence_order')
+            ->orderBy('cj.id')
+            ->get();
+
+        $result = [];
+        $seenTargetRoles = [];
+
+        foreach ($journeys as $journey) {
+            $toRoleId = $journey->{$progressionMap['to']};
+
+            if (in_array($toRoleId, $seenTargetRoles, true)) {
+                continue;
+            }
+
+            $seenTargetRoles[] = $toRoleId;
+
+            $result[] = [
+                'id' => $journey->id,
+                'from_jobrole_id' => $journey->{$progressionMap['from']},
+                'to_jobrole_id' => $journey->{$progressionMap['to']},
+                'role_name' => $journey->jobrole,
+                'job_level' => $journey->job_level,
+                'movement_type' => $progressionTable === 'role_progressions'
+                    ? $journey->type
+                    : 'lateral',
+                'status' => 'upcoming',
+                'progress' => '0%',
+            ];
+        }
+
+        return $result;
     }
 
     private function resolveCurrentJobRoleId($allocatedStandards, $subInstituteId)
