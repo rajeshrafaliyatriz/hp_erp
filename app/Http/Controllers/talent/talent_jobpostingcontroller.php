@@ -19,7 +19,6 @@ class talent_jobpostingcontroller extends Controller
 {
     public function index(request $request)
     {
-        {
         try {
             $type = $request->type; // API or web
 
@@ -49,6 +48,14 @@ class talent_jobpostingcontroller extends Controller
 
                 $sub_institute_id = $request->sub_institute_id;
 
+                // Auto-update expired job postings to inactive
+                DB::table('talent_job_postings')
+                    ->where('sub_institute_id', $sub_institute_id)
+                    ->where('status', 'active')
+                    ->whereNotNull('deadline')
+                    ->where('deadline', '<', now())
+                    ->update(['status' => 'inactive', 'updated_at' => now()]);
+
                 // fetch jobrole data from table
                 $talent = DB::table('talent_job_postings as a')
                             ->select('*')
@@ -71,9 +78,6 @@ class talent_jobpostingcontroller extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
-    }
-
-
     }
 
     /**
@@ -187,6 +191,14 @@ class talent_jobpostingcontroller extends Controller
                 }
 
                 $sub_institute_id = $request->sub_institute_id;
+
+                // Auto-update expired job postings to inactive
+                DB::table('talent_job_postings')
+                    ->where('sub_institute_id', $sub_institute_id)
+                    ->where('status', 'active')
+                    ->whereNotNull('deadline')
+                    ->where('deadline', '<', now())
+                    ->update(['status' => 'inactive', 'updated_at' => now()]);
 
                 // Execute the query
                 $data = DB::select("
