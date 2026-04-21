@@ -22,7 +22,7 @@ class CareerJourneyController extends Controller
 
         // 1. Get user
         $user = DB::table('tbluser')
-            ->select('id', 'allocated_standards', 'sub_institute_id')
+            ->select('id', 'first_name', 'middle_name', 'last_name', 'allocated_standards', 'sub_institute_id')
             ->where('id', $userId)
             ->where('sub_institute_id', $subInstituteId)
             ->first();
@@ -85,6 +85,10 @@ class CareerJourneyController extends Controller
 
         return response()->json([
             'status' => true,
+            'user' => [
+                'id' => $user->id,
+                'name' => trim(($user->first_name ?? '').' '.($user->middle_name ?? '').' '.($user->last_name ?? '')),
+            ],
             'current_jobrole' => [
                 'id' => $currentJobRole->id,
                 'jobrole' => $currentJobRole->jobrole,
