@@ -99,10 +99,10 @@ Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject'
 Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
 Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
 
-Route::get('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis']);
-Route::get('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
-Route::get('/talent-acquisition/funnel', [CandidateDropoffController::class, 'getFunnelData']);
-Route::get('/talent-acquisition/requisitions', [CandidateDropoffController::class, 'getRequisitions']);
+Route::post('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis']);
+Route::post('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
+Route::post('/talent-acquisition/funnel', [CandidateDropoffController::class, 'getFunnelData']);
+Route::post('/talent-acquisition/requisitions', [CandidateDropoffController::class, 'getRequisitions']);
 
 Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
 
