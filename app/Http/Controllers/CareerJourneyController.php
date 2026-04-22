@@ -22,9 +22,10 @@ class CareerJourneyController extends Controller
 
         // 1. Get user
         $user = DB::table('tbluser')
-            ->select('id', 'first_name', 'middle_name', 'last_name', 'allocated_standards', 'sub_institute_id')
-            ->where('id', $userId)
-            ->where('sub_institute_id', $subInstituteId)
+            ->select('tbluser.id', 'tbluser.first_name', 'tbluser.middle_name', 'tbluser.last_name', 'tbluser.allocated_standards', 'tbluser.sub_institute_id', 'tbluser.department_id', 'd.department as department_name')
+            ->leftJoin('hrms_departments as d', 'tbluser.department_id', '=', 'd.id')
+            ->where('tbluser.id', $userId)
+            ->where('tbluser.sub_institute_id', $subInstituteId)
             ->first();
 
         if (! $user) {
@@ -88,6 +89,8 @@ class CareerJourneyController extends Controller
             'user' => [
                 'id' => $user->id,
                 'name' => trim(($user->first_name ?? '').' '.($user->middle_name ?? '').' '.($user->last_name ?? '')),
+                'department_id' => $user->department_id,
+                'department_name' => $user->department_name,
             ],
             'current_jobrole' => [
                 'id' => $currentJobRole->id,
