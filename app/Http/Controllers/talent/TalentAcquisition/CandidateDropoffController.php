@@ -130,30 +130,35 @@ class CandidateDropoffController extends Controller
             }
 
             $subInstituteId = $request->input('sub_institute_id');
+            $departmentId = $request->input('department_id');
 
-            // Query counts from talent_job_applications table
-            $applications = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
+            // Build base query with joins to get department filtering
+            $baseQuery = DB::table('talent_job_applications as a')
+                ->join('talent_job_postings as jp', 'a.job_id', '=', 'jp.id')
+                ->where('a.sub_institute_id', $subInstituteId);
+
+            // Apply department filter if provided
+            if ($departmentId) {
+                $baseQuery->where('jp.department_id', $departmentId);
+            }
+
+            // Query counts from talent_job_applications table with department filter
+            $applications = (clone $baseQuery)->count();
+
+            $shortlisted = (clone $baseQuery)
+                ->where('a.status', 'Shortlisted')
                 ->count();
 
-            $shortlisted = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 'Shortlisted')
+            $interviewed = (clone $baseQuery)
+                ->where('a.status', 'Interview Scheduled')
                 ->count();
 
-            $interviewed = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 'Interview Scheduled')
+            $offers = (clone $baseQuery)
+                ->where('a.status', 'offered')
                 ->count();
 
-            $offers = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 'Hired')
-                ->count();
-
-            $hired = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 'Hired')
+            $hired = (clone $baseQuery)
+                ->where('a.status', 'Hired')
                 ->count();
 
             // Build funnel response
