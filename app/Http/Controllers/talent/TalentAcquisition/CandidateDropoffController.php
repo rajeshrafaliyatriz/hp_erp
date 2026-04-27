@@ -46,38 +46,47 @@ class CandidateDropoffController extends Controller
             }
 
             $subInstituteId = $request->input('sub_institute_id');
+            $departmentId = $request->input('department_id');
+            $experience = $request->input('experience');
 
-            // Fetch aggregated drop-off data filtered by sub_institute_id
-            $data = DB::table('talent_job_applications')
+            // Fetch aggregated drop-off data filtered by sub_institute_id and optionally department_id and experience
+            $data = DB::table('talent_job_applications as a')
+                ->join('talent_job_postings as jp', 'a.job_id', '=', 'jp.id')
                 ->select(
                     DB::raw("CASE
-                        WHEN status = 'Pending Review' THEN 'Application'
-                        WHEN status = 'Shortlisted' THEN 'Shortlist'
-                        WHEN status = 'Interview Scheduled' THEN 'Interview'
-                        WHEN status = 'Hired' THEN 'Offer'
-                        WHEN status = 'Rejected' THEN 'Rejected'
-                        ELSE status
+                        WHEN a.status = 'Pending Review' THEN 'Application'
+                        WHEN a.status = 'Shortlisted' THEN 'Shortlist'
+                        WHEN a.status = 'Completed' THEN 'Interview'
+                        WHEN a.status = 'Hired' THEN 'Offer'
+                        WHEN a.status = 'Rejected' THEN 'Rejected'
+                        ELSE a.status
                     END as stage"),
                     DB::raw('0 as voluntary'),
                     DB::raw('COUNT(*) as involuntary')
                 )
-                ->where('sub_institute_id', $subInstituteId)
-                ->whereIn('status', ['Pending Review', 'Under Review', 'Shortlisted', 'Interview Scheduled', 'Hired', 'Rejected'])
+                ->where('a.sub_institute_id', $subInstituteId)
+                ->whereIn('a.status', ['Pending Review', 'Under Review', 'Shortlisted', 'Completed', 'Hired', 'Rejected'])
+                ->when($departmentId, function ($query) use ($departmentId) {
+                    return $query->where('jp.department_id', $departmentId);
+                })
+                ->when($experience, function ($query) use ($experience) {
+                    return $query->where('a.experience', 'like', '%' . $experience . '%');
+                })
                 ->groupBy(DB::raw("CASE
-                    WHEN status = 'Pending Review' THEN 'Application'
-                    WHEN status = 'Shortlisted' THEN 'Shortlist'
-                    WHEN status = 'Interview Scheduled' THEN 'Interview'
-                    WHEN status = 'Hired' THEN 'Offer'
-                    WHEN status = 'Rejected' THEN 'Rejected'
-                    ELSE status
+                    WHEN a.status = 'Pending Review' THEN 'Application'
+                    WHEN a.status = 'Shortlisted' THEN 'Shortlist'
+                    WHEN a.status = 'Completed' THEN 'Interview'
+                    WHEN a.status = 'Hired' THEN 'Offer'
+                    WHEN a.status = 'Rejected' THEN 'Rejected'
+                    ELSE a.status
                 END"))
                 ->orderByRaw("FIELD(CASE
-                    WHEN status = 'Pending Review' THEN 'Application'
-                    WHEN status = 'Shortlisted' THEN 'Shortlist'
-                    WHEN status = 'Interview Scheduled' THEN 'Interview'
-                    WHEN status = 'Hired' THEN 'Offer'
-                    WHEN status = 'Rejected' THEN 'Rejected'
-                    ELSE status
+                    WHEN a.status = 'Pending Review' THEN 'Application'
+                    WHEN a.status = 'Shortlisted' THEN 'Shortlist'
+                    WHEN a.status = 'Completed' THEN 'Interview'
+                    WHEN a.status = 'Hired' THEN 'Offer'
+                    WHEN a.status = 'Rejected' THEN 'Rejected'
+                    ELSE a.status
                 END, 'Application', 'Shortlist', 'Interview', 'Offer', 'Rejected')")
                 ->get();
 
@@ -131,6 +140,7 @@ class CandidateDropoffController extends Controller
 
             $subInstituteId = $request->input('sub_institute_id');
             $departmentId = $request->input('department_id');
+            $experience = $request->input('experience');
 
             // Build base query with joins to get department filtering
             $baseQuery = DB::table('talent_job_applications as a')
@@ -142,6 +152,11 @@ class CandidateDropoffController extends Controller
                 $baseQuery->where('jp.department_id', $departmentId);
             }
 
+            // Apply experience filter if provided
+            if ($experience) {
+                $baseQuery->where('a.experience', 'like', '%' . $experience . '%');
+            }
+
             // Query counts from talent_job_applications table with department filter
             $applications = (clone $baseQuery)->count();
 
@@ -150,7 +165,7 @@ class CandidateDropoffController extends Controller
                 ->count();
 
             $interviewed = (clone $baseQuery)
-                ->where('a.status', 'Interview Scheduled')
+                ->where('a.status', 'Completed')
                 ->count();
 
             $offers = (clone $baseQuery)
@@ -220,6 +235,7 @@ class CandidateDropoffController extends Controller
             $jobLevel = $request->get('jobLevel', 'all-level');
             $diversity = $request->get('diversity', 'all-gender');
             $status = $request->get('status', 'active');
+            $experience = $request->get('experience', null);
 
             $sortBy = $request->get('sortBy', 'age');   // age | title | interviewed | offers | hires
             $order = $request->get('order', 'desc');   // asc | desc
@@ -263,11 +279,15 @@ class CandidateDropoffController extends Controller
             }
 
             if ($jobLevel !== 'all-level') {
-                $query->where('r.job_level', $jobLevel);
+                $query->where('r.priority_level', $jobLevel);
             }
 
             if ($status !== 'all') {
                 $query->where('r.status', ucfirst($status)); // Active / Closed
+            }
+
+            if ($experience) {
+                $query->where('r.experience', 'like', '%' . $experience . '%');
             }
 
             // Time period filtering (last 30 days, last 7 days, etc.)
