@@ -359,13 +359,13 @@ class GenerateQuestionsController extends Controller
             '403',
             '401'
         ];
-        
+
         foreach ($permanentErrors as $permanentError) {
             if (stripos($error, $permanentError) !== false) {
                 return true;
             }
         }
-        
+
         return false;
     }
     
@@ -408,11 +408,7 @@ class GenerateQuestionsController extends Controller
         }
         
         $modelsToTest = [
-            'gemini-2.0-flash-exp',
-            'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-1.0-pro',
-            'gemini-pro'
+            'gemini-2.5-flash'
         ];
         
         foreach ($modelsToTest as $model) {
@@ -593,7 +589,7 @@ Remember: Return ONLY valid JSON. No markdown formatting. No extra text.";
     private function callGeminiAPI(string $prompt, string $apiKey, ?string $model = null): array
     {
         // Use the provided model or the working model
-        $model = $model ?: ($this->workingModel ?: 'gemini-1.5-flash');
+        $model = $model ?: ($this->workingModel ?: 'gemini-2.5-flash');
         
         // Correct URL format for Gemini API
         $geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
