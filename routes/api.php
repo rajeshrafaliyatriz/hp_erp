@@ -28,6 +28,7 @@ use App\Http\Controllers\build_with_AI\buildwithAIController;
 use App\Http\Controllers\Api\GammaApiController;
 use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
 use App\Http\Controllers\Api\Gemini\SaveJDController;
+use App\Http\Controllers\Api\Gemini\GenerateQuestionsController;
 use App\Http\Controllers\Api\SkillMatchingController;
 use App\Http\Controllers\Api\SuggestedCourseController;
 use App\Http\Controllers\user\UserSkillController;
@@ -221,6 +222,7 @@ Route::group(['prefix' => 'reports'], function () {
 
 Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze']);
 Route::post('/gemini/save-jd', [SaveJDController::class, 'save']);
+Route::post('/gemini/generate-questions', [GenerateQuestionsController::class, 'generate']);
 
 Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks']);
 Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills']);
