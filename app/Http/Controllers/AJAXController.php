@@ -932,9 +932,7 @@ class AJAXController extends Controller
         // Fallback model list - ordered from preferred → fallback (Feb 2026 reality)
         $modelsToTry = [
             'gemini-2.5-flash',         // Fast, cheap, stable GA
-            'gemini-flash-latest',      // Alias to newest Flash (good longevity)
-            'gemini-2.5-pro',           // Stronger reasoning when needed
-            'gemini-3-flash-preview',   // Newer preview (if your project allows)
+               // Newer preview (if your project allows)
             // Add more previews/experimental if needed: 'gemini-3-pro-preview', etc.
         ];
 
