@@ -2351,4 +2351,80 @@ class AJAXController extends Controller
         
         return rtrim($slideStructure, '; ');
     }
+
+    public function getSupervisor(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|integer',
+            'sub_institute_id' => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => $validator->errors()->first()
+            ], 400);
+        }
+
+        $user_id = $request->user_id;
+        $sub_institute_id = $request->sub_institute_id;
+
+        // 🔹 Step 1: Get user
+        $user = DB::table('tbluser')
+            ->where('id', $user_id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        // 🔹 Step 2: Check supervisor_emp_id
+        if (empty($user->employee_id)) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'No supervisor assigned'
+            ], 404);
+        }
+
+        // 🔥 Step 3: Correct Query (id wise search)
+        $supervisor = DB::table('tbluser')
+            ->where('id', $user->employee_id) // ✅ FIX
+            ->where('sub_institute_id', $sub_institute_id)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$supervisor) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'Supervisor not found',
+            ], 404);
+        }
+
+        // 🔹 Step 4: Full name
+        $fullName = trim(
+            ($supervisor->name_suffix ?? '') . ' ' .
+            ($supervisor->first_name ?? '') . ' ' .
+            ($supervisor->middle_name ?? '') . ' ' .
+            ($supervisor->last_name ?? '')
+        );
+
+        // 🔹 Step 5: Response
+        return response()->json([
+            'status_code' => 1,
+            'message' => 'Supervisor found',
+            'data' => [
+                'id' => $supervisor->id,
+                'name' => preg_replace('/\s+/', ' ', $fullName),
+                'email' => $supervisor->email,
+                'mobile' => $supervisor->mobile,
+            ]
+        ]);
+    }
 }
