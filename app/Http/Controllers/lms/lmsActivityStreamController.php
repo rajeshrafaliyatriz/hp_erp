@@ -51,6 +51,7 @@ class lmsActivityStreamController extends Controller
         $res['upcoming'] = $this->upcomingActivity($request);
         $res['today'] = $this->todayActivity($request);
         $res['recent'] = $this->recentActivity($request);
+        $res['observer'] = $this->observerActivity($request);
         $res['checkList'] = DB::table('task')->selectRaw('*')->whereRaw("(TASK_ALLOCATED_TO = '" . $user_id . "' OR TASK_ALLOCATED = '" . $user_id . "')")->where('task_type', '=', 'Daily Task')->where('TASK_DATE', date('Y-m-d'))->get()->toArray();
 
         $currentMonthStart = date('Y-m-01'); // First day of current month
@@ -358,6 +359,50 @@ class lmsActivityStreamController extends Controller
         // $res['studentLeave'] = $studentLeave;
         return $res;
     }
+
+    public function observerActivity(Request $request)
+    {
+        $profileName = $request->user_profile;
+        $profileId = $request->user_profile_id;
+        $sub_institute_id = $request->sub_institute_id;
+        $syear = $request->syear;
+        $user_id = $request->user_id;
+        $term_id = $request->term_id;
+
+        $searchDate = date('Y-m-d');
+        $dayOfWeek = date('l');
+        $firstLetter = substr($dayOfWeek, 0, 1);
+        if ($dayOfWeek == "Thursday") {
+            $firstLetter = "H";
+        }
+
+        $standard_id = $division_id = $classStdId = $classDivId = '';
+        if ($profileName == "Student") {
+            $studentData = $this->studentData($user_id, $sub_institute_id, $syear);
+            $classStdId = $standard_id = $studentData['standard_id'];
+            $classDivId = $division_id = $studentData['section_id'];
+        } else if ($profileName == "Teacher") {
+            $getTeacherData = [];
+            $standard_id = $getTeacherData->standard_id ?? '';
+            $division_id = $getTeacherData->division_id ?? '';
+            $classTeacher = DB::table('class_teacher')->where(['sub_institute_id' => $sub_institute_id, 'syear' => $syear])->first();
+            $classStdId = ($classTeacher->standard_id) ?: '';
+            $classDivId = ($classTeacher->division_id) ?: '';
+        }
+
+        // Not for students
+        $taskAssigned = $complianceAssigned = [];
+        if ($profileName != "Student") {
+            $taskAssigned = $this->getObserverAssigned($sub_institute_id, $syear, $searchDate, $user_id, $classDivId, $classStdId, 'observer');
+            $complianceAssigned = $this->getComplianceAssigned($sub_institute_id, $searchDate, $user_id, 'observer');
+        }
+
+        $res['taskAssigned'] = $taskAssigned;
+        $res['complianceAssigned'] = $complianceAssigned;
+
+        return $res;
+    }
+
     // get student data
     public function studentData($user_id, $sub_institute_id, $syear)
     {
@@ -723,6 +768,65 @@ class lmsActivityStreamController extends Controller
             ->where('mc.assigned_to', $user_id);
 
         return $complianceQuery->get()->toArray();
+    }
+
+    // observer assigned
+    function getObserverAssigned($sub_institute_id, $syear, $searchDate, $user_id, $division_id, $standard_id, $activityType = '')
+    {
+        $observerQuery = DB::table('task as t')
+            ->join('tbluser as tu', function ($join) use ($sub_institute_id) {
+                $join->on('t.TASK_ALLOCATED_TO', '=', 'tu.id')
+                    ->where(['tu.sub_institute_id' => $sub_institute_id]);
+            })
+            ->join('tbluser as us', function ($join) use ($sub_institute_id) {
+                $join->on('t.task_allocated', '=', 'us.id')
+                    ->where(['us.sub_institute_id' => $sub_institute_id]);
+            })
+            ->selectRaw('
+                t.id,
+                t.task_title,
+                t.task_type,
+                t.task_date,
+                t.status,
+                t.approve_status,
+                t.sub_institute_id,
+                t.syear,
+                t.created_at,
+                CONCAT_WS(" ", COALESCE(tu.first_name,"-"), COALESCE(tu.middle_name,"-"), COALESCE(tu.last_name,"-")) as allocatedUser,
+                CONCAT_WS(" ", COALESCE(us.first_name,"-"), COALESCE(us.middle_name,"-"), COALESCE(us.last_name,"-")) as allocatedBy,
+                CASE WHEN tu.image IS NOT NULL
+                    THEN CONCAT("https://s3-triz.fra1.cdn.digitaloceanspaces.com/public/content_library/", tu.image)
+                    ELSE NULL
+                END as image
+            ')
+            ->where(['t.sub_institute_id' => $sub_institute_id, 't.syear' => $syear])
+            ->whereNotNull('t.observation_point')
+            ->when($activityType == 'upcoming', function ($q) use ($searchDate) {
+                $q->where('t.task_date', '>=', $searchDate);
+            })
+            ->when($activityType == 'today', function ($q) use ($searchDate) {
+                $q->where('t.task_date', $searchDate);
+            })
+            ->when($activityType == 'recent', function ($q) use ($searchDate) {
+                $q->where('t.task_date', '<', $searchDate);
+            })
+            ->when($activityType == 'observer', function ($q) {
+                // No date filter for observer, show all
+            })
+            ->where(function($q) use ($user_id, $sub_institute_id) {
+                $q->where('t.task_allocated_to', $user_id)
+                  ->orWhereIn('t.task_allocated_to', function($subQuery) use ($user_id, $sub_institute_id) {
+                      $subQuery->select('id')
+                               ->from('tbluser')
+                               ->where('employee_id', $user_id)
+                               ->where('sub_institute_id', $sub_institute_id)
+                               ->where('status', 1)
+                               ->whereNull('deleted_at');
+                  });
+            });
+
+        // Return observer tasks only
+        return $observerQuery->get()->toArray();
     }
 
     // parent communication 
