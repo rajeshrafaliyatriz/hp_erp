@@ -4,34 +4,31 @@ namespace App\Http\Controllers\user;
 
 use App\Http\Controllers\Controller;
 // use App\Models\HrmsJobTitle;
+use App\Models\libraries\skillJobroleMap;
+use App\Models\libraries\SLevelResponsibility;
+use App\Models\libraries\userJobroleModel;
+use App\Models\libraries\userJobroleTask;
 use App\Models\school_setup\subjectModel;
 use App\Models\settings\tblcustomfieldsModel;
 use App\Models\settings\tblfields_dataModel;
+use App\Models\skill\matrix;
+use App\Models\skill\skill;
 use App\Models\user\tbluserModel;
 use App\Models\user\tbluserprofilemasterModel;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use function App\Helpers\is_mobile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Hash;
-use App\Models\libraries\userJobroleModel;
-use App\Models\libraries\skillJobroleMap;
-use App\Models\libraries\SLevelResponsibility;
-use App\Models\libraries\userKnowledgeAbility;
-use App\Models\libraries\jobroleSkillModel;
-use App\Models\libraries\userJobroleTask;
 use Illuminate\Support\Str;
-use App\Models\skill\skill;
-use App\Models\skill\matrix;
-use Carbon\Carbon;
-use Carbon\CarbonPeriod;
 use Laravel\Sanctum\PersonalAccessToken;
+
+use function App\Helpers\is_mobile;
 
 class tbluserController extends Controller
 {
-
     public function index(Request $request)
     {
         // echo "<pre>";print_r(session()->all());exit;
@@ -44,7 +41,7 @@ class tbluserController extends Controller
             $token = $request->input('token');  // get token from input field 'token'
 
             // Check if token is provided
-            if (!$token) {
+            if (! $token) {
                 return response()->json(['message' => 'Token not provided'], 401);
             }
 
@@ -52,7 +49,7 @@ class tbluserController extends Controller
             $accessToken = PersonalAccessToken::findToken($token);
 
             // If token is invalid
-            if (!$accessToken) {
+            if (! $accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
             // Validate required fields
@@ -69,34 +66,40 @@ class tbluserController extends Controller
             $user_id = $request->get('user_id');
             $user_profile = $request->get('user_profile_name');
         }
-            $user_data = tbluserModel::select(
-                'tbluser.*',
-                'tbluserprofilemaster.name as profile_name',
-                DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
-                DB::raw('IFNULL(hrms_departments.department,"-") as department_name'),
-                DB::raw('IFNULL(s_user_jobrole.jobrole,"-") as jobrole'),
-            )
+        $user_data = tbluserModel::select(
+            'tbluser.*',
+            'tbluserprofilemaster.name as profile_name',
+            DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
+            DB::raw('IFNULL(hrms_departments.department,"-") as department_name'),
+            DB::raw('IFNULL(s_user_jobrole.jobrole,"-") as jobrole'),
+            DB::raw('IFNULL(org_designation.designation,"-") as designation'),
+        )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
             ->leftJoin('hrms_departments', 'tbluser.department_id', '=', 'hrms_departments.id')
             ->leftJoin('s_user_jobrole', 'tbluser.allocated_standards', '=', 's_user_jobrole.id')
-            ->where(['tbluser.sub_institute_id' => $sub_institute_id]) //, 'tbluser.status' => "1"
-            ->when((!in_array(strtoupper($user_profile), ['ADMIN', 'SUPER ADMIN']) && !$request->has('menu_type')), function ($q) use ($user_id) {
+            ->leftJoin('org_designation', function ($join) use ($sub_institute_id) {
+                $join->on('tbluser.id', '=', 'org_designation.user_id')
+                    ->where('org_designation.sub_institute_id', '=', $sub_institute_id)
+                    ->whereNull('org_designation.deleted_at');
+            })
+            ->where(['tbluser.sub_institute_id' => $sub_institute_id]) // , 'tbluser.status' => "1"
+            ->when((! in_array(strtoupper($user_profile), ['ADMIN', 'SUPER ADMIN']) && ! $request->has('menu_type')), function ($q) use ($user_id) {
                 $q->where('tbluser.id', $user_id);
             })
-            ->when($request->has('active_status'),function ($q) use ($request) {
+            ->when($request->has('active_status'), function ($q) use ($request) {
                 $q->where('tbluser.status', $request->active_status);
             })
             ->get();
 
         $res['status_code'] = 1;
-        $res['message'] = "Success";
+        $res['message'] = 'Success';
         $res['departments'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->get()->toArray();
         $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
-        $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();  
-        $res["user_profiles"] = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
+        $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();
+        $res['user_profiles'] = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $res['data'] = $user_data;
 
-        return is_mobile($type, "user/show_user", $res, "view");
+        return is_mobile($type, 'user/show_user', $res, 'view');
     }
 
     public function create(Request $request)
@@ -104,8 +107,7 @@ class tbluserController extends Controller
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $data = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id, 'status' => '1'])->get()->toArray();
 
-        $dataCustomFields = tblcustomfieldsModel::where(['sub_institute_id' => $sub_institute_id, 'status' => "1", 'table_name' => "tbluser", "user_type" => ""])->get();
-
+        $dataCustomFields = tblcustomfieldsModel::where(['sub_institute_id' => $sub_institute_id, 'status' => '1', 'table_name' => 'tbluser', 'user_type' => ''])->get();
 
         $subject_data = subjectModel::where(['sub_institute_id' => $sub_institute_id])->get();
         $employees = tbluserModel::where('sub_institute_id', $sub_institute_id)->where('status', 1)->get();
@@ -125,7 +127,7 @@ class tbluserController extends Controller
         }
 
         // auto increament 20-04-24
-        $maxEmpCode = DB::table('tbluser')->selectRaw("MAX(CAST(employee_no AS INT)) AS new_emp_code")
+        $maxEmpCode = DB::table('tbluser')->selectRaw('MAX(CAST(employee_no AS INT)) AS new_emp_code')
             ->where('sub_institute_id', $sub_institute_id)->whereRaw('employee_no is not null')->limit(1)->orderBy('id')->get()->toArray();
 
         $maxEmpCode = array_map(function ($value) {
@@ -139,10 +141,10 @@ class tbluserController extends Controller
         $occupationList = tbluserModel::where('sub_institute_id', $sub_institute_id)->where('status', 1)->whereNotNull('occupation')->groupBy('occupation')->pluck('occupation');
 
         // start 30-07-2024
-        $masterSetups = []; //DB::table('master_setup_select')->select('type','fieldname',DB::raw('GROUP_CONCAT(fieldValue SEPARATOR "||") as selOptions'))->where('sub_institute_id',$sub_institute_id)->groupBy('type')->get()->toArray();
+        $masterSetups = []; // DB::table('master_setup_select')->select('type','fieldname',DB::raw('GROUP_CONCAT(fieldValue SEPARATOR "||") as selOptions'))->where('sub_institute_id',$sub_institute_id)->groupBy('type')->get()->toArray();
         $pluckedData = [];
         foreach ($masterSetups as $setup) {
-            if (!isset($pluckedData[$setup->type])) {
+            if (! isset($pluckedData[$setup->type])) {
                 $pluckedData[$setup->type] = [];
             }
             $pluckedData[$setup->type]['fieldname'] = $setup->fieldname;
@@ -168,7 +170,7 @@ class tbluserController extends Controller
 
     public function store(Request $request)
     {
-        //return $request->all();
+        // return $request->all();
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $type = $request->input('type');
 
@@ -176,32 +178,34 @@ class tbluserController extends Controller
         $email = $request->input('email');
         if ($email) {
             // Check for valid email format
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $res['status_code'] = "0";
-                $res['message'] = "Invalid email address format";
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $res['status_code'] = '0';
+                $res['message'] = 'Invalid email address format';
                 $res['data'] = null;
-                return is_mobile($type, "add_user.index", $res);
+
+                return is_mobile($type, 'add_user.index', $res);
             }
 
             // Check for duplicate email (globally unique across the system)
             $existingUser = tbluserModel::where('email', $email)
                 ->first();
-            
+
             if ($existingUser) {
-                $res['status_code'] = "0";
-                $res['message'] = "Email address already exists";
+                $res['status_code'] = '0';
+                $res['message'] = 'Email address already exists';
                 $res['data'] = null;
-                return is_mobile($type, "add_user.index", $res);
+
+                return is_mobile($type, 'add_user.index', $res);
             }
         }
 
-        $file_name = "";
+        $file_name = '';
         if ($request->hasFile('user_image')) {
             $file = $request->file('user_image');
             $originalname = $file->getClientOriginalName();
-            $name = $request->get('user_name') . date('YmdHis');
+            $name = $request->get('user_name').date('YmdHis');
             $ext = File::extension($originalname);
-            $file_name = $name . '.' . $ext;
+            $file_name = $name.'.'.$ext;
             // $path = $file->storeAs('public/user/', $file_name);
             $path = Storage::disk('digitalocean')->putFileAs(
                 'hp_user',
@@ -213,16 +217,16 @@ class tbluserController extends Controller
             $publicUrl = Storage::disk('digitalocean')->url($path);
         }
 
-        $request->request->add(['image' => $file_name]); //add request
+        $request->request->add(['image' => $file_name]); // add request
         $data = $this->saveData($request);
 
         $data = tbluserModel::where(['sub_institute_id' => $sub_institute_id])->get();
 
-        $res['status_code'] = "1";
-        $res['message'] = "User created successfully";
+        $res['status_code'] = '1';
+        $res['message'] = 'User created successfully';
         $res['data'] = $data;
 
-        return is_mobile($type, "add_user.index", $res);
+        return is_mobile($type, 'add_user.index', $res);
     }
 
     public function saveData(Request $request)
@@ -235,17 +239,17 @@ class tbluserController extends Controller
         foreach ($newRequest as $key => $value) {
             if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name') {
                 if (is_array($value)) {
-                    $value = implode(",", $value);
+                    $value = implode(',', $value);
                 }
                 $finalArray[$key] = $value;
             }
 
-            if ($key == "password") {
+            if ($key == 'password') {
                 $finalArray[$key] = Hash::make($value);
                 $finalArray['plain_password'] = $value;
             }
 
-            if ($key == "birthdate") {
+            if ($key == 'birthdate') {
                 $finalArray[$key] = carbon::parse($value)->format('Y-m-d');
             }
         }
@@ -303,12 +307,12 @@ class tbluserController extends Controller
         return $id;
     }
 
-    public function updateData(Request $request,$id)
+    public function updateData(Request $request, $id)
     {
         // return $request;exit;
         $sub_institute_id = $request->session()->get('sub_institute_id');
         $user_id = session()->get('user_id');
-        if($request->type=="API"){
+        if ($request->type == 'API') {
             $sub_institute_id = $request->input('sub_institute_id');
             $user_id = $request->input('user_id');
         }
@@ -320,12 +324,12 @@ class tbluserController extends Controller
         foreach ($newRequest as $key => $value) {
             if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name') {
                 if (is_array($value)) {
-                    $value = implode(",", $value);
+                    $value = implode(',', $value);
                 }
 
                 // Convert time fields to HH:MM:SS
                 if (Str::endsWith($key, '_in_date') || Str::endsWith($key, '_out_date')) {
-                    if (!empty($value)) {
+                    if (! empty($value)) {
                         $value = date('H:i:s', strtotime($value));
                     } else {
                         $value = null;
@@ -335,27 +339,28 @@ class tbluserController extends Controller
                 $finalArray[$key] = $value;
             }
 
-            if ($key == "password") {
+            if ($key == 'password') {
                 $finalArray[$key] = Hash::make($value);
                 $finalArray['plain_password'] = $value;
             }
 
-            if ($key == "birthdate") {
+            if ($key == 'birthdate') {
                 $finalArray[$key] = carbon::parse($value)->format('Y-m-d');
             }
         }
 
         $finalArray['updated_at'] = now();
         $finalArray['updated_by'] = $user_id;
+
         return tbluserModel::where(['id' => $id])->update($finalArray);
     }
 
     public function edit(Request $request, $id)
     {
         $type = $request->input('type');
-        $userLevelOfResponsibility = array();
+        $userLevelOfResponsibility = [];
 
-        if ($type == "API") {
+        if ($type == 'API') {
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required|numeric',
                 'syear' => 'required|numeric',
@@ -365,7 +370,8 @@ class tbluserController extends Controller
             if ($validator->fails()) {
                 $res['status'] = '0';
                 $res['message'] = $validator->messages()->first();
-                return is_mobile($type, "add_user.index", $res);
+
+                return is_mobile($type, 'add_user.index', $res);
             }
             $sub_institute_id = $request->input('sub_institute_id');
             $syear = $request->input('syear');
@@ -379,10 +385,10 @@ class tbluserController extends Controller
         $subject_data = subjectModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $userLevels = DB::table('s_level_responsibility')->where('id', $editData['subject_ids'])
                 // ->groupBy('level')
-                ->first();
+            ->first();
         $userLevelsArr = DB::table('s_level_responsibility')->where('level', $userLevels->level ?? 0)
                 // ->groupBy('level')
-                ->get();
+            ->get();
 
         $allLevels = $userLevelOfResponsibility = [];
         foreach ($userLevelsArr as $key => $value) {
@@ -390,12 +396,12 @@ class tbluserController extends Controller
             $userLevelOfResponsibility['guiding_phrase'] = $value->guiding_phrase;
             $userLevelOfResponsibility['essence_level'] = $value->essence_level;
             $userLevelOfResponsibility['guidance_note'] = $value->attribute_guidance_notes;
-           if($value->attribute_type!='Business skills/Behavioural factors'){
-            $userLevelOfResponsibility[$value->attribute_type][$value->attribute_name] = $value;
-           }else{
-            $userLevelOfResponsibility['Business_skills'][str_replace(' ', '_', $value->attribute_name)] = $value;
+            if ($value->attribute_type != 'Business skills/Behavioural factors') {
+                $userLevelOfResponsibility[$value->attribute_type][$value->attribute_name] = $value;
+            } else {
+                $userLevelOfResponsibility['Business_skills'][str_replace(' ', '_', $value->attribute_name)] = $value;
 
-           }
+            }
         }
         // $userLevelOfResponsibility = array_values($allLevels)
         // if (isset($subject_data_selected)) {
@@ -406,15 +412,14 @@ class tbluserController extends Controller
 
         $dataCustomFields = tblcustomfieldsModel::where([
             'sub_institute_id' => $sub_institute_id,
-            'status' => "1",
-            'table_name' => "tbluser",
-            "user_type" => ""
+            'status' => '1',
+            'table_name' => 'tbluser',
+            'user_type' => '',
         ])->get();
-
 
         $fieldsData = tblfields_dataModel::get()->toArray();
         $i = 0;
-        $finalfieldsData = array();
+        $finalfieldsData = [];
         foreach ($fieldsData as $key => $value) {
             $finalfieldsData[$value['field_id']][$i]['display_text'] = $value['display_text'];
             $finalfieldsData[$value['field_id']][$i]['display_value'] = $value['display_value'];
@@ -427,7 +432,7 @@ class tbluserController extends Controller
 
         // auto increament 20-04-24
         $empCode = DB::table('tbluser')->where('id', $id)->first();
-        /* //Hide By Rajesh 19-11-2024 : Edit time not max+1 in emp_no (provide Add time only) 
+        /* //Hide By Rajesh 19-11-2024 : Edit time not max+1 in emp_no (provide Add time only)
         if(!isset($empCode->employee_no) || $empCode->employee_no=='' || $empCode->employee_no==null){
             $maxEmpCode = DB::table('tbluser')->selectRaw("MAX(CAST(employee_no AS INT)) AS new_emp_code")
             ->where('sub_institute_id', $sub_institute_id)->whereRaw('employee_no is not null')->limit(1)->orderBy('id')->get()->toArray();
@@ -467,10 +472,10 @@ class tbluserController extends Controller
         }
         // echo "<pre>";print_r($editData->id);exit;
         // start 29-07-2024
-        $masterSetups = []; //DB::table('master_setup_select')->select('type','fieldname',DB::raw('GROUP_CONCAT(fieldValue SEPARATOR "||") as selOptions'))->where('sub_institute_id',$sub_institute_id)->groupBy('type')->get()->toArray();
+        $masterSetups = []; // DB::table('master_setup_select')->select('type','fieldname',DB::raw('GROUP_CONCAT(fieldValue SEPARATOR "||") as selOptions'))->where('sub_institute_id',$sub_institute_id)->groupBy('type')->get()->toArray();
         $pluckedData = [];
         foreach ($masterSetups as $setup) {
-            if (!isset($pluckedData[$setup->type])) {
+            if (! isset($pluckedData[$setup->type])) {
                 $pluckedData[$setup->type] = [];
             }
             $pluckedData[$setup->type]['fieldname'] = $setup->fieldname;
@@ -479,11 +484,11 @@ class tbluserController extends Controller
         // end 29-07-2024
 
         // 29-10-2024 salary data
-        $payrollTypes = []; //DB::table('payroll_types')->where(['sub_institute_id'=>$sub_institute_id,'status'=>1])->get()->toArray();
+        $payrollTypes = []; // DB::table('payroll_types')->where(['sub_institute_id'=>$sub_institute_id,'status'=>1])->get()->toArray();
         // get type id of salary deposite
         $SalaryDeposit = [];
-        $getSalaryDeposit = []; //DB::table('payroll_types')->where(['sub_institute_id'=>$sub_institute_id,'payroll_name'=>'Salary Deposit'])->first();
-        if (!empty($getSalaryDeposit)) {
+        $getSalaryDeposit = []; // DB::table('payroll_types')->where(['sub_institute_id'=>$sub_institute_id,'payroll_name'=>'Salary Deposit'])->first();
+        if (! empty($getSalaryDeposit)) {
             // get employee salary structure to get amount
             $depositData = DB::table('hrms_emp_payroll_deduction')
                 ->where(['sub_institute_id' => $sub_institute_id, 'employee_id' => $id, 'deduction_type' => $getSalaryDeposit->id])
@@ -503,7 +508,7 @@ class tbluserController extends Controller
             // echo "<pre>";print_r($SalaryDeposit);exit;
         }
         // get year wise salary data
-        $SalaryStructure = []; //DB::table('employee_salary_structures')->where(['sub_institute_id'=>$sub_institute_id,'employee_id'=>$id])->orderBy('id','DESC')->get()->toArray();
+        $SalaryStructure = []; // DB::table('employee_salary_structures')->where(['sub_institute_id'=>$sub_institute_id,'employee_id'=>$id])->orderBy('id','DESC')->get()->toArray();
 
         $res['payroll_types'] = $payrollTypes;
         $res['salary_deposit'] = $SalaryDeposit;
@@ -512,14 +517,14 @@ class tbluserController extends Controller
         $res['masterSetups'] = $pluckedData;
         $res['departments'] = $departments;
         $res['employees'] = tbluserModel::where('sub_institute_id', $sub_institute_id)->get();
-        $res['job_titles'] = []; //HrmsJobTitle::where('sub_institute_id',$sub_institute_id)->get();
+        $res['job_titles'] = []; // HrmsJobTitle::where('sub_institute_id',$sub_institute_id)->get();
         $res['custom_fields'] = $dataCustomFields;
         $res['subject_data'] = $subject_data;
         $res['userLevelOfResponsibility'] = $userLevelOfResponsibility;
         $res['user_profiles'] = $data;
         $res['new_emp_code'] = $new_emp_code;
         // db::enableQueryLog();
-        $res['contactDetails'] =  [];
+        $res['contactDetails'] = [];
         // dd(db::getQueryLog($res['contactDetails']));
         $res['data'] = $editData;
         // 10-01-2025 start supervisor rights
@@ -529,7 +534,7 @@ class tbluserController extends Controller
         $user_profile_name = $profileDetails->name ?? '';
         // echo "<pre>";print_r($profileDetails);exit;
 
-        $res['skills'] = $skills = []; //skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')->whereNull('s_user_skill_jobrole.deleted_at')
+        $res['skills'] = $skills = []; // skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')->whereNull('s_user_skill_jobrole.deleted_at')
         //     ->select('*', 's_users_skills.id as skill_id', 's_user_skill_jobrole.proficiency_level as proficiency_level')
         //     ->groupBy('s_user_skill_jobrole.id')
         //     ->get()->map(function ($item) {
@@ -550,22 +555,22 @@ class tbluserController extends Controller
 
         //         return $item;
         //     });
-        
+
         // echo "<pre>";print_r($res['skills']);exit;
-        $res['completedCount'] = $completedCount = 0;// matrix::where('user_id', $user_id)->count();
-        $res['totalSkills'] = $totalSkills = 0;//$skills->count();
-        $progress = 0;//$totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
+        $res['completedCount'] = $completedCount = 0; // matrix::where('user_id', $user_id)->count();
+        $res['totalSkills'] = $totalSkills = 0; // $skills->count();
+        $progress = 0; // $totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
         $res['progress'] = $progress;
         $res['userRatedSkills'] = matrix::join('s_users_skills', 's_users_skills.id', '=', 's_skill_matrix.skill_id')
             ->where('s_skill_matrix.user_id', $id)
-            ->where('s_users_skills.sub_institute_id',$sub_institute_id)
+            ->where('s_users_skills.sub_institute_id', $sub_institute_id)
             ->whereNull('s_users_skills.deleted_at')
             ->select([
                 's_skill_matrix.*',
                 's_users_skills.title',
                 's_users_skills.category',
                 's_users_skills.sub_category',
-                's_users_skills.description'
+                's_users_skills.description',
             ])
             ->get()->toArray();
         // echo "<pre>";print_r($res['userRatedSkills']);exit;
@@ -582,13 +587,13 @@ class tbluserController extends Controller
                 $ratedIds[] = $rated['skill_id'] ?? 0;
             }
             $res['skills'] = skillJobroleMap::with([
-                    'userSkills' => function($query) use($ratedIds) {
-                        $query->whereNotIn('id', $ratedIds)
-                        ->select(['id', 'title', 
-                        'category', 'sub_category', 
-                        'description']); // Add required fields
-                    }
-                ])
+                'userSkills' => function ($query) use ($ratedIds) {
+                    $query->whereNotIn('id', $ratedIds)
+                        ->select(['id', 'title',
+                            'category', 'sub_category',
+                            'description']); // Add required fields
+                },
+            ])
                 ->where('jobrole', $assignedJobrole->jobrole)
                 ->whereNull('deleted_at')
                 ->where('sub_institute_id', $sub_institute_id)
@@ -596,7 +601,7 @@ class tbluserController extends Controller
                 ->get()
                 // filter out items where userSkills is null (skill_id would be null)
                 ->filter(function ($item) {
-                    return !is_null($item->userSkills);
+                    return ! is_null($item->userSkills);
                 })
                 ->map(function ($item) {
                     $classificationItems = DB::table('s_skill_knowledge_ability')
@@ -616,30 +621,29 @@ class tbluserController extends Controller
 
                     return [
                         'jobrole_skill_id' => $item->id,
-                        'jobrole'          => $item->jobrole,
-                        'skill'            => $item->skill,
-                        'skill_id'         => $item->userSkills->id,
-                        'title'            => $item->userSkills->title,
-                        'category'         => $item->userSkills->category,
-                        'sub_category'     => $item->userSkills->sub_category,
-                        'description'      => $item->userSkills->description,
-                        'proficiency_level'=> $item->proficiency_level,
-                        'knowledge'        => $classificationItems->has('knowledge')
+                        'jobrole' => $item->jobrole,
+                        'skill' => $item->skill,
+                        'skill_id' => $item->userSkills->id,
+                        'title' => $item->userSkills->title,
+                        'category' => $item->userSkills->category,
+                        'sub_category' => $item->userSkills->sub_category,
+                        'description' => $item->userSkills->description,
+                        'proficiency_level' => $item->proficiency_level,
+                        'knowledge' => $classificationItems->has('knowledge')
                                                 ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
                                                 : [],
-                        'ability'          => $classificationItems->has('ability')
+                        'ability' => $classificationItems->has('ability')
                                                 ? $classificationItems['ability']->pluck('classification_item')->toArray()
                                                 : [],
-                        'behaviour'        => $classificationItems2->has('behaviour')
+                        'behaviour' => $classificationItems2->has('behaviour')
                                                 ? $classificationItems2['behaviour']->pluck('classification_item')->toArray()
                                                 : [],
-                        'attitude'         => $classificationItems2->has('attitude')
+                        'attitude' => $classificationItems2->has('attitude')
                                                 ? $classificationItems2['attitude']->pluck('classification_item')->toArray()
                                                 : [],
                     ];
                 })
                 ->values(); // reset array keys
-
 
             // $res['jobroleSkills'] = skillJobroleMap::join('s_users_skills', 's_user_skill_jobrole.skill', '=', 's_users_skills.title')
             //     ->where('s_user_skill_jobrole.jobrole', $assignedJobrole->jobrole)
@@ -684,8 +688,8 @@ class tbluserController extends Controller
                 ->get()
                 ->map(function ($item) {
                     // Initialize a new object/array to hold the mapped data
-                    $mappedItem = new \stdClass(); // or use an array: $mappedItem = [];
-                    
+                    $mappedItem = new \stdClass; // or use an array: $mappedItem = [];
+
                     $classificationItems = DB::table('s_skill_knowledge_ability')
                         ->where('skill_id', $item->userSkills->id ?? null)
                         ->where('proficiency_level', $item->proficiency_level)
@@ -693,7 +697,7 @@ class tbluserController extends Controller
                         ->whereNull('deleted_at')
                         ->get()
                         ->groupBy('classification');
-                    
+
                     $classificationItems2 = DB::table('s_skill_knowledge_ability')
                         ->where('skill_id', $item->userSkills->id ?? null)
                         ->where('sub_institute_id', $item->sub_institute_id)
@@ -701,7 +705,7 @@ class tbluserController extends Controller
                         // ->where('proficiency_level', $item->proficiency_level)
                         ->get()
                         ->groupBy('classification');
-                    
+
                     // Assign properties to the new object
                     $mappedItem->jobrole_skill_id = $item->id;
                     $mappedItem->jobrole = $item->jobrole;
@@ -724,13 +728,12 @@ class tbluserController extends Controller
                     $mappedItem->attitude = $classificationItems2->has('attitude')
                         ? $classificationItems2['attitude']->pluck('classification_item')->toArray()
                         : [];
-                    
+
                     return $mappedItem;
                 });
 
-
             $res['totalSkills'] = skillJobroleMap::where('jobrole', $assignedJobrole->jobrole)->where('sub_institute_id', $sub_institute_id)->count();
-                // DB::enableQueryLog();
+            // DB::enableQueryLog();
             // $res['jobroleTasks'] = DB::table('s_user_jobrole_task as a')
             //     ->join('s_user_skill_jobrole as b', 'b.jobrole', '=', 'a.jobrole')
             //     ->where('a.jobrole', $assignedJobrole->jobrole)
@@ -738,13 +741,12 @@ class tbluserController extends Controller
             //     ->groupBy('task')
             //     ->get();
             $res['jobroleTasks'] = userJobroleTask::with('jobroleSkillModel')
-             ->where('jobrole', $assignedJobrole->jobrole)->where('sub_institute_id', $sub_institute_id)
+                ->where('jobrole', $assignedJobrole->jobrole)->where('sub_institute_id', $sub_institute_id)
                 ->whereNull('deleted_at')
                 ->groupBy('task')
                 ->get();
-                // dd(DB::getQueryLog($res['jobroleTasks']));
+            // dd(DB::getQueryLog($res['jobroleTasks']));
         }
-
 
         // }
         $detailsLevel = SLevelResponsibility::where('level', $editData['subject_ids'])->get()->toArray();
@@ -760,35 +762,36 @@ class tbluserController extends Controller
         $res['usersLevelData']['levelsData'] = array_values($allLevels);
         $res['usersLevelData']['attrData'] = $attrData;
         $res['usersLevelData']['allData'] = $detailsLevel;
-        $res['usersJobroleComponent'] = DB::table('s_user_jobrole')->where('jobrole',$assignedJobrole->jobrole)->where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->first();
+        $res['usersJobroleComponent'] = DB::table('s_user_jobrole')->where('jobrole', $assignedJobrole->jobrole)->where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->first();
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();
+
         // echo "<pre>";print_r($res['skills']);exit;
-        return is_mobile($type, "user/edit_user", $res, "view");
+        return is_mobile($type, 'user/edit_user', $res, 'view');
     }
 
     public function update(Request $request, $id)
     {
         // return $request;exit;
 
-        if (!$request->monday) {
+        if (! $request->monday) {
             $request->request->add(['monday' => 0]);
         }
-        if (!$request->tuesday) {
+        if (! $request->tuesday) {
             $request->request->add(['tuesday' => 0]);
         }
-        if (!$request->wednesday) {
+        if (! $request->wednesday) {
             $request->request->add(['wednesday' => 0]);
         }
-        if (!$request->thursday) {
+        if (! $request->thursday) {
             $request->request->add(['thursday' => 0]);
         }
-        if (!$request->friday) {
+        if (! $request->friday) {
             $request->request->add(['friday' => 0]);
         }
-        if (!$request->saturday) {
+        if (! $request->saturday) {
             $request->request->add(['saturday' => 0]);
         }
-        if (!$request->sunday) {
+        if (! $request->sunday) {
             $request->request->add(['sunday' => 0]);
         }
         $sub_institute_id = $request->session()->get('sub_institute_id');
@@ -798,84 +801,85 @@ class tbluserController extends Controller
         $email = $request->input('email');
         if ($email) {
             // Check for valid email format
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $res['status_code'] = "0";
-                $res['message'] = "Invalid email address format";
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $res['status_code'] = '0';
+                $res['message'] = 'Invalid email address format';
                 $res['data'] = null;
-                return is_mobile($type, "add_user.index", $res);
+
+                return is_mobile($type, 'add_user.index', $res);
             }
 
             // Check for duplicate email (globally unique across the system) - exclude current user
             $existingUser = tbluserModel::where('email', $email)
                 ->where('id', '!=', $id)
                 ->first();
-            
+
             if ($existingUser) {
-                $res['status_code'] = "0";
-                $res['message'] = "Email address already exists";
+                $res['status_code'] = '0';
+                $res['message'] = 'Email address already exists';
                 $res['data'] = null;
-                return is_mobile($type, "add_user.index", $res);
+
+                return is_mobile($type, 'add_user.index', $res);
             }
         }
         // echo "<pre>";print_r($request->all());exit;
-        $file_name = "";
+        $file_name = '';
         if ($request->hasFile('user_image')) {
             $file = $request->file('user_image');
             $originalname = $file->getClientOriginalName();
-            $name = $request->get('user_name') . date('YmdHis');
+            $name = $request->get('user_name').date('YmdHis');
             $ext = File::extension($originalname);
-            $file_name = $name . '.' . $ext;
+            $file_name = $name.'.'.$ext;
             // $path = $file->storeAs('public/user/', $file_name);
             Storage::disk('digitalocean')->putFileAs('public/hp_user/', $file, $file_name, 'public');
         }
-        if ($file_name != "") {
-            $request->request->add(['image' => $file_name]); //add request
+        if ($file_name != '') {
+            $request->request->add(['image' => $file_name]); // add request
             $request->session()->put('image', $file_name);
         }
 
-        $request->request->add(['id' => $id]); //add request
+        $request->request->add(['id' => $id]); // add request
         $user_id = $id;
 
-        $data = $this->updateData($request,$id);
+        $data = $this->updateData($request, $id);
 
-        $res['status_code'] = "1";
-        $res['message'] = "User updated successfully";
+        $res['status_code'] = '1';
+        $res['message'] = 'User updated successfully';
         $res['data'] = $data;
 
-        return is_mobile($type, "add_user.index", $res);
+        return is_mobile($type, 'add_user.index', $res);
     }
 
     public function destroy(Request $request, $id)
     {
         $user = [
-            'status' => "0",
+            'status' => '0',
             'deleted_by' => session()->get('user_id'),
             'deleted_at' => now(),
         ];
         $type = $request->input('type');
-        tbluserModel::where(["id" => $id])->update($user);
+        tbluserModel::where(['id' => $id])->update($user);
 
-        $res['status_code'] = "1";
-        $res['message'] = "User deleted successfully";
+        $res['status_code'] = '1';
+        $res['message'] = 'User deleted successfully';
 
-        return is_mobile($type, "add_user.index", $res);
+        return is_mobile($type, 'add_user.index', $res);
     }
 
     public function deactiveUser(Request $request, $id)
     {
         $user = [
-            'status' => "0",
+            'status' => '0',
             'deleted_by' => session()->get('user_id'),
             'deleted_at' => now(),
         ];
         $type = $request->input('type');
-        tbluserModel::where(["id" => $id])->update($user);
-        $res['status_code'] = "1";
-        $res['message'] = "User deleted successfully";
+        tbluserModel::where(['id' => $id])->update($user);
+        $res['status_code'] = '1';
+        $res['message'] = 'User deleted successfully';
 
-        return is_mobile($type, "add_user.index", $res);
+        return is_mobile($type, 'add_user.index', $res);
     }
-
 
     public function teacherListAPI(Request $request)
     {
@@ -890,82 +894,81 @@ class tbluserController extends Controller
         //           return response()->json($response, 401);
         //       }
 
-        $type = $request->input("type");
-        $sub_institute_id = $request->input("sub_institute_id");
+        $type = $request->input('type');
+        $sub_institute_id = $request->input('sub_institute_id');
 
-
-        if ($sub_institute_id != "") {
-            $data = DB::table("tbluser as u")
+        if ($sub_institute_id != '') {
+            $data = DB::table('tbluser as u')
                 ->join('tbluserprofilemaster as up', function ($join) {
                     $join->whereRaw("up.id = u.user_profile_id AND up.name = 'Teacher'");
                 })
                 ->selectRaw("u.id,concat_ws(' ',u.first_name,u.middle_name,u.last_name) as teacher_name,
 					    u.email,u.mobile,u.user_profile_id,up.name as user_group")
-                ->where("u.sub_institute_id", "=", $sub_institute_id)
+                ->where('u.sub_institute_id', '=', $sub_institute_id)
                 ->orderBy('u.id')
                 ->get()->toArray();
 
             $res['status_code'] = 1;
-            $res['message'] = "Success";
+            $res['message'] = 'Success';
             $res['data'] = $data;
         } else {
             $res['status_code'] = 0;
-            $res['message'] = "Parameter Missing";
+            $res['message'] = 'Parameter Missing';
         }
 
         return json_encode($res);
     }
 
-    function addUserDocument(Request $request, $id)
+    public function addUserDocument(Request $request, $id)
     {
         $type = $request->type;
         $document = $request->document;
         $doc_type = $request->document_type_id;
         $document_title = $request->document_title;
         $sub_institute_id = session()->get('sub_institute_id');
-        if ($type == "API") {
+        if ($type == 'API') {
             $sub_institute_id = $request->sub_institute_id;
         }
         $filename = '';
         if ($request->hasFile('document')) {
             $file = $request->file('document');
             $originalname = $file->getClientOriginalName();
-            $name = $id . date('YmdHis');
+            $name = $id.date('YmdHis');
             $ext = File::extension($originalname);
-            $file_name = $name . '.' . $ext;
+            $file_name = $name.'.'.$ext;
             // $path = $file->storeAs('public/student_document/', $file_name);
             Storage::disk('digitalocean')->putFileAs('public/hp_staff_document/', $file, $file_name, 'public');
         }
 
         $data = [
-            'user_id'          => $id,
-            'document_title'   => $request->get('document_title'),
+            'user_id' => $id,
+            'document_title' => $request->get('document_title'),
             'document_type_id' => $request->get('document_type_id'),
-            'file_name'        => $file_name,
+            'file_name' => $file_name,
             'sub_institute_id' => $sub_institute_id,
-            'created_at'       => now(),
+            'created_at' => now(),
         ];
 
         $insert = DB::table('staff_document')->insert($data);
 
         if ($insert) {
             $res['success'] = 1;
-            $res['message'] = "Document Added successfully";
+            $res['message'] = 'Document Added successfully';
         } else {
             $res['fail'] = 0;
-            $res['message'] = "Failed to Add Document";
+            $res['message'] = 'Failed to Add Document';
         }
 
-        return is_mobile($type, "add_user.index", $res);
+        return is_mobile($type, 'add_user.index', $res);
     }
 
     // show employee dtails for user profile
     public function show(Request $request, $id)
     {
         $type = $request->input('type');
-        $userLevelOfResponsibility = array();
+        $userLevelOfResponsibility = [];
 
-        if ($type == "API") {
+        if ($type == 'API') {
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required|numeric',
                 'syear' => 'required|numeric',
@@ -975,7 +978,8 @@ class tbluserController extends Controller
             if ($validator->fails()) {
                 $res['status'] = '0';
                 $res['message'] = $validator->messages()->first();
-                return is_mobile($type, "add_user.index", $res);
+
+                return is_mobile($type, 'add_user.index', $res);
             }
             $sub_institute_id = $request->input('sub_institute_id');
             $syear = $request->input('syear');
@@ -988,15 +992,14 @@ class tbluserController extends Controller
         $data = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $dataCustomFields = tblcustomfieldsModel::where([
             'sub_institute_id' => $sub_institute_id,
-            'status' => "1",
-            'table_name' => "tbluser",
-            "user_type" => ""
+            'status' => '1',
+            'table_name' => 'tbluser',
+            'user_type' => '',
         ])->get();
-
 
         $fieldsData = tblfields_dataModel::get()->toArray();
         $i = 0;
-        $finalfieldsData = array();
+        $finalfieldsData = [];
         foreach ($fieldsData as $key => $value) {
             $finalfieldsData[$value['field_id']][$i]['display_text'] = $value['display_text'];
             $finalfieldsData[$value['field_id']][$i]['display_value'] = $value['display_value'];
@@ -1025,22 +1028,21 @@ class tbluserController extends Controller
             }
         }
         // 29-10-2024 salary data
-        $payrollTypes = []; //DB::table('payroll_types')->where(['sub_institute_id'=>$sub_institute_id,'status'=>1])->get()->toArray();
+        $payrollTypes = []; // DB::table('payroll_types')->where(['sub_institute_id'=>$sub_institute_id,'status'=>1])->get()->toArray();
         // get type id of salary deposite
         $SalaryDeposit = [];
-   
-        // get year wise salary data
-        $SalaryStructure = []; //DB::table('employee_salary_structures')->where(['sub_institute_id'=>$sub_institute_id,'employee_id'=>$id])->orderBy('id','DESC')->get()->toArray();
 
-  
+        // get year wise salary data
+        $SalaryStructure = []; // DB::table('employee_salary_structures')->where(['sub_institute_id'=>$sub_institute_id,'employee_id'=>$id])->orderBy('id','DESC')->get()->toArray();
+
         // 29-10-2024 end
         $res['departments'] = $departments;
-        $res['job_titles'] = []; //HrmsJobTitle::where('sub_institute_id',$sub_institute_id)->get();
+        $res['job_titles'] = []; // HrmsJobTitle::where('sub_institute_id',$sub_institute_id)->get();
         $res['custom_fields'] = $dataCustomFields;
         $res['userLevelOfResponsibility'] = $userLevelOfResponsibility;
         $res['user_profiles'] = $data;
         // db::enableQueryLog();
-        $res['contactDetails'] =  [];
+        $res['contactDetails'] = [];
         // dd(db::getQueryLog($res['contactDetails']));
         $res['data'] = $editData;
         // 10-01-2025 start supervisor rights
@@ -1059,7 +1061,7 @@ class tbluserController extends Controller
                     ->where('skill_id', $item->skill_id)
                     ->where('proficiency_level', $item->proficiency_level) // or dynamic if needed
                     ->where('sub_institute_id', $item->sub_institute_id)
-                        ->whereNull('deleted_at')
+                    ->whereNull('deleted_at')
                     ->get()
                     ->groupBy('classification');
 
@@ -1076,7 +1078,7 @@ class tbluserController extends Controller
         // echo "<pre>";print_r($res['skills']);exit;
         $res['completedCount'] = $completedCount = matrix::where('user_id', $user_id)->count();
         $res['totalSkills'] = $totalSkills = skillJobroleMap::where('jobrole', $assignedJobrole->jobrole)->whereNull('deleted_at')->
-        where('sub_institute_id', $sub_institute_id)->count();            
+        where('sub_institute_id', $sub_institute_id)->count();
         $progress = $totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
         $res['progress'] = $totalSkills > 0 ? round(($completedCount / $totalSkills) * 100) : 0;
         $res['userRatedSkills'] = matrix::join('s_users_skills', 's_users_skills.id', '=', 's_skill_matrix.skill_id')
@@ -1169,9 +1171,8 @@ class tbluserController extends Controller
                     return $item;
                 });
 
-
             $res['totalSkills'] = skillJobroleMap::where('jobrole', $assignedJobrole->jobrole)->count();
-                // DB::enableQueryLog();
+            // DB::enableQueryLog();
             // $res['jobroleTasks'] = DB::table('s_user_jobrole_task as a')
             //     ->join('s_user_skill_jobrole as b', 'b.jobrole', '=', 'a.jobrole')
             //     ->where('a.jobrole', $assignedJobrole->jobrole)
@@ -1179,14 +1180,13 @@ class tbluserController extends Controller
             //     ->groupBy('task')
             //     ->get();
 
-          $res['jobroleTasks'] = userJobroleTask::with('jobroleSkillModel')
-             ->where('jobrole', $assignedJobrole->jobrole)
+            $res['jobroleTasks'] = userJobroleTask::with('jobroleSkillModel')
+                ->where('jobrole', $assignedJobrole->jobrole)
                 ->whereNull('deleted_at')
                 ->groupBy('task')
                 ->get();
-                // dd(DB::getQueryLog($res['jobroleTasks']));
+            // dd(DB::getQueryLog($res['jobroleTasks']));
         }
-
 
         // }
         $detailsLevel = SLevelResponsibility::where('level', $editData['subject_ids'])->get()->toArray();
@@ -1203,7 +1203,8 @@ class tbluserController extends Controller
         $res['usersLevelData']['attrData'] = $attrData;
         $res['usersLevelData']['allData'] = $detailsLevel;
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();
+
         // echo "<pre>";print_r($res['skills']);exit;
-        return is_mobile($type, "user/edit_user", $res, "view");
+        return is_mobile($type, 'user/edit_user', $res, 'view');
     }
 }
