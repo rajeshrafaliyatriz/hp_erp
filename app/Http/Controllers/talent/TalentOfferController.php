@@ -65,6 +65,9 @@ class TalentOfferController extends Controller
             'notes' => 'nullable|string',
             'sub_institute_id' => 'required|integer',
             'user_id' => 'required|integer',
+            'reportmanager' => 'nullable|string',
+            'punchintime' => 'nullable|date_format:H:i',
+            'punchouttime' => 'nullable|date_format:H:i',
         ]);
 
         if ($validator->fails()) {
@@ -85,6 +88,9 @@ class TalentOfferController extends Controller
                 'notes' => $request->notes,
                 'sub_institute_id' => $sub_institute_id,
                 'created_by' => $request->user_id,
+                'reportmanager' => $request->reportmanager,
+                'punchintime' => $request->punchintime,
+                'punchouttime' => $request->punchouttime,
                 'status' => 'draft', // default status
             ]);
 
