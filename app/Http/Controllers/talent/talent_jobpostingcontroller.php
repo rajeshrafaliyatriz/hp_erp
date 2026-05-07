@@ -58,7 +58,8 @@ class talent_jobpostingcontroller extends Controller
 
                 // fetch jobrole data from table
                 $talent = DB::table('talent_job_postings as a')
-                            ->select('*')
+                            ->leftJoin('hrms_departments as d', 'a.department_id', '=', 'd.id')
+                            ->select('a.*', 'd.department as department_name')
                             ->where('a.sub_institute_id',$sub_institute_id)
                             ->whereNull('a.deleted_at')
                             ->get();
