@@ -99,6 +99,7 @@ class GenerateQuestionsController extends Controller
         $apiKeys = DB::table('gemini_api')
             ->where('status', 1)
             ->get();
+
         
         if ($apiKeys->isEmpty()) {
             return response()->json([
@@ -590,7 +591,24 @@ Remember: Return ONLY valid JSON. No markdown formatting. No extra text.";
     {
         // Use the provided model or the working model
         $model = $model ?: ($this->workingModel ?: 'gemini-2.5-flash');
-        
+        // added by uma on 08-05-2026 for API count 
+        $findAPI = DB::table('ai_daily_used_api')->where('key', $apiKey)->where('date', date('Y-m-d'))->first();
+        if($findAPI && isset($findAPI->key)){
+            $apiUsedCount = $findAPI->count + 1;
+            DB::table('ai_daily_used_api')->where('id', $findAPI->id)->where('date', date('Y-m-d'))->update(['count' => $apiUsedCount]);
+        }else{
+            $getParentId = DB::table('gemini_api')->where('key', $apiKey)->first();
+            DB::table('ai_daily_used_api')->insert([
+                'api_name' => 'gemini',
+                'parent_id' => $getParentId ? $getParentId->id : null,
+                'key' => $apiKey,
+                'date' => date('Y-m-d'),
+                'count' => 1,
+                'sub_institute_id' => null,
+                'created_at' => now(),
+            ]);
+
+        }
         // Correct URL format for Gemini API
         $geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
         
