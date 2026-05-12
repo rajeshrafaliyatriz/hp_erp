@@ -881,7 +881,43 @@ class tbluserController extends Controller
         return is_mobile($type, 'add_user.index', $res);
     }
 
+    public function updateFcmToken(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|integer',
+            'fcm_token' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => $validator->errors()->first()
+            ], 400);
+        }
+
+        $userId = $request->user_id;
+        $fcmToken = $request->fcm_token;
+
+        $updated = tbluserModel::where('id', $userId)->update([
+            'fcm_token' => $fcmToken,
+            'updated_at' => now()
+        ]);
+
+        if ($updated) {
+            return response()->json([
+                'status_code' => 1,
+                'message' => 'FCM token updated successfully'
+            ]);
+        } else {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'Failed to update FCM token'
+            ], 500);
+        }
+    }
+
     public function teacherListAPI(Request $request)
+
     {
 
         // try {
@@ -915,6 +951,9 @@ class tbluserController extends Controller
             $res['status_code'] = 0;
             $res['message'] = 'Parameter Missing';
         }
+
+        return json_encode($res);
+    }
 
         return json_encode($res);
     }

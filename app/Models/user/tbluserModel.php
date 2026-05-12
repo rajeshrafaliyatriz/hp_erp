@@ -92,7 +92,8 @@ class tbluserModel extends Model
         'sunday_out_date',
         'bank_name',
         'account_no',
-        'ifsc_code'
+        'ifsc_code',
+        'fcm_token'
     ];
 
     public function getFullNameAttribute()

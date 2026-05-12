@@ -16,7 +16,8 @@
         "laudis/neo4j-php-client": "^3.4",
         "league/flysystem-aws-s3-v3": "^3.29",
         "phpmailer/phpmailer": "^6.10",
-        "tightenco/ziggy": "^2.0"
+        "tightenco/ziggy": "^2.0",
+        "kreait/firebase-php": "^6.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
