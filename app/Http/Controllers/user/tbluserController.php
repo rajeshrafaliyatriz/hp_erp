@@ -955,9 +955,6 @@ class tbluserController extends Controller
         return json_encode($res);
     }
 
-        return json_encode($res);
-    }
-
     public function addUserDocument(Request $request, $id)
     {
         $type = $request->type;
