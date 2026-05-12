@@ -58,6 +58,7 @@ use App\Http\Controllers\Api\signup_api\UserSignupController;
 use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
 use App\Http\Controllers\Api\UserImportController;
+use App\Http\Controllers\user\tbluserController;
 use App\Http\Controllers\Api\ExcelAutomationAgentController;
 use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
@@ -248,6 +249,8 @@ Route::post('/user-signup', [UserSignupController::class, 'store']);
 Route::get('/user-signup/{id}', [UserSignupController::class, 'show']);
 Route::put('/user-signup/{id}', [UserSignupController::class, 'update']);
 Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy']);
+
+Route::post('/update-fcm-token', [tbluserController::class, 'updateFcmToken']);
 
 // Skill Heatmap API Routes
 Route::prefix('skill-heatmap')->group(function () {

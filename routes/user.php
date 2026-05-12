@@ -55,4 +55,3 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
 });
 
 Route::post('/teacherListAPI', [tbluserController::class, 'teacherListAPI']);
-Route::post('/update-fcm-token', [tbluserController::class, 'updateFcmToken']);
