@@ -19,9 +19,57 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
+use App\Models\user\tbluserModel;
+use Kreait\Firebase\Factory;
+use Kreait\Firebase\Messaging\CloudMessage;
 
 class taskController extends Controller
 {
+    /**
+     * Send FCM notification to user
+     */
+    private function sendTaskNotification($assigneeId, $taskTitle, $assignerName, $taskId)
+    {
+        $assignee = tbluserModel::find($assigneeId);
+        $fcmToken = $assignee->fcm_token;
+
+        if ($fcmToken) {
+            try {
+                // Initialize Firebase with service account
+                $factory = (new Factory)->withServiceAccount(storage_path('app/firebase/gapstogrowth-ba988-firebase-adminsdk-fbsvc.json'));
+                $messaging = $factory->createMessaging();
+
+                // Create the message
+                $message = CloudMessage::withTarget('token', $fcmToken)
+                    ->withNotification([
+                        'title' => 'New Task Assigned',
+                        'body' => 'You have been assigned: ' . $taskTitle
+                    ])
+                    ->withData([
+                        'type' => 'task_assigned',
+                        'task_title' => $taskTitle,
+                        'assigned_by' => $assignerName,
+                        'task_id' => $taskId,
+                        'employee_id' => $assigneeId
+                    ]);
+
+                // Send the message
+                $result = $messaging->send($message);
+
+                \Log::info("FCM notification sent successfully to user $assigneeId for task $taskId. Message ID: " . $result);
+
+            } catch (\Kreait\Firebase\Exception\MessagingException $e) {
+                \Log::error("FCM Messaging Exception for user $assigneeId: " . $e->getMessage());
+            } catch (\Kreait\Firebase\Exception\FirebaseException $e) {
+                \Log::error("FCM Firebase Exception for user $assigneeId: " . $e->getMessage());
+            } catch (\Exception $e) {
+                \Log::error("Exception sending FCM notification to user $assigneeId: " . $e->getMessage());
+            }
+        } else {
+            \Log::info("No FCM token found for user $assigneeId");
+        }
+    }
+
     /**
      * Display a listing of the resource.
      *
@@ -361,26 +409,30 @@ class taskController extends Controller
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
-                        taskModel::insert($data);
+                        $taskId = taskModel::insertGetId($data);
+                        $this->sendTaskNotification($request->input("TASK_ALLOCATED_TO"), $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 } else if ($task_type == "Medium") {
                     $dates = $this->getDatesWithoutSundays('Medium', $request->task_date, (int)$request->repeat_days, $request->repeat_until);
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
-                        taskModel::insert($data);
+                        $taskId = taskModel::insertGetId($data);
+                        $this->sendTaskNotification($request->input("TASK_ALLOCATED_TO"), $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 } else if ($task_type == "Low") {
                     $dates = $this->getDatesWithoutSundays('Low', $request->task_date, (int)$request->repeat_days, $request->repeat_until);
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
-                        taskModel::insert($data);
+                        $taskId = taskModel::insertGetId($data);
+                        $this->sendTaskNotification($request->input("TASK_ALLOCATED_TO"), $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 } else {
                     $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? now()]);
                     $data['created_by'] = $user_id;
-                    taskModel::insert($data);
+                    $taskId = taskModel::insertGetId($data);
+                    $this->sendTaskNotification($request->input("TASK_ALLOCATED_TO"), $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                 }
             } elseif ($request->formType == "multiUser" && !empty($request->TASK_ALLOCATED_TO)) {
                 // Handle array of allocated users - create one task per user, no repetition
@@ -393,7 +445,8 @@ class taskController extends Controller
                         $extraData['skill_id'] = $request->input("skill_id");
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? now()]);
                         $data['created_by'] = $user_id;
-                        taskModel::insert($data);
+                        $taskId = taskModel::insertGetId($data);
+                        $this->sendTaskNotification($allocatedUser, $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 }
             }
@@ -451,6 +504,7 @@ class taskController extends Controller
 
                                     if ($insert) {
                                         $insertCount++;
+                                        $this->sendTaskNotification($allocatedUser, $taskData['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
                                     }
                                 }
                             }else{
@@ -466,6 +520,7 @@ class taskController extends Controller
 
                                 if ($insert) {
                                     $insertCount++;
+                                    $this->sendTaskNotification($allocatedUser, $taskData['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
                                 }
                             }
                             
@@ -494,12 +549,14 @@ class taskController extends Controller
                         foreach ($dates as $date) {
                             $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                             $data['created_by'] = $user_id;
-                            taskModel::insert($data);
+                            $taskId = taskModel::insertGetId($data);
+                            $this->sendTaskNotification($value, $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                         }
                     } else {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? $request->get('TASK_DATE')]);
                         $data['created_by'] = $user_id;
-                        taskModel::insert($data);
+                        $taskId = taskModel::insertGetId($data);
+                        $this->sendTaskNotification($value, $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 }
             }
