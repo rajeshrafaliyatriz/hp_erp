@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\front_desk\taskModel;
 use App\Models\user\tbluserModel;
 use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -19,7 +18,6 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
-use App\Models\user\tbluserModel;
 use Kreait\Firebase\Factory;
 use Kreait\Firebase\Messaging\CloudMessage;
 
@@ -30,14 +28,31 @@ class taskController extends Controller
      */
     private function sendTaskNotification($assigneeId, $taskTitle, $assignerName, $taskId)
     {
+        \Log::info("FCM Notification: Starting notification process for assignee ID: $assigneeId, task ID: $taskId");
+
         $assignee = tbluserModel::find($assigneeId);
+        if (!$assignee) {
+            \Log::error("FCM Notification: Assignee user not found for ID: $assigneeId");
+            return;
+        }
+
         $fcmToken = $assignee->fcm_token;
+        \Log::info("FCM Notification: Retrieved FCM token for user $assigneeId: " . (empty($fcmToken) ? 'NULL' : substr($fcmToken, 0, 10) . '...'));
 
         if ($fcmToken) {
             try {
+                // Check if Firebase service account file exists
+                $firebaseKeyPath = storage_path('app/firebase/gapstogrowth-ba988-firebase-adminsdk-fbsvc.json');
+                if (!file_exists($firebaseKeyPath)) {
+                    \Log::error("FCM Notification: Firebase service account file not found at: $firebaseKeyPath");
+                    return;
+                }
+                \Log::info("FCM Notification: Firebase service account file found and loaded");
+
                 // Initialize Firebase with service account
-                $factory = (new Factory)->withServiceAccount(storage_path('app/firebase/gapstogrowth-ba988-firebase-adminsdk-fbsvc.json'));
+                $factory = (new Factory)->withServiceAccount($firebaseKeyPath);
                 $messaging = $factory->createMessaging();
+                \Log::info("FCM Notification: Firebase messaging initialized successfully");
 
                 // Create the message
                 $message = CloudMessage::withTarget('token', $fcmToken)
@@ -53,20 +68,40 @@ class taskController extends Controller
                         'employee_id' => $assigneeId
                     ]);
 
+                \Log::info("FCM Notification: Message payload prepared for user $assigneeId", [
+                    'title' => 'New Task Assigned',
+                    'body' => 'You have been assigned: ' . $taskTitle,
+                    'data' => [
+                        'type' => 'task_assigned',
+                        'task_title' => $taskTitle,
+                        'assigned_by' => $assignerName,
+                        'task_id' => $taskId,
+                        'employee_id' => $assigneeId
+                    ]
+                ]);
+
                 // Send the message
                 $result = $messaging->send($message);
 
                 \Log::info("FCM notification sent successfully to user $assigneeId for task $taskId. Message ID: " . $result);
 
             } catch (\Kreait\Firebase\Exception\MessagingException $e) {
-                \Log::error("FCM Messaging Exception for user $assigneeId: " . $e->getMessage());
+                \Log::error("FCM Messaging Exception for user $assigneeId, task $taskId: " . $e->getMessage(), [
+                    'exception_code' => $e->getCode(),
+                    'fcm_token_prefix' => substr($fcmToken, 0, 10)
+                ]);
             } catch (\Kreait\Firebase\Exception\FirebaseException $e) {
-                \Log::error("FCM Firebase Exception for user $assigneeId: " . $e->getMessage());
+                \Log::error("FCM Firebase Exception for user $assigneeId, task $taskId: " . $e->getMessage(), [
+                    'exception_code' => $e->getCode()
+                ]);
             } catch (\Exception $e) {
-                \Log::error("Exception sending FCM notification to user $assigneeId: " . $e->getMessage());
+                \Log::error("Exception sending FCM notification to user $assigneeId, task $taskId: " . $e->getMessage(), [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]);
             }
         } else {
-            \Log::info("No FCM token found for user $assigneeId");
+            \Log::info("No FCM token found for user $assigneeId - user may not have logged in recently or FCM token not updated");
         }
     }
 
