@@ -478,54 +478,17 @@ class jobroleLibraryController extends Controller
             // Update or insert skills
             foreach ($request->skillName as $key => $skillName) {
                 $skillDescription = $request->description[$key] ?? null;
-                $checkSkillExits = userSkills::where('title', $request->skillName)->where('sub_institute_id', $request->sub_institute_id)->first();
-                if (!$checkSkillExits) {
-                    $insertData = [
-                        'department' => $request->department,
-                        'sub_department' => $request->sub_department,
-                        'category' => $request->category [$key] ?? null,
-                        'sub_category' => $request->sub_category [$key] ?? null,
-                        'title' => $skillName,
-                        'description' => $skillDescription,
-                        'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
-                        'created_at' => now(),
-                        'status' => 'Active',
-                        'approve_status' => 'approved'
-                    ];
-                    $lastInsertedId = userSkills::insertGetId($insertData);
-                    if ($lastInsertedId && $lastInsertedId != 0) {
-                        // $insertArray = [
-                        //     'skill' => $skillName,
-                        //     'jobrole' => $request->jobrole,
-                        //     'description' => null,
-                        //     'sub_institute_id' => $request->sub_institute_id,
-                        //     'created_by' => $request->user_id,
-                        //     'created_at' => now(),
-                        // ];
-                         $insertArray = [
-                             'skill' => $skillName,
-                            'jobrole' =>  $request->jobrole,
-                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
-                            'sub_institute_id' => $request->sub_institute_id,
-                            'created_by' => $request->user_id,
-                            'created_at' => now(),
-                        ];
-                        $insert = skillJobroleMap::insert($insertArray);
-                    }
-                } else if($request->has('id')) {
-                    // return $request->all();exit;
-                    $checkSkillExits = skillJobroleMap::where('id', $request->id)->first();
-                    // return $checkSkillExits;exit;
-
-                    // If skill-jobrole mapping exists, update skill
-                    if (isset($checkSkillExits->skill)) {
-
+                $skillId = $request->skill_id[$key] ?? null;
+                $checkSkillExits = userSkills::where('title', $skillName)->where('sub_institute_id', $request->sub_institute_id)->first();
+                if (!$checkSkillExits || $skillId) {
+                    if ($skillId) {
+                        // Update existing skill
                         $updateData = [
                             'department' => $request->department,
+                            'department_id' => $request->department_id,
                             'sub_department' => $request->sub_department,
-                            'category' => $request->category [$key] ?? null,
-                            'sub_category' => $request->sub_category [$key] ?? null,
+                            'category' => $request->category[$key] ?? null,
+                            'sub_category' => $request->sub_category[$key] ?? null,
                             'title' => $skillName,
                             'description' => $skillDescription,
                             'sub_institute_id' => $request->sub_institute_id,
@@ -534,50 +497,70 @@ class jobroleLibraryController extends Controller
                             'status' => 'Active',
                             'approve_status' => 'approved'
                         ];
-                    // return $updateData;exit;
-
-                        $lastInsertedId = userSkills::where('id', $request->skill_id)->update($updateData);
-                         $updateArray = [
-                            'skill' => $skillName,
-                            'jobrole' =>  $request->jobrole,
-                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
-                            'sub_institute_id' => $request->sub_institute_id,
-                            'updated_by' => $request->user_id,
-                            'updated_at' => now(),
-                        ];
-                        $update = skillJobroleMap::where('id', $request->id)->update($updateArray);
-                    }
-                }else{
-                     $insertArray = [
-                            'skill' => $skillName,
-                            'jobrole' =>  $request->jobrole,
-                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
+                        $lastInsertedId = userSkills::where('id', $skillId)->update($updateData);
+                        if ($lastInsertedId) {
+                            $updateArray = [
+                                'skill' => $skillName,
+                                'jobrole' => $request->jobrole,
+                                'proficiency_level' => $request->proficiency_level[$key] ?? null,
+                                'sub_institute_id' => $request->sub_institute_id,
+                                'updated_by' => $request->user_id,
+                                'updated_at' => now(),
+                            ];
+                            $update = skillJobroleMap::where('skill', $skillName)->where('jobrole', $request->jobrole)->where('sub_institute_id', $request->sub_institute_id)->update($updateArray);
+                        }
+                    } else {
+                        // Insert new skill
+                        $insertData = [
+                            'department' => $request->department,
+                            'department_id' => $request->department_id,
+                            'sub_department' => $request->sub_department,
+                            'category' => $request->category[$key] ?? null,
+                            'sub_category' => $request->sub_category[$key] ?? null,
+                            'title' => $skillName,
+                            'description' => $skillDescription,
                             'sub_institute_id' => $request->sub_institute_id,
                             'created_by' => $request->user_id,
                             'created_at' => now(),
+                            'status' => 'Active',
+                            'approve_status' => 'approved'
                         ];
-                        $insert = skillJobroleMap::insert($insertArray);
+                        $lastInsertedId = userSkills::insertGetId($insertData);
+                        if ($lastInsertedId && $lastInsertedId != 0) {
+                            $insertArray = [
+                                'skill' => $skillName,
+                                'jobrole' => $request->jobrole,
+                                'proficiency_level' => $request->proficiency_level[$key] ?? null,
+                                'sub_institute_id' => $request->sub_institute_id,
+                                'created_by' => $request->user_id,
+                                'created_at' => now(),
+                            ];
+                            $insert = skillJobroleMap::insert($insertArray);
+                        }
+                    }
                 }
             }
             $i++;
         } else if ($request->formType == "tasks") {
             // Update or insert tasks
             foreach ($request->taskName as $key => $taskName) {
-                $checkTaskExits = userJobroleTask::where('jobrole', $request->jobrole)->where('task', $request->taskName)->first();
-                if (!$checkTaskExits && !isset($request->id)) {
-                    $insertData = [
-                        'sector' => $request->sector[$key] ?? null,
-                        'track' => $request->track[$key] ?? null,
-                        'jobrole' => $request->jobrole,
-                        'critical_work_function' => $request->critical_work_function[$key] ?? null,
-                        'task' => $taskName,
-                        'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
-                        'created_at' => now(),
-                    ];
-                    $lastInsertedId = userJobroleTask::insertGetId($insertData);
+                $checkTaskExits = userJobroleTask::where('jobrole', $request->jobrole)->where('task', $taskName)->first();
+                if (!isset($request->id)) {
+                    if (!$checkTaskExits) {
+                        $insertData = [
+                            'sector' => $request->sector[$key] ?? null,
+                            'track' => $request->track[$key] ?? null,
+                            'jobrole' => $request->jobrole,
+                            'critical_work_function' => $request->critical_work_function[$key] ?? null,
+                            'task' => $taskName,
+                            'sub_institute_id' => $request->sub_institute_id,
+                            'created_by' => $request->user_id,
+                            'created_at' => now(),
+                        ];
+                        $lastInsertedId = userJobroleTask::insertGetId($insertData);
+                    }
                 } else {
-                    $insertData = [
+                    $updateData = [
                         'sector' => $request->sector[$key] ?? null,
                         'track' => $request->track[$key] ?? null,
                         'jobrole' => $request->jobrole,
@@ -587,7 +570,7 @@ class jobroleLibraryController extends Controller
                         'updated_by' => $request->user_id,
                         'updated_at' => now(),
                     ];
-                    $lastInsertedId = userJobroleTask::where('id', $request->id)->update($insertData);
+                    $lastInsertedId = userJobroleTask::where('id', $request->id)->update($updateData);
                 }
             }
             $i++;
