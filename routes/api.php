@@ -48,6 +48,7 @@ use App\Http\Controllers\Reports\EmployeeLifecycleController;
 use App\Http\Controllers\Reports\OrganizationGrowthController;
 use App\Http\Controllers\Reports\EmployeeSkillCoverageMatrix\EmployeeSkillCoverageMatrixController;
 use App\Http\Controllers\Reports\EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController;
+use App\Http\Controllers\front_desk\BulkTaskController;
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
@@ -278,3 +279,6 @@ Route::get('templates/{id}/versions', [TemplateController::class, 'versions']);
 Route::post('templates/{id}/restore/{version}', [TemplateController::class, 'restore']);
 
 Route::get('/career-journey', [CareerJourneyController::class, 'getCareerJourney']);
+
+// Bulk Task Import API
+Route::post('bulk-task/import', [BulkTaskController::class, 'import']);

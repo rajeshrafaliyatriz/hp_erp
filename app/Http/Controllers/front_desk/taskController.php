@@ -485,100 +485,93 @@ class taskController extends Controller
                     }
                 }
             }
-            else if($request->formType=="BulkTask" && ($request->hasFile('csv_file') || $request->task_details)){
+            else if($request->formType=="BulkTask" && $request->TASK_ALLOCATED_TO && $request->task_details){
                $insertCount = 0;
-               $sub_institute_id = ($request->type == "API") ? $request->sub_institute_id : $request->session()->get("sub_institute_id");
 
-               $taskDetails = [];
+                // Convert TASK_ALLOCATED_TO into array
+                $allocatedUsers = $request->TASK_ALLOCATED_TO ? explode(',', $request->TASK_ALLOCATED_TO) : [];
 
-               // Priority 1: CSV file upload
-               if ($request->hasFile('csv_file')) {
-                   $file = $request->file('csv_file');
-                   if (($handle = fopen($file->getRealPath(), "r")) !== false) {
-                       $headers = fgetcsv($handle, 1000, ",");
-                       while (($row = fgetcsv($handle, 1000, ",")) !== false) {
-                           $taskDetails[] = array_combine($headers, $row);
-                       }
-                       fclose($handle);
-                   }
-               } 
-               // Priority 2: JSON input (task_details)
-               elseif ($request->has('task_details')) {
-                   $taskDetails = json_decode($request->task_details, true) ?: [];
-               }
+                foreach ($allocatedUsers as $allocatedUser) {
+                    if (!empty($allocatedUser)) {
 
-               foreach ($taskDetails as $taskValue) {
-                   $assignedName = trim($taskValue['assigned_to'] ?? $taskValue['Calendar Assigned To'] ?? '');
-                   $taskTitle = $taskValue['task_title'] ?? $taskValue['Calendar Subject'] ?? '';
-                   $taskDesc = $taskValue['task_description'] ?? $taskValue['Calendar Description'] ?? '';
-                   $completionRemarks = $taskValue['taskcompletation_remarks'] ?? $taskValue['Calendar Event Completion Remarks'] ?? '';
+                        // Decode task details from request
+                        $taskDetails = $request->has('task_details') ? json_decode($request->task_details, true) : [];
 
-                   // Resolve name to user ID
-                   $nameParts = explode(' ', $assignedName, 2);
-                   $firstName = $nameParts[0] ?? '';
-                   $lastName = $nameParts[1] ?? '';
+                        foreach ($taskDetails as $taskValue) {
 
-                   $matchedUser = tbluserModel::where('sub_institute_id', $sub_institute_id)
-                       ->whereRaw("LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)", [$firstName, $lastName])
-                       ->first();
+                            // Base request data except unwanted fields
+                            $baseData = $request->except([
+                                '_method', '_token', 'token', 'org_type', 'formType',
+                                'submit', 'formName', 'repeat_until', 'task_details',
+                                'TASK_ALLOCATED_TO','type','user_id'
+                            ]);
 
-                   $allocatedUserId = $matchedUser ? $matchedUser->id : 0;
+                            // Task specific data
+                            $taskData = [
+                                'task_title'       => $taskValue['task_title'] ?? '',
+                                'task_description' => $taskValue['task_description'] ?? '',
+                                'repeat_days'      => $taskValue['repeat_days'] ?? 0,
+                                'task_allocated'   => $taskValue['task_allocated'] ?? 0,
+                                'task_type'        => $taskValue['task_type'] ?? 'Medium',
+                                'TASK_DATE'        => $taskValue['TASK_DATE'] ?? date('Y-m-d'),
+                                'TASK_ALLOCATED_TO'=> $allocatedUser,
+                            ];
 
-                   if (!$allocatedUserId) continue; // skip if no match
+                            $task_type = $taskValue['task_type'] ?? 'Medium';
+                            $task_date = $taskValue['TASK_DATE'] ?? now()->format('Y-m-d');
 
-                    $baseData = $request->except([
-                        '_method', '_token', 'token', 'org_type', 'formType',
-                        'submit', 'formName', 'repeat_until', 'task_details',
-                        'TASK_ALLOCATED_TO','type','user_id','csv_file'
-                    ]);
+                            // Get dates based on task type
+                            $repeat_until = $taskValue['repeat_until'] ?? null;
+                            $dates = $this->getDatesWithoutSundays($task_type, $task_date, (int)$taskValue['repeat_days'] ?? 1, $repeat_until);
+                          
+                            // return $dates;
+                            if(!empty($dates)){
+                                foreach ($dates as $date) {
+                                $data = array_merge($baseData, $taskData, [
+                                    'TASK_DATE'  => $date,
+                                    'created_by' => $user_id,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                    ]);
 
-                   $taskData = [
-                       'task_title'             => $taskTitle,
-                       'task_description'       => $taskDesc,
-                       'taskcompletation_remarks' => $completionRemarks,
-                       'task_type'              => $taskValue['task_type'] ?? 'Medium',
-                       'TASK_DATE'              => $taskValue['TASK_DATE'] ?? date('Y-m-d'),
-                       'TASK_ALLOCATED_TO'      => $allocatedUserId,
-                   ];
+                                    // Insert using Eloquent create()
+                                    $insert = taskModel::create($data);
 
-                   $task_type = $taskValue['task_type'] ?? 'Medium';
-                   $task_date = $taskValue['TASK_DATE'] ?? now()->format('Y-m-d');
-                   $repeat_until = $taskValue['repeat_until'] ?? null;
-                   $dates = $this->getDatesWithoutSundays($task_type, $task_date, (int)($taskValue['repeat_days'] ?? 1), $repeat_until);
+                                    if ($insert) {
+                                        $insertCount++;
+                                        $this->sendTaskNotification($allocatedUser, $taskData['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
+                                    }
+                                }
+                            }else{
+                            $data = array_merge($baseData, $taskData, [
+                                    'TASK_DATE'  => $task_date,
+                                    'created_by' => $user_id,
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ]);
 
-                   if(!empty($dates)){
-                       foreach ($dates as $date) {
-                           $data = array_merge($baseData, $taskData, [
-                               'TASK_DATE'        => $date,
-                               'created_by'       => $user_id,
-                               'sub_institute_id' => $sub_institute_id,
-                               'created_at'       => now(),
-                               'updated_at'       => now(),
-                           ]);
-                           $insert = taskModel::create($data);
-                           if ($insert) {
-                               $insertCount++;
-                               $this->sendTaskNotification($allocatedUserId, $taskTitle, tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
-                           }
-                       }
-                   } else {
-                       $data = array_merge($baseData, $taskData, [
-                           'TASK_DATE'        => $task_date,
-                           'created_by'       => $user_id,
-                           'sub_institute_id' => $sub_institute_id,
-                           'created_at'       => now(),
-                           'updated_at'       => now(),
-                       ]);
-                       $insert = taskModel::create($data);
-                       if ($insert) {
-                           $insertCount++;
-                           $this->sendTaskNotification($allocatedUserId, $taskTitle, tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
-                       }
-                   }
-               }
+                                // Insert using Eloquent create()
+                                $insert = taskModel::create($data);
 
-               $res['status_code'] = $insertCount > 0 ? 1 : 0;
-               $res['message'] = $insertCount > 0 ? "Added successfully" : "Failed to Add";
+                                if ($insert) {
+                                    $insertCount++;
+                                    $this->sendTaskNotification($allocatedUser, $taskData['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
+                                }
+                            }
+                            
+                        }
+                    }
+                }
+
+                // Response
+                $res['status_code'] = 0;
+                $res['message']     = "Failed to Add";
+
+                if ($insertCount > 0) {
+                    $res['status_code'] = 1;
+                    $res['message']     = "Added successfully";
+                }
+
             }
              else {
                 foreach ($request->input("TASK_ALLOCATED_TO", []) as $value) {
