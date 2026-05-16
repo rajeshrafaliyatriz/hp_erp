@@ -244,15 +244,15 @@ class departmentController extends Controller
             $old_sub_department = $request->old_sub_department;
             $sub_department = $request->sub_department;
 
-                if(!empty($checkSubDepartment) && isset($checkSubDepartment->id)){
-                    $parentId = DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->department, 'parent_id'=>0])->value('id');
-                    $updateArray['sub_department'] = $sub_department;
-                    $updateArray['department_id'] = $parentId;
-                    $updateArray['updated_at'] = now();
-                    $updateArray['updated_by'] = $user_id;
+            $checkSubDepartment = DB::table('hrms_departments')
+                ->where(['sub_institute_id'=>$sub_institute_id,'department'=>$old_sub_department, 'parent_id'=>DB::raw("(SELECT id FROM hrms_departments WHERE department='{$department}' AND parent_id=0 AND sub_institute_id={$sub_institute_id})")])
+                ->first();
 
-                    DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$old_sub_department, 'parent_id'=>$parentId])->update(['department'=>$sub_department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
-                }
+            if(!empty($checkSubDepartment) && isset($checkSubDepartment->id)){
+                $parentId = DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$department, 'parent_id'=>0])->value('id');
+                DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$old_sub_department, 'parent_id'=>$parentId])->update(['department'=>$sub_department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
+                $i=1;
+            }
         }
         elseif($formType=="import"){
             $departments = $request->department;
