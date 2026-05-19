@@ -33,16 +33,30 @@ class BulkTaskController extends Controller
 
             $insertCount = 0;
             $taskDetails = [];
+            $skippedTasks = [];
 
             // Priority 1: CSV File Upload
             if ($request->hasFile('csv_file')) {
                 $file = $request->file('csv_file');
                 if (($handle = fopen($file->getRealPath(), "r")) !== false) {
                     $headers = fgetcsv($handle, 1000, ",");
+                    // clean BOM if present in headers
+                    if ($headers && count($headers) > 0) {
+                        $headers[0] = preg_replace('/[\x00-\x1F\x80-\xFF]/', '', $headers[0]);
+                    }
+                    $rowNum = 2;
                     while (($row = fgetcsv($handle, 1000, ",")) !== false) {
                         if (count($headers) === count($row)) {
-                            $taskDetails[] = array_combine($headers, $row);
+                            $rowAssoc = array_combine($headers, $row);
+                            $rowAssoc['_row_num'] = $rowNum;
+                            $taskDetails[] = $rowAssoc;
+                        } else {
+                            $skippedTasks[] = [
+                                'row' => $rowNum,
+                                'reason' => 'Row column count does not match header column count'
+                            ];
                         }
+                        $rowNum++;
                     }
                     fclose($handle);
                 }
@@ -59,7 +73,9 @@ class BulkTaskController extends Controller
                 ], 400);
             }
 
-            foreach ($taskDetails as $taskValue) {
+            foreach ($taskDetails as $index => $taskValue) {
+                $rowNum = $taskValue['_row_num'] ?? ($index + 1);
+
                 $assignedName = trim($taskValue['assigned_to']
                     ?? $taskValue['Calendar Assigned To']
                     ?? $taskValue['Calendar Assigned to']
@@ -78,17 +94,33 @@ class BulkTaskController extends Controller
                     ?? '';
 
                 // Resolve name → user ID
-                $nameParts = explode(' ', $assignedName, 2);
+                // Remove extra spaces in case of "John  Doe"
+                $assignedNameClean = trim(preg_replace('/\s+/', ' ', $assignedName));
+                $nameParts = explode(' ', $assignedNameClean, 2);
                 $firstName = $nameParts[0] ?? '';
                 $lastName  = $nameParts[1] ?? '';
 
-                $matchedUser = tbluserModel::where('sub_institute_id', $sub_institute_id)
-                    ->whereRaw("LOWER(first_name) = LOWER(?) AND LOWER(last_name) = LOWER(?)", [$firstName, $lastName])
-                    ->first();
+                $query = tbluserModel::where('sub_institute_id', $sub_institute_id)
+                    ->whereRaw("LOWER(first_name) = LOWER(?)", [$firstName]);
+                
+                if ($lastName !== '') {
+                    $query->whereRaw("LOWER(last_name) = LOWER(?)", [$lastName]);
+                } else {
+                    $query->where(function($q) {
+                        $q->whereNull('last_name')->orWhere('last_name', '');
+                    });
+                }
+                $matchedUser = $query->first();
 
                 $allocatedUserId = $matchedUser ? $matchedUser->id : 0;
 
                 if (!$allocatedUserId) {
+                    $skippedTasks[] = [
+                        'row' => $rowNum,
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedName,
+                        'reason' => 'User not found in this sub_institute with the given name'
+                    ];
                     continue; // Skip if user not found
                 }
 
@@ -136,9 +168,11 @@ class BulkTaskController extends Controller
             }
 
             return response()->json([
-                'status_code' => $insertCount > 0 ? 1 : 0,
-                'message'     => $insertCount > 0 ? "$insertCount tasks imported successfully" : "No tasks were imported",
-                'imported'    => $insertCount
+                'status_code'     => $insertCount > 0 ? 1 : 0,
+                'message'         => $insertCount > 0 ? "$insertCount tasks imported successfully" : "No tasks were imported",
+                'imported'        => $insertCount,
+                'skipped_count'   => count($skippedTasks),
+                'skipped_details' => $skippedTasks
             ]);
 
         } catch (\Exception $e) {
@@ -159,7 +193,7 @@ class BulkTaskController extends Controller
         $startDate = $task_date ? \Carbon\Carbon::parse($task_date) : \Carbon\Carbon::now();
         $endDate = $repeat_until
             ? \Carbon\Carbon::parse($repeat_until)
-            : ($task_date ? \Carbon\Carbon::parse($task_date)->addDay() : \Carbon\Carbon::create($startDate->year, $startDate->month)->endOfMonth());
+            : ($task_date ? \Carbon\Carbon::parse($task_date) : \Carbon\Carbon::create($startDate->year, $startDate->month)->endOfMonth());
 
         $dates = [];
 
