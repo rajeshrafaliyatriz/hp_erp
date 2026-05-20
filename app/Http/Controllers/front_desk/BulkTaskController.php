@@ -125,9 +125,29 @@ class BulkTaskController extends Controller
                 }
 
                 $task_type = $taskValue['task_type'] ?? 'Medium';
+                
                 $task_date = $taskValue['TASK_DATE'] ?? date('Y-m-d');
+                if (!empty($taskValue['Calendar Start Date & Time'])) {
+                    $parsedDate = strtotime($taskValue['Calendar Start Date & Time']);
+                    if ($parsedDate !== false) {
+                        $task_date = date('Y-m-d', $parsedDate);
+                    }
+                }
+
                 $repeat_days = (int)($taskValue['repeat_days'] ?? 1);
                 $repeat_until = $taskValue['repeat_until'] ?? null;
+
+                $calendarStatus = trim($taskValue['Calendar Status'] ?? '');
+                
+                // Map calendar status to task status
+                $taskStatus = 'PENDING'; // Default
+                if (strcasecmp($calendarStatus, 'Planned') === 0) {
+                    $taskStatus = 'Pending';
+                } elseif (strcasecmp($calendarStatus, 'Held') === 0) {
+                    $taskStatus = 'COMPLETED';
+                } elseif (strcasecmp($calendarStatus, 'In Progress') === 0) {
+                    $taskStatus = 'IN PROGRESS';
+                }
 
                 // Get repeating dates
                 $dates = $this->getDatesWithoutSundays($task_type, $task_date, $repeat_days, $repeat_until);
@@ -141,7 +161,7 @@ class BulkTaskController extends Controller
                     'task_type'                => $task_type,
                     'TASK_ALLOCATED_TO'        => $allocatedUserId,
                     'created_by'               => $user_id,
-                    'STATUS'                   => 'PENDING',
+                    'STATUS'                   => $taskStatus,
                     'created_at'               => now(),
                     'updated_at'               => now(),
                 ];
