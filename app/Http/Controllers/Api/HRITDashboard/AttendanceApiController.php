@@ -326,7 +326,8 @@ class AttendanceApiController extends Controller
         $employee = DB::table('tbluser')
             ->select('id', 'first_name', 'middle_name', 'last_name', 'employee_id', 'department_id', 'jobtitle_id',
                      'monday_in_date', 'tuesday_in_date', 'wednesday_in_date', 'thursday_in_date',
-                     'friday_in_date', 'saturday_in_date', 'sunday_in_date')
+                     'friday_in_date', 'saturday_in_date', 'sunday_in_date',
+                     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
             ->where('id', $userId)
             ->where('sub_institute_id', $subInstituteId)
             ->where('status', 1)
@@ -401,14 +402,19 @@ class AttendanceApiController extends Controller
         $lateCount    = 0;
         $leaveCount   = 0;
         $holidayCount = 0;
+        $weekendCount = 0;
 
         $current = $startOfMonth->copy();
         while ($current->lte($endOfMonth)) {
             $dateStr   = $current->format('Y-m-d');
             $dayName   = $current->format('l'); // Monday, Tuesday...
-            $dayKey    = strtolower($dayName) . '_in_date';
+            $dayLower  = strtolower($dayName);  // sunday, monday etc.
+            $dayKey    = $dayLower . '_in_date';
 
             $shiftTime = $employee->$dayKey ?? null;
+
+            // Check if this day is a working day for the employee (0 = off / weekend)
+            $isWorkingDay = isset($employee->$dayLower) ? (int)$employee->$dayLower : 1;
 
             $record = $attendanceRecords->get($dateStr);
 
@@ -426,6 +432,10 @@ class AttendanceApiController extends Controller
             } elseif ($leaveInfo) {
                 $status = 'leave';
                 $leaveCount += $leaveInfo['day_type'] ?? 1;
+            } elseif ($isWorkingDay === 0) {
+                // Off day / Weekend (Sunday etc.)
+                $status = 'weekend';
+                $weekendCount++;
             } elseif ($record) {
                 $punchIn  = $record->punchin_time  ? Carbon::parse($record->punchin_time)->format('H:i:s')  : null;
                 $punchOut = $record->punchout_time ? Carbon::parse($record->punchout_time)->format('H:i:s') : null;
@@ -449,7 +459,8 @@ class AttendanceApiController extends Controller
                     $status = 'incomplete';
                 }
             } else {
-                // No record and not leave/holiday
+                // Working day but no attendance record → Absent
+                $status = 'absent';
                 $absentCount++;
             }
 
@@ -470,7 +481,7 @@ class AttendanceApiController extends Controller
         }
 
         $totalDays     = $startOfMonth->daysInMonth;
-        $workingDays   = $totalDays - $holidayCount; // rough
+        $scheduledWorkingDays = $totalDays - $weekendCount - $holidayCount;
 
         return response()->json([
             'status'  => 1,
@@ -483,13 +494,14 @@ class AttendanceApiController extends Controller
                 ],
                 'month'    => $month,
                 'summary'  => [
-                    'total_days'     => $totalDays,
-                    'present_days'   => $presentCount,
-                    'absent_days'    => $absentCount,
-                    'leave_days'     => $leaveCount,
-                    'holiday_days'   => $holidayCount,
-                    'late_days'      => $lateCount,
-                    'working_days'   => max(0, $workingDays),
+                    'total_days'      => $totalDays,
+                    'present_days'    => $presentCount,
+                    'absent_days'     => $absentCount,
+                    'leave_days'      => $leaveCount,
+                    'holiday_days'    => $holidayCount,
+                    'late_days'       => $lateCount,
+                    'weekend_days'    => $weekendCount,
+                    'working_days'    => max(0, $scheduledWorkingDays),
                 ],
                 'daily_report' => $dailyReport
             ]
