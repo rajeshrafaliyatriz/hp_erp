@@ -20,7 +20,7 @@ use App\Traits\Helpers;
 
 class ApplyLeaveController extends Controller
 {
-    // use GetsJwtToken;
+    // use GetsJwtToken; 
 
     /**
      * Display a listing of the resource.
@@ -332,27 +332,32 @@ class ApplyLeaveController extends Controller
 
     public function getYearwiseleave(Request $request)
     {
-        $selectedYear = $request->input('year') ?? date('Y');
-        $nextYear = ($selectedYear+1);
         $type = $request->type;
         $user_id = session()->get('user_id');
         $sub_institute_id = session()->get('sub_institute_id');
+        $selectedYear = $request->year ?? $request->syear ?? session()->get('syear');
+
         if($type=="API"){
             $user_id=$request->user_id;
             $sub_institute_id=$request->sub_institute_id;
-            // $syear=$request->$year;
         }
-        
-        $data = DB::table('hrms_emp_leaves as hel')->selectRaw("hel.*, hlt.leave_type as leave_type_name")
-        ->join('hrms_leave_types as hlt', function($join) use ($sub_institute_id) {
-            $join->on('hlt.id', '=', 'hel.leave_type_id')
-                 ->where('hlt.sub_institute_id', '=', $sub_institute_id);
-        })
-        ->where('hel.user_id', $user_id)
-        ->whereRaw('hel.from_date >= "'.$selectedYear.'-04-01"')
-        ->whereRaw('hel.to_date <= "'.$nextYear.'-03-31"')
-        ->where('hel.sub_institute_id',$sub_institute_id)
-        ->get()->toArray();
+
+        $query = DB::table('hrms_emp_leaves as hel')->selectRaw("hel.*, hlt.leave_type as leave_type_name")
+            ->join('hrms_leave_types as hlt', function($join) use ($sub_institute_id) {
+                $join->on('hlt.id', '=', 'hel.leave_type_id')
+                     ->where('hlt.sub_institute_id', '=', $sub_institute_id);
+            })
+            ->where('hel.user_id', $user_id)
+            ->where('hel.sub_institute_id', $sub_institute_id);
+
+        // Keep year-based filtering for non-API requests, but return all leaves for API calls.
+        if ($type !== "API" && !empty($selectedYear)) {
+            $nextYear = ((int) $selectedYear) + 1;
+            $query->whereDate('hel.from_date', '>=', $selectedYear . '-04-01')
+                ->whereDate('hel.to_date', '<=', $nextYear . '-03-31');
+        }
+
+        $data = $query->orderBy('hel.from_date', 'desc')->get()->toArray();
         
         return response()->json($data);
     }
