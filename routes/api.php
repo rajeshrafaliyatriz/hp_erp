@@ -61,6 +61,7 @@ use App\Http\Controllers\signupOtpController;
 use App\Http\Controllers\Api\UserImportController;
 use App\Http\Controllers\user\tbluserController;
 use App\Http\Controllers\Api\ExcelAutomationAgentController;
+use App\Http\Controllers\Api\GoogleAuthController;
 use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
 use App\Http\Controllers\HRMS\DepartmentSkillController;
@@ -283,3 +284,12 @@ Route::get('/career-journey', [CareerJourneyController::class, 'getCareerJourney
 
 // Bulk Task Import API
 Route::post('bulk-task/import', [BulkTaskController::class, 'import']);
+
+// Nango Google Calendar OAuth API
+Route::post('nango/google/check-connection', [App\Http\Controllers\NangoController::class, 'checkConnection']);
+Route::post('nango/google/oauth-url', [App\Http\Controllers\NangoController::class, 'getOauthUrl']);
+
+// Task Google Calendar Re-sync API
+Route::post('task/resync-google-calendar', [App\Http\Controllers\front_desk\taskController::class, 'resyncTaskToGoogleCalendar']);
+
+Route::post('/auth/google', [GoogleAuthController::class, 'login']);

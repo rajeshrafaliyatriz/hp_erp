@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
 use function App\Helpers\is_mobile;
@@ -22,6 +21,7 @@ class dashboardController extends Controller
         $user_id = session()->get('user_id');
         $user_profile_name = session()->get('user_profile_name');
         $user_profile_id = session()->get('user_profile_id');
+        $user = null;
 
         if ($type == 'API') {
             $token = $request->input('token');  // get token from input field 'token'
@@ -37,26 +37,31 @@ class dashboardController extends Controller
                 return response()->json(['message' => 'Invalid token'], 401);
             }
 
-            $validator = Validator::make($request->all(), [
-                'sub_institute_id' => 'required',
-                'user_id' => 'required',
-                'user_profile_name' =>'required',
-                'user_profile_id'=>'required',
-            ]);
+            $tokenUser = $accessToken->tokenable;
 
-            if ($validator->fails()) {
-                return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+            $user = tbluserModel::with('userProfile')
+                ->where('id', $tokenUser->id ?? 0)
+                ->where('status', 1)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (! $user) {
+                return response()->json([
+                    'status_code' => 0,
+                    'message' => 'Authenticated ERP user not found',
+                ], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
-            $user_id = $request->get('user_id');
-            $user_profile_name = $request->get('user_profile_name');
-            $user_profile_id = $request->get('user_profile_id');
+
+            $sub_institute_id = $user->sub_institute_id;
+            $user_id = $user->id;
+            $user_profile_name = $user->userProfile->name ?? $request->get('user_profile_name');
+            $user_profile_id = $user->user_profile_id;
         }
 
-        $user = tbluserModel::where('id', $user_id)
-        ->where(['sub_institute_id'=>$sub_institute_id,'status'=>1])
-        ->whereNull('deleted_at')
-        ->first();
+        $user = $user ?: tbluserModel::where('id', $user_id)
+            ->where(['sub_institute_id' => $sub_institute_id, 'status' => 1])
+            ->whereNull('deleted_at')
+            ->first();
 
         if (!$user) {
             return response()->json([
@@ -226,4 +231,3 @@ class dashboardController extends Controller
         return response()->json($res);
     }
 }
-
