@@ -117,6 +117,13 @@ class GoogleAuthController extends Controller
                 $client_sub_institute_id = $schools[0]->id ?? '';
                 session()->put('syear', $schools[0]->syear ?? '');
             }
+            if (empty($client_sub_institute_id) && !empty($user->sub_institute_id)) {
+                $client_sub_institute_id = $user->sub_institute_id;
+                $fallbackSchool = DB::table('school_setup')->where('id', $user->sub_institute_id)->first();
+                if ($fallbackSchool) {
+                    session()->put('syear', $fallbackSchool->syear ?? '');
+                }
+            }
 
             if ($user->is_admin == 2) {
                 $getTermId = DB::table('academic_year')
