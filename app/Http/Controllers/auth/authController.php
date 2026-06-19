@@ -168,13 +168,21 @@ class authController extends Controller
                 if ($user['is_admin'] == 2) {
                     $schools = DB::table('school_setup')->whereIn('client_id', [2, 11, 20, 34, 81])->get()->toArray();
                 } else {
-                    $schools = DB::table('school_setup')->where(['client_id' => $user->client_id])->get()->toArray();
+                    $schools = DB::table('school_setup')->where(['client_id' => $user->client_id])
+                        ->get()->toArray();
                 }
-                // echo "<pre>";print_r($schools);exit;    
+                // echo "<pre>";print_r($schools);exit;
                 $client_sub_institute_id = '';
                 if (count($schools) > 0) {
                     $client_sub_institute_id = isset($schools[0]) ? $schools[0]->id : '';
                     $request->session()->put('syear', isset($schools[0]) ? $schools[0]->syear : '');
+                }
+                if (empty($client_sub_institute_id) && !empty($user['sub_institute_id'])) {
+                    $client_sub_institute_id = $user['sub_institute_id'];
+                    $fallbackSchool = DB::table('school_setup')->where('id', $user['sub_institute_id'])->first();
+                    if ($fallbackSchool) {
+                        $request->session()->put('syear', $fallbackSchool->syear ?? '');
+                    }
                 }
                 if ($user['is_admin'] == 2) {
                     $getTermId = DB::table('academic_year')->whereIn('sub_institute_id', [254, 195, 47, 72, 1])
