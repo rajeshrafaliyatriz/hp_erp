@@ -111,20 +111,16 @@ class BulkTaskController extends Controller
                 // Resolve name → user ID
                 // Remove extra spaces in case of "John  Doe"
                 if ($taskTitle === '') {
-                    $skippedTasks[] = [
-                        'row' => $rowNum,
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Task title is missing', [
                         'assigned_to' => $assignedName,
-                        'reason' => 'Task title is missing'
-                    ];
+                    ]);
                     continue;
                 }
 
                 if ($assignedName === '') {
-                    $skippedTasks[] = [
-                        'row' => $rowNum,
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Assigned employee name is missing', [
                         'task_title' => $taskTitle,
-                        'reason' => 'Assigned employee name is missing'
-                    ];
+                    ]);
                     continue;
                 }
 
@@ -132,14 +128,12 @@ class BulkTaskController extends Controller
                 $matchedUser = $resolvedUser['user'];
 
                 if (!$matchedUser) {
-                    $skippedTasks[] = [
-                        'row' => $rowNum,
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, $resolvedUser['reason'], [
                         'task_title' => $taskTitle,
                         'assigned_to' => $assignedName,
                         'department' => $departmentName,
                         'job_role' => $jobRoleName,
-                        'reason' => $resolvedUser['reason']
-                    ];
+                    ]);
                     continue;
                 }
 
@@ -149,20 +143,58 @@ class BulkTaskController extends Controller
                     'task_priority',
                 ], 'Medium'));
                 
-                $task_date = $this->parseTaskDate($this->getTaskFieldValue($taskValue, [
+                $rawTaskDate = $this->getTaskFieldValue($taskValue, [
                     'task_date',
                     'task_deadline',
                     'calendar_start_date_time',
-                ])) ?? date('Y-m-d');
+                ]);
+                $parsedTaskDate = $this->parseTaskDate($rawTaskDate);
+                if (!empty($rawTaskDate) && $parsedTaskDate === null) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Invalid task date format', [
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedName,
+                        'task_date' => $rawTaskDate,
+                    ]);
+                    continue;
+                }
+                $task_date = $parsedTaskDate ?? date('Y-m-d');
 
-                $repeat_days = max((int) $this->getTaskFieldValue($taskValue, [
+                $rawRepeatDays = $this->getTaskFieldValue($taskValue, [
                     'repeat_days',
                     'repeat_once_in_every_days',
-                ], 1), 1);
-                $repeat_until = $this->parseTaskDate($this->getTaskFieldValue($taskValue, [
+                ], 1);
+                if ($rawRepeatDays !== null && $rawRepeatDays !== '' && (!is_numeric($rawRepeatDays) || (int) $rawRepeatDays < 1)) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Repeat days must be a number greater than 0', [
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedName,
+                        'repeat_days' => $rawRepeatDays,
+                    ]);
+                    continue;
+                }
+                $repeat_days = max((int) $rawRepeatDays, 1);
+
+                $rawRepeatUntil = $this->getTaskFieldValue($taskValue, [
                     'repeat_until',
                     'calendar_end_date_time',
-                ]));
+                ]);
+                $repeat_until = $this->parseTaskDate($rawRepeatUntil);
+                if (!empty($rawRepeatUntil) && $repeat_until === null) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Invalid repeat until date format', [
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedName,
+                        'repeat_until' => $rawRepeatUntil,
+                    ]);
+                    continue;
+                }
+                if (!empty($repeat_until) && $repeat_until < $task_date) {
+                    $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Repeat until date cannot be earlier than task date', [
+                        'task_title' => $taskTitle,
+                        'assigned_to' => $assignedName,
+                        'task_date' => $task_date,
+                        'repeat_until' => $repeat_until,
+                    ]);
+                    continue;
+                }
 
                 $calendarStatus = trim((string) $this->getTaskFieldValue($taskValue, ['calendar_status'], ''));
                 $taskStatus = $this->mapTaskStatus($calendarStatus);
@@ -171,7 +203,7 @@ class BulkTaskController extends Controller
 
                 $baseTask = [
                     'sub_institute_id'         => $sub_institute_id,
-                    'SYEAR'                    => 2025,
+                    'SYEAR'                    => $request->syear ?? date('Y'),
                     'task_title'               => $taskTitle,
                     'task_description'         => $taskDesc,
                     'taskcompletation_remarks' => $completionRemarks,
@@ -192,18 +224,46 @@ class BulkTaskController extends Controller
                         $data = $baseTask;
                         $data['TASK_DATE'] = $date;
 
-                        $insert = $this->createTask($data);
-                        if ($insert) {
-                            $insertCount++;
-                            $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
+                        try {
+                            $insert = $this->createTask($data);
+                            if ($insert) {
+                                $insertCount++;
+                                $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
+                            } else {
+                                $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Task insert failed for this generated date', [
+                                    'task_title' => $taskTitle,
+                                    'assigned_to' => $assignedName,
+                                    'task_date' => $date,
+                                ]);
+                            }
+                        } catch (\Exception $e) {
+                            $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, $e->getMessage(), [
+                                'task_title' => $taskTitle,
+                                'assigned_to' => $assignedName,
+                                'task_date' => $date,
+                            ]);
                         }
                     }
                 } else {
                     $baseTask['TASK_DATE'] = $task_date;
-                    $insert = $this->createTask($baseTask);
-                    if ($insert) {
-                        $insertCount++;
-                        $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
+                    try {
+                        $insert = $this->createTask($baseTask);
+                        if ($insert) {
+                            $insertCount++;
+                            $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
+                        } else {
+                            $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, 'Task insert failed', [
+                                'task_title' => $taskTitle,
+                                'assigned_to' => $assignedName,
+                                'task_date' => $task_date,
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        $skippedTasks[] = $this->buildSkippedTaskDetail($rowNum, $e->getMessage(), [
+                            'task_title' => $taskTitle,
+                            'assigned_to' => $assignedName,
+                            'task_date' => $task_date,
+                        ]);
                     }
                 }
             }
@@ -254,6 +314,16 @@ class BulkTaskController extends Controller
         }
 
         return $dates;
+    }
+
+    private function buildSkippedTaskDetail(int $rowNum, string $reason, array $context = []): array
+    {
+        return array_merge(
+            ['row' => $rowNum, 'reason' => $reason],
+            array_filter($context, function ($value) {
+                return $value !== null && $value !== '';
+            })
+        );
     }
 
     private function normalizeTaskRow(array $row): array
