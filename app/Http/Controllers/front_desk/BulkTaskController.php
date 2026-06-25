@@ -5,6 +5,7 @@ namespace App\Http\Controllers\front_desk;
 use App\Http\Controllers\Controller;
 use App\Models\front_desk\taskModel;
 use App\Models\user\tbluserModel;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Factory;
@@ -40,9 +41,13 @@ class BulkTaskController extends Controller
                 $file = $request->file('csv_file');
                 if (($handle = fopen($file->getRealPath(), "r")) !== false) {
                     $headers = fgetcsv($handle, 1000, ",");
-                    // clean BOM if present in headers
                     if ($headers && count($headers) > 0) {
-                        $headers[0] = preg_replace('/[\x00-\x1F\x80-\xFF]/', '', $headers[0]);
+                        $headers = array_map(function ($header) {
+                            $header = (string) $header;
+                            $header = preg_replace('/^\xEF\xBB\xBF/', '', $header);
+
+                            return trim($header);
+                        }, $headers);
                     }
                     $rowNum = 2;
                     while (($row = fgetcsv($handle, 1000, ",")) !== false) {
@@ -75,93 +80,109 @@ class BulkTaskController extends Controller
 
             foreach ($taskDetails as $index => $taskValue) {
                 $rowNum = $taskValue['_row_num'] ?? ($index + 1);
+                $taskValue = $this->normalizeTaskRow($taskValue);
 
-                $assignedName = trim($taskValue['assigned_to']
-                    ?? $taskValue['Calendar Assigned To']
-                    ?? $taskValue['Calendar Assigned to']
-                    ?? '');
+                $assignedName = trim((string) $this->getTaskFieldValue($taskValue, [
+                    'assigned_to',
+                    'employee_name_assigned_to',
+                    'employee_name',
+                    'calendar_assigned_to',
+                    'calendar_assignedto',
+                ], ''));
+                $departmentName = trim((string) $this->getTaskFieldValue($taskValue, ['department'], ''));
+                $jobRoleName = trim((string) $this->getTaskFieldValue($taskValue, ['jobrole', 'job_role'], ''));
+                $observerName = trim((string) $this->getTaskFieldValue($taskValue, ['observer', 'observation_point'], ''));
 
-                $taskTitle = $taskValue['task_title']
-                    ?? $taskValue['Calendar Subject']
-                    ?? '';
+                $taskTitle = trim((string) $this->getTaskFieldValue($taskValue, [
+                    'task_title',
+                    'calendar_subject',
+                ], ''));
 
-                $taskDesc = $taskValue['task_description']
-                    ?? $taskValue['Calendar Description']
-                    ?? '';
+                $taskDesc = trim((string) $this->getTaskFieldValue($taskValue, [
+                    'task_description',
+                    'calendar_description',
+                ], ''));
 
-                $completionRemarks = $taskValue['taskcompletation_remarks']
-                    ?? $taskValue['Calendar Event Completion Remarks']
-                    ?? '';
+                $completionRemarks = trim((string) $this->getTaskFieldValue($taskValue, [
+                    'taskcompletation_remarks',
+                    'calendar_event_completion_remarks',
+                ], ''));
 
                 // Resolve name → user ID
                 // Remove extra spaces in case of "John  Doe"
-                $assignedNameClean = trim(preg_replace('/\s+/', ' ', $assignedName));
-                $nameParts = explode(' ', $assignedNameClean, 2);
-                $firstName = $nameParts[0] ?? '';
-                $lastName  = $nameParts[1] ?? '';
-
-                $query = tbluserModel::where('sub_institute_id', $sub_institute_id)
-                    ->whereRaw("LOWER(first_name) = LOWER(?)", [$firstName]);
-                
-                if ($lastName !== '') {
-                    $query->whereRaw("LOWER(last_name) = LOWER(?)", [$lastName]);
-                } else {
-                    $query->where(function($q) {
-                        $q->whereNull('last_name')->orWhere('last_name', '');
-                    });
+                if ($taskTitle === '') {
+                    $skippedTasks[] = [
+                        'row' => $rowNum,
+                        'assigned_to' => $assignedName,
+                        'reason' => 'Task title is missing'
+                    ];
+                    continue;
                 }
-                $matchedUser = $query->first();
 
-                $allocatedUserId = $matchedUser ? $matchedUser->id : 0;
+                if ($assignedName === '') {
+                    $skippedTasks[] = [
+                        'row' => $rowNum,
+                        'task_title' => $taskTitle,
+                        'reason' => 'Assigned employee name is missing'
+                    ];
+                    continue;
+                }
 
-                if (!$allocatedUserId) {
+                $resolvedUser = $this->resolveTaskUser($sub_institute_id, $assignedName, $departmentName, $jobRoleName);
+                $matchedUser = $resolvedUser['user'];
+
+                if (!$matchedUser) {
                     $skippedTasks[] = [
                         'row' => $rowNum,
                         'task_title' => $taskTitle,
                         'assigned_to' => $assignedName,
-                        'reason' => 'User not found in this sub_institute with the given name'
+                        'department' => $departmentName,
+                        'job_role' => $jobRoleName,
+                        'reason' => $resolvedUser['reason']
                     ];
-                    continue; // Skip if user not found
+                    continue;
                 }
 
-                $task_type = $taskValue['task_type'] ?? 'Medium';
+                $allocatedUserId = $matchedUser->id;
+                $task_type = $this->normalizeTaskType($this->getTaskFieldValue($taskValue, [
+                    'task_type',
+                    'task_priority',
+                ], 'Medium'));
                 
-                $task_date = $taskValue['TASK_DATE'] ?? date('Y-m-d');
-                if (!empty($taskValue['Calendar Start Date & Time'])) {
-                    $parsedDate = strtotime($taskValue['Calendar Start Date & Time']);
-                    if ($parsedDate !== false) {
-                        $task_date = date('Y-m-d', $parsedDate);
-                    }
-                }
+                $task_date = $this->parseTaskDate($this->getTaskFieldValue($taskValue, [
+                    'task_date',
+                    'task_deadline',
+                    'calendar_start_date_time',
+                ])) ?? date('Y-m-d');
 
-                $repeat_days = (int)($taskValue['repeat_days'] ?? 1);
-                $repeat_until = $taskValue['repeat_until'] ?? null;
+                $repeat_days = max((int) $this->getTaskFieldValue($taskValue, [
+                    'repeat_days',
+                    'repeat_once_in_every_days',
+                ], 1), 1);
+                $repeat_until = $this->parseTaskDate($this->getTaskFieldValue($taskValue, [
+                    'repeat_until',
+                    'calendar_end_date_time',
+                ]));
 
-                $calendarStatus = trim($taskValue['Calendar Status'] ?? '');
-                
-                // Map calendar status to task status
-                $taskStatus = 'PENDING'; // Default
-                if (strcasecmp($calendarStatus, 'Planned') === 0) {
-                    $taskStatus = 'Pending';
-                } elseif (strcasecmp($calendarStatus, 'Held') === 0) {
-                    $taskStatus = 'COMPLETED';
-                } elseif (strcasecmp($calendarStatus, 'In Progress') === 0) {
-                    $taskStatus = 'IN PROGRESS';
-                }
+                $calendarStatus = trim((string) $this->getTaskFieldValue($taskValue, ['calendar_status'], ''));
+                $taskStatus = $this->mapTaskStatus($calendarStatus);
 
-                // Get repeating dates
                 $dates = $this->getDatesWithoutSundays($task_type, $task_date, $repeat_days, $repeat_until);
 
                 $baseTask = [
                     'sub_institute_id'         => $sub_institute_id,
-                    'syear'                    => $request->syear ?? date('Y'),
+                    'SYEAR'                    => 2025,
                     'task_title'               => $taskTitle,
                     'task_description'         => $taskDesc,
                     'taskcompletation_remarks' => $completionRemarks,
+                    'observation_point'        => $observerName ?: null,
+                    'repeat_days'              => $repeat_days,
                     'task_type'                => $task_type,
+                    'TASK_ALLOCATED'           => $user_id,
                     'TASK_ALLOCATED_TO'        => $allocatedUserId,
                     'created_by'               => $user_id,
                     'STATUS'                   => $taskStatus,
+                    'CREATED_IP_ADDRESS'       => $request->ip(),
                     'created_at'               => now(),
                     'updated_at'               => now(),
                 ];
@@ -171,7 +192,7 @@ class BulkTaskController extends Controller
                         $data = $baseTask;
                         $data['TASK_DATE'] = $date;
 
-                        $insert = taskModel::create($data);
+                        $insert = $this->createTask($data);
                         if ($insert) {
                             $insertCount++;
                             $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
@@ -179,7 +200,7 @@ class BulkTaskController extends Controller
                     }
                 } else {
                     $baseTask['TASK_DATE'] = $task_date;
-                    $insert = taskModel::create($baseTask);
+                    $insert = $this->createTask($baseTask);
                     if ($insert) {
                         $insertCount++;
                         $this->sendTaskNotification($allocatedUserId, $taskTitle, $user_id, $insert->id);
@@ -210,10 +231,10 @@ class BulkTaskController extends Controller
      */
     private function getDatesWithoutSundays($type = "", $task_date = '', $repeat_days = 1, $repeat_until = null)
     {
-        $startDate = $task_date ? \Carbon\Carbon::parse($task_date) : \Carbon\Carbon::now();
+        $startDate = $task_date ? Carbon::parse($task_date) : Carbon::now();
         $endDate = $repeat_until
-            ? \Carbon\Carbon::parse($repeat_until)
-            : ($task_date ? \Carbon\Carbon::parse($task_date) : \Carbon\Carbon::create($startDate->year, $startDate->month)->endOfMonth());
+            ? Carbon::parse($repeat_until)
+            : ($task_date ? Carbon::parse($task_date) : Carbon::create($startDate->year, $startDate->month)->endOfMonth());
 
         $dates = [];
 
@@ -233,6 +254,179 @@ class BulkTaskController extends Controller
         }
 
         return $dates;
+    }
+
+    private function normalizeTaskRow(array $row): array
+    {
+        $normalizedRow = [];
+
+        foreach ($row as $key => $value) {
+            if ($key === '_row_num') {
+                $normalizedRow[$key] = $value;
+                continue;
+            }
+
+            $normalizedRow[$this->normalizeFieldKey($key)] = is_string($value)
+                ? trim($value)
+                : $value;
+        }
+
+        return $normalizedRow;
+    }
+
+    private function normalizeFieldKey($key): string
+    {
+        $key = strtolower((string) $key);
+
+        return preg_replace('/[^a-z0-9]+/', '', $key);
+    }
+
+    private function getTaskFieldValue(array $row, array $possibleKeys, $default = null)
+    {
+        foreach ($possibleKeys as $key) {
+            $normalizedKey = $this->normalizeFieldKey($key);
+            if (array_key_exists($normalizedKey, $row) && $row[$normalizedKey] !== '' && $row[$normalizedKey] !== null) {
+                return $row[$normalizedKey];
+            }
+        }
+
+        return $default;
+    }
+
+    private function normalizeTaskType($taskType): string
+    {
+        $taskType = ucfirst(strtolower(trim((string) $taskType)));
+
+        return in_array($taskType, ['High', 'Medium', 'Low'], true) ? $taskType : 'Medium';
+    }
+
+    private function parseTaskDate($value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $formats = [
+            'Y-m-d',
+            'd-m-Y',
+            'd/m/Y',
+            'Y/m/d',
+            'm/d/Y',
+            'd-m-y',
+            'd/m/y',
+            'Y-m-d H:i:s',
+            'd-m-Y H:i:s',
+            'd/m/Y H:i:s',
+            'd-m-Y h:i A',
+            'd/m/Y h:i A',
+            'Y-m-d H:i',
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                return Carbon::createFromFormat($format, $value)->format('Y-m-d');
+            } catch (\Exception $e) {
+            }
+        }
+
+        $timestamp = strtotime($value);
+
+        return $timestamp !== false ? date('Y-m-d', $timestamp) : null;
+    }
+
+    private function mapTaskStatus(string $calendarStatus): string
+    {
+        if ($calendarStatus === '') {
+            return 'PENDING';
+        }
+
+        if (strcasecmp($calendarStatus, 'Planned') === 0 || strcasecmp($calendarStatus, 'Pending') === 0) {
+            return 'Pending';
+        }
+
+        if (strcasecmp($calendarStatus, 'Held') === 0 || strcasecmp($calendarStatus, 'Completed') === 0) {
+            return 'COMPLETED';
+        }
+
+        if (strcasecmp($calendarStatus, 'In Progress') === 0) {
+            return 'IN PROGRESS';
+        }
+
+        if (strcasecmp($calendarStatus, 'On Hold') === 0) {
+            return 'ON HOLD';
+        }
+
+        return 'PENDING';
+    }
+
+    private function resolveTaskUser($subInstituteId, string $assignedName, string $departmentName = '', string $jobRoleName = ''): array
+    {
+        $assignedName = trim(preg_replace('/\s+/', ' ', $assignedName));
+
+        $searchAttempts = [];
+        if ($departmentName !== '' || $jobRoleName !== '') {
+            $searchAttempts[] = [$departmentName, $jobRoleName];
+            if ($departmentName !== '') {
+                $searchAttempts[] = [$departmentName, ''];
+            }
+            if ($jobRoleName !== '') {
+                $searchAttempts[] = ['', $jobRoleName];
+            }
+        }
+        $searchAttempts[] = ['', ''];
+
+        foreach ($searchAttempts as [$departmentFilter, $jobRoleFilter]) {
+            $query = tbluserModel::query()
+                ->from('tbluser as u')
+                ->leftJoin('hrms_departments as hd', 'hd.id', '=', 'u.department_id')
+                ->leftJoin('s_user_jobrole as uj', 'uj.id', '=', 'u.allocated_standards')
+                ->where('u.sub_institute_id', $subInstituteId)
+                ->where('u.status', 1)
+                ->select('u.*')
+                ->where(function ($nameQuery) use ($assignedName) {
+                    $nameQuery
+                        ->whereRaw("LOWER(TRIM(CONCAT_WS(' ', COALESCE(u.first_name, ''), COALESCE(u.middle_name, ''), COALESCE(u.last_name, '')))) = ?", [strtolower($assignedName)])
+                        ->orWhereRaw("LOWER(TRIM(CONCAT_WS(' ', COALESCE(u.first_name, ''), COALESCE(u.last_name, '')))) = ?", [strtolower($assignedName)])
+                        ->orWhereRaw("LOWER(TRIM(u.first_name)) = ?", [strtolower($assignedName)]);
+                });
+
+            if ($departmentFilter !== '') {
+                $query->whereRaw('LOWER(TRIM(hd.department)) = ?', [strtolower(trim($departmentFilter))]);
+            }
+
+            if ($jobRoleFilter !== '') {
+                $query->whereRaw('LOWER(TRIM(uj.jobrole)) = ?', [strtolower(trim($jobRoleFilter))]);
+            }
+
+            $matches = $query->get();
+
+            if ($matches->count() === 1) {
+                return [
+                    'user' => $matches->first(),
+                    'reason' => null,
+                ];
+            }
+
+            if ($matches->count() > 1) {
+                return [
+                    'user' => null,
+                    'reason' => 'Multiple active users matched this employee name. Please make the employee name unique in the CSV.'
+                ];
+            }
+        }
+
+        return [
+            'user' => null,
+            'reason' => 'User not found in this sub institute with the given employee name, department, and job role'
+        ];
+    }
+
+    private function createTask(array $data)
+    {
+        return taskModel::withoutEvents(function () use ($data) {
+            return taskModel::create($data);
+        });
     }
 
     /**
