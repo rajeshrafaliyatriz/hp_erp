@@ -68,6 +68,17 @@ use App\Http\Controllers\HRMS\DepartmentSkillController;
 use App\Http\Controllers\HRTemplates\TemplateController;
 use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\CareerJourneyController;
+use App\Http\Controllers\Api\Leave\LeaveDashboardController;
+use App\Http\Controllers\Api\Leave\LeaveRequestApiController;
+use App\Http\Controllers\Api\Leave\LeaveOptionsController;
+use App\Http\Controllers\Api\Leave\LeaveReportApiController;
+use App\Http\Controllers\Api\Leave\LeaveTypeApiController;
+use App\Http\Controllers\Api\Leave\HolidayApiController;
+use App\Http\Controllers\Api\Leave\LeaveWorkflowApiController;
+use App\Http\Controllers\Api\Leave\LeaveDistributionApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceTrackingApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceReportApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
 
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
@@ -158,6 +169,95 @@ Route::get('/employee-attendance-monthly-report', [AttendanceApiController::clas
 
 Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise']);
 Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution']);
+
+/*
+|--------------------------------------------------------------------------
+| Leave Management API
+|--------------------------------------------------------------------------
+| Token authenticated endpoints backing the Next.js Leave Management module
+| (Dashboard, Leave Requests, Reports, Configuration). Every endpoint is
+| scoped by sub_institute_id and the April-March leave year - see
+| App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveContext.
+*/
+Route::prefix('leave')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [LeaveDashboardController::class, 'index']);
+    Route::get('/trend', [LeaveDashboardController::class, 'trend']);
+    Route::get('/department-summary', [LeaveDashboardController::class, 'departmentSummary']);
+    Route::get('/type-distribution', [LeaveDashboardController::class, 'typeDistribution']);
+    Route::get('/holidays/upcoming', [LeaveDashboardController::class, 'upcomingHolidays']);
+
+    // Shared lookups
+    Route::get('/options', [LeaveOptionsController::class, 'index']);
+    Route::get('/balances', [LeaveOptionsController::class, 'balances']);
+
+    // Leave requests
+    Route::get('/requests', [LeaveRequestApiController::class, 'index']);
+    Route::post('/requests', [LeaveRequestApiController::class, 'store']);
+    Route::post('/requests/bulk-decision', [LeaveRequestApiController::class, 'bulkDecision']);
+    Route::get('/requests/{id}', [LeaveRequestApiController::class, 'show'])->whereNumber('id');
+    Route::post('/requests/{id}/decision', [LeaveRequestApiController::class, 'decision'])->whereNumber('id');
+    Route::delete('/requests/{id}', [LeaveRequestApiController::class, 'destroy'])->whereNumber('id');
+
+    // Reports
+    Route::get('/reports/summary', [LeaveReportApiController::class, 'summary']);
+    Route::get('/reports/register', [LeaveReportApiController::class, 'register']);
+    Route::get('/reports/balance', [LeaveReportApiController::class, 'balance']);
+
+    // Configuration - leave types
+    Route::get('/leave-types', [LeaveTypeApiController::class, 'index']);
+    Route::post('/leave-types', [LeaveTypeApiController::class, 'store']);
+    Route::put('/leave-types/{id}', [LeaveTypeApiController::class, 'store'])->whereNumber('id');
+    Route::patch('/leave-types/{id}/status', [LeaveTypeApiController::class, 'toggleStatus'])->whereNumber('id');
+    Route::delete('/leave-types/{id}', [LeaveTypeApiController::class, 'destroy'])->whereNumber('id');
+
+    // Configuration - holidays and weekly off pattern
+    Route::get('/holidays', [HolidayApiController::class, 'index']);
+    Route::post('/holidays', [HolidayApiController::class, 'store']);
+    Route::put('/holidays/{id}', [HolidayApiController::class, 'update'])->whereNumber('id');
+    Route::delete('/holidays/{id}', [HolidayApiController::class, 'destroy']);
+    Route::get('/weekdays', [HolidayApiController::class, 'weekdays']);
+    Route::post('/weekdays', [HolidayApiController::class, 'storeWeekdays']);
+
+    // Configuration - approval workflow and role access
+    Route::get('/workflow', [LeaveWorkflowApiController::class, 'workflow']);
+    Route::put('/workflow', [LeaveWorkflowApiController::class, 'saveWorkflow']);
+    Route::get('/roles', [LeaveWorkflowApiController::class, 'roles']);
+    Route::put('/roles', [LeaveWorkflowApiController::class, 'saveRoles']);
+
+    // Distribution - new controller, GET /api/leave-distribution above is
+    // untouched and still serves its existing consumers.
+    Route::get('/distribution', [LeaveDistributionApiController::class, 'index']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Attendance Management API
+|--------------------------------------------------------------------------
+| Token authenticated, session free endpoints backing the Next.js Attendance
+| Management module (Attendance Tracking + Attendance Reports).
+|
+| These are additive: the legacy web routes hrms-attendance,
+| hrms-attendance-in-time/store, hrms-attendance-out-time/store,
+| hrms-attendance-report and get-employees-list still point at
+| App\Http\Controllers\HRMS\HrmsController, and /api/attendance-weekly plus
+| /api/KPI-HRITDashboard still point at
+| App\Http\Controllers\Api\HRITDashboard\AttendanceApiController.
+*/
+Route::prefix('attendance')->group(function () {
+    // Self service - my attendance calendar and punches
+    Route::get('/my-attendance', [AttendanceTrackingApiController::class, 'myAttendance']);
+    Route::post('/punch-in', [AttendanceTrackingApiController::class, 'punchIn']);
+    Route::post('/punch-out', [AttendanceTrackingApiController::class, 'punchOut']);
+
+    // Report lookups
+    Route::get('/report-filters', [AttendanceReportApiController::class, 'filters']);
+    Route::get('/employees', [AttendanceReportApiController::class, 'employees']);
+
+    // Dashboard analytics (department + employee scoped)
+    Route::get('/weekly-summary', [AttendanceDashboardApiController::class, 'weeklySummary']);
+    Route::get('/kpi', [AttendanceDashboardApiController::class, 'kpi']);
+});
 
 
 
