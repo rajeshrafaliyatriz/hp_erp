@@ -105,6 +105,10 @@ Route::post('user_check_otp', [authController::class, 'user_check_otp']);
 Route::middleware(['auth','session','menu'])->group(function () {
     Route::resource('dashboard', dashboardController::class);
     Route::resource('organization_dashboard', orgDashboardContorller::class);
+
+    // Nango Google OAuth routes
+    Route::get('nango/google/connect/{userId}', [App\Http\Controllers\NangoController::class, 'connectGoogle'])->name('nango.google.connect');
+    Route::get('nango/google/callback', [App\Http\Controllers\NangoController::class, 'googleCallback'])->name('nango.google.callback');
     
     Route::get('menu_lists', [authController::class, 'menu_lists'])->name('menu_lists');
     Route::resource('skill_library', skillLibraryController::class);
@@ -169,8 +173,8 @@ Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','men
     Route::resource('master_setup', masterSetupController::class);
     Route::post('insert_data', [masterSetupController::class, 'insert_data'])->name('insert_data');
     Route::resource('sub_std_map', sub_std_mapController::class);
+    Route::post('sub_std_map/store', [sub_std_mapController::class, 'store']);
 });
-Route::post('/sub_std_map/store', [sub_std_mapController::class, 'store']);
 Route::post('collectsct', [AJAXController::class, 'collectsct'])->name('collectsct');
 
 Route::get('table_data',[AJAXController::class, 'GetTableData'])->name('table_data');
