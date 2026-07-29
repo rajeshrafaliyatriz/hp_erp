@@ -78,6 +78,26 @@ class BulkTaskController extends Controller
                 ], 400);
             }
 
+            foreach ($taskDetails as $taskValue) {
+                $assignedName = trim($taskValue['assigned_to']
+                    ?? $taskValue['Employee Name (Assigned To)']
+                    ?? $taskValue['Calendar Assigned To']
+                    ?? $taskValue['Calendar Assigned to']
+                    ?? '');
+
+                $taskTitle = $taskValue['task_title']
+                    ?? $taskValue['Task Title']
+                    ?? $taskValue['Calendar Subject']
+                    ?? '';
+
+                $taskDesc = $taskValue['task_description']
+                    ?? $taskValue['Task Description']
+                    ?? $taskValue['Calendar Description']
+                    ?? '';
+
+                $completionRemarks = $taskValue['taskcompletation_remarks']
+                    ?? $taskValue['Calendar Event Completion Remarks']
+                    ?? '';
             foreach ($taskDetails as $index => $taskValue) {
                 $rowNum = $taskValue['_row_num'] ?? ($index + 1);
                 $taskValue = $this->normalizeTaskRow($taskValue);
@@ -173,6 +193,10 @@ class BulkTaskController extends Controller
                 }
                 $repeat_days = max((int) $rawRepeatDays, 1);
 
+                $task_type = $taskValue['task_type'] ?? $taskValue['Task Priority'] ?? 'Medium';
+                $task_date = $taskValue['TASK_DATE'] ?? $taskValue['Task Deadline'] ?? date('Y-m-d');
+                $repeat_days = (int)($taskValue['repeat_days'] ?? $taskValue['Repeat once in every (days)'] ?? 1);
+                $repeat_until = $taskValue['repeat_until'] ?? $taskValue['Task Deadline'] ?? null;
                 $rawRepeatUntil = $this->getTaskFieldValue($taskValue, [
                     'repeat_until',
                     'calendar_end_date_time',

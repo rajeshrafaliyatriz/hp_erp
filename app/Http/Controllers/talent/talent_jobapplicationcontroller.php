@@ -320,6 +320,14 @@ class talent_jobapplicationcontroller extends Controller
                 return response()->json(['message' => 'Application not found'], 404);
             }
 
+            if (
+                $request->filled('status')
+                && $request->status === 'Shortlisted'
+                && $application->hasReachedOfferOrHiredStage()
+            ) {
+                return response()->json(['message' => 'A candidate cannot be shortlisted after an offer has been sent or the candidate has been hired.'], 422);
+            }
+
             // 🧩 Update job info if job_id is changed
             if ($request->filled('job_id')) {
                 $jobData = talent_jobposting::find($request->job_id);
@@ -442,6 +450,10 @@ public function updateStatus(Request $request, $id)
 
             if (!$application) {
                 return response()->json(['message' => 'Job application not found'], 404);
+            }
+
+            if ($request->status === 'Shortlisted' && $application->hasReachedOfferOrHiredStage()) {
+                return response()->json(['message' => 'A candidate cannot be shortlisted after an offer has been sent or the candidate has been hired.'], 422);
             }
 
             // 🧠 Update status only

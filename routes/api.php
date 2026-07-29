@@ -53,6 +53,8 @@ use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
 use App\Http\Controllers\Api\TaskController;
+use App\Http\Controllers\Api\TaskManagement\MyTasksController;
+use App\Http\Controllers\Api\TaskManagement\ProjectController;
 use App\Http\Controllers\Api\UserJourneyLogController;
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
@@ -338,6 +340,22 @@ Route::get('/tasks/counts', [TaskController::class, 'getTaskCounts']);
 Route::get('/tasks/daily', [TaskController::class, 'getDailyTasks']);
 Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
 Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
+Route::prefix('task-management')->group(function () {
+    Route::get('/my-tasks', [MyTasksController::class, 'index']);
+    Route::get('/my-tasks/{id}', [MyTasksController::class, 'show'])->whereNumber('id');
+    Route::patch('/my-tasks/{id}/status', [MyTasksController::class, 'updateStatus'])->whereNumber('id');
+    Route::get('/projects/options', [ProjectController::class, 'options']);
+    Route::get('/projects', [ProjectController::class, 'index']);
+    Route::post('/projects', [ProjectController::class, 'store']);
+    Route::get('/projects/{id}', [ProjectController::class, 'show'])->whereNumber('id');
+    Route::put('/projects/{id}', [ProjectController::class, 'update'])->whereNumber('id');
+    Route::patch('/projects/{id}/archive', [ProjectController::class, 'archive'])->whereNumber('id');
+    Route::put('/projects/{id}/members', [ProjectController::class, 'syncProjectMembers'])->whereNumber('id');
+    Route::put('/projects/{id}/tasks', [ProjectController::class, 'syncTasks'])->whereNumber('id');
+    Route::post('/projects/{id}/workstreams', [ProjectController::class, 'storeWorkstream'])->whereNumber('id');
+    Route::put('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'updateWorkstream'])->whereNumber('projectId')->whereNumber('workstreamId');
+    Route::delete('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'destroyWorkstream'])->whereNumber('projectId')->whereNumber('workstreamId');
+});
 Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills']);
 
 // User Journey Log API Routes
