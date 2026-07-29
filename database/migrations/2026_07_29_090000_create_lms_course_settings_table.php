@@ -52,8 +52,8 @@ return new class extends Migration
             // JSON arrays of hrms_departments.id and jobrole names. sub_std_map
             // already carries a single standard_id/jobrole; these are the
             // wizard's multi-select restriction lists, which have no home there.
-            $table->json('restrict_departments')->nullable();
-            $table->json('restrict_roles')->nullable();
+            $table->longText('restrict_departments')->nullable();
+            $table->longText('restrict_roles')->nullable();
             $table->date('available_from')->nullable();
             $table->date('available_until')->nullable();
 
