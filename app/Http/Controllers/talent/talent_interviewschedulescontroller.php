@@ -133,11 +133,26 @@ class talent_interviewschedulescontroller extends Controller
             ], 422);
         }
 
+        $candidate = \App\Models\talent\talent_jobapplication::where('id', $request->applicant_id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->first();
+        if (!$candidate) {
+            return response()->json(['message' => 'Candidate not found.'], 404);
+        }
+        if ($candidate->hasReachedOfferOrHiredStage()) {
+            return response()->json([
+                'message' => 'An interview cannot be scheduled after an offer has been sent or the candidate has been hired.',
+            ], 422);
+        }
+
         try {
             $objtalent = new talent_interviewschedules();
             $objtalent->job_id = $request->job_id;
             $objtalent->applicant_id = $request->applicant_id;
-            $objtalent->round_no = $request->round_no;
+            $objtalent->round_no = ((int) talent_interviewschedules::where(
+                'applicant_id',
+                $request->applicant_id
+            )->max('round_no')) + 1;
             $objtalent->interview_date = $request->interview_date;
             $objtalent->time = $request->time;
             $objtalent->duration = $request->duration;

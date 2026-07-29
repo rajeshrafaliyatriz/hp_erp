@@ -61,15 +61,18 @@ class BulkTaskController extends Controller
 
             foreach ($taskDetails as $taskValue) {
                 $assignedName = trim($taskValue['assigned_to']
+                    ?? $taskValue['Employee Name (Assigned To)']
                     ?? $taskValue['Calendar Assigned To']
                     ?? $taskValue['Calendar Assigned to']
                     ?? '');
 
                 $taskTitle = $taskValue['task_title']
+                    ?? $taskValue['Task Title']
                     ?? $taskValue['Calendar Subject']
                     ?? '';
 
                 $taskDesc = $taskValue['task_description']
+                    ?? $taskValue['Task Description']
                     ?? $taskValue['Calendar Description']
                     ?? '';
 
@@ -92,10 +95,10 @@ class BulkTaskController extends Controller
                     continue; // Skip if user not found
                 }
 
-                $task_type = $taskValue['task_type'] ?? 'Medium';
-                $task_date = $taskValue['TASK_DATE'] ?? date('Y-m-d');
-                $repeat_days = (int)($taskValue['repeat_days'] ?? 1);
-                $repeat_until = $taskValue['repeat_until'] ?? null;
+                $task_type = $taskValue['task_type'] ?? $taskValue['Task Priority'] ?? 'Medium';
+                $task_date = $taskValue['TASK_DATE'] ?? $taskValue['Task Deadline'] ?? date('Y-m-d');
+                $repeat_days = (int)($taskValue['repeat_days'] ?? $taskValue['Repeat once in every (days)'] ?? 1);
+                $repeat_until = $taskValue['repeat_until'] ?? $taskValue['Task Deadline'] ?? null;
 
                 // Get repeating dates
                 $dates = $this->getDatesWithoutSundays($task_type, $task_date, $repeat_days, $repeat_until);
