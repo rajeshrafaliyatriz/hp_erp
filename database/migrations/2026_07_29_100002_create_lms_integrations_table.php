@@ -38,7 +38,7 @@ return new class extends Migration
             $table->text('last_error')->nullable();
 
             /** Non-sensitive settings only. See the note above. */
-            $table->json('config')->nullable();
+            $table->longText('config')->nullable();
 
             $table->unsignedBigInteger('created_by')->nullable();
             $table->unsignedBigInteger('updated_by')->nullable();
