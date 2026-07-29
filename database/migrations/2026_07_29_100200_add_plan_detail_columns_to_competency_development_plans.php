@@ -1,0 +1,47 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+/**
+ * Plan-detail columns for the workspace's "Plan Overview" tab.
+ *
+ * The detail panel shows an Objective paragraph, a Key Focus Areas list and a
+ * Linked Career Path - none of which s_competency_development_plans could hold.
+ *
+ * All three are nullable with no default change, so every existing consumer
+ * (DevelopmentPlanController@index/store/destroy, the Command Center counts,
+ * EmployeeCompetencyProfileController@developmentPlans) keeps working unchanged:
+ * they select explicit columns or `*` and never insert these.
+ */
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('s_competency_development_plans', function (Blueprint $table) {
+            if (!Schema::hasColumn('s_competency_development_plans', 'objective')) {
+                $table->text('objective')->nullable()->after('title');
+            }
+            if (!Schema::hasColumn('s_competency_development_plans', 'focus_areas')) {
+                // Comma-separated competency/theme labels, same style as
+                // s_user_jobrole.related_jobrole.
+                $table->text('focus_areas')->nullable()->after('objective');
+            }
+            if (!Schema::hasColumn('s_competency_development_plans', 'career_path_id')) {
+                $table->unsignedBigInteger('career_path_id')->nullable()->index()->after('framework_id');
+            }
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('s_competency_development_plans', function (Blueprint $table) {
+            foreach (['objective', 'focus_areas', 'career_path_id'] as $column) {
+                if (Schema::hasColumn('s_competency_development_plans', $column)) {
+                    $table->dropColumn($column);
+                }
+            }
+        });
+    }
+};

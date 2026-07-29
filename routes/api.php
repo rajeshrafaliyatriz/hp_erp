@@ -10,6 +10,21 @@ use App\Http\Controllers\libraries\jobroleskillcontroller;
 use App\Http\Controllers\HRMS\HrmsController;
 use App\Http\Controllers\Api\CompetencyDashboardController;
 use App\Http\Controllers\Api\CompetencyDashboard\CompetencyDashboardController as SubCompetencyDashboardController;
+use App\Http\Controllers\Api\Competency\CommandCenterController as CompetencyCommandCenterController;
+use App\Http\Controllers\Api\Competency\CompetencyController as CompetencyCrudController;
+use App\Http\Controllers\Api\Competency\FrameworkController as CompetencyFrameworkController;
+use App\Http\Controllers\Api\Competency\AssessmentController as CompetencyAssessmentController;
+use App\Http\Controllers\Api\Competency\AssessmentCycleController as CompetencyAssessmentCycleController;
+use App\Http\Controllers\Api\Competency\EmployeeCompetencyProfileController;
+use App\Http\Controllers\Api\Competency\CertificationController as CompetencyCertificationController;
+use App\Http\Controllers\Api\Competency\CertificationRequirementController as CompetencyCertificationRequirementController;
+use App\Http\Controllers\Api\Competency\DevelopmentPlanController as CompetencyDevelopmentPlanController;
+use App\Http\Controllers\Api\Competency\StudioController as CompetencyStudioController;
+use App\Http\Controllers\Api\Competency\RoleMappingController as CompetencyRoleMappingController;
+use App\Http\Controllers\Api\Competency\MappingReviewController as CompetencyMappingReviewController;
+use App\Http\Controllers\Api\Competency\CareerPathController as CompetencyCareerPathController;
+use App\Http\Controllers\Api\Competency\LearningAssignmentController as CompetencyLearningAssignmentController;
+use App\Http\Controllers\Api\Competency\AuditController as CompetencyAuditController;
 use App\Http\Controllers\Api\DBController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
@@ -162,6 +177,192 @@ Route::get('/competency/health-radar', [SubCompetencyDashboardController::class,
 Route::get('/competency/skills-management-funnel', [SubCompetencyDashboardController::class, 'getSkillsManagementFunnel']);
 Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'getAlignment']);
 
+/*
+| Competency Command Center + domain CRUD (token authenticated, tenant scoped
+| via App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext).
+| Additive - does not touch the read-only /competency/* analytics routes above.
+*/
+Route::get('/competency/command-center', [CompetencyCommandCenterController::class, 'index']);
+Route::get('/competency/command-center/filters', [CompetencyCommandCenterController::class, 'filters']);
+
+Route::get('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'index']);
+Route::post('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'store']);
+Route::get('/competency/assessment-cycles/metrics', [CompetencyAssessmentCycleController::class, 'metrics']);
+Route::get('/competency/assessment-cycles/participant-ratings', [CompetencyAssessmentCycleController::class, 'participantRatings']);
+Route::get('/competency/assessment-cycles/calibration', [CompetencyAssessmentCycleController::class, 'calibration']);
+Route::get('/competency/assessment-cycles/approvals', [CompetencyAssessmentCycleController::class, 'approvals']);
+Route::get('/competency/assessment-cycles/closed', [CompetencyAssessmentCycleController::class, 'closed']);
+Route::put('/competency/assessment-cycles/assessments/{id}/review', [CompetencyAssessmentCycleController::class, 'reviewAssessment'])->whereNumber('id');
+// "View Configuration" - declared BEFORE /{id} so the word is not read as an id.
+Route::get('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'configuration']);
+Route::put('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'saveConfiguration']);
+Route::get('/competency/assessment-cycles/{id}/participants', [CompetencyAssessmentCycleController::class, 'participants'])->whereNumber('id');
+// Campaign detail panel: Overview / Edit / Ratings / Calibration / Audit Trail.
+Route::get('/competency/assessment-cycles/{id}/ratings', [CompetencyAssessmentCycleController::class, 'ratings'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}/calibration-queue', [CompetencyAssessmentCycleController::class, 'calibrationQueue'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}/audit-trail', [CompetencyAssessmentCycleController::class, 'auditTrail'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleController::class, 'show'])->whereNumber('id');
+Route::put('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleController::class, 'update'])->whereNumber('id');
+
+Route::get('/competency/employee-profiles/{id}', [EmployeeCompetencyProfileController::class, 'show'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/available-skills', [EmployeeCompetencyProfileController::class, 'availableSkills'])->whereNumber('id');
+Route::post('/competency/employee-profiles/{id}/skills', [EmployeeCompetencyProfileController::class, 'addSkill'])->whereNumber('id');
+Route::put('/competency/employee-profiles/{id}/skills/{matrixId}', [EmployeeCompetencyProfileController::class, 'updateSkill'])->whereNumber('id')->whereNumber('matrixId');
+Route::get('/competency/employee-profiles/{id}/skills/{skillId}/history', [EmployeeCompetencyProfileController::class, 'skillHistory'])->whereNumber('id')->whereNumber('skillId');
+Route::get('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'notes'])->whereNumber('id');
+Route::put('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'saveNotes'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/certifications', [EmployeeCompetencyProfileController::class, 'certifications'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/development-plans', [EmployeeCompetencyProfileController::class, 'developmentPlans'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'evidence'])->whereNumber('id');
+Route::post('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'storeEvidence'])->whereNumber('id');
+Route::delete('/competency/employee-profiles/{id}/evidence/{evidenceId}', [EmployeeCompetencyProfileController::class, 'deleteEvidence'])->whereNumber('id')->whereNumber('evidenceId');
+Route::get('/competency/employee-profiles/{id}/career-path', [EmployeeCompetencyProfileController::class, 'careerPath'])->whereNumber('id');
+
+Route::get('/competency/competencies', [CompetencyCrudController::class, 'index']);
+Route::post('/competency/competencies', [CompetencyCrudController::class, 'store']);
+Route::delete('/competency/competencies/{id}', [CompetencyCrudController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/frameworks', [CompetencyFrameworkController::class, 'index']);
+Route::post('/competency/frameworks', [CompetencyFrameworkController::class, 'store']);
+Route::delete('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/assessments', [CompetencyAssessmentController::class, 'index']);
+Route::post('/competency/assessments', [CompetencyAssessmentController::class, 'store']);
+Route::delete('/competency/assessments/{id}', [CompetencyAssessmentController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/certifications', [CompetencyCertificationController::class, 'index']);
+Route::post('/competency/certifications', [CompetencyCertificationController::class, 'store']);
+Route::delete('/competency/certifications/{id}', [CompetencyCertificationController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'index']);
+Route::post('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'store']);
+Route::delete('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'destroy'])->whereNumber('id');
+
+/*
+| Development & Career Path Workspace (token authenticated, tenant scoped).
+| Additive on top of the three development-plan routes above, which keep their
+| existing contract. Reuses s_skill_matrix + s_user_skill_jobrole for gaps,
+| s_competency_activity_log for history, career_journey + s_user_jobrole for the
+| progression graph and sub_std_map + lms_assignments for learning; adds
+| s_competency_plan_actions and s_competency_career_paths/_steps.
+*/
+
+// Static segments first so they cannot be swallowed by /{id}.
+Route::get('/competency/development-plans/metrics', [CompetencyDevelopmentPlanController::class, 'metrics']);
+Route::get('/competency/development-plans/owners', [CompetencyDevelopmentPlanController::class, 'owners']);
+Route::get('/competency/employee-options', [CompetencyDevelopmentPlanController::class, 'employees']);
+
+Route::get('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'show'])->whereNumber('id');
+Route::put('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'update'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/gaps', [CompetencyDevelopmentPlanController::class, 'gaps'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/history', [CompetencyDevelopmentPlanController::class, 'history'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'actions'])->whereNumber('id');
+Route::post('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'storeAction'])->whereNumber('id');
+Route::put('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'updateAction'])->whereNumber('id')->whereNumber('actionId');
+Route::delete('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'destroyAction'])->whereNumber('id')->whereNumber('actionId');
+
+// Named career paths + the Career Path Explorer.
+Route::get('/competency/career-paths/explorer', [CompetencyCareerPathController::class, 'explorer']);
+Route::get('/competency/career-paths/role-options', [CompetencyCareerPathController::class, 'roleOptions']);
+Route::get('/competency/career-paths', [CompetencyCareerPathController::class, 'index']);
+Route::post('/competency/career-paths', [CompetencyCareerPathController::class, 'store']);
+Route::get('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'show'])->whereNumber('id');
+Route::put('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'update'])->whereNumber('id');
+Route::delete('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'destroy'])->whereNumber('id');
+
+// Learning assignments (lms_assignments rows tagged source='competency').
+Route::get('/competency/learning-assignments/courses', [CompetencyLearningAssignmentController::class, 'courses']);
+Route::get('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'index']);
+Route::post('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'store']);
+Route::put('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'update'])->whereNumber('id');
+Route::delete('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'destroy'])->whereNumber('id');
+
+/*
+| Framework & Role Mapping Studio (token authenticated, tenant scoped).
+| Additive: reuses existing tables (s_users_skills, s_user_jobrole,
+| s_user_skill_jobrole, s_proficiency_levels, s_competency_frameworks/_items)
+| plus two new studio tables (s_competency_framework_weights, _mapping_reviews).
+*/
+Route::get('/competency/studio/summary', [CompetencyStudioController::class, 'summary']);
+Route::get('/competency/studio/framework-structure', [CompetencyStudioController::class, 'frameworkStructure']);
+Route::get('/competency/studio/proficiency-scale', [CompetencyStudioController::class, 'proficiencyScale']);
+Route::post('/competency/studio/proficiency-scale', [CompetencyStudioController::class, 'storeLevel']);
+Route::put('/competency/studio/proficiency-scale/{id}', [CompetencyStudioController::class, 'updateLevel'])->whereNumber('id');
+Route::delete('/competency/studio/proficiency-scale/{id}', [CompetencyStudioController::class, 'deleteLevel'])->whereNumber('id');
+Route::get('/competency/studio/weights', [CompetencyStudioController::class, 'weights']);
+Route::put('/competency/studio/weights', [CompetencyStudioController::class, 'saveWeights']);
+// Scoring rules behind the weights (s_competency_settings, scope='weighting').
+Route::get('/competency/studio/weighting-config', [CompetencyStudioController::class, 'weightingConfig']);
+Route::put('/competency/studio/weighting-config', [CompetencyStudioController::class, 'saveWeightingConfig']);
+
+// Framework show / update / clone / items / weighting (list/create/delete are above).
+Route::get('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'show'])->whereNumber('id');
+Route::put('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'update'])->whereNumber('id');
+Route::post('/competency/frameworks/{id}/clone', [CompetencyFrameworkController::class, 'clone'])->whereNumber('id');
+Route::get('/competency/frameworks/{id}/items', [CompetencyFrameworkController::class, 'items'])->whereNumber('id');
+Route::post('/competency/frameworks/{id}/items', [CompetencyFrameworkController::class, 'storeItem'])->whereNumber('id');
+Route::delete('/competency/frameworks/{id}/items/{itemId}', [CompetencyFrameworkController::class, 'destroyItem'])->whereNumber('id')->whereNumber('itemId');
+Route::get('/competency/frameworks/{id}/weights', [CompetencyFrameworkController::class, 'weights'])->whereNumber('id');
+Route::put('/competency/frameworks/{id}/weights', [CompetencyFrameworkController::class, 'saveWeights'])->whereNumber('id');
+
+// Role mapping matrix (cells live on s_user_skill_jobrole).
+Route::get('/competency/role-mapping/roles', [CompetencyRoleMappingController::class, 'roles']);
+Route::get('/competency/role-mapping/matrix', [CompetencyRoleMappingController::class, 'matrix']);
+Route::put('/competency/role-mapping/cell', [CompetencyRoleMappingController::class, 'upsertCell']);
+Route::delete('/competency/role-mapping/cell', [CompetencyRoleMappingController::class, 'deleteCell']);
+
+// Mapping-change approval workflow.
+Route::get('/competency/mapping-reviews', [CompetencyMappingReviewController::class, 'index']);
+Route::post('/competency/mapping-reviews', [CompetencyMappingReviewController::class, 'store']);
+Route::put('/competency/mapping-reviews/{id}', [CompetencyMappingReviewController::class, 'update'])->whereNumber('id');
+Route::post('/competency/mapping-reviews/bulk-approve', [CompetencyMappingReviewController::class, 'bulkApprove']);
+
+/*
+| Certification & Compliance Center (token authenticated, tenant scoped).
+| Additive on top of the three certification routes above, which keep their
+| paths and response envelope. Reads/writes s_competency_certifications, the
+| new s_competency_certification_requirements policy table, the shared
+| s_competency_evidence table for documents and s_competency_activity_log for
+| history. Static segments are declared BEFORE the /{id} routes so the numeric
+| show/update route cannot swallow metrics / filters / export / bulk.
+*/
+Route::get('/competency/certifications/metrics', [CompetencyCertificationController::class, 'metrics']);
+Route::get('/competency/certifications/filters', [CompetencyCertificationController::class, 'filters']);
+Route::get('/competency/certifications/export', [CompetencyCertificationController::class, 'export']);
+Route::post('/competency/certifications/bulk', [CompetencyCertificationController::class, 'bulk']);
+
+Route::get('/competency/certifications/{id}', [CompetencyCertificationController::class, 'show'])->whereNumber('id');
+Route::put('/competency/certifications/{id}', [CompetencyCertificationController::class, 'update'])->whereNumber('id');
+Route::post('/competency/certifications/{id}/notes', [CompetencyCertificationController::class, 'addNote'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/compliance', [CompetencyCertificationController::class, 'compliance'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/requirements', [CompetencyCertificationController::class, 'requirements'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/history', [CompetencyCertificationController::class, 'history'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'documents'])->whereNumber('id');
+Route::post('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'storeDocument'])->whereNumber('id');
+Route::delete('/competency/certifications/{id}/documents/{documentId}', [CompetencyCertificationController::class, 'destroyDocument'])->whereNumber('id')->whereNumber('documentId');
+
+// Certification requirements - the "which role must hold what" policy master.
+Route::get('/competency/certification-requirements', [CompetencyCertificationRequirementController::class, 'index']);
+Route::post('/competency/certification-requirements', [CompetencyCertificationRequirementController::class, 'store']);
+Route::put('/competency/certification-requirements/{id}', [CompetencyCertificationRequirementController::class, 'update'])->whereNumber('id');
+Route::delete('/competency/certification-requirements/{id}', [CompetencyCertificationRequirementController::class, 'destroy'])->whereNumber('id');
+
+/*
+| Audit & Activity Center (token authenticated, tenant scoped).
+| Read-only over s_competency_activity_log - the feed every competency
+| controller already writes to via ResolvesCompetencyContext - plus
+| tbl_user_journey_logs for the User Actions Log tab's screen-access history.
+| The only write is the export event the export endpoint logs about itself.
+| Static segments are declared BEFORE /{id} so user-actions is not swallowed.
+*/
+Route::get('/competency/audit/metrics', [CompetencyAuditController::class, 'metrics']);
+Route::get('/competency/audit/filters', [CompetencyAuditController::class, 'filters']);
+Route::get('/competency/audit/export', [CompetencyAuditController::class, 'export']);
+Route::get('/competency/audit/user-actions', [CompetencyAuditController::class, 'userActions']);
+Route::get('/competency/audit/user-actions/{userId}', [CompetencyAuditController::class, 'userActivity'])->whereNumber('userId');
+Route::get('/competency/audit', [CompetencyAuditController::class, 'index']);
+Route::get('/competency/audit/{id}', [CompetencyAuditController::class, 'show'])->whereNumber('id');
+
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
 Route::get('/KPI-HRITDashboard', [AttendanceApiController::class, 'KPI']);
@@ -281,6 +482,20 @@ Route::get('/index', [buildwithAIController::class, 'index']);
 
 Route::resource('gamma-api', GammaApiController::class);
 Route::get('gamma-api/sub-institute/{subInstituteId}', [GammaApiController::class, 'getBySubInstituteId']);
+
+// Competency Library JSON API (additive; a competency == an approved skill on
+// s_users_skills). Registered BEFORE the skill_library resource so these paths
+// are not swallowed by the resource's /skill_library/{id} show route.
+Route::get('skill_library/competency-list', [skillLibraryController::class, 'competencyLibraryIndex']);
+Route::get('skill_library/competency-export', [skillLibraryController::class, 'competencyLibraryExport']);
+Route::post('skill_library/competency-import', [skillLibraryController::class, 'competencyLibraryImport']);
+Route::get('skill_library/competency/{id}/detail', [skillLibraryController::class, 'competencyLibraryDetail'])->whereNumber('id');
+Route::post('skill_library/competency/{id}/clone', [skillLibraryController::class, 'competencyLibraryClone'])->whereNumber('id');
+Route::put('skill_library/competency/{id}/archive', [skillLibraryController::class, 'competencyLibraryArchive'])->whereNumber('id');
+Route::get('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryShow'])->whereNumber('id');
+Route::post('skill_library/competency', [skillLibraryController::class, 'competencyLibraryStore']);
+Route::put('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryUpdate'])->whereNumber('id');
+Route::delete('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryDestroy'])->whereNumber('id');
 
 Route::resource('skill_library', skillLibraryController::class);
 Route::get('/positions', [InterviewController::class, 'getPositions']);
