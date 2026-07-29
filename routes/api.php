@@ -4,6 +4,13 @@ use App\Http\Controllers\Api\IndustryController;
 use App\Http\Controllers\Api\jobrolecontroller;
 use App\Http\Controllers\Api\skillcontroller;
 use App\Http\Controllers\Api\SkillDevelopmentController;
+use App\Http\Controllers\Api\LmsAssessmentController;
+use App\Http\Controllers\Api\LmsCourseController;
+use App\Http\Controllers\Api\LmsGovernanceController;
+use App\Http\Controllers\Api\LmsPartnerController;
+use App\Http\Controllers\Api\AiCourseController;
+use App\Http\Controllers\Api\LmsLearningController;
+use App\Http\Controllers\Api\LmsSessionController;
 use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
@@ -155,6 +162,7 @@ Route::get('/skill-development/weekly-goal', [SkillDevelopmentController::class,
 Route::get('/skill-development/achievements', [SkillDevelopmentController::class, 'getUserAchievements']);
 Route::get('/skill-development/peer-comparison', [SkillDevelopmentController::class, 'getPeerComparison']);
 Route::get('/skill-development/calendar', [SkillDevelopmentController::class, 'getLearningCalendar']);
+Route::get('/skill-development/recent-activity', [SkillDevelopmentController::class, 'getRecentActivity']);
 
 Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
 Route::get('/competency/kpi', [SubCompetencyDashboardController::class, 'getKPI']);
@@ -268,6 +276,154 @@ Route::prefix('attendance')->group(function () {
 
 Route::get('/enroll', [LmsCourseEnrollController::class, 'index']);
 Route::get('/enrolled_courses', [LmsCourseEnrollController::class, 'index']);
+Route::get('/available_courses', [LmsCourseEnrollController::class, 'available']);
+
+/*
+| LMS Assignments – token-authenticated assignment management.
+| These sit in api.php (not lms.php) so they resolve under the /api prefix
+| that the Next.js frontend expects.
+*/
+Route::get('/lmsAssignment/stats', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'stats']);
+Route::post('/lmsAssignment/bulkUpdateStatus', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'bulkUpdateStatus']);
+Route::post('/lmsAssignment/updateStatus/{id}', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'updateStatus']);
+Route::post('/lmsAssignment/import', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'import']);
+Route::get('/lmsAssignment/learners', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'learners']);
+Route::get('/lmsAssignment/enrollments', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'enrollments']);
+Route::post('/lmsAssignment/request', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'requestEnrollment']);
+Route::post('/lmsAssignment/review/{id}', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'review']);
+Route::post('/lmsAssignment/bulkReview', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'bulkReview']);
+Route::get('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'index']);
+Route::post('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'store']);
+
+/*
+| Learning Catalog - token-authenticated course management. The equivalent
+| school_setup/sub_std_map web routes stay untouched for the Blade admin UI.
+| Static segments are declared before /{id} so they are not captured by it.
+*/
+/*
+| Administration & Governance.
+|
+| Users, roles and the permission matrix all have controllers already, but
+| those live in routes/user.php behind ['auth','session','menu'] - session
+| authenticated and CSRF protected, so unusable cross-origin for writes.
+| Trainers, vendors and integrations are new entities with no prior model.
+| routes/user.php is untouched, so the old frontend keeps working.
+*/
+Route::get('/lms/governance/kpis', [LmsGovernanceController::class, 'kpis']);
+Route::get('/lms/governance/system-health', [LmsGovernanceController::class, 'systemHealth']);
+Route::get('/lms/governance/audit-logs', [LmsGovernanceController::class, 'auditLogs']);
+
+Route::get('/lms/governance/users', [LmsGovernanceController::class, 'users']);
+Route::post('/lms/governance/users', [LmsGovernanceController::class, 'storeUser']);
+// Stays ahead of /users/{id} so the wildcard does not swallow it.
+Route::post('/lms/governance/users/import', [LmsGovernanceController::class, 'importUsers']);
+Route::put('/lms/governance/users/{id}', [LmsGovernanceController::class, 'updateUser']);
+Route::delete('/lms/governance/users/{id}', [LmsGovernanceController::class, 'destroyUser']);
+
+Route::get('/lms/governance/roles', [LmsGovernanceController::class, 'roles']);
+Route::post('/lms/governance/roles', [LmsGovernanceController::class, 'storeRole']);
+Route::put('/lms/governance/roles/{id}', [LmsGovernanceController::class, 'updateRole']);
+Route::delete('/lms/governance/roles/{id}', [LmsGovernanceController::class, 'destroyRole']);
+
+Route::get('/lms/governance/permissions', [LmsGovernanceController::class, 'permissions']);
+Route::post('/lms/governance/permissions', [LmsGovernanceController::class, 'savePermissions']);
+
+Route::get('/lms/governance/trainers', [LmsPartnerController::class, 'trainers']);
+Route::post('/lms/governance/trainers', [LmsPartnerController::class, 'storeTrainer']);
+Route::put('/lms/governance/trainers/{id}', [LmsPartnerController::class, 'updateTrainer']);
+Route::delete('/lms/governance/trainers/{id}', [LmsPartnerController::class, 'destroyTrainer']);
+
+Route::get('/lms/governance/vendors', [LmsPartnerController::class, 'vendors']);
+Route::post('/lms/governance/vendors', [LmsPartnerController::class, 'storeVendor']);
+Route::put('/lms/governance/vendors/{id}', [LmsPartnerController::class, 'updateVendor']);
+Route::delete('/lms/governance/vendors/{id}', [LmsPartnerController::class, 'destroyVendor']);
+
+Route::get('/lms/governance/integrations', [LmsPartnerController::class, 'integrations']);
+Route::post('/lms/governance/integrations', [LmsPartnerController::class, 'storeIntegration']);
+Route::put('/lms/governance/integrations/{id}', [LmsPartnerController::class, 'updateIntegration']);
+Route::delete('/lms/governance/integrations/{id}', [LmsPartnerController::class, 'destroyIntegration']);
+
+/*
+| Course Builder assessments. An additive /api surface over question_paper -
+| that table's own routes live in routes/lms.php as CSRF-protected web routes,
+| which a cross-origin call cannot use. routes/lms.php is left untouched, so the
+| old frontend's Assessment Library is unaffected.
+| The static /questions segment stays ahead of the /{id} wildcard.
+*/
+Route::get('/lms/assessments/questions', [LmsAssessmentController::class, 'questions']);
+Route::get('/lms/assessments', [LmsAssessmentController::class, 'index']);
+Route::post('/lms/assessments', [LmsAssessmentController::class, 'store']);
+Route::put('/lms/assessments/{id}', [LmsAssessmentController::class, 'update']);
+Route::delete('/lms/assessments/{id}', [LmsAssessmentController::class, 'destroy']);
+
+Route::get('/lms/courses/kpis', [LmsCourseController::class, 'kpis']);
+Route::get('/lms/courses/filters', [LmsCourseController::class, 'filters']);
+Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk']);
+Route::get('/lms/courses', [LmsCourseController::class, 'index']);
+Route::post('/lms/courses', [LmsCourseController::class, 'store']);
+Route::get('/lms/courses/{id}', [LmsCourseController::class, 'show']);
+Route::put('/lms/courses/{id}', [LmsCourseController::class, 'update']);
+Route::delete('/lms/courses/{id}', [LmsCourseController::class, 'destroy']);
+
+/*
+| Build with AI - outline generation (DeepSeek) and presentation rendering
+| (Gamma). Both previously lived in the old frontend's Next.js API routes.
+*/
+/*
+| My Learning - the course player. Progress and notes are new entities; the
+| chapter/content writes exist as web routes but are CSRF-blocked cross-origin.
+*/
+Route::get('/lms/learning/courses', [LmsLearningController::class, 'courses']);
+Route::get('/lms/learning/assessments', [LmsLearningController::class, 'assessments']);
+Route::post('/lms/learning/progress', [LmsLearningController::class, 'saveProgress']);
+Route::get('/lms/learning/notes', [LmsLearningController::class, 'notes']);
+Route::post('/lms/learning/notes', [LmsLearningController::class, 'storeNote']);
+Route::put('/lms/learning/notes/{id}', [LmsLearningController::class, 'updateNote']);
+Route::delete('/lms/learning/notes/{id}', [LmsLearningController::class, 'destroyNote']);
+Route::post('/lms/learning/chapters', [LmsLearningController::class, 'storeChapter']);
+Route::put('/lms/learning/chapters/{id}', [LmsLearningController::class, 'updateChapter']);
+Route::delete('/lms/learning/chapters/{id}', [LmsLearningController::class, 'destroyChapter']);
+Route::post('/lms/learning/content', [LmsLearningController::class, 'storeContent']);
+Route::put('/lms/learning/content/{id}', [LmsLearningController::class, 'updateContent']);
+Route::delete('/lms/learning/content/{id}', [LmsLearningController::class, 'destroyContent']);
+Route::get('/lms/learning/certificates', [LmsLearningController::class, 'certificates']);
+Route::post('/lms/learning/certificates', [LmsLearningController::class, 'issueCertificate']);
+// Public by design: checking whether a credential is genuine must not require
+// the checker to hold an account. Returns only the fields printed on the
+// certificate itself, never the wider learner record.
+Route::get('/lms/learning/certificates/verify/{code}', [LmsLearningController::class, 'verifyCertificate']);
+Route::get('/lms/learning/certificates/{id}/download', [LmsLearningController::class, 'downloadCertificate']);
+Route::post('/lms/learning/certificates/{id}/reissue', [LmsLearningController::class, 'reissueCertificate']);
+// Public: a credential nobody outside the org can check is worth nothing.
+Route::get('/verify/certificate/{code}', [LmsLearningController::class, 'verifyCertificate']);
+Route::get('/lms/learning/discussions', [LmsLearningController::class, 'discussions']);
+Route::post('/lms/learning/discussions', [LmsLearningController::class, 'storeDiscussion']);
+Route::post('/lms/learning/discussions/{id}/replies', [LmsLearningController::class, 'replyToDiscussion']);
+Route::delete('/lms/learning/discussions/{id}', [LmsLearningController::class, 'destroyDiscussion']);
+Route::get('/lms/learning/courses/{courseId}', [LmsLearningController::class, 'course']);
+
+/*
+| Sessions & Calendar. Sessions live in lms_virtual_classroom; attendees in
+| lms_session_registrations. Static segments precede /{id}.
+*/
+// Both static segments stay ahead of /lms/sessions/{id} so they are not
+// swallowed by the wildcard.
+Route::get('/lms/sessions/stats', [LmsSessionController::class, 'stats']);
+Route::get('/lms/sessions/deadlines', [LmsSessionController::class, 'deadlines']);
+Route::get('/lms/sessions', [LmsSessionController::class, 'index']);
+Route::post('/lms/sessions', [LmsSessionController::class, 'store']);
+Route::get('/lms/sessions/{id}/attendees', [LmsSessionController::class, 'attendees']);
+Route::post('/lms/sessions/{id}/register', [LmsSessionController::class, 'register']);
+Route::delete('/lms/sessions/{id}/register', [LmsSessionController::class, 'cancelRegistration']);
+Route::put('/lms/sessions/{id}', [LmsSessionController::class, 'update']);
+Route::delete('/lms/sessions/{id}', [LmsSessionController::class, 'destroy']);
+
+Route::get('/lms/ai/status', [AiCourseController::class, 'status']);
+Route::post('/lms/ai/outline', [AiCourseController::class, 'generateOutline']);
+Route::get('/lms/ai/outlines', [AiCourseController::class, 'outlines']);
+Route::post('/lms/ai/outlines/{id}/publish', [AiCourseController::class, 'publish']);
+Route::post('/lms/ai/presentation', [AiCourseController::class, 'generatePresentation']);
+Route::get('/lms/ai/presentation/{generationId}', [AiCourseController::class, 'generationStatus']);
 Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
 Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
 Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
@@ -284,7 +440,20 @@ Route::get('/index', [buildwithAIController::class, 'index']);
 Route::resource('gamma-api', GammaApiController::class);
 Route::get('gamma-api/sub-institute/{subInstituteId}', [GammaApiController::class, 'getBySubInstituteId']);
 
-Route::resource('skill_library', skillLibraryController::class);
+/*
+| Named api.skill_library, not skill_library.
+|
+| routes/web.php registers a resource on the same name, so both generated
+| skill_library.index / .store / ... and `php artisan route:cache` aborted with
+| "Another route has already been assigned name [skill_library.index]" - which
+| breaks any deploy that caches routes.
+|
+| Renaming the API copy also fixes the blade views under
+| resources/views/lms/library/skill_library/, whose {{ route('skill_library.store') }}
+| form actions were resolving to whichever registration happened to win. URLs
+| are unchanged; only the generated route name differs.
+*/
+Route::resource('skill_library', skillLibraryController::class)->names('api.skill_library');
 Route::get('/positions', [InterviewController::class, 'getPositions']);
 Route::get('/interviewers', [InterviewController::class, 'getInterviewers']);
 Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings']);

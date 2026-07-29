@@ -1,4 +1,3 @@
-
 <?php
 
 use App\Http\Controllers\user\mobileapp_menu_rightsController;

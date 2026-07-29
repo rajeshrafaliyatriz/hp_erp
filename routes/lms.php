@@ -187,7 +187,10 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
 
     Route::resource('lb_master', lbMasterController::class);
 
-    Route::resource('lmsAssignment', assignmentController::class);
+    Route::get('lmsAssignment/stats', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'stats']);
+    Route::post('lmsAssignment/bulkUpdateStatus', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'bulkUpdateStatus']);
+    Route::resource('lmsAssignment', \App\Http\Controllers\lms\assignment\assignmentController::class);
+    Route::post('lmsAssignment/updateStatus/{id}', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'updateStatus']);
 
     Route::resource('lmsAssignment_submission', assignmentSubmissionController::class);
 
