@@ -269,7 +269,7 @@ return new class extends Migration
             $table->string('status', 30)->default('scheduled')->index();
             $table->unsignedInteger('participant_count')->default(0);
             // Target rating distribution guardrail, e.g. {"5":10,"4":20,"3":50,...}
-            $table->json('distribution_target')->nullable();
+            $table->longText('distribution_target')->nullable();
             $table->text('notes')->nullable();
             $table->dateTime('locked_at')->nullable();
             $table->unsignedBigInteger('created_by')->index()->nullable();
@@ -297,7 +297,7 @@ return new class extends Migration
             $table->unsignedBigInteger('subject_id')->nullable()->index();
             $table->string('subject_name', 191)->nullable();
             // Field-level diff: [{field,label,old,new}] - the Audit Trail's change summary.
-            $table->json('changes')->nullable();
+            $table->longText('changes')->nullable();
             // Lets the feed be scoped to one review (the screen's Activity Feed panel).
             $table->unsignedBigInteger('review_id')->nullable()->index();
             $table->unsignedBigInteger('cycle_id')->nullable()->index();
@@ -367,7 +367,7 @@ return new class extends Migration
             // Which tab the preset belongs to: goals | reviews | appraisals | ...
             $table->string('tab', 30)->default('reviews')->index();
             // The serialised filter set, e.g. {"department_id":"3","stage":"calibration"}
-            $table->json('filters')->nullable();
+            $table->longText('filters')->nullable();
             $table->boolean('is_shared')->default(false)->index();
             $table->boolean('is_default')->default(false);
             $table->unsignedBigInteger('created_by')->index()->nullable();
