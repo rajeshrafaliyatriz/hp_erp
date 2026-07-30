@@ -171,7 +171,9 @@ class ForgotPasswordController extends Controller
             ], 422);
         }
 
-        $user = tbluserModel::where('email', $request->email)->update(['password' => Hash::make($request->password),'plain_password'=>$request->password]);
+        $user = tbluserModel::where('email', $request->email)->update([
+            'password' => Hash::make($request->password),
+        ]);
 
         DB::table('password_reset_tokens')->where(['email' => $request->email])->delete();
 

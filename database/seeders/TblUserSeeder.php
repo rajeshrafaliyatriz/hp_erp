@@ -19,8 +19,7 @@ class TblUserSeeder extends Seeder
         DB::table('tbluser')->insert([
             [
                 'user_name' => 'adminuser',
-                'password' => Hash::make('admin'),
-                'plain_password' => 'admin',
+                'password' => Hash::make(Str::password(32)),
                 'name_suffix' => 'Mr.',
                 'first_name' => 'Admin',
                 'middle_name' => 'System',
@@ -115,8 +114,7 @@ class TblUserSeeder extends Seeder
             ],
             [
                 'user_name' => 'employeeUser',
-                'password' => Hash::make('staff'),
-                'plain_password' => 'staff',
+                'password' => Hash::make(Str::password(32)),
                 'name_suffix' => 'Mr.',
                 'first_name' => 'Employee',
                 'middle_name' => 'System',
