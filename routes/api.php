@@ -32,6 +32,18 @@ use App\Http\Controllers\Api\Competency\MappingReviewController as CompetencyMap
 use App\Http\Controllers\Api\Competency\CareerPathController as CompetencyCareerPathController;
 use App\Http\Controllers\Api\Competency\LearningAssignmentController as CompetencyLearningAssignmentController;
 use App\Http\Controllers\Api\Competency\AuditController as CompetencyAuditController;
+// Talent Management -> Performance & Rewards Center (new module, see the route
+// block at the end of this file).
+use App\Http\Controllers\Api\Performance\PerformanceOverviewController;
+use App\Http\Controllers\Api\Performance\PerformanceCycleController;
+use App\Http\Controllers\Api\Performance\PerformanceReviewController;
+use App\Http\Controllers\Api\Performance\PerformanceGoalController;
+use App\Http\Controllers\Api\Performance\PerformanceAppraisalController;
+use App\Http\Controllers\Api\Performance\PerformanceCompensationController;
+use App\Http\Controllers\Api\Performance\PerformanceBonusController;
+use App\Http\Controllers\Api\Performance\PerformanceCalibrationController;
+use App\Http\Controllers\Api\Performance\PerformanceActivityController;
+use App\Http\Controllers\Api\Performance\PerformanceSavedViewController;
 use App\Http\Controllers\Api\DBController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
@@ -796,3 +808,106 @@ Route::post('nango/google/oauth-url', [App\Http\Controllers\NangoController::cla
 Route::post('task/resync-google-calendar', [App\Http\Controllers\front_desk\taskController::class, 'resyncTaskToGoogleCalendar']);
 
 Route::post('/auth/google', [GoogleAuthController::class, 'login']);
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Performance & Rewards Center
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/competency/* and /api/leave/*.
+|
+| Entirely NEW surface: this module had no routes, controllers, models or tables
+| before. Nothing below touches an existing endpoint, so no current consumer is
+| affected. Backed by the 11 s_performance_* tables created in
+| 2026_07_30_100000_create_performance_module_tables, plus READ-ONLY reuse of
+| tbluser, hrms_departments, org_designation, s_competency_assessments (job-role
+| derivation) and employee_salary_structures (current CTC).
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR. The subject employee
+| travels as `user_id_target` on writes and `user_id_filter` on reads.
+*/
+
+// Header: KPI cards, shared filter options, team comparison, cycle timeline.
+Route::get('/performance/overview', [PerformanceOverviewController::class, 'index']);
+Route::get('/performance/filters', [PerformanceOverviewController::class, 'filters']);
+Route::get('/performance/team-comparison', [PerformanceOverviewController::class, 'teamComparison']);
+Route::get('/performance/timeline', [PerformanceOverviewController::class, 'timeline']);
+
+// Review cycles - the cycle selector and the Create / Launch button.
+Route::get('/performance/cycles', [PerformanceCycleController::class, 'index']);
+Route::post('/performance/cycles', [PerformanceCycleController::class, 'store']);
+Route::get('/performance/cycles/{id}', [PerformanceCycleController::class, 'show'])->whereNumber('id');
+Route::put('/performance/cycles/{id}', [PerformanceCycleController::class, 'update'])->whereNumber('id');
+Route::post('/performance/cycles/{id}/launch', [PerformanceCycleController::class, 'launch'])->whereNumber('id');
+Route::post('/performance/cycles/{id}/close', [PerformanceCycleController::class, 'close'])->whereNumber('id');
+Route::delete('/performance/cycles/{id}', [PerformanceCycleController::class, 'destroy'])->whereNumber('id');
+
+// Employee reviews - the main table, the Review Board and the sidebar.
+// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+Route::get('/performance/reviews/board', [PerformanceReviewController::class, 'board']);
+Route::post('/performance/reviews/bulk', [PerformanceReviewController::class, 'bulk']);
+Route::get('/performance/reviews', [PerformanceReviewController::class, 'index']);
+Route::get('/performance/reviews/{id}', [PerformanceReviewController::class, 'show'])->whereNumber('id');
+Route::put('/performance/reviews/{id}', [PerformanceReviewController::class, 'update'])->whereNumber('id');
+Route::post('/performance/reviews/{id}/advance', [PerformanceReviewController::class, 'advance'])->whereNumber('id');
+Route::post('/performance/reviews/{id}/reminder', [PerformanceReviewController::class, 'sendReminder'])->whereNumber('id');
+Route::delete('/performance/reviews/{id}', [PerformanceReviewController::class, 'destroy'])->whereNumber('id');
+
+// Comments / Notes and Attachments, both scoped to a review.
+Route::get('/performance/reviews/{reviewId}/notes', [PerformanceActivityController::class, 'notes'])->whereNumber('reviewId');
+Route::post('/performance/reviews/{reviewId}/notes', [PerformanceActivityController::class, 'storeNote'])->whereNumber('reviewId');
+Route::put('/performance/notes/{id}', [PerformanceActivityController::class, 'updateNote'])->whereNumber('id');
+Route::delete('/performance/notes/{id}', [PerformanceActivityController::class, 'destroyNote'])->whereNumber('id');
+
+Route::get('/performance/reviews/{reviewId}/attachments', [PerformanceActivityController::class, 'attachments'])->whereNumber('reviewId');
+Route::post('/performance/reviews/{reviewId}/attachments', [PerformanceActivityController::class, 'storeAttachment'])->whereNumber('reviewId');
+Route::delete('/performance/attachments/{id}', [PerformanceActivityController::class, 'destroyAttachment'])->whereNumber('id');
+
+// Goals tab (KRA / KPI / OKR).
+Route::get('/performance/goals', [PerformanceGoalController::class, 'index']);
+Route::post('/performance/goals', [PerformanceGoalController::class, 'store']);
+Route::put('/performance/goals/{id}', [PerformanceGoalController::class, 'update'])->whereNumber('id');
+Route::delete('/performance/goals/{id}', [PerformanceGoalController::class, 'destroy'])->whereNumber('id');
+
+// Appraisals tab.
+Route::post('/performance/appraisals/bulk', [PerformanceAppraisalController::class, 'bulk']);
+Route::get('/performance/appraisals', [PerformanceAppraisalController::class, 'index']);
+Route::post('/performance/appraisals', [PerformanceAppraisalController::class, 'store']);
+Route::put('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'update'])->whereNumber('id');
+Route::put('/performance/appraisals/{id}/decision', [PerformanceAppraisalController::class, 'decision'])->whereNumber('id');
+Route::delete('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'destroy'])->whereNumber('id');
+
+// Compensation tab.
+Route::post('/performance/compensation/bulk', [PerformanceCompensationController::class, 'bulk']);
+Route::get('/performance/compensation', [PerformanceCompensationController::class, 'index']);
+Route::post('/performance/compensation', [PerformanceCompensationController::class, 'store']);
+Route::put('/performance/compensation/{id}', [PerformanceCompensationController::class, 'update'])->whereNumber('id');
+Route::put('/performance/compensation/{id}/decision', [PerformanceCompensationController::class, 'decision'])->whereNumber('id');
+Route::delete('/performance/compensation/{id}', [PerformanceCompensationController::class, 'destroy'])->whereNumber('id');
+
+// Bonus tab.
+Route::post('/performance/bonus/bulk', [PerformanceBonusController::class, 'bulk']);
+Route::get('/performance/bonus', [PerformanceBonusController::class, 'index']);
+Route::post('/performance/bonus', [PerformanceBonusController::class, 'store']);
+Route::put('/performance/bonus/{id}', [PerformanceBonusController::class, 'update'])->whereNumber('id');
+Route::put('/performance/bonus/{id}/decision', [PerformanceBonusController::class, 'decision'])->whereNumber('id');
+Route::delete('/performance/bonus/{id}', [PerformanceBonusController::class, 'destroy'])->whereNumber('id');
+
+// Calibration tab.
+Route::get('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'index']);
+Route::post('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'store']);
+Route::get('/performance/calibration-sessions/{id}/grid', [PerformanceCalibrationController::class, 'grid'])->whereNumber('id');
+Route::put('/performance/calibration-sessions/{id}/calibrate', [PerformanceCalibrationController::class, 'calibrate'])->whereNumber('id');
+Route::post('/performance/calibration-sessions/{id}/lock', [PerformanceCalibrationController::class, 'lock'])->whereNumber('id');
+Route::put('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'update'])->whereNumber('id');
+Route::delete('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'destroy'])->whereNumber('id');
+
+// Activity Feed / Audit Trail.
+Route::get('/performance/activity/filters', [PerformanceActivityController::class, 'filters']);
+Route::get('/performance/activity', [PerformanceActivityController::class, 'index']);
+
+// Saved Views (named filter presets per tab).
+Route::get('/performance/saved-views', [PerformanceSavedViewController::class, 'index']);
+Route::post('/performance/saved-views', [PerformanceSavedViewController::class, 'store']);
+Route::put('/performance/saved-views/{id}', [PerformanceSavedViewController::class, 'update'])->whereNumber('id');
+Route::delete('/performance/saved-views/{id}', [PerformanceSavedViewController::class, 'destroy'])->whereNumber('id');
