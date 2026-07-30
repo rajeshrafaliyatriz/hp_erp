@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -27,26 +28,41 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /**
+     * Portable column check.
+     *
+     * Schema::hasColumn() asks information_schema for `generation_expression`,
+     * a column that only exists on MySQL >= 5.7.6 / MariaDB >= 10.2. The
+     * production server runs an older engine, so that call dies there with
+     * "1054 Unknown column 'generation_expression'" even though the migration
+     * itself is fine. SHOW COLUMNS has existed in every MySQL/MariaDB release,
+     * so this behaves identically everywhere.
+     */
+    private function hasColumnPortable(string $table, string $column): bool
+    {
+        return count(DB::select("SHOW COLUMNS FROM `{$table}` LIKE ?", [$column])) > 0;
+    }
+
     public function up(): void
     {
         Schema::table('s_competency_certifications', function (Blueprint $table) {
-            if (!Schema::hasColumn('s_competency_certifications', 'certification_type')) {
+            if (!$this->hasColumnPortable('s_competency_certifications', 'certification_type')) {
                 $table->string('certification_type', 100)->nullable()->index()->after('issuing_body');
             }
-            if (!Schema::hasColumn('s_competency_certifications', 'verification_status')) {
+            if (!$this->hasColumnPortable('s_competency_certifications', 'verification_status')) {
                 // pending | verified | rejected
                 $table->string('verification_status', 30)->nullable()->index()->after('status');
             }
-            if (!Schema::hasColumn('s_competency_certifications', 'verified_by')) {
+            if (!$this->hasColumnPortable('s_competency_certifications', 'verified_by')) {
                 $table->unsignedBigInteger('verified_by')->nullable()->after('verification_status');
             }
-            if (!Schema::hasColumn('s_competency_certifications', 'verified_at')) {
+            if (!$this->hasColumnPortable('s_competency_certifications', 'verified_at')) {
                 $table->dateTime('verified_at')->nullable()->after('verified_by');
             }
-            if (!Schema::hasColumn('s_competency_certifications', 'notes')) {
+            if (!$this->hasColumnPortable('s_competency_certifications', 'notes')) {
                 $table->text('notes')->nullable()->after('expiry_date');
             }
-            if (!Schema::hasColumn('s_competency_certifications', 'requirement_id')) {
+            if (!$this->hasColumnPortable('s_competency_certifications', 'requirement_id')) {
                 $table->unsignedBigInteger('requirement_id')->nullable()->index()->after('competency_id');
             }
         });
@@ -56,7 +72,7 @@ return new class extends Migration
     {
         Schema::table('s_competency_certifications', function (Blueprint $table) {
             foreach (['certification_type', 'verification_status', 'verified_by', 'verified_at', 'notes', 'requirement_id'] as $column) {
-                if (Schema::hasColumn('s_competency_certifications', $column)) {
+                if ($this->hasColumnPortable('s_competency_certifications', $column)) {
                     $table->dropColumn($column);
                 }
             }

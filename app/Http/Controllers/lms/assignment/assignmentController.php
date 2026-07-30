@@ -77,7 +77,18 @@ class assignmentController extends Controller
             'a.review_note',
             'a.progress',
             'a.assigned_by',
-            'a.assigned_on'
+            'a.assigned_on',
+            /*
+             * Provenance. lms_assignments is shared: the Competency module
+             * writes rows here with source='competency' when learning is
+             * assigned from a development plan, and every row currently in the
+             * table came that way. Without these columns the LMS list showed
+             * them as if they were its own, so an admin had no way to know that
+             * changing one also moves a competency plan.
+             */
+            'a.source',
+            'a.competency_id',
+            'a.development_plan_id'
         )->get();
 
         // Compute initials on the server side
@@ -225,18 +236,56 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
+        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+
         $validator = Validator::make($request->all(), [
-            'ids' => 'required|array',
-            'status' => 'required|string'
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+            // Constrained to the four states the table actually uses. Previously
+            // 'required|string' accepted anything, so a typo silently wrote a
+            // status neither module's filters would ever match again.
+            'status' => 'required|in:Not Started,In Progress,Completed,Overdue',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
-        LmsAssignment::whereIn('id', $request->ids)->update(['status' => $request->status]);
+        $status = $request->input('status');
+        $update = ['status' => $status, 'updated_at' => now()];
 
-        return response()->json(['message' => 'Statuses updated successfully', 'status' => true]);
+        /*
+         * Keep `progress` in step with `status`.
+         *
+         * lms_assignments is shared with the Competency module, which assigns
+         * learning from a development plan and reads `progress` back to show
+         * plan completion. Its own update() already couples the two - marking
+         * an assignment Completed sets progress to 100. This endpoint set only
+         * `status`, so a bulk "Completed" here left progress at whatever it was
+         * (20-84% on live rows) and the Competency dashboard would report the
+         * plan as unfinished forever.
+         *
+         * Only the unambiguous ends are forced; In Progress and Overdue leave
+         * whatever real progress the learner has made alone.
+         */
+        if ($status === 'Completed') {
+            $update['progress'] = 100;
+        } elseif ($status === 'Not Started') {
+            $update['progress'] = 0;
+        }
+
+        // Scoped to the tenant and to live rows. Without this an id from another
+        // institute could be updated by guessing it.
+        $affected = LmsAssignment::whereIn('id', $request->ids)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->update($update);
+
+        return response()->json([
+            'message' => $affected . ' assignment(s) updated.',
+            'status' => true,
+            'data' => ['affected' => $affected, 'skipped' => count($request->ids) - $affected],
+        ]);
     }
 
     /**
