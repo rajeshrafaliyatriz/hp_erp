@@ -33,6 +33,21 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
+     * Portable column check.
+     *
+     * Schema::hasColumn() asks information_schema for `generation_expression`,
+     * a column that only exists on MySQL >= 5.7.6 / MariaDB >= 10.2. The
+     * production server runs an older engine, so that call dies there with
+     * "1054 Unknown column 'generation_expression'" even though the migration
+     * itself is fine. SHOW COLUMNS has existed in every MySQL/MariaDB release,
+     * so this behaves identically everywhere.
+     */
+    private function hasColumnPortable(string $table, string $column): bool
+    {
+        return count(DB::select("SHOW COLUMNS FROM `{$table}` LIKE ?", [$column])) > 0;
+    }
+
+    /**
      * The LMS branch's own migration for this table. Its timestamp is earlier
      * than this file's, so when both exist it runs first and this migration
      * only adds columns. The one case that needs handling is the reverse: this
@@ -69,17 +84,17 @@ return new class extends Migration
         }
 
         Schema::table('lms_assignments', function (Blueprint $table) {
-            if (!Schema::hasColumn('lms_assignments', 'development_plan_id')) {
+            if (!$this->hasColumnPortable('lms_assignments', 'development_plan_id')) {
                 $table->unsignedBigInteger('development_plan_id')->nullable()->index();
             }
-            if (!Schema::hasColumn('lms_assignments', 'competency_id')) {
+            if (!$this->hasColumnPortable('lms_assignments', 'competency_id')) {
                 $table->unsignedBigInteger('competency_id')->nullable()->index();
             }
-            if (!Schema::hasColumn('lms_assignments', 'assigned_by_id')) {
+            if (!$this->hasColumnPortable('lms_assignments', 'assigned_by_id')) {
                 // `assigned_by` is a display name (varchar); this is the tbluser id.
                 $table->unsignedBigInteger('assigned_by_id')->nullable();
             }
-            if (!Schema::hasColumn('lms_assignments', 'source')) {
+            if (!$this->hasColumnPortable('lms_assignments', 'source')) {
                 // 'competency' = created by the Development & Career workspace.
                 $table->string('source', 30)->nullable()->index();
             }
@@ -123,7 +138,7 @@ return new class extends Migration
 
         Schema::table('lms_assignments', function (Blueprint $table) {
             foreach (['development_plan_id', 'competency_id', 'assigned_by_id', 'source'] as $column) {
-                if (Schema::hasColumn('lms_assignments', $column)) {
+                if ($this->hasColumnPortable('lms_assignments', $column)) {
                     $table->dropColumn($column);
                 }
             }

@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -21,16 +22,31 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /**
+     * Portable column check.
+     *
+     * Schema::hasColumn() asks information_schema for `generation_expression`,
+     * a column that only exists on MySQL >= 5.7.6 / MariaDB >= 10.2. The
+     * production server runs an older engine, so that call dies there with
+     * "1054 Unknown column 'generation_expression'" even though the migration
+     * itself is fine. SHOW COLUMNS has existed in every MySQL/MariaDB release,
+     * so this behaves identically everywhere.
+     */
+    private function hasColumnPortable(string $table, string $column): bool
+    {
+        return count(DB::select("SHOW COLUMNS FROM `{$table}` LIKE ?", [$column])) > 0;
+    }
+
     public function up(): void
     {
         Schema::table('s_competency_evidence', function (Blueprint $table) {
-            if (!Schema::hasColumn('s_competency_evidence', 'certification_id')) {
+            if (!$this->hasColumnPortable('s_competency_evidence', 'certification_id')) {
                 $table->unsignedBigInteger('certification_id')->nullable()->index()->after('competency_id');
             }
-            if (!Schema::hasColumn('s_competency_evidence', 'file_name')) {
+            if (!$this->hasColumnPortable('s_competency_evidence', 'file_name')) {
                 $table->string('file_name', 191)->nullable()->after('link');
             }
-            if (!Schema::hasColumn('s_competency_evidence', 'file_path')) {
+            if (!$this->hasColumnPortable('s_competency_evidence', 'file_path')) {
                 $table->string('file_path', 500)->nullable()->after('file_name');
             }
         });
@@ -40,7 +56,7 @@ return new class extends Migration
     {
         Schema::table('s_competency_evidence', function (Blueprint $table) {
             foreach (['certification_id', 'file_name', 'file_path'] as $column) {
-                if (Schema::hasColumn('s_competency_evidence', $column)) {
+                if ($this->hasColumnPortable('s_competency_evidence', $column)) {
                     $table->dropColumn($column);
                 }
             }
