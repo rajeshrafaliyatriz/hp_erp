@@ -44,6 +44,14 @@ use App\Http\Controllers\Api\Performance\PerformanceBonusController;
 use App\Http\Controllers\Api\Performance\PerformanceCalibrationController;
 use App\Http\Controllers\Api\Performance\PerformanceActivityController;
 use App\Http\Controllers\Api\Performance\PerformanceSavedViewController;
+// Talent Management -> Onboarding & Employee Lifecycle Center (route block at the
+// end of this file).
+use App\Http\Controllers\Api\Onboarding\OnboardingOverviewController;
+use App\Http\Controllers\Api\Onboarding\OnboardingJourneyController;
+use App\Http\Controllers\Api\Onboarding\OnboardingTaskController;
+use App\Http\Controllers\Api\Onboarding\OnboardingDocumentController;
+use App\Http\Controllers\Api\Onboarding\OnboardingNoteController;
+use App\Http\Controllers\Api\Onboarding\OnboardingProbationController;
 use App\Http\Controllers\Api\DBController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
@@ -911,3 +919,140 @@ Route::get('/performance/saved-views', [PerformanceSavedViewController::class, '
 Route::post('/performance/saved-views', [PerformanceSavedViewController::class, 'store']);
 Route::put('/performance/saved-views/{id}', [PerformanceSavedViewController::class, 'update'])->whereNumber('id');
 Route::delete('/performance/saved-views/{id}', [PerformanceSavedViewController::class, 'destroy'])->whereNumber('id');
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Onboarding & Employee Lifecycle Center
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/performance/* and
+| /api/competency/*.
+|
+| Entirely NEW surface: this module had no routes, controllers or models before.
+| Nothing below touches an existing endpoint, so no current consumer is affected.
+| Backed by 2026_07_31_100000_create_onboarding_module_tables, which ADOPTS the
+| two orphan tables talent_onboarding_journeys / talent_onboarding_tasks (present
+| in the database with 0 rows, no migration and zero code references) and adds
+| talent_onboarding_journey_stages / _documents / _notes / _activity_log.
+| Read-only reuse of tbluser, hrms_departments, org_designation, document_type,
+| talent_offers and talent_job_applications; the ONLY write outside this module's
+| own tables is tbluser.probation_period_from/to, set on an explicit probation
+| decision by OnboardingProbationController.
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR, never the subject.
+| The subject employee is `employee_id` on a journey and `owner_id` on a task.
+*/
+
+// Header: the 5 KPI cards and every dropdown on the screen.
+Route::get('/onboarding/overview', [OnboardingOverviewController::class, 'index']);
+Route::get('/onboarding/filters', [OnboardingOverviewController::class, 'filters']);
+
+// Journeys - the journey list sheet, the profile sidebar and "Start onboarding".
+Route::get('/onboarding/journeys', [OnboardingJourneyController::class, 'index']);
+Route::post('/onboarding/journeys', [OnboardingJourneyController::class, 'store']);
+Route::post('/onboarding/journeys/from-offer/{offerId}', [OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
+Route::get('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'show'])->whereNumber('id');
+Route::put('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
+
+// Journey stages - the "Onboarding Journey Progress" timeline.
+Route::get('/onboarding/journeys/{journeyId}/stages', [OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
+Route::put('/onboarding/stages/{id}', [OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
+Route::post('/onboarding/stages/{id}/complete', [OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
+
+// Key Contacts card and the Lifecycle Timeline tab.
+Route::get('/onboarding/journeys/{journeyId}/contacts', [OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
+Route::get('/onboarding/journeys/{journeyId}/timeline', [OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
+
+// Preboarding tasks - the main table, its row actions and the Add Task sheet.
+// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+Route::get('/onboarding/workstreams', [OnboardingTaskController::class, 'workstreams']);
+Route::post('/onboarding/tasks/bulk', [OnboardingTaskController::class, 'bulk']);
+Route::get('/onboarding/tasks', [OnboardingTaskController::class, 'index']);
+Route::post('/onboarding/tasks', [OnboardingTaskController::class, 'store']);
+Route::put('/onboarding/tasks/{id}', [OnboardingTaskController::class, 'update'])->whereNumber('id');
+Route::post('/onboarding/tasks/{id}/complete', [OnboardingTaskController::class, 'complete'])->whereNumber('id');
+Route::delete('/onboarding/tasks/{id}', [OnboardingTaskController::class, 'destroy'])->whereNumber('id');
+
+// Documents card. POST accepts multipart; PUT doubles as the upload endpoint for
+// an existing request (browsers cannot send multipart PUT, so the frontend posts
+// with _method=PUT, which Laravel's method spoofing resolves).
+Route::get('/onboarding/journeys/{journeyId}/documents', [OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
+Route::post('/onboarding/journeys/{journeyId}/documents', [OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
+Route::match(['put', 'post'], '/onboarding/documents/{id}', [OnboardingDocumentController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/documents/{id}', [OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
+
+// Notes card.
+Route::get('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'index'])->whereNumber('journeyId');
+Route::post('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'store'])->whereNumber('journeyId');
+Route::put('/onboarding/notes/{id}', [OnboardingNoteController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/notes/{id}', [OnboardingNoteController::class, 'destroy'])->whereNumber('id');
+
+// Probation & Confirmation tab.
+Route::get('/onboarding/probation', [OnboardingProbationController::class, 'index']);
+Route::put('/onboarding/probation/{journeyId}', [OnboardingProbationController::class, 'update'])->whereNumber('journeyId');
+Route::post('/onboarding/probation/{journeyId}/confirm', [OnboardingProbationController::class, 'confirm'])->whereNumber('journeyId');
+Route::post('/onboarding/probation/{journeyId}/extend', [OnboardingProbationController::class, 'extend'])->whereNumber('journeyId');
+Route::post('/onboarding/probation/{journeyId}/terminate', [OnboardingProbationController::class, 'terminate'])->whereNumber('journeyId');
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Internal Mobility & Succession Center
+|--------------------------------------------------------------------------
+| Sanctum token query param authenticated and tenant scoped by sub_institute_id.
+*/
+Route::prefix('mobility')->group(function () {
+    Route::get('/overview', [App\Http\Controllers\Api\Mobility\MobilityOverviewController::class, 'index']);
+    Route::get('/filters', [App\Http\Controllers\Api\Mobility\MobilityOverviewController::class, 'filters']);
+
+
+    Route::get('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'index']);
+    Route::post('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'store']);
+    Route::get('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'show'])->whereNumber('id');
+    Route::put('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'update'])->whereNumber('id');
+    Route::delete('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'index']);
+    Route::post('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'store']);
+    Route::put('/applications/{id}', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'update'])->whereNumber('id');
+
+    Route::get('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'index']);
+    Route::post('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'store']);
+    Route::put('/transfers/{id}', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'update'])->whereNumber('id');
+
+    Route::get('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'index']);
+    Route::post('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'store']);
+    Route::put('/promotions/{id}', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'update'])->whereNumber('id');
+
+    Route::get('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'index']);
+    Route::post('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'store']);
+    Route::put('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'update'])->whereNumber('id');
+    Route::delete('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'index']);
+    Route::post('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'store']);
+    Route::get('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'members'])->whereNumber('id');
+    Route::post('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'addMember'])->whereNumber('id');
+    Route::delete('/pools/{id}/members/{userId}', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'removeMember'])->whereNumber('id')->whereNumber('userId');
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Offboarding Center
+|--------------------------------------------------------------------------
+*/
+Route::prefix('offboarding')->group(function () {
+    Route::get('/overview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'overview']);
+    Route::get('/filters', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'filters']);
+    Route::get('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'index']);
+    Route::post('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'store']);
+    Route::get('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'show'])->whereNumber('id');
+    Route::put('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'update'])->whereNumber('id');
+    Route::post('/cases/{id}/status', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateStatus'])->whereNumber('id');
+    Route::post('/cases/{id}/clearance', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateClearance'])->whereNumber('id');
+    Route::post('/cases/{id}/documents', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateDocuments'])->whereNumber('id');
+    Route::post('/cases/{id}/comments', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'addComment'])->whereNumber('id');
+    Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
+    Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');
+});
