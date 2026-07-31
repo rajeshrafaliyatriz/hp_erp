@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Controllers\lms\library;
+namespace App\Http\Controllers\lms\pal;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
-class skillLibraryController1 extends Controller
+class palController extends Controller
 {
     /**
      * Display a listing of the resource.
