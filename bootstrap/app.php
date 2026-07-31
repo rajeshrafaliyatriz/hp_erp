@@ -27,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'menu' => \App\Http\Middleware\MenuMiddleware::class,
             'session' => \App\Http\Middleware\SessionMiddleware::class,
             'auth' => \App\Http\Middleware\authMiddleware::class,
+            'task.sanitize' => \App\Http\Middleware\TaskSanitizeMiddleware::class,
         ]);
           $middleware->validateCsrfTokens(except: [
             'stripe/*',
