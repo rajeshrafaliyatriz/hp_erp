@@ -9,10 +9,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('talent_offboarding_cases', function (Blueprint $table) {
-            $table->json('clearance_tasks')->nullable();
-            $table->json('documents')->nullable();
-            $table->json('comments')->nullable();
-            $table->json('activity_log')->nullable();
+            $table->longText('clearance_tasks')->nullable();
+            $table->longText('documents')->nullable();
+            $table->longText('comments')->nullable();
+            $table->longText('activity_log')->nullable();
         });
     }
 
