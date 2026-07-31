@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\TaskManagement;
 
 use App\Http\Controllers\Controller;
+use App\Services\TaskManagement\TaskAuditService;
+use App\Services\TaskManagement\TaskDependencyResolutionService;
+use App\Services\TaskManagement\TaskStatusTransitionService;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -20,6 +23,13 @@ class MyTasksController extends Controller
 {
     private const STATUSES = ['PENDING', 'IN-PROGRESS', 'ON HOLD', 'COMPLETED'];
     private const PRIORITIES = ['High', 'Medium', 'Low'];
+
+    public function __construct(
+        private readonly TaskAuditService $taskAudit,
+        private readonly TaskStatusTransitionService $statusTransitions,
+        private readonly TaskDependencyResolutionService $dependencyResolution
+    ) {
+    }
 
     public function index(Request $request)
     {
@@ -134,6 +144,8 @@ class MyTasksController extends Controller
         $validator = Validator::make($request->all(), [
             'status' => 'required|in:PENDING,IN-PROGRESS,ON HOLD,COMPLETED',
             'remarks' => 'required|string|max:5000',
+            'delay_category' => 'nullable|in:Dependency,Resource,Scope,Technical,Approval,External,Other',
+            'delay_reason' => 'nullable|string|max:5000',
         ]);
 
         if ($validator->fails()) {
@@ -156,12 +168,24 @@ class MyTasksController extends Controller
             return response()->json(['status' => 0, 'message' => 'Task not found or cannot be updated.'], 404);
         }
 
+        if (!$this->statusTransitions->allows($task->status, $request->input('status'))) {
+            return response()->json([
+                'status' => 0,
+                'message' => $this->statusTransitions->message($task->status, $request->input('status')),
+            ], 422);
+        }
+
+        $before = (array) $task;
         DB::table('task')->where('id', $id)->update([
             'status' => $request->input('status'),
             'reply' => $request->input('remarks'),
+            'delay_category' => $request->input('status') === 'ON HOLD' ? $request->input('delay_category') : ($before['delay_category'] ?? null),
+            'delay_reason' => $request->input('status') === 'ON HOLD' ? ($request->input('delay_reason') ?: $request->input('remarks')) : ($before['delay_reason'] ?? null),
             'updated_by' => $context['user_id'],
             'updated_at' => now(),
         ]);
+        $this->taskAudit->taskChanged($id, 'status_changed', $before, $context['user_id']);
+        if ($request->input('status') === 'COMPLETED') $this->dependencyResolution->resolveAfterCompletion($id, $context['user_id']);
 
         return response()->json([
             'status' => 1,
@@ -176,7 +200,7 @@ class MyTasksController extends Controller
 
     private function context(Request $request)
     {
-        $token = trim((string) $request->input('token'));
+        $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
         if ($token === '') {
             return response()->json(['status' => 0, 'message' => 'Token not provided.'], 401);
         }
@@ -221,8 +245,8 @@ class MyTasksController extends Controller
             ->whereNull('t.deleted_at')
             ->select([
                 't.id', 't.task_title', 't.task_description', 't.task_attachment',
-                't.file_size', 't.file_type', 't.task_date', 't.task_type',
-                't.status', 't.reply', 't.observation_point', 't.created_at',
+                't.file_size', 't.file_type', 't.task_date', 't.planned_start_date', 't.estimated_hours', 't.actual_hours', 't.remaining_hours', 't.acceptance_criteria', 't.task_type',
+                't.status', 't.reply', 't.delay_category', 't.delay_reason', 't.observation_point', 't.created_at',
                 't.updated_at', 't.task_allocated', 't.task_allocated_to',
                 DB::raw("TRIM(CONCAT_WS(' ', assignee.first_name, assignee.middle_name, assignee.last_name)) as assignee_name"),
                 DB::raw("TRIM(CONCAT_WS(' ', allocator.first_name, allocator.middle_name, allocator.last_name)) as allocator_name"),
@@ -304,7 +328,13 @@ class MyTasksController extends Controller
             'status' => $status,
             'priority' => in_array($task->task_type, self::PRIORITIES, true) ? $task->task_type : null,
             'task_type' => $task->task_type,
+            'estimated_hours' => $task->estimated_hours !== null ? (float) $task->estimated_hours : null,
+            'actual_hours' => $task->actual_hours !== null ? (float) $task->actual_hours : null,
+            'remaining_hours' => $task->remaining_hours !== null ? (float) $task->remaining_hours : null,
+            'acceptance_criteria' => json_decode((string) ($task->acceptance_criteria ?? '[]'), true) ?: [],
+            'planned_start_date' => $task->planned_start_date ? Carbon::parse($task->planned_start_date)->toDateString() : null,
             'due_date' => $task->task_date ? Carbon::parse($task->task_date)->toDateString() : null,
+            'delay_category' => $task->delay_category, 'delay_reason' => $task->delay_reason,
             'remarks' => $task->reply,
             'created_at' => $task->created_at ? Carbon::parse($task->created_at)->toIso8601String() : null,
             'updated_at' => $task->updated_at ? Carbon::parse($task->updated_at)->toIso8601String() : null,
