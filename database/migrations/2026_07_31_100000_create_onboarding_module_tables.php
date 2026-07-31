@@ -199,46 +199,46 @@ return new class extends Migration
         // no-op on a database that already has it.
         Schema::table('talent_onboarding_journeys', function (Blueprint $table) {
             // The breadcrumb identifier the screen shows (OHB-2025-0456).
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'journey_code')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'journey_code')) {
                 $table->string('journey_code', 40)->nullable()->index()->after('sub_institute_id');
             }
             // A hire sourced from recruitment before they exist in tbluser.
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'application_id')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'application_id')) {
                 $table->unsignedBigInteger('application_id')->nullable()->index()->after('offer_id');
             }
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'candidate_name')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'candidate_name')) {
                 $table->string('candidate_name', 191)->nullable()->after('application_id');
             }
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'candidate_email')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'candidate_email')) {
                 $table->string('candidate_email', 191)->nullable()->after('candidate_name');
             }
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'candidate_phone')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'candidate_phone')) {
                 $table->string('candidate_phone', 50)->nullable()->after('candidate_email');
             }
             // Probation & Confirmation tab. tbluser.probation_period_from/to hold
             // the same window for a confirmed employee; these carry it for a hire
             // who has no tbluser row yet, and record the decision itself, which
             // tbluser has nowhere to store.
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'probation_start')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'probation_start')) {
                 $table->date('probation_start')->nullable()->after('completed_at');
             }
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'probation_end')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'probation_end')) {
                 $table->date('probation_end')->nullable()->index()->after('probation_start');
             }
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'extension_end')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'extension_end')) {
                 $table->date('extension_end')->nullable()->after('probation_end');
             }
             // pending | confirmed | extended | terminated
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'confirmation_status')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'confirmation_status')) {
                 $table->string('confirmation_status', 20)->default('pending')->index()->after('extension_end');
             }
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'confirmed_on')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'confirmed_on')) {
                 $table->date('confirmed_on')->nullable()->after('confirmation_status');
             }
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'confirmed_by')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'confirmed_by')) {
                 $table->unsignedBigInteger('confirmed_by')->nullable()->index()->after('confirmed_on');
             }
-            if (!Schema::hasColumn('talent_onboarding_journeys', 'confirmation_notes')) {
+            if (!$this->hasColumn('talent_onboarding_journeys', 'confirmation_notes')) {
                 $table->text('confirmation_notes')->nullable()->after('confirmed_by');
             }
         });
@@ -246,7 +246,7 @@ return new class extends Migration
         // employee_id was created NOT NULL on the orphan table, which blocks the
         // preboarding case the screen is built around (offer accepted, no tbluser
         // row yet). Safe to relax: the table holds 0 rows and nothing reads it.
-        if (Schema::hasColumn('talent_onboarding_journeys', 'employee_id')) {
+        if ($this->hasColumn('talent_onboarding_journeys', 'employee_id')) {
             \Illuminate\Support\Facades\DB::statement(
                 'ALTER TABLE `talent_onboarding_journeys` MODIFY `employee_id` BIGINT UNSIGNED NULL'
             );
@@ -287,7 +287,7 @@ return new class extends Migration
         Schema::table('talent_onboarding_tasks', function (Blueprint $table) {
             // The screen shows owners like "HR Team" / "IT Team" that are not a
             // single tbluser row; owner_id stays authoritative when it is set.
-            if (!Schema::hasColumn('talent_onboarding_tasks', 'owner_label')) {
+            if (!$this->hasColumn('talent_onboarding_tasks', 'owner_label')) {
                 $table->string('owner_label', 100)->nullable()->after('owner_id');
             }
         });
@@ -304,7 +304,7 @@ return new class extends Migration
         // Only the columns this migration added are removed.
         if (Schema::hasTable('talent_onboarding_tasks')) {
             Schema::table('talent_onboarding_tasks', function (Blueprint $table) {
-                if (Schema::hasColumn('talent_onboarding_tasks', 'owner_label')) {
+                if ($this->hasColumn('talent_onboarding_tasks', 'owner_label')) {
                     $table->dropColumn('owner_label');
                 }
             });
@@ -317,11 +317,22 @@ return new class extends Migration
                     'candidate_phone', 'probation_start', 'probation_end', 'extension_end',
                     'confirmation_status', 'confirmed_on', 'confirmed_by', 'confirmation_notes',
                 ] as $column) {
-                    if (Schema::hasColumn('talent_onboarding_journeys', $column)) {
+                    if ($this->hasColumn('talent_onboarding_journeys', $column)) {
                         $table->dropColumn($column);
                     }
                 }
             });
         }
+    }
+
+    private function hasColumn(string $table, string $column): bool
+    {
+        $columns = \Illuminate\Support\Facades\DB::select("SHOW COLUMNS FROM `{$table}`");
+        foreach ($columns as $col) {
+            if ($col->Field === $column) {
+                return true;
+            }
+        }
+        return false;
     }
 };
