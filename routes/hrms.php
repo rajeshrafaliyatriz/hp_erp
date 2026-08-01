@@ -29,6 +29,8 @@ Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], 
     route::get('department-Emp-Lists', [departmentController::class, 'departmentEmpLists'])->name('departmentEmpLists');
     route::get('sub-department-list', [departmentController::class, 'subDepartmentList'])->name('subDepartmentList');
     route::get('department-employee-list', [departmentController::class, 'departmentEmployeeList'])->name('departmentEmployeeList');
+    route::get('department-jobroles', [departmentController::class, 'departmentJobRoles'])->name('departmentJobRoles');
+    route::get('jobrole-tasks', [departmentController::class, 'jobRoleTasks'])->name('jobRoleTasks');
     Route::get('holiday_weekdays', [HolidayController::class,'getWeekdays'])->name('holiday.weekdays');
     Route::post('holiday_weekdays', [HolidayController::class,'storeWeekdays'])->name('holiday.weekdays');
 });
@@ -138,6 +140,8 @@ Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], 
     route::get('department-Emp-Lists', [departmentController::class, 'departmentEmpLists'])->name('departmentEmpLists');
     route::get('sub-department-list', [departmentController::class, 'subDepartmentList'])->name('subDepartmentList');
     route::get('department-employee-list', [departmentController::class, 'departmentEmployeeList'])->name('departmentEmployeeList');
+    route::get('department-jobroles', [departmentController::class, 'departmentJobRoles'])->name('departmentJobRoles');
+    route::get('jobrole-tasks', [departmentController::class, 'jobRoleTasks'])->name('jobRoleTasks');
 
     route::get('attendance-by-id', [HrmsController::class, 'getAttandanceData'])->name('attendance_by_id');
 
@@ -153,3 +157,4 @@ Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], 
 
 Route::get('hrms/myleave/{employeeId}', [HrmsLeaveController::class, 'getLeaveDashboard']);
 Route::get('hrms/leavehistory/{employeeId}', [HrmsLeaveController::class, 'getLeaveHistory']);
+

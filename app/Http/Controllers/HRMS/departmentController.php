@@ -43,6 +43,52 @@ class departmentController extends Controller
         return is_mobile($type, "HRMS.department.index", $res, "view");
     }
 
+    public function departmentJobRoles(Request $request)
+    {
+        $depId = $request->input('depId');
+
+        if (empty($depId)) {
+            return response()->json([]);
+        }
+
+        $jobRoles = DB::table('s_jobrole')
+            ->select('id', 'jobrole')
+            ->where('track', $depId)
+            ->orderBy('jobrole')
+            ->get();
+
+        return response()->json($jobRoles);
+    }
+
+    public function jobRoleTasks(Request $request)
+    {
+        $jobrole = $request->input('jobrole');
+
+        if (empty($jobrole)) {
+            return response()->json([]);
+        }
+
+        $jobroleName = $jobrole;
+        if (is_numeric($jobrole)) {
+            $jobroleName = DB::table('s_jobrole')->where('id', $jobrole)->value('jobrole') ?? $jobrole;
+        }
+
+        $tasks = DB::table('s_jobrole_task')
+            ->select('id', 'task', 'critical_work_function')
+            ->where('jobrole', $jobroleName)
+            ->orderBy('task')
+            ->get()
+            ->map(function ($task) {
+                return [
+                    'id' => $task->id,
+                    'task_title' => $task->task,
+                    'task_description' => $task->critical_work_function,
+                ];
+            })
+            ->values();
+
+        return response()->json($tasks);
+    }
     public function create(Request $request)
     {
         $type = $request->input('type');
@@ -448,3 +494,4 @@ class departmentController extends Controller
         ->toArray();
     }
 }
+

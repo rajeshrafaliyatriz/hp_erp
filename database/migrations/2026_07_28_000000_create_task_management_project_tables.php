@@ -24,7 +24,9 @@ return new class extends Migration
             $table->date('due_date')->nullable();
             $table->decimal('budget_estimate', 15, 2)->nullable();
             $table->string('client_name', 191)->nullable();
-            $table->json('regulatory_flags')->nullable();
+            // Stored as encoded JSON for compatibility with MariaDB versions
+            // that do not support the native JSON column type.
+            $table->text('regulatory_flags')->nullable();
             $table->unsignedBigInteger('sub_institute_id')->index();
             $table->string('syear', 50)->index();
             $table->unsignedBigInteger('created_by')->index();

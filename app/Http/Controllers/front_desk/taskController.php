@@ -3,8 +3,14 @@
 namespace App\Http\Controllers\front_desk;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\TaskManagement\StoreTaskRequest;
 use App\Models\front_desk\taskModel;
 use App\Models\user\tbluserModel;
+use App\Services\TaskManagement\TaskReferenceService;
+use App\Services\TaskManagement\TaskAuditService;
+use App\Services\TaskManagement\TaskDependencyResolutionService;
+use App\Services\TaskManagement\TaskNotificationService;
+use App\Services\TaskManagement\TaskStatusTransitionService;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -23,6 +29,25 @@ use Kreait\Firebase\Messaging\CloudMessage;
 
 class taskController extends Controller
 {
+    public function __construct(
+        private readonly TaskReferenceService $taskReferences,
+        private readonly TaskAuditService $taskAudit,
+        private readonly TaskNotificationService $taskNotifications,
+        private readonly TaskStatusTransitionService $statusTransitions,
+        private readonly TaskDependencyResolutionService $dependencyResolution
+    ) {
+    }
+
+    private function insertTaskWithReference(array $data, string|int|null $syear): int
+    {
+        $taskId = (int) taskModel::insertGetId($data);
+        $this->taskReferences->assign($taskId, $syear);
+        $this->taskAudit->taskCreated($taskId, isset($data['created_by']) ? (int) $data['created_by'] : null);
+        $this->taskNotifications->taskAssigned($taskId);
+
+        return $taskId;
+    }
+
     /**
      * Send FCM notification to user
      */
@@ -123,7 +148,7 @@ class taskController extends Controller
 
         // Token validation for API requests
         if ($type == "API") {
-            $token = $request->input('token');
+            $token = $request->bearerToken() ?: $request->input('token');
             
             // If token is provided, validate it
             if ($token) {
@@ -350,7 +375,7 @@ class taskController extends Controller
     //     return is_mobile($type, "task.index", $res);
     // }
 
-    public function store(Request $request)
+    public function store(StoreTaskRequest $request)
     {
         try {
             $type = $request->type;
@@ -444,7 +469,7 @@ class taskController extends Controller
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
-                        $taskId = taskModel::insertGetId($data);
+                        $taskId = $this->insertTaskWithReference($data, $syear);
                         $this->sendTaskNotification($request->input("TASK_ALLOCATED_TO"), $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 } else if ($task_type == "Medium") {
@@ -452,7 +477,7 @@ class taskController extends Controller
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
-                        $taskId = taskModel::insertGetId($data);
+                        $taskId = $this->insertTaskWithReference($data, $syear);
                         $this->sendTaskNotification($request->input("TASK_ALLOCATED_TO"), $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 } else if ($task_type == "Low") {
@@ -460,13 +485,13 @@ class taskController extends Controller
                     foreach ($dates as $date) {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                         $data['created_by'] = $user_id;
-                        $taskId = taskModel::insertGetId($data);
+                        $taskId = $this->insertTaskWithReference($data, $syear);
                         $this->sendTaskNotification($request->input("TASK_ALLOCATED_TO"), $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 } else {
                     $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? now()]);
                     $data['created_by'] = $user_id;
-                    $taskId = taskModel::insertGetId($data);
+                    $taskId = $this->insertTaskWithReference($data, $syear);
                     $this->sendTaskNotification($request->input("TASK_ALLOCATED_TO"), $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                 }
             } elseif ($request->formType == "multiUser" && !empty($request->TASK_ALLOCATED_TO)) {
@@ -480,7 +505,7 @@ class taskController extends Controller
                         $extraData['skill_id'] = $request->input("skill_id");
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? now()]);
                         $data['created_by'] = $user_id;
-                        $taskId = taskModel::insertGetId($data);
+                        $taskId = $this->insertTaskWithReference($data, $syear);
                         $this->sendTaskNotification($allocatedUser, $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 }
@@ -584,13 +609,13 @@ class taskController extends Controller
                         foreach ($dates as $date) {
                             $data = array_merge($baseData, $extraData, ['TASK_DATE' => $date]);
                             $data['created_by'] = $user_id;
-                            $taskId = taskModel::insertGetId($data);
+                            $taskId = $this->insertTaskWithReference($data, $syear);
                             $this->sendTaskNotification($value, $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                         }
                     } else {
                         $data = array_merge($baseData, $extraData, ['TASK_DATE' => $request->repeat_until ?? $request->get('TASK_DATE')]);
                         $data['created_by'] = $user_id;
-                        $taskId = taskModel::insertGetId($data);
+                        $taskId = $this->insertTaskWithReference($data, $syear);
                         $this->sendTaskNotification($value, $data['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $taskId);
                     }
                 }
@@ -682,6 +707,7 @@ class taskController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $before = $this->taskAudit->taskSnapshot((int) $id);
         // return $request;
         $type = $request->input("type");
         if ($type == "API") {
@@ -797,7 +823,21 @@ class taskController extends Controller
             }
         }
 
+        $requestedStatus = $data['status'] ?? $data['STATUS'] ?? null;
+        if ($requestedStatus !== null && !$this->statusTransitions->allows($before['status'] ?? null, $requestedStatus)) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => $this->statusTransitions->message($before['status'] ?? null, $requestedStatus),
+            ], 422);
+        }
+
         $updateStatus = taskModel::where(['id' => $id])->update($data);
+        if ($updateStatus) {
+            $this->taskAudit->taskChanged((int) $id, 'updated', $before, $user_id ? (int) $user_id : null);
+            if ($requestedStatus !== null && $this->statusTransitions->normalize($requestedStatus) === 'COMPLETED') {
+                $this->dependencyResolution->resolveAfterCompletion((int) $id, $user_id ? (int) $user_id : null);
+            }
+        }
 
         // Webhook Trigger
         try {
@@ -831,6 +871,7 @@ class taskController extends Controller
      */
     public function destroy(Request $request, $id)
     {
+        $before = $this->taskAudit->taskSnapshot((int) $id);
         $type = $request->input('type');
         $user_id = session()->get('user_id');
 
@@ -842,6 +883,9 @@ class taskController extends Controller
             'deleted_by' => $user_id,
             'deleted_at' => now(),
         ]);
+        if ($delete) {
+            $this->taskAudit->taskChanged((int) $id, 'archived', $before, $user_id ? (int) $user_id : null);
+        }
 
         if ($delete) {
             $res['status_code'] = "1";

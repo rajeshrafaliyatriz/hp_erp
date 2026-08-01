@@ -4,16 +4,26 @@ namespace App\Http\Controllers\front_desk;
 
 use App\Http\Controllers\Controller;
 use App\Models\front_desk\taskModel;
+use App\Services\TaskManagement\TaskAuditService;
+use App\Services\TaskManagement\TaskDependencyResolutionService;
+use App\Services\TaskManagement\TaskStatusTransitionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class TaskUpdateController extends Controller
 {
+    public function __construct(
+        private readonly TaskAuditService $taskAudit,
+        private readonly TaskStatusTransitionService $statusTransitions,
+        private readonly TaskDependencyResolutionService $dependencyResolution
+    ) {
+    }
+
     public function updateStatusAndDescription(Request $request, $id)
     {
         // Validate token
-        $token = $request->input('token');
+        $token = $request->Token() ?: $request->input('token');
         if (!$token) {
             return response()->json(['message' => 'Token not provided'], 401);
         }
@@ -42,6 +52,14 @@ class TaskUpdateController extends Controller
             return response()->json(['status_code' => 0, 'message' => 'Task not found'], 404);
         }
 
+        if (!$this->statusTransitions->allows($task->status, $request->input('row.data.status'))) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => $this->statusTransitions->message($task->status, $request->input('row.data.status')),
+            ], 422);
+        }
+
+        $before = $this->taskAudit->taskSnapshot((int) $id);
         // Update only the specified fields
         $task->update([
             'status' => $request->input('row.data.status'),
@@ -50,6 +68,8 @@ class TaskUpdateController extends Controller
             'updated_at' => now(),
             'updated_by' => $user_id,
         ]);
+        $this->taskAudit->taskChanged((int) $id, 'status_changed', $before, (int) $user_id);
+        if ($request->input('row.data.status') === 'COMPLETED') $this->dependencyResolution->resolveAfterCompletion((int) $id, (int) $user_id);
 
         return response()->json([
             'status_code' => 1,

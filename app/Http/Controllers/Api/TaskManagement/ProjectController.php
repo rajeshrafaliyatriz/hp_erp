@@ -130,9 +130,12 @@ class ProjectController extends Controller
             ->select('id', DB::raw("TRIM(CONCAT_WS(' ', first_name, middle_name, last_name)) as name"))->get();
         $departments = DB::table('hrms_departments')->where('sub_institute_id', $context['sub_institute_id'])
             ->orderBy('department')->select('id', 'department as name')->get();
-        $tasks = DB::table('task')->where('sub_institute_id', $context['sub_institute_id'])
-            ->where('syear', $context['syear'])->whereNull('deleted_at')
-            ->orderByDesc('id')->limit(200)->select('id', 'task_title as title', 'status')->get();
+        $tasks = DB::table('task as t')
+            ->leftJoin('tbluser as assignee', 'assignee.id', '=', 't.task_allocated_to')
+            ->where('t.sub_institute_id', $context['sub_institute_id'])
+            ->where('t.syear', $context['syear'])->whereNull('t.deleted_at')
+            ->orderByDesc('t.id')->limit(200)
+            ->select('t.id', 't.task_title as title', 't.status', 'assignee.department_id')->get();
         return response()->json(['status' => 1, 'message' => 'Project options retrieved successfully.', 'data' => [
             'users' => $users, 'departments' => $departments, 'tasks' => $tasks,
             'categories' => self::CATEGORIES, 'statuses' => self::STATUSES, 'priorities' => self::PRIORITIES,
@@ -148,6 +151,11 @@ class ProjectController extends Controller
         if ($validator->fails()) return $this->validationError($validator);
         $this->validateTenantUsers($request->input('member_ids'), $context);
         $this->syncMembers($id, $request->input('member_ids'), $context['user_id']);
+        $memberIds = array_values(array_unique(array_map('intval', $request->input('member_ids'))));
+        DB::table('task_management_workstreams')->where('project_id', $id)
+            ->when($memberIds, fn ($query) => $query->whereNotIn('owner_id', $memberIds))
+            ->when(!$memberIds, fn ($query) => $query->whereNotNull('owner_id'))
+            ->update(['owner_id' => null, 'updated_by' => $context['user_id'], 'updated_at' => now()]);
         return response()->json(['status' => 1, 'message' => 'Project team updated successfully.', 'data' => $this->members($id)]);
     }
 
@@ -158,6 +166,9 @@ class ProjectController extends Controller
         if (!$this->canManage($context, $id)) return response()->json(['status' => 0, 'message' => 'You cannot manage workstreams.'], 403);
         $validator = $this->workstreamValidator($request);
         if ($validator->fails()) return $this->validationError($validator);
+        if ($request->filled('owner_id') && !$this->isProjectMember($id, (int) $request->input('owner_id'))) {
+            return response()->json(['status' => 0, 'message' => 'The selected owner must be a project team member.'], 422);
+        }
         $workstreamId = DB::table('task_management_workstreams')->insertGetId($this->workstreamPayload($request) + [
             'project_id' => $id, 'created_by' => $context['user_id'], 'created_at' => now(), 'updated_at' => now(),
         ]);
@@ -171,6 +182,9 @@ class ProjectController extends Controller
         if (!$this->canManage($context, $projectId)) return response()->json(['status' => 0, 'message' => 'You cannot manage workstreams.'], 403);
         $validator = $this->workstreamValidator($request);
         if ($validator->fails()) return $this->validationError($validator);
+        if ($request->filled('owner_id') && !$this->isProjectMember($projectId, (int) $request->input('owner_id'))) {
+            return response()->json(['status' => 0, 'message' => 'The selected owner must be a project team member.'], 422);
+        }
         DB::table('task_management_workstreams')->where(['id' => $workstreamId, 'project_id' => $projectId])
             ->update($this->workstreamPayload($request) + ['updated_by' => $context['user_id'], 'updated_at' => now()]);
         return response()->json(['status' => 1, 'message' => 'Workstream updated successfully.', 'data' => $this->workstream($projectId, $workstreamId)]);
@@ -206,7 +220,7 @@ class ProjectController extends Controller
 
     private function context(Request $request)
     {
-        $token = trim((string) $request->input('token'));
+        $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
         $accessToken = $token ? PersonalAccessToken::findToken($token) : null;
         if (!$accessToken || !$accessToken->tokenable) return response()->json(['status' => 0, 'message' => $token ? 'Invalid token.' : 'Token not provided.'], 401);
         $user = $accessToken->tokenable;
@@ -341,6 +355,12 @@ class ProjectController extends Controller
             'status' => ['required', Rule::in(self::STATUSES)], 'start_date' => 'nullable|date',
             'due_date' => 'nullable|date|after_or_equal:start_date', 'sort_order' => 'nullable|integer|min:0',
         ]);
+    }
+
+    private function isProjectMember(int $projectId, int $userId): bool
+    {
+        return DB::table('task_management_project_members')
+            ->where('project_id', $projectId)->where('user_id', $userId)->exists();
     }
 
     private function workstreamPayload(Request $request): array
