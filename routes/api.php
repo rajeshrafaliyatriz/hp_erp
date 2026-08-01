@@ -34,6 +34,13 @@ use App\Http\Controllers\Api\Competency\LearningAssignmentController as Competen
 use App\Http\Controllers\Api\Competency\AuditController as CompetencyAuditController;
 use App\Http\Controllers\Api\Competency\LibraryController as CompetencyLibraryController;
 use App\Http\Controllers\Api\Competency\ApprovalController as CompetencyApprovalController;
+use App\Http\Controllers\Api\Agentic\AgentController as AgenticAgentController;
+use App\Http\Controllers\Api\Agentic\ConfigController as AgenticConfigController;
+use App\Http\Controllers\Api\Agentic\RunController as AgenticRunController;
+use App\Http\Controllers\Api\Agentic\ToolController as AgenticToolController;
+use App\Http\Controllers\Api\Agentic\WorkflowController as AgenticWorkflowController;
+use App\Http\Controllers\Api\Agentic\AnalyticsController as AgenticAnalyticsController;
+use App\Http\Controllers\Api\Agentic\ReflectionController as AgenticReflectionController;
 // Talent Management -> Performance & Rewards Center (new module, see the route
 // block at the end of this file).
 use App\Http\Controllers\Api\Performance\PerformanceOverviewController;
@@ -940,6 +947,9 @@ Route::get('/excel-agent/credentials', [ExcelAutomationAgentController::class, '
 Route::post('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'saveCredentials']);
 Route::post('/excel-agent/test-connection', [ExcelAutomationAgentController::class, 'testConnection']);
 Route::post('/excel-agent/upload', [ExcelAutomationAgentController::class, 'upload']);
+// Blank workbook using this organisation's own template headers, so the file
+// a user downloads is always the file upload() will accept.
+Route::get('/excel-agent/template', [ExcelAutomationAgentController::class, 'downloadTemplate']);
 // Course Recommendation API - Get courses based on logged-in user's job role
 
 // Department Job Role Export API - Export department and job role data to CSV
@@ -1302,3 +1312,81 @@ Route::prefix('offboarding')->group(function () {
 });
 
 
+
+/*
+|--------------------------------------------------------------------------
+| Agentic AI (module m7)
+|--------------------------------------------------------------------------
+| Agent registry, runs and traces, tool invocations, multi-agent workflows,
+| analytics and the reflection system.
+|
+| Token authenticated + tenant scoped through
+| App\Http\Controllers\Api\Agentic\Concerns\ResolvesAgenticContext. The screens
+| this serves previously talked to two public HuggingFace Spaces with neither,
+| so any browser could read or delete any organisation's agents.
+|
+| Fixed segments are declared before the {id} routes so they are never read as
+| an id, and every {id} is whereNumber.
+*/
+Route::prefix('agentic')->group(function () {
+    // Agents
+    Route::get('/agents/meta', [AgenticAgentController::class, 'meta']);
+    Route::get('/agents', [AgenticAgentController::class, 'index']);
+    Route::post('/agents', [AgenticAgentController::class, 'store']);
+    Route::post('/agents/{id}/clone', [AgenticAgentController::class, 'clone'])->whereNumber('id');
+    Route::patch('/agents/{id}/status', [AgenticAgentController::class, 'setStatus'])->whereNumber('id');
+    Route::post('/agents/{id}/run', [AgenticRunController::class, 'start'])->whereNumber('id');
+
+    // Per-tenant setup. A shared catalogue agent is connected to each
+    // organisation's own sheet / workspace / key here rather than by cloning it.
+    Route::get('/agents/{id}/config', [AgenticConfigController::class, 'show'])->whereNumber('id');
+    Route::post('/agents/{id}/config', [AgenticConfigController::class, 'update'])->whereNumber('id');
+    Route::put('/agents/{id}/config', [AgenticConfigController::class, 'update'])->whereNumber('id');
+    Route::delete('/agents/{id}/config', [AgenticConfigController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/agents/{id}', [AgenticAgentController::class, 'show'])->whereNumber('id');
+    Route::put('/agents/{id}', [AgenticAgentController::class, 'update'])->whereNumber('id');
+    Route::delete('/agents/{id}', [AgenticAgentController::class, 'destroy'])->whereNumber('id');
+
+    // Runs + traces
+    Route::get('/runs', [AgenticRunController::class, 'index']);
+    Route::get('/runs/{id}/trace', [AgenticRunController::class, 'trace'])->whereNumber('id');
+    Route::post('/runs/{id}/tasks', [AgenticRunController::class, 'addTask'])->whereNumber('id');
+    Route::post('/runs/{id}/cancel', [AgenticRunController::class, 'cancel'])->whereNumber('id');
+    Route::get('/runs/{id}', [AgenticRunController::class, 'show'])->whereNumber('id');
+    Route::put('/runs/{id}', [AgenticRunController::class, 'update'])->whereNumber('id');
+    Route::delete('/runs/{id}', [AgenticRunController::class, 'destroy'])->whereNumber('id');
+
+    // Tools
+    Route::get('/tools', [AgenticToolController::class, 'catalogue']);
+    Route::get('/tools/invocations', [AgenticToolController::class, 'invocations']);
+    Route::get('/tools/invocations/{id}', [AgenticToolController::class, 'showInvocation'])->whereNumber('id');
+    Route::post('/tools/{tool}/invoke', [AgenticToolController::class, 'invoke']);
+
+    // Analytics
+    Route::get('/analytics/dashboard', [AgenticAnalyticsController::class, 'dashboard']);
+    Route::get('/analytics/overview', [AgenticAnalyticsController::class, 'overview']);
+
+    // Multi-agent workflows
+    Route::get('/workflows', [AgenticWorkflowController::class, 'index']);
+    Route::post('/workflows', [AgenticWorkflowController::class, 'store']);
+    Route::post('/workflows/{id}/steps', [AgenticWorkflowController::class, 'addStep'])->whereNumber('id');
+    Route::put('/workflows/{id}/steps/{stepId}', [AgenticWorkflowController::class, 'updateStep'])->whereNumber('id')->whereNumber('stepId');
+    Route::delete('/workflows/{id}/steps/{stepId}', [AgenticWorkflowController::class, 'deleteStep'])->whereNumber('id')->whereNumber('stepId');
+    Route::post('/workflows/{id}/run', [AgenticWorkflowController::class, 'run'])->whereNumber('id');
+    Route::get('/workflows/{id}', [AgenticWorkflowController::class, 'show'])->whereNumber('id');
+    Route::put('/workflows/{id}', [AgenticWorkflowController::class, 'update'])->whereNumber('id');
+    Route::delete('/workflows/{id}', [AgenticWorkflowController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/workflow-runs/{id}', [AgenticWorkflowController::class, 'showRun'])->whereNumber('id');
+    Route::put('/workflow-runs/{id}/steps/{stepRunId}', [AgenticWorkflowController::class, 'updateStepRun'])->whereNumber('id')->whereNumber('stepRunId');
+
+    // Inter-agent messages
+    Route::get('/messages', [AgenticWorkflowController::class, 'messages']);
+    Route::post('/messages', [AgenticWorkflowController::class, 'storeMessage']);
+
+    // Reflection
+    Route::get('/reflection', [AgenticReflectionController::class, 'index']);
+    Route::post('/reflection/analyse', [AgenticReflectionController::class, 'analyse']);
+    Route::put('/reflection/optimizations/{id}', [AgenticReflectionController::class, 'updateOptimization'])->whereNumber('id');
+});

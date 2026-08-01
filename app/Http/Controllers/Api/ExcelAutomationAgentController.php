@@ -40,6 +40,9 @@ class ExcelAutomationAgentController extends Controller
                 'template_id' => 'nullable|integer',
                 'sheet_name' => 'nullable|string|max:255',
                 'file' => 'required|file|mimes:xlsx|max:10240',
+                // Dry run: parse and check the file, report what would be
+                // written, then stop before touching the Google Sheet.
+                'validate_only' => 'nullable|boolean',
             ]
         );
 
@@ -128,6 +131,25 @@ class ExcelAutomationAgentController extends Controller
             ], 422);
         }
 
+        // Everything above is validation. A dry run stops here and reports what
+        // would happen, so the UI can preview a file before anything is written
+        // to the customer's Google Sheet.
+        if ($request->boolean('validate_only')) {
+            return response()->json([
+                'status' => true,
+                'validated_only' => true,
+                'message' => 'File is valid and ready to upload.',
+                'template_id' => $templateConfig['template_id'],
+                'expected_headers' => $expectedHeaders,
+                'received_headers' => $headerCheck['received_headers'],
+                'header_row' => $headerRowNumber,
+                'rows_ready' => count($prepared['rows']),
+                'skipped_empty_rows' => $prepared['skipped_empty_rows'],
+                // A short preview so the user recognises their own data.
+                'preview_rows' => array_slice($prepared['rows'], 0, 5),
+            ]);
+        }
+
         try {
             $credential = $this->activeGoogleCredential($subInstituteId);
             $serviceAccount = $this->serviceAccountFromCredential($credential->service_account_key);
@@ -166,9 +188,7 @@ class ExcelAutomationAgentController extends Controller
             ], 500);
         }
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Excel data uploaded to Google Sheet successfully.',
+        $summary = [
             'sub_institute_id' => $subInstituteId,
             'template_id' => $templateConfig['template_id'],
             'google_sheet_id' => $credential->google_sheet_id,
@@ -176,7 +196,53 @@ class ExcelAutomationAgentController extends Controller
             'rows_uploaded' => count($prepared['rows']),
             'skipped_empty_rows' => $prepared['skipped_empty_rows'],
             'written_range' => $writtenRange,
-        ]);
+        ];
+
+        // Record it as an agent run so this upload shows up in the agent's
+        // History like every other agent's work, rather than being invisible
+        // because it happens to go through its own endpoint.
+        $this->recordAgentRun($subInstituteId, $file->getClientOriginalName(), $summary);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Excel data uploaded to Google Sheet successfully.',
+        ] + $summary);
+    }
+
+    /**
+     * Log a completed upload against the Excel automation agent.
+     *
+     * Best effort on purpose: the rows are already in the customer's sheet by
+     * the time this runs, so a logging failure must not turn a successful
+     * upload into an error response.
+     */
+    private function recordAgentRun(int $subInstituteId, string $fileName, array $summary): void
+    {
+        try {
+            $agent = DB::table('agentic_agents')
+                ->where('slug', 'social-media-automation')
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (!$agent) {
+                return;
+            }
+
+            DB::table('agentic_agent_runs')->insert([
+                'sub_institute_id' => $subInstituteId,
+                'agent_id'         => $agent->id,
+                'status'           => 'success',
+                'trigger'          => 'manual',
+                'input'            => 'Uploaded ' . $fileName,
+                'output'           => json_encode($summary),
+                'started_at'       => now(),
+                'completed_at'     => now(),
+                'created_at'       => now(),
+                'updated_at'       => now(),
+            ]);
+        } catch (Throwable $e) {
+            // Nothing to recover: the upload itself succeeded.
+        }
     }
 
     public function credentialStatus(Request $request)
@@ -382,6 +448,128 @@ class ExcelAutomationAgentController extends Controller
             'template_id' => $template->id,
             'test_connection' => $testResult,
         ], $action === 'created' ? 201 : 200);
+    }
+
+    /**
+     * Download a blank workbook using this organisation's own template headers.
+     *
+     * Built here rather than in the browser for two reasons: the headers live
+     * in the database next to the validation rules, so a server-built file is
+     * always the one `upload()` will accept; and the client would otherwise
+     * need a spreadsheet library just to emit eight strings.
+     *
+     * The file is a minimal OOXML package written with ZipArchive - the same
+     * component readXlsxRows() uses to read one back.
+     */
+    public function downloadTemplate(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'token' => 'required|string',
+            'sub_institute_id' => 'nullable|integer',
+            'template_id' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $tokenUser = $this->tokenUser($request->input('token'));
+
+        if (!$tokenUser) {
+            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
+        }
+
+        try {
+            $subInstituteId = $this->resolveSubInstituteId($request, $tokenUser);
+        } catch (Throwable $e) {
+            return response()->json(['status' => false, 'message' => $e->getMessage()], 403);
+        }
+
+        $headers = $this->templateConfig($subInstituteId, $request->input('template_id'))['headers'];
+
+        try {
+            $path = $this->buildTemplateWorkbook($headers);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Could not build the template file.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->download($path, 'content_plan_template.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Write a one-row .xlsx containing just the header cells.
+     *
+     * Inline strings are used so the package needs no sharedStrings part,
+     * which keeps this to the four entries a reader actually requires.
+     *
+     * @param  array<int, string>  $headers
+     * @return string  path to the generated file
+     */
+    private function buildTemplateWorkbook(array $headers): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'tpl') . '.xlsx';
+        $zip = new ZipArchive();
+
+        if ($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new RuntimeException('Could not create the workbook archive.');
+        }
+
+        $cells = '';
+        foreach (array_values($headers) as $index => $header) {
+            $reference = $this->columnName($index) . '1';
+            $cells .= sprintf(
+                '<c r="%s" t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>',
+                $reference,
+                htmlspecialchars((string) $header, ENT_XML1 | ENT_QUOTES, 'UTF-8')
+            );
+        }
+
+        $zip->addFromString('[Content_Types].xml',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            . '<Default Extension="xml" ContentType="application/xml"/>'
+            . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '</Types>');
+
+        $zip->addFromString('_rels/.rels',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            . '</Relationships>');
+
+        $zip->addFromString('xl/_rels/workbook.xml.rels',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            . '</Relationships>');
+
+        $zip->addFromString('xl/workbook.xml',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+            . ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            . '<sheets><sheet name="Content Plan" sheetId="1" r:id="rId1"/></sheets>'
+            . '</workbook>');
+
+        $zip->addFromString('xl/worksheets/sheet1.xml',
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<sheetData><row r="1">' . $cells . '</row></sheetData>'
+            . '</worksheet>');
+
+        $zip->close();
+
+        return $path;
     }
 
     public function testConnection(Request $request)
