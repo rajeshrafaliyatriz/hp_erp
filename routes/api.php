@@ -60,9 +60,9 @@ use App\Http\Controllers\Api\Talent\AdminWorkflowController;
 // Talent Management -> Onboarding & Employee Lifecycle Center (route block at the
 // end of this file).
 use App\Http\Controllers\Api\Onboarding\OnboardingOverviewController;
-use App\Http\Controllers\Api\Onboarding\OnboardingJourneyController;
-use App\Http\Controllers\Api\Onboarding\OnboardingTaskController;
-use App\Http\Controllers\Api\Onboarding\OnboardingDocumentController;
+use App\Http\Controllers\Api\Onboarding\OnboardingJourneyController as V2OnboardingJourneyController;
+use App\Http\Controllers\Api\Onboarding\OnboardingTaskController as V2OnboardingTaskController;
+use App\Http\Controllers\Api\Onboarding\OnboardingDocumentController as V2OnboardingDocumentController;
 use App\Http\Controllers\Api\Onboarding\OnboardingNoteController;
 use App\Http\Controllers\Api\Onboarding\OnboardingProbationController;
 use App\Http\Controllers\Api\DBController;
@@ -1237,4 +1237,5 @@ Route::prefix('offboarding')->group(function () {
     Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
     Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');
 });
+
 
