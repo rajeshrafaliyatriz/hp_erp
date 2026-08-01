@@ -1136,6 +1136,10 @@ class CertificationController extends Controller
         if ($type = $this->activeFilter($request->input('certification_type'))) {
             $query->where('certification_type', $type);
         }
+        // Drill-through from a competency's detail panel ("Certifications").
+        if ($competencyId = $this->activeFilter($request->input('competency_id'))) {
+            $query->where('competency_id', $competencyId);
+        }
         if ($issuer = $this->activeFilter($request->input('issuing_body'))) {
             $query->where('issuing_body', $issuer);
         }

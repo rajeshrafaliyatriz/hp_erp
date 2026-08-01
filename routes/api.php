@@ -32,6 +32,8 @@ use App\Http\Controllers\Api\Competency\MappingReviewController as CompetencyMap
 use App\Http\Controllers\Api\Competency\CareerPathController as CompetencyCareerPathController;
 use App\Http\Controllers\Api\Competency\LearningAssignmentController as CompetencyLearningAssignmentController;
 use App\Http\Controllers\Api\Competency\AuditController as CompetencyAuditController;
+use App\Http\Controllers\Api\Competency\LibraryController as CompetencyLibraryController;
+use App\Http\Controllers\Api\Competency\ApprovalController as CompetencyApprovalController;
 // Talent Management -> Performance & Rewards Center (new module, see the route
 // block at the end of this file).
 use App\Http\Controllers\Api\Performance\PerformanceOverviewController;
@@ -246,6 +248,67 @@ Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'g
 */
 Route::get('/competency/command-center', [CompetencyCommandCenterController::class, 'index']);
 Route::get('/competency/command-center/filters', [CompetencyCommandCenterController::class, 'filters']);
+
+/*
+| Libraries & Taxonomy - the eight library tabs (Skill, Jobrole, Jobrole Task,
+| Knowledge, Ability, Attitude, Behaviour, Invisible), their taxonomy editors
+| and the skill taxonomy tree.
+|
+| Fixed segments (meta, taxonomy, skill-taxonomy-tree) are declared before the
+| {id} routes so they are never read as an id, and every {id} is whereNumber.
+*/
+/*
+| Approval queue. One inbox governing competencies and frameworks; the existing
+| role-mapping reviews are unioned in for reading and still actioned through
+| /competency/mapping-reviews.
+*/
+Route::get('/competency/approvals', [CompetencyApprovalController::class, 'index']);
+Route::post('/competency/approvals', [CompetencyApprovalController::class, 'store']);
+Route::post('/competency/approvals/bulk-approve', [CompetencyApprovalController::class, 'bulkApprove']);
+Route::get('/competency/approvals/for/{type}/{id}', [CompetencyApprovalController::class, 'forSubject'])->whereNumber('id');
+Route::put('/competency/approvals/{id}', [CompetencyApprovalController::class, 'update'])->whereNumber('id');
+
+Route::get('/competency/library/meta', [CompetencyLibraryController::class, 'meta']);
+Route::get('/competency/library/skill-taxonomy-tree', [CompetencyLibraryController::class, 'skillTaxonomyTree']);
+Route::get('/competency/library/levels-of-responsibility', [CompetencyLibraryController::class, 'levelsOfResponsibility']);
+Route::get('/competency/library/work-functions', [CompetencyLibraryController::class, 'workFunctions']);
+
+Route::get('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'taxonomy']);
+Route::post('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'storeTaxonomy']);
+Route::put('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'updateTaxonomy']);
+Route::delete('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'destroyTaxonomy']);
+
+Route::get('/competency/library/skills', [CompetencyLibraryController::class, 'skills']);
+Route::post('/competency/library/skills', [CompetencyLibraryController::class, 'storeSkill']);
+Route::get('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'showSkill'])->whereNumber('id');
+Route::put('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'updateSkill'])->whereNumber('id');
+Route::delete('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'destroySkill'])->whereNumber('id');
+
+Route::get('/competency/library/jobroles', [CompetencyLibraryController::class, 'jobroles']);
+Route::post('/competency/library/jobroles', [CompetencyLibraryController::class, 'storeJobrole']);
+Route::get('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'showJobrole'])->whereNumber('id');
+Route::put('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'updateJobrole'])->whereNumber('id');
+Route::delete('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'destroyJobrole'])->whereNumber('id');
+
+Route::get('/competency/library/jobrole-tasks', [CompetencyLibraryController::class, 'jobroleTasks']);
+Route::post('/competency/library/jobrole-tasks', [CompetencyLibraryController::class, 'storeJobroleTask']);
+Route::get('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'showJobroleTask'])->whereNumber('id');
+Route::put('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'updateJobroleTask'])->whereNumber('id');
+Route::delete('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'destroyJobroleTask'])->whereNumber('id');
+
+// One set of routes for all four KASA tabs: {type} is knowledge|ability|attitude|behaviour.
+Route::get('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'kasa']);
+Route::post('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'storeKasa']);
+Route::get('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'showKasa'])->whereNumber('id');
+Route::put('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'updateKasa'])->whereNumber('id');
+Route::delete('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'destroyKasa'])->whereNumber('id');
+
+Route::get('/competency/library/invisible', [CompetencyLibraryController::class, 'invisible']);
+Route::post('/competency/library/invisible', [CompetencyLibraryController::class, 'storeInvisible']);
+Route::post('/competency/library/invisible/{id}/clone', [CompetencyLibraryController::class, 'cloneInvisible'])->whereNumber('id');
+Route::get('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'showInvisible'])->whereNumber('id');
+Route::put('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'updateInvisible'])->whereNumber('id');
+Route::delete('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'destroyInvisible'])->whereNumber('id');
 
 Route::get('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'index']);
 Route::post('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'store']);

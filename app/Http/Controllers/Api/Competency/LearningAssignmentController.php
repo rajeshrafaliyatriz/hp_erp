@@ -64,6 +64,10 @@ class LearningAssignmentController extends Controller
         if ($employeeId = $this->activeFilter($request->input('employee_id'))) {
             $query->where('a.user_id', $employeeId);
         }
+        // Drill-through from a competency's detail panel ("Learning Assigned").
+        if ($competencyId = $this->activeFilter($request->input('competency_id'))) {
+            $query->where('a.competency_id', $competencyId);
+        }
         if ($search = $this->activeFilter($request->input('search'))) {
             $query->where('c.display_name', 'like', "%{$search}%");
         }
