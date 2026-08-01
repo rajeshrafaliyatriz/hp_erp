@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\front_desk;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\TaskManagement\BulkTaskImportRequest;
 use App\Models\front_desk\taskModel;
 use App\Models\user\tbluserModel;
 use Carbon\Carbon;
@@ -16,7 +17,7 @@ class BulkTaskController extends Controller
     /**
      * Bulk Task Import (supports CSV file or JSON task_details)
      */
-    public function import(Request $request)
+    public function import(BulkTaskImportRequest $request)
     {
         try {
             $type = $request->type;
