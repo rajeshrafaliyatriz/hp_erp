@@ -44,6 +44,19 @@ use App\Http\Controllers\Api\Performance\PerformanceBonusController;
 use App\Http\Controllers\Api\Performance\PerformanceCalibrationController;
 use App\Http\Controllers\Api\Performance\PerformanceActivityController;
 use App\Http\Controllers\Api\Performance\PerformanceSavedViewController;
+// Talent Management: dashboard, onboarding, mobility & succession, offboarding
+// (routes in the "Talent Management -> Lifecycle" block at the end of this file).
+use App\Http\Controllers\Api\TalentDashboardController;
+use App\Http\Controllers\Api\Talent\OnboardingJourneyController;
+use App\Http\Controllers\Api\Talent\OnboardingTaskController;
+use App\Http\Controllers\Api\Talent\OnboardingDocumentController;
+use App\Http\Controllers\Api\Talent\InternalJobController;
+use App\Http\Controllers\Api\Talent\MobilityRequestController;
+use App\Http\Controllers\Api\Talent\SuccessionPlanController;
+use App\Http\Controllers\Api\Talent\OffboardingCaseController;
+use App\Http\Controllers\Api\Talent\OffboardingClearanceController;
+use App\Http\Controllers\Api\Talent\ExitInterviewController;
+use App\Http\Controllers\Api\Talent\AdminWorkflowController;
 // Talent Management -> Onboarding & Employee Lifecycle Center (route block at the
 // end of this file).
 use App\Http\Controllers\Api\Onboarding\OnboardingOverviewController;
@@ -993,6 +1006,103 @@ Route::delete('/performance/saved-views/{id}', [PerformanceSavedViewController::
 
 /*
 |--------------------------------------------------------------------------
+| Talent Management -> Lifecycle (Dashboard, Onboarding, Mobility, Offboarding)
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/performance/*, /api/competency/*
+| and /api/leave/*.
+|
+| Entirely NEW surface. None of these modules had routes, controllers, models or
+| tables before: grepping the backend for onboarding-journey, mobility,
+| succession, resignation or clearance returned only menu labels. Nothing below
+| touches an existing endpoint, so no current consumer is affected - in
+| particular /api/talent-acquisition/{kpis,funnel,dropoff,requisitions},
+| /api/job-postings, /api/job-applications, /api/interview-schedules and
+| /api/talent-offers are all left exactly as they were.
+|
+| Backed by the 9 tables created in:
+|   2026_07_30_120000_create_talent_onboarding_tables
+|   2026_07_30_130000_create_talent_mobility_tables
+|   2026_07_30_140000_create_talent_offboarding_tables
+| plus READ-ONLY reuse of talent_job_postings, talent_job_applications,
+| talent_offers, talent_interview_schedules, talent_evaluation_form,
+| s_performance_*, tbluser, hrms_departments and org_designation.
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR. The subject employee
+| always travels as an explicit field (employee_id, owner_id, incumbent_id).
+*/
+
+// Executive dashboard - one aggregate across all five talent modules.
+Route::get('/talent/dashboard', [TalentDashboardController::class, 'index']);
+Route::get('/talent/dashboard/filters', [TalentDashboardController::class, 'filters']);
+
+// Onboarding: journeys, their checklist tasks and their documents.
+// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+Route::get('/talent/onboarding/journeys', [OnboardingJourneyController::class, 'index']);
+Route::post('/talent/onboarding/journeys', [OnboardingJourneyController::class, 'store']);
+Route::get('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'show'])->whereNumber('id');
+Route::put('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'update'])->whereNumber('id');
+Route::post('/talent/onboarding/journeys/{id}/complete', [OnboardingJourneyController::class, 'complete'])->whereNumber('id');
+Route::delete('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/onboarding/tasks', [OnboardingTaskController::class, 'index']);
+Route::post('/talent/onboarding/tasks', [OnboardingTaskController::class, 'store']);
+Route::put('/talent/onboarding/tasks/{id}', [OnboardingTaskController::class, 'update'])->whereNumber('id');
+Route::post('/talent/onboarding/tasks/{id}/complete', [OnboardingTaskController::class, 'complete'])->whereNumber('id');
+Route::delete('/talent/onboarding/tasks/{id}', [OnboardingTaskController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/onboarding/documents', [OnboardingDocumentController::class, 'index']);
+Route::post('/talent/onboarding/documents', [OnboardingDocumentController::class, 'store']);
+Route::put('/talent/onboarding/documents/{id}', [OnboardingDocumentController::class, 'update'])->whereNumber('id');
+Route::delete('/talent/onboarding/documents/{id}', [OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
+
+// Mobility: internal-only job postings and the requests raised against them.
+Route::get('/talent/mobility/internal-jobs', [InternalJobController::class, 'index']);
+Route::post('/talent/mobility/internal-jobs', [InternalJobController::class, 'store']);
+Route::get('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'show'])->whereNumber('id');
+Route::put('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'update'])->whereNumber('id');
+Route::delete('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/mobility/requests', [MobilityRequestController::class, 'index']);
+Route::post('/talent/mobility/requests', [MobilityRequestController::class, 'store']);
+Route::get('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'show'])->whereNumber('id');
+Route::put('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'update'])->whereNumber('id');
+Route::put('/talent/mobility/requests/{id}/decision', [MobilityRequestController::class, 'decision'])->whereNumber('id');
+Route::delete('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'destroy'])->whereNumber('id');
+
+// Succession: critical roles and the bench behind them (the 9-box matrix).
+Route::get('/talent/succession/plans', [SuccessionPlanController::class, 'index']);
+Route::post('/talent/succession/plans', [SuccessionPlanController::class, 'store']);
+Route::get('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'show'])->whereNumber('id');
+Route::put('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'update'])->whereNumber('id');
+Route::delete('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'destroy'])->whereNumber('id');
+Route::post('/talent/succession/plans/{id}/candidates', [SuccessionPlanController::class, 'storeCandidate'])->whereNumber('id');
+Route::put('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'updateCandidate'])->whereNumber('id');
+Route::delete('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'destroyCandidate'])->whereNumber('id');
+
+// Offboarding: exit cases, their clearance checklist and the exit interview.
+Route::get('/talent/offboarding/cases', [OffboardingCaseController::class, 'index']);
+Route::post('/talent/offboarding/cases', [OffboardingCaseController::class, 'store']);
+Route::get('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'show'])->whereNumber('id');
+Route::put('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'update'])->whereNumber('id');
+Route::post('/talent/offboarding/cases/{id}/advance', [OffboardingCaseController::class, 'advance'])->whereNumber('id');
+Route::delete('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/offboarding/clearances', [OffboardingClearanceController::class, 'index']);
+Route::post('/talent/offboarding/clearances', [OffboardingClearanceController::class, 'store']);
+Route::put('/talent/offboarding/clearances/{id}', [OffboardingClearanceController::class, 'update'])->whereNumber('id');
+Route::post('/talent/offboarding/clearances/{id}/clear', [OffboardingClearanceController::class, 'clear'])->whereNumber('id');
+Route::delete('/talent/offboarding/clearances/{id}', [OffboardingClearanceController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/offboarding/exit-interviews', [ExitInterviewController::class, 'index']);
+Route::post('/talent/offboarding/exit-interviews', [ExitInterviewController::class, 'store']);
+Route::put('/talent/offboarding/exit-interviews/{id}', [ExitInterviewController::class, 'update'])->whereNumber('id');
+Route::delete('/talent/offboarding/exit-interviews/{id}', [ExitInterviewController::class, 'destroy'])->whereNumber('id');
+
+// Administration & Governance: Workflows
+Route::get('/talent/admin/workflows', [AdminWorkflowController::class, 'index']);
+/*
+|--------------------------------------------------------------------------
 | Talent Management -> Onboarding & Employee Lifecycle Center
 |--------------------------------------------------------------------------
 | Token authenticated (Sanctum token as the `token` query param) and tenant
@@ -1127,3 +1237,4 @@ Route::prefix('offboarding')->group(function () {
     Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
     Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');
 });
+
