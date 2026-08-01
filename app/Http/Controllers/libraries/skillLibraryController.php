@@ -1426,7 +1426,7 @@ class skillLibraryController extends Controller
         $tables = [
             'Knowledge' => 's_user_knowledge',
             'Ability' => 's_user_ability',
-            'Behaviour' => 's_user_behvaiour',
+            'Behaviour' => 's_user_behaviour',
             'Attitude' => 's_user_attitude',
         ];
 
@@ -1758,7 +1758,12 @@ class skillLibraryController extends Controller
     {
         $query = DB::table('s_users_skills as s')
             ->where('s.sub_institute_id', $sid)
-            ->whereNull('s.deleted_at');
+            ->whereNull('s.deleted_at')
+            // Rows carrying only a category are taxonomy placeholders written by
+            // Libraries & Taxonomy so an empty branch can exist before its first
+            // entry. They are not competencies and must not list as nameless ones.
+            ->whereNotNull('s.title')
+            ->where('s.title', '!=', '');
 
         if ($search = $this->competencyLibraryFilter($request->input('search'))) {
             $query->where(function ($q) use ($search) {
@@ -1815,9 +1820,89 @@ class skillLibraryController extends Controller
         'sub_category'      => 'Sub Category',
         'competency_type'   => 'Competency Type',
         'proficiency_level' => 'Proficiency Level',
+        'department'        => 'Department',
         'department_id'     => 'Department',
         'approve_status'    => 'Status',
+        'bussiness_links'   => 'Business Link',
+        'learning_resources' => 'Learning Resources',
+        'assesment_method'  => 'Assessment Method',
+        'certification_qualifications' => 'Certifications / Qualifications',
+        'experience_project' => 'Experience / Projects',
+        'sop_practice_link' => 'SOP / Practice Link',
+        'related_skills'    => 'Related Skills',
+        'custom_tags'       => 'Tags',
     ];
+
+    /**
+     * The detail columns the Competency Library form owns beyond the core six.
+     *
+     * These used to be editable only from the separate skill library screen,
+     * which left the drawer's Attachments tab permanently empty for anything
+     * created here - it is built from learning_resources, certification_
+     * qualifications, sop_practice_link, experience_project and assesment_method.
+     */
+    private const COMPETENCY_DETAIL_FIELDS = [
+        'department',
+        'bussiness_links',
+        'learning_resources',
+        'assesment_method',
+        'certification_qualifications',
+        'experience_project',
+        'sop_practice_link',
+        'related_skills',
+        'custom_tags',
+    ];
+
+    /** Validation rules shared by competency create and update. */
+    private function competencyLibraryRules(): array
+    {
+        return [
+            'name'              => 'required|string|max:191',
+            'description'       => 'nullable|string',
+            'category'          => 'nullable|string|max:191',
+            'sub_category'      => 'nullable|string|max:191',
+            'competency_type'   => 'nullable|string|max:50',
+            'proficiency_level' => 'nullable|string|max:191',
+            'department'        => 'nullable|string|max:191',
+            'department_id'     => 'nullable|integer',
+            'status'            => 'nullable|in:Approved,Pending,Cancelled',
+            'bussiness_links'              => 'nullable|string',
+            'learning_resources'           => 'nullable|string',
+            'assesment_method'             => 'nullable|string',
+            'certification_qualifications' => 'nullable|string',
+            'experience_project'           => 'nullable|string',
+            'sop_practice_link'            => 'nullable|string',
+            'related_skills'               => 'nullable|string',
+            'custom_tags'                  => 'nullable|string',
+        ];
+    }
+
+    /**
+     * Pull the detail columns the caller actually sent.
+     *
+     * Only present keys are returned so a partial edit cannot blank a column the
+     * form did not show.
+     *
+     * @return array<string, mixed>
+     */
+    private function competencyLibraryDetailPayload(Request $request): array
+    {
+        $data = [];
+
+        foreach (self::COMPETENCY_DETAIL_FIELDS as $field) {
+            if (!$request->has($field)) {
+                continue;
+            }
+            $value = $request->input($field);
+            if (is_array($value)) {
+                $value = implode(',', array_filter(array_map('strval', $value), fn ($item) => trim($item) !== ''));
+            }
+            $value = is_string($value) ? trim($value) : $value;
+            $data[$field] = ($value === '' || $value === null) ? null : $value;
+        }
+
+        return $data;
+    }
 
     /** Treat '', '0' and 'all' (any case) as "no filter". */
     private function competencyLibraryFilter($value): ?string
@@ -2188,12 +2273,20 @@ class skillLibraryController extends Controller
                 's.department',
                 's.department_id',
                 's.job_titles',
-                's.related_skills',
-                's.learning_resources',
                 's.status',
                 's.approve_status',
                 's.created_at',
                 's.updated_at',
+                // The detail columns the edit form owns. Returned here rather
+                // than on the list so the table payload stays small.
+                's.related_skills',
+                's.learning_resources',
+                's.bussiness_links',
+                's.assesment_method',
+                's.certification_qualifications',
+                's.experience_project',
+                's.sop_practice_link',
+                's.custom_tags',
                 DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as owner"),
             ]);
 
@@ -2412,16 +2505,7 @@ class skillLibraryController extends Controller
             return $context;
         }
 
-        $validator = Validator::make($request->all(), [
-            'name'              => 'required|string|max:191',
-            'description'       => 'nullable|string',
-            'category'          => 'nullable|string|max:191',
-            'sub_category'      => 'nullable|string|max:191',
-            'competency_type'   => 'nullable|string|max:50',
-            'proficiency_level' => 'nullable|string|max:191',
-            'department_id'     => 'nullable|integer',
-            'status'            => 'nullable|in:Approved,Pending,Cancelled',
-        ]);
+        $validator = Validator::make($request->all(), $this->competencyLibraryRules());
         if ($validator->fails()) {
             return response()->json([
                 'status'  => 0,
@@ -2430,7 +2514,7 @@ class skillLibraryController extends Controller
             ], 422);
         }
 
-        $id = DB::table('s_users_skills')->insertGetId([
+        $id = DB::table('s_users_skills')->insertGetId(array_merge([
             'sub_institute_id'  => $context['sub_institute_id'],
             'title'             => $request->input('name'),
             'description'       => $request->input('description'),
@@ -2445,7 +2529,7 @@ class skillLibraryController extends Controller
             'updated_by'        => $context['user_id'],
             'created_at'        => now(),
             'updated_at'        => now(),
-        ]);
+        ], $this->competencyLibraryDetailPayload($request)));
 
         $this->logCompetencyLibraryActivity(
             $context['sub_institute_id'],
@@ -2480,16 +2564,7 @@ class skillLibraryController extends Controller
             return response()->json(['status' => 0, 'message' => 'Competency not found'], 404);
         }
 
-        $validator = Validator::make($request->all(), [
-            'name'              => 'required|string|max:191',
-            'description'       => 'nullable|string',
-            'category'          => 'nullable|string|max:191',
-            'sub_category'      => 'nullable|string|max:191',
-            'competency_type'   => 'nullable|string|max:50',
-            'proficiency_level' => 'nullable|string|max:191',
-            'department_id'     => 'nullable|integer',
-            'status'            => 'nullable|in:Approved,Pending,Cancelled',
-        ]);
+        $validator = Validator::make($request->all(), $this->competencyLibraryRules());
         if ($validator->fails()) {
             return response()->json([
                 'status'  => 0,
@@ -2498,7 +2573,7 @@ class skillLibraryController extends Controller
             ], 422);
         }
 
-        $update = [
+        $update = array_merge([
             'title'             => $request->input('name'),
             'description'       => $request->input('description'),
             'category'          => $request->input('category'),
@@ -2508,7 +2583,7 @@ class skillLibraryController extends Controller
             'department_id'     => $request->input('department_id'),
             'updated_by'        => $context['user_id'],
             'updated_at'        => now(),
-        ];
+        ], $this->competencyLibraryDetailPayload($request));
         if ($request->filled('status')) {
             $update['approve_status'] = $request->input('status');
         }

@@ -111,6 +111,10 @@ class DevelopmentPlanController extends Controller
         if ($pathId = $this->activeFilter($request->input('career_path_id'))) {
             $query->where('career_path_id', $pathId);
         }
+        // Drill-through from a competency's detail panel ("Development Plans").
+        if ($competencyId = $this->activeFilter($request->input('competency_id'))) {
+            $query->where('competency_id', $competencyId);
+        }
         // Command Center drilldown: "Pending My Approvals".
         if ($this->activeFilter($request->input('pending_approval'))) {
             $query->where('approval_status', 'pending_approval');

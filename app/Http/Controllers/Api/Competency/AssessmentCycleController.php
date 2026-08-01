@@ -60,6 +60,12 @@ class AssessmentCycleController extends Controller
 
         $cycles = $query->orderByDesc('id')->get();
 
+        // Resolve the framework name once for the whole page rather than per row.
+        $frameworkNames = DB::table('s_competency_frameworks')
+            ->where('sub_institute_id', $context['sub_institute_id'])
+            ->whereIn('id', $cycles->pluck('framework_id')->filter()->unique()->all())
+            ->pluck('name', 'id');
+
         $cycleIds = $cycles->pluck('id')->toArray();
         $assessments = DB::table('s_competency_assessments')
             ->where('sub_institute_id', $context['sub_institute_id'])
@@ -79,11 +85,11 @@ class AssessmentCycleController extends Controller
             }
         }
 
-        $data = $cycles->map(function ($c) use ($stats) {
+        $data = $cycles->map(function ($c) use ($stats, $frameworkNames) {
             $total = $stats[$c->id]['total'] ?? 0;
             $completed = $stats[$c->id]['completed'] ?? 0;
             $completion = $total > 0 ? round(($completed / $total) * 100) : 0;
-            
+
             $frontendStatus = 'In Progress';
             if ($c->status === 'closed') {
                 $frontendStatus = 'Completed';
@@ -92,6 +98,8 @@ class AssessmentCycleController extends Controller
             return [
                 'id' => (string)$c->id,
                 'name' => $c->name,
+                'framework_id' => $c->framework_id ? (int) $c->framework_id : null,
+                'framework_name' => $c->framework_id ? ($frameworkNames[$c->framework_id] ?? null) : null,
                 // Real column now; falls back to what this used to hardcode so
                 // campaigns created before the column read exactly as before.
                 'type' => $c->type ?: self::DEFAULT_CYCLE_TYPE,
@@ -121,6 +129,9 @@ class AssessmentCycleController extends Controller
             'type' => 'nullable|string',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
+            // Which framework the campaign assesses against. Nullable so an
+            // ad-hoc campaign is still possible, but the UI offers it up front.
+            'framework_id' => 'nullable|integer|exists:s_competency_frameworks,id',
         ]);
 
         if ($validator->fails()) {
@@ -134,6 +145,8 @@ class AssessmentCycleController extends Controller
         $id = DB::table('s_competency_assessment_cycles')->insertGetId([
             'sub_institute_id' => $context['sub_institute_id'],
             'name' => $request->input('name'),
+            'type' => $request->input('type'),
+            'framework_id' => $request->input('framework_id'),
             'start_date' => $request->input('start_date'),
             'end_date' => $request->input('end_date'),
             'status' => 'active',
