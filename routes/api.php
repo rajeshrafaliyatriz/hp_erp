@@ -306,6 +306,10 @@ Route::delete('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryContro
 // One set of routes for all four KASA tabs: {type} is knowledge|ability|attitude|behaviour.
 Route::get('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'kasa']);
 Route::post('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'storeKasa']);
+// Where a knowledge / ability / attitude / behaviour item is actually used:
+// which skills reference it, at which levels, and the job roles that inherit
+// it. Declared before the {id} show route so 'usage' is not read as an id.
+Route::get('/competency/library/kasa/{type}/{id}/usage', [CompetencyLibraryController::class, 'usageKasa'])->whereNumber('id');
 Route::get('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'showKasa'])->whereNumber('id');
 Route::put('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'updateKasa'])->whereNumber('id');
 Route::delete('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'destroyKasa'])->whereNumber('id');
