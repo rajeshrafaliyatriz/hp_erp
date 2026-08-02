@@ -999,6 +999,97 @@ class LibraryController extends Controller
             : $this->badRequest('Unknown attribute type.', 404);
     }
 
+    /**
+     * Where a knowledge / ability / attitude / behaviour item is actually used.
+     *
+     * The previous app's detail popup declared state for exactly this - which
+     * skills reference the item, at which proficiency levels, and which job
+     * roles inherit it - and then never fetched any of it, so those panels were
+     * permanently empty. The data exists: s_skill_knowledge_ability joins a
+     * classification item back to the skills that list it.
+     *
+     * Matching is by `classification_item` against the item's title, because
+     * that join carries the text rather than a foreign key.
+     */
+    public function usageKasa(Request $request, $type, $id)
+    {
+        $resolved = $this->kasaType($type);
+
+        if (!$resolved) {
+            return $this->badRequest('Unknown attribute type.', 404);
+        }
+
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $sid = $context['sub_institute_id'];
+        $config = self::RESOURCES[$resolved];
+
+        $item = DB::table($config['table'])
+            ->where('id', (int) $id)
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$item) {
+            return $this->badRequest('Not found.', 404);
+        }
+
+        $title = trim((string) ($item->{$config['title']} ?? ''));
+
+        // A blank title cannot be matched against, and matching on '' would
+        // return every unclassified row in the tenant.
+        if ($title === '') {
+            return $this->ok('Usage', [
+                'item'         => $item,
+                'skills'       => [],
+                'jobroles'     => [],
+                'levels'       => [],
+                'skill_count'  => 0,
+            ]);
+        }
+
+        $links = DB::table('s_skill_knowledge_ability as ska')
+            ->join('s_users_skills as s', 's.id', '=', 'ska.skill_id')
+            ->where('ska.classification', $resolved)
+            ->where('ska.classification_item', $title)
+            ->where('ska.sub_institute_id', $sid)
+            ->whereNull('ska.deleted_at')
+            ->whereNull('s.deleted_at')
+            ->orderBy('s.title')
+            ->get([
+                'ska.id',
+                'ska.skill_id',
+                'ska.proficiency_level',
+                'ska.classification_category',
+                'ska.classification_sub_category',
+                's.title as skill_title',
+                's.category as skill_category',
+                's.sub_category as skill_sub_category',
+                's.department as skill_department',
+            ]);
+
+        // Job roles reached through those skills - the item's real blast radius.
+        $skillTitles = $links->pluck('skill_title')->filter()->unique()->values()->all();
+
+        $jobroles = $skillTitles === [] ? collect() : DB::table('s_user_skill_jobrole')
+            ->whereIn('skill', $skillTitles)
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->orderBy('jobrole')
+            ->get(['id', 'jobrole', 'skill', 'proficiency_level', 'proficiency_description', 'track', 'sector']);
+
+        return $this->ok('Usage', [
+            'item'        => $item,
+            'skills'      => $links,
+            'jobroles'    => $jobroles,
+            'levels'      => $links->pluck('proficiency_level')->filter()->unique()->sort()->values(),
+            'skill_count' => $links->count(),
+        ]);
+    }
+
     public function updateKasa(Request $request, $type, $id)
     {
         $resolved = $this->kasaType($type);
