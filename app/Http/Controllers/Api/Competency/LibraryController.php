@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Competency;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
@@ -617,6 +618,9 @@ class LibraryController extends Controller
             (string) $data[$resource['title']]
         );
 
+        // Counts and dropdown options are cached; a write makes them stale.
+        $this->forgetLibraryMeta((int) $context['sub_institute_id']);
+
         return $this->ok($resource['label'] . ' created successfully', ['id' => (int) $id]);
     }
 
@@ -700,6 +704,9 @@ class LibraryController extends Controller
             $changes
         );
 
+        // Counts and dropdown options are cached; a write makes them stale.
+        $this->forgetLibraryMeta((int) $context['sub_institute_id']);
+
         return $this->ok($resource['label'] . ' updated successfully', ['id' => $id]);
     }
 
@@ -740,6 +747,9 @@ class LibraryController extends Controller
             $id,
             $name
         );
+
+        // Counts and dropdown options are cached; a write makes them stale.
+        $this->forgetLibraryMeta((int) $context['sub_institute_id']);
 
         return $this->ok($resource['label'] . ' deleted successfully', ['id' => $id]);
     }
@@ -1409,6 +1419,9 @@ class LibraryController extends Controller
             $renamingSub ? $sub : $category
         );
 
+        // Counts and dropdown options are cached; a write makes them stale.
+        $this->forgetLibraryMeta((int) $context['sub_institute_id']);
+
         return $this->ok('Taxonomy updated successfully', ['affected' => $affected]);
     }
 
@@ -1674,6 +1687,43 @@ class LibraryController extends Controller
 
         $sid = $context['sub_institute_id'];
 
+        // The database this talks to is remote: a bare `SELECT 1` costs about
+        // 400ms, so the cost of this endpoint is round trips, not rows. It
+        // used to make thirteen of them and take roughly four seconds.
+        //
+        // Cached on local disk rather than the default store, because the
+        // default store is `database` - the same remote server - so caching
+        // there would just swap thirteen slow round trips for one.
+        //
+        // Writes call forgetLibraryMeta(), so the TTL is only a backstop for
+        // rows changed outside this controller.
+        return Cache::store('file')->remember(
+            self::metaCacheKey($sid),
+            now()->addMinutes(10),
+            fn () => $this->buildMeta($sid),
+        );
+    }
+
+    /** Cache key for one tenant's library metadata. */
+    private static function metaCacheKey(int $sid): string
+    {
+        return "competency:library:meta:{$sid}";
+    }
+
+    /**
+     * Drop a tenant's cached metadata.
+     *
+     * Called after every library write, so the tab counts and dropdown options
+     * reflect the change on the next read instead of after the TTL.
+     */
+    private function forgetLibraryMeta(int $sid): void
+    {
+        Cache::store('file')->forget(self::metaCacheKey($sid));
+    }
+
+    /** @return \Illuminate\Http\JsonResponse */
+    private function buildMeta(int $sid)
+    {
         $jobroleRows = DB::table('s_user_jobrole')
             ->where('sub_institute_id', $sid)
             ->whereNull('deleted_at')
@@ -1693,39 +1743,36 @@ class LibraryController extends Controller
         }
         ksort($byDepartment);
 
-        $proficiency = DB::table('s_users_skills')
-            ->where('sub_institute_id', $sid)
-            ->whereNull('deleted_at')
-            ->whereNotNull('proficiency_level')
-            ->where('proficiency_level', '!=', '')
-            ->distinct()
-            ->orderBy('proficiency_level')
-            ->pluck('proficiency_level');
+        // Four DISTINCT lists in one round trip. They are unrelated columns
+        // on three tables, so a UNION of (bucket, value) pairs is the only way
+        // to ask for them together; the caller splits them back apart.
+        $optionRows = DB::select(
+            "  SELECT 'proficiency' AS bucket, proficiency_level AS value FROM s_users_skills"
+            . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
+            . "     AND proficiency_level IS NOT NULL AND proficiency_level <> ''"
+            . " UNION SELECT 'department', department FROM s_users_skills"
+            . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
+            . "     AND department IS NOT NULL AND department <> ''"
+            . " UNION SELECT 'invisible_type', type FROM s_invisible_library"
+            . "   WHERE type IS NOT NULL AND type <> ''"
+            . " UNION SELECT 'task_type', task_type FROM s_user_jobrole_task"
+            . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
+            . "     AND task_type IS NOT NULL AND task_type <> ''"
+            . " ORDER BY bucket, value",
+            [$sid, $sid, $sid]
+        );
 
-        $departments = DB::table('s_users_skills')
-            ->where('sub_institute_id', $sid)
-            ->whereNull('deleted_at')
-            ->whereNotNull('department')
-            ->where('department', '!=', '')
-            ->distinct()
-            ->orderBy('department')
-            ->pluck('department');
+        $buckets = ['proficiency' => [], 'department' => [], 'invisible_type' => [], 'task_type' => []];
+        foreach ($optionRows as $row) {
+            if (array_key_exists($row->bucket, $buckets)) {
+                $buckets[$row->bucket][] = $row->value;
+            }
+        }
 
-        $invisibleTypes = DB::table('s_invisible_library')
-            ->whereNotNull('type')
-            ->where('type', '!=', '')
-            ->distinct()
-            ->orderBy('type')
-            ->pluck('type');
-
-        $taskTypes = DB::table('s_user_jobrole_task')
-            ->where('sub_institute_id', $sid)
-            ->whereNull('deleted_at')
-            ->whereNotNull('task_type')
-            ->where('task_type', '!=', '')
-            ->distinct()
-            ->orderBy('task_type')
-            ->pluck('task_type');
+        $proficiency = $buckets['proficiency'];
+        $departments = $buckets['department'];
+        $invisibleTypes = $buckets['invisible_type'];
+        $taskTypes = $buckets['task_type'];
 
         return $this->ok('Library metadata fetched successfully', [
             'departments'          => $departments,
@@ -1737,18 +1784,68 @@ class LibraryController extends Controller
         ]);
     }
 
-    /** Row counts per tab, for the badges on the tab strip. */
+    /**
+     * Row counts per tab, for the badges on the tab strip.
+     *
+     * Built as one UNION ALL rather than a count per resource. Eight separate
+     * COUNT queries is eight round trips, and against a remote database that
+     * is roughly two and a half seconds spent almost entirely on the wire -
+     * the largest table here is 85k rows, so none of it is query time.
+     *
+     * The WHERE clauses are assembled from the same RESOURCES config the rest
+     * of the controller uses, so a new tab is counted without touching this.
+     */
     private function libraryCounts(int $sid): array
     {
-        $counts = [];
+        $parts = [];
+        $bindings = [];
 
         foreach (self::RESOURCES as $type => $resource) {
-            $counts[$type] = $this->baseQuery($resource, $sid)
-                ->whereNotNull($resource['title'])
-                ->where($resource['title'], '!=', '')
-                ->count();
+            $where = [];
+            // The bucket label is the first placeholder in this SELECT, so its
+            // binding has to lead the resource's own bindings.
+            $partBindings = [$type];
+
+            if ($resource['tenant'] === 'shared') {
+                // Platform rows have no owner and are visible to everyone.
+                $where[] = '(sub_institute_id IS NULL OR sub_institute_id = ?)';
+                $partBindings[] = $sid;
+            } elseif ($resource['tenant']) {
+                $where[] = 'sub_institute_id = ?';
+                $partBindings[] = $sid;
+            }
+
+            if (!empty($resource['soft'])) {
+                $where[] = 'deleted_at IS NULL';
+            }
+
+            // Placeholder rows carry no title and are not real library entries.
+            $title = $resource['title'];
+            $where[] = "`{$title}` IS NOT NULL";
+            $where[] = "`{$title}` <> ''";
+
+            $parts[] = sprintf(
+                "SELECT ? AS bucket, COUNT(*) AS total FROM `%s` WHERE %s",
+                $resource['table'],
+                implode(' AND ', $where)
+            );
+
+            $bindings = array_merge($bindings, $partBindings);
+        }
+
+        $rows = DB::select(implode(' UNION ALL ', $parts), $bindings);
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[$row->bucket] = (int) $row->total;
+        }
+
+        // Any resource the union somehow skipped still reports a number.
+        foreach (self::RESOURCES as $type => $resource) {
+            $counts[$type] = $counts[$type] ?? 0;
         }
 
         return $counts;
     }
+
 }
