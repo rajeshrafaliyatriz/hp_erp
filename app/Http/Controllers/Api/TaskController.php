@@ -28,6 +28,32 @@ class TaskController extends Controller
     }
 
     /**
+     * The tenant every query MUST be filtered by.
+     *
+     * Previously the sub_institute_id filter was applied only "if provided",
+     * so omitting the parameter returned every tenant's tasks to any valid
+     * token. Now the parameter wins when present, the token's own user
+     * supplies it otherwise, and a request that resolves neither is refused.
+     *
+     * @return int|\Illuminate\Http\JsonResponse
+     */
+    private function resolveTenant($request)
+    {
+        $fromRequest = (int) $request->input('sub_institute_id', 0);
+        if ($fromRequest > 0) {
+            return $fromRequest;
+        }
+
+        $user = PersonalAccessToken::findToken((string) $request->input('token'))?->tokenable;
+        $fromUser = (int) ($user->sub_institute_id ?? 0);
+        if ($fromUser > 0) {
+            return $fromUser;
+        }
+
+        return response()->json(['message' => 'sub_institute_id is required'], 400);
+    }
+
+    /**
      * Get task counts and details for daily, weekly, and monthly periods
      * 
      * @param Request $request
@@ -41,7 +67,10 @@ class TaskController extends Controller
         }
 
         $userId = $request->input('user_id');
-        $subInstituteId = $request->input('sub_institute_id');
+        $subInstituteId = $this->resolveTenant($request);
+        if (!is_int($subInstituteId)) {
+            return $subInstituteId;
+        }
 
         // Get date ranges
         $today = now()->toDateString();
@@ -242,7 +271,10 @@ class TaskController extends Controller
 
         $today = now()->toDateString();
         $userId = $request->input('user_id');
-        $subInstituteId = $request->input('sub_institute_id');
+        $subInstituteId = $this->resolveTenant($request);
+        if (!is_int($subInstituteId)) {
+            return $subInstituteId;
+        }
         $allowedStatuses = ['Completed', 'In Progress', 'Pending'];
 
         $query = DB::table('task')
@@ -289,7 +321,10 @@ class TaskController extends Controller
         $startOfWeek = now()->startOfWeek()->toDateString();
         $endOfWeek = now()->endOfWeek()->toDateString();
         $userId = $request->input('user_id');
-        $subInstituteId = $request->input('sub_institute_id');
+        $subInstituteId = $this->resolveTenant($request);
+        if (!is_int($subInstituteId)) {
+            return $subInstituteId;
+        }
         $allowedStatuses = ['Completed', 'In Progress', 'Pending'];
 
         $query = DB::table('task')
@@ -339,7 +374,10 @@ class TaskController extends Controller
         $startOfMonth = now()->startOfMonth()->toDateString();
         $endOfMonth = now()->endOfMonth()->toDateString();
         $userId = $request->input('user_id');
-        $subInstituteId = $request->input('sub_institute_id');
+        $subInstituteId = $this->resolveTenant($request);
+        if (!is_int($subInstituteId)) {
+            return $subInstituteId;
+        }
         $allowedStatuses = ['Completed', 'In Progress', 'Pending'];
 
         $query = DB::table('task')

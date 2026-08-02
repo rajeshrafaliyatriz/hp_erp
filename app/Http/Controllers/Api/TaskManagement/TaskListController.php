@@ -25,15 +25,12 @@ class TaskListController extends Controller
         $query = DB::table('task')->where('sub_institute_id', $context['sub_institute_id'])
             ->where('SYEAR', $context['syear'])->whereNull('deleted_at');
         if ($request->filled('search')) {
-            $search = trim((string) $request->input('search'));
-            if (DB::getDriverName() === 'mysql' && mb_strlen($search) >= 3) {
-                $query->where(fn ($q) => $q->whereRaw('MATCH(task_title, task_description) AGAINST(? IN BOOLEAN MODE)', [$search.'*'])
-                    ->orWhere('task_code', 'like', "%{$search}%"));
-            } else {
-                $query->where(fn ($q) => $q->where('task_title', 'like', "%{$search}%")
-                    ->orWhere('task_description', 'like', "%{$search}%")
-                    ->orWhere('task_code', 'like', "%{$search}%"));
-            }
+            // Plain LIKEs on real columns. The previous MATCH() branch needed
+            // a FULLTEXT index no migration ever created, and task_code is
+            // not a column on the task table - both 500ed on the first search.
+            $search = $this->escapeLike(trim((string) $request->input('search')));
+            $query->where(fn ($q) => $q->where('task_title', 'like', "%{$search}%")
+                ->orWhere('task_description', 'like', "%{$search}%"));
         }
         if ($request->filled('status')) $query->whereRaw('UPPER(status) = ?', [strtoupper($request->input('status'))]);
         if ($request->filled('priority')) $query->where('task_type', $request->input('priority'));
@@ -43,7 +40,7 @@ class TaskListController extends Controller
         $tasks = $query->orderByDesc('id')->cursorPaginate($request->integer('per_page', 50));
         return response()->json(['status' => 1, 'message' => 'Tasks retrieved successfully.', 'data' => [
             'tasks' => collect($tasks->items())->map(fn ($task) => [
-                'id' => (string) $task->id, 'task_code' => $task->task_code ?: (string) $task->id,
+                'id' => (string) $task->id, 'task_code' => (string) $task->id,
                 'title' => $task->task_title, 'description' => $task->task_description,
                 'assignee_id' => $task->task_allocated_to ? (string) $task->task_allocated_to : null,
                 'owner_id' => $task->task_allocated ? (string) $task->task_allocated : null,
@@ -54,6 +51,19 @@ class TaskListController extends Controller
                 'previous_cursor' => $tasks->previousCursor()?->encode(), 'has_more' => $tasks->hasMorePages(),
             ],
         ]]);
+    }
+
+
+    /**
+     * Escape LIKE wildcards in a user-supplied search term.
+     *
+     * Without this, searching for "%" matches every row (the audit measured
+     * 417 of 417) and "_" matches any single character - the term stops being
+     * a search and becomes a table dump.
+     */
+    private function escapeLike(string $value): string
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $value);
     }
 
     private function context(Request $request)
