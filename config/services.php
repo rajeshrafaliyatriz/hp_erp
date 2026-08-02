@@ -28,6 +28,13 @@ return [
         'key' => env('RESEND_KEY'),
     ],
 
+    'n8n' => [
+        // Fired server-side when a task is created through the task-management
+        // API. Blank disables the call entirely. The old frontend fired this
+        // same webhook from the browser.
+        'task_webhook' => env('N8N_TASK_WEBHOOK_URL', ''),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

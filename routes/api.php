@@ -138,6 +138,8 @@ use App\Http\Controllers\Api\TaskManagement\SessionController;
 use App\Http\Controllers\Api\TaskManagement\ProjectController;
 use App\Http\Controllers\Api\TaskManagement\WorkspaceController;
 use App\Http\Controllers\Api\TaskManagement\DependencyController;
+use App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController;
+use App\Http\Controllers\Api\TaskManagement\TaskOptionController;
 use App\Http\Controllers\Api\UserJourneyLogController;
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
@@ -853,6 +855,20 @@ Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
 Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
 Route::prefix('task-management')->middleware('task.sanitize')->group(function () {
     Route::get('/session', [SessionController::class, 'show']);
+    // Module metadata for the Administration screens: the permission matrix
+    // as enforced, and which integrations are configured (never their keys).
+    Route::get('/permissions', [SessionController::class, 'permissions']);
+    // Tenant status/priority vocabularies. System entries are constants; the
+    // CRUD below manages the tenant's custom additions.
+    Route::get('/statuses', [TaskOptionController::class, 'statuses']);
+    Route::post('/statuses', [TaskOptionController::class, 'storeStatus'])->middleware('task.permission:notification.manage');
+    Route::put('/statuses/{id}', [TaskOptionController::class, 'updateStatus'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::delete('/statuses/{id}', [TaskOptionController::class, 'destroyStatus'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::get('/priorities', [TaskOptionController::class, 'priorities']);
+    Route::post('/priorities', [TaskOptionController::class, 'storePriority'])->middleware('task.permission:notification.manage');
+    Route::put('/priorities/{id}', [TaskOptionController::class, 'updatePriority'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::delete('/priorities/{id}', [TaskOptionController::class, 'destroyPriority'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::get('/integrations', [SessionController::class, 'integrations']);
     Route::delete('/session', [SessionController::class, 'destroy'])->middleware('task.permission:notification.manage');
     Route::post('/bulk-tasks/import', [BulkTaskController::class, 'import'])->middleware('task.permission:task.create');
     Route::post('/assignment-capacity', [CapacityController::class, 'check'])->middleware('task.permission:task.create');
@@ -871,8 +887,11 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::delete('/templates/{id}', [TaskTemplateController::class, 'destroy'])->middleware('task.permission:task.create')->whereNumber('id');
     Route::get('/reports/productivity', [ReportController::class, 'productivity']);
     Route::get('/reports/delays', [ReportController::class, 'delays']);
-    Route::get('/audit-logs', [AuditLogController::class, 'index']);
-    Route::get('/audit-logs/export', [AuditLogController::class, 'export']);
+    // Admin-only: the audit trail is org-wide and the export is the whole
+    // thing as a file. Gated with the same privileged ability the other
+    // Administration routes use.
+    Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('task.permission:notification.manage');
+    Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->middleware('task.permission:notification.manage');
     Route::get('/workspace', [WorkspaceController::class, 'index']);
     Route::get('/workspace/workload', [WorkspaceController::class, 'workload']);
     Route::get('/workspace/{id}', [WorkspaceController::class, 'show'])->whereNumber('id');
@@ -897,6 +916,13 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::post('/workspace/{id}/attachments', [TaskAttachmentVersionController::class, 'store'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::get('/workspace/{id}/attachments/{version}', [TaskAttachmentVersionController::class, 'download'])->whereNumber(['id', 'version']);
     Route::post('/workspace/{id}/attachments/{version}/restore', [TaskAttachmentVersionController::class, 'restore'])->middleware('task.permission:task.update')->whereNumber(['id', 'version']);
+    // Deadline extensions: the executor requests more time, the observer
+    // decides. The old frontend had this whole flow pointed at an endpoint
+    // that never existed; these are its backend.
+    Route::get('/deadline-extensions', [DeadlineExtensionController::class, 'index']);
+    Route::post('/deadline-extensions', [DeadlineExtensionController::class, 'store']);
+    Route::patch('/deadline-extensions/{id}/decision', [DeadlineExtensionController::class, 'decide'])->middleware('task.permission:task.approve')->whereNumber('id');
+
     Route::get('/dependencies', [DependencyController::class, 'index']);
     Route::post('/dependencies', [DependencyController::class, 'store'])->middleware('task.permission:dependency.manage');
     Route::put('/dependencies/{id}', [DependencyController::class, 'update'])->middleware('task.permission:dependency.manage')->whereNumber('id');
@@ -968,6 +994,8 @@ Route::get('/career-journey', [CareerJourneyController::class, 'getCareerJourney
 
 // Bulk Task Import API
 Route::post('bulk-task/import', [BulkTaskController::class, 'import']);
+// Path the legacy frontend posts deadline-extension requests to.
+Route::post('/deadline-extension', [App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController::class, 'store']);
 
 // Nango Google Calendar OAuth API
 Route::post('nango/google/check-connection', [App\Http\Controllers\NangoController::class, 'checkConnection']);

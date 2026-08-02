@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\TaskManagement\TaskAuditService;
 use App\Services\TaskManagement\TaskDependencyResolutionService;
 use App\Services\TaskManagement\TaskStatusTransitionService;
+use App\Services\TaskManagement\TaskOptionSetService;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
@@ -27,7 +28,8 @@ class MyTasksController extends Controller
     public function __construct(
         private readonly TaskAuditService $taskAudit,
         private readonly TaskStatusTransitionService $statusTransitions,
-        private readonly TaskDependencyResolutionService $dependencyResolution
+        private readonly TaskDependencyResolutionService $dependencyResolution,
+        private readonly TaskOptionSetService $optionSets
     ) {
     }
 
@@ -41,8 +43,10 @@ class MyTasksController extends Controller
         $validator = Validator::make($request->all(), [
             'group' => 'nullable|in:all,today,upcoming,recent,subordinates',
             'search' => 'nullable|string|max:191',
-            'status' => 'nullable|in:PENDING,IN-PROGRESS,ON HOLD,COMPLETED',
-            'priority' => 'nullable|in:High,Medium,Low',
+            // A system category or a tenant's custom status/priority label;
+            // an unknown value simply matches nothing rather than 422-ing.
+            'status' => 'nullable|string|max:100',
+            'priority' => 'nullable|string|max:100',
             'page' => 'nullable|integer|min:1',
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
@@ -59,7 +63,7 @@ class MyTasksController extends Controller
         $this->applyGroup($query, $request->input('group', 'all'), $context);
 
         if ($request->filled('search')) {
-            $search = trim((string) $request->input('search'));
+            $search = $this->escapeLike(trim((string) $request->input('search')));
             $query->where(function (Builder $builder) use ($search) {
                 $builder
                     ->where('t.task_title', 'like', "%{$search}%")
@@ -72,7 +76,14 @@ class MyTasksController extends Controller
         }
 
         if ($request->filled('status')) {
-            $query->whereRaw('UPPER(t.status) = ?', [strtoupper((string) $request->input('status'))]);
+            $status = (string) $request->input('status');
+            // Custom statuses are labels on a system category - match the
+            // label when the value is not one of the four categories.
+            if (in_array(strtoupper($status), self::STATUSES, true)) {
+                $query->whereRaw('UPPER(t.status) = ?', [strtoupper($status)]);
+            } else {
+                $query->where('t.status_label', $status);
+            }
         }
         if ($request->filled('priority')) {
             $query->where('t.task_type', $request->input('priority'));
@@ -101,6 +112,11 @@ class MyTasksController extends Controller
                 'filters' => [
                     'statuses' => self::STATUSES,
                     'priorities' => self::PRIORITIES,
+                    // Same vocabularies the Dashboard ships, so the My Tasks
+                    // pickers can offer the tenant's custom labels instead of
+                    // only the four system categories.
+                    'status_options' => $this->optionSets->statuses($context['sub_institute_id']),
+                    'priority_options' => $this->optionSets->priorities($context['sub_institute_id']),
                 ],
             ],
         ]);
@@ -142,7 +158,8 @@ class MyTasksController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'status' => 'required|in:PENDING,IN-PROGRESS,ON HOLD,COMPLETED',
+            // System categories plus the tenant's custom statuses, resolved below.
+            'status' => 'required|string|max:100',
             'remarks' => 'required|string|max:5000',
             'delay_category' => 'nullable|in:Dependency,Resource,Scope,Technical,Approval,External,Other',
             'delay_reason' => 'nullable|string|max:5000',
@@ -168,34 +185,54 @@ class MyTasksController extends Controller
             return response()->json(['status' => 0, 'message' => 'Task not found or cannot be updated.'], 404);
         }
 
-        if (!$this->statusTransitions->allows($task->status, $request->input('status'))) {
+        $resolved = $this->optionSets->resolveStatus($context['sub_institute_id'], (string) $request->input('status'));
+        if ($resolved === null) {
+            return response()->json(['status' => 0, 'message' => 'Unknown status for this organisation.'], 422);
+        }
+
+        if (!$this->statusTransitions->allows($task->status, $resolved['status'])) {
             return response()->json([
                 'status' => 0,
-                'message' => $this->statusTransitions->message($task->status, $request->input('status')),
+                'message' => $this->statusTransitions->message($task->status, $resolved['status']),
             ], 422);
         }
 
         $before = (array) $task;
         DB::table('task')->where('id', $id)->update([
-            'status' => $request->input('status'),
+            'status' => $resolved['status'],
+            'status_label' => $resolved['label'],
             'reply' => $request->input('remarks'),
-            'delay_category' => $request->input('status') === 'ON HOLD' ? $request->input('delay_category') : ($before['delay_category'] ?? null),
-            'delay_reason' => $request->input('status') === 'ON HOLD' ? ($request->input('delay_reason') ?: $request->input('remarks')) : ($before['delay_reason'] ?? null),
+            'delay_category' => $resolved['status'] === 'ON HOLD' ? $request->input('delay_category') : ($before['delay_category'] ?? null),
+            'delay_reason' => $resolved['status'] === 'ON HOLD' ? ($request->input('delay_reason') ?: $request->input('remarks')) : ($before['delay_reason'] ?? null),
             'updated_by' => $context['user_id'],
             'updated_at' => now(),
         ]);
         $this->taskAudit->taskChanged($id, 'status_changed', $before, $context['user_id']);
-        if ($request->input('status') === 'COMPLETED') $this->dependencyResolution->resolveAfterCompletion($id, $context['user_id']);
+        if ($resolved['status'] === 'COMPLETED') $this->dependencyResolution->resolveAfterCompletion($id, $context['user_id']);
 
         return response()->json([
             'status' => 1,
             'message' => 'Task status updated successfully.',
             'data' => [
                 'id' => (string) $id,
-                'status' => $request->input('status'),
+                'status' => $resolved['status'],
+                'status_label' => $resolved['label'],
                 'remarks' => $request->input('remarks'),
             ],
         ]);
+    }
+
+
+    /**
+     * Escape LIKE wildcards in a user-supplied search term.
+     *
+     * Without this, searching for "%" matches every row (the audit measured
+     * 417 of 417) and "_" matches any single character - the term stops being
+     * a search and becomes a table dump.
+     */
+    private function escapeLike(string $value): string
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $value);
     }
 
     private function context(Request $request)
@@ -246,7 +283,7 @@ class MyTasksController extends Controller
             ->select([
                 't.id', 't.task_title', 't.task_description', 't.task_attachment',
                 't.file_size', 't.file_type', 't.task_date', 't.planned_start_date', 't.estimated_hours', 't.actual_hours', 't.remaining_hours', 't.acceptance_criteria', 't.task_type',
-                't.status', 't.reply', 't.delay_category', 't.delay_reason', 't.observation_point', 't.created_at',
+                't.status', 't.status_label', 't.reply', 't.delay_category', 't.delay_reason', 't.observation_point', 't.created_at',
                 't.updated_at', 't.task_allocated', 't.task_allocated_to',
                 DB::raw("TRIM(CONCAT_WS(' ', assignee.first_name, assignee.middle_name, assignee.last_name)) as assignee_name"),
                 DB::raw("TRIM(CONCAT_WS(' ', allocator.first_name, allocator.middle_name, allocator.last_name)) as allocator_name"),
@@ -326,7 +363,8 @@ class MyTasksController extends Controller
             'owner_id' => $task->task_allocated ? (string) $task->task_allocated : null,
             'department' => (string) ($task->department_name ?? ''),
             'status' => $status,
-            'priority' => in_array($task->task_type, self::PRIORITIES, true) ? $task->task_type : null,
+            'status_label' => $task->status_label ?? null,
+            'priority' => $task->task_type ?: null,
             'task_type' => $task->task_type,
             'estimated_hours' => $task->estimated_hours !== null ? (float) $task->estimated_hours : null,
             'actual_hours' => $task->actual_hours !== null ? (float) $task->actual_hours : null,

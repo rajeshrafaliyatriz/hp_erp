@@ -28,6 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'session' => \App\Http\Middleware\SessionMiddleware::class,
             'auth' => \App\Http\Middleware\authMiddleware::class,
             'task.sanitize' => \App\Http\Middleware\TaskSanitizeMiddleware::class,
+            // Role-gates the task-management write routes. The routes have
+            // declared this alias since they were written; registering it is
+            // what makes them dispatch instead of 500ing.
+            'task.permission' => \App\Http\Middleware\TaskPermissionMiddleware::class,
         ]);
           $middleware->validateCsrfTokens(except: [
             'stripe/*',
