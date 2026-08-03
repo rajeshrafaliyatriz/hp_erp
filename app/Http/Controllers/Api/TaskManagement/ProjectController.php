@@ -209,13 +209,78 @@ class ProjectController extends Controller
         $valid = DB::table('task')->where('sub_institute_id', $context['sub_institute_id'])->where('syear', $context['syear'])
             ->whereIn('id', $request->input('task_ids'))->pluck('id')->map(fn ($id) => (int) $id)->all();
         DB::transaction(function () use ($id, $valid, $context) {
+            // This replaces the whole list, so a task's workstream would be
+            // lost on every save. Carry the existing placements over instead.
+            $existingWorkstreams = DB::table('task_management_project_tasks')
+                ->where('project_id', $id)->pluck('workstream_id', 'task_id');
             DB::table('task_management_project_tasks')->where('project_id', $id)->delete();
             foreach ($valid as $taskId) DB::table('task_management_project_tasks')->insert([
-                'project_id' => $id, 'task_id' => $taskId, 'created_by' => $context['user_id'],
+                'project_id' => $id, 'task_id' => $taskId,
+                'workstream_id' => $existingWorkstreams[$taskId] ?? null,
+                'created_by' => $context['user_id'],
                 'created_at' => now(), 'updated_at' => now(),
             ]);
         });
         return response()->json(['status' => 1, 'message' => 'Project tasks updated successfully.']);
+    }
+
+    /**
+     * Attach one task to this project, optionally inside a workstream.
+     *
+     * syncTasks replaces the project's entire task list, which is right for
+     * the project editor but unusable when a single new task needs adding -
+     * a partial list there silently unlinks everything else. This adds one
+     * task and leaves the rest alone, and is what lets a task created from
+     * the Add Task drawer land in a project at all.
+     */
+    public function attachTask(Request $request, int $id)
+    {
+        $context = $this->context($request);
+        if (!is_array($context)) return $context;
+        if (!$this->canManage($context, $id)) return response()->json(['status' => 0, 'message' => 'You cannot link tasks.'], 403);
+
+        $validator = Validator::make($request->all(), [
+            'task_id' => 'required|integer',
+            'workstream_id' => 'nullable|integer',
+        ]);
+        if ($validator->fails()) return $this->validationError($validator);
+
+        $taskId = $request->integer('task_id');
+        $taskExists = DB::table('task')->where('id', $taskId)
+            ->where('sub_institute_id', $context['sub_institute_id'])->where('syear', $context['syear'])
+            ->whereNull('deleted_at')->exists();
+        if (!$taskExists) return response()->json(['status' => 0, 'message' => 'Task not found.'], 404);
+
+        // A workstream only means anything inside its own project.
+        $workstreamId = $request->filled('workstream_id') ? $request->integer('workstream_id') : null;
+        if ($workstreamId !== null && !DB::table('task_management_workstreams')
+                ->where('id', $workstreamId)->where('project_id', $id)->exists()) {
+            return response()->json(['status' => 0, 'message' => 'That workstream does not belong to this project.'], 422);
+        }
+
+        // Re-attaching should move the task, not duplicate the row.
+        $existing = DB::table('task_management_project_tasks')
+            ->where('project_id', $id)->where('task_id', $taskId)->first();
+
+        if ($existing) {
+            DB::table('task_management_project_tasks')->where('id', $existing->id)
+                ->update(['workstream_id' => $workstreamId, 'updated_at' => now()]);
+        } else {
+            DB::table('task_management_project_tasks')->insert([
+                'project_id' => $id, 'task_id' => $taskId, 'workstream_id' => $workstreamId,
+                'created_by' => $context['user_id'], 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Task linked to the project.',
+            'data' => [
+                'project_id' => (string) $id,
+                'task_id' => (string) $taskId,
+                'workstream_id' => $workstreamId !== null ? (string) $workstreamId : null,
+            ],
+        ], $existing ? 200 : 201);
     }
 
     private function context(Request $request)

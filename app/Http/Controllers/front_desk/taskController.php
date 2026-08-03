@@ -35,6 +35,18 @@ class taskController extends Controller
     }
 
     /**
+     * Ids created by this request, in creation order.
+     *
+     * One submit can produce several rows - a recurring task becomes one row
+     * per date, a multi-user assignment one row per person - so the caller
+     * needs the whole list to link them to a project or a dependency.
+     * Controllers are resolved per request, so this never leaks between them.
+     *
+     * @var array<int, int>
+     */
+    private array $createdTaskIds = [];
+
+    /**
      * Insert a task and record its creation.
      *
      * TaskReferenceService and TaskNotificationService used to be injected
@@ -47,6 +59,7 @@ class taskController extends Controller
     private function insertTaskWithReference(array $data, string|int|null $syear): int
     {
         $taskId = (int) taskModel::insertGetId($data);
+        $this->createdTaskIds[] = $taskId;
         $this->taskAudit->taskCreated($taskId, isset($data['created_by']) ? (int) $data['created_by'] : null);
 
         return $taskId;
@@ -417,6 +430,7 @@ class taskController extends Controller
                         'status_code' => "1",
                         'message' => 'Task already created for this request.',
                         'task_id' => (string) $existing->task_id,
+                        'task_ids' => [(string) $existing->task_id],
                         'replayed' => true,
                     ], 200);
                 }
@@ -593,6 +607,7 @@ class taskController extends Controller
                                     $insert = taskModel::create($data);
 
                                     if ($insert) {
+                                        $this->createdTaskIds[] = (int) $insert->id;
                                         $insertCount++;
                                         $this->sendTaskNotification($allocatedUser, $taskData['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
                                     }
@@ -609,6 +624,7 @@ class taskController extends Controller
                                 $insert = taskModel::create($data);
 
                                 if ($insert) {
+                                    $this->createdTaskIds[] = (int) $insert->id;
                                     $insertCount++;
                                     $this->sendTaskNotification($allocatedUser, $taskData['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
                                 }
@@ -669,9 +685,15 @@ class taskController extends Controller
                 }
             }
 
+            // The created ids, so the caller can link the new work to a
+            // project, a workstream or a dependency. Without them the client
+            // has no handle on what it just created. `task_id` is the first
+            // one, kept for callers that only ever expect a single task.
             $res =  [
                 'status_code' => "1",
-                'message' => "Added successfully"
+                'message' => "Added successfully",
+                'task_id' => $this->createdTaskIds[0] ?? null,
+                'task_ids' => array_map('strval', $this->createdTaskIds),
             ];
 
             return response()->json($res);
