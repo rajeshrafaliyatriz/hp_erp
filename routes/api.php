@@ -1234,39 +1234,39 @@ Route::get('/onboarding/overview', [OnboardingOverviewController::class, 'index'
 Route::get('/onboarding/filters', [OnboardingOverviewController::class, 'filters']);
 
 // Journeys - the journey list sheet, the profile sidebar and "Start onboarding".
-Route::get('/onboarding/journeys', [OnboardingJourneyController::class, 'index']);
-Route::post('/onboarding/journeys', [OnboardingJourneyController::class, 'store']);
-Route::post('/onboarding/journeys/from-offer/{offerId}', [OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
-Route::get('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'show'])->whereNumber('id');
-Route::put('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'update'])->whereNumber('id');
-Route::delete('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
+Route::get('/onboarding/journeys', [V2OnboardingJourneyController::class, 'index']);
+Route::post('/onboarding/journeys', [V2OnboardingJourneyController::class, 'store']);
+Route::post('/onboarding/journeys/from-offer/{offerId}', [V2OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
+Route::get('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'show'])->whereNumber('id');
+Route::put('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
 
 // Journey stages - the "Onboarding Journey Progress" timeline.
-Route::get('/onboarding/journeys/{journeyId}/stages', [OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
-Route::put('/onboarding/stages/{id}', [OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
-Route::post('/onboarding/stages/{id}/complete', [OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
+Route::get('/onboarding/journeys/{journeyId}/stages', [V2OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
+Route::put('/onboarding/stages/{id}', [V2OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
+Route::post('/onboarding/stages/{id}/complete', [V2OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
 
 // Key Contacts card and the Lifecycle Timeline tab.
-Route::get('/onboarding/journeys/{journeyId}/contacts', [OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
-Route::get('/onboarding/journeys/{journeyId}/timeline', [OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
+Route::get('/onboarding/journeys/{journeyId}/contacts', [V2OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
+Route::get('/onboarding/journeys/{journeyId}/timeline', [V2OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
 
 // Preboarding tasks - the main table, its row actions and the Add Task sheet.
 // Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
-Route::get('/onboarding/workstreams', [OnboardingTaskController::class, 'workstreams']);
-Route::post('/onboarding/tasks/bulk', [OnboardingTaskController::class, 'bulk']);
-Route::get('/onboarding/tasks', [OnboardingTaskController::class, 'index']);
-Route::post('/onboarding/tasks', [OnboardingTaskController::class, 'store']);
-Route::put('/onboarding/tasks/{id}', [OnboardingTaskController::class, 'update'])->whereNumber('id');
-Route::post('/onboarding/tasks/{id}/complete', [OnboardingTaskController::class, 'complete'])->whereNumber('id');
-Route::delete('/onboarding/tasks/{id}', [OnboardingTaskController::class, 'destroy'])->whereNumber('id');
+Route::get('/onboarding/workstreams', [V2OnboardingTaskController::class, 'workstreams']);
+Route::post('/onboarding/tasks/bulk', [V2OnboardingTaskController::class, 'bulk']);
+Route::get('/onboarding/tasks', [V2OnboardingTaskController::class, 'index']);
+Route::post('/onboarding/tasks', [V2OnboardingTaskController::class, 'store']);
+Route::put('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'update'])->whereNumber('id');
+Route::post('/onboarding/tasks/{id}/complete', [V2OnboardingTaskController::class, 'complete'])->whereNumber('id');
+Route::delete('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'destroy'])->whereNumber('id');
 
 // Documents card. POST accepts multipart; PUT doubles as the upload endpoint for
 // an existing request (browsers cannot send multipart PUT, so the frontend posts
 // with _method=PUT, which Laravel's method spoofing resolves).
-Route::get('/onboarding/journeys/{journeyId}/documents', [OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
-Route::post('/onboarding/journeys/{journeyId}/documents', [OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
-Route::match(['put', 'post'], '/onboarding/documents/{id}', [OnboardingDocumentController::class, 'update'])->whereNumber('id');
-Route::delete('/onboarding/documents/{id}', [OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
+Route::get('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
+Route::post('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
+Route::match(['put', 'post'], '/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
 
 // Notes card.
 Route::get('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'index'])->whereNumber('journeyId');
