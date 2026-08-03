@@ -1753,34 +1753,50 @@ class LibraryController extends Controller
             . " UNION SELECT 'department', department FROM s_users_skills"
             . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
             . "     AND department IS NOT NULL AND department <> ''"
+            // The second and third levels below department and category. They
+            // are free-text columns, so offering what already exists is what
+            // stops the same sub-department being spelled three ways.
+            . " UNION SELECT 'sub_department', sub_department FROM s_users_skills"
+            . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
+            . "     AND sub_department IS NOT NULL AND sub_department <> ''"
+            . " UNION SELECT 'sub_department', sub_department FROM s_user_jobrole"
+            . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
+            . "     AND sub_department IS NOT NULL AND sub_department <> ''"
+            . " UNION SELECT 'micro_category', micro_category FROM s_users_skills"
+            . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
+            . "     AND micro_category IS NOT NULL AND micro_category <> ''"
+            . " UNION SELECT 'industry', industries FROM s_user_jobrole"
+            . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
+            . "     AND industries IS NOT NULL AND industries <> ''"
             . " UNION SELECT 'invisible_type', type FROM s_invisible_library"
             . "   WHERE type IS NOT NULL AND type <> ''"
             . " UNION SELECT 'task_type', task_type FROM s_user_jobrole_task"
             . "   WHERE sub_institute_id = ? AND deleted_at IS NULL"
             . "     AND task_type IS NOT NULL AND task_type <> ''"
             . " ORDER BY bucket, value",
-            [$sid, $sid, $sid]
+            [$sid, $sid, $sid, $sid, $sid, $sid, $sid]
         );
 
-        $buckets = ['proficiency' => [], 'department' => [], 'invisible_type' => [], 'task_type' => []];
+        $buckets = [
+            'proficiency' => [], 'department' => [], 'sub_department' => [],
+            'micro_category' => [], 'industry' => [], 'invisible_type' => [], 'task_type' => [],
+        ];
         foreach ($optionRows as $row) {
             if (array_key_exists($row->bucket, $buckets)) {
                 $buckets[$row->bucket][] = $row->value;
             }
         }
 
-        $proficiency = $buckets['proficiency'];
-        $departments = $buckets['department'];
-        $invisibleTypes = $buckets['invisible_type'];
-        $taskTypes = $buckets['task_type'];
-
         return $this->ok('Library metadata fetched successfully', [
-            'departments'          => $departments,
+            'departments'            => $buckets['department'],
+            'sub_departments'        => array_values(array_unique($buckets['sub_department'])),
+            'micro_categories'       => $buckets['micro_category'],
+            'industries'             => $buckets['industry'],
             'jobroles_by_department' => $byDepartment,
-            'proficiency_levels'   => $proficiency,
-            'invisible_types'      => $invisibleTypes,
-            'task_types'           => $taskTypes,
-            'counts'               => $this->libraryCounts($sid),
+            'proficiency_levels'     => $buckets['proficiency'],
+            'invisible_types'        => $buckets['invisible_type'],
+            'task_types'             => $buckets['task_type'],
+            'counts'                 => $this->libraryCounts($sid),
         ]);
     }
 

@@ -941,6 +941,8 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::patch('/projects/{id}/archive', [ProjectController::class, 'archive'])->middleware('task.permission:project.manage')->whereNumber('id');
     Route::put('/projects/{id}/members', [ProjectController::class, 'syncProjectMembers'])->middleware('task.permission:project.manage')->whereNumber('id');
     Route::put('/projects/{id}/tasks', [ProjectController::class, 'syncTasks'])->middleware('task.permission:project.manage')->whereNumber('id');
+    // Attach a single task without disturbing the project's other tasks.
+    Route::post('/projects/{id}/tasks', [ProjectController::class, 'attachTask'])->middleware('task.permission:project.manage')->whereNumber('id');
     Route::post('/projects/{id}/workstreams', [ProjectController::class, 'storeWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('id');
     Route::put('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'updateWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
     Route::delete('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'destroyWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
