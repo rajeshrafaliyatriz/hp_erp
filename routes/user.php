@@ -10,6 +10,7 @@ use App\Http\Controllers\user\tbluserContactDetails;
 use App\Http\Controllers\user\userReportController;
 use App\Http\Controllers\user\tbluserProfileWiseMenuController;
 use App\Http\Controllers\user\tblmobileAppMenuRightsController;
+use App\Http\Controllers\user\tblmenumasterG2gController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\user\UserRatingDetailController;
 
@@ -38,6 +39,8 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
         [tbluserProfileWiseMenuController::class, 'displayUserProfileWiseRights'])->name('ajax_user_profile_wise_rights');
     Route::get('ajax_mobile_app_menu_rights',
         [tblmobileAppMenuRightsController::class, 'displayMobileAppMenuRights'])->name('ajax_mobile_app_menu_rights');
+    Route::get('ajax_sidebar_menu_g2g',
+        [tblmenumasterG2gController::class, 'displaySidebarMenu'])->name('ajax_sidebar_menu_g2g');
     Route::resource('user_rating_details', UserRatingDetailController::class);
 
 
