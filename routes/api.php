@@ -4,12 +4,54 @@ use App\Http\Controllers\Api\IndustryController;
 use App\Http\Controllers\Api\jobrolecontroller;
 use App\Http\Controllers\Api\skillcontroller;
 use App\Http\Controllers\Api\SkillDevelopmentController;
+use App\Http\Controllers\Api\LmsAssessmentController;
+use App\Http\Controllers\Api\LmsCourseController;
+use App\Http\Controllers\Api\LmsGovernanceController;
+use App\Http\Controllers\Api\LmsPartnerController;
+use App\Http\Controllers\Api\AiCourseController;
+use App\Http\Controllers\Api\LmsLearningController;
+use App\Http\Controllers\Api\LmsSessionController;
 use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
 use App\Http\Controllers\HRMS\HrmsController;
 use App\Http\Controllers\Api\CompetencyDashboardController;
 use App\Http\Controllers\Api\CompetencyDashboard\CompetencyDashboardController as SubCompetencyDashboardController;
+use App\Http\Controllers\Api\Competency\CommandCenterController as CompetencyCommandCenterController;
+use App\Http\Controllers\Api\Competency\CompetencyController as CompetencyCrudController;
+use App\Http\Controllers\Api\Competency\FrameworkController as CompetencyFrameworkController;
+use App\Http\Controllers\Api\Competency\AssessmentController as CompetencyAssessmentController;
+use App\Http\Controllers\Api\Competency\AssessmentCycleController as CompetencyAssessmentCycleController;
+use App\Http\Controllers\Api\Competency\EmployeeCompetencyProfileController;
+use App\Http\Controllers\Api\Competency\CertificationController as CompetencyCertificationController;
+use App\Http\Controllers\Api\Competency\CertificationRequirementController as CompetencyCertificationRequirementController;
+use App\Http\Controllers\Api\Competency\DevelopmentPlanController as CompetencyDevelopmentPlanController;
+use App\Http\Controllers\Api\Competency\StudioController as CompetencyStudioController;
+use App\Http\Controllers\Api\Competency\RoleMappingController as CompetencyRoleMappingController;
+use App\Http\Controllers\Api\Competency\MappingReviewController as CompetencyMappingReviewController;
+use App\Http\Controllers\Api\Competency\CareerPathController as CompetencyCareerPathController;
+use App\Http\Controllers\Api\Competency\LearningAssignmentController as CompetencyLearningAssignmentController;
+use App\Http\Controllers\Api\Competency\AuditController as CompetencyAuditController;
+// Talent Management -> Performance & Rewards Center (new module, see the route
+// block at the end of this file).
+use App\Http\Controllers\Api\Performance\PerformanceOverviewController;
+use App\Http\Controllers\Api\Performance\PerformanceCycleController;
+use App\Http\Controllers\Api\Performance\PerformanceReviewController;
+use App\Http\Controllers\Api\Performance\PerformanceGoalController;
+use App\Http\Controllers\Api\Performance\PerformanceAppraisalController;
+use App\Http\Controllers\Api\Performance\PerformanceCompensationController;
+use App\Http\Controllers\Api\Performance\PerformanceBonusController;
+use App\Http\Controllers\Api\Performance\PerformanceCalibrationController;
+use App\Http\Controllers\Api\Performance\PerformanceActivityController;
+use App\Http\Controllers\Api\Performance\PerformanceSavedViewController;
+// Talent Management -> Onboarding & Employee Lifecycle Center (route block at the
+// end of this file).
+use App\Http\Controllers\Api\Onboarding\OnboardingOverviewController;
+use App\Http\Controllers\Api\Onboarding\OnboardingJourneyController;
+use App\Http\Controllers\Api\Onboarding\OnboardingTaskController;
+use App\Http\Controllers\Api\Onboarding\OnboardingDocumentController;
+use App\Http\Controllers\Api\Onboarding\OnboardingNoteController;
+use App\Http\Controllers\Api\Onboarding\OnboardingProbationController;
 use App\Http\Controllers\Api\DBController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
@@ -174,6 +216,7 @@ Route::get('/skill-development/weekly-goal', [SkillDevelopmentController::class,
 Route::get('/skill-development/achievements', [SkillDevelopmentController::class, 'getUserAchievements']);
 Route::get('/skill-development/peer-comparison', [SkillDevelopmentController::class, 'getPeerComparison']);
 Route::get('/skill-development/calendar', [SkillDevelopmentController::class, 'getLearningCalendar']);
+Route::get('/skill-development/recent-activity', [SkillDevelopmentController::class, 'getRecentActivity']);
 
 Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
 Route::get('/competency/kpi', [SubCompetencyDashboardController::class, 'getKPI']);
@@ -182,6 +225,192 @@ Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController:
 Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar']);
 Route::get('/competency/skills-management-funnel', [SubCompetencyDashboardController::class, 'getSkillsManagementFunnel']);
 Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'getAlignment']);
+
+/*
+| Competency Command Center + domain CRUD (token authenticated, tenant scoped
+| via App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext).
+| Additive - does not touch the read-only /competency/* analytics routes above.
+*/
+Route::get('/competency/command-center', [CompetencyCommandCenterController::class, 'index']);
+Route::get('/competency/command-center/filters', [CompetencyCommandCenterController::class, 'filters']);
+
+Route::get('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'index']);
+Route::post('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'store']);
+Route::get('/competency/assessment-cycles/metrics', [CompetencyAssessmentCycleController::class, 'metrics']);
+Route::get('/competency/assessment-cycles/participant-ratings', [CompetencyAssessmentCycleController::class, 'participantRatings']);
+Route::get('/competency/assessment-cycles/calibration', [CompetencyAssessmentCycleController::class, 'calibration']);
+Route::get('/competency/assessment-cycles/approvals', [CompetencyAssessmentCycleController::class, 'approvals']);
+Route::get('/competency/assessment-cycles/closed', [CompetencyAssessmentCycleController::class, 'closed']);
+Route::put('/competency/assessment-cycles/assessments/{id}/review', [CompetencyAssessmentCycleController::class, 'reviewAssessment'])->whereNumber('id');
+// "View Configuration" - declared BEFORE /{id} so the word is not read as an id.
+Route::get('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'configuration']);
+Route::put('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'saveConfiguration']);
+Route::get('/competency/assessment-cycles/{id}/participants', [CompetencyAssessmentCycleController::class, 'participants'])->whereNumber('id');
+// Campaign detail panel: Overview / Edit / Ratings / Calibration / Audit Trail.
+Route::get('/competency/assessment-cycles/{id}/ratings', [CompetencyAssessmentCycleController::class, 'ratings'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}/calibration-queue', [CompetencyAssessmentCycleController::class, 'calibrationQueue'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}/audit-trail', [CompetencyAssessmentCycleController::class, 'auditTrail'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleController::class, 'show'])->whereNumber('id');
+Route::put('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleController::class, 'update'])->whereNumber('id');
+
+Route::get('/competency/employee-profiles/{id}', [EmployeeCompetencyProfileController::class, 'show'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/available-skills', [EmployeeCompetencyProfileController::class, 'availableSkills'])->whereNumber('id');
+Route::post('/competency/employee-profiles/{id}/skills', [EmployeeCompetencyProfileController::class, 'addSkill'])->whereNumber('id');
+Route::put('/competency/employee-profiles/{id}/skills/{matrixId}', [EmployeeCompetencyProfileController::class, 'updateSkill'])->whereNumber('id')->whereNumber('matrixId');
+Route::get('/competency/employee-profiles/{id}/skills/{skillId}/history', [EmployeeCompetencyProfileController::class, 'skillHistory'])->whereNumber('id')->whereNumber('skillId');
+Route::get('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'notes'])->whereNumber('id');
+Route::put('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'saveNotes'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/certifications', [EmployeeCompetencyProfileController::class, 'certifications'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/development-plans', [EmployeeCompetencyProfileController::class, 'developmentPlans'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'evidence'])->whereNumber('id');
+Route::post('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'storeEvidence'])->whereNumber('id');
+Route::delete('/competency/employee-profiles/{id}/evidence/{evidenceId}', [EmployeeCompetencyProfileController::class, 'deleteEvidence'])->whereNumber('id')->whereNumber('evidenceId');
+Route::get('/competency/employee-profiles/{id}/career-path', [EmployeeCompetencyProfileController::class, 'careerPath'])->whereNumber('id');
+
+Route::get('/competency/competencies', [CompetencyCrudController::class, 'index']);
+Route::post('/competency/competencies', [CompetencyCrudController::class, 'store']);
+Route::delete('/competency/competencies/{id}', [CompetencyCrudController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/frameworks', [CompetencyFrameworkController::class, 'index']);
+Route::post('/competency/frameworks', [CompetencyFrameworkController::class, 'store']);
+Route::delete('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/assessments', [CompetencyAssessmentController::class, 'index']);
+Route::post('/competency/assessments', [CompetencyAssessmentController::class, 'store']);
+Route::delete('/competency/assessments/{id}', [CompetencyAssessmentController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/certifications', [CompetencyCertificationController::class, 'index']);
+Route::post('/competency/certifications', [CompetencyCertificationController::class, 'store']);
+Route::delete('/competency/certifications/{id}', [CompetencyCertificationController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'index']);
+Route::post('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'store']);
+Route::delete('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'destroy'])->whereNumber('id');
+
+/*
+| Development & Career Path Workspace (token authenticated, tenant scoped).
+| Additive on top of the three development-plan routes above, which keep their
+| existing contract. Reuses s_skill_matrix + s_user_skill_jobrole for gaps,
+| s_competency_activity_log for history, career_journey + s_user_jobrole for the
+| progression graph and sub_std_map + lms_assignments for learning; adds
+| s_competency_plan_actions and s_competency_career_paths/_steps.
+*/
+
+// Static segments first so they cannot be swallowed by /{id}.
+Route::get('/competency/development-plans/metrics', [CompetencyDevelopmentPlanController::class, 'metrics']);
+Route::get('/competency/development-plans/owners', [CompetencyDevelopmentPlanController::class, 'owners']);
+Route::get('/competency/employee-options', [CompetencyDevelopmentPlanController::class, 'employees']);
+
+Route::get('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'show'])->whereNumber('id');
+Route::put('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'update'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/gaps', [CompetencyDevelopmentPlanController::class, 'gaps'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/history', [CompetencyDevelopmentPlanController::class, 'history'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'actions'])->whereNumber('id');
+Route::post('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'storeAction'])->whereNumber('id');
+Route::put('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'updateAction'])->whereNumber('id')->whereNumber('actionId');
+Route::delete('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'destroyAction'])->whereNumber('id')->whereNumber('actionId');
+
+// Named career paths + the Career Path Explorer.
+Route::get('/competency/career-paths/explorer', [CompetencyCareerPathController::class, 'explorer']);
+Route::get('/competency/career-paths/role-options', [CompetencyCareerPathController::class, 'roleOptions']);
+Route::get('/competency/career-paths', [CompetencyCareerPathController::class, 'index']);
+Route::post('/competency/career-paths', [CompetencyCareerPathController::class, 'store']);
+Route::get('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'show'])->whereNumber('id');
+Route::put('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'update'])->whereNumber('id');
+Route::delete('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'destroy'])->whereNumber('id');
+
+// Learning assignments (lms_assignments rows tagged source='competency').
+Route::get('/competency/learning-assignments/courses', [CompetencyLearningAssignmentController::class, 'courses']);
+Route::get('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'index']);
+Route::post('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'store']);
+Route::put('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'update'])->whereNumber('id');
+Route::delete('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'destroy'])->whereNumber('id');
+
+/*
+| Framework & Role Mapping Studio (token authenticated, tenant scoped).
+| Additive: reuses existing tables (s_users_skills, s_user_jobrole,
+| s_user_skill_jobrole, s_proficiency_levels, s_competency_frameworks/_items)
+| plus two new studio tables (s_competency_framework_weights, _mapping_reviews).
+*/
+Route::get('/competency/studio/summary', [CompetencyStudioController::class, 'summary']);
+Route::get('/competency/studio/framework-structure', [CompetencyStudioController::class, 'frameworkStructure']);
+Route::get('/competency/studio/proficiency-scale', [CompetencyStudioController::class, 'proficiencyScale']);
+Route::post('/competency/studio/proficiency-scale', [CompetencyStudioController::class, 'storeLevel']);
+Route::put('/competency/studio/proficiency-scale/{id}', [CompetencyStudioController::class, 'updateLevel'])->whereNumber('id');
+Route::delete('/competency/studio/proficiency-scale/{id}', [CompetencyStudioController::class, 'deleteLevel'])->whereNumber('id');
+Route::get('/competency/studio/weights', [CompetencyStudioController::class, 'weights']);
+Route::put('/competency/studio/weights', [CompetencyStudioController::class, 'saveWeights']);
+// Scoring rules behind the weights (s_competency_settings, scope='weighting').
+Route::get('/competency/studio/weighting-config', [CompetencyStudioController::class, 'weightingConfig']);
+Route::put('/competency/studio/weighting-config', [CompetencyStudioController::class, 'saveWeightingConfig']);
+
+// Framework show / update / clone / items / weighting (list/create/delete are above).
+Route::get('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'show'])->whereNumber('id');
+Route::put('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'update'])->whereNumber('id');
+Route::post('/competency/frameworks/{id}/clone', [CompetencyFrameworkController::class, 'clone'])->whereNumber('id');
+Route::get('/competency/frameworks/{id}/items', [CompetencyFrameworkController::class, 'items'])->whereNumber('id');
+Route::post('/competency/frameworks/{id}/items', [CompetencyFrameworkController::class, 'storeItem'])->whereNumber('id');
+Route::delete('/competency/frameworks/{id}/items/{itemId}', [CompetencyFrameworkController::class, 'destroyItem'])->whereNumber('id')->whereNumber('itemId');
+Route::get('/competency/frameworks/{id}/weights', [CompetencyFrameworkController::class, 'weights'])->whereNumber('id');
+Route::put('/competency/frameworks/{id}/weights', [CompetencyFrameworkController::class, 'saveWeights'])->whereNumber('id');
+
+// Role mapping matrix (cells live on s_user_skill_jobrole).
+Route::get('/competency/role-mapping/roles', [CompetencyRoleMappingController::class, 'roles']);
+Route::get('/competency/role-mapping/matrix', [CompetencyRoleMappingController::class, 'matrix']);
+Route::put('/competency/role-mapping/cell', [CompetencyRoleMappingController::class, 'upsertCell']);
+Route::delete('/competency/role-mapping/cell', [CompetencyRoleMappingController::class, 'deleteCell']);
+
+// Mapping-change approval workflow.
+Route::get('/competency/mapping-reviews', [CompetencyMappingReviewController::class, 'index']);
+Route::post('/competency/mapping-reviews', [CompetencyMappingReviewController::class, 'store']);
+Route::put('/competency/mapping-reviews/{id}', [CompetencyMappingReviewController::class, 'update'])->whereNumber('id');
+Route::post('/competency/mapping-reviews/bulk-approve', [CompetencyMappingReviewController::class, 'bulkApprove']);
+
+/*
+| Certification & Compliance Center (token authenticated, tenant scoped).
+| Additive on top of the three certification routes above, which keep their
+| paths and response envelope. Reads/writes s_competency_certifications, the
+| new s_competency_certification_requirements policy table, the shared
+| s_competency_evidence table for documents and s_competency_activity_log for
+| history. Static segments are declared BEFORE the /{id} routes so the numeric
+| show/update route cannot swallow metrics / filters / export / bulk.
+*/
+Route::get('/competency/certifications/metrics', [CompetencyCertificationController::class, 'metrics']);
+Route::get('/competency/certifications/filters', [CompetencyCertificationController::class, 'filters']);
+Route::get('/competency/certifications/export', [CompetencyCertificationController::class, 'export']);
+Route::post('/competency/certifications/bulk', [CompetencyCertificationController::class, 'bulk']);
+
+Route::get('/competency/certifications/{id}', [CompetencyCertificationController::class, 'show'])->whereNumber('id');
+Route::put('/competency/certifications/{id}', [CompetencyCertificationController::class, 'update'])->whereNumber('id');
+Route::post('/competency/certifications/{id}/notes', [CompetencyCertificationController::class, 'addNote'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/compliance', [CompetencyCertificationController::class, 'compliance'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/requirements', [CompetencyCertificationController::class, 'requirements'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/history', [CompetencyCertificationController::class, 'history'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'documents'])->whereNumber('id');
+Route::post('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'storeDocument'])->whereNumber('id');
+Route::delete('/competency/certifications/{id}/documents/{documentId}', [CompetencyCertificationController::class, 'destroyDocument'])->whereNumber('id')->whereNumber('documentId');
+
+// Certification requirements - the "which role must hold what" policy master.
+Route::get('/competency/certification-requirements', [CompetencyCertificationRequirementController::class, 'index']);
+Route::post('/competency/certification-requirements', [CompetencyCertificationRequirementController::class, 'store']);
+Route::put('/competency/certification-requirements/{id}', [CompetencyCertificationRequirementController::class, 'update'])->whereNumber('id');
+Route::delete('/competency/certification-requirements/{id}', [CompetencyCertificationRequirementController::class, 'destroy'])->whereNumber('id');
+
+/*
+| Audit & Activity Center (token authenticated, tenant scoped).
+| Read-only over s_competency_activity_log - the feed every competency
+| controller already writes to via ResolvesCompetencyContext - plus
+| tbl_user_journey_logs for the User Actions Log tab's screen-access history.
+| The only write is the export event the export endpoint logs about itself.
+| Static segments are declared BEFORE /{id} so user-actions is not swallowed.
+*/
+Route::get('/competency/audit/metrics', [CompetencyAuditController::class, 'metrics']);
+Route::get('/competency/audit/filters', [CompetencyAuditController::class, 'filters']);
+Route::get('/competency/audit/export', [CompetencyAuditController::class, 'export']);
+Route::get('/competency/audit/user-actions', [CompetencyAuditController::class, 'userActions']);
+Route::get('/competency/audit/user-actions/{userId}', [CompetencyAuditController::class, 'userActivity'])->whereNumber('userId');
+Route::get('/competency/audit', [CompetencyAuditController::class, 'index']);
+Route::get('/competency/audit/{id}', [CompetencyAuditController::class, 'show'])->whereNumber('id');
 
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
@@ -287,6 +516,154 @@ Route::prefix('attendance')->group(function () {
 
 Route::get('/enroll', [LmsCourseEnrollController::class, 'index']);
 Route::get('/enrolled_courses', [LmsCourseEnrollController::class, 'index']);
+Route::get('/available_courses', [LmsCourseEnrollController::class, 'available']);
+
+/*
+| LMS Assignments – token-authenticated assignment management.
+| These sit in api.php (not lms.php) so they resolve under the /api prefix
+| that the Next.js frontend expects.
+*/
+Route::get('/lmsAssignment/stats', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'stats']);
+Route::post('/lmsAssignment/bulkUpdateStatus', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'bulkUpdateStatus']);
+Route::post('/lmsAssignment/updateStatus/{id}', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'updateStatus']);
+Route::post('/lmsAssignment/import', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'import']);
+Route::get('/lmsAssignment/learners', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'learners']);
+Route::get('/lmsAssignment/enrollments', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'enrollments']);
+Route::post('/lmsAssignment/request', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'requestEnrollment']);
+Route::post('/lmsAssignment/review/{id}', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'review']);
+Route::post('/lmsAssignment/bulkReview', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'bulkReview']);
+Route::get('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'index']);
+Route::post('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'store']);
+
+/*
+| Learning Catalog - token-authenticated course management. The equivalent
+| school_setup/sub_std_map web routes stay untouched for the Blade admin UI.
+| Static segments are declared before /{id} so they are not captured by it.
+*/
+/*
+| Administration & Governance.
+|
+| Users, roles and the permission matrix all have controllers already, but
+| those live in routes/user.php behind ['auth','session','menu'] - session
+| authenticated and CSRF protected, so unusable cross-origin for writes.
+| Trainers, vendors and integrations are new entities with no prior model.
+| routes/user.php is untouched, so the old frontend keeps working.
+*/
+Route::get('/lms/governance/kpis', [LmsGovernanceController::class, 'kpis']);
+Route::get('/lms/governance/system-health', [LmsGovernanceController::class, 'systemHealth']);
+Route::get('/lms/governance/audit-logs', [LmsGovernanceController::class, 'auditLogs']);
+
+Route::get('/lms/governance/users', [LmsGovernanceController::class, 'users']);
+Route::post('/lms/governance/users', [LmsGovernanceController::class, 'storeUser']);
+// Stays ahead of /users/{id} so the wildcard does not swallow it.
+Route::post('/lms/governance/users/import', [LmsGovernanceController::class, 'importUsers']);
+Route::put('/lms/governance/users/{id}', [LmsGovernanceController::class, 'updateUser']);
+Route::delete('/lms/governance/users/{id}', [LmsGovernanceController::class, 'destroyUser']);
+
+Route::get('/lms/governance/roles', [LmsGovernanceController::class, 'roles']);
+Route::post('/lms/governance/roles', [LmsGovernanceController::class, 'storeRole']);
+Route::put('/lms/governance/roles/{id}', [LmsGovernanceController::class, 'updateRole']);
+Route::delete('/lms/governance/roles/{id}', [LmsGovernanceController::class, 'destroyRole']);
+
+Route::get('/lms/governance/permissions', [LmsGovernanceController::class, 'permissions']);
+Route::post('/lms/governance/permissions', [LmsGovernanceController::class, 'savePermissions']);
+
+Route::get('/lms/governance/trainers', [LmsPartnerController::class, 'trainers']);
+Route::post('/lms/governance/trainers', [LmsPartnerController::class, 'storeTrainer']);
+Route::put('/lms/governance/trainers/{id}', [LmsPartnerController::class, 'updateTrainer']);
+Route::delete('/lms/governance/trainers/{id}', [LmsPartnerController::class, 'destroyTrainer']);
+
+Route::get('/lms/governance/vendors', [LmsPartnerController::class, 'vendors']);
+Route::post('/lms/governance/vendors', [LmsPartnerController::class, 'storeVendor']);
+Route::put('/lms/governance/vendors/{id}', [LmsPartnerController::class, 'updateVendor']);
+Route::delete('/lms/governance/vendors/{id}', [LmsPartnerController::class, 'destroyVendor']);
+
+Route::get('/lms/governance/integrations', [LmsPartnerController::class, 'integrations']);
+Route::post('/lms/governance/integrations', [LmsPartnerController::class, 'storeIntegration']);
+Route::put('/lms/governance/integrations/{id}', [LmsPartnerController::class, 'updateIntegration']);
+Route::delete('/lms/governance/integrations/{id}', [LmsPartnerController::class, 'destroyIntegration']);
+
+/*
+| Course Builder assessments. An additive /api surface over question_paper -
+| that table's own routes live in routes/lms.php as CSRF-protected web routes,
+| which a cross-origin call cannot use. routes/lms.php is left untouched, so the
+| old frontend's Assessment Library is unaffected.
+| The static /questions segment stays ahead of the /{id} wildcard.
+*/
+Route::get('/lms/assessments/questions', [LmsAssessmentController::class, 'questions']);
+Route::get('/lms/assessments', [LmsAssessmentController::class, 'index']);
+Route::post('/lms/assessments', [LmsAssessmentController::class, 'store']);
+Route::put('/lms/assessments/{id}', [LmsAssessmentController::class, 'update']);
+Route::delete('/lms/assessments/{id}', [LmsAssessmentController::class, 'destroy']);
+
+Route::get('/lms/courses/kpis', [LmsCourseController::class, 'kpis']);
+Route::get('/lms/courses/filters', [LmsCourseController::class, 'filters']);
+Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk']);
+Route::get('/lms/courses', [LmsCourseController::class, 'index']);
+Route::post('/lms/courses', [LmsCourseController::class, 'store']);
+Route::get('/lms/courses/{id}', [LmsCourseController::class, 'show']);
+Route::put('/lms/courses/{id}', [LmsCourseController::class, 'update']);
+Route::delete('/lms/courses/{id}', [LmsCourseController::class, 'destroy']);
+
+/*
+| Build with AI - outline generation (DeepSeek) and presentation rendering
+| (Gamma). Both previously lived in the old frontend's Next.js API routes.
+*/
+/*
+| My Learning - the course player. Progress and notes are new entities; the
+| chapter/content writes exist as web routes but are CSRF-blocked cross-origin.
+*/
+Route::get('/lms/learning/courses', [LmsLearningController::class, 'courses']);
+Route::get('/lms/learning/assessments', [LmsLearningController::class, 'assessments']);
+Route::post('/lms/learning/progress', [LmsLearningController::class, 'saveProgress']);
+Route::get('/lms/learning/notes', [LmsLearningController::class, 'notes']);
+Route::post('/lms/learning/notes', [LmsLearningController::class, 'storeNote']);
+Route::put('/lms/learning/notes/{id}', [LmsLearningController::class, 'updateNote']);
+Route::delete('/lms/learning/notes/{id}', [LmsLearningController::class, 'destroyNote']);
+Route::post('/lms/learning/chapters', [LmsLearningController::class, 'storeChapter']);
+Route::put('/lms/learning/chapters/{id}', [LmsLearningController::class, 'updateChapter']);
+Route::delete('/lms/learning/chapters/{id}', [LmsLearningController::class, 'destroyChapter']);
+Route::post('/lms/learning/content', [LmsLearningController::class, 'storeContent']);
+Route::put('/lms/learning/content/{id}', [LmsLearningController::class, 'updateContent']);
+Route::delete('/lms/learning/content/{id}', [LmsLearningController::class, 'destroyContent']);
+Route::get('/lms/learning/certificates', [LmsLearningController::class, 'certificates']);
+Route::post('/lms/learning/certificates', [LmsLearningController::class, 'issueCertificate']);
+// Public by design: checking whether a credential is genuine must not require
+// the checker to hold an account. Returns only the fields printed on the
+// certificate itself, never the wider learner record.
+Route::get('/lms/learning/certificates/verify/{code}', [LmsLearningController::class, 'verifyCertificate']);
+Route::get('/lms/learning/certificates/{id}/download', [LmsLearningController::class, 'downloadCertificate']);
+Route::post('/lms/learning/certificates/{id}/reissue', [LmsLearningController::class, 'reissueCertificate']);
+// Public: a credential nobody outside the org can check is worth nothing.
+Route::get('/verify/certificate/{code}', [LmsLearningController::class, 'verifyCertificate']);
+Route::get('/lms/learning/discussions', [LmsLearningController::class, 'discussions']);
+Route::post('/lms/learning/discussions', [LmsLearningController::class, 'storeDiscussion']);
+Route::post('/lms/learning/discussions/{id}/replies', [LmsLearningController::class, 'replyToDiscussion']);
+Route::delete('/lms/learning/discussions/{id}', [LmsLearningController::class, 'destroyDiscussion']);
+Route::get('/lms/learning/courses/{courseId}', [LmsLearningController::class, 'course']);
+
+/*
+| Sessions & Calendar. Sessions live in lms_virtual_classroom; attendees in
+| lms_session_registrations. Static segments precede /{id}.
+*/
+// Both static segments stay ahead of /lms/sessions/{id} so they are not
+// swallowed by the wildcard.
+Route::get('/lms/sessions/stats', [LmsSessionController::class, 'stats']);
+Route::get('/lms/sessions/deadlines', [LmsSessionController::class, 'deadlines']);
+Route::get('/lms/sessions', [LmsSessionController::class, 'index']);
+Route::post('/lms/sessions', [LmsSessionController::class, 'store']);
+Route::get('/lms/sessions/{id}/attendees', [LmsSessionController::class, 'attendees']);
+Route::post('/lms/sessions/{id}/register', [LmsSessionController::class, 'register']);
+Route::delete('/lms/sessions/{id}/register', [LmsSessionController::class, 'cancelRegistration']);
+Route::put('/lms/sessions/{id}', [LmsSessionController::class, 'update']);
+Route::delete('/lms/sessions/{id}', [LmsSessionController::class, 'destroy']);
+
+Route::get('/lms/ai/status', [AiCourseController::class, 'status']);
+Route::post('/lms/ai/outline', [AiCourseController::class, 'generateOutline']);
+Route::get('/lms/ai/outlines', [AiCourseController::class, 'outlines']);
+Route::post('/lms/ai/outlines/{id}/publish', [AiCourseController::class, 'publish']);
+Route::post('/lms/ai/presentation', [AiCourseController::class, 'generatePresentation']);
+Route::get('/lms/ai/presentation/{generationId}', [AiCourseController::class, 'generationStatus']);
 Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
 Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
 Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
@@ -303,7 +680,35 @@ Route::get('/index', [buildwithAIController::class, 'index']);
 Route::resource('gamma-api', GammaApiController::class);
 Route::get('gamma-api/sub-institute/{subInstituteId}', [GammaApiController::class, 'getBySubInstituteId']);
 
+// Competency Library JSON API (additive; a competency == an approved skill on
+// s_users_skills). Registered BEFORE the skill_library resource so these paths
+// are not swallowed by the resource's /skill_library/{id} show route.
+Route::get('skill_library/competency-list', [skillLibraryController::class, 'competencyLibraryIndex']);
+Route::get('skill_library/competency-export', [skillLibraryController::class, 'competencyLibraryExport']);
+Route::post('skill_library/competency-import', [skillLibraryController::class, 'competencyLibraryImport']);
+Route::get('skill_library/competency/{id}/detail', [skillLibraryController::class, 'competencyLibraryDetail'])->whereNumber('id');
+Route::post('skill_library/competency/{id}/clone', [skillLibraryController::class, 'competencyLibraryClone'])->whereNumber('id');
+Route::put('skill_library/competency/{id}/archive', [skillLibraryController::class, 'competencyLibraryArchive'])->whereNumber('id');
+Route::get('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryShow'])->whereNumber('id');
+Route::post('skill_library/competency', [skillLibraryController::class, 'competencyLibraryStore']);
+Route::put('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryUpdate'])->whereNumber('id');
+Route::delete('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryDestroy'])->whereNumber('id');
+
 Route::resource('skill_library', skillLibraryController::class);
+/*
+| Named api.skill_library, not skill_library.
+|
+| routes/web.php registers a resource on the same name, so both generated
+| skill_library.index / .store / ... and `php artisan route:cache` aborted with
+| "Another route has already been assigned name [skill_library.index]" - which
+| breaks any deploy that caches routes.
+|
+| Renaming the API copy also fixes the blade views under
+| resources/views/lms/library/skill_library/, whose {{ route('skill_library.store') }}
+| form actions were resolving to whichever registration happened to win. URLs
+| are unchanged; only the generated route name differs.
+*/
+Route::resource('skill_library', skillLibraryController::class)->names('api.skill_library');
 Route::get('/positions', [InterviewController::class, 'getPositions']);
 Route::get('/interviewers', [InterviewController::class, 'getInterviewers']);
 Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings']);
@@ -482,3 +887,243 @@ Route::post('nango/google/oauth-url', [App\Http\Controllers\NangoController::cla
 Route::post('task/resync-google-calendar', [App\Http\Controllers\front_desk\taskController::class, 'resyncTaskToGoogleCalendar']);
 
 Route::post('/auth/google', [GoogleAuthController::class, 'login']);
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Performance & Rewards Center
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/competency/* and /api/leave/*.
+|
+| Entirely NEW surface: this module had no routes, controllers, models or tables
+| before. Nothing below touches an existing endpoint, so no current consumer is
+| affected. Backed by the 11 s_performance_* tables created in
+| 2026_07_30_100000_create_performance_module_tables, plus READ-ONLY reuse of
+| tbluser, hrms_departments, org_designation, s_competency_assessments (job-role
+| derivation) and employee_salary_structures (current CTC).
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR. The subject employee
+| travels as `user_id_target` on writes and `user_id_filter` on reads.
+*/
+
+// Header: KPI cards, shared filter options, team comparison, cycle timeline.
+Route::get('/performance/overview', [PerformanceOverviewController::class, 'index']);
+Route::get('/performance/filters', [PerformanceOverviewController::class, 'filters']);
+Route::get('/performance/team-comparison', [PerformanceOverviewController::class, 'teamComparison']);
+Route::get('/performance/timeline', [PerformanceOverviewController::class, 'timeline']);
+
+// Review cycles - the cycle selector and the Create / Launch button.
+Route::get('/performance/cycles', [PerformanceCycleController::class, 'index']);
+Route::post('/performance/cycles', [PerformanceCycleController::class, 'store']);
+Route::get('/performance/cycles/{id}', [PerformanceCycleController::class, 'show'])->whereNumber('id');
+Route::put('/performance/cycles/{id}', [PerformanceCycleController::class, 'update'])->whereNumber('id');
+Route::post('/performance/cycles/{id}/launch', [PerformanceCycleController::class, 'launch'])->whereNumber('id');
+Route::post('/performance/cycles/{id}/close', [PerformanceCycleController::class, 'close'])->whereNumber('id');
+Route::delete('/performance/cycles/{id}', [PerformanceCycleController::class, 'destroy'])->whereNumber('id');
+
+// Employee reviews - the main table, the Review Board and the sidebar.
+// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+Route::get('/performance/reviews/board', [PerformanceReviewController::class, 'board']);
+Route::post('/performance/reviews/bulk', [PerformanceReviewController::class, 'bulk']);
+Route::get('/performance/reviews', [PerformanceReviewController::class, 'index']);
+Route::get('/performance/reviews/{id}', [PerformanceReviewController::class, 'show'])->whereNumber('id');
+Route::put('/performance/reviews/{id}', [PerformanceReviewController::class, 'update'])->whereNumber('id');
+Route::post('/performance/reviews/{id}/advance', [PerformanceReviewController::class, 'advance'])->whereNumber('id');
+Route::post('/performance/reviews/{id}/reminder', [PerformanceReviewController::class, 'sendReminder'])->whereNumber('id');
+Route::delete('/performance/reviews/{id}', [PerformanceReviewController::class, 'destroy'])->whereNumber('id');
+
+// Comments / Notes and Attachments, both scoped to a review.
+Route::get('/performance/reviews/{reviewId}/notes', [PerformanceActivityController::class, 'notes'])->whereNumber('reviewId');
+Route::post('/performance/reviews/{reviewId}/notes', [PerformanceActivityController::class, 'storeNote'])->whereNumber('reviewId');
+Route::put('/performance/notes/{id}', [PerformanceActivityController::class, 'updateNote'])->whereNumber('id');
+Route::delete('/performance/notes/{id}', [PerformanceActivityController::class, 'destroyNote'])->whereNumber('id');
+
+Route::get('/performance/reviews/{reviewId}/attachments', [PerformanceActivityController::class, 'attachments'])->whereNumber('reviewId');
+Route::post('/performance/reviews/{reviewId}/attachments', [PerformanceActivityController::class, 'storeAttachment'])->whereNumber('reviewId');
+Route::delete('/performance/attachments/{id}', [PerformanceActivityController::class, 'destroyAttachment'])->whereNumber('id');
+
+// Goals tab (KRA / KPI / OKR).
+Route::get('/performance/goals', [PerformanceGoalController::class, 'index']);
+Route::post('/performance/goals', [PerformanceGoalController::class, 'store']);
+Route::put('/performance/goals/{id}', [PerformanceGoalController::class, 'update'])->whereNumber('id');
+Route::delete('/performance/goals/{id}', [PerformanceGoalController::class, 'destroy'])->whereNumber('id');
+
+// Appraisals tab.
+Route::post('/performance/appraisals/bulk', [PerformanceAppraisalController::class, 'bulk']);
+Route::get('/performance/appraisals', [PerformanceAppraisalController::class, 'index']);
+Route::post('/performance/appraisals', [PerformanceAppraisalController::class, 'store']);
+Route::put('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'update'])->whereNumber('id');
+Route::put('/performance/appraisals/{id}/decision', [PerformanceAppraisalController::class, 'decision'])->whereNumber('id');
+Route::delete('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'destroy'])->whereNumber('id');
+
+// Compensation tab.
+Route::post('/performance/compensation/bulk', [PerformanceCompensationController::class, 'bulk']);
+Route::get('/performance/compensation', [PerformanceCompensationController::class, 'index']);
+Route::post('/performance/compensation', [PerformanceCompensationController::class, 'store']);
+Route::put('/performance/compensation/{id}', [PerformanceCompensationController::class, 'update'])->whereNumber('id');
+Route::put('/performance/compensation/{id}/decision', [PerformanceCompensationController::class, 'decision'])->whereNumber('id');
+Route::delete('/performance/compensation/{id}', [PerformanceCompensationController::class, 'destroy'])->whereNumber('id');
+
+// Bonus tab.
+Route::post('/performance/bonus/bulk', [PerformanceBonusController::class, 'bulk']);
+Route::get('/performance/bonus', [PerformanceBonusController::class, 'index']);
+Route::post('/performance/bonus', [PerformanceBonusController::class, 'store']);
+Route::put('/performance/bonus/{id}', [PerformanceBonusController::class, 'update'])->whereNumber('id');
+Route::put('/performance/bonus/{id}/decision', [PerformanceBonusController::class, 'decision'])->whereNumber('id');
+Route::delete('/performance/bonus/{id}', [PerformanceBonusController::class, 'destroy'])->whereNumber('id');
+
+// Calibration tab.
+Route::get('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'index']);
+Route::post('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'store']);
+Route::get('/performance/calibration-sessions/{id}/grid', [PerformanceCalibrationController::class, 'grid'])->whereNumber('id');
+Route::put('/performance/calibration-sessions/{id}/calibrate', [PerformanceCalibrationController::class, 'calibrate'])->whereNumber('id');
+Route::post('/performance/calibration-sessions/{id}/lock', [PerformanceCalibrationController::class, 'lock'])->whereNumber('id');
+Route::put('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'update'])->whereNumber('id');
+Route::delete('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'destroy'])->whereNumber('id');
+
+// Activity Feed / Audit Trail.
+Route::get('/performance/activity/filters', [PerformanceActivityController::class, 'filters']);
+Route::get('/performance/activity', [PerformanceActivityController::class, 'index']);
+
+// Saved Views (named filter presets per tab).
+Route::get('/performance/saved-views', [PerformanceSavedViewController::class, 'index']);
+Route::post('/performance/saved-views', [PerformanceSavedViewController::class, 'store']);
+Route::put('/performance/saved-views/{id}', [PerformanceSavedViewController::class, 'update'])->whereNumber('id');
+Route::delete('/performance/saved-views/{id}', [PerformanceSavedViewController::class, 'destroy'])->whereNumber('id');
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Onboarding & Employee Lifecycle Center
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/performance/* and
+| /api/competency/*.
+|
+| Entirely NEW surface: this module had no routes, controllers or models before.
+| Nothing below touches an existing endpoint, so no current consumer is affected.
+| Backed by 2026_07_31_100000_create_onboarding_module_tables, which ADOPTS the
+| two orphan tables talent_onboarding_journeys / talent_onboarding_tasks (present
+| in the database with 0 rows, no migration and zero code references) and adds
+| talent_onboarding_journey_stages / _documents / _notes / _activity_log.
+| Read-only reuse of tbluser, hrms_departments, org_designation, document_type,
+| talent_offers and talent_job_applications; the ONLY write outside this module's
+| own tables is tbluser.probation_period_from/to, set on an explicit probation
+| decision by OnboardingProbationController.
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR, never the subject.
+| The subject employee is `employee_id` on a journey and `owner_id` on a task.
+*/
+
+// Header: the 5 KPI cards and every dropdown on the screen.
+Route::get('/onboarding/overview', [OnboardingOverviewController::class, 'index']);
+Route::get('/onboarding/filters', [OnboardingOverviewController::class, 'filters']);
+
+// Journeys - the journey list sheet, the profile sidebar and "Start onboarding".
+Route::get('/onboarding/journeys', [OnboardingJourneyController::class, 'index']);
+Route::post('/onboarding/journeys', [OnboardingJourneyController::class, 'store']);
+Route::post('/onboarding/journeys/from-offer/{offerId}', [OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
+Route::get('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'show'])->whereNumber('id');
+Route::put('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
+
+// Journey stages - the "Onboarding Journey Progress" timeline.
+Route::get('/onboarding/journeys/{journeyId}/stages', [OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
+Route::put('/onboarding/stages/{id}', [OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
+Route::post('/onboarding/stages/{id}/complete', [OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
+
+// Key Contacts card and the Lifecycle Timeline tab.
+Route::get('/onboarding/journeys/{journeyId}/contacts', [OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
+Route::get('/onboarding/journeys/{journeyId}/timeline', [OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
+
+// Preboarding tasks - the main table, its row actions and the Add Task sheet.
+// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+Route::get('/onboarding/workstreams', [OnboardingTaskController::class, 'workstreams']);
+Route::post('/onboarding/tasks/bulk', [OnboardingTaskController::class, 'bulk']);
+Route::get('/onboarding/tasks', [OnboardingTaskController::class, 'index']);
+Route::post('/onboarding/tasks', [OnboardingTaskController::class, 'store']);
+Route::put('/onboarding/tasks/{id}', [OnboardingTaskController::class, 'update'])->whereNumber('id');
+Route::post('/onboarding/tasks/{id}/complete', [OnboardingTaskController::class, 'complete'])->whereNumber('id');
+Route::delete('/onboarding/tasks/{id}', [OnboardingTaskController::class, 'destroy'])->whereNumber('id');
+
+// Documents card. POST accepts multipart; PUT doubles as the upload endpoint for
+// an existing request (browsers cannot send multipart PUT, so the frontend posts
+// with _method=PUT, which Laravel's method spoofing resolves).
+Route::get('/onboarding/journeys/{journeyId}/documents', [OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
+Route::post('/onboarding/journeys/{journeyId}/documents', [OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
+Route::match(['put', 'post'], '/onboarding/documents/{id}', [OnboardingDocumentController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/documents/{id}', [OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
+
+// Notes card.
+Route::get('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'index'])->whereNumber('journeyId');
+Route::post('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'store'])->whereNumber('journeyId');
+Route::put('/onboarding/notes/{id}', [OnboardingNoteController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/notes/{id}', [OnboardingNoteController::class, 'destroy'])->whereNumber('id');
+
+// Probation & Confirmation tab.
+Route::get('/onboarding/probation', [OnboardingProbationController::class, 'index']);
+Route::put('/onboarding/probation/{journeyId}', [OnboardingProbationController::class, 'update'])->whereNumber('journeyId');
+Route::post('/onboarding/probation/{journeyId}/confirm', [OnboardingProbationController::class, 'confirm'])->whereNumber('journeyId');
+Route::post('/onboarding/probation/{journeyId}/extend', [OnboardingProbationController::class, 'extend'])->whereNumber('journeyId');
+Route::post('/onboarding/probation/{journeyId}/terminate', [OnboardingProbationController::class, 'terminate'])->whereNumber('journeyId');
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Internal Mobility & Succession Center
+|--------------------------------------------------------------------------
+| Sanctum token query param authenticated and tenant scoped by sub_institute_id.
+*/
+Route::prefix('mobility')->group(function () {
+    Route::get('/overview', [App\Http\Controllers\Api\Mobility\MobilityOverviewController::class, 'index']);
+    Route::get('/filters', [App\Http\Controllers\Api\Mobility\MobilityOverviewController::class, 'filters']);
+
+
+    Route::get('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'index']);
+    Route::post('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'store']);
+    Route::get('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'show'])->whereNumber('id');
+    Route::put('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'update'])->whereNumber('id');
+    Route::delete('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'index']);
+    Route::post('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'store']);
+    Route::put('/applications/{id}', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'update'])->whereNumber('id');
+
+    Route::get('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'index']);
+    Route::post('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'store']);
+    Route::put('/transfers/{id}', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'update'])->whereNumber('id');
+
+    Route::get('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'index']);
+    Route::post('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'store']);
+    Route::put('/promotions/{id}', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'update'])->whereNumber('id');
+
+    Route::get('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'index']);
+    Route::post('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'store']);
+    Route::put('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'update'])->whereNumber('id');
+    Route::delete('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'index']);
+    Route::post('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'store']);
+    Route::get('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'members'])->whereNumber('id');
+    Route::post('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'addMember'])->whereNumber('id');
+    Route::delete('/pools/{id}/members/{userId}', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'removeMember'])->whereNumber('id')->whereNumber('userId');
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Offboarding Center
+|--------------------------------------------------------------------------
+*/
+Route::prefix('offboarding')->group(function () {
+    Route::get('/overview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'overview']);
+    Route::get('/filters', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'filters']);
+    Route::get('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'index']);
+    Route::post('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'store']);
+    Route::get('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'show'])->whereNumber('id');
+    Route::put('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'update'])->whereNumber('id');
+    Route::post('/cases/{id}/status', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateStatus'])->whereNumber('id');
+    Route::post('/cases/{id}/clearance', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateClearance'])->whereNumber('id');
+    Route::post('/cases/{id}/documents', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateDocuments'])->whereNumber('id');
+    Route::post('/cases/{id}/comments', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'addComment'])->whereNumber('id');
+    Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
+    Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');
+});

@@ -31,8 +31,77 @@ use Dompdf\Options;
 
 class AJAXController extends Controller
 {
+    /**
+     * Columns table_data must never return, whatever table is asked for.
+     *
+     * Credentials and government/financial identifiers. No screen renders any
+     * of these - the old frontend reads tbluser for names, emails and profile
+     * ids - so stripping them breaks nothing while closing the exposure.
+     */
+    private const TABLE_DATA_DENIED_COLUMNS = [
+        'password', 'plain_password', 'otp', 'remember_token', 'fcm_token',
+        'aadhar_no', 'pan_no', 'account_no', 'ifsc_code', 'bank_name',
+        'esic_no', 'uan_no', 'pf_no',
+    ];
+
+    /**
+     * The authenticated caller's tenant, or null when nobody is authenticated.
+     *
+     * Deliberately ignores any sub_institute_id in the query string: that is
+     * caller-controlled, and trusting it is what let one tenant read another's
+     * rows. The value is derived from the session or the bearer token instead.
+     */
+    private function tableDataTenant(Request $request)
+    {
+        if (session()->has('user_id') && session()->get('sub_institute_id')) {
+            return session()->get('sub_institute_id');
+        }
+
+        $token = $request->input('token') ?: $request->bearerToken();
+        if ($token && ($accessToken = PersonalAccessToken::findToken($token))) {
+            return optional($accessToken->tokenable)->sub_institute_id;
+        }
+
+        return null;
+    }
+
+    /** True when the caller has a session or a valid personal access token. */
+    private function tableDataAuthenticated(Request $request): bool
+    {
+        if (session()->has('user_id') && session()->get('user_id')) {
+            return true;
+        }
+
+        $token = $request->input('token') ?: $request->bearerToken();
+
+        return $token && PersonalAccessToken::findToken($token) !== null;
+    }
+
+    /**
+     * Generic table reader.
+     *
+     * Previously this answered any request, from anyone, for any table: no
+     * authentication, no tenant filter, and every column returned verbatim.
+     * `?table=tbluser` alone returned every user in every tenant along with
+     * their password hash, plain_password, Aadhaar and bank details.
+     *
+     * Three guards now apply, in this order:
+     *   1. the caller must hold a session or a valid token;
+     *   2. if the table has a sub_institute_id column, rows are forced to the
+     *      caller's own tenant, derived from their identity rather than from a
+     *      query parameter they control;
+     *   3. credential and identity columns are stripped from every response.
+     */
     public function GetTableData(Request $request)
     {
+        if (!$this->tableDataAuthenticated($request)) {
+            return response()->json([
+                'error' => 'Authentication is required to read table data.',
+            ], 401);
+        }
+
+        $tenantId = $this->tableDataTenant($request);
+
         if($request->has('all_tables') && $request->all_tables==1){
             // Get all tables
             $tables = DB::select('SHOW TABLES');
@@ -90,6 +159,33 @@ class AJAXController extends Controller
 
         // Start query using the validated table name
         $query = DB::table($table);
+
+        // Force the caller's own tenant whenever the table is tenant-scoped.
+        // Applied here, before any caller-supplied filter, so a filters[] entry
+        // naming sub_institute_id cannot widen it back out.
+        $tenantColumnExists = DB::table('information_schema.columns')
+            ->where('table_schema', DB::raw('DATABASE()'))
+            ->where('table_name', $table)
+            ->where('column_name', 'sub_institute_id')
+            ->exists();
+
+        if ($tenantColumnExists) {
+            if (!$tenantId) {
+                return response()->json([
+                    'error' => 'Your account is not linked to an institute.',
+                ], 403);
+            }
+
+            // Two conventions live in this schema: most tables store a single
+            // id, but shared-catalogue tables such as tblmenumaster store a
+            // comma-separated list of the tenants a row applies to
+            // ("1,2,3,...,11"). Matching only on equality would hide every row
+            // of the second kind, so both forms are accepted.
+            $query->where(function ($scope) use ($table, $tenantId) {
+                $scope->where($table . '.sub_institute_id', $tenantId)
+                      ->orWhereRaw('FIND_IN_SET(?, ' . $table . '.sub_institute_id)', [$tenantId]);
+            });
+        }
 
         // Apply filters if provided
         if ($request->has('filters') && is_array($request->filters)) {
@@ -189,6 +285,16 @@ class AJAXController extends Controller
         if ($data->isEmpty()) {
             return response()->json(['message' => 'Data not found'], 404);
         }
+
+        // Strip credential and identity columns from every row before it leaves.
+        // Done on the result rather than as a select list so it holds for any
+        // table, including ones added later.
+        $data = $data->map(function ($row) {
+            foreach (self::TABLE_DATA_DENIED_COLUMNS as $denied) {
+                unset($row->$denied);
+            }
+            return $row;
+        });
 
         return response()->json($data);
     }

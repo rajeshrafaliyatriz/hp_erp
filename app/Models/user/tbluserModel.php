@@ -35,7 +35,6 @@ class tbluserModel extends Model
         'user_profile_id',
         'join_year',
         'image',
-        'plain_password',
         'sub_institute_id',
         'client_id',
         'is_admin',

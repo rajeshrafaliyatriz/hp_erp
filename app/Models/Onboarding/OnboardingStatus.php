@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models\onboarding;
+namespace App\Models\Onboarding;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;

@@ -5,9 +5,35 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class SkillDevelopmentController extends Controller
 {
+    /**
+     * Validate the Sanctum token on API calls.
+     *
+     * Same contract as LmsCourseEnrollController: when the caller identifies
+     * itself with type=API a valid token must accompany the request. Returns
+     * null when the request may proceed, or the error response to return.
+     */
+    private function guardApiToken(Request $request)
+    {
+        if ($request->input('type') !== 'API') {
+            return null;
+        }
+
+        $token = $request->input('token');
+        if (!$token) {
+            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
+        }
+
+        if (!PersonalAccessToken::findToken($token)) {
+            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
+        }
+
+        return null;
+    }
+
     /**
      * Get skill development progress data from database
      */
@@ -17,6 +43,10 @@ class SkillDevelopmentController extends Controller
         try {
             
             
+            if ($tokenError = $this->guardApiToken($request)) {
+                return $tokenError;
+            }
+
             $userId = $request->user_id ?? $request->header('user_id');
             $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
 
@@ -27,11 +57,29 @@ class SkillDevelopmentController extends Controller
                 ], 422);
             }
 
-            // Get user's skills grouped by category and sub_category
+            // Get user's skills grouped by category and sub_category.
+            //
+            // The enrolment join used to key on user_id alone, with nothing tying
+            // an enrolment to the skill row it sat beside. That produced a
+            // cartesian product: every skill in a category was credited with the
+            // learner's entire course list, so a user with 26 enrolments reported
+            // 234 courses against "Functional Skills".
+            //
+            // Courses reach competency through sub_std_map: subject_id addresses
+            // the skill and subject_category says which table it addresses.
+            // 'Task', 'jobrole', 'course' and 'sub' point at other entities
+            // entirely and must be excluded, or a task id would be read as a
+            // skill id.
             $userSkills = DB::table('s_skill_matrix as sm')
                 ->join('s_users_skills as sus', 'sus.id', '=', 'sm.skill_id')
+                ->leftJoin('sub_std_map as ssm', function($join) {
+                    $join->on('ssm.subject_id', '=', 'sus.id')
+                         ->whereNotIn(DB::raw('LOWER(TRIM(ssm.subject_category))'), ['task', 'jobrole', 'course', 'sub'])
+                         ->whereNull('ssm.deleted_at');
+                })
                 ->leftJoin('lms_course_enroll as lce', function($join) use ($userId) {
-                    $join->on('lce.user_id', '=', DB::raw($userId))
+                    $join->on('lce.course_id', '=', 'ssm.id')
+                         ->where('lce.user_id', '=', DB::raw($userId))
                          ->whereNull('lce.deleted_at');
                 })
                 ->where('sm.user_id', $userId)
@@ -168,6 +216,10 @@ class SkillDevelopmentController extends Controller
     public function getLearningStreak(Request $request)
     {
         try {
+            if ($tokenError = $this->guardApiToken($request)) {
+                return $tokenError;
+            }
+
             $userId = $request->user_id ?? $request->header('user_id');
             $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
 
@@ -297,6 +349,10 @@ class SkillDevelopmentController extends Controller
     public function getWeeklyLearningGoal(Request $request)
     {
         try {
+            if ($tokenError = $this->guardApiToken($request)) {
+                return $tokenError;
+            }
+
             $userId = $request->user_id ?? $request->header('user_id');
             $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
 
@@ -371,6 +427,10 @@ class SkillDevelopmentController extends Controller
     public function getUserAchievements(Request $request)
     {
         try {
+            if ($tokenError = $this->guardApiToken($request)) {
+                return $tokenError;
+            }
+
             $userId = $request->user_id ?? $request->header('user_id');
             $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
 
@@ -494,6 +554,10 @@ class SkillDevelopmentController extends Controller
     public function getPeerComparison(Request $request)
     {
         try {
+            if ($tokenError = $this->guardApiToken($request)) {
+                return $tokenError;
+            }
+
             $userId = $request->user_id ?? $request->header('user_id');
             $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
 
@@ -639,6 +703,10 @@ class SkillDevelopmentController extends Controller
     public function getLearningCalendar(Request $request)
     {
         try {
+            if ($tokenError = $this->guardApiToken($request)) {
+                return $tokenError;
+            }
+
             $userId = $request->user_id ?? $request->header('user_id');
             $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
             $month = $request->input('month', now()->format('m')); // Default to current month
@@ -668,6 +736,7 @@ class SkillDevelopmentController extends Controller
                     'title' => $event->title,
                     'description' => $event->description,
                     'current_datetime' => now()->format('M d \a\t g:i A'),
+                    'school_date' => $event->school_date,
                     'priority' => $event->event_type ?? 'medium', // Assuming event_type maps to priority
                     'event_type' => $event->event_type,
                     'standard' => $event->standard,
@@ -698,6 +767,173 @@ class SkillDevelopmentController extends Controller
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to retrieve learning calendar events',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get recent learning activity.
+     *
+     * There is no dedicated LMS activity-log table, so the feed is derived from
+     * the records that already change as the learner works: their enrolments
+     * (lms_course_enroll) and the learning calendar (calendar_events).
+     */
+    public function getRecentActivity(Request $request)
+    {
+        try {
+            if ($tokenError = $this->guardApiToken($request)) {
+                return $tokenError;
+            }
+
+            $userId = $request->user_id ?? $request->header('user_id');
+            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $limit = (int) $request->input('limit', 8);
+
+            if (!$userId) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'user_id is required'
+                ], 422);
+            }
+
+            $now = now();
+            $activities = [];
+
+            // 1. Enrolment records - one entry for the enrolment, plus one for the
+            //    completion or the approaching/overdue deadline.
+            $enrollments = DB::table('lms_course_enroll as e')
+                ->join('sub_std_map as s', 'e.course_id', '=', 's.id')
+                ->leftJoin('subject as subj', 's.subject_id', '=', 'subj.id')
+                ->where('e.user_id', $userId)
+                ->whereNull('e.deleted_at')
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('e.sub_institute_id', $subInstituteId);
+                })
+                ->select([
+                    'e.id',
+                    'e.status',
+                    'e.end_date',
+                    'e.created_at',
+                    'e.updated_at',
+                    DB::raw('COALESCE(subj.subject_name, s.display_name) as course_title'),
+                ])
+                ->orderByDesc('e.created_at')
+                ->limit(50)
+                ->get();
+
+            foreach ($enrollments as $enrollment) {
+                $title = $enrollment->course_title ?: 'a course';
+
+                if ($enrollment->status === 'completed') {
+                    $completedAt = $enrollment->updated_at ?? $enrollment->created_at;
+                    $activities[] = [
+                        'id' => 'enroll-completed-' . $enrollment->id,
+                        'text' => 'You completed "' . $title . '"',
+                        'type' => 'course_completed',
+                        'tone' => 'success',
+                        'timestamp' => $completedAt,
+                        'sort' => $completedAt ? strtotime($completedAt) : 0,
+                    ];
+                } else {
+                    $activities[] = [
+                        'id' => 'enroll-started-' . $enrollment->id,
+                        'text' => 'You enrolled in "' . $title . '"',
+                        'type' => 'course_enrolled',
+                        'tone' => 'primary',
+                        'timestamp' => $enrollment->created_at,
+                        'sort' => $enrollment->created_at ? strtotime($enrollment->created_at) : 0,
+                    ];
+
+                    if ($enrollment->end_date) {
+                        $dueDate = \Carbon\Carbon::parse($enrollment->end_date);
+                        $overdue = $dueDate->isPast();
+
+                        // Only surface deadlines that are actionable: already
+                        // overdue, or falling within the next two weeks.
+                        if ($overdue || $dueDate->lte($now->copy()->addDays(14))) {
+                            $activities[] = [
+                                'id' => 'enroll-due-' . $enrollment->id,
+                                'text' => $overdue
+                                    ? '"' . $title . '" is overdue'
+                                    : '"' . $title . '" is due ' . $dueDate->diffForHumans(),
+                                'type' => 'deadline_due',
+                                'tone' => 'warning',
+                                'timestamp' => $dueDate->toDateTimeString(),
+                                'sort' => $dueDate->getTimestamp(),
+                            ];
+                        }
+                    }
+                }
+            }
+
+            // 2. Learning calendar - sessions and events around today.
+            $events = DB::table('calendar_events')
+                ->whereNull('deleted_at')
+                ->whereBetween('school_date', [
+                    $now->copy()->subDays(30)->format('Y-m-d'),
+                    $now->copy()->addDays(30)->format('Y-m-d'),
+                ])
+                ->when($subInstituteId, function ($query) use ($subInstituteId) {
+                    return $query->where('sub_institute_id', $subInstituteId);
+                })
+                ->orderByDesc('school_date')
+                ->limit(20)
+                ->get();
+
+            foreach ($events as $event) {
+                $eventDate = \Carbon\Carbon::parse($event->school_date);
+                $activities[] = [
+                    'id' => 'event-' . $event->id,
+                    'text' => $eventDate->isPast()
+                        ? '"' . $event->title . '" took place'
+                        : '"' . $event->title . '" is scheduled ' . $eventDate->diffForHumans(),
+                    'type' => 'session_upcoming',
+                    'tone' => 'neutral',
+                    'timestamp' => $eventDate->toDateTimeString(),
+                    'sort' => $eventDate->getTimestamp(),
+                ];
+            }
+
+            // Most recent (or most imminent) first.
+            usort($activities, function ($a, $b) {
+                return $b['sort'] <=> $a['sort'];
+            });
+
+            // A learner with a long backlog can have dozens of overdue courses,
+            // which would otherwise crowd every state change out of the feed.
+            // Keep only the most pressing few; the deadline widgets list the rest.
+            $deadlineCount = 0;
+            $activities = array_values(array_filter($activities, function ($activity) use (&$deadlineCount) {
+                if ($activity['type'] !== 'deadline_due') {
+                    return true;
+                }
+
+                return ++$deadlineCount <= 3;
+            }));
+
+            $activities = array_map(function ($activity) {
+                return [
+                    'id' => $activity['id'],
+                    'text' => $activity['text'],
+                    'time' => $activity['timestamp']
+                        ? \Carbon\Carbon::parse($activity['timestamp'])->diffForHumans()
+                        : '',
+                    'type' => $activity['type'],
+                    'tone' => $activity['tone'],
+                    'timestamp' => $activity['timestamp'],
+                ];
+            }, array_slice($activities, 0, max($limit, 1)));
+
+            return response()->json([
+                'status' => true,
+                'data' => $activities
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to retrieve recent activity',
                 'error' => $e->getMessage()
             ], 500);
         }

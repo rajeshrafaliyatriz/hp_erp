@@ -237,7 +237,7 @@ class tbluserController extends Controller
         $finalArray['status'] = 1;
         unset($newRequest['user_image']);
         foreach ($newRequest as $key => $value) {
-            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name') {
+            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name' && $key != 'plain_password') {
                 if (is_array($value)) {
                     $value = implode(',', $value);
                 }
@@ -246,7 +246,6 @@ class tbluserController extends Controller
 
             if ($key == 'password') {
                 $finalArray[$key] = Hash::make($value);
-                $finalArray['plain_password'] = $value;
             }
 
             if ($key == 'birthdate') {
@@ -322,7 +321,7 @@ class tbluserController extends Controller
         $finalArray['status'] = 1;
         unset($newRequest['user_image']);
         foreach ($newRequest as $key => $value) {
-            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name') {
+            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name' && $key != 'plain_password') {
                 if (is_array($value)) {
                     $value = implode(',', $value);
                 }
@@ -341,7 +340,6 @@ class tbluserController extends Controller
 
             if ($key == 'password') {
                 $finalArray[$key] = Hash::make($value);
-                $finalArray['plain_password'] = $value;
             }
 
             if ($key == 'birthdate') {
