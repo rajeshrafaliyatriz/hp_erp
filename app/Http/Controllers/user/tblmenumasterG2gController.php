@@ -63,26 +63,30 @@ class tblmenumasterG2gController extends Controller
         $menusByParent = $menus->groupBy('parent_id');
         $submenusByParent = $submenus->groupBy('parent_id');
 
+        $rightsByMenuId = tblgroupwise_rights_g2gModel::where('profile_id', $profile_id)
+            ->get()
+            ->keyBy('menu_id');
+
         $data = [];
 
         foreach ($modules as $module) {
-            if (! $this->canView($module->id, $profile_id)) {
+            if (! $this->canView($module->id, $rightsByMenuId)) {
                 continue;
             }
 
             $menuNodes = [];
             foreach ($menusByParent->get($module->id, []) as $menu) {
-                if (! $this->canView($menu->id, $profile_id)) {
+                if (! $this->canView($menu->id, $rightsByMenuId)) {
                     continue;
                 }
 
                 $submenuNodes = [];
                 foreach ($submenusByParent->get($menu->id, []) as $submenu) {
-                    if (! $this->canView($submenu->id, $profile_id)) {
+                    if (! $this->canView($submenu->id, $rightsByMenuId)) {
                         continue;
                     }
 
-                    $submenuNodes[] = $this->formatNode($submenu);
+                    $submenuNodes[] = $this->formatNode($submenu, $rightsByMenuId);
                 }
 
                 $hadSubmenus = $submenusByParent->has($menu->id);
@@ -90,7 +94,7 @@ class tblmenumasterG2gController extends Controller
                     continue;
                 }
 
-                $menuNode = $this->formatNode($menu);
+                $menuNode = $this->formatNode($menu, $rightsByMenuId);
                 $menuNode['submenus'] = $submenuNodes;
                 $menuNodes[] = $menuNode;
             }
@@ -100,7 +104,7 @@ class tblmenumasterG2gController extends Controller
                 continue;
             }
 
-            $moduleNode = $this->formatNode($module);
+            $moduleNode = $this->formatNode($module, $rightsByMenuId);
             $moduleNode['menus'] = $menuNodes;
             $data[] = $moduleNode;
         }
@@ -112,15 +116,17 @@ class tblmenumasterG2gController extends Controller
         ]);
     }
 
-    private function canView($menuId, $profileId): bool
+    private function canView($menuId, $rightsByMenuId): bool
     {
-        $rights = tblgroupwise_rights_g2gModel::where(['profile_id' => $profileId, 'menu_id' => $menuId])->first();
+        $rights = $rightsByMenuId->get($menuId);
 
         return ($rights->can_view ?? 0) == 1;
     }
 
-    private function formatNode($node): array
+    private function formatNode($node, $rightsByMenuId): array
     {
+        $rights = $rightsByMenuId->get($node->id);
+
         return [
             'id' => $node->id,
             'label' => $node->menu_name,
@@ -128,6 +134,12 @@ class tblmenumasterG2gController extends Controller
             'access_link' => $node->access_link,
             'page_type' => $node->page_type,
             'sort_order' => $node->sort_order,
+            'can_view' => (int) ($rights->can_view ?? 0),
+            'can_add' => (int) ($rights->can_add ?? 0),
+            'can_edit' => (int) ($rights->can_edit ?? 0),
+            'can_delete' => (int) ($rights->can_delete ?? 0),
+            'dashboard_right' => (int) ($rights->dashboard_right ?? 0),
+            'is_mobile' => (int) ($rights->is_mobile ?? 0),
         ];
     }
 }
