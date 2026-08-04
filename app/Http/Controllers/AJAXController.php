@@ -25,6 +25,7 @@ use PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -45,7 +46,71 @@ class AJAXController extends Controller
     ];
 
     /**
-     * The authenticated caller's tenant, or null when nobody is authenticated.
+     * Presence of any of these marks a table as sensitive: it holds credentials
+     * or government/financial identity, so it is readable only by an
+     * authenticated caller.
+     *
+     * Derived from the schema rather than a hand-kept table list so that a
+     * payroll or KYC table added next month is covered the day it is created,
+     * without anyone remembering to update this file.
+     */
+    private const TABLE_DATA_SENSITIVE_COLUMNS = [
+        'password', 'plain_password', 'otp', 'remember_token',
+        'aadhar_no', 'pan_no', 'account_no', 'ifsc_code',
+        'esic_no', 'uan_no', 'pf_no',
+    ];
+
+    /** Per-request memo for information_schema lookups, keyed "table.column". */
+    private array $tableDataColumnCache = [];
+
+    /** True when $table has $column. Each pair is looked up at most once. */
+    private function tableDataHasColumn(string $table, string $column): bool
+    {
+        $key = $table . '.' . $column;
+
+        if (!array_key_exists($key, $this->tableDataColumnCache)) {
+            $this->tableDataColumnCache[$key] = DB::table('information_schema.columns')
+                ->where('table_schema', DB::raw('DATABASE()'))
+                ->where('table_name', $table)
+                ->where('column_name', $column)
+                ->exists();
+        }
+
+        return $this->tableDataColumnCache[$key];
+    }
+
+    /** True when $table carries credentials or identity documents. */
+    private function tableDataIsSensitive(string $table): bool
+    {
+        foreach (self::TABLE_DATA_SENSITIVE_COLUMNS as $column) {
+            if ($this->tableDataHasColumn($table, $column)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Treats 0 and '' as "no tenant".
+     *
+     * Multi-institute admins are stored with sub_institute_id = 0 (see
+     * authController::index), and a falsy check that conflates 0 with null is
+     * what locked every admin out of this endpoint.
+     */
+    private function tableDataNormaliseTenant($value)
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return ($value === '' || $value === '0') ? null : $value;
+    }
+
+    /**
+     * The tenant proven by the caller's own identity, or null.
      *
      * Deliberately ignores any sub_institute_id in the query string: that is
      * caller-controlled, and trusting it is what let one tenant read another's
@@ -53,16 +118,40 @@ class AJAXController extends Controller
      */
     private function tableDataTenant(Request $request)
     {
-        if (session()->has('user_id') && session()->get('sub_institute_id')) {
-            return session()->get('sub_institute_id');
+        if (session()->has('user_id')) {
+            $sessionTenant = $this->tableDataNormaliseTenant(session()->get('sub_institute_id'));
+            if ($sessionTenant !== null) {
+                return $sessionTenant;
+            }
         }
 
         $token = $request->input('token') ?: $request->bearerToken();
         if ($token && ($accessToken = PersonalAccessToken::findToken($token))) {
-            return optional($accessToken->tokenable)->sub_institute_id;
+            return $this->tableDataNormaliseTenant(optional($accessToken->tokenable)->sub_institute_id);
         }
 
         return null;
+    }
+
+    /**
+     * The tenant the caller asked for, from either shape the frontends send:
+     * filters[sub_institute_id] (most screens) or a bare sub_institute_id
+     * (the onboarding-tour calls).
+     *
+     * Only consulted when identity does not settle the question - see
+     * GetTableData for the precedence.
+     */
+    private function tableDataRequestedTenant(Request $request)
+    {
+        $filters = $request->input('filters');
+        if (is_array($filters) && isset($filters['sub_institute_id'])) {
+            $requested = $this->tableDataNormaliseTenant($filters['sub_institute_id']);
+            if ($requested !== null) {
+                return $requested;
+            }
+        }
+
+        return $this->tableDataNormaliseTenant($request->input('sub_institute_id'));
     }
 
     /** True when the caller has a session or a valid personal access token. */
@@ -85,24 +174,36 @@ class AJAXController extends Controller
      * `?table=tbluser` alone returned every user in every tenant along with
      * their password hash, plain_password, Aadhaar and bank details.
      *
-     * Three guards now apply, in this order:
-     *   1. the caller must hold a session or a valid token;
-     *   2. if the table has a sub_institute_id column, rows are forced to the
-     *      caller's own tenant, derived from their identity rather than from a
-     *      query parameter they control;
-     *   3. credential and identity columns are stripped from every response.
+     * Four guards now apply:
+     *   1. the schema listing (all_tables=1) requires authentication;
+     *   2. tables holding credentials or identity documents require
+     *      authentication - detected from their columns, not a fixed list;
+     *   3. every tenant-scoped table is pinned to exactly one tenant. An
+     *      authenticated caller is pinned to their own and cannot widen it;
+     *      an anonymous caller must name one, so no request can ever sweep
+     *      every tenant at once;
+     *   4. credential and identity columns are stripped from every response.
+     *
+     * Guard 3 still honours filters[sub_institute_id] for anonymous callers.
+     * That is a deliberate compatibility window: roughly a hundred call sites
+     * in the production frontend send no token at all, and blocking them
+     * outright took working screens down. Anonymous reads are logged (see
+     * below) so those call sites can be found and migrated; once the log is
+     * quiet, the anonymous branch can be deleted and this becomes token-only.
      */
     public function GetTableData(Request $request)
     {
-        if (!$this->tableDataAuthenticated($request)) {
-            return response()->json([
-                'error' => 'Authentication is required to read table data.',
-            ], 401);
-        }
+        $authenticated = $this->tableDataAuthenticated($request);
 
-        $tenantId = $this->tableDataTenant($request);
-
+        // The schema dump names every table and column in the database. It is
+        // a mapping tool for an attacker and no screen needs it anonymously.
         if($request->has('all_tables') && $request->all_tables==1){
+            if (!$authenticated) {
+                return response()->json([
+                    'error' => 'Authentication is required to list tables.',
+                ], 401);
+            }
+
             // Get all tables
             $tables = DB::select('SHOW TABLES');
 
@@ -157,23 +258,45 @@ class AJAXController extends Controller
             return response()->json(['error' => 'An internal server error occurred while validating the table.'], 500);
         }
 
+        // Credentials and identity documents are never readable anonymously,
+        // whatever tenant is named. tbluser and the payroll tables land here.
+        if (!$authenticated && $this->tableDataIsSensitive($table)) {
+            return response()->json([
+                'error' => 'Authentication is required to read "' . $table . '".',
+            ], 401);
+        }
+
         // Start query using the validated table name
         $query = DB::table($table);
 
-        // Force the caller's own tenant whenever the table is tenant-scoped.
-        // Applied here, before any caller-supplied filter, so a filters[] entry
-        // naming sub_institute_id cannot widen it back out.
-        $tenantColumnExists = DB::table('information_schema.columns')
-            ->where('table_schema', DB::raw('DATABASE()'))
-            ->where('table_name', $table)
-            ->where('column_name', 'sub_institute_id')
-            ->exists();
+        // Pin the query to exactly one tenant whenever the table is
+        // tenant-scoped. Applied here, before any caller-supplied filter.
+        $tenantColumnExists = $this->tableDataHasColumn($table, 'sub_institute_id');
 
         if ($tenantColumnExists) {
-            if (!$tenantId) {
+            // Precedence matters. A proven identity wins outright, so a
+            // logged-in caller cannot read another tenant by passing
+            // filters[sub_institute_id]. The request is consulted only when
+            // identity leaves the question open: an anonymous legacy caller,
+            // or a multi-institute admin whose own sub_institute_id is 0.
+            $tenantId = $this->tableDataTenant($request)
+                ?? $this->tableDataRequestedTenant($request);
+
+            if ($tenantId === null) {
                 return response()->json([
-                    'error' => 'Your account is not linked to an institute.',
-                ], 403);
+                    'error' => 'sub_institute_id is required to read "' . $table . '".',
+                ], 400);
+            }
+
+            if (!$authenticated) {
+                // The migration worklist: every legacy call site that still
+                // reads without a token, with enough context to find it.
+                Log::info('table_data anonymous read', [
+                    'table'   => $table,
+                    'tenant'  => $tenantId,
+                    'referer' => $request->headers->get('referer'),
+                    'ip'      => $request->ip(),
+                ]);
             }
 
             // Two conventions live in this schema: most tables store a single
@@ -197,24 +320,24 @@ class AJAXController extends Controller
                     // OR: return response()->json(['error' => 'Invalid column name format in filters.'], 400);
                 }
 
+                // Already pinned by the tenant scope above. Re-applying it here
+                // as plain equality would break the comma-separated tables
+                // (tblmenumaster stores "1,2,3,...,11"), where the scope
+                // matched via FIND_IN_SET and equality never can.
+                if ($column === 'sub_institute_id' && $tenantColumnExists) {
+                    continue;
+                }
+
                 // 5. Manually validate if the column exists to bypass Schema::hasColumn()
                 try {
                     //check table has deleted_at
-                    $hasDeletedAt = DB::table('information_schema.columns')
-                        ->where('table_schema', DB::raw('DATABASE()'))
-                        ->where('table_name', $table)
-                        ->where('column_name', 'deleted_at')
-                        ->exists();
+                    $hasDeletedAt = $this->tableDataHasColumn($table, 'deleted_at');
 
                     if ($hasDeletedAt) {
                         $query->whereNull('deleted_at');
                     }
                     // other column
-                    $columnExists = DB::table('information_schema.columns')
-                        ->where('table_schema', DB::raw('DATABASE()'))
-                        ->where('table_name', $table)
-                        ->where('column_name', $column)
-                        ->exists();
+                    $columnExists = $this->tableDataHasColumn($table, $column);
 
                     if ($columnExists) {
                         $query->where($column, $value);
@@ -233,11 +356,7 @@ class AJAXController extends Controller
         if ($request->has('item_type')) {
             // Validate item_type column exists
             try {
-                $itemTypeExists = DB::table('information_schema.columns')
-                    ->where('table_schema', DB::raw('DATABASE()'))
-                    ->where('table_name', $table)
-                    ->where('column_name', 'item_type')
-                    ->exists();
+                $itemTypeExists = $this->tableDataHasColumn($table, 'item_type');
 
                 if ($itemTypeExists) {
                     $query->where('item_type', $request->item_type);
