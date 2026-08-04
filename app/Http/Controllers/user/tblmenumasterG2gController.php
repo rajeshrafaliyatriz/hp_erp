@@ -103,6 +103,32 @@ class tblmenumasterG2gController extends Controller
         return $nodes;
     }
 
+    /**
+     * Validates the Sanctum bearer token and the given required fields.
+     * Returns a JSON error response if either check fails, or null to
+     * signal the caller can proceed.
+     */
+    private function guard(Request $request, array $rules)
+    {
+        $token = $request->input('token');
+
+        if (! $token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        if (! PersonalAccessToken::findToken($token)) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+        }
+
+        return null;
+    }
+
     private function canView($menuId, $rightsByMenuId): bool
     {
         $rights = $rightsByMenuId->get($menuId);
