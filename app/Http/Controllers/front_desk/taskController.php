@@ -6,10 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\TaskManagement\StoreTaskRequest;
 use App\Models\front_desk\taskModel;
 use App\Models\user\tbluserModel;
-use App\Services\TaskManagement\TaskReferenceService;
 use App\Services\TaskManagement\TaskAuditService;
 use App\Services\TaskManagement\TaskDependencyResolutionService;
-use App\Services\TaskManagement\TaskNotificationService;
 use App\Services\TaskManagement\TaskStatusTransitionService;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\View;
@@ -30,20 +28,39 @@ use Kreait\Firebase\Messaging\CloudMessage;
 class taskController extends Controller
 {
     public function __construct(
-        private readonly TaskReferenceService $taskReferences,
         private readonly TaskAuditService $taskAudit,
-        private readonly TaskNotificationService $taskNotifications,
         private readonly TaskStatusTransitionService $statusTransitions,
         private readonly TaskDependencyResolutionService $dependencyResolution
     ) {
     }
 
+    /**
+     * Ids created by this request, in creation order.
+     *
+     * One submit can produce several rows - a recurring task becomes one row
+     * per date, a multi-user assignment one row per person - so the caller
+     * needs the whole list to link them to a project or a dependency.
+     * Controllers are resolved per request, so this never leaks between them.
+     *
+     * @var array<int, int>
+     */
+    private array $createdTaskIds = [];
+
+    /**
+     * Insert a task and record its creation.
+     *
+     * TaskReferenceService and TaskNotificationService used to be injected
+     * here but neither class exists, so every create through this controller
+     * died at constructor resolution. Nothing is lost by dropping them: the
+     * "reference" every reader shows is the task id itself (see
+     * TaskListController::resource and the Approvals card's TSK-{id}), and
+     * each caller already invokes sendTaskNotification() for the assignee.
+     */
     private function insertTaskWithReference(array $data, string|int|null $syear): int
     {
         $taskId = (int) taskModel::insertGetId($data);
-        $this->taskReferences->assign($taskId, $syear);
+        $this->createdTaskIds[] = $taskId;
         $this->taskAudit->taskCreated($taskId, isset($data['created_by']) ? (int) $data['created_by'] : null);
-        $this->taskNotifications->taskAssigned($taskId);
 
         return $taskId;
     }
@@ -394,6 +411,31 @@ class taskController extends Controller
             //     $manageby = $user_id;
             // }
 
+            // Double-submit guard. A retried create - impatient second click,
+            // a browser retry after a slow response - used to produce a second
+            // copy of the whole recurring series. Callers that send a key get
+            // the first attempt's task back instead; callers that do not are
+            // unaffected.
+            $idempotencyKey = trim((string) $request->input('idempotency_key'));
+            if ($idempotencyKey !== '') {
+                $existing = DB::table('task_management_idempotency_keys')
+                    ->where('sub_institute_id', $sub_institute_id)
+                    ->where('idempotency_key', $idempotencyKey)
+                    ->first();
+
+                if ($existing) {
+                    // status_code 1 - from the caller's point of view the task
+                    // it asked for exists, which is what success means here.
+                    return response()->json([
+                        'status_code' => "1",
+                        'message' => 'Task already created for this request.',
+                        'task_id' => (string) $existing->task_id,
+                        'task_ids' => [(string) $existing->task_id],
+                        'replayed' => true,
+                    ], 200);
+                }
+            }
+
             $dates = $this->getDatesWithoutSundays("High", null, 1, $request->repeat_until);
             $task_type = $request->input('selType', ''); // fallback if not present
 
@@ -435,6 +477,8 @@ class taskController extends Controller
                 'employee_id',
                 'job_role',
                 'repeat_until',
+                // Request metadata, not a task column.
+                'idempotency_key',
             ]);
 
             $extraData = [
@@ -563,6 +607,7 @@ class taskController extends Controller
                                     $insert = taskModel::create($data);
 
                                     if ($insert) {
+                                        $this->createdTaskIds[] = (int) $insert->id;
                                         $insertCount++;
                                         $this->sendTaskNotification($allocatedUser, $taskData['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
                                     }
@@ -579,6 +624,7 @@ class taskController extends Controller
                                 $insert = taskModel::create($data);
 
                                 if ($insert) {
+                                    $this->createdTaskIds[] = (int) $insert->id;
                                     $insertCount++;
                                     $this->sendTaskNotification($allocatedUser, $taskData['task_title'], tbluserModel::where('id', $user_id)->value('first_name'), $insert->id);
                                 }
@@ -621,9 +667,33 @@ class taskController extends Controller
                 }
             }
 
+            // Remember the key so a retry replays this create instead of
+            // repeating it. Best-effort: a bookkeeping failure must not turn a
+            // successful create into an error.
+            if ($idempotencyKey !== '') {
+                try {
+                    DB::table('task_management_idempotency_keys')->insert([
+                        'sub_institute_id' => $sub_institute_id,
+                        'idempotency_key' => $idempotencyKey,
+                        'task_id' => (int) ($taskId ?? 0),
+                        'created_at' => now(),
+                    ]);
+                } catch (\Throwable $exception) {
+                    // A duplicate key here means two requests raced; the second
+                    // one still created a task, which is the pre-existing
+                    // behaviour, so there is nothing to undo.
+                }
+            }
+
+            // The created ids, so the caller can link the new work to a
+            // project, a workstream or a dependency. Without them the client
+            // has no handle on what it just created. `task_id` is the first
+            // one, kept for callers that only ever expect a single task.
             $res =  [
                 'status_code' => "1",
-                'message' => "Added successfully"
+                'message' => "Added successfully",
+                'task_id' => $this->createdTaskIds[0] ?? null,
+                'task_ids' => array_map('strval', $this->createdTaskIds),
             ];
 
             return response()->json($res);

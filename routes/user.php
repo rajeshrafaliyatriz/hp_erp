@@ -41,6 +41,14 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
         [tblmobileAppMenuRightsController::class, 'displayMobileAppMenuRights'])->name('ajax_mobile_app_menu_rights');
     Route::get('ajax_sidebar_menu_g2g',
         [tblmenumasterG2gController::class, 'displaySidebarMenu'])->name('ajax_sidebar_menu_g2g');
+    Route::get('ajax_groupwiserights_g2g',
+        [tblmenumasterG2gController::class, 'displayGroupwiseRightsG2g'])->name('ajax_groupwiserights_g2g');
+    Route::post('save_groupwiserights_g2g',
+        [tblmenumasterG2gController::class, 'storeGroupwiseRightsG2g'])->name('save_groupwiserights_g2g');
+    Route::get('ajax_user_profiles_g2g',
+        [tblmenumasterG2gController::class, 'displayUserProfilesG2g'])->name('ajax_user_profiles_g2g');
+    Route::post('save_user_profile_g2g',
+        [tblmenumasterG2gController::class, 'storeUserProfileG2g'])->name('save_user_profile_g2g');
     Route::resource('user_rating_details', UserRatingDetailController::class);
 
 

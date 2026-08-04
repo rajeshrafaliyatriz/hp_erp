@@ -10,7 +10,6 @@ use App\Http\Controllers\loginController;
 use App\Http\Controllers\leave\HrmsDepartment;
 use App\Http\Controllers\school_setup\batchController;
 use App\Http\Controllers\school_setup\changePasswordController;
-use App\Http\Controllers\school_setup\chapterController;
 use App\Http\Controllers\school_setup\classteacherController;
 use App\Http\Controllers\school_setup\classteacherReportController;
 use App\Http\Controllers\easy_com\send_birthday_notification\send_birthday_notification_controller;
@@ -198,7 +197,9 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::get('/create-view/{id}/update/{recordId}',[CustomModuleController::class,'crudCreate']);
     Route::post('/create-view-store/{id}',[CustomModuleController::class,'crudStore'])->name('custom_module_crud.store');
     Route::delete('/view-delete/{id}',[CustomModuleController::class,'viewDelete'])->name('custom_module_crud.delete');
-    Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
+    // StandardwiseSubject lives on the LMS chapter controller - the
+    // school_setup\chapterController this used to reference does not exist.
+    Route::get('ajax_StandardwiseSubject', [LmsChapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
     Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
 });
 

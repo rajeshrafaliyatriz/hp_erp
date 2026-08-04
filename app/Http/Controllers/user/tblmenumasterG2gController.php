@@ -5,7 +5,10 @@ namespace App\Http\Controllers\user;
 use App\Http\Controllers\Controller;
 use App\Models\tblmenumaster_g2gModel;
 use App\Models\user\tblgroupwise_rights_g2gModel;
+use App\Models\user\tbluserModel;
+use App\Models\user\tbluserprofilemasterModel;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -27,25 +30,9 @@ class tblmenumasterG2gController extends Controller
     public function displaySidebarMenu(Request $request)
     {
         $profile_id = $request->input('profile_id');
-        $token = $request->input('token');
 
-        if (! $token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
-
-        $accessToken = PersonalAccessToken::findToken($token);
-
-        if (! $accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'sub_institute_id' => 'required',
-            'profile_id' => 'required',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['status_code' => 0, 'message' => $validator->errors()->first()], 400);
+        if ($error = $this->guard($request, ['sub_institute_id' => 'required', 'profile_id' => 'required'])) {
+            return $error;
         }
 
         $sub_institute_id = $request->get('sub_institute_id');

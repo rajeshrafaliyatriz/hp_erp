@@ -32,6 +32,15 @@ use App\Http\Controllers\Api\Competency\MappingReviewController as CompetencyMap
 use App\Http\Controllers\Api\Competency\CareerPathController as CompetencyCareerPathController;
 use App\Http\Controllers\Api\Competency\LearningAssignmentController as CompetencyLearningAssignmentController;
 use App\Http\Controllers\Api\Competency\AuditController as CompetencyAuditController;
+use App\Http\Controllers\Api\Competency\LibraryController as CompetencyLibraryController;
+use App\Http\Controllers\Api\Competency\ApprovalController as CompetencyApprovalController;
+use App\Http\Controllers\Api\Agentic\AgentController as AgenticAgentController;
+use App\Http\Controllers\Api\Agentic\ConfigController as AgenticConfigController;
+use App\Http\Controllers\Api\Agentic\RunController as AgenticRunController;
+use App\Http\Controllers\Api\Agentic\ToolController as AgenticToolController;
+use App\Http\Controllers\Api\Agentic\WorkflowController as AgenticWorkflowController;
+use App\Http\Controllers\Api\Agentic\AnalyticsController as AgenticAnalyticsController;
+use App\Http\Controllers\Api\Agentic\ReflectionController as AgenticReflectionController;
 // Talent Management -> Performance & Rewards Center (new module, see the route
 // block at the end of this file).
 use App\Http\Controllers\Api\Performance\PerformanceOverviewController;
@@ -44,12 +53,25 @@ use App\Http\Controllers\Api\Performance\PerformanceBonusController;
 use App\Http\Controllers\Api\Performance\PerformanceCalibrationController;
 use App\Http\Controllers\Api\Performance\PerformanceActivityController;
 use App\Http\Controllers\Api\Performance\PerformanceSavedViewController;
+// Talent Management: dashboard, onboarding, mobility & succession, offboarding
+// (routes in the "Talent Management -> Lifecycle" block at the end of this file).
+use App\Http\Controllers\Api\TalentDashboardController;
+use App\Http\Controllers\Api\Talent\OnboardingJourneyController;
+use App\Http\Controllers\Api\Talent\OnboardingTaskController;
+use App\Http\Controllers\Api\Talent\OnboardingDocumentController;
+use App\Http\Controllers\Api\Talent\InternalJobController;
+use App\Http\Controllers\Api\Talent\MobilityRequestController;
+use App\Http\Controllers\Api\Talent\SuccessionPlanController;
+use App\Http\Controllers\Api\Talent\OffboardingCaseController;
+use App\Http\Controllers\Api\Talent\OffboardingClearanceController;
+use App\Http\Controllers\Api\Talent\ExitInterviewController;
+use App\Http\Controllers\Api\Talent\AdminWorkflowController;
 // Talent Management -> Onboarding & Employee Lifecycle Center (route block at the
 // end of this file).
 use App\Http\Controllers\Api\Onboarding\OnboardingOverviewController;
-use App\Http\Controllers\Api\Onboarding\OnboardingJourneyController;
-use App\Http\Controllers\Api\Onboarding\OnboardingTaskController;
-use App\Http\Controllers\Api\Onboarding\OnboardingDocumentController;
+use App\Http\Controllers\Api\Onboarding\OnboardingJourneyController as V2OnboardingJourneyController;
+use App\Http\Controllers\Api\Onboarding\OnboardingTaskController as V2OnboardingTaskController;
+use App\Http\Controllers\Api\Onboarding\OnboardingDocumentController as V2OnboardingDocumentController;
 use App\Http\Controllers\Api\Onboarding\OnboardingNoteController;
 use App\Http\Controllers\Api\Onboarding\OnboardingProbationController;
 use App\Http\Controllers\Api\DBController;
@@ -116,6 +138,8 @@ use App\Http\Controllers\Api\TaskManagement\SessionController;
 use App\Http\Controllers\Api\TaskManagement\ProjectController;
 use App\Http\Controllers\Api\TaskManagement\WorkspaceController;
 use App\Http\Controllers\Api\TaskManagement\DependencyController;
+use App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController;
+use App\Http\Controllers\Api\TaskManagement\TaskOptionController;
 use App\Http\Controllers\Api\UserJourneyLogController;
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
@@ -233,6 +257,71 @@ Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'g
 */
 Route::get('/competency/command-center', [CompetencyCommandCenterController::class, 'index']);
 Route::get('/competency/command-center/filters', [CompetencyCommandCenterController::class, 'filters']);
+
+/*
+| Libraries & Taxonomy - the eight library tabs (Skill, Jobrole, Jobrole Task,
+| Knowledge, Ability, Attitude, Behaviour, Invisible), their taxonomy editors
+| and the skill taxonomy tree.
+|
+| Fixed segments (meta, taxonomy, skill-taxonomy-tree) are declared before the
+| {id} routes so they are never read as an id, and every {id} is whereNumber.
+*/
+/*
+| Approval queue. One inbox governing competencies and frameworks; the existing
+| role-mapping reviews are unioned in for reading and still actioned through
+| /competency/mapping-reviews.
+*/
+Route::get('/competency/approvals', [CompetencyApprovalController::class, 'index']);
+Route::post('/competency/approvals', [CompetencyApprovalController::class, 'store']);
+Route::post('/competency/approvals/bulk-approve', [CompetencyApprovalController::class, 'bulkApprove']);
+Route::get('/competency/approvals/for/{type}/{id}', [CompetencyApprovalController::class, 'forSubject'])->whereNumber('id');
+Route::put('/competency/approvals/{id}', [CompetencyApprovalController::class, 'update'])->whereNumber('id');
+
+Route::get('/competency/library/meta', [CompetencyLibraryController::class, 'meta']);
+Route::get('/competency/library/skill-taxonomy-tree', [CompetencyLibraryController::class, 'skillTaxonomyTree']);
+Route::get('/competency/library/levels-of-responsibility', [CompetencyLibraryController::class, 'levelsOfResponsibility']);
+Route::get('/competency/library/work-functions', [CompetencyLibraryController::class, 'workFunctions']);
+
+Route::get('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'taxonomy']);
+Route::post('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'storeTaxonomy']);
+Route::put('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'updateTaxonomy']);
+Route::delete('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'destroyTaxonomy']);
+
+Route::get('/competency/library/skills', [CompetencyLibraryController::class, 'skills']);
+Route::post('/competency/library/skills', [CompetencyLibraryController::class, 'storeSkill']);
+Route::get('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'showSkill'])->whereNumber('id');
+Route::put('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'updateSkill'])->whereNumber('id');
+Route::delete('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'destroySkill'])->whereNumber('id');
+
+Route::get('/competency/library/jobroles', [CompetencyLibraryController::class, 'jobroles']);
+Route::post('/competency/library/jobroles', [CompetencyLibraryController::class, 'storeJobrole']);
+Route::get('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'showJobrole'])->whereNumber('id');
+Route::put('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'updateJobrole'])->whereNumber('id');
+Route::delete('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'destroyJobrole'])->whereNumber('id');
+
+Route::get('/competency/library/jobrole-tasks', [CompetencyLibraryController::class, 'jobroleTasks']);
+Route::post('/competency/library/jobrole-tasks', [CompetencyLibraryController::class, 'storeJobroleTask']);
+Route::get('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'showJobroleTask'])->whereNumber('id');
+Route::put('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'updateJobroleTask'])->whereNumber('id');
+Route::delete('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'destroyJobroleTask'])->whereNumber('id');
+
+// One set of routes for all four KASA tabs: {type} is knowledge|ability|attitude|behaviour.
+Route::get('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'kasa']);
+Route::post('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'storeKasa']);
+// Where a knowledge / ability / attitude / behaviour item is actually used:
+// which skills reference it, at which levels, and the job roles that inherit
+// it. Declared before the {id} show route so 'usage' is not read as an id.
+Route::get('/competency/library/kasa/{type}/{id}/usage', [CompetencyLibraryController::class, 'usageKasa'])->whereNumber('id');
+Route::get('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'showKasa'])->whereNumber('id');
+Route::put('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'updateKasa'])->whereNumber('id');
+Route::delete('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'destroyKasa'])->whereNumber('id');
+
+Route::get('/competency/library/invisible', [CompetencyLibraryController::class, 'invisible']);
+Route::post('/competency/library/invisible', [CompetencyLibraryController::class, 'storeInvisible']);
+Route::post('/competency/library/invisible/{id}/clone', [CompetencyLibraryController::class, 'cloneInvisible'])->whereNumber('id');
+Route::get('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'showInvisible'])->whereNumber('id');
+Route::put('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'updateInvisible'])->whereNumber('id');
+Route::delete('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'destroyInvisible'])->whereNumber('id');
 
 Route::get('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'index']);
 Route::post('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'store']);
@@ -766,6 +855,20 @@ Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
 Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
 Route::prefix('task-management')->middleware('task.sanitize')->group(function () {
     Route::get('/session', [SessionController::class, 'show']);
+    // Module metadata for the Administration screens: the permission matrix
+    // as enforced, and which integrations are configured (never their keys).
+    Route::get('/permissions', [SessionController::class, 'permissions']);
+    // Tenant status/priority vocabularies. System entries are constants; the
+    // CRUD below manages the tenant's custom additions.
+    Route::get('/statuses', [TaskOptionController::class, 'statuses']);
+    Route::post('/statuses', [TaskOptionController::class, 'storeStatus'])->middleware('task.permission:notification.manage');
+    Route::put('/statuses/{id}', [TaskOptionController::class, 'updateStatus'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::delete('/statuses/{id}', [TaskOptionController::class, 'destroyStatus'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::get('/priorities', [TaskOptionController::class, 'priorities']);
+    Route::post('/priorities', [TaskOptionController::class, 'storePriority'])->middleware('task.permission:notification.manage');
+    Route::put('/priorities/{id}', [TaskOptionController::class, 'updatePriority'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::delete('/priorities/{id}', [TaskOptionController::class, 'destroyPriority'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::get('/integrations', [SessionController::class, 'integrations']);
     Route::delete('/session', [SessionController::class, 'destroy'])->middleware('task.permission:notification.manage');
     Route::post('/bulk-tasks/import', [BulkTaskController::class, 'import'])->middleware('task.permission:task.create');
     Route::post('/assignment-capacity', [CapacityController::class, 'check'])->middleware('task.permission:task.create');
@@ -784,8 +887,11 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::delete('/templates/{id}', [TaskTemplateController::class, 'destroy'])->middleware('task.permission:task.create')->whereNumber('id');
     Route::get('/reports/productivity', [ReportController::class, 'productivity']);
     Route::get('/reports/delays', [ReportController::class, 'delays']);
-    Route::get('/audit-logs', [AuditLogController::class, 'index']);
-    Route::get('/audit-logs/export', [AuditLogController::class, 'export']);
+    // Admin-only: the audit trail is org-wide and the export is the whole
+    // thing as a file. Gated with the same privileged ability the other
+    // Administration routes use.
+    Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('task.permission:notification.manage');
+    Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->middleware('task.permission:notification.manage');
     Route::get('/workspace', [WorkspaceController::class, 'index']);
     Route::get('/workspace/workload', [WorkspaceController::class, 'workload']);
     Route::get('/workspace/{id}', [WorkspaceController::class, 'show'])->whereNumber('id');
@@ -810,6 +916,13 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::post('/workspace/{id}/attachments', [TaskAttachmentVersionController::class, 'store'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::get('/workspace/{id}/attachments/{version}', [TaskAttachmentVersionController::class, 'download'])->whereNumber(['id', 'version']);
     Route::post('/workspace/{id}/attachments/{version}/restore', [TaskAttachmentVersionController::class, 'restore'])->middleware('task.permission:task.update')->whereNumber(['id', 'version']);
+    // Deadline extensions: the executor requests more time, the observer
+    // decides. The old frontend had this whole flow pointed at an endpoint
+    // that never existed; these are its backend.
+    Route::get('/deadline-extensions', [DeadlineExtensionController::class, 'index']);
+    Route::post('/deadline-extensions', [DeadlineExtensionController::class, 'store']);
+    Route::patch('/deadline-extensions/{id}/decision', [DeadlineExtensionController::class, 'decide'])->middleware('task.permission:task.approve')->whereNumber('id');
+
     Route::get('/dependencies', [DependencyController::class, 'index']);
     Route::post('/dependencies', [DependencyController::class, 'store'])->middleware('task.permission:dependency.manage');
     Route::put('/dependencies/{id}', [DependencyController::class, 'update'])->middleware('task.permission:dependency.manage')->whereNumber('id');
@@ -828,6 +941,8 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::patch('/projects/{id}/archive', [ProjectController::class, 'archive'])->middleware('task.permission:project.manage')->whereNumber('id');
     Route::put('/projects/{id}/members', [ProjectController::class, 'syncProjectMembers'])->middleware('task.permission:project.manage')->whereNumber('id');
     Route::put('/projects/{id}/tasks', [ProjectController::class, 'syncTasks'])->middleware('task.permission:project.manage')->whereNumber('id');
+    // Attach a single task without disturbing the project's other tasks.
+    Route::post('/projects/{id}/tasks', [ProjectController::class, 'attachTask'])->middleware('task.permission:project.manage')->whereNumber('id');
     Route::post('/projects/{id}/workstreams', [ProjectController::class, 'storeWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('id');
     Route::put('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'updateWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
     Route::delete('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'destroyWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
@@ -864,6 +979,9 @@ Route::get('/excel-agent/credentials', [ExcelAutomationAgentController::class, '
 Route::post('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'saveCredentials']);
 Route::post('/excel-agent/test-connection', [ExcelAutomationAgentController::class, 'testConnection']);
 Route::post('/excel-agent/upload', [ExcelAutomationAgentController::class, 'upload']);
+// Blank workbook using this organisation's own template headers, so the file
+// a user downloads is always the file upload() will accept.
+Route::get('/excel-agent/template', [ExcelAutomationAgentController::class, 'downloadTemplate']);
 // Course Recommendation API - Get courses based on logged-in user's job role
 
 // Department Job Role Export API - Export department and job role data to CSV
@@ -878,6 +996,8 @@ Route::get('/career-journey', [CareerJourneyController::class, 'getCareerJourney
 
 // Bulk Task Import API
 Route::post('bulk-task/import', [BulkTaskController::class, 'import']);
+// Path the legacy frontend posts deadline-extension requests to.
+Route::post('/deadline-extension', [App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController::class, 'store']);
 
 // Nango Google Calendar OAuth API
 Route::post('nango/google/check-connection', [App\Http\Controllers\NangoController::class, 'checkConnection']);
@@ -993,6 +1113,103 @@ Route::delete('/performance/saved-views/{id}', [PerformanceSavedViewController::
 
 /*
 |--------------------------------------------------------------------------
+| Talent Management -> Lifecycle (Dashboard, Onboarding, Mobility, Offboarding)
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/performance/*, /api/competency/*
+| and /api/leave/*.
+|
+| Entirely NEW surface. None of these modules had routes, controllers, models or
+| tables before: grepping the backend for onboarding-journey, mobility,
+| succession, resignation or clearance returned only menu labels. Nothing below
+| touches an existing endpoint, so no current consumer is affected - in
+| particular /api/talent-acquisition/{kpis,funnel,dropoff,requisitions},
+| /api/job-postings, /api/job-applications, /api/interview-schedules and
+| /api/talent-offers are all left exactly as they were.
+|
+| Backed by the 9 tables created in:
+|   2026_07_30_120000_create_talent_onboarding_tables
+|   2026_07_30_130000_create_talent_mobility_tables
+|   2026_07_30_140000_create_talent_offboarding_tables
+| plus READ-ONLY reuse of talent_job_postings, talent_job_applications,
+| talent_offers, talent_interview_schedules, talent_evaluation_form,
+| s_performance_*, tbluser, hrms_departments and org_designation.
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR. The subject employee
+| always travels as an explicit field (employee_id, owner_id, incumbent_id).
+*/
+
+// Executive dashboard - one aggregate across all five talent modules.
+Route::get('/talent/dashboard', [TalentDashboardController::class, 'index']);
+Route::get('/talent/dashboard/filters', [TalentDashboardController::class, 'filters']);
+
+// Onboarding: journeys, their checklist tasks and their documents.
+// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+Route::get('/talent/onboarding/journeys', [OnboardingJourneyController::class, 'index']);
+Route::post('/talent/onboarding/journeys', [OnboardingJourneyController::class, 'store']);
+Route::get('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'show'])->whereNumber('id');
+Route::put('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'update'])->whereNumber('id');
+Route::post('/talent/onboarding/journeys/{id}/complete', [OnboardingJourneyController::class, 'complete'])->whereNumber('id');
+Route::delete('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/onboarding/tasks', [OnboardingTaskController::class, 'index']);
+Route::post('/talent/onboarding/tasks', [OnboardingTaskController::class, 'store']);
+Route::put('/talent/onboarding/tasks/{id}', [OnboardingTaskController::class, 'update'])->whereNumber('id');
+Route::post('/talent/onboarding/tasks/{id}/complete', [OnboardingTaskController::class, 'complete'])->whereNumber('id');
+Route::delete('/talent/onboarding/tasks/{id}', [OnboardingTaskController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/onboarding/documents', [OnboardingDocumentController::class, 'index']);
+Route::post('/talent/onboarding/documents', [OnboardingDocumentController::class, 'store']);
+Route::put('/talent/onboarding/documents/{id}', [OnboardingDocumentController::class, 'update'])->whereNumber('id');
+Route::delete('/talent/onboarding/documents/{id}', [OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
+
+// Mobility: internal-only job postings and the requests raised against them.
+Route::get('/talent/mobility/internal-jobs', [InternalJobController::class, 'index']);
+Route::post('/talent/mobility/internal-jobs', [InternalJobController::class, 'store']);
+Route::get('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'show'])->whereNumber('id');
+Route::put('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'update'])->whereNumber('id');
+Route::delete('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/mobility/requests', [MobilityRequestController::class, 'index']);
+Route::post('/talent/mobility/requests', [MobilityRequestController::class, 'store']);
+Route::get('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'show'])->whereNumber('id');
+Route::put('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'update'])->whereNumber('id');
+Route::put('/talent/mobility/requests/{id}/decision', [MobilityRequestController::class, 'decision'])->whereNumber('id');
+Route::delete('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'destroy'])->whereNumber('id');
+
+// Succession: critical roles and the bench behind them (the 9-box matrix).
+Route::get('/talent/succession/plans', [SuccessionPlanController::class, 'index']);
+Route::post('/talent/succession/plans', [SuccessionPlanController::class, 'store']);
+Route::get('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'show'])->whereNumber('id');
+Route::put('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'update'])->whereNumber('id');
+Route::delete('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'destroy'])->whereNumber('id');
+Route::post('/talent/succession/plans/{id}/candidates', [SuccessionPlanController::class, 'storeCandidate'])->whereNumber('id');
+Route::put('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'updateCandidate'])->whereNumber('id');
+Route::delete('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'destroyCandidate'])->whereNumber('id');
+
+// Offboarding: exit cases, their clearance checklist and the exit interview.
+Route::get('/talent/offboarding/cases', [OffboardingCaseController::class, 'index']);
+Route::post('/talent/offboarding/cases', [OffboardingCaseController::class, 'store']);
+Route::get('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'show'])->whereNumber('id');
+Route::put('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'update'])->whereNumber('id');
+Route::post('/talent/offboarding/cases/{id}/advance', [OffboardingCaseController::class, 'advance'])->whereNumber('id');
+Route::delete('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/offboarding/clearances', [OffboardingClearanceController::class, 'index']);
+Route::post('/talent/offboarding/clearances', [OffboardingClearanceController::class, 'store']);
+Route::put('/talent/offboarding/clearances/{id}', [OffboardingClearanceController::class, 'update'])->whereNumber('id');
+Route::post('/talent/offboarding/clearances/{id}/clear', [OffboardingClearanceController::class, 'clear'])->whereNumber('id');
+Route::delete('/talent/offboarding/clearances/{id}', [OffboardingClearanceController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/talent/offboarding/exit-interviews', [ExitInterviewController::class, 'index']);
+Route::post('/talent/offboarding/exit-interviews', [ExitInterviewController::class, 'store']);
+Route::put('/talent/offboarding/exit-interviews/{id}', [ExitInterviewController::class, 'update'])->whereNumber('id');
+Route::delete('/talent/offboarding/exit-interviews/{id}', [ExitInterviewController::class, 'destroy'])->whereNumber('id');
+
+// Administration & Governance: Workflows
+Route::get('/talent/admin/workflows', [AdminWorkflowController::class, 'index']);
+/*
+|--------------------------------------------------------------------------
 | Talent Management -> Onboarding & Employee Lifecycle Center
 |--------------------------------------------------------------------------
 | Token authenticated (Sanctum token as the `token` query param) and tenant
@@ -1019,39 +1236,39 @@ Route::get('/onboarding/overview', [OnboardingOverviewController::class, 'index'
 Route::get('/onboarding/filters', [OnboardingOverviewController::class, 'filters']);
 
 // Journeys - the journey list sheet, the profile sidebar and "Start onboarding".
-Route::get('/onboarding/journeys', [OnboardingJourneyController::class, 'index']);
-Route::post('/onboarding/journeys', [OnboardingJourneyController::class, 'store']);
-Route::post('/onboarding/journeys/from-offer/{offerId}', [OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
-Route::get('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'show'])->whereNumber('id');
-Route::put('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'update'])->whereNumber('id');
-Route::delete('/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
+Route::get('/onboarding/journeys', [V2OnboardingJourneyController::class, 'index']);
+Route::post('/onboarding/journeys', [V2OnboardingJourneyController::class, 'store']);
+Route::post('/onboarding/journeys/from-offer/{offerId}', [V2OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
+Route::get('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'show'])->whereNumber('id');
+Route::put('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
 
 // Journey stages - the "Onboarding Journey Progress" timeline.
-Route::get('/onboarding/journeys/{journeyId}/stages', [OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
-Route::put('/onboarding/stages/{id}', [OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
-Route::post('/onboarding/stages/{id}/complete', [OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
+Route::get('/onboarding/journeys/{journeyId}/stages', [V2OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
+Route::put('/onboarding/stages/{id}', [V2OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
+Route::post('/onboarding/stages/{id}/complete', [V2OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
 
 // Key Contacts card and the Lifecycle Timeline tab.
-Route::get('/onboarding/journeys/{journeyId}/contacts', [OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
-Route::get('/onboarding/journeys/{journeyId}/timeline', [OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
+Route::get('/onboarding/journeys/{journeyId}/contacts', [V2OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
+Route::get('/onboarding/journeys/{journeyId}/timeline', [V2OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
 
 // Preboarding tasks - the main table, its row actions and the Add Task sheet.
 // Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
-Route::get('/onboarding/workstreams', [OnboardingTaskController::class, 'workstreams']);
-Route::post('/onboarding/tasks/bulk', [OnboardingTaskController::class, 'bulk']);
-Route::get('/onboarding/tasks', [OnboardingTaskController::class, 'index']);
-Route::post('/onboarding/tasks', [OnboardingTaskController::class, 'store']);
-Route::put('/onboarding/tasks/{id}', [OnboardingTaskController::class, 'update'])->whereNumber('id');
-Route::post('/onboarding/tasks/{id}/complete', [OnboardingTaskController::class, 'complete'])->whereNumber('id');
-Route::delete('/onboarding/tasks/{id}', [OnboardingTaskController::class, 'destroy'])->whereNumber('id');
+Route::get('/onboarding/workstreams', [V2OnboardingTaskController::class, 'workstreams']);
+Route::post('/onboarding/tasks/bulk', [V2OnboardingTaskController::class, 'bulk']);
+Route::get('/onboarding/tasks', [V2OnboardingTaskController::class, 'index']);
+Route::post('/onboarding/tasks', [V2OnboardingTaskController::class, 'store']);
+Route::put('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'update'])->whereNumber('id');
+Route::post('/onboarding/tasks/{id}/complete', [V2OnboardingTaskController::class, 'complete'])->whereNumber('id');
+Route::delete('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'destroy'])->whereNumber('id');
 
 // Documents card. POST accepts multipart; PUT doubles as the upload endpoint for
 // an existing request (browsers cannot send multipart PUT, so the frontend posts
 // with _method=PUT, which Laravel's method spoofing resolves).
-Route::get('/onboarding/journeys/{journeyId}/documents', [OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
-Route::post('/onboarding/journeys/{journeyId}/documents', [OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
-Route::match(['put', 'post'], '/onboarding/documents/{id}', [OnboardingDocumentController::class, 'update'])->whereNumber('id');
-Route::delete('/onboarding/documents/{id}', [OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
+Route::get('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
+Route::post('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
+Route::match(['put', 'post'], '/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'update'])->whereNumber('id');
+Route::delete('/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
 
 // Notes card.
 Route::get('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'index'])->whereNumber('journeyId');
@@ -1126,4 +1343,84 @@ Route::prefix('offboarding')->group(function () {
     Route::post('/cases/{id}/comments', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'addComment'])->whereNumber('id');
     Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
     Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');
+});
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Agentic AI (module m7)
+|--------------------------------------------------------------------------
+| Agent registry, runs and traces, tool invocations, multi-agent workflows,
+| analytics and the reflection system.
+|
+| Token authenticated + tenant scoped through
+| App\Http\Controllers\Api\Agentic\Concerns\ResolvesAgenticContext. The screens
+| this serves previously talked to two public HuggingFace Spaces with neither,
+| so any browser could read or delete any organisation's agents.
+|
+| Fixed segments are declared before the {id} routes so they are never read as
+| an id, and every {id} is whereNumber.
+*/
+Route::prefix('agentic')->group(function () {
+    // Agents
+    Route::get('/agents/meta', [AgenticAgentController::class, 'meta']);
+    Route::get('/agents', [AgenticAgentController::class, 'index']);
+    Route::post('/agents', [AgenticAgentController::class, 'store']);
+    Route::post('/agents/{id}/clone', [AgenticAgentController::class, 'clone'])->whereNumber('id');
+    Route::patch('/agents/{id}/status', [AgenticAgentController::class, 'setStatus'])->whereNumber('id');
+    Route::post('/agents/{id}/run', [AgenticRunController::class, 'start'])->whereNumber('id');
+
+    // Per-tenant setup. A shared catalogue agent is connected to each
+    // organisation's own sheet / workspace / key here rather than by cloning it.
+    Route::get('/agents/{id}/config', [AgenticConfigController::class, 'show'])->whereNumber('id');
+    Route::post('/agents/{id}/config', [AgenticConfigController::class, 'update'])->whereNumber('id');
+    Route::put('/agents/{id}/config', [AgenticConfigController::class, 'update'])->whereNumber('id');
+    Route::delete('/agents/{id}/config', [AgenticConfigController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/agents/{id}', [AgenticAgentController::class, 'show'])->whereNumber('id');
+    Route::put('/agents/{id}', [AgenticAgentController::class, 'update'])->whereNumber('id');
+    Route::delete('/agents/{id}', [AgenticAgentController::class, 'destroy'])->whereNumber('id');
+
+    // Runs + traces
+    Route::get('/runs', [AgenticRunController::class, 'index']);
+    Route::get('/runs/{id}/trace', [AgenticRunController::class, 'trace'])->whereNumber('id');
+    Route::post('/runs/{id}/tasks', [AgenticRunController::class, 'addTask'])->whereNumber('id');
+    Route::post('/runs/{id}/cancel', [AgenticRunController::class, 'cancel'])->whereNumber('id');
+    Route::get('/runs/{id}', [AgenticRunController::class, 'show'])->whereNumber('id');
+    Route::put('/runs/{id}', [AgenticRunController::class, 'update'])->whereNumber('id');
+    Route::delete('/runs/{id}', [AgenticRunController::class, 'destroy'])->whereNumber('id');
+
+    // Tools
+    Route::get('/tools', [AgenticToolController::class, 'catalogue']);
+    Route::get('/tools/invocations', [AgenticToolController::class, 'invocations']);
+    Route::get('/tools/invocations/{id}', [AgenticToolController::class, 'showInvocation'])->whereNumber('id');
+    Route::post('/tools/{tool}/invoke', [AgenticToolController::class, 'invoke']);
+
+    // Analytics
+    Route::get('/analytics/dashboard', [AgenticAnalyticsController::class, 'dashboard']);
+    Route::get('/analytics/overview', [AgenticAnalyticsController::class, 'overview']);
+
+    // Multi-agent workflows
+    Route::get('/workflows', [AgenticWorkflowController::class, 'index']);
+    Route::post('/workflows', [AgenticWorkflowController::class, 'store']);
+    Route::post('/workflows/{id}/steps', [AgenticWorkflowController::class, 'addStep'])->whereNumber('id');
+    Route::put('/workflows/{id}/steps/{stepId}', [AgenticWorkflowController::class, 'updateStep'])->whereNumber('id')->whereNumber('stepId');
+    Route::delete('/workflows/{id}/steps/{stepId}', [AgenticWorkflowController::class, 'deleteStep'])->whereNumber('id')->whereNumber('stepId');
+    Route::post('/workflows/{id}/run', [AgenticWorkflowController::class, 'run'])->whereNumber('id');
+    Route::get('/workflows/{id}', [AgenticWorkflowController::class, 'show'])->whereNumber('id');
+    Route::put('/workflows/{id}', [AgenticWorkflowController::class, 'update'])->whereNumber('id');
+    Route::delete('/workflows/{id}', [AgenticWorkflowController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/workflow-runs/{id}', [AgenticWorkflowController::class, 'showRun'])->whereNumber('id');
+    Route::put('/workflow-runs/{id}/steps/{stepRunId}', [AgenticWorkflowController::class, 'updateStepRun'])->whereNumber('id')->whereNumber('stepRunId');
+
+    // Inter-agent messages
+    Route::get('/messages', [AgenticWorkflowController::class, 'messages']);
+    Route::post('/messages', [AgenticWorkflowController::class, 'storeMessage']);
+
+    // Reflection
+    Route::get('/reflection', [AgenticReflectionController::class, 'index']);
+    Route::post('/reflection/analyse', [AgenticReflectionController::class, 'analyse']);
+    Route::put('/reflection/optimizations/{id}', [AgenticReflectionController::class, 'updateOptimization'])->whereNumber('id');
 });
