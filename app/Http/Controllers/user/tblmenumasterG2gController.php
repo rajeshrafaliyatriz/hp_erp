@@ -12,9 +12,14 @@ use Laravel\Sanctum\PersonalAccessToken;
 class tblmenumasterG2gController extends Controller
 {
     /**
-     * Returns the full Modules -> Menus -> Submenus hierarchy from
-     * tblmenumaster_g2g as a nested tree, filtered to the rows the given
-     * profile_id has can_view rights on (tblgroupwise_rights_g2g).
+     * Returns the full Modules -> Menus -> Submenus (-> ... unlimited depth)
+     * hierarchy from tblmenumaster_g2g as a nested tree, filtered to the
+     * rows the given profile_id has can_view rights on
+     * (tblgroupwise_rights_g2g).
+     *
+     * The tree is built purely from parent_id (root nodes have
+     * parent_id = 0), so any additional nesting depth added in the
+     * database is picked up automatically without code changes.
      *
      * Mirrors the auth/param handling of
      * tblgroupwise_rightsController::displayGroupwiseRights.
@@ -45,23 +50,12 @@ class tblmenumasterG2gController extends Controller
 
         $sub_institute_id = $request->get('sub_institute_id');
 
-        $modules = tblmenumaster_g2gModel::where(['level' => 1, 'status' => 1])
+        $allMenus = tblmenumaster_g2gModel::where('status', 1)
             ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
             ->orderBy('sort_order', 'ASC')
             ->get();
 
-        $menus = tblmenumaster_g2gModel::where(['level' => 2, 'status' => 1])
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
-            ->orderBy('sort_order', 'ASC')
-            ->get();
-
-        $submenus = tblmenumaster_g2gModel::where(['level' => 3, 'status' => 1])
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
-            ->orderBy('sort_order', 'ASC')
-            ->get();
-
-        $menusByParent = $menus->groupBy('parent_id');
-        $submenusByParent = $submenus->groupBy('parent_id');
+        $menusByParent = $allMenus->groupBy('parent_id');
 
         $rightsByMenuId = tblgroupwise_rights_g2gModel::where('profile_id', $profile_id)
             ->get()
@@ -69,35 +63,12 @@ class tblmenumasterG2gController extends Controller
 
         $data = [];
 
-        foreach ($modules as $module) {
+        foreach ($menusByParent->get(0, []) as $module) {
             if (! $this->canView($module->id, $rightsByMenuId)) {
                 continue;
             }
 
-            $menuNodes = [];
-            foreach ($menusByParent->get($module->id, []) as $menu) {
-                if (! $this->canView($menu->id, $rightsByMenuId)) {
-                    continue;
-                }
-
-                $submenuNodes = [];
-                foreach ($submenusByParent->get($menu->id, []) as $submenu) {
-                    if (! $this->canView($submenu->id, $rightsByMenuId)) {
-                        continue;
-                    }
-
-                    $submenuNodes[] = $this->formatNode($submenu, $rightsByMenuId);
-                }
-
-                $hadSubmenus = $submenusByParent->has($menu->id);
-                if ($hadSubmenus && empty($submenuNodes)) {
-                    continue;
-                }
-
-                $menuNode = $this->formatNode($menu, $rightsByMenuId);
-                $menuNode['submenus'] = $submenuNodes;
-                $menuNodes[] = $menuNode;
-            }
+            $menuNodes = $this->buildMenuTree($module->id, $menusByParent, $rightsByMenuId);
 
             $hadMenus = $menusByParent->has($module->id);
             if ($hadMenus && empty($menuNodes)) {
@@ -114,6 +85,35 @@ class tblmenumasterG2gController extends Controller
             'message' => 'Success',
             'data' => $data,
         ]);
+    }
+
+    /**
+     * Recursively builds the submenus array for the given parent menu id,
+     * checking can_view rights at every level so it works for any nesting
+     * depth without needing to know the depth in advance.
+     */
+    private function buildMenuTree($parentId, $menusByParent, $rightsByMenuId): array
+    {
+        $nodes = [];
+
+        foreach ($menusByParent->get($parentId, []) as $menu) {
+            if (! $this->canView($menu->id, $rightsByMenuId)) {
+                continue;
+            }
+
+            $submenuNodes = $this->buildMenuTree($menu->id, $menusByParent, $rightsByMenuId);
+
+            $hadSubmenus = $menusByParent->has($menu->id);
+            if ($hadSubmenus && empty($submenuNodes)) {
+                continue;
+            }
+
+            $menuNode = $this->formatNode($menu, $rightsByMenuId);
+            $menuNode['submenus'] = $submenuNodes;
+            $nodes[] = $menuNode;
+        }
+
+        return $nodes;
     }
 
     private function canView($menuId, $rightsByMenuId): bool
