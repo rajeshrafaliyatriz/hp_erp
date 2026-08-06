@@ -1,0 +1,539 @@
+[
+ {
+  "column": "status",
+  "writers": 63,
+  "union": [
+   "ARCHIVED",
+   "Active",
+   "Applied",
+   "Approved",
+   "Cancelled",
+   "Completed",
+   "Data synced to Neo4j",
+   "Not Started",
+   "Notice Period",
+   "PENDING",
+   "Pending",
+   "Rejected",
+   "Review Status",
+   "Status",
+   "Submitted",
+   "active",
+   "approved",
+   "boolean",
+   "cancelled",
+   "completed",
+   "current",
+   "draft",
+   "enrolled",
+   "error",
+   "healthy",
+   "idle",
+   "in-progress",
+   "in_progress",
+   "inactive",
+   "integer",
+   "open",
+   "pending",
+   "processing",
+   "registered",
+   "rejected",
+   "requested",
+   "required",
+   "resignation-submitted",
+   "revoked",
+   "running",
+   "status",
+   "submitted",
+   "success",
+   "superseded",
+   "upcoming",
+   "warning"
+  ],
+  "per_writer": {
+   "AJAXController.php": [
+    "success"
+   ],
+   "CareerJourneyController.php": [
+    "upcoming"
+   ],
+   "dashboardController.php": [
+    "Active"
+   ],
+   "Neo4jSyncController.php": [
+    "Data synced to Neo4j"
+   ],
+   "AiCourseController.php": [
+    "pending"
+   ],
+   "ExcelAutomationAgentController.php": [
+    "Status",
+    "success"
+   ],
+   "LmsGovernanceController.php": [
+    "error",
+    "healthy",
+    "success",
+    "warning"
+   ],
+   "LmsLearningController.php": [
+    "active",
+    "completed",
+    "superseded"
+   ],
+   "LmsSessionController.php": [
+    "cancelled",
+    "registered"
+   ],
+   "AgentController.php": [
+    "draft"
+   ],
+   "ReflectionController.php": [
+    "open"
+   ],
+   "RunController.php": [
+    "cancelled",
+    "error",
+    "running",
+    "success"
+   ],
+   "ToolController.php": [
+    "success"
+   ],
+   "WorkflowController.php": [
+    "completed",
+    "error",
+    "idle",
+    "processing",
+    "running"
+   ],
+   "ApprovalController.php": [
+    "approved",
+    "pending",
+    "rejected"
+   ],
+   "AssessmentCycleController.php": [
+    "Completed",
+    "Status",
+    "active"
+   ],
+   "CertificationController.php": [
+    "Status",
+    "pending",
+    "revoked",
+    "status"
+   ],
+   "CertificationRequirementController.php": [
+    "status"
+   ],
+   "CompetencyController.php": [
+    "Active"
+   ],
+   "DevelopmentPlanController.php": [
+    "Status",
+    "status"
+   ],
+   "FrameworkController.php": [
+    "Status",
+    "draft"
+   ],
+   "LearningAssignmentController.php": [
+    "Status"
+   ],
+   "MappingReviewController.php": [
+    "Review Status",
+    "approved",
+    "pending"
+   ],
+   "CompetencyDashboardController.php": [
+    "error",
+    "success"
+   ],
+   "LeaveRequestApiController.php": [
+    "completed",
+    "pending"
+   ],
+   "MobilityApplicationController.php": [
+    "Applied"
+   ],
+   "OffboardingController.php": [
+    "Notice Period",
+    "Pending",
+    "Submitted"
+   ],
+   "OnboardingDocumentController.php": [
+    "Status",
+    "requested",
+    "submitted"
+   ],
+   "OnboardingJourneyController.php": [
+    "Status",
+    "completed",
+    "pending"
+   ],
+   "OnboardingOverviewController.php": [
+    "in-progress"
+   ],
+   "OnboardingProbationController.php": [
+    "completed"
+   ],
+   "OnboardingTaskController.php": [
+    "Status"
+   ],
+   "PerformanceAppraisalController.php": [
+    "Status"
+   ],
+   "PerformanceBonusController.php": [
+    "Status"
+   ],
+   "PerformanceCalibrationController.php": [
+    "Status",
+    "in_progress"
+   ],
+   "PerformanceCompensationController.php": [
+    "Status"
+   ],
+   "PerformanceCycleController.php": [
+    "Status",
+    "pending"
+   ],
+   "PerformanceGoalController.php": [
+    "Status"
+   ],
+   "PerformanceReviewController.php": [
+    "Status",
+    "current",
+    "upcoming"
+   ],
+   "SchoolSetupController.php": [
+    "Active"
+   ],
+   "MobilityRequestController.php": [
+    "pending"
+   ],
+   "OffboardingCaseController.php": [
+    "pending",
+    "resignation-submitted"
+   ],
+   "DeadlineExtensionController.php": [
+    "approved",
+    "pending",
+    "rejected"
+   ],
+   "LegacyTaskController.php": [
+    "PENDING"
+   ],
+   "ProjectController.php": [
+    "ARCHIVED"
+   ],
+   "SkillDashboardController.php": [
+    "Active"
+   ],
+   "DepartmentSkillController.php": [
+    "Active"
+   ],
+   "HrmsController.php": [
+    "required"
+   ],
+   "HrmsLeaveController.php": [
+    "Approved",
+    "Cancelled",
+    "Pending",
+    "Rejected"
+   ],
+   "jobroleLibrary1Controller.php": [
+    "Active"
+   ],
+   "jobroleLibraryController.php": [
+    "Active"
+   ],
+   "skillLibraryController.php": [
+    "Active"
+   ],
+   "assignmentController.php": [
+    "Not Started"
+   ],
+   "LmsCourseEnrollController.php": [
+    "enrolled",
+    "pending"
+   ],
+   "OrganizationGrowthController.php": [
+    "error",
+    "success",
+    "warning"
+   ],
+   "EmployeeDirectoryAnalyticsController.php": [
+    "error",
+    "success"
+   ],
+   "TalentOfferController.php": [
+    "draft",
+    "rejected"
+   ],
+   "talent_jobpostingcontroller.php": [
+    "inactive"
+   ],
+   "feedbackController.php": [
+    "Completed"
+   ],
+   "UserRatingDetailController.php": [
+    "error",
+    "success"
+   ],
+   "GammaApi.php": [
+    "integer"
+   ],
+   "HrmsLeaveRolePermission.php": [
+    "boolean"
+   ],
+   "TaskDependencyResolutionService.php": [
+    "PENDING"
+   ]
+  }
+ },
+ {
+  "column": "type",
+  "writers": 16,
+  "union": [
+   "API",
+   "Assessment Type",
+   "Full Time",
+   "absent",
+   "application",
+   "control",
+   "course_completed",
+   "course_enrolled",
+   "deadline_due",
+   "exact_display",
+   "hidden",
+   "incomplete",
+   "jobrole",
+   "json_object",
+   "like_display",
+   "mobility",
+   "offboarding",
+   "offer",
+   "onboarding",
+   "performance",
+   "present",
+   "required",
+   "session_upcoming",
+   "skill",
+   "subject_type",
+   "task_assigned",
+   "text"
+  ],
+  "per_writer": {
+   "AJAXController.php": [
+    "API"
+   ],
+   "SkillDevelopmentController.php": [
+    "course_completed",
+    "course_enrolled",
+    "deadline_due",
+    "session_upcoming"
+   ],
+   "SkillMatchingController.php": [
+    "exact_display",
+    "like_display"
+   ],
+   "TalentDashboardController.php": [
+    "application",
+    "mobility",
+    "offboarding",
+    "offer",
+    "onboarding",
+    "performance"
+   ],
+   "AttendanceDashboardApiController.php": [
+    "absent",
+    "incomplete",
+    "present"
+   ],
+   "AssessmentCycleController.php": [
+    "Assessment Type"
+   ],
+   "AuditController.php": [
+    "subject_type"
+   ],
+   "EmployeeCompetencyProfileController.php": [
+    "Full Time",
+    "skill"
+   ],
+   "SaveJDController.php": [
+    "jobrole"
+   ],
+   "BulkTaskController.php": [
+    "task_assigned"
+   ],
+   "taskController.php": [
+    "task_assigned"
+   ],
+   "LeaveSummaryReportController.php": [
+    "API"
+   ],
+   "instituteDetailController.php": [
+    "API"
+   ],
+   "tbluserController.php": [
+    "required"
+   ],
+   "tbluserPastEducationController.php": [
+    "control",
+    "hidden",
+    "text"
+   ],
+   "DeepSeekService.php": [
+    "json_object"
+   ]
+  }
+ },
+ {
+  "column": "stage",
+  "writers": 7,
+  "union": [
+   "Department head reviewed",
+   "HR reviewed",
+   "Identified Orphans",
+   "In Review",
+   "Mapped Candidates",
+   "Request ",
+   "Request submitted",
+   "Stage",
+   "final_review",
+   "preboarding",
+   "self_review"
+  ],
+  "per_writer": {
+   "CompetencyDashboardController.php": [
+    "Identified Orphans",
+    "In Review",
+    "Mapped Candidates"
+   ],
+   "LeaveRequestApiController.php": [
+    "Department head reviewed",
+    "HR reviewed",
+    "Request ",
+    "Request submitted"
+   ],
+   "OnboardingJourneyController.php": [
+    "Stage"
+   ],
+   "OnboardingOverviewController.php": [
+    "preboarding"
+   ],
+   "PerformanceCalibrationController.php": [
+    "final_review"
+   ],
+   "PerformanceCycleController.php": [
+    "self_review"
+   ],
+   "PerformanceReviewController.php": [
+    "Stage"
+   ]
+  }
+ },
+ {
+  "column": "approve_status",
+  "writers": 5,
+  "union": [
+   "Approved",
+   "Pending",
+   "Rejected",
+   "Status",
+   "approved"
+  ],
+  "per_writer": {
+   "CompetencyController.php": [
+    "Pending"
+   ],
+   "WorkspaceController.php": [
+    "Approved",
+    "Rejected"
+   ],
+   "jobroleLibrary1Controller.php": [
+    "approved"
+   ],
+   "jobroleLibraryController.php": [
+    "approved"
+   ],
+   "skillLibraryController.php": [
+    "Approved",
+    "Pending",
+    "Status"
+   ]
+  }
+ },
+ {
+  "column": "subject_type",
+  "writers": 3,
+  "union": [
+   "Skill Development",
+   "competency",
+   "role-mapping"
+  ],
+  "per_writer": {
+   "AJAXController.php": [
+    "Skill Development"
+   ],
+   "ApprovalController.php": [
+    "role-mapping"
+   ],
+   "skillLibraryController.php": [
+    "competency"
+   ]
+  }
+ },
+ {
+  "column": "approval_status",
+  "writers": 3,
+  "union": [
+   "Approval Status",
+   "approved",
+   "pending"
+  ],
+  "per_writer": {
+   "DevelopmentPlanController.php": [
+    "Approval Status"
+   ],
+   "LearningAssignmentController.php": [
+    "approved"
+   ],
+   "assignmentController.php": [
+    "pending"
+   ]
+  }
+ },
+ {
+  "column": "assignment_type",
+  "writers": 2,
+  "union": [
+   "Assignment Type",
+   "Optional"
+  ],
+  "per_writer": {
+   "LearningAssignmentController.php": [
+    "Assignment Type"
+   ],
+   "assignmentController.php": [
+    "Optional"
+   ]
+  }
+ },
+ {
+  "column": "document_type_id",
+  "writers": 2,
+  "union": [
+   "Document Type",
+   "integer"
+  ],
+  "per_writer": {
+   "OnboardingDocumentController.php": [
+    "Document Type"
+   ],
+   "OnboardingDocument.php": [
+    "integer"
+   ]
+  }
+ }
+]

@@ -1,0 +1,740 @@
+verb,uri,controller,method,api_line,authorization,how,menu_id,menu,confidence
+GET,"/agents",Agentic\AgentController,index,1377,AUTH-ONLY,"no role check found",,"",0
+POST,"/agents",Agentic\AgentController,store,1378,AUTH-ONLY,"no role check found",,"",0
+GET,"/agents/meta",Agentic\AgentController,meta,1376,AUTH-ONLY,"no role check found",,"",0
+GET,"/agents/{id}",Agentic\AgentController,show,1390,AUTH-ONLY,"no role check found",,"",0
+PUT,"/agents/{id}",Agentic\AgentController,update,1391,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/agents/{id}",Agentic\AgentController,destroy,1392,AUTH-ONLY,"no role check found",,"",0
+POST,"/agents/{id}/clone",Agentic\AgentController,clone,1379,AUTH-ONLY,"no role check found",,"",0
+PATCH,"/agents/{id}/status",Agentic\AgentController,setStatus,1380,AUTH-ONLY,"no role check found",217,"Status Management",1
+GET,"/analytics/dashboard",Agentic\AnalyticsController,dashboard,1410,AUTH-ONLY,"no role check found",161,"Organization Dashboard",1
+GET,"/analytics/overview",Agentic\AnalyticsController,overview,1411,AUTH-ONLY,"no role check found",184,"Employee Directory Analytics Report",1
+GET,"/agents/{id}/config",Agentic\ConfigController,show,1385,AUTH-ONLY,"no role check found",,"",0
+POST,"/agents/{id}/config",Agentic\ConfigController,update,1386,AUTH-ONLY,"no role check found",,"",0
+PUT,"/agents/{id}/config",Agentic\ConfigController,update,1387,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/agents/{id}/config",Agentic\ConfigController,destroy,1388,AUTH-ONLY,"no role check found",,"",0
+GET,"/reflection",Agentic\ReflectionController,index,1432,AUTH-ONLY,"no role check found",193,"Reflection",1
+POST,"/reflection/analyse",Agentic\ReflectionController,analyse,1433,AUTH-ONLY,"no role check found",193,"Reflection",1
+PUT,"/reflection/optimizations/{id}",Agentic\ReflectionController,updateOptimization,1434,AUTH-ONLY,"no role check found",193,"Reflection",1
+POST,"/agents/{id}/run",Agentic\RunController,start,1381,AUTH-ONLY,"no role check found",,"",0
+GET,"/runs",Agentic\RunController,index,1395,AUTH-ONLY,"no role check found",,"",0
+GET,"/runs/{id}",Agentic\RunController,show,1399,AUTH-ONLY,"no role check found",,"",0
+PUT,"/runs/{id}",Agentic\RunController,update,1400,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/runs/{id}",Agentic\RunController,destroy,1401,AUTH-ONLY,"no role check found",,"",0
+POST,"/runs/{id}/cancel",Agentic\RunController,cancel,1398,AUTH-ONLY,"no role check found",,"",0
+POST,"/runs/{id}/tasks",Agentic\RunController,addTask,1397,AUTH-ONLY,"no role check found",211,"My Tasks",1
+GET,"/runs/{id}/trace",Agentic\RunController,trace,1396,AUTH-ONLY,"no role check found",,"",0
+GET,"/tools",Agentic\ToolController,catalogue,1404,AUTH-ONLY,"no role check found",9,"Communication Tools",1
+GET,"/tools/invocations",Agentic\ToolController,invocations,1405,AUTH-ONLY,"no role check found",9,"Communication Tools",1
+GET,"/tools/invocations/{id}",Agentic\ToolController,showInvocation,1406,AUTH-ONLY,"no role check found",9,"Communication Tools",1
+POST,"/tools/{tool}/invoke",Agentic\ToolController,invoke,1407,AUTH-ONLY,"no role check found",9,"Communication Tools",1
+GET,"/messages",Agentic\WorkflowController,messages,1428,AUTH-ONLY,"no role check found",,"",0
+POST,"/messages",Agentic\WorkflowController,storeMessage,1429,AUTH-ONLY,"no role check found",,"",0
+GET,"/workflow-runs/{id}",Agentic\WorkflowController,showRun,1424,AUTH-ONLY,"no role check found",,"",0
+PUT,"/workflow-runs/{id}/steps/{stepRunId}",Agentic\WorkflowController,updateStepRun,1425,AUTH-ONLY,"no role check found",,"",0
+GET,"/workflows",Agentic\WorkflowController,index,1414,AUTH-ONLY,"no role check found",,"",0
+POST,"/workflows",Agentic\WorkflowController,store,1415,AUTH-ONLY,"no role check found",,"",0
+GET,"/workflows/{id}",Agentic\WorkflowController,show,1420,AUTH-ONLY,"no role check found",,"",0
+PUT,"/workflows/{id}",Agentic\WorkflowController,update,1421,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/workflows/{id}",Agentic\WorkflowController,destroy,1422,AUTH-ONLY,"no role check found",,"",0
+POST,"/workflows/{id}/run",Agentic\WorkflowController,run,1419,AUTH-ONLY,"no role check found",,"",0
+POST,"/workflows/{id}/steps",Agentic\WorkflowController,addStep,1416,AUTH-ONLY,"no role check found",,"",0
+PUT,"/workflows/{id}/steps/{stepId}",Agentic\WorkflowController,updateStep,1417,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/workflows/{id}/steps/{stepId}",Agentic\WorkflowController,deleteStep,1418,AUTH-ONLY,"no role check found",,"",0
+GET,"/lms/ai/outlines",Api\AiCourseController,outlines,752,AUTH-ONLY,"no role check found",,"",0
+GET,"/lms/ai/presentation/{generationId}",Api\AiCourseController,generationStatus,755,AUTH-ONLY,"no role check found",,"",0
+GET,"/lms/ai/status",Api\AiCourseController,status,750,AUTH-ONLY,"no role check found",217,"Status Management",1
+GET,"/competency-dashboard",Api\CompetencyDashboardController,index,236,AUTH-ONLY,"token required, no role check",161,"Organization Dashboard",1
+GET,"/excel-agent/credentials",Api\ExcelAutomationAgentController,credentialStatus,984,AUTH-ONLY,"no role check found",188,"Agent Dashboard",1
+POST,"/excel-agent/credentials",Api\ExcelAutomationAgentController,saveCredentials,985,AUTH-ONLY,"no role check found",188,"Agent Dashboard",1
+GET,"/excel-agent/template",Api\ExcelAutomationAgentController,downloadTemplate,990,AUTH-ONLY,"no role check found",10,"Template Management",1
+POST,"/excel-agent/test-connection",Api\ExcelAutomationAgentController,testConnection,986,AUTH-ONLY,"no role check found",188,"Agent Dashboard",1
+POST,"/excel-agent/upload",Api\ExcelAutomationAgentController,upload,987,AUTH-ONLY,"no role check found",188,"Agent Dashboard",1
+GET,"gamma-api/sub-institute/{subInstituteId}",Api\GammaApiController,getBySubInstituteId,770,AUTH-ONLY,"no role check found",,"",0
+GET,"/industries",Api\IndustryController,index,235,AUTH-ONLY,"no role check found",,"",0
+GET,"/industry/{id}/departments",Api\IndustryController,departments,234,AUTH-ONLY,"no role check found",,"",0
+GET,"/lms/assessments",Api\LmsAssessmentController,index,683,AUTH-ONLY,"no role check found",155,"Assessments",1
+GET,"/lms/assessments/questions",Api\LmsAssessmentController,questions,682,AUTH-ONLY,"no role check found",155,"Assessments",1
+GET,"/lms/courses",Api\LmsCourseController,index,691,AUTH-ONLY,"no role check found",,"",0
+POST,"/lms/courses",Api\LmsCourseController,store,692,AUTH-ONLY,"no role check found",,"",0
+POST,"/lms/courses/bulk",Api\LmsCourseController,bulk,690,AUTH-ONLY,"no role check found",,"",0
+GET,"/lms/courses/filters",Api\LmsCourseController,filters,689,AUTH-ONLY,"no role check found",,"",0
+GET,"/lms/courses/kpis",Api\LmsCourseController,kpis,688,AUTH-ONLY,"no role check found",,"",0
+GET,"/lms/courses/{id}",Api\LmsCourseController,show,693,AUTH-ONLY,"no role check found",,"",0
+PUT,"/lms/courses/{id}",Api\LmsCourseController,update,694,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/lms/courses/{id}",Api\LmsCourseController,destroy,695,AUTH-ONLY,"no role check found",,"",0
+GET,"/lms/governance/system-health",Api\LmsGovernanceController,systemHealth,642,AUTH-ONLY,"no role check found",85,"Administration & Governance",1
+GET,"/lms/learning/assessments",Api\LmsLearningController,assessments,706,AUTH-ONLY,"no role check found",155,"Assessments",1
+POST,"/lms/learning/certificates",Api\LmsLearningController,issueCertificate,719,AUTH-ONLY,"no role check found",74,"Learning",1
+GET,"/lms/learning/certificates/verify/{code}",Api\LmsLearningController,verifyCertificate,723,AUTH-ONLY,"no role check found",74,"Learning",1
+GET,"/lms/learning/courses",Api\LmsLearningController,courses,705,AUTH-ONLY,"no role check found",74,"Learning",1
+GET,"/lms/learning/courses/{courseId}",Api\LmsLearningController,course,732,AUTH-ONLY,"no role check found",74,"Learning",1
+GET,"/lms/learning/discussions",Api\LmsLearningController,discussions,728,AUTH-ONLY,"no role check found",74,"Learning",1
+POST,"/lms/learning/discussions",Api\LmsLearningController,storeDiscussion,729,AUTH-ONLY,"no role check found",74,"Learning",1
+DELETE,"/lms/learning/discussions/{id}",Api\LmsLearningController,destroyDiscussion,731,AUTH-ONLY,"no role check found",74,"Learning",1
+POST,"/lms/learning/discussions/{id}/replies",Api\LmsLearningController,replyToDiscussion,730,AUTH-ONLY,"no role check found",74,"Learning",1
+GET,"/lms/learning/notes",Api\LmsLearningController,notes,708,AUTH-ONLY,"no role check found",74,"Learning",1
+POST,"/lms/learning/notes",Api\LmsLearningController,storeNote,709,AUTH-ONLY,"no role check found",74,"Learning",1
+PUT,"/lms/learning/notes/{id}",Api\LmsLearningController,updateNote,710,AUTH-ONLY,"no role check found",74,"Learning",1
+DELETE,"/lms/learning/notes/{id}",Api\LmsLearningController,destroyNote,711,AUTH-ONLY,"no role check found",74,"Learning",1
+POST,"/lms/learning/progress",Api\LmsLearningController,saveProgress,707,AUTH-ONLY,"no role check found",18,"Task Assignment & Progress",1
+GET,"/verify/certificate/{code}",Api\LmsLearningController,verifyCertificate,727,AUTH-ONLY,"no role check found",110,"Salary Certificate",1
+GET,"/lms/governance/integrations",Api\LmsPartnerController,integrations,670,AUTH-ONLY,"no role check found",85,"Administration & Governance",1
+GET,"/lms/governance/trainers",Api\LmsPartnerController,trainers,660,AUTH-ONLY,"no role check found",85,"Administration & Governance",1
+GET,"/lms/governance/vendors",Api\LmsPartnerController,vendors,665,AUTH-ONLY,"no role check found",85,"Administration & Governance",1
+GET,"/lms/sessions",Api\LmsSessionController,index,742,AUTH-ONLY,"no role check found",82,"Sessions & Calendar",1
+GET,"/lms/sessions/stats",Api\LmsSessionController,stats,740,AUTH-ONLY,"no role check found",82,"Sessions & Calendar",1
+GET,"/lms/sessions/{id}/attendees",Api\LmsSessionController,attendees,744,AUTH-ONLY,"no role check found",82,"Sessions & Calendar",1
+GET,"/skill-development/achievements",Api\SkillDevelopmentController,getUserAchievements,240,AUTH-ONLY,"no role check found",26,"Skill Gap Analysis",1
+GET,"/skill-development/calendar",Api\SkillDevelopmentController,getLearningCalendar,242,AUTH-ONLY,"no role check found",26,"Skill Gap Analysis",1
+GET,"/skill-development/peer-comparison",Api\SkillDevelopmentController,getPeerComparison,241,AUTH-ONLY,"no role check found",26,"Skill Gap Analysis",1
+GET,"/skill-development/progress",Api\SkillDevelopmentController,getSkillProgress,237,AUTH-ONLY,"no role check found",18,"Task Assignment & Progress",1
+GET,"/skill-development/recent-activity",Api\SkillDevelopmentController,getRecentActivity,243,AUTH-ONLY,"no role check found",26,"Skill Gap Analysis",1
+GET,"/skill-development/streak",Api\SkillDevelopmentController,getLearningStreak,238,AUTH-ONLY,"no role check found",26,"Skill Gap Analysis",1
+GET,"/skill-development/weekly-goal",Api\SkillDevelopmentController,getWeeklyLearningGoal,239,AUTH-ONLY,"no role check found",26,"Skill Gap Analysis",1
+GET,"/",Api\SkillHeatmapController,heatmap,976,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/drill",Api\SkillHeatmapController,drill,979,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/user-rejected-tasks",Api\SkillMatchingController,getUserRejectedTasks,852,AUTH-ONLY,"token required, no role check",8,"User Management",1
+GET,"/user-rejected-tasks-courses",Api\SkillMatchingController,getCoursesForUserRejectedTasksSkills,853,AUTH-ONLY,"token required, no role check",8,"User Management",1
+POST,"/employee/course-suggestions",Api\SuggestedCourseController,store,855,AUTH-ONLY,"token required, no role check",21,"Suggestion for employee",1
+GET,"/talent/dashboard",Api\TalentDashboardController,index,1152,AUTH-ONLY,"no role check found",46,"Talent Dashboard",2
+GET,"/talent/dashboard/filters",Api\TalentDashboardController,filters,1153,AUTH-ONLY,"no role check found",46,"Talent Dashboard",2
+GET,"/tasks/counts",Api\TaskController,getTaskCounts,858,AUTH-ONLY,"no role check found",211,"My Tasks",1
+GET,"/tasks/daily",Api\TaskController,getDailyTasks,859,AUTH-ONLY,"no role check found",211,"My Tasks",1
+GET,"/tasks/monthly",Api\TaskController,getMonthlyTasks,861,AUTH-ONLY,"no role check found",140,"Monthly Payroll Report",1
+GET,"/tasks/weekly",Api\TaskController,getWeeklyTasks,860,AUTH-ONLY,"no role check found",211,"My Tasks",1
+POST,"/import-users",Api\UserImportController,importUsers,983,AUTH-ONLY,"no role check found",,"",0
+POST,"/user-journey-logs",Api\UserJourneyLogController,store,959,AUTH-ONLY,"no role check found",8,"User Management",1
+POST,"/user-journey-logs/bulk",Api\UserJourneyLogController,storeBulk,960,AUTH-ONLY,"no role check found",8,"User Management",1
+GET,"/department/{id}/jobroles",Api\jobrolecontroller,getJobRolesByDepartment,233,AUTH-ONLY,"no role check found",13,"Department Management",1
+GET,"jobrole/{id}/skills",Api\jobrolecontroller,skills,232,AUTH-ONLY,"no role check found",17,"Search Employees by Skills",1
+GET,"skills/search",Api\jobrolecontroller,searchskills,231,AUTH-ONLY,"no role check found",17,"Search Employees by Skills",2
+GET,"/kpi",Attendance\AttendanceDashboardApiController,kpi,598,AUTH-ONLY,"no role check found",,"",0
+GET,"/weekly-summary",Attendance\AttendanceDashboardApiController,weeklySummary,597,AUTH-ONLY,"no role check found",,"",0
+GET,"/employees",Attendance\AttendanceReportApiController,employees,594,AUTH-ONLY,"no role check found",17,"Search Employees by Skills",1
+GET,"/report-filters",Attendance\AttendanceReportApiController,filters,593,AUTH-ONLY,"no role check found",162,"Attendance Report",1
+GET,"/my-attendance",Attendance\AttendanceTrackingApiController,myAttendance,588,AUTH-ONLY,"no role check found",93,"Attendance Management",1
+POST,"/punch-in",Attendance\AttendanceTrackingApiController,punchIn,589,AUTH-ONLY,"no role check found",,"",0
+POST,"/punch-out",Attendance\AttendanceTrackingApiController,punchOut,590,AUTH-ONLY,"no role check found",,"",0
+GET,"/career-journey",CareerJourneyController,getCareerJourney,1004,AUTH-ONLY,"token required, no role check",157,"Development & Career Paths",1
+GET,"/competency/alignment",CompetencyDashboard\CompetencyDashboardController,getAlignment,251,AUTH-ONLY,"token required, no role check",2,"Competency Management",1
+GET,"/competency/coverage-scorecards",CompetencyDashboard\CompetencyDashboardController,getCoverageScorecards,248,AUTH-ONLY,"token required, no role check",2,"Competency Management",1
+GET,"/competency/health-radar",CompetencyDashboard\CompetencyDashboardController,getHealthRadar,249,AUTH-ONLY,"token required, no role check",2,"Competency Management",1
+GET,"/competency/kpi",CompetencyDashboard\CompetencyDashboardController,getKPI,246,AUTH-ONLY,"token required, no role check",2,"Competency Management",1
+GET,"/competency/role-similarity",CompetencyDashboard\CompetencyDashboardController,getRoleSimilarity,247,AUTH-ONLY,"token required, no role check",154,"Framework & Role Mapping",2
+GET,"/competency/skills-management-funnel",CompetencyDashboard\CompetencyDashboardController,getSkillsManagementFunnel,250,AUTH-ONLY,"token required, no role check",17,"Search Employees by Skills",2
+GET,"/competency/workload-heatmap",CompetencyDashboard\CompetencyDashboardController,getWorkloadHeatmap,245,AUTH-ONLY,"token required, no role check",2,"Competency Management",1
+GET,"/competency/approvals",Competency\ApprovalController,index,274,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/approvals",Competency\ApprovalController,store,275,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/approvals/bulk-approve",Competency\ApprovalController,bulkApprove,276,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/approvals/for/{type}/{id}",Competency\ApprovalController,forSubject,277,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/approvals/{id}",Competency\ApprovalController,update,278,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessments",Competency\AssessmentController,index,367,AUTH-ONLY,"no role check found",155,"Assessments",2
+POST,"/competency/assessments",Competency\AssessmentController,store,368,AUTH-ONLY,"no role check found",155,"Assessments",2
+DELETE,"/competency/assessments/{id}",Competency\AssessmentController,destroy,369,AUTH-ONLY,"no role check found",155,"Assessments",2
+GET,"/competency/assessment-cycles",Competency\AssessmentCycleController,index,326,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/assessment-cycles",Competency\AssessmentCycleController,store,327,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/approvals",Competency\AssessmentCycleController,approvals,331,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/assessment-cycles/assessments/{id}/review",Competency\AssessmentCycleController,reviewAssessment,333,AUTH-ONLY,"no role check found",155,"Assessments",2
+GET,"/competency/assessment-cycles/calibration",Competency\AssessmentCycleController,calibration,330,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/closed",Competency\AssessmentCycleController,closed,332,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/configuration",Competency\AssessmentCycleController,configuration,335,AUTH-ONLY,"no role check found",14,"Admin and Configuration Module",1
+PUT,"/competency/assessment-cycles/configuration",Competency\AssessmentCycleController,saveConfiguration,336,AUTH-ONLY,"no role check found",14,"Admin and Configuration Module",1
+GET,"/competency/assessment-cycles/metrics",Competency\AssessmentCycleController,metrics,328,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/participant-ratings",Competency\AssessmentCycleController,participantRatings,329,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/{id}",Competency\AssessmentCycleController,show,342,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/assessment-cycles/{id}",Competency\AssessmentCycleController,update,343,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/{id}/audit-trail",Competency\AssessmentCycleController,auditTrail,341,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/{id}/calibration-queue",Competency\AssessmentCycleController,calibrationQueue,340,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/{id}/participants",Competency\AssessmentCycleController,participants,337,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/assessment-cycles/{id}/ratings",Competency\AssessmentCycleController,ratings,339,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/audit",Competency\AuditController,index,501,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/audit/export",Competency\AuditController,export,498,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/audit/filters",Competency\AuditController,filters,497,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/audit/metrics",Competency\AuditController,metrics,496,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/audit/user-actions",Competency\AuditController,userActions,499,AUTH-ONLY,"no role check found",8,"User Management",1
+GET,"/competency/audit/user-actions/{userId}",Competency\AuditController,userActivity,500,AUTH-ONLY,"no role check found",8,"User Management",1
+GET,"/competency/audit/{id}",Competency\AuditController,show,502,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/career-paths",Competency\CareerPathController,index,405,AUTH-ONLY,"no role check found",157,"Development & Career Paths",3
+POST,"/competency/career-paths",Competency\CareerPathController,store,406,AUTH-ONLY,"no role check found",157,"Development & Career Paths",3
+GET,"/competency/career-paths/explorer",Competency\CareerPathController,explorer,403,AUTH-ONLY,"no role check found",157,"Development & Career Paths",3
+GET,"/competency/career-paths/role-options",Competency\CareerPathController,roleOptions,404,AUTH-ONLY,"no role check found",157,"Development & Career Paths",3
+GET,"/competency/career-paths/{id}",Competency\CareerPathController,show,407,AUTH-ONLY,"no role check found",157,"Development & Career Paths",3
+PUT,"/competency/career-paths/{id}",Competency\CareerPathController,update,408,AUTH-ONLY,"no role check found",157,"Development & Career Paths",3
+DELETE,"/competency/career-paths/{id}",Competency\CareerPathController,destroy,409,AUTH-ONLY,"no role check found",157,"Development & Career Paths",3
+GET,"/competency/certifications",Competency\CertificationController,index,371,AUTH-ONLY,"no role check found",158,"Certifications",2
+POST,"/competency/certifications",Competency\CertificationController,store,372,AUTH-ONLY,"no role check found",158,"Certifications",2
+POST,"/competency/certifications/bulk",Competency\CertificationController,bulk,470,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certifications/export",Competency\CertificationController,export,469,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certifications/filters",Competency\CertificationController,filters,468,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certifications/metrics",Competency\CertificationController,metrics,467,AUTH-ONLY,"no role check found",158,"Certifications",2
+DELETE,"/competency/certifications/{id}",Competency\CertificationController,destroy,373,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certifications/{id}",Competency\CertificationController,show,472,AUTH-ONLY,"no role check found",158,"Certifications",2
+PUT,"/competency/certifications/{id}",Competency\CertificationController,update,473,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certifications/{id}/compliance",Competency\CertificationController,compliance,475,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certifications/{id}/documents",Competency\CertificationController,documents,478,AUTH-ONLY,"no role check found",158,"Certifications",2
+POST,"/competency/certifications/{id}/documents",Competency\CertificationController,storeDocument,479,AUTH-ONLY,"no role check found",158,"Certifications",2
+DELETE,"/competency/certifications/{id}/documents/{documentId}",Competency\CertificationController,destroyDocument,480,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certifications/{id}/history",Competency\CertificationController,history,477,AUTH-ONLY,"no role check found",158,"Certifications",2
+POST,"/competency/certifications/{id}/notes",Competency\CertificationController,addNote,474,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certifications/{id}/requirements",Competency\CertificationController,requirements,476,AUTH-ONLY,"no role check found",158,"Certifications",2
+GET,"/competency/certification-requirements",Competency\CertificationRequirementController,index,483,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/certification-requirements",Competency\CertificationRequirementController,store,484,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/certification-requirements/{id}",Competency\CertificationRequirementController,update,485,AUTH-ONLY,"no role check found",2,"Competency Management",1
+DELETE,"/competency/certification-requirements/{id}",Competency\CertificationRequirementController,destroy,486,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/command-center",Competency\CommandCenterController,index,258,AUTH-ONLY,"no role check found",37,"Command Center",3
+GET,"/competency/command-center/filters",Competency\CommandCenterController,filters,259,AUTH-ONLY,"no role check found",37,"Command Center",3
+GET,"/competency/competencies",Competency\CompetencyController,index,359,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/competencies",Competency\CompetencyController,store,360,AUTH-ONLY,"no role check found",2,"Competency Management",1
+DELETE,"/competency/competencies/{id}",Competency\CompetencyController,destroy,361,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/development-plans",Competency\DevelopmentPlanController,index,375,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+POST,"/competency/development-plans",Competency\DevelopmentPlanController,store,376,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+GET,"/competency/development-plans/metrics",Competency\DevelopmentPlanController,metrics,389,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+GET,"/competency/development-plans/owners",Competency\DevelopmentPlanController,owners,390,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+DELETE,"/competency/development-plans/{id}",Competency\DevelopmentPlanController,destroy,377,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+GET,"/competency/development-plans/{id}",Competency\DevelopmentPlanController,show,393,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+PUT,"/competency/development-plans/{id}",Competency\DevelopmentPlanController,update,394,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+GET,"/competency/development-plans/{id}/actions",Competency\DevelopmentPlanController,actions,397,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+POST,"/competency/development-plans/{id}/actions",Competency\DevelopmentPlanController,storeAction,398,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+PUT,"/competency/development-plans/{id}/actions/{actionId}",Competency\DevelopmentPlanController,updateAction,399,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+DELETE,"/competency/development-plans/{id}/actions/{actionId}",Competency\DevelopmentPlanController,destroyAction,400,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+GET,"/competency/development-plans/{id}/gaps",Competency\DevelopmentPlanController,gaps,395,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+GET,"/competency/development-plans/{id}/history",Competency\DevelopmentPlanController,history,396,AUTH-ONLY,"no role check found",157,"Development & Career Paths",2
+GET,"/competency/employee-options",Competency\DevelopmentPlanController,employees,391,AUTH-ONLY,"no role check found",156,"Employee Profiles",2
+GET,"/competency/employee-profiles/{id}",Competency\EmployeeCompetencyProfileController,show,345,AUTH-ONLY,"no role check found",156,"Employee Profiles",3
+GET,"/competency/employee-profiles/{id}/available-skills",Competency\EmployeeCompetencyProfileController,availableSkills,346,AUTH-ONLY,"no role check found",156,"Employee Profiles",3
+GET,"/competency/employee-profiles/{id}/career-path",Competency\EmployeeCompetencyProfileController,careerPath,357,AUTH-ONLY,"no role check found",156,"Employee Profiles",3
+GET,"/competency/employee-profiles/{id}/certifications",Competency\EmployeeCompetencyProfileController,certifications,352,AUTH-ONLY,"no role check found",156,"Employee Profiles",3
+GET,"/competency/employee-profiles/{id}/development-plans",Competency\EmployeeCompetencyProfileController,developmentPlans,353,AUTH-ONLY,"no role check found",156,"Employee Profiles",3
+GET,"/competency/employee-profiles/{id}/evidence",Competency\EmployeeCompetencyProfileController,evidence,354,AUTH-ONLY,"no role check found",156,"Employee Profiles",3
+GET,"/competency/employee-profiles/{id}/notes",Competency\EmployeeCompetencyProfileController,notes,350,AUTH-ONLY,"no role check found",156,"Employee Profiles",3
+GET,"/competency/employee-profiles/{id}/skills/{skillId}/history",Competency\EmployeeCompetencyProfileController,skillHistory,349,AUTH-ONLY,"no role check found",156,"Employee Profiles",3
+GET,"/competency/frameworks",Competency\FrameworkController,index,363,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/frameworks",Competency\FrameworkController,store,364,AUTH-ONLY,"no role check found",2,"Competency Management",1
+DELETE,"/competency/frameworks/{id}",Competency\FrameworkController,destroy,365,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/frameworks/{id}",Competency\FrameworkController,show,437,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/frameworks/{id}",Competency\FrameworkController,update,438,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/frameworks/{id}/clone",Competency\FrameworkController,clone,439,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/frameworks/{id}/items",Competency\FrameworkController,items,440,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/frameworks/{id}/items",Competency\FrameworkController,storeItem,441,AUTH-ONLY,"no role check found",2,"Competency Management",1
+DELETE,"/competency/frameworks/{id}/items/{itemId}",Competency\FrameworkController,destroyItem,442,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/frameworks/{id}/weights",Competency\FrameworkController,weights,443,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/frameworks/{id}/weights",Competency\FrameworkController,saveWeights,444,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/learning-assignments",Competency\LearningAssignmentController,index,413,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/learning-assignments",Competency\LearningAssignmentController,store,414,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/learning-assignments/courses",Competency\LearningAssignmentController,courses,412,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/learning-assignments/{id}",Competency\LearningAssignmentController,update,415,AUTH-ONLY,"no role check found",2,"Competency Management",1
+DELETE,"/competency/learning-assignments/{id}",Competency\LearningAssignmentController,destroy,416,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/library/invisible",Competency\LibraryController,invisible,319,AUTH-ONLY,"no role check found",34,"Competency Library",2
+POST,"/competency/library/invisible",Competency\LibraryController,storeInvisible,320,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/invisible/{id}",Competency\LibraryController,showInvisible,322,AUTH-ONLY,"no role check found",34,"Competency Library",2
+PUT,"/competency/library/invisible/{id}",Competency\LibraryController,updateInvisible,323,AUTH-ONLY,"no role check found",34,"Competency Library",2
+DELETE,"/competency/library/invisible/{id}",Competency\LibraryController,destroyInvisible,324,AUTH-ONLY,"no role check found",34,"Competency Library",2
+POST,"/competency/library/invisible/{id}/clone",Competency\LibraryController,cloneInvisible,321,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/jobrole-tasks",Competency\LibraryController,jobroleTasks,302,AUTH-ONLY,"no role check found",34,"Competency Library",2
+POST,"/competency/library/jobrole-tasks",Competency\LibraryController,storeJobroleTask,303,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/jobrole-tasks/{id}",Competency\LibraryController,showJobroleTask,304,AUTH-ONLY,"no role check found",34,"Competency Library",2
+PUT,"/competency/library/jobrole-tasks/{id}",Competency\LibraryController,updateJobroleTask,305,AUTH-ONLY,"no role check found",34,"Competency Library",2
+DELETE,"/competency/library/jobrole-tasks/{id}",Competency\LibraryController,destroyJobroleTask,306,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/jobroles",Competency\LibraryController,jobroles,296,AUTH-ONLY,"no role check found",34,"Competency Library",2
+POST,"/competency/library/jobroles",Competency\LibraryController,storeJobrole,297,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/jobroles/{id}",Competency\LibraryController,showJobrole,298,AUTH-ONLY,"no role check found",34,"Competency Library",2
+PUT,"/competency/library/jobroles/{id}",Competency\LibraryController,updateJobrole,299,AUTH-ONLY,"no role check found",34,"Competency Library",2
+DELETE,"/competency/library/jobroles/{id}",Competency\LibraryController,destroyJobrole,300,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/kasa/{type}",Competency\LibraryController,kasa,309,AUTH-ONLY,"no role check found",34,"Competency Library",2
+POST,"/competency/library/kasa/{type}",Competency\LibraryController,storeKasa,310,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/kasa/{type}/{id}",Competency\LibraryController,showKasa,315,AUTH-ONLY,"no role check found",34,"Competency Library",2
+PUT,"/competency/library/kasa/{type}/{id}",Competency\LibraryController,updateKasa,316,AUTH-ONLY,"no role check found",34,"Competency Library",2
+DELETE,"/competency/library/kasa/{type}/{id}",Competency\LibraryController,destroyKasa,317,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/kasa/{type}/{id}/usage",Competency\LibraryController,usageKasa,314,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/levels-of-responsibility",Competency\LibraryController,levelsOfResponsibility,282,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/meta",Competency\LibraryController,meta,280,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/skill-taxonomy-tree",Competency\LibraryController,skillTaxonomyTree,281,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",4
+GET,"/competency/library/skills",Competency\LibraryController,skills,290,AUTH-ONLY,"no role check found",34,"Competency Library",2
+POST,"/competency/library/skills",Competency\LibraryController,storeSkill,291,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/skills/{id}",Competency\LibraryController,showSkill,292,AUTH-ONLY,"no role check found",34,"Competency Library",2
+PUT,"/competency/library/skills/{id}",Competency\LibraryController,updateSkill,293,AUTH-ONLY,"no role check found",34,"Competency Library",2
+DELETE,"/competency/library/skills/{id}",Competency\LibraryController,destroySkill,294,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/library/taxonomy/{type}",Competency\LibraryController,taxonomy,285,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+POST,"/competency/library/taxonomy/{type}",Competency\LibraryController,storeTaxonomy,286,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+PUT,"/competency/library/taxonomy/{type}",Competency\LibraryController,updateTaxonomy,287,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+DELETE,"/competency/library/taxonomy/{type}",Competency\LibraryController,destroyTaxonomy,288,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+GET,"/competency/library/work-functions",Competency\LibraryController,workFunctions,283,AUTH-ONLY,"no role check found",34,"Competency Library",2
+GET,"/competency/mapping-reviews",Competency\MappingReviewController,index,453,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",2
+POST,"/competency/mapping-reviews",Competency\MappingReviewController,store,454,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",2
+POST,"/competency/mapping-reviews/bulk-approve",Competency\MappingReviewController,bulkApprove,456,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",2
+PUT,"/competency/mapping-reviews/{id}",Competency\MappingReviewController,update,455,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",2
+PUT,"/competency/role-mapping/cell",Competency\RoleMappingController,upsertCell,449,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",3
+DELETE,"/competency/role-mapping/cell",Competency\RoleMappingController,deleteCell,450,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",3
+GET,"/competency/role-mapping/matrix",Competency\RoleMappingController,matrix,448,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",3
+GET,"/competency/role-mapping/roles",Competency\RoleMappingController,roles,447,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",3
+GET,"/competency/studio/framework-structure",Competency\StudioController,frameworkStructure,425,AUTH-ONLY,"no role check found",154,"Framework & Role Mapping",2
+GET,"/competency/studio/proficiency-scale",Competency\StudioController,proficiencyScale,426,AUTH-ONLY,"no role check found",2,"Competency Management",1
+POST,"/competency/studio/proficiency-scale",Competency\StudioController,storeLevel,427,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/studio/proficiency-scale/{id}",Competency\StudioController,updateLevel,428,AUTH-ONLY,"no role check found",2,"Competency Management",1
+DELETE,"/competency/studio/proficiency-scale/{id}",Competency\StudioController,deleteLevel,429,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/studio/summary",Competency\StudioController,summary,424,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/studio/weighting-config",Competency\StudioController,weightingConfig,433,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/studio/weighting-config",Competency\StudioController,saveWeightingConfig,434,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/competency/studio/weights",Competency\StudioController,weights,430,AUTH-ONLY,"no role check found",2,"Competency Management",1
+PUT,"/competency/studio/weights",Competency\StudioController,saveWeights,431,AUTH-ONLY,"no role check found",2,"Competency Management",1
+GET,"/departments/{deptId}/graph",DepartmentGraphController,show,178,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/employee-directory-analytics",EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController,getKPIs,838,AUTH-ONLY,"token required, no role check",184,"Employee Directory Analytics Report",3
+GET,"/employee-directory/attrition",EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController,getAttritionBreakdown,844,AUTH-ONLY,"token required, no role check",22,"Employee Directory",2
+GET,"/employee-directory/departments/distribution",EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController,getDepartmentDistribution,841,AUTH-ONLY,"token required, no role check",22,"Employee Directory",2
+GET,"/employee-directory/growth",EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController,getGrowthData,839,AUTH-ONLY,"token required, no role check",22,"Employee Directory",2
+GET,"/employee-directory/growth/stacked",EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController,getStackedGrowth,840,AUTH-ONLY,"token required, no role check",22,"Employee Directory",2
+GET,"/employee-directory/job-roles/distribution",EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController,getJobRoleDistribution,842,AUTH-ONLY,"token required, no role check",22,"Employee Directory",2
+GET,"/employee-directory/lifecycle",EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController,getLifecycle,843,AUTH-ONLY,"token required, no role check",22,"Employee Directory",2
+GET,"/employee-directory/skills/matrix",EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController,getSkillMatrix,845,AUTH-ONLY,"token required, no role check",22,"Employee Directory",2
+GET,"/kpis",EmployeeSkillCoverageMatrix\EmployeeSkillCoverageMatrixController,getKpiMetrics,819,AUTH-ONLY,"no role check found",,"",0
+GET,"/skill-coverage/matrix",EmployeeSkillCoverageMatrix\EmployeeSkillCoverageMatrixController,index,836,AUTH-ONLY,"token required, no role check",185,"Employee Skill Coverage Matrix Report",3
+GET,"/skill-gaps",EmployeeSkillCoverageMatrix\EmployeeSkillCoverageMatrixController,skillGaps,820,AUTH-ONLY,"no role check found",26,"Skill Gap Analysis",1
+GET,"/skill-trends",EmployeeSkillCoverageMatrix\EmployeeSkillCoverageMatrixController,skillTrends,837,AUTH-ONLY,"token required, no role check",26,"Skill Gap Analysis",1
+POST,"/gemini/analyze-jd",Gemini\AnalyzeJDController,analyze,848,AUTH-ONLY,"token required, no role check",,"",0
+POST,"/gemini/generate-questions",Gemini\GenerateQuestionsController,generate,850,AUTH-ONLY,"token required, no role check",,"",0
+POST,"/gemini/save-jd",Gemini\SaveJDController,save,849,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/KPI-HRITDashboard",HRITDashboard\AttendanceApiController,KPI,506,AUTH-ONLY,"no role check found",,"",0
+GET,"/attendance-weekly",HRITDashboard\AttendanceApiController,weeklySummary,505,AUTH-ONLY,"no role check found",93,"Attendance Management",1
+GET,"/employee-attendance-monthly-report",HRITDashboard\AttendanceApiController,employeeMonthlyReport,507,AUTH-ONLY,"no role check found",145,"Monthly Attendance Report",3
+GET,"/jobroles-by-department",HRITDashboard\JobroleApiController,getDepartmentWise,509,AUTH-ONLY,"token required, no role check",13,"Department Management",1
+GET,"/leave-distribution",HRITDashboard\LeaveDistribution,leaveDistribution,510,AUTH-ONLY,"no role check found",94,"Leave management",1
+GET,"/export-department-jobroles/{subInstituteId}",HRMS\DepartmentJobRoleExportController,exportToCsv,997,AUTH-ONLY,"token required, no role check",13,"Department Management",1
+GET,"/department-skills",HRMS\DepartmentSkillController,index,764,AUTH-ONLY,"no role check found",13,"Department Management",1
+POST,"designation_leave",HRMS\HrmsLeaveController,store,209,AUTH-ONLY,"token required, no role check",94,"Leave management",1
+POST,"templates/{id}/restore/{version}",HRTemplates\TemplateController,restore,1002,AUTH-ONLY,"token required, no role check",,"",0
+GET,"templates/{id}/versions",HRTemplates\TemplateController,versions,1001,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/jobroles/{jobRoleId}/graph",JobRoleGraphController,show,176,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/holidays",Leave\HolidayApiController,index,554,AUTH-ONLY,"no role check found",,"",0
+POST,"/holidays",Leave\HolidayApiController,store,555,AUTH-ONLY,"no role check found",,"",0
+PUT,"/holidays/{id}",Leave\HolidayApiController,update,556,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/holidays/{id}",Leave\HolidayApiController,destroy,557,AUTH-ONLY,"no role check found",,"",0
+GET,"/weekdays",Leave\HolidayApiController,weekdays,558,AUTH-ONLY,"no role check found",,"",0
+POST,"/weekdays",Leave\HolidayApiController,storeWeekdays,559,AUTH-ONLY,"no role check found",,"",0
+GET,"/dashboard",Leave\LeaveDashboardController,index,523,AUTH-ONLY,"no role check found",161,"Organization Dashboard",1
+GET,"/department-summary",Leave\LeaveDashboardController,departmentSummary,525,AUTH-ONLY,"no role check found",13,"Department Management",1
+GET,"/holidays/upcoming",Leave\LeaveDashboardController,upcomingHolidays,527,AUTH-ONLY,"no role check found",,"",0
+GET,"/trend",Leave\LeaveDashboardController,trend,524,AUTH-ONLY,"no role check found",,"",0
+GET,"/type-distribution",Leave\LeaveDashboardController,typeDistribution,526,AUTH-ONLY,"no role check found",105,"Payroll Type",1
+GET,"/distribution",Leave\LeaveDistributionApiController,index,569,AUTH-ONLY,"no role check found",,"",0
+GET,"/balances",Leave\LeaveOptionsController,balances,531,AUTH-ONLY,"no role check found",,"",0
+GET,"/options",Leave\LeaveOptionsController,index,530,AUTH-ONLY,"no role check found",,"",0
+GET,"/reports/balance",Leave\LeaveReportApiController,balance,544,AUTH-ONLY,"no role check found",101,"Attendance Reports",1
+GET,"/reports/register",Leave\LeaveReportApiController,register,543,AUTH-ONLY,"no role check found",128,"Register User Report",2
+GET,"/reports/summary",Leave\LeaveReportApiController,summary,542,AUTH-ONLY,"no role check found",101,"Attendance Reports",1
+GET,"/requests",Leave\LeaveRequestApiController,index,534,AUTH-ONLY,"no role check found",103,"Leave Requests",1
+POST,"/requests",Leave\LeaveRequestApiController,store,535,AUTH-ONLY,"no role check found",103,"Leave Requests",1
+POST,"/requests/bulk-decision",Leave\LeaveRequestApiController,bulkDecision,536,AUTH-ONLY,"no role check found",103,"Leave Requests",1
+GET,"/requests/{id}",Leave\LeaveRequestApiController,show,537,AUTH-ONLY,"no role check found",103,"Leave Requests",1
+DELETE,"/requests/{id}",Leave\LeaveRequestApiController,destroy,539,AUTH-ONLY,"no role check found",103,"Leave Requests",1
+POST,"/requests/{id}/decision",Leave\LeaveRequestApiController,decision,538,AUTH-ONLY,"no role check found",103,"Leave Requests",1
+GET,"/leave-types",Leave\LeaveTypeApiController,index,547,AUTH-ONLY,"no role check found",94,"Leave management",1
+POST,"/leave-types",Leave\LeaveTypeApiController,store,548,AUTH-ONLY,"no role check found",94,"Leave management",1
+PUT,"/leave-types/{id}",Leave\LeaveTypeApiController,store,549,AUTH-ONLY,"no role check found",94,"Leave management",1
+DELETE,"/leave-types/{id}",Leave\LeaveTypeApiController,destroy,551,AUTH-ONLY,"no role check found",94,"Leave management",1
+PATCH,"/leave-types/{id}/status",Leave\LeaveTypeApiController,toggleStatus,550,AUTH-ONLY,"no role check found",94,"Leave management",1
+GET,"/roles",Leave\LeaveWorkflowApiController,roles,564,AUTH-ONLY,"no role check found",,"",0
+PUT,"/roles",Leave\LeaveWorkflowApiController,saveRoles,565,AUTH-ONLY,"no role check found",,"",0
+GET,"/workflow",Leave\LeaveWorkflowApiController,workflow,562,AUTH-ONLY,"no role check found",,"",0
+PUT,"/workflow",Leave\LeaveWorkflowApiController,saveWorkflow,563,AUTH-ONLY,"no role check found",,"",0
+GET,"/applications",Mobility\MobilityApplicationController,index,1312,AUTH-ONLY,"no role check found",,"",0
+POST,"/applications",Mobility\MobilityApplicationController,store,1313,AUTH-ONLY,"no role check found",,"",0
+PUT,"/applications/{id}",Mobility\MobilityApplicationController,update,1314,AUTH-ONLY,"no role check found",,"",0
+GET,"/jobs",Mobility\MobilityJobController,index,1306,AUTH-ONLY,"no role check found",,"",0
+POST,"/jobs",Mobility\MobilityJobController,store,1307,AUTH-ONLY,"no role check found",,"",0
+GET,"/jobs/{id}",Mobility\MobilityJobController,show,1308,AUTH-ONLY,"no role check found",,"",0
+PUT,"/jobs/{id}",Mobility\MobilityJobController,update,1309,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/jobs/{id}",Mobility\MobilityJobController,destroy,1310,AUTH-ONLY,"no role check found",,"",0
+GET,"/filters",Mobility\MobilityOverviewController,filters,1303,AUTH-ONLY,"no role check found",,"",0
+GET,"/overview",Mobility\MobilityOverviewController,index,1302,AUTH-ONLY,"no role check found",,"",0
+GET,"/promotions",Mobility\MobilityPromotionController,index,1320,AUTH-ONLY,"no role check found",,"",0
+POST,"/promotions",Mobility\MobilityPromotionController,store,1321,AUTH-ONLY,"no role check found",,"",0
+PUT,"/promotions/{id}",Mobility\MobilityPromotionController,update,1322,AUTH-ONLY,"no role check found",,"",0
+GET,"/successions",Mobility\MobilitySuccessionController,index,1324,AUTH-ONLY,"no role check found",,"",0
+POST,"/successions",Mobility\MobilitySuccessionController,store,1325,AUTH-ONLY,"no role check found",,"",0
+PUT,"/successions/{id}",Mobility\MobilitySuccessionController,update,1326,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/successions/{id}",Mobility\MobilitySuccessionController,destroy,1327,AUTH-ONLY,"no role check found",,"",0
+GET,"/pools",Mobility\MobilityTalentPoolController,index,1329,AUTH-ONLY,"no role check found",,"",0
+POST,"/pools",Mobility\MobilityTalentPoolController,store,1330,AUTH-ONLY,"no role check found",,"",0
+GET,"/pools/{id}/members",Mobility\MobilityTalentPoolController,members,1331,AUTH-ONLY,"no role check found",,"",0
+POST,"/pools/{id}/members",Mobility\MobilityTalentPoolController,addMember,1332,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/pools/{id}/members/{userId}",Mobility\MobilityTalentPoolController,removeMember,1333,AUTH-ONLY,"no role check found",,"",0
+GET,"/transfers",Mobility\MobilityTransferController,index,1316,AUTH-ONLY,"no role check found",,"",0
+POST,"/transfers",Mobility\MobilityTransferController,store,1317,AUTH-ONLY,"no role check found",,"",0
+PUT,"/transfers/{id}",Mobility\MobilityTransferController,update,1318,AUTH-ONLY,"no role check found",,"",0
+POST,"nango/google/check-connection",NangoController,checkConnection,1012,AUTH-ONLY,"no role check found",,"",0
+POST,"nango/google/oauth-url",NangoController,getOauthUrl,1013,AUTH-ONLY,"no role check found",,"",0
+POST,"/newsletter/send",NewsletterController,sendNewsletter,173,AUTH-ONLY,"token required, no role check",27,"Send SMS to User",1
+GET,"/cases",Offboarding\OffboardingController,index,1345,AUTH-ONLY,"no role check found",,"",0
+POST,"/cases",Offboarding\OffboardingController,store,1346,AUTH-ONLY,"no role check found",,"",0
+GET,"/cases/{id}",Offboarding\OffboardingController,show,1347,AUTH-ONLY,"no role check found",,"",0
+PUT,"/cases/{id}",Offboarding\OffboardingController,update,1348,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/cases/{id}",Offboarding\OffboardingController,destroy,1354,AUTH-ONLY,"no role check found",,"",0
+POST,"/cases/{id}/clearance",Offboarding\OffboardingController,updateClearance,1350,AUTH-ONLY,"no role check found",,"",0
+POST,"/cases/{id}/comments",Offboarding\OffboardingController,addComment,1352,AUTH-ONLY,"no role check found",,"",0
+POST,"/cases/{id}/documents",Offboarding\OffboardingController,updateDocuments,1351,AUTH-ONLY,"no role check found",,"",0
+POST,"/cases/{id}/exit-interview",Offboarding\OffboardingController,updateExitInterview,1353,AUTH-ONLY,"no role check found",,"",0
+POST,"/cases/{id}/status",Offboarding\OffboardingController,updateStatus,1349,AUTH-ONLY,"no role check found",217,"Status Management",1
+GET,"/filters",Offboarding\OffboardingController,filters,1344,AUTH-ONLY,"no role check found",,"",0
+GET,"/overview",Offboarding\OffboardingController,overview,1343,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/onboarding/documents/{id}",Onboarding\OnboardingDocumentController,destroy,1280,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/journeys/{journeyId}/documents",Onboarding\OnboardingDocumentController,index,1277,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/journeys/{journeyId}/documents",Onboarding\OnboardingDocumentController,store,1278,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/journeys",Onboarding\OnboardingJourneyController,index,1248,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/journeys",Onboarding\OnboardingJourneyController,store,1249,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/journeys/from-offer/{offerId}",Onboarding\OnboardingJourneyController,storeFromOffer,1250,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/journeys/{id}",Onboarding\OnboardingJourneyController,show,1251,AUTH-ONLY,"no role check found",48,"Onboarding",1
+PUT,"/onboarding/journeys/{id}",Onboarding\OnboardingJourneyController,update,1252,AUTH-ONLY,"no role check found",48,"Onboarding",1
+DELETE,"/onboarding/journeys/{id}",Onboarding\OnboardingJourneyController,destroy,1253,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/journeys/{journeyId}/contacts",Onboarding\OnboardingJourneyController,contacts,1261,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/journeys/{journeyId}/stages",Onboarding\OnboardingJourneyController,stages,1256,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/journeys/{journeyId}/timeline",Onboarding\OnboardingJourneyController,timeline,1262,AUTH-ONLY,"no role check found",48,"Onboarding",1
+PUT,"/onboarding/stages/{id}",Onboarding\OnboardingJourneyController,updateStage,1257,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/stages/{id}/complete",Onboarding\OnboardingJourneyController,completeStage,1258,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/journeys/{journeyId}/notes",Onboarding\OnboardingNoteController,index,1283,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/journeys/{journeyId}/notes",Onboarding\OnboardingNoteController,store,1284,AUTH-ONLY,"no role check found",48,"Onboarding",1
+PUT,"/onboarding/notes/{id}",Onboarding\OnboardingNoteController,update,1285,AUTH-ONLY,"no role check found",48,"Onboarding",1
+DELETE,"/onboarding/notes/{id}",Onboarding\OnboardingNoteController,destroy,1286,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/filters",Onboarding\OnboardingOverviewController,filters,1245,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/overview",Onboarding\OnboardingOverviewController,index,1244,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/probation",Onboarding\OnboardingProbationController,index,1289,AUTH-ONLY,"no role check found",48,"Onboarding",1
+PUT,"/onboarding/probation/{journeyId}",Onboarding\OnboardingProbationController,update,1290,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/probation/{journeyId}/confirm",Onboarding\OnboardingProbationController,confirm,1291,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/probation/{journeyId}/extend",Onboarding\OnboardingProbationController,extend,1292,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/probation/{journeyId}/terminate",Onboarding\OnboardingProbationController,terminate,1293,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/tasks",Onboarding\OnboardingTaskController,index,1268,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/tasks",Onboarding\OnboardingTaskController,store,1269,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/tasks/bulk",Onboarding\OnboardingTaskController,bulk,1267,AUTH-ONLY,"no role check found",48,"Onboarding",1
+PUT,"/onboarding/tasks/{id}",Onboarding\OnboardingTaskController,update,1270,AUTH-ONLY,"no role check found",48,"Onboarding",1
+DELETE,"/onboarding/tasks/{id}",Onboarding\OnboardingTaskController,destroy,1272,AUTH-ONLY,"no role check found",48,"Onboarding",1
+POST,"/onboarding/tasks/{id}/complete",Onboarding\OnboardingTaskController,complete,1271,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/onboarding/workstreams",Onboarding\OnboardingTaskController,workstreams,1266,AUTH-ONLY,"no role check found",48,"Onboarding",1
+GET,"/organizations/{orgId}/graph",OrganizationGraphController,show,177,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/performance/activity",Performance\PerformanceActivityController,index,1115,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/activity/filters",Performance\PerformanceActivityController,filters,1114,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+DELETE,"/performance/attachments/{id}",Performance\PerformanceActivityController,destroyAttachment,1072,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/notes/{id}",Performance\PerformanceActivityController,updateNote,1067,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+DELETE,"/performance/notes/{id}",Performance\PerformanceActivityController,destroyNote,1068,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/reviews/{reviewId}/attachments",Performance\PerformanceActivityController,attachments,1070,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+POST,"/performance/reviews/{reviewId}/attachments",Performance\PerformanceActivityController,storeAttachment,1071,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+GET,"/performance/reviews/{reviewId}/notes",Performance\PerformanceActivityController,notes,1065,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+POST,"/performance/reviews/{reviewId}/notes",Performance\PerformanceActivityController,storeNote,1066,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+GET,"/performance/appraisals",Performance\PerformanceAppraisalController,index,1082,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+POST,"/performance/appraisals",Performance\PerformanceAppraisalController,store,1083,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+POST,"/performance/appraisals/bulk",Performance\PerformanceAppraisalController,bulk,1081,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+PUT,"/performance/appraisals/{id}",Performance\PerformanceAppraisalController,update,1084,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+DELETE,"/performance/appraisals/{id}",Performance\PerformanceAppraisalController,destroy,1086,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+PUT,"/performance/appraisals/{id}/decision",Performance\PerformanceAppraisalController,decision,1085,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+GET,"/performance/bonus",Performance\PerformanceBonusController,index,1098,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+POST,"/performance/bonus",Performance\PerformanceBonusController,store,1099,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+POST,"/performance/bonus/bulk",Performance\PerformanceBonusController,bulk,1097,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/bonus/{id}",Performance\PerformanceBonusController,update,1100,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+DELETE,"/performance/bonus/{id}",Performance\PerformanceBonusController,destroy,1102,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/bonus/{id}/decision",Performance\PerformanceBonusController,decision,1101,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/calibration-sessions",Performance\PerformanceCalibrationController,index,1105,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+POST,"/performance/calibration-sessions",Performance\PerformanceCalibrationController,store,1106,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/calibration-sessions/{id}",Performance\PerformanceCalibrationController,update,1110,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+DELETE,"/performance/calibration-sessions/{id}",Performance\PerformanceCalibrationController,destroy,1111,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/calibration-sessions/{id}/calibrate",Performance\PerformanceCalibrationController,calibrate,1108,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/calibration-sessions/{id}/grid",Performance\PerformanceCalibrationController,grid,1107,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+POST,"/performance/calibration-sessions/{id}/lock",Performance\PerformanceCalibrationController,lock,1109,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/compensation",Performance\PerformanceCompensationController,index,1090,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+POST,"/performance/compensation",Performance\PerformanceCompensationController,store,1091,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+POST,"/performance/compensation/bulk",Performance\PerformanceCompensationController,bulk,1089,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/compensation/{id}",Performance\PerformanceCompensationController,update,1092,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+DELETE,"/performance/compensation/{id}",Performance\PerformanceCompensationController,destroy,1094,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/compensation/{id}/decision",Performance\PerformanceCompensationController,decision,1093,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/cycles",Performance\PerformanceCycleController,index,1045,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/cycles/{id}",Performance\PerformanceCycleController,show,1047,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/goals",Performance\PerformanceGoalController,index,1075,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+POST,"/performance/goals",Performance\PerformanceGoalController,store,1076,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/goals/{id}",Performance\PerformanceGoalController,update,1077,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+DELETE,"/performance/goals/{id}",Performance\PerformanceGoalController,destroy,1078,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/filters",Performance\PerformanceOverviewController,filters,1040,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/overview",Performance\PerformanceOverviewController,index,1039,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/team-comparison",Performance\PerformanceOverviewController,teamComparison,1041,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/timeline",Performance\PerformanceOverviewController,timeline,1042,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/performance/reviews",Performance\PerformanceReviewController,index,1057,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+GET,"/performance/reviews/board",Performance\PerformanceReviewController,board,1055,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+GET,"/performance/reviews/{id}",Performance\PerformanceReviewController,show,1058,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+PUT,"/performance/reviews/{id}",Performance\PerformanceReviewController,update,1059,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+POST,"/performance/reviews/{id}/reminder",Performance\PerformanceReviewController,sendReminder,1061,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",2
+GET,"/performance/saved-views",Performance\PerformanceSavedViewController,index,1118,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+POST,"/performance/saved-views",Performance\PerformanceSavedViewController,store,1119,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/saved-views/{id}",Performance\PerformanceSavedViewController,update,1120,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+DELETE,"/performance/saved-views/{id}",Performance\PerformanceSavedViewController,destroy,1121,AUTH-ONLY,"no role check found",49,"Performance Reviews & Appraisals",1
+GET,"/departments/distribution",Reports\DepartmentDistributionController,index,831,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/departments/summary",Reports\DepartmentDistributionController,getDepartmentSummary,832,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/departments/sizes",Reports\DepartmentSizeController,getDepartmentSizes,833,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/employees/lifecycle",Reports\EmployeeLifecycleController,getEmployeeLifecycle,834,AUTH-ONLY,"token required, no role check",17,"Search Employees by Skills",1
+GET,"/hiring-analytics",Reports\HiringAnalyticsController,getHiringTrends,830,AUTH-ONLY,"token required, no role check",184,"Employee Directory Analytics Report",1
+GET,"/kpi",Reports\KpiController,index,829,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/organization/growth",Reports\OrganizationGrowthController,index,835,AUTH-ONLY,"token required, no role check",161,"Organization Dashboard",1
+POST,"/talent-acquisition/dropoff",TalentAcquisition\CandidateDropoffController,getDropoff,205,AUTH-ONLY,"no role check found",3,"Talent Management",1
+POST,"/talent-acquisition/funnel",TalentAcquisition\CandidateDropoffController,getFunnelData,206,AUTH-ONLY,"no role check found",3,"Talent Management",1
+POST,"/talent-acquisition/requisitions",TalentAcquisition\CandidateDropoffController,getRequisitions,207,AUTH-ONLY,"no role check found",3,"Talent Management",1
+POST,"/talent-acquisition/kpis",TalentAcquisition\TalentAcquisitionController,getKpis,204,AUTH-ONLY,"token required, no role check",3,"Talent Management",1
+GET,"/talent/admin/workflows",Talent\AdminWorkflowController,index,1219,AUTH-ONLY,"no role check found",14,"Admin and Configuration Module",1
+GET,"/talent/offboarding/exit-interviews",Talent\ExitInterviewController,index,1213,AUTH-ONLY,"no role check found",171,"Offboarding",2
+POST,"/talent/offboarding/exit-interviews",Talent\ExitInterviewController,store,1214,AUTH-ONLY,"no role check found",171,"Offboarding",2
+PUT,"/talent/offboarding/exit-interviews/{id}",Talent\ExitInterviewController,update,1215,AUTH-ONLY,"no role check found",171,"Offboarding",2
+DELETE,"/talent/offboarding/exit-interviews/{id}",Talent\ExitInterviewController,destroy,1216,AUTH-ONLY,"no role check found",171,"Offboarding",2
+GET,"/talent/mobility/internal-jobs",Talent\InternalJobController,index,1176,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+GET,"/talent/mobility/internal-jobs/{id}",Talent\InternalJobController,show,1178,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+GET,"/talent/mobility/requests",Talent\MobilityRequestController,index,1182,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+POST,"/talent/mobility/requests",Talent\MobilityRequestController,store,1183,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+GET,"/talent/mobility/requests/{id}",Talent\MobilityRequestController,show,1184,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+PUT,"/talent/mobility/requests/{id}",Talent\MobilityRequestController,update,1185,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+DELETE,"/talent/mobility/requests/{id}",Talent\MobilityRequestController,destroy,1187,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+GET,"/talent/offboarding/cases",Talent\OffboardingCaseController,index,1200,AUTH-ONLY,"no role check found",171,"Offboarding",2
+POST,"/talent/offboarding/cases",Talent\OffboardingCaseController,store,1201,AUTH-ONLY,"no role check found",171,"Offboarding",2
+GET,"/talent/offboarding/cases/{id}",Talent\OffboardingCaseController,show,1202,AUTH-ONLY,"no role check found",171,"Offboarding",2
+PUT,"/talent/offboarding/cases/{id}",Talent\OffboardingCaseController,update,1203,AUTH-ONLY,"no role check found",171,"Offboarding",2
+DELETE,"/talent/offboarding/cases/{id}",Talent\OffboardingCaseController,destroy,1205,AUTH-ONLY,"no role check found",171,"Offboarding",2
+POST,"/talent/offboarding/cases/{id}/advance",Talent\OffboardingCaseController,advance,1204,AUTH-ONLY,"no role check found",171,"Offboarding",2
+GET,"/talent/offboarding/clearances",Talent\OffboardingClearanceController,index,1207,AUTH-ONLY,"no role check found",171,"Offboarding",2
+POST,"/talent/offboarding/clearances",Talent\OffboardingClearanceController,store,1208,AUTH-ONLY,"no role check found",171,"Offboarding",2
+PUT,"/talent/offboarding/clearances/{id}",Talent\OffboardingClearanceController,update,1209,AUTH-ONLY,"no role check found",171,"Offboarding",2
+DELETE,"/talent/offboarding/clearances/{id}",Talent\OffboardingClearanceController,destroy,1211,AUTH-ONLY,"no role check found",171,"Offboarding",2
+POST,"/talent/offboarding/clearances/{id}/clear",Talent\OffboardingClearanceController,clear,1210,AUTH-ONLY,"no role check found",171,"Offboarding",2
+GET,"/talent/onboarding/documents",Talent\OnboardingDocumentController,index,1170,AUTH-ONLY,"no role check found",48,"Onboarding",2
+POST,"/talent/onboarding/documents",Talent\OnboardingDocumentController,store,1171,AUTH-ONLY,"no role check found",48,"Onboarding",2
+PUT,"/talent/onboarding/documents/{id}",Talent\OnboardingDocumentController,update,1172,AUTH-ONLY,"no role check found",48,"Onboarding",2
+DELETE,"/talent/onboarding/documents/{id}",Talent\OnboardingDocumentController,destroy,1173,AUTH-ONLY,"no role check found",48,"Onboarding",2
+GET,"/talent/onboarding/journeys",Talent\OnboardingJourneyController,index,1157,AUTH-ONLY,"no role check found",48,"Onboarding",2
+POST,"/talent/onboarding/journeys",Talent\OnboardingJourneyController,store,1158,AUTH-ONLY,"no role check found",48,"Onboarding",2
+GET,"/talent/onboarding/journeys/{id}",Talent\OnboardingJourneyController,show,1159,AUTH-ONLY,"no role check found",48,"Onboarding",2
+PUT,"/talent/onboarding/journeys/{id}",Talent\OnboardingJourneyController,update,1160,AUTH-ONLY,"no role check found",48,"Onboarding",2
+DELETE,"/talent/onboarding/journeys/{id}",Talent\OnboardingJourneyController,destroy,1162,AUTH-ONLY,"no role check found",48,"Onboarding",2
+POST,"/talent/onboarding/journeys/{id}/complete",Talent\OnboardingJourneyController,complete,1161,AUTH-ONLY,"no role check found",48,"Onboarding",2
+GET,"/talent/onboarding/tasks",Talent\OnboardingTaskController,index,1164,AUTH-ONLY,"no role check found",48,"Onboarding",2
+POST,"/talent/onboarding/tasks",Talent\OnboardingTaskController,store,1165,AUTH-ONLY,"no role check found",48,"Onboarding",2
+PUT,"/talent/onboarding/tasks/{id}",Talent\OnboardingTaskController,update,1166,AUTH-ONLY,"no role check found",48,"Onboarding",2
+DELETE,"/talent/onboarding/tasks/{id}",Talent\OnboardingTaskController,destroy,1168,AUTH-ONLY,"no role check found",48,"Onboarding",2
+POST,"/talent/onboarding/tasks/{id}/complete",Talent\OnboardingTaskController,complete,1167,AUTH-ONLY,"no role check found",48,"Onboarding",2
+GET,"/talent/succession/plans",Talent\SuccessionPlanController,index,1190,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+GET,"/talent/succession/plans/{id}",Talent\SuccessionPlanController,show,1192,AUTH-ONLY,"no role check found",52,"Mobility & Succession",2
+GET,"/workspace/{id}/activity",TaskManagement\ActivityController,index,904,AUTH-ONLY,"token required, no role check",,"",0
+POST,"/deadline-extension",TaskManagement\DeadlineExtensionController,store,1009,AUTH-ONLY,"no role check found",,"",0
+GET,"/deadline-extensions",TaskManagement\DeadlineExtensionController,index,928,AUTH-ONLY,"token required, no role check",,"",0
+POST,"/deadline-extensions",TaskManagement\DeadlineExtensionController,store,929,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/dependencies",TaskManagement\DependencyController,index,932,AUTH-ONLY,"token required, no role check",213,"Dependencies & Workstreams",1
+GET,"/search",TaskManagement\GlobalSearchController,index,890,AUTH-ONLY,"token required, no role check",17,"Search Employees by Skills",1
+GET,"/my-tasks",TaskManagement\MyTasksController,index,939,AUTH-ONLY,"token required, no role check",211,"My Tasks",1
+GET,"/my-tasks/{id}",TaskManagement\MyTasksController,show,940,AUTH-ONLY,"token required, no role check",211,"My Tasks",1
+GET,"/notifications",TaskManagement\NotificationController,index,886,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/projects",TaskManagement\ProjectController,index,943,AUTH-ONLY,"token required, no role check",212,"Projects & Workstreams",1
+GET,"/projects/options",TaskManagement\ProjectController,options,942,AUTH-ONLY,"token required, no role check",212,"Projects & Workstreams",1
+GET,"/projects/{id}",TaskManagement\ProjectController,show,945,AUTH-ONLY,"token required, no role check",212,"Projects & Workstreams",1
+GET,"/reports/delays",TaskManagement\ReportController,delays,895,AUTH-ONLY,"token required, no role check",101,"Attendance Reports",1
+GET,"/reports/productivity",TaskManagement\ReportController,productivity,894,AUTH-ONLY,"token required, no role check",196,"Human Productivity & Operational Excellence",2
+GET,"/integrations",TaskManagement\SessionController,integrations,877,AUTH-ONLY,"token required, no role check",220,"Integration",1
+GET,"/workspace/{id}/attachments",TaskManagement\TaskAttachmentVersionController,index,921,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/workspace/{id}/attachments/{version}",TaskManagement\TaskAttachmentVersionController,download,923,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/tasks",TaskManagement\TaskListController,index,889,AUTH-ONLY,"token required, no role check",211,"My Tasks",1
+GET,"/priorities",TaskManagement\TaskOptionController,priorities,873,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/statuses",TaskManagement\TaskOptionController,statuses,869,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/workspace/{id}/recurrence",TaskManagement\TaskRecurrenceController,show,916,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/workspace/{id}/schedule",TaskManagement\TaskScheduleController,show,919,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/workspace/{id}/subtasks",TaskManagement\TaskSubtaskController,index,912,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/templates",TaskManagement\TaskTemplateController,index,891,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/workspace/{id}/time-entries",TaskManagement\TaskTimeTrackingController,index,909,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/workspace",TaskManagement\WorkspaceController,index,901,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/workspace/workload",TaskManagement\WorkspaceController,workload,902,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/workspace/{id}",TaskManagement\WorkspaceController,show,903,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/ai-generated-assessment/assessment/index",ai_generated_assessment\generateAssessmentController,index,183,AUTH-ONLY,"token required, no role check",86,"Assessment List",1
+POST,"/ai-generated-assessment/assessment/store",ai_generated_assessment\generateAssessmentController,store,182,AUTH-ONLY,"token required, no role check",86,"Assessment List",1
+GET,"/ai-generated-assessment/question/index",ai_generated_assessment\generateQuestionController,index,180,AUTH-ONLY,"no role check found",86,"Assessment List",1
+POST,"/ai-generated-assessment/question/store",ai_generated_assessment\generateQuestionController,store,179,AUTH-ONLY,"no role check found",86,"Assessment List",1
+GET,"/lmsAssignment",assignment\assignmentController,index,624,AUTH-ONLY,"no role check found",,"",0
+POST,"/lmsAssignment",assignment\assignmentController,store,625,AUTH-ONLY,"no role check found",,"",0
+POST,"/lmsAssignment/bulkReview",assignment\assignmentController,bulkReview,623,AUTH-ONLY,"no role check found",,"",0
+POST,"/lmsAssignment/bulkUpdateStatus",assignment\assignmentController,bulkUpdateStatus,616,AUTH-ONLY,"no role check found",,"",0
+GET,"/lmsAssignment/enrollments",assignment\assignmentController,enrollments,620,AUTH-ONLY,"no role check found",,"",0
+POST,"/lmsAssignment/import",assignment\assignmentController,import,618,AUTH-ONLY,"no role check found",,"",0
+GET,"/lmsAssignment/learners",assignment\assignmentController,learners,619,AUTH-ONLY,"no role check found",,"",0
+POST,"/lmsAssignment/request",assignment\assignmentController,requestEnrollment,621,AUTH-ONLY,"no role check found",,"",0
+POST,"/lmsAssignment/review/{id}",assignment\assignmentController,review,622,AUTH-ONLY,"no role check found",,"",0
+GET,"/lmsAssignment/stats",assignment\assignmentController,stats,615,AUTH-ONLY,"no role check found",,"",0
+POST,"/lmsAssignment/updateStatus/{id}",assignment\assignmentController,updateStatus,617,AUTH-ONLY,"no role check found",,"",0
+GET,"/index",build_with_AI\buildwithAIController,index,767,AUTH-ONLY,"no role check found",,"",0
+POST,"/save-generated-course",build_with_AI\buildwithAIController,store,766,AUTH-ONLY,"no role check found",84,"Course Builder",1
+GET,"/candidate",candidate\candidateController,getCandidate,810,AUTH-ONLY,"no role check found",,"",0
+POST,"/evaluation",feedback\feedbackController,storeFeedback,813,AUTH-ONLY,"no role check found",,"",0
+GET,"/feedback",feedback\feedbackController,getAllFeedback,811,AUTH-ONLY,"no role check found",,"",0
+GET,"/feedback/{id}",feedback\feedbackController,getFeedback,812,AUTH-ONLY,"no role check found",,"",0
+PUT,"/feedback/{id}",feedback\feedbackController,updateFeedback,816,AUTH-ONLY,"no role check found",,"",0
+GET,"/pending-feedback",feedback\feedbackController,getPendingFeedback,814,AUTH-ONLY,"no role check found",,"",0
+POST,"bulk-task/import",front_desk\BulkTaskController,import,1007,AUTH-ONLY,"token required, no role check",18,"Task Assignment & Progress",1
+DELETE,"/interview-panel/delete/{id}",interview_panel\talent_interviewpanelController,destroy,808,AUTH-ONLY,"no role check found",,"",0
+GET,"/interview-panel/list",interview_panel\talent_interviewpanelController,getInterviewPanel,809,AUTH-ONLY,"no role check found",86,"Assessment List",1
+POST,"/interview-panel/store",interview_panel\talent_interviewpanelController,storeinterviewer,806,AUTH-ONLY,"no role check found",,"",0
+PUT,"/interview-panel/update/{id}",interview_panel\talent_interviewpanelController,update,807,AUTH-ONLY,"no role check found",,"",0
+GET,"/interview-panel/users",interview_panel\talent_interviewpanelController,getInterviewers,805,AUTH-ONLY,"no role check found",,"",0
+POST,"skill_library/competency",libraries\skillLibraryController,competencyLibraryStore,782,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+GET,"skill_library/competency-export",libraries\skillLibraryController,competencyLibraryExport,776,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+POST,"skill_library/competency-import",libraries\skillLibraryController,competencyLibraryImport,777,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+GET,"skill_library/competency-list",libraries\skillLibraryController,competencyLibraryIndex,775,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+GET,"skill_library/competency/{id}",libraries\skillLibraryController,competencyLibraryShow,781,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+PUT,"skill_library/competency/{id}",libraries\skillLibraryController,competencyLibraryUpdate,783,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+DELETE,"skill_library/competency/{id}",libraries\skillLibraryController,competencyLibraryDestroy,784,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+PUT,"skill_library/competency/{id}/archive",libraries\skillLibraryController,competencyLibraryArchive,780,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+POST,"skill_library/competency/{id}/clone",libraries\skillLibraryController,competencyLibraryClone,779,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+GET,"skill_library/competency/{id}/detail",libraries\skillLibraryController,competencyLibraryDetail,778,AUTH-ONLY,"no role check found",41,"Skill Taxonomy",3
+GET,"/available_courses",lms_course_enroll\LmsCourseEnrollController,available,608,AUTH-ONLY,"no role check found",,"",0
+GET,"/enroll",lms_course_enroll\LmsCourseEnrollController,index,606,AUTH-ONLY,"no role check found",,"",0
+PUT,"/enroll/{id}",lms_course_enroll\LmsCourseEnrollController,update,757,AUTH-ONLY,"no role check found",,"",0
+DELETE,"/enroll/{id}",lms_course_enroll\LmsCourseEnrollController,destroy,758,AUTH-ONLY,"no role check found",,"",0
+GET,"/enrolled_courses",lms_course_enroll\LmsCourseEnrollController,index,607,AUTH-ONLY,"no role check found",,"",0
+POST,"/send-otp",signupOtpController,sendOtp,171,AUTH-ONLY,"no role check found",27,"Send SMS to User",1
+POST,"/verify-otp",signupOtpController,verifyOtp,172,AUTH-ONLY,"no role check found",,"",0
+POST,"/school-setup",signup_api\SchoolSetupController,store,963,AUTH-ONLY,"no role check found",7,"Organization Setup",1
+GET,"/user-signup/{id}",signup_api\UserSignupController,show,967,AUTH-ONLY,"token required, no role check",8,"User Management",1
+DELETE,"/user-signup/{id}",signup_api\UserSignupController,destroy,969,AUTH-ONLY,"token required, no role check",8,"User Management",1
+GET,"/interviewers",talent\InterviewController,getInterviewers,802,AUTH-ONLY,"no role check found",,"",0
+POST,"/interviews/{id}/decision",talent\InterviewController,recordDecision,817,AUTH-ONLY,"no role check found",,"",0
+GET,"/positions",talent\InterviewController,getPositions,801,AUTH-ONLY,"no role check found",,"",0
+GET,"offers",talent\TalentOfferController,index,198,AUTH-ONLY,"no role check found",,"",0
+POST,"talent-offers",talent\TalentOfferController,store,199,AUTH-ONLY,"no role check found",3,"Talent Management",1
+POST,"talent-offers/{id}/reject",talent\TalentOfferController,reject,200,AUTH-ONLY,"no role check found",3,"Talent Management",1
+GET,"/candidate-pipeline",talent\talent_interviewschedulescontroller,candidatepipeline,187,AUTH-ONLY,"no role check found",,"",0
+GET,"/interview-details",talent\talent_interviewschedulescontroller,index,815,AUTH-ONLY,"no role check found",,"",0
+PUT,"/interview-schedules",talent\talent_interviewschedulescontroller,customUpdate,222,AUTH-ONLY,"no role check found",,"",0
+GET,"job-applications/candidate/{candidate_id}",talent\talent_jobapplicationcontroller,getCandidateApplications,224,AUTH-ONLY,"no role check found",,"",0
+GET,"job-applications/shortlisted",talent\talent_jobapplicationcontroller,getShortlistedCandidates,189,AUTH-ONLY,"no role check found",,"",0
+POST,"job-applications/{id}/status",talent\talent_jobapplicationcontroller,updateStatus,223,AUTH-ONLY,"no role check found",217,"Status Management",1
+GET,"/talent/team-overview",talent\talent_jobpostingcontroller,getHiringStatus,193,AUTH-ONLY,"no role check found",3,"Talent Management",1
+POST,"talent-screening-results",talent\talent_screening_results_controller,store,195,AUTH-ONLY,"no role check found",3,"Talent Management",1
+GET,"talent-screening-results/candidate/{candidate_id}",talent\talent_screening_results_controller,show,196,AUTH-ONLY,"no role check found",3,"Talent Management",1
+GET,"/user-skills/{user_id}",user\UserSkillController,getUserSkills,956,AUTH-ONLY,"no role check found",17,"Search Employees by Skills",1
+POST,"/update-fcm-token",user\tbluserController,updateFcmToken,971,AUTH-ONLY,"token required, no role check",,"",0
+GET,"/get-employee-tasks",AJAXController,getUsersMappings,803,ROLE-GATED,"in-controller profile check",21,"Suggestion for employee",1
+POST,"/lms/ai/outline",Api\AiCourseController,generateOutline,751,ROLE-GATED,"in-controller profile check",,"",0
+POST,"/lms/ai/outlines/{id}/publish",Api\AiCourseController,publish,753,ROLE-GATED,"in-controller profile check",,"",0
+POST,"/lms/ai/presentation",Api\AiCourseController,generatePresentation,754,ROLE-GATED,"in-controller profile check",,"",0
+POST,"/auth/google",Api\GoogleAuthController,login,1018,ROLE-GATED,"in-controller profile check",,"",0
+POST,"/lms/assessments",Api\LmsAssessmentController,store,684,ROLE-GATED,"in-controller profile check",155,"Assessments",1
+PUT,"/lms/assessments/{id}",Api\LmsAssessmentController,update,685,ROLE-GATED,"in-controller profile check",155,"Assessments",1
+DELETE,"/lms/assessments/{id}",Api\LmsAssessmentController,destroy,686,ROLE-GATED,"in-controller profile check",155,"Assessments",1
+GET,"/lms/governance/audit-logs",Api\LmsGovernanceController,auditLogs,643,ROLE-GATED,"in-controller profile check",221,"Audit Log",2
+GET,"/lms/governance/kpis",Api\LmsGovernanceController,kpis,641,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+GET,"/lms/governance/permissions",Api\LmsGovernanceController,permissions,657,ROLE-GATED,"in-controller profile check",23,"Role & Permissions",1
+POST,"/lms/governance/permissions",Api\LmsGovernanceController,savePermissions,658,ROLE-GATED,"in-controller profile check",23,"Role & Permissions",1
+GET,"/lms/governance/roles",Api\LmsGovernanceController,roles,652,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+POST,"/lms/governance/roles",Api\LmsGovernanceController,storeRole,653,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+PUT,"/lms/governance/roles/{id}",Api\LmsGovernanceController,updateRole,654,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+DELETE,"/lms/governance/roles/{id}",Api\LmsGovernanceController,destroyRole,655,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+GET,"/lms/governance/users",Api\LmsGovernanceController,users,645,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+POST,"/lms/governance/users",Api\LmsGovernanceController,storeUser,646,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+POST,"/lms/governance/users/import",Api\LmsGovernanceController,importUsers,648,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+PUT,"/lms/governance/users/{id}",Api\LmsGovernanceController,updateUser,649,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+DELETE,"/lms/governance/users/{id}",Api\LmsGovernanceController,destroyUser,650,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+GET,"/lms/learning/certificates",Api\LmsLearningController,certificates,718,ROLE-GATED,"in-controller profile check",74,"Learning",1
+GET,"/lms/learning/certificates/{id}/download",Api\LmsLearningController,downloadCertificate,724,ROLE-GATED,"in-controller profile check",74,"Learning",1
+POST,"/lms/learning/certificates/{id}/reissue",Api\LmsLearningController,reissueCertificate,725,ROLE-GATED,"in-controller profile check",74,"Learning",1
+POST,"/lms/learning/chapters",Api\LmsLearningController,storeChapter,712,ROLE-GATED,"in-controller profile check",74,"Learning",1
+PUT,"/lms/learning/chapters/{id}",Api\LmsLearningController,updateChapter,713,ROLE-GATED,"in-controller profile check",74,"Learning",1
+DELETE,"/lms/learning/chapters/{id}",Api\LmsLearningController,destroyChapter,714,ROLE-GATED,"in-controller profile check",74,"Learning",1
+POST,"/lms/learning/content",Api\LmsLearningController,storeContent,715,ROLE-GATED,"in-controller profile check",74,"Learning",1
+PUT,"/lms/learning/content/{id}",Api\LmsLearningController,updateContent,716,ROLE-GATED,"in-controller profile check",74,"Learning",1
+DELETE,"/lms/learning/content/{id}",Api\LmsLearningController,destroyContent,717,ROLE-GATED,"in-controller profile check",74,"Learning",1
+POST,"/lms/governance/integrations",Api\LmsPartnerController,storeIntegration,671,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+PUT,"/lms/governance/integrations/{id}",Api\LmsPartnerController,updateIntegration,672,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+DELETE,"/lms/governance/integrations/{id}",Api\LmsPartnerController,destroyIntegration,673,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+POST,"/lms/governance/trainers",Api\LmsPartnerController,storeTrainer,661,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+PUT,"/lms/governance/trainers/{id}",Api\LmsPartnerController,updateTrainer,662,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+DELETE,"/lms/governance/trainers/{id}",Api\LmsPartnerController,destroyTrainer,663,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+POST,"/lms/governance/vendors",Api\LmsPartnerController,storeVendor,666,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+PUT,"/lms/governance/vendors/{id}",Api\LmsPartnerController,updateVendor,667,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+DELETE,"/lms/governance/vendors/{id}",Api\LmsPartnerController,destroyVendor,668,ROLE-GATED,"in-controller profile check",85,"Administration & Governance",1
+POST,"/lms/sessions",Api\LmsSessionController,store,743,ROLE-GATED,"in-controller profile check",82,"Sessions & Calendar",1
+GET,"/lms/sessions/deadlines",Api\LmsSessionController,deadlines,741,ROLE-GATED,"in-controller profile check",82,"Sessions & Calendar",1
+PUT,"/lms/sessions/{id}",Api\LmsSessionController,update,747,ROLE-GATED,"in-controller profile check",82,"Sessions & Calendar",1
+DELETE,"/lms/sessions/{id}",Api\LmsSessionController,destroy,748,ROLE-GATED,"in-controller profile check",82,"Sessions & Calendar",1
+POST,"/lms/sessions/{id}/register",Api\LmsSessionController,register,745,ROLE-GATED,"in-controller profile check",82,"Sessions & Calendar",1
+DELETE,"/lms/sessions/{id}/register",Api\LmsSessionController,cancelRegistration,746,ROLE-GATED,"in-controller profile check",82,"Sessions & Calendar",1
+POST,"/competency/employee-profiles/{id}/evidence",Competency\EmployeeCompetencyProfileController,storeEvidence,355,ROLE-GATED,"profile middleware",156,"Employee Profiles",3
+DELETE,"/competency/employee-profiles/{id}/evidence/{evidenceId}",Competency\EmployeeCompetencyProfileController,deleteEvidence,356,ROLE-GATED,"profile middleware",156,"Employee Profiles",3
+PUT,"/competency/employee-profiles/{id}/notes",Competency\EmployeeCompetencyProfileController,saveNotes,351,ROLE-GATED,"profile middleware",156,"Employee Profiles",3
+POST,"/competency/employee-profiles/{id}/skills",Competency\EmployeeCompetencyProfileController,addSkill,347,ROLE-GATED,"profile middleware",156,"Employee Profiles",3
+PUT,"/competency/employee-profiles/{id}/skills/{matrixId}",Competency\EmployeeCompetencyProfileController,updateSkill,348,ROLE-GATED,"profile middleware",156,"Employee Profiles",3
+POST,"designation_leave",HRMS\HrmsController,store,226,UNKNOWN,"method not found",94,"Leave management",1
+POST,"/performance/cycles",Performance\PerformanceCycleController,store,1046,ROLE-GATED,"profile middleware",49,"Performance Reviews & Appraisals",1
+PUT,"/performance/cycles/{id}",Performance\PerformanceCycleController,update,1048,ROLE-GATED,"profile middleware",49,"Performance Reviews & Appraisals",1
+DELETE,"/performance/cycles/{id}",Performance\PerformanceCycleController,destroy,1051,ROLE-GATED,"profile middleware",49,"Performance Reviews & Appraisals",1
+POST,"/performance/cycles/{id}/close",Performance\PerformanceCycleController,close,1050,ROLE-GATED,"profile middleware",49,"Performance Reviews & Appraisals",1
+POST,"/performance/cycles/{id}/launch",Performance\PerformanceCycleController,launch,1049,ROLE-GATED,"profile middleware",49,"Performance Reviews & Appraisals",1
+POST,"/performance/reviews/bulk",Performance\PerformanceReviewController,bulk,1056,ROLE-GATED,"profile middleware",49,"Performance Reviews & Appraisals",2
+DELETE,"/performance/reviews/{id}",Performance\PerformanceReviewController,destroy,1062,ROLE-GATED,"profile middleware",49,"Performance Reviews & Appraisals",2
+POST,"/performance/reviews/{id}/advance",Performance\PerformanceReviewController,advance,1060,ROLE-GATED,"profile middleware",49,"Performance Reviews & Appraisals",2
+POST,"/talent/mobility/internal-jobs",Talent\InternalJobController,store,1177,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+PUT,"/talent/mobility/internal-jobs/{id}",Talent\InternalJobController,update,1179,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+DELETE,"/talent/mobility/internal-jobs/{id}",Talent\InternalJobController,destroy,1180,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+PUT,"/talent/mobility/requests/{id}/decision",Talent\MobilityRequestController,decision,1186,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+PUT,"/talent/succession/candidates/{id}",Talent\SuccessionPlanController,updateCandidate,1196,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+DELETE,"/talent/succession/candidates/{id}",Talent\SuccessionPlanController,destroyCandidate,1197,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+POST,"/talent/succession/plans",Talent\SuccessionPlanController,store,1191,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+PUT,"/talent/succession/plans/{id}",Talent\SuccessionPlanController,update,1193,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+DELETE,"/talent/succession/plans/{id}",Talent\SuccessionPlanController,destroy,1194,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+POST,"/talent/succession/plans/{id}/candidates",Talent\SuccessionPlanController,storeCandidate,1195,ROLE-GATED,"profile middleware",52,"Mobility & Succession",2
+GET,"/audit-logs",TaskManagement\AuditLogController,index,899,ROLE-GATED,"task.permission middleware",221,"Audit Log",2
+GET,"/audit-logs/export",TaskManagement\AuditLogController,export,900,ROLE-GATED,"task.permission middleware",221,"Audit Log",2
+POST,"/assignment-capacity",TaskManagement\CapacityController,check,880,ROLE-GATED,"task.permission middleware",18,"Task Assignment & Progress",1
+PATCH,"/deadline-extensions/{id}/decision",TaskManagement\DeadlineExtensionController,decide,930,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/dependencies",TaskManagement\DependencyController,store,933,ROLE-GATED,"task.permission middleware",213,"Dependencies & Workstreams",1
+PUT,"/dependencies/{id}",TaskManagement\DependencyController,update,934,ROLE-GATED,"task.permission middleware",213,"Dependencies & Workstreams",1
+DELETE,"/dependencies/{id}",TaskManagement\DependencyController,destroy,935,ROLE-GATED,"task.permission middleware",213,"Dependencies & Workstreams",1
+POST,"/milestones",TaskManagement\DependencyController,storeMilestone,936,ROLE-GATED,"task.permission middleware",,"",0
+PUT,"/milestones/{id}",TaskManagement\DependencyController,updateMilestone,937,ROLE-GATED,"task.permission middleware",,"",0
+DELETE,"/milestones/{id}",TaskManagement\DependencyController,destroyMilestone,938,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/legacy-tasks/idempotent",TaskManagement\IdempotentTaskController,store,882,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+POST,"/legacy-tasks",TaskManagement\LegacyTaskController,store,881,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+PUT,"/legacy-tasks/{id}",TaskManagement\LegacyTaskController,update,883,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+DELETE,"/legacy-tasks/{id}",TaskManagement\LegacyTaskController,destroy,885,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+PATCH,"/my-tasks/{id}/status",TaskManagement\MyTasksController,updateStatus,941,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+PATCH,"/notifications/read-all",TaskManagement\NotificationController,markAllRead,887,ROLE-GATED,"task.permission middleware",,"",0
+PATCH,"/notifications/{id}/read",TaskManagement\NotificationController,markRead,888,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/projects",TaskManagement\ProjectController,store,944,ROLE-GATED,"task.permission middleware",212,"Projects & Workstreams",1
+PUT,"/projects/{id}",TaskManagement\ProjectController,update,946,ROLE-GATED,"task.permission middleware",212,"Projects & Workstreams",1
+PATCH,"/projects/{id}/archive",TaskManagement\ProjectController,archive,947,ROLE-GATED,"task.permission middleware",212,"Projects & Workstreams",1
+PUT,"/projects/{id}/members",TaskManagement\ProjectController,syncProjectMembers,948,ROLE-GATED,"task.permission middleware",212,"Projects & Workstreams",1
+PUT,"/projects/{id}/tasks",TaskManagement\ProjectController,syncTasks,949,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+POST,"/projects/{id}/tasks",TaskManagement\ProjectController,attachTask,951,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+POST,"/projects/{id}/workstreams",TaskManagement\ProjectController,storeWorkstream,952,ROLE-GATED,"task.permission middleware",212,"Projects & Workstreams",2
+PUT,"/projects/{projectId}/workstreams/{workstreamId}",TaskManagement\ProjectController,updateWorkstream,953,ROLE-GATED,"task.permission middleware",212,"Projects & Workstreams",2
+DELETE,"/projects/{projectId}/workstreams/{workstreamId}",TaskManagement\ProjectController,destroyWorkstream,954,ROLE-GATED,"task.permission middleware",212,"Projects & Workstreams",2
+GET,"/permissions",TaskManagement\SessionController,permissions,866,ROLE-GATED,"in-controller profile check",23,"Role & Permissions",1
+GET,"/session",TaskManagement\SessionController,show,863,ROLE-GATED,"in-controller profile check",,"",0
+DELETE,"/session",TaskManagement\SessionController,destroy,878,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/workspace/{id}/attachments",TaskManagement\TaskAttachmentVersionController,store,922,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/workspace/{id}/attachments/{version}/restore",TaskManagement\TaskAttachmentVersionController,restore,924,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/priorities",TaskManagement\TaskOptionController,storePriority,874,ROLE-GATED,"task.permission middleware",,"",0
+PUT,"/priorities/{id}",TaskManagement\TaskOptionController,updatePriority,875,ROLE-GATED,"task.permission middleware",,"",0
+DELETE,"/priorities/{id}",TaskManagement\TaskOptionController,destroyPriority,876,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/statuses",TaskManagement\TaskOptionController,storeStatus,870,ROLE-GATED,"task.permission middleware",,"",0
+PUT,"/statuses/{id}",TaskManagement\TaskOptionController,updateStatus,871,ROLE-GATED,"task.permission middleware",,"",0
+DELETE,"/statuses/{id}",TaskManagement\TaskOptionController,destroyStatus,872,ROLE-GATED,"task.permission middleware",,"",0
+PUT,"/workspace/{id}/recurrence",TaskManagement\TaskRecurrenceController,upsert,917,ROLE-GATED,"task.permission middleware",,"",0
+DELETE,"/workspace/{id}/recurrence",TaskManagement\TaskRecurrenceController,destroy,918,ROLE-GATED,"task.permission middleware",,"",0
+PUT,"/workspace/{id}/schedule",TaskManagement\TaskScheduleController,update,920,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/workspace/{id}/subtasks",TaskManagement\TaskSubtaskController,store,913,ROLE-GATED,"task.permission middleware",,"",0
+PATCH,"/workspace/{id}/subtasks/{subtask}",TaskManagement\TaskSubtaskController,toggle,914,ROLE-GATED,"task.permission middleware",,"",0
+DELETE,"/workspace/{id}/subtasks/{subtask}",TaskManagement\TaskSubtaskController,destroy,915,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/templates",TaskManagement\TaskTemplateController,store,892,ROLE-GATED,"task.permission middleware",,"",0
+DELETE,"/templates/{id}",TaskManagement\TaskTemplateController,destroy,893,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/workspace/{id}/time-entries/start",TaskManagement\TaskTimeTrackingController,start,910,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/workspace/{id}/time-entries/stop",TaskManagement\TaskTimeTrackingController,stop,911,ROLE-GATED,"task.permission middleware",,"",0
+PUT,"/legacy-tasks/{id}/versioned",TaskManagement\VersionedLegacyTaskController,update,884,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+PUT,"/workspace/{id}",TaskManagement\WorkspaceController,update,905,ROLE-GATED,"task.permission middleware",,"",0
+DELETE,"/workspace/{id}",TaskManagement\WorkspaceController,destroy,906,ROLE-GATED,"task.permission middleware",,"",0
+PATCH,"/workspace/{id}/approval",TaskManagement\WorkspaceController,approve,907,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/workspace/{id}/comments",TaskManagement\WorkspaceController,comment,908,ROLE-GATED,"task.permission middleware",,"",0
+POST,"/bulk-tasks/import",front_desk\BulkTaskController,import,879,ROLE-GATED,"task.permission middleware",211,"My Tasks",1
+POST,"task/resync-google-calendar",front_desk\taskController,resyncTaskToGoogleCalendar,1016,UNKNOWN,"method not found",214,"Task Calendar",2
+POST,"/jobrole-skill/store",libraries\jobroleskillcontroller,storeSkill,211,UNKNOWN,"method not found",26,"Skill Gap Analysis",1
+POST,"/jobrole-skill/store",libraries\jobroleskillcontroller,storeSkill,227,UNKNOWN,"method not found",26,"Skill Gap Analysis",1
+POST,"/enroll",lms_course_enroll\LmsCourseEnrollController,store,756,ROLE-GATED,"in-controller profile check",,"",0
+POST,"/user-signup",signup_api\UserSignupController,store,966,ROLE-GATED,"in-controller profile check",8,"User Management",1
+PUT,"/user-signup/{id}",signup_api\UserSignupController,update,968,ROLE-GATED,"in-controller profile check",8,"User Management",1
+GET,"talent-offer-letter/{offerId}",talent\TalentOfferController,getOfferLetter,201,UNKNOWN,"method not found",3,"Talent Management",1
+GET,"talent-templates",talent\TalentOfferController,getTemplates,202,UNKNOWN,"method not found",3,"Talent Management",1
