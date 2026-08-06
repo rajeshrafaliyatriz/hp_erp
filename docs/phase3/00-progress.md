@@ -112,14 +112,14 @@ the app or click a UI, so I can never mark my own work `Verified`. Cap of 3
 
 ## GATE C — audit thread
 
-### Module write-ups: **17 of 32 sub-modules**
+### Module write-ups: **19 of 32 sub-modules**
 
 | Module | Sub-modules | Status |
 |---|---:|---|
 | **Competency** | 9 | ✅ `competency.md` |
 | **Organization** | 5 | ✅ `organization.md` |
 | **LMS** | 3 | ✅ `lms.md` |
-| Task | 2 | pending |
+| **Task** | 2 | ✅ `task.md` |
 | Talent | 7 | pending |
 | Other (HRIT, Agentic, Reports, CRM) | 4 | pending |
 
@@ -150,7 +150,8 @@ first · **R5** status summary every turn · **R6** a sweep produces candidates 
 **R7** an estimate names its files · **R8** pre-deletion checklist · **R9** re-read
 frontend consumers after a server change · **R10** name the proxy · **R11**
 verify scope-shrinking assumptions **before** using them · **R12** land a queued
-item every turn · **R13** standing authority · **R14** turns end at boundaries ·
+item every turn *(a turn spent entirely on an incident counts as landed work,
+provided the incident is reported and closed)* · **R13** standing authority · **R14** turns end at boundaries ·
 **R15** assert the column exists · **R16** every sweep names a known-positive ·
 **R17** check your own artefacts before writing a new script · **R18** commit
 `docs/phase3/` after every write to this file.
@@ -319,6 +320,9 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 ---
 
 ## Still owed — carried explicitly so they do not drop again
+
+> **Rule: nothing leaves this section without either a commit reference or an
+> explicit decision not to do it.**
 
 | Item | State |
 |---|---|

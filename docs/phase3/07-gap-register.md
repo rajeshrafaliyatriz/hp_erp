@@ -386,7 +386,7 @@ Tagged conclusions:
 | `manager.md` §1.1 | 2,245 of 2,271 overdue | **Test data only.** Says nothing about task management as a discipline. Drives the readiness gate (M1), never a product-wide rule |
 | `employee.md` §2 | 169 ratings / 386 users | **Never exercised.** The structural chain is the finding, not the sparsity |
 | `02-domain-model.md` §8 | all six gate thresholds | **Uncalibrated.** Cannot be tuned against test data |
-| `G-FLOW-24` | `delay_category` 0 rows | **Structural, not provenance** — no code path writes it, so it would be 0 in production too |
+| `G-FLOW-24` | `delay_category` 0 rows | ⚠️ **CORRECTED 2026-08-06 — it IS provenance.** A write path **does** exist: `MyTasksController.php:164` validates a closed enum and `:205` writes it, gated on `status === 'ON HOLD'`. **Exactly 1 task of 2,271 has ever been ON HOLD.** The column is empty because the state that fills it has been reached once, not because nothing writes it. **The first finding in this phase to move in the reassuring direction** — recorded because a register that only ever escalates is not being checked properly |
 
 ### A second trap, avoided
 
