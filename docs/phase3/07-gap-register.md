@@ -134,6 +134,55 @@ key column added beside a name; this needs a *table* that does not exist.
 
 ---
 
+## G-OPS-01 — the trait behind both shipped security fixes was untracked · **S1 (near-miss, now closed)**
+
+**Found by an accident, not by a check.** A mangled shell command truncated
+`00-progress.md` to zero bytes. It was untracked in git, so nothing could restore
+it — which prompted an audit of what else was unversioned.
+
+> **`ResolvesApiIdentity.php` — the F-01 trait that BOTH D-003 and D-004 depend on
+> — was untracked.**
+>
+> Had it been lost the same way, **the two shipped tenant-isolation fixes would
+> have silently reverted.** The calling code would still compile. The controllers
+> would still respond. `skillLibraryController::competencyLibraryContext()` would
+> still return an array. **The leaks would simply reopen, with no error anywhere.**
+>
+> **Only a C23 re-run would have caught it — and only if someone thought to run
+> one.**
+
+Four more load-bearing artefacts were in the same state: `RequireApiToken`,
+`RequireProfile`, the `s_skill_matrix` alignment migration, and all three Phase 1
+audit scripts.
+
+### Net
+
+**A corrupted tracking file triggered an audit that found five load-bearing
+artefacts one mistake from disappearing. That is a better outcome than the accident
+cost.**
+
+### Closed by
+
+| | |
+|---|---|
+| `fb284a06` | 87 Phase 3 files |
+| `2849500e` | the Phase 1 security artefacts |
+| `732f1ce` (g2gv0) | the frontend halves of D-001 and D-002, which were **not even committed** |
+| **R18** | `docs/phase3/` is committed after every write to `00-progress.md` |
+
+### ⚠️ Still open — committed is not backed up (C39)
+
+| Repo | Remote | State |
+|---|---|---|
+| `hp_erp` | `github.com/rajeshrafaliyatriz/hp_erp.git`, tracking `origin/Milan-2` | **10 unpushed commits.** All of Phase 3 exists only on this machine |
+| `g2gv0` | `github.com/zeeltank/g2gv0.git`, branch `milan1` | Now committed; **1 unpushed** |
+
+**Exposure is reduced, not removed.** A lost machine or a bad reset still takes
+Phase 3 with it. **Pushing is Triz's call** — `hp_erp` carries 8 unpushed commits
+that are not mine, and pushing is outward-facing.
+
+---
+
 ## Data provenance — read before any row-count conclusion
 
 **M3.** Several findings rest on row counts (99% overdue, 1 progress row, 0
