@@ -124,7 +124,9 @@ the app or click a UI, so I can never mark my own work `Verified`. Cap of 3
 
 ## GATE C — audit thread
 
-### Module write-ups: **26 of 32 sub-modules**
+### Module write-ups: **30 of 32 sub-modules — GATE C EFFECTIVELY CLOSED**
+
+The remaining 2 are CRM's deferred rows (Q-A4). **Next artefact: `08-connection-plan.md`.**
 
 | Module | Sub-modules | Status |
 |---|---:|---|
@@ -133,7 +135,7 @@ the app or click a UI, so I can never mark my own work `Verified`. Cap of 3
 | **LMS** | 3 | ✅ `lms.md` |
 | **Task** | 2 | ✅ `task.md` |
 | **Talent** | 7 | ✅ `talent.md` |
-| Other (HRIT, Agentic, Reports, CRM) | 4 | pending |
+| **Other** (HRIT, Agentic, Reports, CRM) | 4 | ✅ `other.md` |
 
 ### Sweeps — CONCLUDED, 7 of 7
 

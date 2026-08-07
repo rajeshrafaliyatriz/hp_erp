@@ -27,6 +27,20 @@ workflow · **S3** degrades the product · **S4** cosmetic.
 are breaches to be closed; **this one explains why the product does not function as
 a connected system.** Until now L-11 was an argument. It is now a measurement.
 
+### ⭐ READ WITH `G-FLOW-26` — THEY ARE A MATCHED PAIR AND TOGETHER THEY ARE THE DIAGNOSIS
+
+| | |
+|---|---|
+| **G-DATA-06 — the SUPPLY side** | the relationships that **do** exist are joined by **strings**, not keys |
+| **G-FLOW-26 — the DEMAND side** | three relationships the product is **sold on** do not exist at all — they are **named and not built** |
+
+**The single concrete illustration: the 9-box grid has performance on one axis
+and nothing to put on the other.** Performance has never been able to read a
+capability measurement, because the join was never built — only the word
+*competency* appears, as a dropdown label and a validator enum value.
+
+Neither finding alone explains the product's state. Together they do.
+
 ## Exactly what the number counts
 
 **283,126 = the sum of the ROW COUNTS of four tables**, each verified individually
@@ -165,6 +179,23 @@ not built.
 
 ---
 
+## FIX ORDER FOR THE REMAINING TENANT LEAKS — by DATA CLASS, not route count
+
+**Decided 2026-08-06.** Route count is the wrong ordering: it optimises for
+closing many at once rather than for closing the worst first.
+
+| Tier | Data class | First items |
+|---|---|---|
+| **1** | **Candidate / personal data** | **`talent_interviewpanelController`** — interview panel records cover **candidates: people outside the company who never agreed to be in the system.** Once Q-D4's portal exists this is external PII and a leak is a **regulatory** matter, not only a commercial one. Then the other three C27 Talent controllers |
+| **2** | **Payroll-adjacent** | `PayrollController` ✅ **done (D-004)**; `HrmsLeaveController`, `ApplyLeaveController`, `LeaveTypeController`, `LeaveSummaryReportController` |
+| **3** | **Credentials / integrations** | `ExcelAutomationAgentController@credentialStatus` — reports on **another tenant's integration credentials** |
+| **4** | **Competency and learning content** | `skillLibraryController` ✅ **done (D-003)**; `skillcontroller`, `assignmentController`, `courseController`, the rest |
+
+**`talent_interviewpanelController` goes first among everything remaining**, ahead
+of `assignmentController` (6 routes) and `HrmsController` (3).
+
+---
+
 ## G-SEC-12 — caller-supplied audit provenance · **S1** (C40)
 
 **`created_by` / `updated_by` taken from the request body.** S-3 found the pattern
@@ -208,8 +239,11 @@ to point at.** That is the same finding from the other side — role mapping has
 create path, and the button is bound to `framework` because that is the only thing
 available.
 
-**The only genuine one-line change is DELETING the button**, which is a
-user-facing removal and needs explicit approval plus an R8 checklist. **Not done.**
+**RESOLVED 2026-08-06: the button was REMOVED**, with approval and an R8
+checklist (`g2gv0` commit `cb2f6a5`). Not disabled, not annotated — **a control
+that quietly does the wrong thing is worse than an absent one**: the user asked for
+a role mapping, got a framework, and was told it succeeded. **M-03 is its
+reinstatement** and it stays gone until the create path exists.
 
 **M-03 stands as S–M**, and its real content is confirmed: build the create path
 (surfacing `SchoolSetupController.php:392-408`'s existing bulk insert), then wire
