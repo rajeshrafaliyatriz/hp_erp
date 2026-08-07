@@ -4,6 +4,8 @@
 BUILD sections of the six module write-ups. Nothing is re-derived here.
 
 **Status:** `DRAFT — §1–§3 complete. §4–§11 in assembly.`
+
+⚠️ **Headline numbers corrected by `12-gate-c-verification.md` V6** — 283,127 (not 283,126), 2.7% (not 3.0%), 29 controllers (not 30). The write-route coverage claim is **withdrawn** pending re-derivation.
 **Nothing is built from this document until it is approved.**
 
 ---
@@ -42,7 +44,7 @@ That chain is broken in two different ways at once.
 
 ### The supply side — what exists is held together by names, not keys
 
-> **283,126 rows** carry the product's core relationships — *which job role needs
+> **283,127 rows** carry the product's core relationships — *which job role needs
 > which skill*, *which tasks belong to which role* — and **every one of them is
 > resolved by matching a piece of text**, not by a proper database link.
 
@@ -51,7 +53,7 @@ That chain is broken in two different ways at once.
 matching**. Nothing errors. Nothing warns. The data is simply orphaned.
 
 **Caveats, which travel with the number:**
-- **Not 283,126 defects.** It is 283,126 rows across four tables, each resolving its relationship by string.
+- **Not 283,127 defects.** It is 283,127 rows across four tables, each resolving its relationship by string. *(Of these, 283,126 carry a populated key; one row's is empty. Quote the row count.)*
 - **The data is not wrong today.** It means any rename detaches it and nothing can join by key.
 - This is **test data** — the *structure* is the finding, not the volume. A customer's own library would have the same shape.
 
@@ -80,9 +82,9 @@ capability on the other.**
 
 | Number | What it is | Caveats that must travel with it |
 |---|---|---|
-| **283,126** | rows whose relationships resolve by string, across four tables verified individually | not defects; not a column count; test data; the structure is the finding |
+| **283,127** | rows whose relationships resolve by string, across four tables verified individually | not defects; not a column count; test data; the structure is the finding |
 | **3 confirmed cross-tenant leaks** — 2 fixed | one organisation could read another's data. `skillLibraryController` and `PayrollController` **are fixed and verified green**; `talent_interviewpanelController` remains | **A floor, not a total.** 46 route failures remain unverified candidates; 454 routes could not be tested; the write half is untested |
-| **3.0%** | share of active users with any capability measurement — 8 of 264 | **test data (R2).** It measures reach, not quality; all 8 resolve cleanly |
+| **2.7%** | share of active users with any capability measurement — **7 of 264** | **test data (R2).** It measures reach, not quality; all 8 resolve cleanly |
 
 **And the fact that changes everything about urgency:** **there are no customers.**
 This is a test database with no production tenant. Three times in this phase that
@@ -257,7 +259,7 @@ measured capability against that role's requirements**, with coverage stated rat
 than assumed.
 
 **Phase 3 completable:** ✅ **yes** — with the caveat that eligibility quality
-depends on capability coverage, currently **3.0%**. The seed import is what moves
+depends on capability coverage, currently **2.7%**. The seed import is what moves
 that.
 
 ---
