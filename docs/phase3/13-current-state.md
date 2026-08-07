@@ -9,7 +9,7 @@
 
 | # | Item | Verdict |
 |---|---|---|
-| 1 | **§3 — `s_user_jobrole_task` 85,662** | ⚠️ **Recap carries the corrected TOTAL with the uncorrected COMPONENT.** Its four components sum to **283,126**, but it states **283,127**. My files are right: the table has **85,663 rows**, of which 85,662 have a populated key. **Use 85,663 → 283,127 rows** |
+| 1 | **§3 — `s_user_jobrole_task` 85,662** | ⚠️ **Recap carries the corrected TOTAL with the uncorrected COMPONENT.** Its four components sum to **283,126**, but it states **283,127**. **Settled 2026-08-07: the headline is 283,126 — rows with a populated key.** The tables hold 283,127 rows; one `s_user_jobrole_task` row has an empty `jobrole`. The recap's total was mine and paired a corrected total with an uncorrected component — **R19's failure mode inside the document written to prevent drift** |
 | 2 | §3 — 79,295 / 62,208 / 55,961 | ✅ all three re-derived exactly (V4) |
 | 3 | §5 — 2.7% coverage, 7 of 264 | ✅ matches |
 | 4 | §5 — 46 / 29 | ✅ matches the corrected figures |

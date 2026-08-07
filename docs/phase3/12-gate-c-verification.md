@@ -69,9 +69,10 @@ for the other three.
 | **rows in the four tables** | **283,127** |
 | rows with a populated string key | 283,126 |
 
-**Use 283,127** and describe it as *rows*. The difference is one row and changes
-nothing material — **but a headline number quoted to a board must be derived one
-way.**
+**Settled 2026-08-07: the headline is 283,126 — ROWS WITH A POPULATED STRING KEY.**
+The four tables hold 283,127 rows; one `s_user_jobrole_task` row has an empty
+`jobrole`. Either figure is defensible; **the headline is the second, and the
+distinction is stated wherever it appears.**
 
 ### 3.0% → **2.7%** · the material one
 
@@ -164,7 +165,7 @@ credibility.
 
 | Use this | Not this |
 |---|---|
-| **283,127 rows** across four tables | ~~283,126~~ |
+| **283,126** rows **with a populated key** (283,127 rows exist) | ~~an unqualified 283,127~~ |
 | **2.7%** capability coverage (7 of 264) | ~~3.0%~~ |
 | **46 guard FAILs across 29 controllers** | ~~30 controllers~~ |
 | **1,683 registered routes · 912 GET · 772 with a write verb** | ~~1,676~~ · ~~864~~ |
