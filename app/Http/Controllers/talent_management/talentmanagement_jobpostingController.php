@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent_management;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -13,6 +14,33 @@ use App\Models\talent_management\talentmanagement_jobposting;
 
 class talentmanagement_jobpostingController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+    private function g2gActorId(\Illuminate\Http\Request $request): ?int
+    {
+        $fromToken = $this->apiUserId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+        $fromSession = $request->session()->get('user_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
+
     /**
      * Display a listing of the resource.
      */
@@ -204,7 +232,7 @@ class talentmanagement_jobpostingController extends Controller
         'benefits' => $request->benefits,
         'description' => $request->description,
         'status' => $request->status,
-        'updated_by' => $request->user_id,
+        'updated_by' => $this->g2gActorId($request),
         'updated_at' => now()
     ]);
 

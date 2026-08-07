@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -10,6 +11,33 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class DepartmentSkillController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+    private function g2gActorId(\Illuminate\Http\Request $request): ?int
+    {
+        $fromToken = $this->apiUserId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+        $fromSession = $request->session()->get('user_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
+
     public function index(Request $request)
     {
         try {
@@ -33,7 +61,7 @@ class DepartmentSkillController extends Controller
                 }
             }
 
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
 
             if (!$sub_institute_id) {
                 return response()->json([
@@ -131,7 +159,7 @@ class DepartmentSkillController extends Controller
                 }
             }
 
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
 
             if (!$sub_institute_id) {
                 return response()->json([
@@ -220,7 +248,7 @@ class DepartmentSkillController extends Controller
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
             $department_id = $request->department_id;
 
             $department = DB::table('hrms_departments')
@@ -245,7 +273,7 @@ class DepartmentSkillController extends Controller
                 'proficiency_level' => $request->proficiency_level,
                 'status' => 'Active',
                 'sub_institute_id' => $sub_institute_id,
-                'created_by' => $request->user_id,
+                'created_by' => $this->g2gActorId($request),
                 'created_at' => now(),
             ]);
 
@@ -298,7 +326,7 @@ class DepartmentSkillController extends Controller
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             $skill = DB::table('s_users_skills')
                 ->where('id', $id)
@@ -373,7 +401,7 @@ class DepartmentSkillController extends Controller
                 }
             }
 
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
 
             if (!$sub_institute_id) {
                 return response()->json([

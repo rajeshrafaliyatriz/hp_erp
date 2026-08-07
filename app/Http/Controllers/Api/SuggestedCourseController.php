@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\SuggestedCourse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
 class SuggestedCourseController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function store(Request $request): JsonResponse
     {
         $request->validate([
@@ -28,8 +31,9 @@ class SuggestedCourseController extends Controller
             ],
             [
                 'course_name'      => $request->course_name,
-                'sub_institute_id' => $request->sub_institute_id,
-                'created_by'       => $request->created_by,
+                'sub_institute_id' => $this->apiTenantId($request),
+                // G-SEC-12: the acting user comes from the token, never the request.
+                'created_by'       => $this->apiUserId($request),
             ]
         );
 

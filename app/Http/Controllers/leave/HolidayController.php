@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\leave;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\HRMS\hrmsDepartmentModel;
 use App\Models\HRMS\HrmsHoliday;
 use App\Models\HRMS\HrmsWeekday;
@@ -17,6 +18,33 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class HolidayController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+    private function g2gActorId(\Illuminate\Http\Request $request): ?int
+    {
+        $fromToken = $this->apiUserId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+        $fromSession = $request->session()->get('user_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
+
     /**
      * Display a listing of the resource.
      *
@@ -279,7 +307,7 @@ class HolidayController extends Controller
                       $updated = DB::table('hrms_weekdays')
                     ->where('day', $day)
                     ->where('sub_institute_id',$request->sub_institute_id)
-                    ->update(['day_type' => $dayType,'updated_at'=>now(),'updated_by'=>$request->user_id]);
+                    ->update(['day_type' => $dayType,'updated_at'=>now(),'updated_by'=>$this->g2gActorId($request)]);
                     $status=2;
                 } else {
                     DB::table('hrms_weekdays')->insert([
@@ -287,7 +315,7 @@ class HolidayController extends Controller
                         'day_type' => $dayType,
                         'sub_institute_id' => $request->sub_institute_id,
                         'created_at'=>now(),
-                        'created_by'=>$request->user_id,
+                        'created_by'=>$this->g2gActorId($request),
                     ]);
                     $status=1;
                 }

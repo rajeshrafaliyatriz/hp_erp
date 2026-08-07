@@ -15,9 +15,37 @@ use App\Models\libraries\userKnowledgeAbility;
 use App\Models\libraries\userApplication;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 
 class skillLibraryController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+    private function g2gActorId(\Illuminate\Http\Request $request): ?int
+    {
+        $fromToken = $this->apiUserId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+        $fromSession = $request->session()->get('user_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
+
     //
     public function index(Request $request)
     {
@@ -354,7 +382,7 @@ class skillLibraryController extends Controller
                                     'jobrole' => $jv->jobrole,
                                     // 'description' => null,
                                     'sub_institute_id' => $request->sub_institute_id,
-                                    'created_by' => $request->user_id,
+                                    'created_by' => $this->g2gActorId($request),
                                     'created_at' => now(),
                                 ];
                                 $check = DB::table('s_user_skill_jobrole')->where([
@@ -375,7 +403,7 @@ class skillLibraryController extends Controller
                                         'proficiency_level' => $jv->proficiency_level,
                                         'description' => $jv->proficiency_description,
                                         'sub_institute_id' => $request->sub_institute_id,
-                                        'created_by' => $request->user_id,
+                                        'created_by' => $this->g2gActorId($request),
                                         'created_at' => now(),
                                     ];
                                     $check = userProfeceincyLevel::where([
@@ -403,7 +431,7 @@ class skillLibraryController extends Controller
                                         'classification' => 'knowledge',
                                         'classification_item' => $jv->knowledge_ability_items,
                                         'sub_institute_id' => $request->sub_institute_id,
-                                        'created_by' => $request->user_id,
+                                        'created_by' => $this->g2gActorId($request),
                                         'created_at' => now(),
                                     ];
                                     $check = userKnowledgeAbility::where([
@@ -427,7 +455,7 @@ class skillLibraryController extends Controller
                                         'classification' => 'ability',
                                         'classification_item' => $jv->knowledge_ability_items,
                                         'sub_institute_id' => $request->sub_institute_id,
-                                        'created_by' => $request->user_id,
+                                        'created_by' => $this->g2gActorId($request),
                                         'created_at' => now(),
                                     ];
                                     $check = userKnowledgeAbility::where([
@@ -451,7 +479,7 @@ class skillLibraryController extends Controller
                                         'proficiency_level' => $jv->proficiency_level,
                                         'application' => $jv->range_application,
                                         'sub_institute_id' => $request->sub_institute_id,
-                                        'created_by' => $request->user_id,
+                                        'created_by' => $this->g2gActorId($request),
                                         'created_at' => now(),
                                     ];
                                     $insert = userApplication::insert($applicationInsert);
@@ -705,7 +733,7 @@ class skillLibraryController extends Controller
                         'jobrole' => $value,
                         // 'description' => $request->description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                     ];
                     $check = skillJobroleMap::where([
@@ -723,7 +751,7 @@ class skillLibraryController extends Controller
                         'jobrole' => $value,
                         // 'description' => $request->description[$key] ?? null,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $insert = skillJobroleMap::where('id', $checkExists->id)->update($insertArray);
@@ -754,7 +782,7 @@ class skillLibraryController extends Controller
             //             'proficiency_type' => $request->proficiency_type[$key] ?? null,
             //             'type_description' => $request->type_description[$key] ?? null,
             //             'sub_institute_id' => $request->sub_institute_id,
-            //             'created_by' => $request->user_id,
+            //             'created_by' => $this->g2gActorId($request),
             //             'created_at' => now(),
             //         ];
             //         $insert = userProfeceincyLevel::insert($insertArray);
@@ -767,7 +795,7 @@ class skillLibraryController extends Controller
             //             'proficiency_type' => $request->proficiency_type[$key] ?? null,
             //             'type_description' => $request->type_description[$key] ?? null,
             //             'sub_institute_id' => $request->sub_institute_id,
-            //             'updated_by' => $request->user_id,
+            //             'updated_by' => $this->g2gActorId($request),
             //             'updated_at' => now(),
             //         ];
             //         $insert = userProfeceincyLevel::where('id', $checkExists->id)->update($insertArray);
@@ -784,7 +812,7 @@ class skillLibraryController extends Controller
                         'proficiency_level' => $value->proficiency_level,
                         'proficiency_description'=>$value->proficiency_description,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::insert($insertArray);
@@ -795,7 +823,7 @@ class skillLibraryController extends Controller
                         'proficiency_level' => $value->proficiency_level,
                         'proficiency_description'=>$value->proficiency_description,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::where('id', $checkExists->id)->update($insertArray);
@@ -823,7 +851,7 @@ class skillLibraryController extends Controller
                         'classification_item' => $value->classification_item,
                         'classification' => 'knowledge',
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::insert($insertArray);
@@ -837,7 +865,7 @@ class skillLibraryController extends Controller
                         'classification_item' => $value->classification_item,
                         'classification' => 'knowledge',
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::where('id', $checkExists->id)->update($insertArray);
@@ -859,7 +887,7 @@ class skillLibraryController extends Controller
                         'classification_sub_category'=>$value->classification_sub_category,
                         'classification' => 'ability',
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::insert($insertArray);
@@ -873,7 +901,7 @@ class skillLibraryController extends Controller
                         'classification_item' => $value->classification_item,
                         'classification' => 'ability',
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::where('id', $checkExists->id)->update($insertArray);
@@ -895,7 +923,7 @@ class skillLibraryController extends Controller
                         'classification_sub_category'=>$value->classification_sub_category,
                         'classification' => 'attitude',
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::insert($insertArray);
@@ -909,7 +937,7 @@ class skillLibraryController extends Controller
                         'classification_item' => $value->classification_item,
                         'classification' => 'attitude',
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::where('id', $checkExists->id)->update($insertArray);
@@ -931,7 +959,7 @@ class skillLibraryController extends Controller
                         'classification_sub_category'=>$value->classification_sub_category,
                         'classification' => 'behaviour',
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::insert($insertArray);
@@ -945,7 +973,7 @@ class skillLibraryController extends Controller
                         'classification_item' => $value->classification_item,
                         'classification' => 'behaviour',
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $insert = userKnowledgeAbility::where('id', $checkExists->id)->update($insertArray);
@@ -964,7 +992,7 @@ class skillLibraryController extends Controller
                         'proficiency_level' => $value->proficiency_level,
                         'application' => $value->application,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                     ];
                     $insert = userApplication::insert($insertArray);
@@ -975,7 +1003,7 @@ class skillLibraryController extends Controller
                         'proficiency_level' => $value->proficiency_level,
                         'application' => $value->application,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $insert = userApplication::where('id', $checkExists->id)->update($insertArray);
@@ -1025,47 +1053,47 @@ class skillLibraryController extends Controller
         }
         $i = 0;
         if ($request->formType == "jobrole") {
-            $delete = skillJobroleMap::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = skillJobroleMap::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         if ($request->formType == "proficiency_level") {
-            $delete = userProfeceincyLevel::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userProfeceincyLevel::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         if ($request->has('formType') && $request->formType == "jobrole") {
 
-            $delete = skillJobroleMap::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = skillJobroleMap::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
 
         if ($request->has('formType') && $request->formType == "knowledge") {
-            $delete = userKnowledgeAbility::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userKnowledgeAbility::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         if ($request->has('formType') && $request->formType == "ability") {
-            $delete = userKnowledgeAbility::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userKnowledgeAbility::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         // userApplication
         if ($request->has('formType') && $request->formType == "application") {
-            $delete = userApplication::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userApplication::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
 
         if ($request->has('formType') && $request->formType == "user") {
-            $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
@@ -1608,7 +1636,7 @@ class skillLibraryController extends Controller
         $ids = json_decode($request->ids, true);
         foreach ($ids as $id) {
             if ($request->has('formType') && $request->formType == "user") {
-                $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+                $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
                 if ($delete) {
                     $i++;
                 }
@@ -1648,23 +1676,21 @@ class skillLibraryController extends Controller
      */
     private function competencyLibraryContext(Request $request)
     {
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => 0, 'message' => 'Token not provided'], 401);
-        }
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => 0, 'message' => 'Invalid token'], 401);
-        }
-
-        $subInstituteId = $request->input('sub_institute_id') ?? $request->header('sub_institute_id');
-        if (!$subInstituteId || !is_numeric($subInstituteId)) {
-            return response()->json(['status' => 0, 'message' => 'sub_institute_id is required'], 400);
-        }
-
-        return [
-            'sub_institute_id' => (int) $subInstituteId,
-            'user_id'          => is_numeric($request->input('user_id')) ? (int) $request->input('user_id') : null,
-        ];
+        // G-SEC-09. This method used to validate that a token EXISTED and then
+        // discard its owner, taking sub_institute_id and user_id from the
+        // request body with only an is_numeric() check. Any valid token from
+        // any tenant could therefore read and write any other tenant's
+        // competency library by changing one number - confirmed by execution,
+        // not inference (C23 guard: /api/skill_library/competency-list and
+        // /competency-export both returned a different tenant's data).
+        //
+        // ResolvesApiIdentity resolves the caller from $accessToken->tokenable
+        // and derives the tenant from that user, ignoring whatever the request
+        // claims. Its return is a superset of the shape this method used to
+        // produce - ['user', 'user_id', 'sub_institute_id'] - so all eleven
+        // call sites, which check `is_array($context)` and read those two keys,
+        // are unaffected.
+        return $this->resolveApiIdentity($request);
     }
 
     /**
@@ -2220,7 +2246,15 @@ class skillLibraryController extends Controller
         }
 
         $restore = filter_var($request->input('restore', false), FILTER_VALIDATE_BOOLEAN);
-        $status = $restore ? 'Approved' : 'Cancelled';
+        // G-COMP-01: restore used to return the row to 'Approved' unconditionally,
+        // so archiving a Pending competency and restoring it laundered it into
+        // Approved with no reviewer recorded. Restore now returns it to Pending;
+        // housekeeping must never grant approval.
+        //
+        // The deeper flaw is that approve_status carries TWO concerns - lifecycle
+        // (active/archived) and review state. Separating them is a schema change
+        // and belongs with the Gate D migration, not with this fix.
+        $status = $restore ? 'Pending' : 'Cancelled';
 
         DB::table('s_users_skills')->where('id', $id)->update([
             'approve_status' => $status,
@@ -2524,7 +2558,12 @@ class skillLibraryController extends Controller
             'proficiency_level' => $request->input('proficiency_level'),
             'department_id'     => $request->input('department_id'),
             'status'            => 'Active',
-            'approve_status'    => $request->input('status', 'Approved'),
+            // G-COMP-01: approval state is SERVER-OWNED. It was previously taken
+            // from the request and defaulted to 'Approved', so a caller could
+            // decide their own approval state and every new competency was born
+            // approved with no review. It now always starts Pending; only
+            // ApprovalController may move it.
+            'approve_status'    => 'Pending',
             'created_by'        => $context['user_id'],
             'updated_by'        => $context['user_id'],
             'created_at'        => now(),
@@ -2584,10 +2623,10 @@ class skillLibraryController extends Controller
             'updated_by'        => $context['user_id'],
             'updated_at'        => now(),
         ], $this->competencyLibraryDetailPayload($request));
-        if ($request->filled('status')) {
-            $update['approve_status'] = $request->input('status');
-        }
-
+        // G-COMP-01: `status` is deliberately NOT copied to approve_status here.
+        // Editing a competency must not change its approval state - that was a
+        // one-dropdown bypass of the entire review workflow. Approval moves only
+        // through ApprovalController.
         DB::table('s_users_skills')->where('id', $id)->update($update);
 
         $this->logCompetencyLibraryActivity(

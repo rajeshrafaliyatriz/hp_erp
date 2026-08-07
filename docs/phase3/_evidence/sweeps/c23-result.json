@@ -1,15 +1,51 @@
 [
     [
-        "talent_interviewpanelController@getInterviewers",
-        "api/interview-panel/users",
+        "skillLibraryController@competencyLibraryIndex",
+        "api/skill_library/competency-list",
         "PASS",
         "identical JSON payload; supplied tenant ignored"
     ],
     [
-        "talent_interviewpanelController@getInterviewPanel",
-        "api/interview-panel/list",
+        "skillLibraryController@competencyLibraryExport",
+        "api/skill_library/competency-export",
         "PASS",
         "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@competencyLibraryDetail",
+        "api/skill_library/competency/{id}/detail",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@competencyLibraryShow",
+        "api/skill_library/competency/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "api/skill_library",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "api/skill_library/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "api/skill_library/{skill_library}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "api/skill_library/{skill_library}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
     ],
     [
         "closure",
@@ -28,6 +64,162 @@
         "/",
         "UNTESTABLE",
         "closure route, no controller"
+    ],
+    [
+        "skillLibraryController@index",
+        "skill_library",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "skill_library/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "skill_library/{skill_library}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "skill_library/{skill_library}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "jobrole",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "jobrole/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "jobrole/{jobrole}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "jobrole/{jobrole}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "profeciency_level",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "profeciency_level/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "profeciency_level/{profeciency_level}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "profeciency_level/{profeciency_level}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "knowledge_ability",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "knowledge_ability/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "knowledge_ability/{knowledge_ability}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "knowledge_ability/{knowledge_ability}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "application",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "application/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "application/{application}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "application/{application}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController1@index",
+        "lms/lms_skill_library",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "skillLibraryController1@create",
+        "lms/lms_skill_library/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "skillLibraryController1@show",
+        "lms/lms_skill_library/{lms_skill_library}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController1@edit",
+        "lms/lms_skill_library/{lms_skill_library}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController1@destroy",
+        "lms/lms_skill_library/{id}/delete",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController1@show",
+        "lms/lms_skill_library/{id}/show",
+        "UNTESTABLE",
+        "requires path parameter"
     ],
     [
         "closure",

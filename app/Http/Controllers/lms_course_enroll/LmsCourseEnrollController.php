@@ -3,31 +3,64 @@
 namespace App\Http\Controllers\lms_course_enroll;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\lms_course_enroll\LmsCourseEnroll;
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 
 class LmsCourseEnrollController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+    private function g2gActorId(\Illuminate\Http\Request $request): ?int
+    {
+        $fromToken = $this->apiUserId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+        $fromSession = $request->session()->get('user_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
+
+    /*
+     * Authentication used to be opt-in: every method ran its token check
+     * only `if ($type == "API")`, so omitting one parameter skipped it.
+     * The organisation was read from the request too, which let an
+     * enrolment be created against another tenant's course.
+     *
+     * `user_id` is deliberately NOT forced to the token owner here. Unlike
+     * the other controllers in this pass it is a genuine subject: store()
+     * supports an administrator recording an enrolment or completion for
+     * somebody else, as its own comment describes. Confining it to the
+     * caller would remove that. It is now bounded by the tenant instead -
+     * the queries filter on the token-derived sub_institute_id, so a
+     * subject outside the caller's organisation cannot be reached.
+     */
+
     public function index(Request $request)
     {
-        $type = $request->type;
-
-        if ($type == "API") {
-
-            $token = $request->input('token');
-            if (!$token) {
-                return response()->json(['message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) {
-                return response()->json(['message' => 'Invalid token'], 401);
-            }
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $identity['sub_institute_id'];
+
         $userId = $request->user_id ?? $request->header('user_id');
         
         if (!$userId) {
@@ -100,21 +133,12 @@ class LmsCourseEnrollController extends Controller
      */
     public function available(Request $request)
     {
-        $type = $request->type;
-
-        if ($type == "API") {
-            $token = $request->input('token');
-            if (!$token) {
-                return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) {
-                return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-            }
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
+        $subInstituteId = $identity['sub_institute_id'];
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
         $userId = $request->user_id ?? $request->header('user_id');
 
         if (!$userId) {
@@ -322,21 +346,12 @@ class LmsCourseEnrollController extends Controller
 
      public function store(Request $request)
     {
-    $type = $request->type;
-
-    if ($type == "API") {
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
-
-        $accessToken = PersonalAccessToken::findToken($token);
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
+    $identity = $this->resolveApiIdentity($request);
+    if (!is_array($identity)) {
+        return $identity;
     }
- $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+    $subInstituteId = $identity['sub_institute_id'];
+
     // ✅ VALIDATION
     $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer',
@@ -387,7 +402,7 @@ class LmsCourseEnrollController extends Controller
         $objcourse->status = $request->status;
         $objcourse->start_date = $request->start_date;
         $objcourse->end_date = $request->end_date;
-        $objcourse->sub_institute_id = $request->sub_institute_id;
+        $objcourse->sub_institute_id = $subInstituteId;
 
         if ($objcourse->save()) {
             return response()->json([
@@ -417,22 +432,12 @@ class LmsCourseEnrollController extends Controller
 
     public function update(Request $request, string $id)
 {
-        $type = $request->type;
-
-        if ($type == "API") {
-
-            $token = $request->input('token');
-            if (!$token) {
-                return response()->json(['message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) {
-                return response()->json(['message' => 'Invalid token'], 401);
-            }
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
-    // $sub_institute_id = $request->sub_institute_id;
-    $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $identity['sub_institute_id'];
+
 
     // Validate required fields
     $validator = Validator::make($request->all(), [
@@ -473,8 +478,8 @@ class LmsCourseEnrollController extends Controller
         'status' => $request->status,
         'start_date' => $request->start_date,
         'end_date' => $request->end_date,
-        'sub_institute_id' => $request->sub_institute_id,
-        'updated_by' => $request->user_id,
+        'sub_institute_id' => $subInstituteId,
+        'updated_by' => $this->g2gActorId($request),
         'updated_at' => now()
     ]);
 
@@ -494,24 +499,12 @@ class LmsCourseEnrollController extends Controller
 
      public function destroy(Request $request, string $id)
 {
-    $type = $request->type;
-
-    // --------------------------
-    // 🔐 API Token Validation
-    // --------------------------
-    if ($type == "API") {
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
-
-        $accessToken = PersonalAccessToken::findToken($token);
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
+    $identity = $this->resolveApiIdentity($request);
+    if (!is_array($identity)) {
+        return $identity;
     }
-    $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+    $subInstituteId = $identity['sub_institute_id'];
+
     // --------------------------
     // 🛂 Required Validation
     // --------------------------
@@ -527,7 +520,7 @@ class LmsCourseEnrollController extends Controller
         ], 422);
     }
 
-    $sub_institute_id = $request->sub_institute_id;
+    $sub_institute_id = $subInstituteId;
 
     // --------------------------
     // 🔎 Find Enrollment Record
@@ -556,7 +549,7 @@ class LmsCourseEnrollController extends Controller
     // --------------------------
     $delete = $courseEnroll->update([
         'deleted_at' => now(),
-        'deleted_by' => $request->user_id,
+        'deleted_by' => $this->g2gActorId($request),
         'updated_at' => now()
     ]);
 
