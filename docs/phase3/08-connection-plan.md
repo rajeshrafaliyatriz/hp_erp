@@ -663,8 +663,14 @@ before/after menu diff** \u2192 X-02 route permission declarations \u2192 S-08.
 products**. Today all three see essentially the same 1,500-1,657 menus, with
 Employee seeing *more* than Admin.
 
-**Still missing:** the capability chain is one role deep; no learning loop.
-**Gate:** X-01 needs the before/after diff reviewed by Triz before rollout.
+**Still missing:** the whole capability chain — this slice makes roles mean
+something, not capability. **Gate:** X-01 needs the before/after menu diff reviewed
+by Triz before rollout.
+
+**Why it now runs first:** independent of every join table, visible in one deploy,
+and it closes `G-SEC-07` — today the rights matrix is uniform, so **Employee sees
+1,657 menus against Admin's 1,500**. That inversion is demonstrable on a screen
+without a single migration.
 
 ---
 

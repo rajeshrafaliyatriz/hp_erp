@@ -445,6 +445,6 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 
 1. **Task** module write-up, then **Talent**, then **Other**
 2. **F-6** — delete the ontology iframe (approved; needs R8 checklist + a record of what it displayed + the registered replacement)
-3. **C32** — the worked example: rename a job role in tenant 7, report what detaches, revert
+3. ~~**C32** worked example~~ — **SUBSUMED** by Slice 1's demo step 6, which is the same rename. Removed so it is not run twice
 4. **C37** — nine more hand-checks of C34's 114
 5. The 37 unverified C23 candidates, ordered by data sensitivity
