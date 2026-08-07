@@ -34,7 +34,7 @@
 > | **Changes executed** - G-NAV-01 | **RECOVERED** |
 > | Decisions after 2026-08-05 | **REBUILT** from `10-open-questions.md`, `07-gap-register.md`, `09-implementation-log.md` |
 > | **`00-progress-ORIGINAL-1823.md`** | **PRIMARY EVIDENCE - the recovered 37,983-byte original. KEPT, not deleted (R8).** Every claim about what was lost is checkable against it |
-> | **Status legend · Gate checklist · Module checklist** | **RECOVERED 2026-08-06 from a Recycle Bin snapshot** taken 18:23:51, the last copy before the truncation. These three existed **only** in this file - they were in neither the user's snapshot nor my reconstruction |
+> | **Status legend · Gate checklist · Module checklist** | **RECOVERED 2026-08-06 from a Recycle Bin snapshot** — ⚠️ the Gate checklist came back with a **stale row** (*"2 of 32 delivered"*) that survived the merge unnoticed until 2026-08-07. **Corrected. A recovered section is a snapshot, not a current statement** taken 18:23:51, the last copy before the truncation. These three existed **only** in this file - they were in neither the user's snapshot nor my reconstruction |
 
 Last updated: 2026-08-06
 Current gate: **C (audit) and D (foundation build) RUNNING IN PARALLEL**
@@ -193,7 +193,9 @@ table queried, UI path walked). Analysis alone is **never** `Verified`.
 | B | `04-user-flows/` remaining roles | Not Started | hr, admin, executive, auditor, recruiter, instructor-assessor |
 | B | `05-data-flow-contracts.md` | **Analysis Done** | S6 one-source model, event catalogue with the named-consumer test, notification service, readiness gates, `task_status_history` first. **Q-F1 raised** |
 | C | `06-feature-audit/00-calibration.md` | **Analysis Done** | **C1: 0 of 159. C1b: 0 of 206** (hard unit). Spot-check regime approved; **C6b** added — negative claims checked against code **and** prior decisions |
-| C | `06-feature-audit/*` write-ups | **In Progress** | **2 of 32 delivered.** C2 order: Competency → Organization → LMS → Task → Talent → rest |
+| C | `06-feature-audit/*` write-ups | ✅ **CLOSED** | **All six module write-ups delivered.** 30 audited · 1 duplicate · 1 out of scope = 32 |
+| C | `12-gate-c-verification.md` | ✅ **VERIFIED** | V4 sample error rate **3.3%** (1 of 30); V7 reconciliation **clean**. **Gate C stands** |
+| D | `08-connection-plan.md` | **In Progress** | §1–§3 written (diagnosis, 9 threads traced, dependency tiers). §4–§11 next |
 | C | `06-feature-audit/00-pace-c9.md` | **Awaiting decision** | C9 pace report. FULL/SHALLOW split proposed |
 | D | `08-connection-plan.md` | Not Started | |
 | D | `09-implementation-log.md` | **Current** | **D-001 built** (L-03R). R7 retroactive cost review recorded here |
