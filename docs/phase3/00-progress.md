@@ -6,6 +6,15 @@
 > mangled, and the write **truncated this file to zero bytes**. It was **untracked
 > in git**, so no copy existed.
 >
+> **CORRECTED TIMELINE.** The truncation happened between **18:23 and 18:34**, not
+> at 19:33 as first reported. **The file was dead for roughly an hour**, and several
+> subsequent "updates" wrote into an empty file **and reported success**.
+>
+> **So the loss was one bad command PLUS an hour of unnoticed silent failure** - and
+> the second half is the larger lesson. A write that silently succeeds into nothing
+> is the same failure class as a checker that reports a confident wrong number:
+> **it looks like it worked.**
+>
 > **What is below is rebuilt from the working session.** The decisions, rules and
 > gate states are accurate — all are cross-checkable against `07-gap-register.md`,
 > `09-implementation-log.md`, `_evidence/sweeps/` and the module write-ups, which
@@ -24,6 +33,7 @@
 > | **Deferred scope** - 6 items | **RECOVERED.** It had been silently dropped |
 > | **Changes executed** - G-NAV-01 | **RECOVERED** |
 > | Decisions after 2026-08-05 | **REBUILT** from `10-open-questions.md`, `07-gap-register.md`, `09-implementation-log.md` |
+> | **`00-progress-ORIGINAL-1823.md`** | **PRIMARY EVIDENCE - the recovered 37,983-byte original. KEPT, not deleted (R8).** Every claim about what was lost is checkable against it |
 > | **Status legend · Gate checklist · Module checklist** | **RECOVERED 2026-08-06 from a Recycle Bin snapshot** taken 18:23:51, the last copy before the truncation. These three existed **only** in this file - they were in neither the user's snapshot nor my reconstruction |
 
 Last updated: 2026-08-06
@@ -233,7 +243,8 @@ item every turn *(a turn spent entirely on an incident counts as landed work,
 provided the incident is reported and closed)* · **R13** standing authority · **R14** turns end at boundaries ·
 **R15** assert the column exists · **R16** every sweep names a known-positive ·
 **R17** check your own artefacts before writing a new script · **R18** commit
-`docs/phase3/` after every write to this file.
+`docs/phase3/` after every write to this file, **and assert after every write that
+the file is non-empty and still contains an expected marker line**.
 
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else

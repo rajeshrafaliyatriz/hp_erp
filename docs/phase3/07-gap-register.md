@@ -339,6 +339,24 @@ each changed endpoint needs its consumers enumerated.
 Applied together: R3 before counting, R1 before quoting, R2 before interpreting,
 **R4 before accusing, R8 before deleting, R9 after changing a contract.**
 
+### ⭐ The first correction to move in the REASSURING direction
+
+**`G-FLOW-24`, 2026-08-06.** Every prior correction in this phase made a finding
+worse. This one made one **better**: `delay_category` is empty because **exactly
+one task of 2,271 has ever reached `ON HOLD`** - not because nothing writes it.
+`MyTasksController.php:164` validates a closed enum and `:205` writes it.
+
+**It is provenance, not a structural defect.**
+
+> **A register that only ever escalates is being fed, not checked.** Recording the
+> one item that got better is how you tell the difference.
+
+**Carried into golden thread 2:** the overdue/stall rule **cannot rely on
+`delay_category` being populated**, because the state that fills it has been
+reached once. In production it would populate; on this data it proves nothing.
+
+---
+
 ### The direction, now beyond doubt
 
 **Thirteen cases. Thirteen under-reports from scope-narrowing assumptions. Zero
