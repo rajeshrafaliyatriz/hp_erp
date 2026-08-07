@@ -1,5 +1,17 @@
 [
     [
+        "talent_interviewpanelController@getInterviewers",
+        "api/interview-panel/users",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_interviewpanelController@getInterviewPanel",
+        "api/interview-panel/list",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
         "closure",
         "up",
         "UNTESTABLE",
@@ -16,132 +28,6 @@
         "/",
         "UNTESTABLE",
         "closure route, no controller"
-    ],
-    [
-        "PayrollController@payrollType",
-        "payroll-type",
-        "VACUOUS",
-        "identical, but response is empty/trivial (11 bytes)"
-    ],
-    [
-        "PayrollController@payrollCreate",
-        "payroll-type/create",
-        "UNTESTABLE",
-        "server error (500/500)"
-    ],
-    [
-        "PayrollController@payrollCreate",
-        "payroll-type/create/{id}",
-        "UNTESTABLE",
-        "requires path parameter"
-    ],
-    [
-        "PayrollController@payrollTypeReport",
-        "payroll-type-report",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@payrollTypeReportCreate",
-        "payroll-type-report/create",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@employeeSalaryStructure",
-        "employee-salary-structure",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@rollOver",
-        "roll-over",
-        "UNTESTABLE",
-        "server error (500/500)"
-    ],
-    [
-        "PayrollController@salaryStructureReport",
-        "salary-structure-report",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@form16",
-        "form16",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@payrollDeduction",
-        "payroll-deduction",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@monthlyPayrollReport",
-        "monthly-payroll-report",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@monthlyPayrollPdf",
-        "monthly-payroll-report/pdf/{id}/{month}/{year}",
-        "UNTESTABLE",
-        "requires path parameter"
-    ],
-    [
-        "PayrollController@payrollReport",
-        "payroll-report",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@employeePayrollHistory",
-        "employee-payroll-history",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@payrollBankWiseReport",
-        "payroll-bank-wise-report",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@hrmsSalaryCertificateIndex",
-        "hrms-salary-certificate",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@SalaryCertificatePdfDownload",
-        "salary-certificate-pdf-download",
-        "UNTESTABLE",
-        "server error (500/500)"
-    ],
-    [
-        "PayrollController@monthlyPayroll",
-        "monthly-payroll",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@monthlyPayrollCreate",
-        "monthly-payroll/create",
-        "UNTESTABLE",
-        "server error (500/500)"
-    ],
-    [
-        "PayrollController@getEmpMonthlyData",
-        "getMonthlyData",
-        "PASS",
-        "identical JSON payload; supplied tenant ignored"
-    ],
-    [
-        "PayrollController@getTotalDays",
-        "getTotalDays",
-        "UNTESTABLE",
-        "server error (500/500)"
     ],
     [
         "closure",
