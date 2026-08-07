@@ -126,7 +126,18 @@ the app or click a UI, so I can never mark my own work `Verified`. Cap of 3
 
 ### Module write-ups: **30 of 32 sub-modules — GATE C EFFECTIVELY CLOSED**
 
-The remaining 2 are CRM's deferred rows (Q-A4). **Next artefact: `08-connection-plan.md`.**
+**The two not audited, named** (`08-connection-plan.md` §0): **CRM** — deliberately
+out of scope per Q-A4, recorded not audited; and **"Development & Career Paths"**
+— a **duplicate checklist row** for a screen audited under its singular name.
+Neither was "not reached".
+
+⚠️ Count correction: the checklist carries **11** Competency rows, my write-up
+counted 9. Difference = the duplicate + Skill Taxonomy/Ontology covered as one
+section. **No sub-module was skipped.** Reconciled: 30 audited · 1 duplicate · 1
+out of scope = 32.
+
+**`08-connection-plan.md` STARTED — §1–§3 complete** (diagnosis, all 9 threads
+traced, dependency tiers). §4–§11 in assembly.
 
 | Module | Sub-modules | Status |
 |---|---:|---|
