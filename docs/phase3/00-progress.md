@@ -443,8 +443,28 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 
 ## Queue
 
-1. **Task** module write-up, then **Talent**, then **Other**
-2. **F-6** — delete the ontology iframe (approved; needs R8 checklist + a record of what it displayed + the registered replacement)
-3. ~~**C32** worked example~~ — **SUBSUMED** by Slice 1's demo step 6, which is the same rename. Removed so it is not run twice
-4. **C37** — nine more hand-checks of C34's 114
-5. The 37 unverified C23 candidates, ordered by data sensitivity
+**CURRENTLY WORKING ON — the build. Analysis is closed.**
+
+**FOUNDATIONS BUILT — 0 of 6.**
+
+| # | Build item | State |
+|---:|---|---|
+| 1 | `talent_interviewpanelController` | ✅ done (`15791bca`) |
+| 2 | G-SEC-12 actor identity | ✅ done (`d70a204c`) — **unblocks the event store** |
+| 3 | **The join-table migration, as ONE change** | **NEXT — the counter starts here** |
+| 4 | Rights matrix populated + before/after menu diff for review | after 3 |
+| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | after 4 |
+| 6 | Event store + projector/reactor split + `task_status_history` | after 5 |
+
+### Next 3 steps
+
+1. **F-01** — the five join tables, one migration (`02-domain-model.md` §2.1 DDL)
+2. **X-01** — rights matrix populated, with the before/after menu diff
+3. **F-05** — reporting line with cycle validation
+
+### Still queued, not blocking
+
+- **F-6** ontology iframe deletion (approved; needs the R8 checklist)
+- **C37** — nine more hand-checks of C34's 114
+- The **37** guard candidates, from `c23-result-FULL-912.json` — **do not re-run the guard**
+- ~~C32~~ — subsumed by Slice 1's demo step 6

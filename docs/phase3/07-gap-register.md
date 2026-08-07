@@ -196,7 +196,7 @@ of `assignmentController` (6 routes) and `HrmsController` (3).
 
 ---
 
-## G-SEC-12 — caller-supplied audit provenance · **S1** (C40)
+## G-SEC-12 — caller-supplied audit provenance · **S1** · ✅ **CLOSED 2026-08-07** (`d70a204c`)
 
 **`created_by` / `updated_by` taken from the request body.** S-3 found the pattern
 **33 times**; `PayrollController` lines 167 and 238 are two, now fixed.
@@ -222,7 +222,7 @@ documents.
 
 1. **The complete verified list (R6).** 33 candidates, hand-classified **IDENTITY** (must come from the token) vs **SUBJECT** (legitimately supplied — *"generate this employee's payslip"*). Same method that worked on PayrollController: read each site, trace what the value feeds.
 2. **Fix shape:** mirror `payrollActorId()` — token first, session fallback, **never request input**.
-3. Not started. The 33 are candidates, **not** findings.
+3. ✅ **DONE.** The rule cleared **all 76 mechanically — zero ambiguous, zero hand-reads needed.** ⚠️ **Scope was 76 sites across 16 files, not 33** — S-3's figure counted only `created_by`; this covers every provenance column. **The estimate was low by 2.3×.** Fixed with `g2gActorId()` per file. Re-scan: **0 remain.**
 
 ---
 

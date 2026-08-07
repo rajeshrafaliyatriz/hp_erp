@@ -341,6 +341,54 @@ and the **write half is untested**. The read leak — the breach — is closed.
 
 ---
 
+## D-005 · S-01 — `talent_interviewpanelController` tenant resolution
+
+**2026-08-07** · `API-verified-UI-pending` · commit **`15791bca`**
+
+| | |
+|---|---|
+| **Changed** | Five `if ($type == "API")` branches validated that a token existed, then took `sub_institute_id` from the request body — the G-SEC-09 defect. Added `panelTenantId()` (token first, session fallback, mirroring `payrollTenantId`) and substituted all five |
+| **Files** | `app/Http/Controllers/talent/interview_panel/talent_interviewpanelController.php` |
+| **Guard** | **1 FAIL → 0.** `LEAK-NOSCOPE 0 · FAIL 0 · PASS 2 · UNTESTABLE 4` |
+| **Acceptance** | API-level green. **Not `Verified`** — 4 UNTESTABLE routes need path parameters; the write half is untested |
+
+**First by data class**, ahead of controllers with four times the route count:
+interview panel records cover **candidates** — people outside the company who never
+agreed to be in the system.
+
+---
+
+## D-006 · S-02 — G-SEC-12, the acting user resolved from identity
+
+**2026-08-07** · `API-verified-UI-pending` · commit **`d70a204c`**
+
+| | |
+|---|---|
+| **Changed** | **76 provenance sites across 16 files** took `created_by` / `updated_by` / `verified_by` / `reviewer_id` from request input. Added `g2gActorId()` per file (token first, session fallback, mirroring `payrollActorId`) and substituted every site |
+| **Files** | 16 — `skillLibraryController` (29 sites), `jobroleLibrary1Controller` (16), `jobroleLibraryController` (11), `jobroletexonomycontroller` (4), `HolidayController` (2), `jobroletaskcontroller` (2), `LmsCourseEnrollController` (2), `talent_jobpostingcontroller` (2), plus 8 with one each |
+| **Guard** | Re-scan: **0 provenance-from-request sites remain.** C23 on previously fixed controllers **unchanged at 0 FAIL** — no regression |
+| **Acceptance** | `php -l` clean on all 16. **Not `Verified`** — no UI path exercised |
+
+### Classification — the rule held completely
+
+**76 IDENTITY, 0 AMBIGUOUS.** The proven rule — *provenance columns fed from input
+are always IDENTITY; a field naming who the operation is ABOUT is SUBJECT* —
+cleared **every one mechanically. None needed a hand read.**
+
+⚠️ **Scope was larger than estimated: 76 sites, not 33.** S-3's figure counted only
+`created_by`; this covers all provenance columns. **The estimate was low by 2.3×**,
+and it was marked ESTIMATE PENDING for exactly this reason.
+
+**75 substituted by script; 1 by hand** — a CRLF line ending defeated the anchor
+regex in `SuggestedCourseController`. Same class of defect as earlier in the phase.
+
+### ⛔ This unblocks the event store
+
+`05-data-flow-contracts.md` §1.9 recorded that everything downstream assumes
+`actor_id` is trustworthy. **It now is.** X-04 is no longer blocked by S-02.
+
+---
+
 ## R7 applied retroactively — which costs move
 
 **R7: an estimate that does not name the files it touches is a guess.** Every

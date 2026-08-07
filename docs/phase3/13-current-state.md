@@ -63,19 +63,21 @@
 | 3 | **D-003** `skillLibraryController` tenant resolution | **API-verified-UI-pending** — guard 2 FAIL → 0 |
 | 4 | **D-004** `PayrollController` tenant **and** actor resolution | **API-verified-UI-pending** — guard 9 FAIL → 0 |
 | 5 | **G-MAP-01** button removed | **Built** — R8 checklist clean |
-| 6 | `talent_interviewpanelController` | **NOT STARTED — next** |
-| 7 | G-SEC-12 actor fixes (33 candidates) | **Not started.** Blocks 11 |
+| 6 | **S-01** `talent_interviewpanelController` | ✅ **API-verified-UI-pending** — guard 1 FAIL → 0 (`15791bca`) |
+| 7 | **S-02** G-SEC-12 actor fixes | ✅ **API-verified-UI-pending** — 76 sites / 16 files, 0 remain (`d70a204c`). **No longer blocks 11** |
 | 8 | Join-table migration (one change) | **Not started** |
 | 9 | Rights matrix populated + before/after diff | **Not started** |
 | 10 | `reporting_manager_id` + `head_user_id` | **Not started** |
-| 11 | Event store + projector/reactor split | **Not started.** Blocked by 7 |
+| 11 | Event store + projector/reactor split | **Not started. UNBLOCKED** — S-02 closed |
 | 12 | C19 picker mechanism | **Not started** |
 | 13 | `certification_type` + map | **Not started** |
 | 14 | Three restored tables | **Not started** |
 | 15 | `skill_matrix_item` + tenant column | **Not started** |
 | 16 | Text→FK migrations | **Not started** |
 
-**Built: 5. Structural foundations built: 0.**
+**Built: 7. Structural foundations built: 0 of 6.**
+
+**FOUNDATIONS BUILT — 0 of 6.** The counter starts at the join-table migration.
 
 ---
 
@@ -83,7 +85,7 @@
 
 | Tier | Class | Items |
 |---|---|---|
-| **1** | **Candidate / personal** | **`talent_interviewpanelController`** ← next · then the other three C27 `talent_*` controllers |
+| **1** | **Candidate / personal** | `talent_interviewpanelController` ✅ **done** · then the other three C27 `talent_*` controllers |
 | **2** | Payroll-adjacent | `PayrollController` ✅ done · `HrmsLeaveController`, `ApplyLeaveController`, `LeaveTypeController`, `LeaveSummaryReportController` |
 | **3** | Credentials / integrations | `ExcelAutomationAgentController@credentialStatus` |
 | **4** | Competency / learning | `skillLibraryController` ✅ done · `skillcontroller`, `assignmentController`, `courseController`, rest |
@@ -100,7 +102,7 @@ regression guard in CI.
 
 | Blocked | By |
 |---|---|
-| Event store, `task_status_history`, `competency_evidence` projector | **G-SEC-12** — actor identity must be trustworthy first |
+| ~~Event store~~ | ~~G-SEC-12~~ — **UNBLOCKED 2026-08-07** |
 | Threads 2 and 9 | the event store |
 | L-01, L-02, L-04 and every later entity binding | **C19** picker mechanism |
 | Rights matrix population | tri-state rights columns |

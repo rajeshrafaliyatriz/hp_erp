@@ -484,114 +484,114 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| S-01 | `talent_interviewpanelController` tenant fix | G-SEC-11 | 7 | **XS-S** · `talent_interviewpanelController.php` | nothing | \u2014 | AT-S01 | API | **NEXT** |
-| S-02 | G-SEC-12 actor identity, 33 candidates | G-SEC-12 | 2, 9 | **ESTIMATE PENDING** \u2014 33 sites unclassified | **event store** | own classification | AT-S02 | API | Not started |
-| S-03 | Remaining leaks, data-class order | G-SEC-11 | all | **ESTIMATE PENDING** | customer readiness | \u2014 | AT-S03 | API | Not started |
-| S-04 | 37 guard candidates hand-verified | G-SEC-11 | \u2014 | **S** \u00b7 from `c23-result-FULL-912.json`, **no re-run** | S-03 scope | \u2014 | \u2014 | DB | Not started |
-| S-05 | C37 ten checks (1 done) | \u2014 | \u2014 | **S** | C34 calibration | \u2014 | \u2014 | API | 1 of 10 |
-| S-06 | C23 write-half phase | \u2014 | \u2014 | **ESTIMATE PENDING** | C24 gate | tenant + row register | \u2014 | API | Not started |
-| S-07 | C23 regression guard in CI | G-QUAL-02 | \u2014 | **S** \u00b7 guard exists; needs a CI hook | prevents regrowth | \u2014 | \u2014 | API | Not started |
-| S-08 | G-SEC-01 authorization coverage | G-SEC-01 | all | **ESTIMATE PENDING** \u2014 superseded counts | \u2014 | rights matrix | \u2014 | API | Not started |
+| S-01 | `talent_interviewpanelController` tenant fix | G-SEC-11 | 7 | **XS-S** · `talent_interviewpanelController.php` | nothing | — | AT-S01 | API | ✅ **API-verified** (`15791bca`) |
+| S-02 | G-SEC-12 actor identity | G-SEC-12 | 2, 9 | **M** — **76 sites / 16 files** (est. was 33; low by 2.3×) | ~~event store~~ **UNBLOCKED** | — | AT-S02 | API | ✅ **API-verified** (`d70a204c`) |
+| S-03 | Remaining leaks, data-class order | G-SEC-11 | all | **ESTIMATE PENDING** | customer readiness | — | AT-S03 | API | Not started |
+| S-04 | 37 guard candidates hand-verified | G-SEC-11 | — | **S** · from `c23-result-FULL-912.json`, **no re-run** | S-03 scope | — | — | DB | Not started |
+| S-05 | C37 ten checks (1 done) | — | — | **S** | C34 calibration | — | — | API | 1 of 10 |
+| S-06 | C23 write-half phase | — | — | **ESTIMATE PENDING** | C24 gate | tenant + row register | — | API | Not started |
+| S-07 | C23 regression guard in CI | G-QUAL-02 | — | **S** · guard exists; needs a CI hook | prevents regrowth | — | — | API | Not started |
+| S-08 | G-SEC-01 authorization coverage | G-SEC-01 | all | **ESTIMATE PENDING** — superseded counts | — | rights matrix | — | API | Not started |
 
 ## Tier 1 — Structural foundations
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| F-01 | **The five join tables, ONE migration** | G-DATA-06, G-FLOW-26 | 1-8 | **L** \u00b7 new migration + `02-domain-model.md` \u00a72.1 DDL | **everything in T3** | \u2014 | AT-F01 | DB | Not started |
-| F-02 | `certification_type` + `certification_competency_map` | G-CERT-01 | 3, 8 | **M** \u00b7 \u00a710.1 DDL, steps 3b/9b | L-09, thread 8 | F-01 | AT-F02 | DB | Not started |
-| F-03 | Three restored tables | Q-B5 | 2, 3, 8 | **S** \u00b7 \u00a74.2 idempotent DDL | evidence projector | \u2014 | AT-F03 | DB | Not started |
-| F-04 | `skill_matrix_item` + `sub_institute_id` | G-DATA-08 | 1, 5, 6 | **M** \u00b7 step 12 normalisation | guards seeing tenancy | F-01 | AT-F04 | DB | Not started |
-| F-05 | `reporting_manager_id` + `head_user_id` + cycle validation | Q-B1 | 2, 4, 9 | **M** \u00b7 `tbluser`, `hrms_departments` migration | every approval flow | \u2014 | AT-F05 | DB | Not started |
-| F-06 | Tri-state rights columns | G-SEC-06 | 9 | **S** \u00b7 both rights tables | rights population | \u2014 | AT-F06 | DB | Not started |
-| F-07 | Text\u2192FK migrations (steps 12-14) | G-DATA-06 | all | **L** \u00b7 backfill + report unmatched | joins by key | F-01 | AT-F07 | DB | Not started |
-| F-08 | `portal_identity` | Q-D4 | 7 | **M** \u00b7 \u00a77.3 DDL | candidate conversion | \u2014 | AT-F08 | DB | Not started |
-| F-09 | `library_map_skill` join table | G-DATA-07 | 1 | **S** \u00b7 3,270 rows to split | \u2014 | F-01 | AT-F09 | DB | Not started |
+| F-01 | **The five join tables, ONE migration** | G-DATA-06, G-FLOW-26 | 1-8 | **L** · new migration + `02-domain-model.md` §2.1 DDL | **everything in T3** | — | AT-F01 | DB | Not started |
+| F-02 | `certification_type` + `certification_competency_map` | G-CERT-01 | 3, 8 | **M** · §10.1 DDL, steps 3b/9b | L-09, thread 8 | F-01 | AT-F02 | DB | Not started |
+| F-03 | Three restored tables | Q-B5 | 2, 3, 8 | **S** · §4.2 idempotent DDL | evidence projector | — | AT-F03 | DB | Not started |
+| F-04 | `skill_matrix_item` + `sub_institute_id` | G-DATA-08 | 1, 5, 6 | **M** · step 12 normalisation | guards seeing tenancy | F-01 | AT-F04 | DB | Not started |
+| F-05 | `reporting_manager_id` + `head_user_id` + cycle validation | Q-B1 | 2, 4, 9 | **M** · `tbluser`, `hrms_departments` migration | every approval flow | — | AT-F05 | DB | Not started |
+| F-06 | Tri-state rights columns | G-SEC-06 | 9 | **S** · both rights tables | rights population | — | AT-F06 | DB | Not started |
+| F-07 | Text→FK migrations (steps 12-14) | G-DATA-06 | all | **L** · backfill + report unmatched | joins by key | F-01 | AT-F07 | DB | Not started |
+| F-08 | `portal_identity` | Q-D4 | 7 | **M** · §7.3 DDL | candidate conversion | — | AT-F08 | DB | Not started |
+| F-09 | `library_map_skill` join table | G-DATA-07 | 1 | **S** · 3,270 rows to split | — | F-01 | AT-F09 | DB | Not started |
 
 ## Tier 2 — Mechanisms
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| X-01 | **Rights matrix populated** + before/after menu diff | G-SEC-07 | 9 | **L** \u00b7 seeder from `03-rbac-matrix.md` \u00a73.1-3.7 | X-02, thread 9 | F-06 | AT-X01 | **SCREEN** | Not started |
-| X-02 | Route permission declarations | G-SEC-04 | all | **ESTIMATE PENDING** | authorization | X-01 | \u2014 | API | Not started |
-| X-03 | **C19 picker mechanism** | G-LIB-08 | 1 | **M-L** \u00b7 `LibraryController` meta, `library-form.tsx`, `library-config.ts`, `services/competency/libraries.ts` | L-01/02/04 | \u00a710.0 *(decided)* | AT-X03 | SCREEN | Not started |
-| X-04 | **Event store + projector/reactor split** | G-STR-04 | 2, 9 | **L** \u00b7 `05-data-flow-contracts.md` \u00a71 DDL | X-05, threads 2/9 | **S-02** | AT-X04 | DB | Not started |
+| X-01 | **Rights matrix populated** + before/after menu diff | G-SEC-07 | 9 | **L** · seeder from `03-rbac-matrix.md` §3.1-3.7 | X-02, thread 9 | F-06 | AT-X01 | **SCREEN** | Not started |
+| X-02 | Route permission declarations | G-SEC-04 | all | **ESTIMATE PENDING** | authorization | X-01 | — | API | Not started |
+| X-03 | **C19 picker mechanism** | G-LIB-08 | 1 | **M-L** · `LibraryController` meta, `library-form.tsx`, `library-config.ts`, `services/competency/libraries.ts` | L-01/02/04 | §10.0 *(decided)* | AT-X03 | SCREEN | Not started |
+| X-04 | **Event store + projector/reactor split** | G-STR-04 | 2, 9 | **L** · `05-data-flow-contracts.md` §1 DDL | X-05, threads 2/9 | ~~S-02~~ **now unblocked** | AT-X04 | DB | Not started |
 | X-05 | `task_status_history` | G-STR-04 | 2 | **M** | thread 2 | X-04 | AT-X05 | DB | Not started |
-| X-06 | Notification service + terminology | Q-F1 | 4, 9 | **M** \u00b7 \u00a78 DDL | readiness gates | \u2014 | AT-X06 | API | Not started |
-| X-07 | Readiness gates + asymmetric switching | M1 | 6, 8 | **M** \u00b7 \u00a78 | honest surfaces | X-04 | AT-X07 | DB | Not started |
-| X-08 | **Seed-library import flow** | G-FLOW-03, Q-C1 | 1, 6 | **L** \u00b7 \u00a79 | coverage | F-01 | AT-X08 | SCREEN | Not started |
+| X-06 | Notification service + terminology | Q-F1 | 4, 9 | **M** · §8 DDL | readiness gates | — | AT-X06 | API | Not started |
+| X-07 | Readiness gates + asymmetric switching | M1 | 6, 8 | **M** · §8 | honest surfaces | X-04 | AT-X07 | DB | Not started |
+| X-08 | **Seed-library import flow** | G-FLOW-03, Q-C1 | 1, 6 | **L** · §9 | coverage | F-01 | AT-X08 | SCREEN | Not started |
 
 ## Tier 3 — Connections
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| L-01 | `department_id` from the Job Role form | G-LIB-01 | 1 | **XS** *(after X-03)* \u00b7 `library-config.ts` | \u2014 | X-03 | AT-L01 | SCREEN | Not started |
-| L-02 | `department_id` from the Skill form | G-LIB-01 | 1 | **XS** *(after X-03)* | \u2014 | X-03 | AT-L02 | SCREEN | Not started |
-| ~~L-03~~ | ~~Reach the detail panel~~ | G-LIB-06 | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 | **SUPERSEDED by L-03R** |
-| L-03R | Delete the dead panel | G-LIB-06 | \u2014 | **XS** | \u2014 | \u2014 | AT-L03R | SCREEN | \u2705 **BUILT** (D-001) |
-| L-04 | Job Level \u2192 `s_level_responsibility` | G-LIB-07 | 1 | **XS** *(after X-03)* | \u2014 | X-03 | AT-L04 | SCREEN | Not started |
-| L-05 | Honour Status at assignment time | G-LIB-05 | 3 | **S** \u00b7 `RoleMappingController`, `StudioController` | \u2014 | F-01 | AT-L05 | API | Not started |
-| L-06 | Delete impact count / block | G-LIB-02 | \u2014 | **S** \u00b7 `library-tab.tsx` | \u2014 | \u2014 | AT-L06 | SCREEN | Not started |
-| L-07 | Job Titles \u2192 `s_user_skill_jobrole` | G-LIB-02 | 1 | **M** | \u2014 | F-07 | AT-L07 | DB | Not started |
-| L-08 | Learning Resources \u2192 course refs | G-FLOW-26 | 3, 4 | **M** | thread 4 | F-01 | AT-L08 | SCREEN | Not started |
-| L-09 | Certifications \u2192 `certification_type` | G-CERT-01 | 3, 8 | **M** | thread 8 | F-02 | AT-L09 | SCREEN | Not started |
-| L-10 | Import on every library tab | G-LIB-04 | 1 | **M** | \u2014 | X-08 | AT-L10 | SCREEN | Not started |
-| L-11 | Join on ids, not titles | G-DATA-06 | all | **L** | \u2014 | *(= F-07)* | AT-F07 | DB | Not started |
+| L-01 | `department_id` from the Job Role form | G-LIB-01 | 1 | **XS** *(after X-03)* · `library-config.ts` | — | X-03 | AT-L01 | SCREEN | Not started |
+| L-02 | `department_id` from the Skill form | G-LIB-01 | 1 | **XS** *(after X-03)* | — | X-03 | AT-L02 | SCREEN | Not started |
+| ~~L-03~~ | ~~Reach the detail panel~~ | G-LIB-06 | — | — | — | — | — | — | **SUPERSEDED by L-03R** |
+| L-03R | Delete the dead panel | G-LIB-06 | — | **XS** | — | — | AT-L03R | SCREEN | ✅ **BUILT** (D-001) |
+| L-04 | Job Level → `s_level_responsibility` | G-LIB-07 | 1 | **XS** *(after X-03)* | — | X-03 | AT-L04 | SCREEN | Not started |
+| L-05 | Honour Status at assignment time | G-LIB-05 | 3 | **S** · `RoleMappingController`, `StudioController` | — | F-01 | AT-L05 | API | Not started |
+| L-06 | Delete impact count / block | G-LIB-02 | — | **S** · `library-tab.tsx` | — | — | AT-L06 | SCREEN | Not started |
+| L-07 | Job Titles → `s_user_skill_jobrole` | G-LIB-02 | 1 | **M** | — | F-07 | AT-L07 | DB | Not started |
+| L-08 | Learning Resources → course refs | G-FLOW-26 | 3, 4 | **M** | thread 4 | F-01 | AT-L08 | SCREEN | Not started |
+| L-09 | Certifications → `certification_type` | G-CERT-01 | 3, 8 | **M** | thread 8 | F-02 | AT-L09 | SCREEN | Not started |
+| L-10 | Import on every library tab | G-LIB-04 | 1 | **M** | — | X-08 | AT-L10 | SCREEN | Not started |
+| L-11 | Join on ids, not titles | G-DATA-06 | all | **L** | — | *(= F-07)* | AT-F07 | DB | Not started |
 | L-12 | One shared category table + applicability | G-LIB-02 | 1 | **L** | L-13, L-20 | F-01 | AT-L12 | DB | Not started |
-| L-13 | Propagate taxonomy renames | G-LIB-02 | 1 | **M** | \u2014 | L-12 | AT-L13 | DB | Not started |
-| L-14 | Task catalogue \u2192 competency | G-LIB-03 | 2 | **L** | thread 2 | *(= F-01)* | AT-F01 | DB | Not started |
-| L-15 | Compliance Relevance \u2192 boolean + regulation ref | G-LIB-02 | 8 | **M** \u00b7 migration + `library-config.ts` | thread 8 | F-01 | AT-L15 | SCREEN | Not started |
-| L-16 | Risk Implications \u2192 severity enum \u2192 `competency.criticality` | G-LIB-02 | \u2014 | **M** | \u2014 | F-01 | AT-L16 | DB | Not started |
-| L-17 | `assessment_method` enum, **additive** | G-LIB-02 | 3 | **M** \u00b7 keeps both element columns | \u2014 | F-01 | AT-L17 | DB | Not started |
-| L-18 | Importance \u2192 `competency_kasba_item.weight` | G-LIB-02 | 1 | **S** | \u2014 | F-01 | AT-L18 | DB | Not started |
-| L-19 | Experience \u2192 numeric min years, text kept | G-LIB-02 | 6, 7 | **M** \u00b7 parse clear patterns, **report coverage** | thread 6 | F-01 | AT-L19 | DB | Not started |
-| L-20 | Three `*_tags` \u2192 shared categories | G-LIB-02 | \u2014 | **S** | \u2014 | L-12 | AT-L20 | DB | Not started |
-| L-21 | Performance Metrics on the rating screen | G-LIB-02 | 3 | **S** *(re-costed from display)* | \u2014 | F-01 | AT-L21 | SCREEN | Not started |
-| L-22 | Measurement Metrics as scale anchor | G-LIB-02 | 3 | **S** *(re-costed)* | \u2014 | F-01 | AT-L22 | SCREEN | Not started |
-| L-23 | Development Methods at plan creation | G-LIB-02 | 4 | **S** *(re-costed)* | \u2014 | F-01 | AT-L23 | SCREEN | Not started |
-| C-10 | Library drawer: 5 unrendered fields | \u2014 | \u2014 | **display** \u00b7 data already on the wire | \u2014 | \u2014 | AT-C10 | SCREEN | Not started |
-| M-01 | Learning edit controls | G-FLOW-26 | 4 | **XS** \u00b7 endpoint already accepts both | \u2014 | \u2014 | AT-M01 | SCREEN | Not started |
+| L-13 | Propagate taxonomy renames | G-LIB-02 | 1 | **M** | — | L-12 | AT-L13 | DB | Not started |
+| L-14 | Task catalogue → competency | G-LIB-03 | 2 | **L** | thread 2 | *(= F-01)* | AT-F01 | DB | Not started |
+| L-15 | Compliance Relevance → boolean + regulation ref | G-LIB-02 | 8 | **M** · migration + `library-config.ts` | thread 8 | F-01 | AT-L15 | SCREEN | Not started |
+| L-16 | Risk Implications → severity enum → `competency.criticality` | G-LIB-02 | — | **M** | — | F-01 | AT-L16 | DB | Not started |
+| L-17 | `assessment_method` enum, **additive** | G-LIB-02 | 3 | **M** · keeps both element columns | — | F-01 | AT-L17 | DB | Not started |
+| L-18 | Importance → `competency_kasba_item.weight` | G-LIB-02 | 1 | **S** | — | F-01 | AT-L18 | DB | Not started |
+| L-19 | Experience → numeric min years, text kept | G-LIB-02 | 6, 7 | **M** · parse clear patterns, **report coverage** | thread 6 | F-01 | AT-L19 | DB | Not started |
+| L-20 | Three `*_tags` → shared categories | G-LIB-02 | — | **S** | — | L-12 | AT-L20 | DB | Not started |
+| L-21 | Performance Metrics on the rating screen | G-LIB-02 | 3 | **S** *(re-costed from display)* | — | F-01 | AT-L21 | SCREEN | Not started |
+| L-22 | Measurement Metrics as scale anchor | G-LIB-02 | 3 | **S** *(re-costed)* | — | F-01 | AT-L22 | SCREEN | Not started |
+| L-23 | Development Methods at plan creation | G-LIB-02 | 4 | **S** *(re-costed)* | — | F-01 | AT-L23 | SCREEN | Not started |
+| C-10 | Library drawer: 5 unrendered fields | — | — | **display** · data already on the wire | — | — | AT-C10 | SCREEN | Not started |
+| M-01 | Learning edit controls | G-FLOW-26 | 4 | **XS** · endpoint already accepts both | — | — | AT-M01 | SCREEN | Not started |
 | M-02 | Learning assignment records its gap | G-FLOW-26 | 4 | **M** | thread 4 | F-01 | AT-M02 | SCREEN | Not started |
-| M-03 | **Role-mapping create path** + reinstate the button | **G-MAP-01** | 1 | **S-M** \u00b7 surface `SchoolSetupController.php:392-408` | thread 1 | F-01 | AT-M03 | SCREEN | Not started |
-| M-04 | `skill_matrix_item` tenant column | G-DATA-08 | 1, 5 | **XS** *(inside F-04)* | \u2014 | *(= F-04)* | AT-F04 | DB | Not started |
-| O-01 | Skill Deficit KPI honesty | G-DATA-05 | \u2014 | **XS** \u00b7 `employee-directory.tsx` | \u2014 | \u2014 | AT-O01 | SCREEN | Not started |
-| O-02 | Directory ratings via one service | \u2014 | 1 | **S** | \u2014 | F-04 | AT-O02 | API | Not started |
-| O-03 | `ExcelAutomationAgentController@credentialStatus` | G-SEC-11 | \u2014 | **XS-S** | \u2014 | \u2014 | AT-O03 | API | Not started |
-| O-04 | Three report-route leaks | G-SEC-11 | \u2014 | **S** | \u2014 | \u2014 | AT-O04 | API | Not started |
-| O-05 | Read `HrmsController` (31 routes) | C21 | \u2014 | **S** *(reading)* | S-03 scope | \u2014 | \u2014 | \u2014 | Not started |
-| LM-01 | Retire `contentLibraryControllerOld` | \u2014 | \u2014 | **S** \u00b7 \u26a0\ufe0f **R8 + approval** | \u2014 | \u2014 | AT-LM01 | API | Not started |
-| LM-02 | Course Builder prompt enrichment | \u2014 | 4 | **XS** \u00b7 `course-builder-panel.tsx` | \u2014 | \u2014 | AT-LM02 | SCREEN | Not started |
-| LM-03 | Surface the LMS funnel | G-FLOW-05 | 4 | **S** | \u2014 | \u2014 | AT-LM03 | SCREEN | Not started |
-| T-01 | One write path for `task.status` | S-6 | 2 | **M** \u00b7 10 writing files | \u2014 | S-6 verification | AT-T01 | API | Not started |
-| T-02 | Surface `delay_category` | G-FLOW-24 | 2 | **XS** \u00b7 mechanism already correct | \u2014 | \u2014 | AT-T02 | SCREEN | Not started |
-| TL-01 | *(= S-01)* interview panel leak | G-SEC-11 | 7 | **XS-S** | \u2014 | \u2014 | AT-S01 | API | **NEXT** |
-| TL-02 | Performance goal \u2192 `competency_id` | **G-FLOW-26** | 5 | **M** \u00b7 `PerformanceGoalController.php` | 9-box | F-01 | AT-TL02 | DB | Not started |
+| M-03 | **Role-mapping create path** + reinstate the button | **G-MAP-01** | 1 | **S-M** · surface `SchoolSetupController.php:392-408` | thread 1 | F-01 | AT-M03 | SCREEN | Not started |
+| M-04 | `skill_matrix_item` tenant column | G-DATA-08 | 1, 5 | **XS** *(inside F-04)* | — | *(= F-04)* | AT-F04 | DB | Not started |
+| O-01 | Skill Deficit KPI honesty | G-DATA-05 | — | **XS** · `employee-directory.tsx` | — | — | AT-O01 | SCREEN | Not started |
+| O-02 | Directory ratings via one service | — | 1 | **S** | — | F-04 | AT-O02 | API | Not started |
+| O-03 | `ExcelAutomationAgentController@credentialStatus` | G-SEC-11 | — | **XS-S** | — | — | AT-O03 | API | Not started |
+| O-04 | Three report-route leaks | G-SEC-11 | — | **S** | — | — | AT-O04 | API | Not started |
+| O-05 | Read `HrmsController` (31 routes) | C21 | — | **S** *(reading)* | S-03 scope | — | — | — | Not started |
+| LM-01 | Retire `contentLibraryControllerOld` | — | — | **S** · ⚠️ **R8 + approval** | — | — | AT-LM01 | API | Not started |
+| LM-02 | Course Builder prompt enrichment | — | 4 | **XS** · `course-builder-panel.tsx` | — | — | AT-LM02 | SCREEN | Not started |
+| LM-03 | Surface the LMS funnel | G-FLOW-05 | 4 | **S** | — | — | AT-LM03 | SCREEN | Not started |
+| T-01 | One write path for `task.status` | S-6 | 2 | **M** · 10 writing files | — | S-6 verification | AT-T01 | API | Not started |
+| T-02 | Surface `delay_category` | G-FLOW-24 | 2 | **XS** · mechanism already correct | — | — | AT-T02 | SCREEN | Not started |
+| TL-01 | *(= S-01)* interview panel leak | G-SEC-11 | 7 | **XS-S** | — | — | AT-S01 | API | ✅ **API-verified** (`15791bca`) |
+| TL-02 | Performance goal → `competency_id` | **G-FLOW-26** | 5 | **M** · `PerformanceGoalController.php` | 9-box | F-01 | AT-TL02 | DB | Not started |
 | TL-03 | Requisitions read `jobrole_competency_map` | **G-FLOW-26** | 7 | **M** | thread 7 | F-01 | AT-TL03 | SCREEN | Not started |
-| TL-04 | Resolve the two `OnboardingTaskController`s | \u2014 | \u2014 | **S** \u00b7 read both first (R6) | \u2014 | \u2014 | AT-TL04 | API | Not started |
+| TL-04 | Resolve the two `OnboardingTaskController`s | — | — | **S** · read both first (R6) | — | — | AT-TL04 | API | Not started |
 
 ## Tier 4 — Surfaces
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| R-01 | Consolidated reporting home | Q-A4 | \u2014 | **ESTIMATE PENDING** | \u2014 | F-01, F-02 | AT-R01 | SCREEN | Not started |
-| R-02 | Competency gap report | \u2014 | 1 | **M** | \u2014 | R-01 | AT-R02 | SCREEN | Not started |
-| R-03 | Development plan report | \u2014 | 4 | **M** | \u2014 | R-01, M-02 | AT-R03 | SCREEN | Not started |
-| R-04 | Certification expiry report | G-CERT-01 | 8 | **M** | \u2014 | R-01, F-02 | AT-R04 | SCREEN | Not started |
-| R-05 | 9-box second axis | **G-FLOW-26** | 5 | **M** | \u2014 | TL-02 | AT-R05 | SCREEN | Not started |
+| R-01 | Consolidated reporting home | Q-A4 | — | **ESTIMATE PENDING** | — | F-01, F-02 | AT-R01 | SCREEN | Not started |
+| R-02 | Competency gap report | — | 1 | **M** | — | R-01 | AT-R02 | SCREEN | Not started |
+| R-03 | Development plan report | — | 4 | **M** | — | R-01, M-02 | AT-R03 | SCREEN | Not started |
+| R-04 | Certification expiry report | G-CERT-01 | 8 | **M** | — | R-01, F-02 | AT-R04 | SCREEN | Not started |
+| R-05 | 9-box second axis | **G-FLOW-26** | 5 | **M** | — | TL-02 | AT-R05 | SCREEN | Not started |
 
-### \u00a75.1 \u2014 whole-plan reconciliation
+### §5.1 — whole-plan reconciliation
 
 **Run across the plan, not per module.** Items appearing in several write-ups
 appear **once** here.
 
 | | Count |
 |---|---:|
-| Items deduplicated into one row | **4** \u2014 L-11 = F-07 · L-14 = F-01 · M-04 = F-04 · TL-01 = S-01 |
-| ID collisions fixed | **3** \u2014 LMS `L-01/02/03` \u2192 `LM-01/02/03` |
-| Superseded | **1** \u2014 L-03 by L-03R |
-| **ESTIMATE PENDING** | **6** \u2014 S-02, S-03, S-06, S-08, X-02, R-01 |
-| Already built | **1** \u2014 L-03R |
+| Items deduplicated into one row | **4** — L-11 = F-07 · L-14 = F-01 · M-04 = F-04 · TL-01 = S-01 |
+| ID collisions fixed | **3** — LMS `L-01/02/03` → `LM-01/02/03` |
+| Superseded | **1** — L-03 by L-03R |
+| **ESTIMATE PENDING** | **5** — S-03, S-06, S-08, X-02, R-01 *(S-02 derived: 76 sites / 16 files)* |
+| Already built | **1** — L-03R |
 
-> **The headline result of Gate C, stated as one:** across six modules, \u00a75.1
+> **The headline result of Gate C, stated as one:** across six modules, §5.1
 > returned **2 new / 3-5 already approved** every time. **Gate C found almost
 > nothing that Gate B's domain model had not already anticipated.** That is what a
 > correct model looks like, and it is the strongest evidence that
@@ -606,11 +606,11 @@ something demonstrable.
 
 ---
 
-## SLICE 1 \u2014 "One job role, one employee, one visible gap"
+## SLICE 1 — "One job role, one employee, one visible gap"
 
 **The shortest path to a visible capability chain.** Triz's assumption was seed
 import + join tables + one role's mapping + a gap on a profile. **That is right,
-with one correction: the seed import is not needed for Slice 1** \u2014 the mapping
+with one correction: the seed import is not needed for Slice 1** — the mapping
 rows already exist (79,295 of them). Importing is how you get *coverage*; Slice 1
 only needs *one role*.
 
@@ -621,45 +621,45 @@ only needs *one role*.
 | 1 | **S-01** interview panel leak | Tier 0. Nothing demos until security items in flight are closed |
 | 2 | **F-01** the five join tables, one migration | The chain has no shape without them |
 | 3 | **F-04** `skill_matrix_item` + tenant column | The measured side of the gap |
-| 4 | **F-07** text\u2192FK, scoped to **one job role** | Full backfill is not required to demo one role |
+| 4 | **F-07** text→FK, scoped to **one job role** | Full backfill is not required to demo one role |
 | 5 | **M-03** role-mapping create path | So the mapping is *authorable*, not just seeded |
 | 6 | A gap read: required vs measured, on the employee profile | The visible output |
 
 **Deliberately NOT in Slice 1:** the rights matrix, the event store, the picker
 mechanism, the import flow, every report. **None is needed to show the chain.**
 
-### Demo script \u2014 "Staff Nurse"
+### Demo script — "Staff Nurse"
 
-1. Open **Competency \u2192 Library & Taxonomy \u2192 Job Role**, show *Staff Nurse* exists.
-2. Open **Framework & Role Mapping**, add three competencies at required proficiency \u2014 **using M-03's create path, not cell-by-cell**.
-3. Open **Organization \u2192 Employee Directory**, pick an employee whose role is *Staff Nurse*.
+1. Open **Competency → Library & Taxonomy → Job Role**, show *Staff Nurse* exists.
+2. Open **Framework & Role Mapping**, add three competencies at required proficiency — **using M-03's create path, not cell-by-cell**.
+3. Open **Organization → Employee Directory**, pick an employee whose role is *Staff Nurse*.
 4. Rate them on one of the three competencies.
-5. Open their **capability profile**: **required 3, measured 1, gap 2** \u2014 resolved **by key**.
-6. Rename the job role to *Registered Nurse*. **The mapping survives.** *(Today it silently detaches \u2014 this is the moment that shows what was fixed.)*
+5. Open their **capability profile**: **required 3, measured 1, gap 2** — resolved **by key**.
+6. Rename the job role to *Registered Nurse*. **The mapping survives.** *(Today it silently detaches — this is the moment that shows what was fixed.)*
 
 ### What a user can do at the end
-Define what a role requires, measure a person against it, and **see the gap** \u2014
+Define what a role requires, measure a person against it, and **see the gap** —
 for one role, end to end.
 
 ### What is still missing
 Coverage (one role, not all), learning assignment, evidence from tasks,
-reports, and the rights matrix \u2014 so **everyone still sees everything**.
+reports, and the rights matrix — so **everyone still sees everything**.
 
 ### How far away
 **Honestly: F-01 + F-04 + F-07 are the largest single migration in the plan
 (two L's and an M), and F-07 is a backfill against 283,126 string-joined rows even
-scoped to one role.** Slice 1 is **not a quick win** \u2014 it is the *shortest* path,
+scoped to one role.** Slice 1 is **not a quick win** — it is the *shortest* path,
 which is not the same thing. Everything after it is faster, because the foundation
 is laid once.
 
 ---
 
-## SLICE 2 \u2014 "Roles mean something"
+## SLICE 2 — "Roles mean something"
 
-**Items:** F-06 tri-state rights \u2192 **X-01 rights matrix populated with the
-before/after menu diff** \u2192 X-02 route permission declarations \u2192 S-08.
+**Items:** F-06 tri-state rights → **X-01 rights matrix populated with the
+before/after menu diff** → X-02 route permission declarations → S-08.
 
-**Demo:** log in as Employee, then as HR, then as Admin \u2014 **three different
+**Demo:** log in as Employee, then as HR, then as Admin — **three different
 products**. Today all three see essentially the same 1,500-1,657 menus, with
 Employee seeing *more* than Admin.
 
@@ -674,27 +674,27 @@ without a single migration.
 
 ---
 
-## SLICE 3 \u2014 "Work and learning feed capability"
+## SLICE 3 — "Work and learning feed capability"
 
-**Items:** S-02 (G-SEC-12) \u2192 X-04 event store \u2192 X-05 `task_status_history` \u2192
-F-03 restored tables \u2192 `competency_evidence` projector \u2192 M-02, M-01.
+**Items:** S-02 (G-SEC-12) → X-04 event store → X-05 `task_status_history` →
+F-03 restored tables → `competency_evidence` projector → M-02, M-01.
 
-**Demo:** complete a job-role task \u2192 evidence appears against the competency it
-exercises \u2192 a gap triggers a learning assignment **recorded against that gap** \u2192
+**Demo:** complete a job-role task → evidence appears against the competency it
+exercises → a gap triggers a learning assignment **recorded against that gap** →
 completion raises proficiency where policy allows.
 
 **This is the loop the product is sold on, closed for the first time.**
 
 **Still missing:** recruitment, performance, reports.
-**Note:** S-02 first is not optional \u2014 an event store on untrustworthy `actor_id`
+**Note:** S-02 first is not optional — an event store on untrustworthy `actor_id`
 inherits a corrupted audit trail on day one.
 
 ---
 
-## SLICE 4 \u2014 "The rest of the chain"
+## SLICE 4 — "The rest of the chain"
 
-**Items:** F-02 + L-09 certifications \u2192 F-05 reporting line \u2192 TL-02 performance \u2192
-TL-03 recruitment \u2192 F-08 `portal_identity` \u2192 X-03 picker \u2192 L-01/02/04.
+**Items:** F-02 + L-09 certifications → F-05 reporting line → TL-02 performance →
+TL-03 recruitment → F-08 `portal_identity` → X-03 picker → L-01/02/04.
 
 **Demo:** a requisition generating its scorecard from the framework; a review whose
 goal points at a real competency; a certificate resolving to a known type.
@@ -703,9 +703,9 @@ goal points at a real competency; a certificate resolving to a known type.
 
 ---
 
-## SLICE 5 \u2014 "See it"
+## SLICE 5 — "See it"
 
-**Items:** X-08 import \u2192 R-01 reporting home \u2192 R-02/03/04 \u2192 R-05 9-box \u2192 O-01.
+**Items:** X-08 import → R-01 reporting home → R-02/03/04 → R-05 9-box → O-01.
 
 **Demo:** a new tenant imports a seed library and **sees a populated product on day
 one**; the three reports that never existed among the 45 legacy ones; a 9-box with
@@ -744,10 +744,10 @@ Folded in as a Tier 0 sub-plan. Order is **§4's data-class rule**, not route co
 | 9 | **C23 write-half** | per controller, opt-in, every row registered |
 | 10 | **C23 regression guard in CI** | without it this regrows on the next controller |
 
-> ## \u26d4 C24 \u2014 RELEASE PRECONDITION
+> ## ⛔ C24 — RELEASE PRECONDITION
 > **No customer tenant is created on this platform until the tenant-isolation test
 > suite passes end to end.** A business rule, not an engineering task. The gate is
-> a **passing suite**, not a completed fix \u2014 because C22 showed a fix can look done
+> a **passing suite**, not a completed fix — because C22 showed a fix can look done
 > and not be.
 
 ---
@@ -759,12 +759,12 @@ Folded in as a Tier 0 sub-plan. Order is **§4's data-class rule**, not route co
 | Item | Depends on | If it comes back differently |
 |---|---|---|
 | **S-03** remaining leaks | **S-04**'s classification of 37 candidates | If a **fourth defect class** appears (not wrong-scope, not no-scope, not actor), Tier 0 grows and Slice 1 slips |
-| **C34's 114** | **S-05** \u2014 C37's ten checks | **One real hit** \u2192 C34 calibrates and 114 become a worklist. **Ten false positives** \u2192 C34 closes as a **proven negative** and the no-scoping class does not exist here. Either ends it |
+| **C34's 114** | **S-05** — C37's ten checks | **One real hit** → C34 calibrates and 114 become a worklist. **Ten false positives** → C34 closes as a **proven negative** and the no-scoping class does not exist here. Either ends it |
 | **S-02** G-SEC-12 | its own hand-classification | If most of the 33 are SUBJECT, this is small. If most are IDENTITY, it is **M-L** and the event store slips |
 | **X-03** picker | actual cost of the meta pipeline | If it exceeds M-L, L-01/02/04 stay XS but arrive later |
 | **X-08** import | whether `SchoolSetupController`'s bulk path generalises | If it does not, the import is **L** and Slice 5 slips |
-| **F-07** text\u2192FK | how many rows fail to match on backfill | **Unmatched rows are reported, never guessed** (\u00a710.0). A high unmatched rate means manual reconciliation |
-| **L-17** | whether the two element columns are a controlled vocabulary | Already measured: **10 terms cover 78%** \u2014 it is a library. Additive, not a substitution |
+| **F-07** text→FK | how many rows fail to match on backfill | **Unmatched rows are reported, never guessed** (§10.0). A high unmatched rate means manual reconciliation |
+| **L-17** | whether the two element columns are a controlled vocabulary | Already measured: **10 terms cover 78%** — it is a library. Additive, not a substitution |
 | **F-02** certifications | whether §10 gained a step | **Confirmed a genuine Gate B omission**; steps 3b/9b added |
 
 ---
@@ -781,10 +781,10 @@ Folded in as a Tier 0 sub-plan. Order is **§4's data-class rule**, not route co
 | **Delegation / acting manager** | Not Phase 3 build work. Two rules designed in now: audit records both parties; delegation never widens scope | A4 |
 | **Leave convergence steps 3-4** | Fold local leave flags into the shared rights matrix, then drop `hrms_leave_role_permissions`. First post-Phase-3 items | A7 |
 | **27 deferred nav rows** | Itemised in `01b-scope-triage.md` | Q-A3 |
-| **Compensation** | Not in the golden threads | \u2014 |
-| **Template management** | Not in the golden threads | \u2014 |
+| **Compensation** | Not in the golden threads | — |
+| **Template management** | Not in the golden threads | — |
 | **65 nav rows marked DELETE** | Approved in principle; **no row removed without a reversible script + backup** | Q-A3 amendment 4 |
-| **The 9-box surface** *(if T4 defers)* | Thread 5's data lands in Phase 3; the grid itself may be Phase 4 | \u00a72 |
+| **The 9-box surface** *(if T4 defers)* | Thread 5's data lands in Phase 3; the grid itself may be Phase 4 | §2 |
 
 ---
 
@@ -795,12 +795,12 @@ Folded in as a Tier 0 sub-plan. Order is **§4's data-class rule**, not route co
 1. **All Tier 0 and Tier 1 items shipped and verified.**
 2. **Every golden thread either works end to end or is explicitly deferred with a reason recorded.**
 3. **The C23 tenant-isolation suite is green, including the write half.**
-4. **One customer-ready demonstration of the capability chain exists** \u2014 Slice 1's demo script, run for real.
+4. **One customer-ready demonstration of the capability chain exists** — Slice 1's demo script, run for real.
 
 **Anything beyond that is Phase 4.**
 
 **Adopted as proposed.** The evidence does not contradict it, and two points
-support it: Tier 2's mechanisms are *enabling*, not *demonstrable* \u2014 tying "done"
+support it: Tier 2's mechanisms are *enabling*, not *demonstrable* — tying "done"
 to them would hide progress; and item 3 is the only one with an objective pass/fail
 that a person cannot talk their way past.
 
@@ -815,7 +815,7 @@ that a person cannot talk their way past.
 | 3 | **The seed import is harder than `SchoolSetupController` suggests** | Slice 5 slips; **coverage stays at 2.7%** | The bulk path is signup-specific and does not generalise |
 | 4 | **The 75 uncommitted Phase 1/2 files are lost or diverge** | **The F-01 tenant-resolution work itself is in that set.** Losing it silently reverts D-003/D-004 | Escalated to Triz; outside my control |
 | 5 | **F-07's backfill leaves a high unmatched rate** | Manual reconciliation per tenant | Unmatched report is large after the dry run |
-| 6 | **The rights matrix diff removes screens people rely on** | Rollout blocked | Triz's per-role review finds losses \u2014 **which is why the review exists** |
+| 6 | **The rights matrix diff removes screens people rely on** | Rollout blocked | Triz's per-role review finds losses — **which is why the review exists** |
 | 7 | **Process regrowth** | The failure mode of the last ten turns | New rules or numbered checks appear without one being retired |
 
 ---
