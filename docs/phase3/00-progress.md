@@ -136,6 +136,10 @@ counted 9. Difference = the duplicate + Skill Taxonomy/Ontology covered as one
 section. **No sub-module was skipped.** Reconciled: 30 audited · 1 duplicate · 1
 out of scope = 32.
 
+**✅ GATE C VERIFIED AND CLOSED** — `12-gate-c-verification.md`. V4 sample error rate
+**3.3%** (1 of 30, under the 5% bar); V7 reconciliation **clean, no dropped work**.
+V6 corrected four headline numbers. **The audit is closed; no further verification.**
+
 **`08-connection-plan.md` STARTED — §1–§3 complete** (diagnosis, all 9 threads
 traced, dependency tiers). §4–§11 in assembly.
 

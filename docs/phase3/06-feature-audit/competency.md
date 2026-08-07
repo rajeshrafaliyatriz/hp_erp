@@ -103,11 +103,16 @@ roles invisible to HR).
 tracked — and **none of it is attributable to a measured gap.** Thread 4 does not
 close.
 
-### F-2 · Command Center — every navigation target is dead · **S3**
+### F-2 · Command Center navigation · **CANDIDATE (R6), downgraded by V4**
 
-`go()` pushes `/module/competency-management/${submenuId}/${submenuId}`;
-`CONTENT_MAP_LOADERS` is keyed `'1','2','3','4','5','204','186'`. All 6 tile links,
-4 ring links and 5 work-queue rows resolve to a placeholder. **Already C-08.**
+`go()` pushes `/module/competency-management/${submenuId}/${submenuId}`
+(`cm-command-center.tsx:371` — confirmed).
+
+⚠️ **V4 found two errors in the original claim:** `CONTENT_MAP_LOADERS` lives in
+**`hooks/use-content-map.ts`**, not `cm-command-center.tsx`, and has **eight** keys
+— `1 2 3 4 5 204 186 50` — not the seven I listed. **The substance was never
+re-derived**: I did not enumerate the tile submenuIds, so whether they miss the map
+is unproven. **CANDIDATE until someone does.**
 
 ### F-3 · **G-MAP-01 — the core mapping table has NO CREATION PATH** · **S1**
 

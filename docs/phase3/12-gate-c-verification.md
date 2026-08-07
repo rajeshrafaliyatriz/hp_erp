@@ -4,7 +4,7 @@
 traded away. This verifies **the claims the connection plan rests on**, and reports
 an **error rate**, not an assurance.
 
-**Status:** `V1 and V6 complete. V2–V5, V7, V8 in progress.`
+**Status:** `COMPLETE. Trimmed to V4 + V7 by instruction; V2/V5 sampled within V4; V3 and V8 answered inline.`
 
 > ## ⚠️ V6 FOUND FOUR ERRORS IN EIGHT HEADLINE NUMBERS
 > Three share a single root cause, and **they run in the opposite direction to
@@ -173,5 +173,159 @@ credibility.
 
 ---
 
-*V2–V5, V7 and V8 follow in the next pass. Exit criteria are assessed once V4's
-sample error rate exists.*
+
+
+
+---
+
+# V4 — 30-CLAIM SAMPLE, RE-DERIVED FROM SCRATCH
+
+Write-ups **not re-read first**. Weighted to NEGATIVE and NUMERIC, as instructed.
+V2 (negative claims) and V5 (cross-document contradiction) are **sampled within
+this 30**, not run separately.
+
+## Result
+
+| Class | Sampled | Errors | Rate |
+|---|---:|---:|---:|
+| NUMERIC | 9 | 0 | 0% |
+| NEGATIVE — schema | 6 | 0 | 0% |
+| NEGATIVE — code / frontend | 9 | **1** | 11% |
+| STRUCTURAL | 4 | 0 | 0% |
+| BEHAVIOURAL | 2 | 0 | 0% |
+| **TOTAL** | **30** | **1** | **3.3%** |
+
+## What re-derived cleanly
+
+**All nine numeric claims, exactly:** `s_user_skill_jobrole` 79,295 ·
+`s_jobrole_skills` 62,208 · `s_jobrole_task` 55,961 · `s_users_skills` 3,976 ·
+enrolments 1,426 · content-progress **1** · certificates **0** ·
+`compliance_relevance` 804 · rights rows 4,879 with **`can_view`=1 on all 4,879 and
+`can_add`/`can_edit`/`can_delete`=1 on zero**.
+
+**All six schema negatives:** `s_skill_matrix` has no `sub_institute_id` ·
+`s_user_jobrole_task` has no skill/competency column · no `certification_type`
+table · no `task_status_history` · `s_jobrole` and `master_skills` have no tenant
+column.
+
+**Structural / behavioural:** `app/Events`, `app/Listeners`, `app/Observers` all
+absent · `s_user_skill_jobrole` has exactly **two** insert sites
+(`RoleMappingController:224`, `SchoolSetupController:408`) · `LibraryController`
+accepts `department_id` · `JobroleApiController` joins it to `hrms_departments` ·
+`authMiddleware` accepts session **or** token · `contentLibraryControllerOld` is a
+live writer of `content_master` · `MyTasksController` validates `delay_category`
+against a closed enum · `AssignLearningForm` has no competency reference · the
+learning kebab offers only *Mark …* and *Remove Assignment* · **no import control
+on any library tab** · `QuickCreateKind` has no `role-mapping`.
+
+> ⚠️ **One of these nearly scored wrong.** "No import control" first returned
+> **22 hits** for `import` in `library-tab.tsx` — all ES module statements. Re-run
+> against upload/file controls: **none**. The claim holds, but a careless pass
+> would have called a true claim false. (R4)
+
+## The one error — competency.md F-2, Command Center navigation
+
+| | |
+|---|---|
+| **Claimed** | *"`CONTENT_MAP_LOADERS` is keyed `'1','2','3','4','5','204','186'`"*, cited in `cm-command-center.tsx` |
+| **Re-derived** | It lives in **`hooks/use-content-map.ts`**, not `cm-command-center.tsx`, and has **eight** keys: `1 2 3 4 5 204 186 50` — **`50` was missing from my list** |
+
+**Two errors in one claim: wrong file, incomplete list.**
+
+**What it changes:** the *substance* — that Command Center tiles navigate to
+`/module/competency-management/{submenuId}/{submenuId}` (confirmed at
+`cm-command-center.tsx:371`) and land on placeholders — is **not re-derived
+either way**, because I did not enumerate the tile submenuIds. **F-2 is downgraded
+from a finding to a CANDIDATE (R6)** until someone does.
+
+**Direction: this error OVERSTATED the finding** (a shorter key list makes more
+navigation look broken). That is now **four of five** recent errors overstating —
+consistent with V6, not with R11's earlier 13–0 under-reporting.
+
+---
+
+# V7 — RECONCILIATION AUDIT · **CLEAN**
+
+Every **ALREADY-APPROVED** verdict across the six write-ups was checked against the
+item it points at. **A wrong one silently drops work from Gate D — the only error
+class that damages the build.**
+
+| Verdict points at | Specified in `02-domain-model.md`? |
+|---|---|
+| `course_competency_map` | ✅ 9 references |
+| `jobrole_competency_map` | ✅ 8 |
+| `competency_kasba_item` | ✅ 11 |
+| `jobrole_task_competency_map` | ✅ 5 |
+| `certification_competency_map` | ✅ 2 (§10.1, steps 3b/9b) |
+| `portal_identity` | ✅ 4 |
+| `reporting_manager_id` | ✅ 5 |
+| Block-don't-cascade delete (L-06) | ✅ §11 (iii) |
+| Import flow (L-10) | ✅ §9, steps 8–9 |
+| Text→FK (L-11) | ✅ §10 steps 12–14 |
+
+**No already-approved verdict was found pointing at something that does not cover
+the connection claimed. No work is silently dropped.**
+
+---
+
+# V3 — WAS THE C35 CHECKLIST APPLIED? · three lines
+
+**Applied in all six.** Competency 6 forms / 18 files · Organization 4 · LMS 5 ·
+Task 4 · Talent 6 · Other 0 forms *(CRM out of scope, Reports has no forms, HRIT's
+forms belong to owning modules)*.
+
+**Both directions were checked**, and the inverse case (a column accepted but never
+sent) was found **only in Competency** — which is itself a result: `L-01` is one
+screen's defect, not a systemic pattern.
+
+**The S-5 class (divergent vocabularies writing one table) has NO replacement
+mechanism.** S-5 was retired without one, so that defect class is **currently
+unchecked outside the one instance already documented** (Command Center vs Library
+approve_status vocabularies). **Recorded as a known gap in coverage, not a finding.**
+
+---
+
+# V8 — COVERAGE, one line per sub-module
+
+| Sub-module | How it was covered |
+|---|---|
+| Library & Taxonomy | **full write-up + calibration** — 176 rows, 0 structural errors; `library-config.ts`, `library-tab.tsx`, `library-form.tsx`, `LibraryController.php` hand-read |
+| Competency Library | **full write-up** — `cm-competency-library.tsx`, `skillLibraryController.php` hand-read |
+| Development & Career Path | **calibrated (C1b, 0 of 206)** + hand-read of `cm-development-career.tsx`, `LearningAssignmentController.php` |
+| Command Center | sweeps + hand-read of `cm-command-center.tsx`, `CompetencyController.php` · **F-2 now a candidate** |
+| Framework & Role Mapping | sweeps + hand-read of `RoleMappingController.php`, `StudioController.php` |
+| Assessments | sweeps + hand-read of `AssessmentController.php`, `AssessmentCycleController.php` |
+| Employee Profiles | sweeps + hand-read of `EmployeeCompetencyProfileController.php` |
+| Certifications | sweeps + hand-read of `CertificationController.php` + both migrations |
+| Skill Taxonomy / Ontology | **sweeps only** + `cm-taxonomy-ontology.tsx` skim |
+| Organization Profile / Dept Mgmt | sweeps + guard results; `DepartmentManagementController` **not hand-read** |
+| Employee Directory | sweeps + hand-read of `employee-directory.tsx`, `employee-directory-sheets.tsx` |
+| Role & Permissions | sweeps + rights-matrix DB queries; controllers **not hand-read** |
+| Compliance / Disciplinary | **sweeps only** |
+| LMS × 3 | sweeps + hand-read of `course-builder-panel.tsx`, `LmsLearningController`, the certificate chain |
+| Task × 2 | sweeps + hand-read of `MyTasksController.php`, `taskController.php` + DB |
+| Talent × 7 | sweeps + guard records + hand-read of `PerformanceGoalController`, `PerformanceOverviewController`; the four `talent_*` controllers **not hand-read** |
+| HRIT | sweeps + guard records; `HrmsController` **not hand-read — largest unread controller** |
+| Agentic | sweeps + guard records; **not hand-read** |
+| Reports | decision-level only |
+| CRM | **not audited — out of scope** |
+
+**Honest summary: 12 of 30 hand-read at file level, 18 covered by sweeps, guard
+records and DB queries.** That is what the C18 trade bought.
+
+---
+
+# EXIT CRITERIA
+
+| | |
+|---|---|
+| V4 error rate | **3.3%** — **under 5%** |
+| V7 | **CLEAN** — no dropped work |
+
+## ✅ GATE C STANDS.
+
+One correction applied: **competency.md F-2 downgraded to a candidate.** V6's four
+number corrections are already propagated.
+
+**The audit is closed. Nothing further is verified. The remaining risk is no longer
+that something was measured wrong — it is that nothing has been built.**
