@@ -134,6 +134,58 @@ key column added beside a name; this needs a *table* that does not exist.
 
 ---
 
+## G-SEC-12 — caller-supplied audit provenance · **S1** (C40)
+
+**`created_by` / `updated_by` taken from the request body.** S-3 found the pattern
+**33 times**; `PayrollController` lines 167 and 238 are two, now fixed.
+
+### Why this is a different class from the tenant leaks
+
+> **A leak exposes data. This CORRUPTS THE RECORD OF WHO DID WHAT** — the evidence
+> you would rely on when investigating a leak.
+>
+> A caller can attribute their own write to another user, and the audit trail
+> records it **as fact**. Nothing looks wrong.
+
+### ⛔ THIS BLOCKS THE EVENT STORE
+
+`05-data-flow-contracts.md` assumes `actor_id` on every event is trustworthy. **If
+actor identity can be caller-supplied anywhere, the event store inherits a
+corrupted audit trail on day one — the exact thing it exists to provide.**
+
+**Sequenced BEFORE the event store in the Gate D order.** Recorded in both
+documents.
+
+### Required
+
+1. **The complete verified list (R6).** 33 candidates, hand-classified **IDENTITY** (must come from the token) vs **SUBJECT** (legitimately supplied — *"generate this employee's payslip"*). Same method that worked on PayrollController: read each site, trace what the value feeds.
+2. **Fix shape:** mirror `payrollActorId()` — token first, session fallback, **never request input**.
+3. Not started. The 33 are candidates, **not** findings.
+
+---
+
+## G-MAP-01 — the "one-line fix" does not exist · **re-costed**
+
+Checked before changing anything. `QuickCreateKind`
+(`services/competency/command-center.ts:111`) has **five** kinds —
+`competency`, `framework`, `assessment`, `certification`, `development-plan` —
+and `CREATE_ENDPOINTS` has the matching five. **There is no `role-mapping` kind,
+and no create endpoint for it.**
+
+So *"point the button at the right handler"* is impossible: **there is no handler
+to point at.** That is the same finding from the other side — role mapping has no
+create path, and the button is bound to `framework` because that is the only thing
+available.
+
+**The only genuine one-line change is DELETING the button**, which is a
+user-facing removal and needs explicit approval plus an R8 checklist. **Not done.**
+
+**M-03 stands as S–M**, and its real content is confirmed: build the create path
+(surfacing `SchoolSetupController.php:392-408`'s existing bulk insert), then wire
+the button to it.
+
+---
+
 ## G-OPS-01 — the trait behind both shipped security fixes was untracked · **S1 (near-miss, now closed)**
 
 **Found by an accident, not by a check.** A mangled shell command truncated
@@ -176,6 +228,20 @@ cost.**
 |---|---|---|
 | `hp_erp` | `github.com/rajeshrafaliyatriz/hp_erp.git`, tracking `origin/Milan-2` | **10 unpushed commits.** All of Phase 3 exists only on this machine |
 | `g2gv0` | `github.com/zeeltank/g2gv0.git`, branch `milan1` | Now committed; **1 unpushed** |
+
+### C41 — the same exposure, twenty times the size
+
+**75 modified files sit uncommitted in `hp_erp`'s working tree** — the Phase 1/2
+work. An untracked trait was one accident from silently reverting two shipped
+security fixes; **75 uncommitted files in the same working tree is that exposure
+at twenty times the scale.**
+
+**They touch security artefacts.** The modified set includes
+`ApprovalController`, `CertificationController`, `CompetencyController`,
+`LmsGovernanceController`, `AJAXController`, `JobroleApiController` and the
+`Resolves*Context` traits — i.e. **the F-01 tenant-resolution work itself**.
+
+**Not mine to commit.** Raised so it can go to whoever owns them.
 
 **Exposure is reduced, not removed.** A lost machine or a bad reset still takes
 Phase 3 with it. **Pushing is Triz's call** — `hp_erp` carries 8 unpushed commits

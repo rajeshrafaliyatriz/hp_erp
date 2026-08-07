@@ -113,7 +113,8 @@ trust/security claims, 10% sample otherwise.
 | 8 | Join tables + `certification_type` + restored tables, **one migration** (§10) | Not started |
 | 9 | `reporting_manager_id` + `head_user_id`, with cycle validation | Not started |
 | 10 | Tri-state rights + **populate the matrix**, with before/after menu diff | Not started |
-| 11 | Event store + projector/reactor split + `task_status_history` | Not started |
+| 10b | **G-SEC-12 — caller-supplied audit provenance (33 candidates)** | **Not started. BLOCKS item 11** — the event store assumes `actor_id` is trustworthy |
+| 11 | Event store + projector/reactor split + `task_status_history` | Not started. **Blocked by 10b** |
 
 **C20 verification protocol** (`11-verification-protocol.md`): I **cannot** start
 the app or click a UI, so I can never mark my own work `Verified`. Cap of 3

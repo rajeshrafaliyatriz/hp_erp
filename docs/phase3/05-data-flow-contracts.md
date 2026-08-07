@@ -124,6 +124,20 @@ This is what makes "did the notification actually go out?" answerable.
 
 ---
 
+## 1.9 ⛔ PREREQUISITE — G-SEC-12 blocks this document
+
+**Everything below assumes `actor_id` on an event is trustworthy.** It is not, yet.
+
+`created_by` / `updated_by` are taken from the **request body** in **33 places**
+(S-3). A caller can attribute a write to another user and the record states it as
+fact. **An event store built on top of that inherits a corrupted audit trail on day
+one — the exact thing it exists to provide.**
+
+**G-SEC-12 is sequenced before the event store in the Gate D order.** Until it is
+closed, no event's `actor_id` can be relied on for audit, approval or evidence.
+
+---
+
 ## 2. Event catalogue
 
 **The test applied to every event: does it have a NAMED CONSUMER that DOES
