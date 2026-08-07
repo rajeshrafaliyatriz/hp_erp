@@ -124,7 +124,7 @@ the app or click a UI, so I can never mark my own work `Verified`. Cap of 3
 
 ## GATE C — audit thread
 
-### Module write-ups: **19 of 32 sub-modules**
+### Module write-ups: **26 of 32 sub-modules**
 
 | Module | Sub-modules | Status |
 |---|---:|---|
@@ -132,7 +132,7 @@ the app or click a UI, so I can never mark my own work `Verified`. Cap of 3
 | **Organization** | 5 | ✅ `organization.md` |
 | **LMS** | 3 | ✅ `lms.md` |
 | **Task** | 2 | ✅ `task.md` |
-| Talent | 7 | pending |
+| **Talent** | 7 | ✅ `talent.md` |
 | Other (HRIT, Agentic, Reports, CRM) | 4 | pending |
 
 ### Sweeps — CONCLUDED, 7 of 7

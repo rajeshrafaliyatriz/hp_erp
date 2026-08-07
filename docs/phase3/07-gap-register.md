@@ -134,6 +134,37 @@ key column added beside a name; this needs a *table* that does not exist.
 
 ---
 
+## G-FLOW-26 — a vocabulary of connection without the connection · **S2**
+
+**Three modules now show the same shape: the word "competency" is present, the join
+is not.**
+
+| Thread | Where | What exists | What does not |
+|---|---|---|---|
+| **3** · Competency ↔ LMS | `library-config.ts:172` | a *Learning Resources* **text field** | any course reference (`L-08`) |
+| **5** · Competency ↔ Performance | `PerformanceGoalController.php:93,167`; `PerformanceOverviewController.php:314` | `'competency'` as a **validator enum value** and a **filter label** | **any join to `s_skill_matrix`, `s_users_skills` or a competency table — none exists in `Api/Performance/`** |
+| **7** · Competency → Recruitment | Q-D1 recorded the read as intended | nothing | **zero references to `s_user_skill_jobrole` / `s_jobrole_skills` in `Api/Talent/` or `talent_*`** |
+
+### Why this is its own gap and not three
+
+**A reader of the code would conclude these modules are connected.** The
+vocabulary is there — a goal category called *competency*, a filter labelled
+*Competency*, a field called *Learning Resources*. **Each is a label with no
+referent.**
+
+**The 9-box grid is the clearest casualty:** it has performance on one axis and
+**nothing to put on the other**, because Performance has never been able to read a
+capability measurement.
+
+**This is the demand-side counterpart to `G-DATA-06`.** G-DATA-06 says the
+relationships that *do* exist are joined by string; **G-FLOW-26 says three of the
+relationships the product is sold on do not exist at all** — they are named and
+not built.
+
+**Connections:** `TL-02` (Performance), `TL-03` (Recruitment), `L-08` (LMS).
+
+---
+
 ## G-SEC-12 — caller-supplied audit provenance · **S1** (C40)
 
 **`created_by` / `updated_by` taken from the request body.** S-3 found the pattern
