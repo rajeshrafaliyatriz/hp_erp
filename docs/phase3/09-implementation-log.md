@@ -389,6 +389,50 @@ regex in `SuggestedCourseController`. Same class of defect as earlier in the pha
 
 ---
 
+## D-007 · F-01..F-04, F-07, F-09 — the foundation migration, as ONE change
+
+**2026-08-07** · **APPLIED** · commit **`7df8c1c7`**
+
+| | |
+|---|---|
+| **Changed** | **12 tables created, 3 nullable columns added.** Strictly additive — no drops, no inferred backfill, no existing column altered |
+| **Files** | `database/migrations/2026_08_07_100000_phase3_foundation_join_tables.php` |
+| **Verification** | **12 of 12 tables created · 3 of 3 columns added · all twelve carry `sub_institute_id` · all new tables empty** |
+| **Acceptance** | AT-F01..F04, F07, F09 structural half **PASSED** (schema verified by query). **Not `Verified`** — no application code reads these yet |
+
+### The six confirmations, answered before running
+
+| # | Question | Answer |
+|---:|---|---|
+| 1 | Tenancy on every tenant-owned table | **Two were genuinely missing.** `competency_kasba_item` and `library_map_skill` had no `sub_institute_id`; both now do. **The diagram was brevity for ten of twelve and wrong for two** — the check was worth making |
+| 2 | Can a tenant own a `certification_type`? | **Yes.** `sub_institute_id` NULLABLE — NULL = global seed, non-null = tenant-authored, which is where §10.0's gated inline create writes |
+| 3 | Why did the controller break if the table exists? | **It did not.** `CertificationRequirementController` references `s_competency_certification_requirements` — **with** the `s_` prefix — and that table exists with 15 rows. **The audit recorded it without the prefix.** A naming error in the record, not a missing table |
+| 4 | Does `skill_matrix_item` keep `item_label`? | **Yes**, and `item_id` is **nullable** — so an unmatched row keeps what was meant and is reported, never inferred |
+| 5 | UNIQUE on every map table's natural key | **All five verified present** before running |
+| 6 | Does `competency_evidence` carry direction and dismissal? | **Yes** — `direction` (positive/negative/neutral, default neutral), plus `dismissed_reason`, `dismissed_by`, `dismissed_at` |
+
+### One failure during application, and its fix
+
+The first run failed on MySQL's **64-character identifier limit**: the
+auto-generated index name on `s_competency_certification_requirements` came to 66.
+Replaced with an explicit `idx_ccr_cert_type`. **The migration is idempotent
+(`if (!Schema::hasTable)`), so re-running after the fix was safe** and no partial
+state persisted.
+
+### Rollback
+
+`down()` drops exactly what `up()` created, in reverse dependency order, plus the
+three columns. **Every new table starts empty and every new column starts NULL, so
+reverting cannot lose data.**
+
+### What this does NOT do
+
+No backfill. `s_user_jobrole_task.jobrole_id` and the two `certification_type_id`
+columns are **nullable, indexed and unread**. The backfill, its unmatched report,
+and the eventual text-key drops are a separate reviewed change (R8).
+
+---
+
 ## R7 applied retroactively — which costs move
 
 **R7: an estimate that does not name the files it touches is a guess.** Every

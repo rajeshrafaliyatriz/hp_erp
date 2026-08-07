@@ -445,22 +445,26 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 
 **CURRENTLY WORKING ON — the build. Analysis is closed.**
 
-**FOUNDATIONS BUILT — 0 of 6.**
+**FOUNDATIONS BUILT — 1 of 6.**
 
 | # | Build item | State |
 |---:|---|---|
 | 1 | `talent_interviewpanelController` | ✅ done (`15791bca`) |
 | 2 | G-SEC-12 actor identity | ✅ done (`d70a204c`) — **unblocks the event store** |
-| 3 | **The join-table migration, as ONE change** | **NEXT — the counter starts here** |
-| 4 | Rights matrix populated + before/after menu diff for review | after 3 |
+| 3 | **The join-table migration, as ONE change** | ✅ done (`7df8c1c7`) — 12 tables, 3 columns |
+| 4 | **Rights matrix populated + before/after menu diff for review** | **NEXT** |
 | 5 | `reporting_manager_id` + `head_user_id` + cycle validation | after 4 |
 | 6 | Event store + projector/reactor split + `task_status_history` | after 5 |
 
 ### Next 3 steps
 
-1. **F-01** — the five join tables, one migration (`02-domain-model.md` §2.1 DDL)
-2. **X-01** — rights matrix populated, with the before/after menu diff
-3. **F-05** — reporting line with cycle validation
+1. **F-06 + X-01** — tri-state rights columns, then populate the matrix with the
+   before/after menu diff **for Triz's review before rollout**
+2. **F-05** — reporting line with cycle validation
+3. **X-04** — event store + projector/reactor split *(unblocked by S-02)*
+
+**Also now unblocked by D-007:** F-07b (backfill + unmatched report + drops, R8),
+and every Tier 3 connection that was waiting on the join tables.
 
 ### Still queued, not blocking
 

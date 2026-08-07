@@ -497,15 +497,16 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| F-01 | **The five join tables, ONE migration** | G-DATA-06, G-FLOW-26 | 1-8 | **L** · new migration + `02-domain-model.md` §2.1 DDL | **everything in T3** | — | AT-F01 | DB | Not started |
-| F-02 | `certification_type` + `certification_competency_map` | G-CERT-01 | 3, 8 | **M** · §10.1 DDL, steps 3b/9b | L-09, thread 8 | F-01 | AT-F02 | DB | Not started |
-| F-03 | Three restored tables | Q-B5 | 2, 3, 8 | **S** · §4.2 idempotent DDL | evidence projector | — | AT-F03 | DB | Not started |
-| F-04 | `skill_matrix_item` + `sub_institute_id` | G-DATA-08 | 1, 5, 6 | **M** · step 12 normalisation | guards seeing tenancy | F-01 | AT-F04 | DB | Not started |
+| F-01 | **The five join tables, ONE migration** | G-DATA-06, G-FLOW-26 | 1-8 | **L** · new migration + `02-domain-model.md` §2.1 DDL | **everything in T3** | — | AT-F01 | DB | ✅ **APPLIED** (`7df8c1c7`) |
+| F-02 | `certification_type` + `certification_competency_map` | G-CERT-01 | 3, 8 | **M** · §10.1 DDL, steps 3b/9b | L-09, thread 8 | F-01 | AT-F02 | DB | ✅ **APPLIED** (`7df8c1c7`) |
+| F-03 | **Two** restored tables *(not three — see D-007)* | Q-B5 | 2, 3, 8 | **S** · §4.2 idempotent DDL | evidence projector | — | AT-F03 | DB | ✅ **APPLIED** (`7df8c1c7`) |
+| F-04 | `skill_matrix_item` + `sub_institute_id` | G-DATA-08 | 1, 5, 6 | **M** · step 12 normalisation | guards seeing tenancy | F-01 | AT-F04 | DB | ✅ **APPLIED** (`7df8c1c7`) |
 | F-05 | `reporting_manager_id` + `head_user_id` + cycle validation | Q-B1 | 2, 4, 9 | **M** · `tbluser`, `hrms_departments` migration | every approval flow | — | AT-F05 | DB | Not started |
 | F-06 | Tri-state rights columns | G-SEC-06 | 9 | **S** · both rights tables | rights population | — | AT-F06 | DB | Not started |
-| F-07 | Text→FK migrations (steps 12-14) | G-DATA-06 | all | **L** · backfill + report unmatched | joins by key | F-01 | AT-F07 | DB | Not started |
+| F-07a | Text→FK **columns added**, nullable, unread | G-DATA-06 | all | **M** | F-07b | F-01 | AT-F07 | DB | ✅ **APPLIED** (`7df8c1c7`) |
+| F-07b | Text→FK **backfill + unmatched report + drops** | G-DATA-06 | all | **L** · R8 on the drops | joins by key | F-07a | AT-F07b | DB | Not started |
 | F-08 | `portal_identity` | Q-D4 | 7 | **M** · §7.3 DDL | candidate conversion | — | AT-F08 | DB | Not started |
-| F-09 | `library_map_skill` join table | G-DATA-07 | 1 | **S** · 3,270 rows to split | — | F-01 | AT-F09 | DB | Not started |
+| F-09 | `library_map_skill` join table | G-DATA-07 | 1 | **S** · 3,270 rows to split | — | F-01 | AT-F09 | DB | ✅ **APPLIED** (`7df8c1c7`) |
 
 ## Tier 2 — Mechanisms
 

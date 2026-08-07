@@ -65,7 +65,7 @@
 | 5 | **G-MAP-01** button removed | **Built** — R8 checklist clean |
 | 6 | **S-01** `talent_interviewpanelController` | ✅ **API-verified-UI-pending** — guard 1 FAIL → 0 (`15791bca`) |
 | 7 | **S-02** G-SEC-12 actor fixes | ✅ **API-verified-UI-pending** — 76 sites / 16 files, 0 remain (`d70a204c`). **No longer blocks 11** |
-| 8 | Join-table migration (one change) | **Not started** |
+| 8 | **Join-table migration (one change)** | ✅ **APPLIED** (`7df8c1c7`) — 12 tables, 3 columns, all tenant-scoped |
 | 9 | Rights matrix populated + before/after diff | **Not started** |
 | 10 | `reporting_manager_id` + `head_user_id` | **Not started** |
 | 11 | Event store + projector/reactor split | **Not started. UNBLOCKED** — S-02 closed |
@@ -75,9 +75,9 @@
 | 15 | `skill_matrix_item` + tenant column | **Not started** |
 | 16 | Text→FK migrations | **Not started** |
 
-**Built: 7. Structural foundations built: 0 of 6.**
+**Built: 8.**
 
-**FOUNDATIONS BUILT — 0 of 6.** The counter starts at the join-table migration.
+**FOUNDATIONS BUILT — 1 of 6.**
 
 ---
 

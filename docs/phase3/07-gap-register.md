@@ -818,7 +818,14 @@ Q-C2, Q-C3. Golden threads 2 and 3 cannot be built before they exist.
 
 ## G-STR-02 — Three tables have migrations recorded as run but do not exist · **S1** · `OPEN`
 
-`competency_evidence`, `competency_certification_requirements`, `s_skill_jobrole`.
+`competency_evidence`, ~~`competency_certification_requirements`~~, `s_skill_jobrole`.
+
+> ⚠️ **CORRECTED 2026-08-07 (D-007): TWO of three, not three.**
+> `s_competency_certification_requirements` — **with** the `s_` prefix — **exists
+> and holds 15 rows**, and `CertificationRequirementController` references it
+> correctly. **This record listed it without the prefix**, which is why it read as
+> missing. **A naming error in the audit, not a missing table.** The other two were
+> genuinely absent and are now created.
 Controllers and models reference all three; `CertificationController`,
 `CertificationRequirementController` and `EmployeeCompetencyProfileController`
 break on the paths that touch them.
