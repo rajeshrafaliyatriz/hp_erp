@@ -1,0 +1,5474 @@
+[
+    [
+        "CsrfCookieController@show",
+        "sanctum/csrf-cookie",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "UserProfileController@show",
+        "api/user/profile",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "JobRoleGraphController@show",
+        "api/jobroles/{jobRoleId}/graph",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OrganizationGraphController@show",
+        "api/organizations/{orgId}/graph",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "DepartmentGraphController@show",
+        "api/departments/{deptId}/graph",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "generateQuestionController@index",
+        "api/ai-generated-assessment/question/index",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "generateAssessmentController@index",
+        "api/ai-generated-assessment/assessment/index",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_interviewschedulescontroller@index",
+        "api/interview-schedules",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_interviewschedulescontroller@create",
+        "api/interview-schedules/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "talent_interviewschedulescontroller@show",
+        "api/interview-schedules/{interview_schedule}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "talent_interviewschedulescontroller@edit",
+        "api/interview-schedules/{interview_schedule}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "talent_interviewschedulescontroller@candidatepipeline",
+        "api/candidate-pipeline",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_jobapplicationcontroller@getShortlistedCandidates",
+        "api/job-applications/shortlisted",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_jobapplicationcontroller@index",
+        "api/job-applications",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_jobapplicationcontroller@create",
+        "api/job-applications/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "talent_jobapplicationcontroller@show",
+        "api/job-applications/{job_application}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "talent_jobapplicationcontroller@edit",
+        "api/job-applications/{job_application}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "talent_jobpostingcontroller@index",
+        "api/job-postings",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_jobpostingcontroller@create",
+        "api/job-postings/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "talent_jobpostingcontroller@show",
+        "api/job-postings/{job_posting}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "talent_jobpostingcontroller@edit",
+        "api/job-postings/{job_posting}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "talent_jobpostingcontroller@getHiringStatus",
+        "api/talent/team-overview",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_screening_results_controller@show",
+        "api/talent-screening-results/candidate/{candidate_id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TalentOfferController@index",
+        "api/offers",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TalentOfferController@getOfferLetter",
+        "api/talent-offer-letter/{offerId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TalentOfferController@getTemplates",
+        "api/talent-templates",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "jobroletaskcontroller@index",
+        "api/job-role-tasks",
+        "FAIL",
+        "response CHANGED with tenant B (54 vs 132 bytes, delta 78)"
+    ],
+    [
+        "jobroletaskcontroller@create",
+        "api/job-role-tasks/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "jobroletaskcontroller@show",
+        "api/job-role-tasks/{job_role_task}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "jobroletaskcontroller@edit",
+        "api/job-role-tasks/{job_role_task}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "jobroletexonomycontroller@index",
+        "api/jobroletexonomies",
+        "FAIL",
+        "response CHANGED with tenant B (221 vs 672 bytes, delta 451)"
+    ],
+    [
+        "jobroletexonomycontroller@create",
+        "api/jobroletexonomies/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "jobroletexonomycontroller@show",
+        "api/jobroletexonomies/{jobroletexonomy}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "jobroletexonomycontroller@edit",
+        "api/jobroletexonomies/{jobroletexonomy}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillcontroller@index",
+        "api/skills",
+        "FAIL",
+        "tenant B data returned when impersonating: Community Care Associate | Ambulance Readiness and Maintenance"
+    ],
+    [
+        "skillcontroller@create",
+        "api/skills/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "skillcontroller@show",
+        "api/skills/{skill}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillcontroller@edit",
+        "api/skills/{skill}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "talent_jobapplicationcontroller@getCandidateApplications",
+        "api/job-applications/candidate/{candidate_id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "jobrolecontroller@searchskills",
+        "api/skills/search",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "jobrolecontroller@skills",
+        "api/jobrole/{id}/skills",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "jobrolecontroller@getJobRolesByDepartment",
+        "api/department/{id}/jobroles",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "IndustryController@departments",
+        "api/industry/{id}/departments",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "IndustryController@index",
+        "api/industries",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CompetencyDashboardController@index",
+        "api/competency-dashboard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillDevelopmentController@getSkillProgress",
+        "api/skill-development/progress",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillDevelopmentController@getLearningStreak",
+        "api/skill-development/streak",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillDevelopmentController@getWeeklyLearningGoal",
+        "api/skill-development/weekly-goal",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillDevelopmentController@getUserAchievements",
+        "api/skill-development/achievements",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillDevelopmentController@getPeerComparison",
+        "api/skill-development/peer-comparison",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillDevelopmentController@getLearningCalendar",
+        "api/skill-development/calendar",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillDevelopmentController@getRecentActivity",
+        "api/skill-development/recent-activity",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CompetencyDashboardController@getWorkloadHeatmap",
+        "api/competency/workload-heatmap",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CompetencyDashboardController@getKPI",
+        "api/competency/kpi",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CompetencyDashboardController@getRoleSimilarity",
+        "api/competency/role-similarity",
+        "FAIL",
+        "response CHANGED with tenant B (5857 vs 5857 bytes, delta 0)"
+    ],
+    [
+        "CompetencyDashboardController@getCoverageScorecards",
+        "api/competency/coverage-scorecards",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CompetencyDashboardController@getHealthRadar",
+        "api/competency/health-radar",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CompetencyDashboardController@getSkillsManagementFunnel",
+        "api/competency/skills-management-funnel",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CompetencyDashboardController@getAlignment",
+        "api/competency/alignment",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CommandCenterController@index",
+        "api/competency/command-center",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CommandCenterController@filters",
+        "api/competency/command-center/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ApprovalController@index",
+        "api/competency/approvals",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ApprovalController@forSubject",
+        "api/competency/approvals/for/{type}/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LibraryController@meta",
+        "api/competency/library/meta",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LibraryController@skillTaxonomyTree",
+        "api/competency/library/skill-taxonomy-tree",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LibraryController@levelsOfResponsibility",
+        "api/competency/library/levels-of-responsibility",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LibraryController@workFunctions",
+        "api/competency/library/work-functions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LibraryController@taxonomy",
+        "api/competency/library/taxonomy/{type}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LibraryController@skills",
+        "api/competency/library/skills",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LibraryController@showSkill",
+        "api/competency/library/skills/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LibraryController@jobroles",
+        "api/competency/library/jobroles",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LibraryController@showJobrole",
+        "api/competency/library/jobroles/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LibraryController@jobroleTasks",
+        "api/competency/library/jobrole-tasks",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LibraryController@showJobroleTask",
+        "api/competency/library/jobrole-tasks/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LibraryController@kasa",
+        "api/competency/library/kasa/{type}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LibraryController@usageKasa",
+        "api/competency/library/kasa/{type}/{id}/usage",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LibraryController@showKasa",
+        "api/competency/library/kasa/{type}/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LibraryController@invisible",
+        "api/competency/library/invisible",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LibraryController@showInvisible",
+        "api/competency/library/invisible/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AssessmentCycleController@index",
+        "api/competency/assessment-cycles",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AssessmentCycleController@metrics",
+        "api/competency/assessment-cycles/metrics",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AssessmentCycleController@participantRatings",
+        "api/competency/assessment-cycles/participant-ratings",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AssessmentCycleController@calibration",
+        "api/competency/assessment-cycles/calibration",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AssessmentCycleController@approvals",
+        "api/competency/assessment-cycles/approvals",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AssessmentCycleController@closed",
+        "api/competency/assessment-cycles/closed",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AssessmentCycleController@configuration",
+        "api/competency/assessment-cycles/configuration",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AssessmentCycleController@participants",
+        "api/competency/assessment-cycles/{id}/participants",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AssessmentCycleController@ratings",
+        "api/competency/assessment-cycles/{id}/ratings",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AssessmentCycleController@calibrationQueue",
+        "api/competency/assessment-cycles/{id}/calibration-queue",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AssessmentCycleController@auditTrail",
+        "api/competency/assessment-cycles/{id}/audit-trail",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AssessmentCycleController@show",
+        "api/competency/assessment-cycles/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "EmployeeCompetencyProfileController@show",
+        "api/competency/employee-profiles/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "EmployeeCompetencyProfileController@availableSkills",
+        "api/competency/employee-profiles/{id}/available-skills",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "EmployeeCompetencyProfileController@skillHistory",
+        "api/competency/employee-profiles/{id}/skills/{skillId}/history",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "EmployeeCompetencyProfileController@notes",
+        "api/competency/employee-profiles/{id}/notes",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "EmployeeCompetencyProfileController@certifications",
+        "api/competency/employee-profiles/{id}/certifications",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "EmployeeCompetencyProfileController@developmentPlans",
+        "api/competency/employee-profiles/{id}/development-plans",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "EmployeeCompetencyProfileController@evidence",
+        "api/competency/employee-profiles/{id}/evidence",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "EmployeeCompetencyProfileController@careerPath",
+        "api/competency/employee-profiles/{id}/career-path",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CompetencyController@index",
+        "api/competency/competencies",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "FrameworkController@index",
+        "api/competency/frameworks",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AssessmentController@index",
+        "api/competency/assessments",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CertificationController@index",
+        "api/competency/certifications",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DevelopmentPlanController@index",
+        "api/competency/development-plans",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DevelopmentPlanController@metrics",
+        "api/competency/development-plans/metrics",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DevelopmentPlanController@owners",
+        "api/competency/development-plans/owners",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DevelopmentPlanController@employees",
+        "api/competency/employee-options",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DevelopmentPlanController@show",
+        "api/competency/development-plans/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "DevelopmentPlanController@gaps",
+        "api/competency/development-plans/{id}/gaps",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "DevelopmentPlanController@history",
+        "api/competency/development-plans/{id}/history",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "DevelopmentPlanController@actions",
+        "api/competency/development-plans/{id}/actions",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CareerPathController@explorer",
+        "api/competency/career-paths/explorer",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CareerPathController@roleOptions",
+        "api/competency/career-paths/role-options",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CareerPathController@index",
+        "api/competency/career-paths",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CareerPathController@show",
+        "api/competency/career-paths/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LearningAssignmentController@courses",
+        "api/competency/learning-assignments/courses",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LearningAssignmentController@index",
+        "api/competency/learning-assignments",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "StudioController@summary",
+        "api/competency/studio/summary",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "StudioController@frameworkStructure",
+        "api/competency/studio/framework-structure",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "StudioController@proficiencyScale",
+        "api/competency/studio/proficiency-scale",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "StudioController@weights",
+        "api/competency/studio/weights",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "StudioController@weightingConfig",
+        "api/competency/studio/weighting-config",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "FrameworkController@show",
+        "api/competency/frameworks/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "FrameworkController@items",
+        "api/competency/frameworks/{id}/items",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "FrameworkController@weights",
+        "api/competency/frameworks/{id}/weights",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "RoleMappingController@roles",
+        "api/competency/role-mapping/roles",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "RoleMappingController@matrix",
+        "api/competency/role-mapping/matrix",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MappingReviewController@index",
+        "api/competency/mapping-reviews",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CertificationController@metrics",
+        "api/competency/certifications/metrics",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CertificationController@filters",
+        "api/competency/certifications/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CertificationController@export",
+        "api/competency/certifications/export",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CertificationController@show",
+        "api/competency/certifications/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CertificationController@compliance",
+        "api/competency/certifications/{id}/compliance",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CertificationController@requirements",
+        "api/competency/certifications/{id}/requirements",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CertificationController@history",
+        "api/competency/certifications/{id}/history",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CertificationController@documents",
+        "api/competency/certifications/{id}/documents",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CertificationRequirementController@index",
+        "api/competency/certification-requirements",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AuditController@metrics",
+        "api/competency/audit/metrics",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AuditController@filters",
+        "api/competency/audit/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AuditController@export",
+        "api/competency/audit/export",
+        "FAIL",
+        "response CHANGED with tenant B (4797 vs 5297 bytes, delta 500)"
+    ],
+    [
+        "AuditController@userActions",
+        "api/competency/audit/user-actions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AuditController@userActivity",
+        "api/competency/audit/user-actions/{userId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AuditController@index",
+        "api/competency/audit",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AuditController@show",
+        "api/competency/audit/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AttendanceApiController@weeklySummary",
+        "api/attendance-weekly",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AttendanceApiController@KPI",
+        "api/KPI-HRITDashboard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AttendanceApiController@employeeMonthlyReport",
+        "api/employee-attendance-monthly-report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "JobroleApiController@getDepartmentWise",
+        "api/jobroles-by-department",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveDistribution@leaveDistribution",
+        "api/leave-distribution",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveDashboardController@index",
+        "api/leave/dashboard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveDashboardController@trend",
+        "api/leave/trend",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveDashboardController@departmentSummary",
+        "api/leave/department-summary",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveDashboardController@typeDistribution",
+        "api/leave/type-distribution",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveDashboardController@upcomingHolidays",
+        "api/leave/holidays/upcoming",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveOptionsController@index",
+        "api/leave/options",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveOptionsController@balances",
+        "api/leave/balances",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveRequestApiController@index",
+        "api/leave/requests",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveRequestApiController@show",
+        "api/leave/requests/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LeaveReportApiController@summary",
+        "api/leave/reports/summary",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveReportApiController@register",
+        "api/leave/reports/register",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveReportApiController@balance",
+        "api/leave/reports/balance",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveTypeApiController@index",
+        "api/leave/leave-types",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HolidayApiController@index",
+        "api/leave/holidays",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HolidayApiController@weekdays",
+        "api/leave/weekdays",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveWorkflowApiController@workflow",
+        "api/leave/workflow",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveWorkflowApiController@roles",
+        "api/leave/roles",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveDistributionApiController@index",
+        "api/leave/distribution",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AttendanceTrackingApiController@myAttendance",
+        "api/attendance/my-attendance",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AttendanceReportApiController@filters",
+        "api/attendance/report-filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AttendanceReportApiController@employees",
+        "api/attendance/employees",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AttendanceDashboardApiController@weeklySummary",
+        "api/attendance/weekly-summary",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AttendanceDashboardApiController@kpi",
+        "api/attendance/kpi",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsCourseEnrollController@index",
+        "api/enroll",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsCourseEnrollController@index",
+        "api/enrolled_courses",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsCourseEnrollController@available",
+        "api/available_courses",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "assignmentController@stats",
+        "api/lmsAssignment/stats",
+        "FAIL",
+        "response CHANGED with tenant B (106 vs 106 bytes, delta 0)"
+    ],
+    [
+        "assignmentController@learners",
+        "api/lmsAssignment/learners",
+        "FAIL",
+        "response CHANGED with tenant B (5874 vs 4294 bytes, delta 1580)"
+    ],
+    [
+        "assignmentController@enrollments",
+        "api/lmsAssignment/enrollments",
+        "FAIL",
+        "tenant B data returned when impersonating: Ambulance Readiness and Maintenance"
+    ],
+    [
+        "assignmentController@index",
+        "api/lmsAssignment",
+        "FAIL",
+        "response CHANGED with tenant B (25 vs 466 bytes, delta 441)"
+    ],
+    [
+        "LmsGovernanceController@kpis",
+        "api/lms/governance/kpis",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsGovernanceController@systemHealth",
+        "api/lms/governance/system-health",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsGovernanceController@auditLogs",
+        "api/lms/governance/audit-logs",
+        "UNTESTABLE",
+        "not authenticated (403) - token rejected"
+    ],
+    [
+        "LmsGovernanceController@users",
+        "api/lms/governance/users",
+        "UNTESTABLE",
+        "not authenticated (403) - token rejected"
+    ],
+    [
+        "LmsGovernanceController@roles",
+        "api/lms/governance/roles",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsGovernanceController@permissions",
+        "api/lms/governance/permissions",
+        "UNTESTABLE",
+        "not authenticated (403) - token rejected"
+    ],
+    [
+        "LmsPartnerController@trainers",
+        "api/lms/governance/trainers",
+        "VACUOUS",
+        "identical, but response is empty/trivial (25 bytes)"
+    ],
+    [
+        "LmsPartnerController@vendors",
+        "api/lms/governance/vendors",
+        "VACUOUS",
+        "identical, but response is empty/trivial (25 bytes)"
+    ],
+    [
+        "LmsPartnerController@integrations",
+        "api/lms/governance/integrations",
+        "VACUOUS",
+        "identical, but response is empty/trivial (25 bytes)"
+    ],
+    [
+        "LmsAssessmentController@questions",
+        "api/lms/assessments/questions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsAssessmentController@index",
+        "api/lms/assessments",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsCourseController@kpis",
+        "api/lms/courses/kpis",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsCourseController@filters",
+        "api/lms/courses/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsCourseController@index",
+        "api/lms/courses",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsCourseController@show",
+        "api/lms/courses/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LmsLearningController@courses",
+        "api/lms/learning/courses",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsLearningController@assessments",
+        "api/lms/learning/assessments",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsLearningController@notes",
+        "api/lms/learning/notes",
+        "VACUOUS",
+        "identical, but response is empty/trivial (25 bytes)"
+    ],
+    [
+        "LmsLearningController@certificates",
+        "api/lms/learning/certificates",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsLearningController@verifyCertificate",
+        "api/lms/learning/certificates/verify/{code}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LmsLearningController@downloadCertificate",
+        "api/lms/learning/certificates/{id}/download",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LmsLearningController@verifyCertificate",
+        "api/verify/certificate/{code}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LmsLearningController@discussions",
+        "api/lms/learning/discussions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsLearningController@course",
+        "api/lms/learning/courses/{courseId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LmsSessionController@stats",
+        "api/lms/sessions/stats",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsSessionController@deadlines",
+        "api/lms/sessions/deadlines",
+        "VACUOUS",
+        "identical, but response is empty/trivial (25 bytes)"
+    ],
+    [
+        "LmsSessionController@index",
+        "api/lms/sessions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LmsSessionController@attendees",
+        "api/lms/sessions/{id}/attendees",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AiCourseController@status",
+        "api/lms/ai/status",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AiCourseController@outlines",
+        "api/lms/ai/outlines",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AiCourseController@generationStatus",
+        "api/lms/ai/presentation/{generationId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "DepartmentManagementController@index",
+        "api/departments-management",
+        "FAIL",
+        "response CHANGED with tenant B (6595 vs 20932 bytes, delta 14337)"
+    ],
+    [
+        "DepartmentManagementController@create",
+        "api/departments-management/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "DepartmentManagementController@show",
+        "api/departments-management/{departments_management}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "DepartmentManagementController@edit",
+        "api/departments-management/{departments_management}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "DepartmentSkillController@index",
+        "api/department-skills",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "buildwithAIController@index",
+        "api/index",
+        "LEAK-NOSCOPE",
+        "tenant B data present with NO impersonation: Community Care Associate | Senior Community Care Associate"
+    ],
+    [
+        "GammaApiController@index",
+        "api/gamma-api",
+        "VACUOUS",
+        "identical, but response is empty/trivial (11 bytes)"
+    ],
+    [
+        "GammaApiController@create",
+        "api/gamma-api/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "GammaApiController@show",
+        "api/gamma-api/{gamma_api}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "GammaApiController@edit",
+        "api/gamma-api/{gamma_api}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "GammaApiController@getBySubInstituteId",
+        "api/gamma-api/sub-institute/{subInstituteId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@competencyLibraryIndex",
+        "api/skill_library/competency-list",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@competencyLibraryExport",
+        "api/skill_library/competency-export",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@competencyLibraryDetail",
+        "api/skill_library/competency/{id}/detail",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@competencyLibraryShow",
+        "api/skill_library/competency/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "api/skill_library",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "api/skill_library/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "api/skill_library/{skill_library}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "api/skill_library/{skill_library}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "InterviewController@getPositions",
+        "api/positions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "InterviewController@getInterviewers",
+        "api/interviewers",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AJAXController@getUsersMappings",
+        "api/get-employee-tasks",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_interviewpanelController@getInterviewers",
+        "api/interview-panel/users",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_interviewpanelController@getInterviewPanel",
+        "api/interview-panel/list",
+        "FAIL",
+        "tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate"
+    ],
+    [
+        "candidateController@getCandidate",
+        "api/candidate",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "feedbackController@getAllFeedback",
+        "api/feedback",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "feedbackController@getFeedback",
+        "api/feedback/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "feedbackController@getPendingFeedback",
+        "api/pending-feedback",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "talent_interviewschedulescontroller@index",
+        "api/interview-details",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeSkillCoverageMatrixController@getKpiMetrics",
+        "api/kpis",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeSkillCoverageMatrixController@skillGaps",
+        "api/skill-gaps",
+        "VACUOUS",
+        "identical, but response is empty/trivial (36 bytes)"
+    ],
+    [
+        "KpiController@index",
+        "api/reports/kpi",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HiringAnalyticsController@getHiringTrends",
+        "api/reports/hiring-analytics",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DepartmentDistributionController@index",
+        "api/reports/departments/distribution",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DepartmentDistributionController@getDepartmentSummary",
+        "api/reports/departments/summary",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DepartmentSizeController@getDepartmentSizes",
+        "api/reports/departments/sizes",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeLifecycleController@getEmployeeLifecycle",
+        "api/reports/employees/lifecycle",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OrganizationGrowthController@index",
+        "api/reports/organization/growth",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeSkillCoverageMatrixController@index",
+        "api/reports/skill-coverage/matrix",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "EmployeeSkillCoverageMatrixController@skillTrends",
+        "api/reports/skill-trends",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getKPIs",
+        "api/reports/employee-directory-analytics",
+        "FAIL",
+        "response CHANGED with tenant B (287 vs 287 bytes, delta 0)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getGrowthData",
+        "api/reports/employee-directory/growth",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getStackedGrowth",
+        "api/reports/employee-directory/growth/stacked",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getDepartmentDistribution",
+        "api/reports/employee-directory/departments/distribution",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getJobRoleDistribution",
+        "api/reports/employee-directory/job-roles/distribution",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getLifecycle",
+        "api/reports/employee-directory/lifecycle",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getAttritionBreakdown",
+        "api/reports/employee-directory/attrition",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getSkillMatrix",
+        "api/reports/employee-directory/skills/matrix",
+        "VACUOUS",
+        "identical, but response is empty/trivial (30 bytes)"
+    ],
+    [
+        "SkillMatchingController@getUserRejectedTasks",
+        "api/user-rejected-tasks",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillMatchingController@getCoursesForUserRejectedTasksSkills",
+        "api/user-rejected-tasks-courses",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TaskController@getTaskCounts",
+        "api/tasks/counts",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TaskController@getDailyTasks",
+        "api/tasks/daily",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TaskController@getWeeklyTasks",
+        "api/tasks/weekly",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TaskController@getMonthlyTasks",
+        "api/tasks/monthly",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SessionController@show",
+        "api/task-management/session",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SessionController@permissions",
+        "api/task-management/permissions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TaskOptionController@statuses",
+        "api/task-management/statuses",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TaskOptionController@priorities",
+        "api/task-management/priorities",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SessionController@integrations",
+        "api/task-management/integrations",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "NotificationController@index",
+        "api/task-management/notifications",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TaskListController@index",
+        "api/task-management/tasks",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "GlobalSearchController@index",
+        "api/task-management/search",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TaskTemplateController@index",
+        "api/task-management/templates",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ReportController@productivity",
+        "api/task-management/reports/productivity",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ReportController@delays",
+        "api/task-management/reports/delays",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AuditLogController@index",
+        "api/task-management/audit-logs",
+        "UNTESTABLE",
+        "not authenticated (403) - token rejected"
+    ],
+    [
+        "AuditLogController@export",
+        "api/task-management/audit-logs/export",
+        "UNTESTABLE",
+        "not authenticated (403) - token rejected"
+    ],
+    [
+        "WorkspaceController@index",
+        "api/task-management/workspace",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "WorkspaceController@workload",
+        "api/task-management/workspace/workload",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "WorkspaceController@show",
+        "api/task-management/workspace/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "ActivityController@index",
+        "api/task-management/workspace/{id}/activity",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TaskTimeTrackingController@index",
+        "api/task-management/workspace/{id}/time-entries",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TaskSubtaskController@index",
+        "api/task-management/workspace/{id}/subtasks",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TaskRecurrenceController@show",
+        "api/task-management/workspace/{id}/recurrence",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TaskScheduleController@show",
+        "api/task-management/workspace/{id}/schedule",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TaskAttachmentVersionController@index",
+        "api/task-management/workspace/{id}/attachments",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TaskAttachmentVersionController@download",
+        "api/task-management/workspace/{id}/attachments/{version}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "DeadlineExtensionController@index",
+        "api/task-management/deadline-extensions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "DependencyController@index",
+        "api/task-management/dependencies",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MyTasksController@index",
+        "api/task-management/my-tasks",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MyTasksController@show",
+        "api/task-management/my-tasks/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "ProjectController@options",
+        "api/task-management/projects/options",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ProjectController@index",
+        "api/task-management/projects",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ProjectController@show",
+        "api/task-management/projects/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "UserSkillController@getUserSkills",
+        "api/user-skills/{user_id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "UserSignupController@show",
+        "api/user-signup/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "SkillHeatmapController@heatmap",
+        "api/skill-heatmap",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillHeatmapController@drill",
+        "api/skill-heatmap/drill",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ExcelAutomationAgentController@credentialStatus",
+        "api/excel-agent/credentials",
+        "FAIL",
+        "response CHANGED with tenant B (108 vs 58 bytes, delta 50)"
+    ],
+    [
+        "ExcelAutomationAgentController@downloadTemplate",
+        "api/excel-agent/template",
+        "FAIL",
+        "response CHANGED with tenant B (0 vs 58 bytes, delta 58)"
+    ],
+    [
+        "DepartmentJobRoleExportController@exportToCsv",
+        "api/export-department-jobroles/{subInstituteId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TemplateController@index",
+        "api/templates",
+        "FAIL",
+        "response CHANGED with tenant B (2 vs 893654 bytes, delta 893652)"
+    ],
+    [
+        "TemplateController@create",
+        "api/templates/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "TemplateController@show",
+        "api/templates/{template}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TemplateController@edit",
+        "api/templates/{template}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "TemplateController@versions",
+        "api/templates/{id}/versions",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CareerJourneyController@getCareerJourney",
+        "api/career-journey",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceOverviewController@index",
+        "api/performance/overview",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceOverviewController@filters",
+        "api/performance/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceOverviewController@teamComparison",
+        "api/performance/team-comparison",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceOverviewController@timeline",
+        "api/performance/timeline",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceCycleController@index",
+        "api/performance/cycles",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceCycleController@show",
+        "api/performance/cycles/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "PerformanceReviewController@board",
+        "api/performance/reviews/board",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceReviewController@index",
+        "api/performance/reviews",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceReviewController@show",
+        "api/performance/reviews/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "PerformanceActivityController@notes",
+        "api/performance/reviews/{reviewId}/notes",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "PerformanceActivityController@attachments",
+        "api/performance/reviews/{reviewId}/attachments",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "PerformanceGoalController@index",
+        "api/performance/goals",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceAppraisalController@index",
+        "api/performance/appraisals",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceCompensationController@index",
+        "api/performance/compensation",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceBonusController@index",
+        "api/performance/bonus",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceCalibrationController@index",
+        "api/performance/calibration-sessions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceCalibrationController@grid",
+        "api/performance/calibration-sessions/{id}/grid",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "PerformanceActivityController@filters",
+        "api/performance/activity/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceActivityController@index",
+        "api/performance/activity",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PerformanceSavedViewController@index",
+        "api/performance/saved-views",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TalentDashboardController@index",
+        "api/talent/dashboard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "TalentDashboardController@filters",
+        "api/talent/dashboard/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingJourneyController@index",
+        "api/talent/onboarding/journeys",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingJourneyController@show",
+        "api/talent/onboarding/journeys/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OnboardingTaskController@index",
+        "api/talent/onboarding/tasks",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingDocumentController@index",
+        "api/talent/onboarding/documents",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "InternalJobController@index",
+        "api/talent/mobility/internal-jobs",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "InternalJobController@show",
+        "api/talent/mobility/internal-jobs/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "MobilityRequestController@index",
+        "api/talent/mobility/requests",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityRequestController@show",
+        "api/talent/mobility/requests/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "SuccessionPlanController@index",
+        "api/talent/succession/plans",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SuccessionPlanController@show",
+        "api/talent/succession/plans/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OffboardingCaseController@index",
+        "api/talent/offboarding/cases",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OffboardingCaseController@show",
+        "api/talent/offboarding/cases/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OffboardingClearanceController@index",
+        "api/talent/offboarding/clearances",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ExitInterviewController@index",
+        "api/talent/offboarding/exit-interviews",
+        "VACUOUS",
+        "identical, but response is empty/trivial (30 bytes)"
+    ],
+    [
+        "AdminWorkflowController@index",
+        "api/talent/admin/workflows",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingOverviewController@index",
+        "api/onboarding/overview",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingOverviewController@filters",
+        "api/onboarding/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingJourneyController@index",
+        "api/onboarding/journeys",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingJourneyController@show",
+        "api/onboarding/journeys/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OnboardingJourneyController@stages",
+        "api/onboarding/journeys/{journeyId}/stages",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OnboardingJourneyController@contacts",
+        "api/onboarding/journeys/{journeyId}/contacts",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OnboardingJourneyController@timeline",
+        "api/onboarding/journeys/{journeyId}/timeline",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OnboardingTaskController@workstreams",
+        "api/onboarding/workstreams",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingTaskController@index",
+        "api/onboarding/tasks",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OnboardingDocumentController@index",
+        "api/onboarding/journeys/{journeyId}/documents",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OnboardingNoteController@index",
+        "api/onboarding/journeys/{journeyId}/notes",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OnboardingProbationController@index",
+        "api/onboarding/probation",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityOverviewController@index",
+        "api/mobility/overview",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityOverviewController@filters",
+        "api/mobility/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityJobController@index",
+        "api/mobility/jobs",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityJobController@show",
+        "api/mobility/jobs/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "MobilityApplicationController@index",
+        "api/mobility/applications",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityTransferController@index",
+        "api/mobility/transfers",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityPromotionController@index",
+        "api/mobility/promotions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilitySuccessionController@index",
+        "api/mobility/successions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityTalentPoolController@index",
+        "api/mobility/pools",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "MobilityTalentPoolController@members",
+        "api/mobility/pools/{id}/members",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "OffboardingController@overview",
+        "api/offboarding/overview",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OffboardingController@filters",
+        "api/offboarding/filters",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OffboardingController@index",
+        "api/offboarding/cases",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "OffboardingController@show",
+        "api/offboarding/cases/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AgentController@meta",
+        "api/agentic/agents/meta",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AgentController@index",
+        "api/agentic/agents",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ConfigController@show",
+        "api/agentic/agents/{id}/config",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AgentController@show",
+        "api/agentic/agents/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "RunController@index",
+        "api/agentic/runs",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "RunController@trace",
+        "api/agentic/runs/{id}/trace",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "RunController@show",
+        "api/agentic/runs/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "ToolController@catalogue",
+        "api/agentic/tools",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ToolController@invocations",
+        "api/agentic/tools/invocations",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ToolController@showInvocation",
+        "api/agentic/tools/invocations/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AnalyticsController@dashboard",
+        "api/agentic/analytics/dashboard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AnalyticsController@overview",
+        "api/agentic/analytics/overview",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "WorkflowController@index",
+        "api/agentic/workflows",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "WorkflowController@show",
+        "api/agentic/workflows/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "WorkflowController@showRun",
+        "api/agentic/workflow-runs/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "WorkflowController@messages",
+        "api/agentic/messages",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ReflectionController@index",
+        "api/agentic/reflection",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "closure",
+        "up",
+        "UNTESTABLE",
+        "closure route, no controller"
+    ],
+    [
+        "closure",
+        "neo4j-test",
+        "UNTESTABLE",
+        "closure route, no controller"
+    ],
+    [
+        "SkillDashboardController@index",
+        "skill_dashboard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "SkillDashboardController@create",
+        "skill_dashboard/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "SkillDashboardController@show",
+        "skill_dashboard/{skill_dashboard}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "SkillDashboardController@edit",
+        "skill_dashboard/{skill_dashboard}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "closure",
+        "/",
+        "UNTESTABLE",
+        "closure route, no controller"
+    ],
+    [
+        "authController@index",
+        "login",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "authController@create",
+        "login/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "authController@show",
+        "login/{login}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "authController@edit",
+        "login/{login}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "dashboardController@index",
+        "dashboard",
+        "UNTESTABLE",
+        "not authenticated (401) - token rejected"
+    ],
+    [
+        "dashboardController@create",
+        "dashboard/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "dashboardController@show",
+        "dashboard/{dashboard}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "dashboardController@edit",
+        "dashboard/{dashboard}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "orgDashboardContorller@index",
+        "organization_dashboard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "orgDashboardContorller@create",
+        "organization_dashboard/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "orgDashboardContorller@show",
+        "organization_dashboard/{organization_dashboard}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "orgDashboardContorller@edit",
+        "organization_dashboard/{organization_dashboard}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "NangoController@connectGoogle",
+        "nango/google/connect/{userId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "NangoController@googleCallback",
+        "nango/google/callback",
+        "UNTESTABLE",
+        "server error (501/501)"
+    ],
+    [
+        "authController@menu_lists",
+        "menu_lists",
+        "VACUOUS",
+        "identical, but response is empty/trivial (5 bytes)"
+    ],
+    [
+        "skillLibraryController@index",
+        "skill_library",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "skill_library/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "skill_library/{skill_library}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "skill_library/{skill_library}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "jobroleLibraryController@index",
+        "jobrole_library",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "jobroleLibraryController@create",
+        "jobrole_library/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "jobroleLibraryController@show",
+        "jobrole_library/{jobrole_library}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "jobroleLibraryController@edit",
+        "jobrole_library/{jobrole_library}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "levelOfResponsibilityController@index",
+        "level_of_responsibility",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "levelOfResponsibilityController@create",
+        "level_of_responsibility/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "levelOfResponsibilityController@show",
+        "level_of_responsibility/{level_of_responsibility}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "levelOfResponsibilityController@edit",
+        "level_of_responsibility/{level_of_responsibility}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AJAXController@searchSkill",
+        "search_data",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@index",
+        "jobrole",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "jobrole/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "jobrole/{jobrole}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "jobrole/{jobrole}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "profeciency_level",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "profeciency_level/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "profeciency_level/{profeciency_level}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "profeciency_level/{profeciency_level}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "knowledge_ability",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "knowledge_ability/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "knowledge_ability/{knowledge_ability}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "knowledge_ability/{knowledge_ability}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@index",
+        "application",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@create",
+        "application/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "skillLibraryController@show",
+        "application/{application}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController@edit",
+        "application/{application}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LeaveTypeController@index",
+        "leave-type",
+        "FAIL",
+        "response CHANGED with tenant B (21 vs 817 bytes, delta 796)"
+    ],
+    [
+        "LeaveTypeController@create",
+        "leave-type/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "LeaveTypeController@show",
+        "leave-type/{leave_type}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LeaveTypeController@edit",
+        "leave-type/{leave_type}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "HolidayController@index",
+        "holiday",
+        "FAIL",
+        "response CHANGED with tenant B (48 vs 2281 bytes, delta 2233)"
+    ],
+    [
+        "HolidayController@create",
+        "holiday/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "HolidayController@show",
+        "holiday/{holiday}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "HolidayController@edit",
+        "holiday/{holiday}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "ApplyLeaveController@index",
+        "leave-apply",
+        "FAIL",
+        "response CHANGED with tenant B (858 vs 3152 bytes, delta 2294)"
+    ],
+    [
+        "ApplyLeaveController@create",
+        "leave-apply/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "ApplyLeaveController@show",
+        "leave-apply/{leave_apply}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "ApplyLeaveController@edit",
+        "leave-apply/{leave_apply}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "ApplyLeaveController@myLeave",
+        "my-leave",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "ApplyLeaveController@getYearwiseleave",
+        "get-leave",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "ApplyLeaveController@importLeave",
+        "import-leave",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "HolidayController@getWeekdays",
+        "holiday.weekdays",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ApplyLeaveController@getHolidays",
+        "getHolidays",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "LeaveAuthorisationController@index",
+        "leave-authorisation",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveAuthorisationController@create",
+        "leave-authorisation/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "LeaveAuthorisationController@show",
+        "leave-authorisation/{leave_authorisation}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LeaveAuthorisationController@edit",
+        "leave-authorisation/{leave_authorisation}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "LeaveAuthorisationController@leaveAuthorisation",
+        "show-leave-authorisation",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "LeaveReportController@leaveReport",
+        "leave-report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveSummaryReportController@leaveSummaryReport",
+        "leave-summary-report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "LeaveSummaryReportController@leaveSummaryReportShow",
+        "leave-summary-report/create",
+        "FAIL",
+        "response CHANGED with tenant B (245 vs 1009 bytes, delta 764)"
+    ],
+    [
+        "LeaveSummaryReportController@leaveLists",
+        "leave-list",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "ForgotPasswordController@showForgetPasswordForm",
+        "forget-password",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ForgotPasswordController@showResetPasswordForm",
+        "reset-password/{token}/{email}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "masterSetupController@index",
+        "school_setup/master_setup",
+        "FAIL",
+        "tenant B data returned when impersonating: Ambulance Readiness and Maintenance | Care Assistance"
+    ],
+    [
+        "masterSetupController@create",
+        "school_setup/master_setup/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "masterSetupController@show",
+        "school_setup/master_setup/{master_setup}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "masterSetupController@edit",
+        "school_setup/master_setup/{master_setup}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "sub_std_mapController@index",
+        "school_setup/sub_std_map",
+        "FAIL",
+        "tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate"
+    ],
+    [
+        "sub_std_mapController@create",
+        "school_setup/sub_std_map/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "sub_std_mapController@show",
+        "school_setup/sub_std_map/{sub_std_map}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "sub_std_mapController@edit",
+        "school_setup/sub_std_map/{sub_std_map}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "AJAXController@GetTableData",
+        "table_data",
+        "VACUOUS",
+        "identical, but response is empty/trivial (34 bytes)"
+    ],
+    [
+        "CustomModuleController@tables",
+        "custom-module/tables",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "CustomModuleController@tableCreate",
+        "custom-module/table-create/{id?}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CustomModuleController@tableColumnCreate",
+        "custom-module/table-column-create/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CustomModuleController@tableColumnCreate",
+        "custom-module/table-column-create/{id}/column/{colId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CustomModuleController@createDBTable",
+        "custom-module/create-db-table/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CustomModuleController@crudIndex",
+        "custom-module/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CustomModuleController@crudCreate",
+        "custom-module/create-view/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "CustomModuleController@crudCreate",
+        "custom-module/create-view/{id}/update/{recordId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "chapterController@StandardwiseSubject",
+        "custom-module/ajax_StandardwiseSubject",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "SkillMatrixController@index",
+        "custom-module/matrix",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "SkillMatrixController@getKaba",
+        "get-kaba",
+        "VACUOUS",
+        "identical, but response is empty/trivial (24 bytes)"
+    ],
+    [
+        "AJAXController@studentLists",
+        "studentLists",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "CustomModuleController@menuLevel2",
+        "menuLevel2",
+        "FAIL",
+        "response CHANGED with tenant B (128 vs 128 bytes, delta 0)"
+    ],
+    [
+        "AJAXController@getStandardList",
+        "api/get-standard-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "AJAXController@getSubjectList",
+        "api/get-subject-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "AJAXController@getAllSubjectList",
+        "api/get-all-subject-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "AJAXController@getExamsList",
+        "api/get-exam-name-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "AJAXController@getExamsMasterList",
+        "api/get-exam-master-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "CkeditorFileUploadController@create",
+        "ckeditor/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "AJAXController@ajax_checkEmailExist",
+        "ajax_checkEmailExist",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "AJAXController@getUsersMappings",
+        "getUsersMappings",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AJAXController@DeepSeekChat",
+        "DeepSeekChat",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AJAXController@AIassignTask",
+        "AIassignTask",
+        "UNTESTABLE",
+        "server error (200/500)"
+    ],
+    [
+        "AJAXController@getSkillCompetency",
+        "getSkillCompetency",
+        "FAIL",
+        "tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate"
+    ],
+    [
+        "AJAXController@sendEmail",
+        "sendEmail",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AJAXController@AICourseGeneration",
+        "AICourseGeneration",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AJAXController@GammaContentGeneration",
+        "gammaContent",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "AJAXController@getSupervisor",
+        "getSupervisor",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "courseRecommandation@index",
+        "courses-recommendation",
+        "FAIL",
+        "response CHANGED with tenant B (317 vs 82 bytes, delta 235)"
+    ],
+    [
+        "ONetOnlineDataController@index",
+        "lms/o-net-data-category",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "ONetOnlineDataController@ONetDataTable",
+        "lms/o-net-data-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@ONetDataTableListDetails",
+        "lms/o-net-data-list-details",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@showCategoryWiseData",
+        "lms/o-net-data-category/show",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@showCategoryWiseOccupationData",
+        "lms/o-net-data-category/show-occupation-detail",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@showCategoryWiseOccupationDataList",
+        "lms/o-net-data-category/show-occupation-detail-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@showCategoryWiseOccupationDataListSummary",
+        "lms/o-net-data-category/show-occupation-detail-list-summary",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@career_counselling",
+        "lms/career_counselling",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@career_counselling_education",
+        "lms/career_counselling_education",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@career_counselling_ky",
+        "lms/career_counselling_knowing-yourself",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "ONetOnlineDataController@career_report",
+        "lms/career_report",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "syllabusController@index",
+        "lms/syllabus",
+        "VACUOUS",
+        "identical, but response is empty/trivial (11 bytes)"
+    ],
+    [
+        "syllabusController@create",
+        "lms/syllabus/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "syllabusController@show",
+        "lms/syllabus/{syllabu}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "syllabusController@edit",
+        "lms/syllabus/{syllabu}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "syllabusController@GenrateAISyllabus",
+        "lms/generateSyllabus",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "chapterController@index",
+        "lms/chapter_master",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "chapterController@create",
+        "lms/chapter_master/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "chapterController@show",
+        "lms/chapter_master/{chapter_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "chapterController@edit",
+        "lms/chapter_master/{chapter_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "courseController@index",
+        "lms/course_master",
+        "FAIL",
+        "tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate"
+    ],
+    [
+        "courseController@create",
+        "lms/course_master/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "courseController@show",
+        "lms/course_master/{course_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "courseController@edit",
+        "lms/course_master/{course_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "topicController@index",
+        "lms/topic_master",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "topicController@create",
+        "lms/topic_master/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (19 bytes)"
+    ],
+    [
+        "topicController@show",
+        "lms/topic_master/{topic_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "topicController@edit",
+        "lms/topic_master/{topic_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "subtopicController@index",
+        "lms/subtopic_master",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "subtopicController@create",
+        "lms/subtopic_master/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "subtopicController@show",
+        "lms/subtopic_master/{subtopic_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "subtopicController@edit",
+        "lms/subtopic_master/{subtopic_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "chapterController@chapter_search",
+        "lms/chapter_search",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "contentController@index",
+        "lms/content_master",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "contentController@create",
+        "lms/content_master/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "contentController@show",
+        "lms/content_master/{content_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "contentController@edit",
+        "lms/content_master/{content_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "contentController@createChapter",
+        "lms/create_content_master",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "virtualclassroomController@index",
+        "lms/virtual_classroom_master",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "virtualclassroomController@create",
+        "lms/virtual_classroom_master/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "virtualclassroomController@show",
+        "lms/virtual_classroom_master/{virtual_classroom_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "virtualclassroomController@edit",
+        "lms/virtual_classroom_master/{virtual_classroom_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "contentController@ajax_SubjectwiseChapter",
+        "lms/ajax_SubjectwiseChapter",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "contentController@ajax_ChapterwiseTopic",
+        "lms/ajax_ChapterwiseTopic",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lomasterController@ajax_ChapterwiseLOmaster",
+        "lms/ajax_ChapterwiseLOmaster",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsDashboardController@index",
+        "lms/lmsdashboard",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsDashboardController@create",
+        "lms/lmsdashboard/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsDashboardController@show",
+        "lms/lmsdashboard/{lmsdashboard}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsDashboardController@edit",
+        "lms/lmsdashboard/{lmsdashboard}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsDashboardController@teacherIndex",
+        "lms/lmsdashboard_teacher",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lomasterController@index",
+        "lms/lo_master",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lomasterController@create",
+        "lms/lo_master/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lomasterController@show",
+        "lms/lo_master/{lo_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lomasterController@edit",
+        "lms/lo_master/{lo_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "loindicatorController@index",
+        "lms/lo_indicator",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "loindicatorController@create",
+        "lms/lo_indicator/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "loindicatorController@show",
+        "lms/lo_indicator/{lo_indicator}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "loindicatorController@edit",
+        "lms/lo_indicator/{lo_indicator}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "locategoryController@index",
+        "lms/lo_category",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "locategoryController@create",
+        "lms/lo_category/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "locategoryController@show",
+        "lms/lo_category/{lo_category}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "locategoryController@edit",
+        "lms/lo_category/{lo_category}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController1@index",
+        "lms/lms_skill_library",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "skillLibraryController1@create",
+        "lms/lms_skill_library/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "skillLibraryController1@show",
+        "lms/lms_skill_library/{lms_skill_library}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController1@edit",
+        "lms/lms_skill_library/{lms_skill_library}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController1@destroy",
+        "lms/lms_skill_library/{id}/delete",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "skillLibraryController1@show",
+        "lms/lms_skill_library/{id}/show",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "questionmasterController@ajax_multiDeleteQuestion",
+        "lms/multi_delete_questions",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "chapterController@ajax_chapterDependencies",
+        "lms/ajax_chapterDependencies",
+        "VACUOUS",
+        "identical, but response is empty/trivial (1 bytes)"
+    ],
+    [
+        "topicController@ajax_topicDependencies",
+        "lms/ajax_topicDependencies",
+        "VACUOUS",
+        "identical, but response is empty/trivial (1 bytes)"
+    ],
+    [
+        "questionmasterController@ajax_questionDependencies",
+        "lms/ajax_questionDependencies",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "sub_std_mapController@ajax_subStdMappingDependencies",
+        "lms/ajax_subStdMappingDependencies",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "questionpaperController@ajax_questionpaperDependencies",
+        "lms/ajax_questionpaperDependencies",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "locategoryController@ajax_SubjectwiseLoCategory",
+        "lms/ajax_SubjectwiseLoCategory",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "loindicatorController@ajax_LoMasterwiseLoIndicator",
+        "lms/ajax_LoMasterwiseLoIndicator",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "questionmasterController@index",
+        "lms/question_master",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "questionmasterController@create",
+        "lms/question_master/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "questionmasterController@show",
+        "lms/question_master/{question_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "questionmasterController@edit",
+        "lms/question_master/{question_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "questionmasterController@getMappedValue",
+        "lms/question_mapped_value",
+        "VACUOUS",
+        "identical, but response is empty/trivial (38 bytes)"
+    ],
+    [
+        "questionmasterController@indexChapter",
+        "lms/question_chapter_master",
+        "FAIL",
+        "tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate"
+    ],
+    [
+        "questionpaperController@index",
+        "lms/question_paper",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "questionpaperController@create",
+        "lms/question_paper/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "questionpaperController@show",
+        "lms/question_paper/{question_paper}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "questionpaperController@edit",
+        "lms/question_paper/{question_paper}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "bulk_chapter_uploadController@index",
+        "lms/bulk_chapter_upload",
+        "VACUOUS",
+        "identical, but response is empty/trivial (34 bytes)"
+    ],
+    [
+        "bulk_chapter_uploadController@create",
+        "lms/bulk_chapter_upload/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "bulk_chapter_uploadController@show",
+        "lms/bulk_chapter_upload/{bulk_chapter_upload}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "bulk_chapter_uploadController@edit",
+        "lms/bulk_chapter_upload/{bulk_chapter_upload}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "questionpaperController@ajax_SubjectwiseQuestion",
+        "lms/ajax_SubjectwiseQuestion",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "palController@index",
+        "lms/pal",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "palController@create",
+        "lms/pal/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "palController@show",
+        "lms/pal/{pal}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "palController@edit",
+        "lms/pal/{pal}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "contentController@ajax_LMS_MappingValue",
+        "lms/ajax_LMS_MappingValue",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "courseController@course_search",
+        "lms/course_search",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "questionpaperController@ajax_LMS_StandardwiseSubject",
+        "lms/ajax_LMS_StandardwiseSubject",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "lmsmappingController@index",
+        "lms/lmsmapping",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsmappingController@create",
+        "lms/lmsmapping/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "lmsmappingController@show",
+        "lms/lmsmapping/{lmsmapping}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsmappingController@edit",
+        "lms/lmsmapping/{lmsmapping}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsexamController@index",
+        "lms/lmsexam",
+        "VACUOUS",
+        "identical, but response is empty/trivial (34 bytes)"
+    ],
+    [
+        "lmsexamController@create",
+        "lms/lmsexam/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsexamController@show",
+        "lms/lmsexam/{lmsexam}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsexamController@edit",
+        "lms/lmsexam/{lmsexam}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsActivityStreamController@index",
+        "lms/lmsActivityStream",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsActivityStreamController@create",
+        "lms/lmsActivityStream/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsActivityStreamController@show",
+        "lms/lmsActivityStream/{lmsActivityStream}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsActivityStreamController@edit",
+        "lms/lmsActivityStream/{lmsActivityStream}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCommunicationController@index",
+        "lms/lmsCommunication",
+        "VACUOUS",
+        "identical, but response is empty/trivial (34 bytes)"
+    ],
+    [
+        "lmsCommunicationController@create",
+        "lms/lmsCommunication/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsCommunicationController@show",
+        "lms/lmsCommunication/{lmsCommunication}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCommunicationController@edit",
+        "lms/lmsCommunication/{lmsCommunication}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsSocialCollabrotiveController@index",
+        "lms/lmsSocialCollabrotive",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsSocialCollabrotiveController@create",
+        "lms/lmsSocialCollabrotive/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsSocialCollabrotiveController@show",
+        "lms/lmsSocialCollabrotive/{lmsSocialCollabrotive}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsSocialCollabrotiveController@edit",
+        "lms/lmsSocialCollabrotive/{lmsSocialCollabrotive}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsVirtualClassroomController@index",
+        "lms/lmsVirtualClassroom",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsVirtualClassroomController@create",
+        "lms/lmsVirtualClassroom/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsVirtualClassroomController@show",
+        "lms/lmsVirtualClassroom/{lmsVirtualClassroom}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsVirtualClassroomController@edit",
+        "lms/lmsVirtualClassroom/{lmsVirtualClassroom}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsPortfolioController@index",
+        "lms/lmsPortfolio",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsPortfolioController@create",
+        "lms/lmsPortfolio/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (15 bytes)"
+    ],
+    [
+        "lmsPortfolioController@show",
+        "lms/lmsPortfolio/{lmsPortfolio}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsPortfolioController@edit",
+        "lms/lmsPortfolio/{lmsPortfolio}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsLeaderboardController@index",
+        "lms/lmsLeaderboard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsLeaderboardController@create",
+        "lms/lmsLeaderboard/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsLeaderboardController@show",
+        "lms/lmsLeaderboard/{lmsLeaderboard}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsLeaderboardController@edit",
+        "lms/lmsLeaderboard/{lmsLeaderboard}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsmappingController@ajax_AddLMS_MappingFromContent",
+        "lms/ajax_AddLMS_MappingFromContent",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "onlineExamController@index",
+        "lms/online_exam",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "onlineExamController@create",
+        "lms/online_exam/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "onlineExamController@show",
+        "lms/online_exam/{online_exam}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "onlineExamController@edit",
+        "lms/online_exam/{online_exam}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "onlineExamController@online_exam_attempt",
+        "lms/online_exam_attempt",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsPortfolioController@ajax_LMS_SubjectwiseChapter",
+        "lms/ajax_LMS_SubjectwiseChapter",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "lmsPortfolioController@ajax_LMS_ChapterwiseTopic",
+        "lms/ajax_LMS_ChapterwiseTopic",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "lmsDoubtController@index",
+        "lms/lmsDoubt",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsDoubtController@create",
+        "lms/lmsDoubt/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsDoubtController@show",
+        "lms/lmsDoubt/{lmsDoubt}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsDoubtController@edit",
+        "lms/lmsDoubt/{lmsDoubt}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCounsellingController@index",
+        "lms/lmsCounselling",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@create",
+        "lms/lmsCounselling/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsCounsellingController@show",
+        "lms/lmsCounselling/{lmsCounselling}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCounsellingController@edit",
+        "lms/lmsCounselling/{lmsCounselling}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "counselling_questionmasterController@index",
+        "lms/lmsCounsellingQuestion",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "counselling_questionmasterController@create",
+        "lms/lmsCounsellingQuestion/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "counselling_questionmasterController@show",
+        "lms/lmsCounsellingQuestion/{lmsCounsellingQuestion}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "counselling_questionmasterController@edit",
+        "lms/lmsCounsellingQuestion/{lmsCounsellingQuestion}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "counsellingExamController@index",
+        "lms/lmsCounsellingExam",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "counsellingExamController@create",
+        "lms/lmsCounsellingExam/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "counsellingExamController@show",
+        "lms/lmsCounsellingExam/{lmsCounsellingExam}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "counsellingExamController@edit",
+        "lms/lmsCounsellingExam/{lmsCounsellingExam}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCounsellingController@lmsIndustryListing",
+        "lms/lmsIndustryListing",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCounsellingController@careersInIndustry",
+        "lms/lmsIndustryListing/careersInIndustry/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCounsellingController@careerReport",
+        "lms/lmsIndustryListing/careersInIndustry/careerReport/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCounsellingController@resources",
+        "lms/lmsIndustryListing/careersInIndustry/careerReport/resources/{id}/{title}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "MBTIController@index",
+        "lms/lmsMBTIPaper",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "MBTIController@create",
+        "lms/lmsMBTIPaper/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "MBTIController@show",
+        "lms/lmsMBTIPaper/{lmsMBTIPaper}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "MBTIController@edit",
+        "lms/lmsMBTIPaper/{lmsMBTIPaper}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "onlineExamController@ajax_getQuestionList",
+        "lms/ajax_getQuestionList",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsDoubtConversationController@index",
+        "lms/lmsDoubtConversation",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "lmsDoubtConversationController@create",
+        "lms/lmsDoubtConversation/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsDoubtConversationController@show",
+        "lms/lmsDoubtConversation/{lmsDoubtConversation}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsDoubtConversationController@edit",
+        "lms/lmsDoubtConversation/{lmsDoubtConversation}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lbMasterController@index",
+        "lms/lb_master",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lbMasterController@create",
+        "lms/lb_master/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "lbMasterController@show",
+        "lms/lb_master/{lb_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lbMasterController@edit",
+        "lms/lb_master/{lb_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "assignmentController@stats",
+        "lms/lmsAssignment/stats",
+        "FAIL",
+        "response CHANGED with tenant B (106 vs 106 bytes, delta 0)"
+    ],
+    [
+        "assignmentController@index",
+        "lms/lmsAssignment",
+        "FAIL",
+        "response CHANGED with tenant B (25 vs 466 bytes, delta 441)"
+    ],
+    [
+        "assignmentController@create",
+        "lms/lmsAssignment/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "assignmentController@show",
+        "lms/lmsAssignment/{lmsAssignment}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "assignmentController@edit",
+        "lms/lmsAssignment/{lmsAssignment}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "assignmentSubmissionController@index",
+        "lms/lmsAssignment_submission",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "assignmentSubmissionController@create",
+        "lms/lmsAssignment_submission/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "assignmentSubmissionController@show",
+        "lms/lmsAssignment_submission/{lmsAssignment_submission}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "assignmentSubmissionController@edit",
+        "lms/lmsAssignment_submission/{lmsAssignment_submission}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "annotateAssignmentController@index",
+        "lms/lmsAnnotate_assignment",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "annotateAssignmentController@create",
+        "lms/lmsAnnotate_assignment/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "annotateAssignmentController@show",
+        "lms/lmsAnnotate_assignment/{lmsAnnotate_assignment}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "annotateAssignmentController@edit",
+        "lms/lmsAnnotate_assignment/{lmsAnnotate_assignment}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "studentReportController@index",
+        "lms/lmsStudent_report",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "studentReportController@create",
+        "lms/lmsStudent_report/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "studentReportController@show",
+        "lms/lmsStudent_report/{lmsStudent_report}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "studentReportController@edit",
+        "lms/lmsStudent_report/{lmsStudent_report}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "examWiseProgressReportController@index",
+        "lms/lmsExamwise_progress_report",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "examWiseProgressReportController@create",
+        "lms/lmsExamwise_progress_report/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "examWiseProgressReportController@show",
+        "lms/lmsExamwise_progress_report/{lmsExamwise_progress_report}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "examWiseProgressReportController@edit",
+        "lms/lmsExamwise_progress_report/{lmsExamwise_progress_report}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "examWiseProgressReportController@ajax_LMS_SubjectWiseExam",
+        "lms/ajax_LMS_SubjectWiseExam",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lms_lessonplanController@index",
+        "lms/lms_lessonplan",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lms_lessonplanController@create",
+        "lms/lms_lessonplan/create",
+        "UNTESTABLE",
+        "redirect (302) - html/session route"
+    ],
+    [
+        "lms_lessonplanController@show",
+        "lms/lms_lessonplan/{lms_lessonplan}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lms_lessonplanController@edit",
+        "lms/lms_lessonplan/{lms_lessonplan}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lms_lessonplanController@ajax_Timetable",
+        "lms/ajax_Timetable",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lms_lessonplanController@ajax_DayWiseData",
+        "lms/ajax_daywisedata",
+        "LEAK-NOSCOPE",
+        "tenant B data present with NO impersonation: Community Care Associate | Senior Community Care Associate"
+    ],
+    [
+        "lms_lessonplanController@ajax_contentMasterData",
+        "lms/ajax_contentmasterdata",
+        "LEAK-NOSCOPE",
+        "tenant B data present with NO impersonation: Community Care Associate | Ambulance Readiness and Maintenance"
+    ],
+    [
+        "lms_lessonplanController@ajax_questionPaperData",
+        "lms/ajax_questionpaperdata",
+        "LEAK-NOSCOPE",
+        "tenant B data present with NO impersonation: Community Care Associate | Senior Community Care Associate"
+    ],
+    [
+        "lms_lessonplanController@ajax_getTeacher",
+        "lms/ajax_getTeacher",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lms_lessonplanController@getChatOutput",
+        "lms/get_chat_data",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "questionWiseReportController@index",
+        "lms/questionReport",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lms_contentCategoryController@index",
+        "lms/lms_content_category",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lms_contentCategoryController@create",
+        "lms/lms_content_category/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "lms_contentCategoryController@show",
+        "lms/lms_content_category/{lms_content_category}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lms_contentCategoryController@edit",
+        "lms/lms_content_category/{lms_content_category}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "contentController@ajax_getYouTubeSuggestion",
+        "lms/ajax_getYouTubeSuggestion",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lms_teacherResourceController@index",
+        "lms/lms_teacherResource",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lms_teacherResourceController@create",
+        "lms/lms_teacherResource/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lms_teacherResourceController@show",
+        "lms/lms_teacherResource/{lms_teacherResource}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lms_teacherResourceController@edit",
+        "lms/lms_teacherResource/{lms_teacherResource}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "flashcardController@index",
+        "lms/lms_flashcard",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "flashcardController@create",
+        "lms/lms_flashcard/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "flashcardController@show",
+        "lms/lms_flashcard/{lms_flashcard}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "flashcardController@edit",
+        "lms/lms_flashcard/{lms_flashcard}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "chapterController@index",
+        "lms/subjectwise_graph",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "chapterController@create",
+        "lms/subjectwise_graph/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "chapterController@show",
+        "lms/subjectwise_graph/{subjectwise_graph}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "chapterController@edit",
+        "lms/subjectwise_graph/{subjectwise_graph}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCurriculumController@index",
+        "lms/lms_curriculum",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCurriculumController@create",
+        "lms/lms_curriculum/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCurriculumController@show",
+        "lms/lms_curriculum/{lms_curriculum}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsCurriculumController@edit",
+        "lms/lms_curriculum/{lms_curriculum}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsSyllabusController@index",
+        "lms/lms_syllabus",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsSyllabusController@create",
+        "lms/lms_syllabus/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (34 bytes)"
+    ],
+    [
+        "lmsSyllabusController@show",
+        "lms/lms_syllabus/{lms_syllabu}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lmsSyllabusController@edit",
+        "lms/lms_syllabus/{lms_syllabu}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "contentLibraryController@index",
+        "lms/content_library",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "contentLibraryController@create",
+        "lms/content_library/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "contentLibraryController@show",
+        "lms/content_library/{content_library}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "contentLibraryController@edit",
+        "lms/content_library/{content_library}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "curriculumLessonplanController@index",
+        "lms/curriculum_lessonplan",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "curriculumLessonplanController@create",
+        "lms/curriculum_lessonplan/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "curriculumLessonplanController@show",
+        "lms/curriculum_lessonplan/{curriculum_lessonplan}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "curriculumLessonplanController@edit",
+        "lms/curriculum_lessonplan/{curriculum_lessonplan}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "contentLibraryController@getMapVals",
+        "lms/getMapVals",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "contentLibraryController@getSearchedContent",
+        "lms/searchContent",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "H5PController@index",
+        "lms/h5p",
+        "VACUOUS",
+        "identical, but response is empty/trivial (32 bytes)"
+    ],
+    [
+        "H5PController@create",
+        "lms/h5p/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "H5PController@show",
+        "lms/h5p/{h5p}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "H5PController@edit",
+        "lms/h5p/{h5p}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "lms_apiController@assessment_master",
+        "lms/assessment_master",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lms_apiController@getSuggestedCoursesByUser",
+        "getSuggestedCoursesByUser",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "taskController@index",
+        "task",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "taskController@create",
+        "task/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "taskController@show",
+        "task/{task}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "taskController@edit",
+        "task/{task}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "taskController@taskAnalysisReport",
+        "task_analysis_report",
+        "FAIL",
+        "tenant B data returned when impersonating: Care Assistance | Support Service to Seniors"
+    ],
+    [
+        "lmsActivityStreamController@upcomingActivity",
+        "upcoming",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsActivityStreamController@todayActivity",
+        "today",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsActivityStreamController@recentActivity",
+        "recent",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCounsellingController@careerExplore",
+        "careerExplore",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@careerExploreResult",
+        "careerExploreResult",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@careerCluster",
+        "careerCluster",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@allOccupation",
+        "allOccupation",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@OccupationDetails",
+        "OccupationDetails",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@getInstituteData",
+        "getInstituteData",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@getCourseData",
+        "getCourseData",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@getEmployerData",
+        "getEmployerData",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@ExploreSector",
+        "ExploreSector",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@ExpertAdvice",
+        "ExpertAdvice",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "lmsCounsellingController@intrestQuestions",
+        "intrestQuestions",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCounsellingController@intrestResults",
+        "intrestResults",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCounsellingController@intrestJobzone",
+        "intrestJobzone",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCounsellingController@intrestCareers",
+        "intrestCareers",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsSyllabusController@getCurriculums",
+        "api/get-curriculum-list",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "lmsCounsellingController@intrestEnterScore",
+        "intrestEnterScore",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCounsellingController@intrestArea",
+        "intrestArea",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "lmsCounsellingController@matchProfile",
+        "matchProfile",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "contentLibraryController@downloadFile",
+        "download-File",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "questionpaperController@search_question2",
+        "question_paper/search_question",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tblgroupwise_rightsController@index",
+        "user/add_groupwise_rights",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "tblgroupwise_rightsController@create",
+        "user/add_groupwise_rights/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tblgroupwise_rightsController@show",
+        "user/add_groupwise_rights/{add_groupwise_right}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tblgroupwise_rightsController@edit",
+        "user/add_groupwise_rights/{add_groupwise_right}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "mobileapp_menu_rightsController@index",
+        "user/add_mobileapp_menu_rights",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "mobileapp_menu_rightsController@create",
+        "user/add_mobileapp_menu_rights/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "mobileapp_menu_rightsController@show",
+        "user/add_mobileapp_menu_rights/{add_mobileapp_menu_right}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "mobileapp_menu_rightsController@edit",
+        "user/add_mobileapp_menu_rights/{add_mobileapp_menu_right}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tbluserPastEducationController@index",
+        "user/add_user_past_education",
+        "VACUOUS",
+        "identical, but response is empty/trivial (34 bytes)"
+    ],
+    [
+        "tbluserPastEducationController@create",
+        "user/add_user_past_education/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "tbluserPastEducationController@show",
+        "user/add_user_past_education/{add_user_past_education}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tbluserPastEducationController@edit",
+        "user/add_user_past_education/{add_user_past_education}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tbluserProfileWiseMenuController@index",
+        "user/user_profile_wise_menu_rights",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tbluserProfileWiseMenuController@create",
+        "user/user_profile_wise_menu_rights/create",
+        "VACUOUS",
+        "identical, but it is an HTML view shell - no tenant data in the response"
+    ],
+    [
+        "tbluserProfileWiseMenuController@show",
+        "user/user_profile_wise_menu_rights/{user_profile_wise_menu_right}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tbluserProfileWiseMenuController@edit",
+        "user/user_profile_wise_menu_rights/{user_profile_wise_menu_right}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tblmobileAppMenuRightsController@create",
+        "user/mobile_app_menu_rights",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tblgroupwise_rightsController@displayGroupwiseRights",
+        "user/ajax_groupwiserights",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "tbluserPastEducationController@addUpdateUserPastEducation",
+        "user/ajax_pasteducation",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "tblindividual_rightsController@index",
+        "user/add_individual_rights",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tblindividual_rightsController@create",
+        "user/add_individual_rights/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tblindividual_rightsController@show",
+        "user/add_individual_rights/{add_individual_right}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tblindividual_rightsController@edit",
+        "user/add_individual_rights/{add_individual_right}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tblindividual_rightsController@profileWiseUsers",
+        "user/ajax_profileWiseUsers",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tblindividual_rightsController@displayIndividualRights",
+        "user/ajax_individualrights",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tbluserProfileWiseMenuController@displayUserProfileWiseRights",
+        "user/ajax_user_profile_wise_rights",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tblmobileAppMenuRightsController@displayMobileAppMenuRights",
+        "user/ajax_mobile_app_menu_rights",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "tblmenumasterG2gController@displaySidebarMenu",
+        "user/ajax_sidebar_menu_g2g",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "tblmenumasterG2gController@displayGroupwiseRightsG2g",
+        "user/ajax_groupwiserights_g2g",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "tblmenumasterG2gController@displayUserProfilesG2g",
+        "user/ajax_user_profiles_g2g",
+        "FAIL",
+        "response CHANGED with tenant B (281 vs 447 bytes, delta 166)"
+    ],
+    [
+        "UserRatingDetailController@index",
+        "user/user_rating_details",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "UserRatingDetailController@create",
+        "user/user_rating_details/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "UserRatingDetailController@show",
+        "user/user_rating_details/{user_rating_detail}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "UserRatingDetailController@edit",
+        "user/user_rating_details/{user_rating_detail}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tbluserprofilemasterController@index",
+        "user/add_user_profile",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "tbluserprofilemasterController@create",
+        "user/add_user_profile/create",
+        "VACUOUS",
+        "identical, but it is an HTML view shell - no tenant data in the response"
+    ],
+    [
+        "tbluserprofilemasterController@show",
+        "user/add_user_profile/{add_user_profile}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tbluserprofilemasterController@edit",
+        "user/add_user_profile/{add_user_profile}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tbluserController@index",
+        "user/add_user",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "tbluserController@create",
+        "user/add_user/create",
+        "VACUOUS",
+        "identical, but it is an HTML view shell - no tenant data in the response"
+    ],
+    [
+        "tbluserController@show",
+        "user/add_user/{add_user}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "tbluserController@edit",
+        "user/add_user/{add_user}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "userReportController@index",
+        "user/user_report",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "userReportController@create",
+        "user/user_report/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "userReportController@show",
+        "user/user_report/{user_report}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "userReportController@edit",
+        "user/user_report/{user_report}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "userReportController@employeeReport",
+        "user/employee_report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "instituteDetailController@index",
+        "settings/institute_detail",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "instituteDetailController@create",
+        "settings/institute_detail/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "instituteDetailController@show",
+        "settings/institute_detail/{institute_detail}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "instituteDetailController@edit",
+        "settings/institute_detail/{institute_detail}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "organizationDetailsController@index",
+        "settings/organization_data",
+        "FAIL",
+        "response CHANGED with tenant B (421 vs 982 bytes, delta 561)"
+    ],
+    [
+        "organizationDetailsController@create",
+        "settings/organization_data/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "organizationDetailsController@show",
+        "settings/organization_data/{organization_datum}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "organizationDetailsController@edit",
+        "settings/organization_data/{organization_datum}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "discliplinaryManagementController@index",
+        "settings/discliplinary_management",
+        "FAIL",
+        "response CHANGED with tenant B (46 vs 1174 bytes, delta 1128)"
+    ],
+    [
+        "discliplinaryManagementController@create",
+        "settings/discliplinary_management/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "discliplinaryManagementController@show",
+        "settings/discliplinary_management/{discliplinary_management}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "discliplinaryManagementController@edit",
+        "settings/discliplinary_management/{discliplinary_management}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "departmentController@index",
+        "hrms/add_department",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "departmentController@create",
+        "hrms/add_department/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "departmentController@show",
+        "hrms/add_department/{add_department}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "departmentController@edit",
+        "hrms/add_department/{add_department}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "HolidayController@index",
+        "hrms/holiday",
+        "FAIL",
+        "response CHANGED with tenant B (48 vs 2281 bytes, delta 2233)"
+    ],
+    [
+        "HolidayController@create",
+        "hrms/holiday/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "HolidayController@show",
+        "hrms/holiday/{holiday}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "HolidayController@edit",
+        "hrms/holiday/{holiday}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "departmentController@departmentEmpLists",
+        "hrms/department-Emp-Lists",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "departmentController@subDepartmentList",
+        "hrms/sub-department-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "departmentController@departmentEmployeeList",
+        "hrms/department-employee-list",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "departmentController@departmentJobRoles",
+        "hrms/department-jobroles",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "departmentController@jobRoleTasks",
+        "hrms/jobrole-tasks",
+        "VACUOUS",
+        "identical, but response is empty/trivial (2 bytes)"
+    ],
+    [
+        "HolidayController@getWeekdays",
+        "hrms/holiday_weekdays",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "PayrollController@payrollType",
+        "payroll-type",
+        "FAIL",
+        "response CHANGED with tenant B (11 vs 937 bytes, delta 926)"
+    ],
+    [
+        "PayrollController@payrollCreate",
+        "payroll-type/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "PayrollController@payrollCreate",
+        "payroll-type/create/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "PayrollController@payrollTypeReport",
+        "payroll-type-report",
+        "FAIL",
+        "response CHANGED with tenant B (203 vs 1785 bytes, delta 1582)"
+    ],
+    [
+        "PayrollController@payrollTypeReportCreate",
+        "payroll-type-report/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PayrollController@employeeSalaryStructure",
+        "employee-salary-structure",
+        "FAIL",
+        "response CHANGED with tenant B (758219 vs 479236 bytes, delta 278983)"
+    ],
+    [
+        "PayrollController@rollOver",
+        "roll-over",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "PayrollController@salaryStructureReport",
+        "salary-structure-report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PayrollController@form16",
+        "form16",
+        "FAIL",
+        "response CHANGED with tenant B (175 vs 3358 bytes, delta 3183)"
+    ],
+    [
+        "PayrollController@payrollDeduction",
+        "payroll-deduction",
+        "FAIL",
+        "response CHANGED with tenant B (379277 vs 239150 bytes, delta 140127)"
+    ],
+    [
+        "PayrollController@monthlyPayrollReport",
+        "monthly-payroll-report",
+        "FAIL",
+        "response CHANGED with tenant B (379541 vs 239303 bytes, delta 140238)"
+    ],
+    [
+        "PayrollController@monthlyPayrollPdf",
+        "monthly-payroll-report/pdf/{id}/{month}/{year}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "PayrollController@payrollReport",
+        "payroll-report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PayrollController@employeePayrollHistory",
+        "employee-payroll-history",
+        "FAIL",
+        "response CHANGED with tenant B (379263 vs 239024 bytes, delta 140239)"
+    ],
+    [
+        "PayrollController@payrollBankWiseReport",
+        "payroll-bank-wise-report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PayrollController@hrmsSalaryCertificateIndex",
+        "hrms-salary-certificate",
+        "FAIL",
+        "response CHANGED with tenant B (41572 vs 42519 bytes, delta 947)"
+    ],
+    [
+        "PayrollController@SalaryCertificatePdfDownload",
+        "salary-certificate-pdf-download",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "HrmsController@hrmsJobTitle",
+        "hrms-job-title",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "HrmsController@hrmsCreate",
+        "hrms-job-title/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HrmsController@hrmsCreate",
+        "hrms-job-title/create/{id}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "HrmsController@hrmsInOutTime",
+        "hrms-inout-time",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HrmsController@hrmsAttendance",
+        "hrms-attendance",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HrmsController@hrmsAttendanceReportIndex",
+        "hrms-attendance-report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HrmsController@earlyGoingHrmsAttendanceReportCreate",
+        "early-going-hrms-attendance-report/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "HrmsController@earlyGoingHrmsAttendanceReportIndex",
+        "early-going-hrms-attendance-report",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HrmsController@earlyGoingHrmsAttendanceReport",
+        "show-early-going-hrms-attendance-report",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "HrmsController@generalSettingIndex",
+        "hrms-general-setting",
+        "FAIL",
+        "response CHANGED with tenant B (343 vs 857 bytes, delta 514)"
+    ],
+    [
+        "HrmsController@departmentAttendanceReport",
+        "departmentwise-attendance-report",
+        "FAIL",
+        "response CHANGED with tenant B (84 vs 84 bytes, delta 0)"
+    ],
+    [
+        "HrmsController@departmentAttendanceReportCreate",
+        "departmentwise-attendance-report/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "AJAXController@getDepEmployeeLists",
+        "departmentwise-emplist",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "HrmsController@getHolidays",
+        "get-holidays",
+        "FAIL",
+        "response CHANGED with tenant B (128 vs 128 bytes, delta 0)"
+    ],
+    [
+        "HrmsController@getPresentDays",
+        "get-present-days",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "HrmsController@getAbsentDays",
+        "get-absent-days",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "HrmsController@getHalfDays",
+        "get-half-day",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "PayrollController@monthlyPayroll",
+        "monthly-payroll",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PayrollController@monthlyPayrollCreate",
+        "monthly-payroll/create",
+        "FAIL",
+        "response CHANGED with tenant B (406725 vs 255518 bytes, delta 151207)"
+    ],
+    [
+        "PayrollController@getEmpMonthlyData",
+        "getMonthlyData",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "PayrollController@getTotalDays",
+        "getTotalDays",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "HrmsLeaveController@index",
+        "hrms/designation_leave",
+        "VACUOUS",
+        "identical, but response is empty/trivial (39 bytes)"
+    ],
+    [
+        "HrmsLeaveController@create",
+        "hrms/designation_leave/create",
+        "FAIL",
+        "response CHANGED with tenant B (889 vs 2447 bytes, delta 1558)"
+    ],
+    [
+        "HrmsLeaveController@show",
+        "hrms/designation_leave/{designation_leave}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "HrmsLeaveController@edit",
+        "hrms/designation_leave/{designation_leave}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "leaveEncashmentController@index",
+        "hrms/leave_encashment",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "leaveEncashmentController@create",
+        "hrms/leave_encashment/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "leaveEncashmentController@show",
+        "hrms/leave_encashment/{leave_encashment}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "leaveEncashmentController@edit",
+        "hrms/leave_encashment/{leave_encashment}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "shiftMasterController@index",
+        "hrms/user_shift_master",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "shiftMasterController@create",
+        "hrms/user_shift_master/create",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "shiftMasterController@show",
+        "hrms/user_shift_master/{user_shift_master}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "shiftMasterController@edit",
+        "hrms/user_shift_master/{user_shift_master}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "bulkUserShiftUpdateController@index",
+        "hrms/user_bulk_shift_update",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "bulkUserShiftUpdateController@create",
+        "hrms/user_bulk_shift_update/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "bulkUserShiftUpdateController@show",
+        "hrms/user_bulk_shift_update/{user_bulk_shift_update}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "bulkUserShiftUpdateController@edit",
+        "hrms/user_bulk_shift_update/{user_bulk_shift_update}/edit",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "HrmsController@getAttandanceData",
+        "hrms/attendance-by-id",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "HrmsController@multipleAttendanceReportIndex",
+        "hrms/multiple_attendance_report",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "HrmsController@multipleAttendanceReportCreate",
+        "hrms/multiple_attendance_report/create",
+        "PASS",
+        "identical JSON payload; supplied tenant ignored"
+    ],
+    [
+        "HrmsController@DaywiseAttendanceReportIndex",
+        "hrms/daywise_attendance_report",
+        "VACUOUS",
+        "identical, but response is empty/trivial (0 bytes)"
+    ],
+    [
+        "HrmsController@DaywiseAttendanceportCreate",
+        "hrms/daywise_attendance_report/create",
+        "UNTESTABLE",
+        "server error (500/500)"
+    ],
+    [
+        "HrmsLeaveController@getLeaveDashboard",
+        "hrms/myleave/{employeeId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "HrmsLeaveController@getLeaveHistory",
+        "hrms/leavehistory/{employeeId}",
+        "UNTESTABLE",
+        "requires path parameter"
+    ],
+    [
+        "closure",
+        "storage/{path}",
+        "UNTESTABLE",
+        "closure route, no controller"
+    ]
+]

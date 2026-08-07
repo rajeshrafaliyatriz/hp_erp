@@ -1,144 +1,214 @@
 # Phase 3 Progress
 
-> ## ⚠️ THIS FILE WAS RECONSTRUCTED 2026-08-06 AFTER I DESTROYED IT
->
-> A backtick inside a `python -c "..."` shell string opened a subshell, the command
-> mangled, and the write **truncated this file to zero bytes**. It was **untracked
-> in git**, so no copy existed.
->
-> **What is below is rebuilt from the working session.** The decisions, rules and
-> gate states are accurate — all are cross-checkable against `07-gap-register.md`,
-> `09-implementation-log.md`, `_evidence/sweeps/` and the module write-ups, which
-> are intact. **What may be missing is detail that lived only here**: some older
-> decision-log rows and deferred-scope notes.
->
-> **Fixed going forward:** this file is written with the Write tool, **never**
-> through a shell string. **R18: committed to git after every write.**
->
-> ### Recovered vs rebuilt
->
-> | Section | Provenance |
-> |---|---|
-> | Gate state, C17/C18, G-DATA-06, rules R1-R18, sweep conclusion, 17-of-32, Gate D thread, instruments | **REBUILT** (newer, and correct) |
-> | **Decisions made** - 43 dated rows to 2026-08-05 | **RECOVERED** from the snapshot |
-> | **Deferred scope** - 6 items | **RECOVERED.** It had been silently dropped |
-> | **Changes executed** - G-NAV-01 | **RECOVERED** |
-> | Decisions after 2026-08-05 | **REBUILT** from `10-open-questions.md`, `07-gap-register.md`, `09-implementation-log.md` |
-> | **Status legend · Gate checklist · Module checklist** | **RECOVERED 2026-08-06 from a Recycle Bin snapshot** taken 18:23:51, the last copy before the truncation. These three existed **only** in this file - they were in neither the user's snapshot nor my reconstruction |
-
-Last updated: 2026-08-06
+Last updated: 2026-08-05
 Current gate: **C (audit) and D (foundation build) RUNNING IN PARALLEL**
-Gate B: **SIGNED OFF** · Gate A: **SIGNED OFF**
+Gate B: **SIGNED OFF** 2026-08-05 (conditional on B1, applied)
+Gate A: **SIGNED OFF** 2026-08-05
 
 ---
+
+## PLAN CHANGE 2026-08-06 — C17 / C18
+
+**Two threads now run in parallel.** Progress on each is reported separately.
+
+| Thread | What |
+|---|---|
+| **D — foundation build** | Gate D opened early (**C17**). The foundation items are fully specified in Gate B and depend on **none** of the remaining 30 sub-module audits, so waiting bought nothing. Six-step order below |
+| **C — audit** | Compressed to ~5 turns (**C18**). The sweeps *are* the deep pass |
+
+### C18 — the trade-off, recorded explicitly so it is never mistaken for an oversight
+
+> **DECIDED, EYES OPEN: the per-element coverage ledger (C11) is ABANDONED.**
+> We will **not** be able to say that each of the 3,378 catalogued elements was
+> individually examined.
+
+**What is given up:** per-element attestation.
+**What is kept, and is worth more to a customer:** every known defect pattern
+checked across the **whole codebase in one pass**, plus the golden-thread modules
+read by hand.
+
+**The evidence for the trade:** across two full write-ups, exhaustive enumeration
+produced **zero findings on its own**. Every confirmed break came from reading a
+form config or a controller, or from a sweep. C11 would have priced a guarantee
+nobody was buying.
+
+**This was a deliberate decision, not a shortcut that was later rationalised.**
+
+### C18 — structure and token rules
+
+**One write-up per MODULE, not per sub-module — six files:**
+`competency.md` (9 sub-modules), `talent.md` (7), `organization.md` (5),
+`lms.md` (3), `task.md` (2), `other.md` (4 — HRIT, Agentic, Reports, CRM).
+
+Each contains **only**: sweep hits for its screens · a hand-read of its primary
+config + controller · the §5.1 reconciliation · CONNECTIONS TO BUILD.
+No narrative, no "what this screen is", no restating Gate B.
+
+| # | Token rule |
+|---:|---|
+| 1 | **The raw inventory JSON is a lookup, not reading material.** Zero findings across two write-ups |
+| 2 | **Read by pattern, not by file.** Grep the sweep patterns, open hit regions. Never read a 6,000-line component end to end |
+| 3 | **Output deltas only.** If it is written down, reference it |
+| 4 | **100% verification for negative and trust/security claims only.** Sample the rest at 10% |
+
+### R6 — standing rule
+
+> **A sweep produces CANDIDATES, never FINDINGS.** Nothing from a sweep enters a
+> write-up or the gap register until it is hand-verified.
+
+Earned eight times over (R4 tally). **Stop condition:** if compression starts
+producing shallow or unreliable output, **stop and say so** rather than continue —
+spending the turns is cheaper than a plan built on weak findings.
+
+### New labels registered this round
+
+| Label | Meaning |
+|---|---|
+| **G-SEC-08** | Server must own `verification_status` — `CertificationController.php:390` takes it from the client. **A credential that verifies itself.** Candidate from S-3, verification pending |
+| **C21/C22** | ✅ **C21: 1,463 routes across all 7 route files; 77 controllers resolve tenant/user from the request, 35 of them via `api.php`. ONE verified (`skillLibraryController`), 76 candidates — R6. C22: Phase 1's sweep counted `findToken()` as a guard, so a controller that validates a token and discards its owner passed it.** Evidence: `_evidence/sweeps/c21-c22-tenant-enumeration.md` |
+| **C15** | ✅ **ANSWERED — OUTSIDE, and it is a security finding.** `skillLibraryController` (12 API routes) discards the token's owner and takes tenant + user from the request. **Live cross-tenant read/write on the Competency Library.** → **G-SEC-09 (S1)**. Evidence: `_evidence/sweeps/c15-tenant-field.md` |
+| **R6** | Above |
+| **R8** | **PRE-DELETION CHECKLIST** — exports, referrers, where each moves, what is orphaned, what changes outside scope. Earned by L-03R: `dash()` had 4 live call sites in the file being deleted | see `07-gap-register.md` |
+| **C20** | Verification protocol **PROPOSED** — `11-verification-protocol.md`. I **cannot** start the app or click a UI, so I can never mark my own work `Verified`. Cap of 3 `Built-unverified`; **currently 2** |
+| **R7** | **A cost estimate must NAME THE FILES it touches, in both repos.** An estimate that does not is a guess. Applied retroactively — `09-implementation-log.md` |
+| **C19** | Build the picker mechanism ONCE, generically. Then every entity binding is configuration |
+| **§10.0** | **BINDING RULE**, `02-domain-model.md`: entity → closed picker + permission-gated inline create; vocabulary → open choice. Decided by **ownership**, not drift. Pre-answers L-04, L-07, L-08, L-09 and every field L-11 touches |
+
+---
+
+## ✅ C23 GUARD LIVE — **48 EXECUTED FAILURES** · `_evidence/sweeps/c23-worklist.md`
+
+912 GET routes, all six route files, run in-process against the real database.
+
+| FAIL | PASS | VACUOUS | UNTESTABLE |
+|---:|---:|---:|---:|
+| **48** across **30 controllers** | 321 | 89 | 454 |
+
+**48 is a FLOOR.** 454 routes — half the read surface — could not be called, and
+the 864 write routes are untested. **PayrollController leaks on 9 routes**;
+`api/skills` returns **297,582 bytes for another tenant vs 84,363 for its own**.
+
+**R1 satisfied:** static source reading and dynamic execution agree on both
+G-SEC-09 and G-SEC-10. No longer inference.
+
+**The guard is now the completion criterion — "green" replaces "we think we got
+them all".**
+
+## ⚠️ C27 — PayrollController VERIFIED · **G-SEC-10 (S1)**
+
+Imports the trait, **never calls it**, reads tenant from the request at ~18 sites,
+and has an explicit `if ($type == 'API')` branch that hands API callers their own
+tenant. **39 routes, salary data, token-reachable.** The trait's presence is what
+made it look done — the same illusion as C22, now confirmed in application code.
+
+## ⛔ C25 — NO SECURITY FIGURE IS QUOTED UNTIL RECONCILED
+
+`_evidence/sweeps/c25-security-reconciliation.md` — **done**. Headlines:
+
+- **1,676 routes across six files**, not 739. `api.php` is **48%** of the surface.
+- **THE BLADE ASSUMPTION WAS FALSE.** `authMiddleware` accepts a session **OR a bare Sanctum token**, so `lms/hrms/user/settings` are token-reachable. **Scope 35 → 66 controllers.** `PayrollController` — **salary data, has the trait** — is now in scope.
+- **G-SEC-01, G-SEC-04 and the 279 remain UNQUOTABLE.** Their proxy fails both ways; only the C23 guard can replace them.
+- **G-SEC-02 survives intact** — the one Phase 1 security number whose proxy has no gap.
 
 ## ⛔ C24 — COMPANY-LEVEL RELEASE PRECONDITION
 
 > **NO CUSTOMER TENANT IS CREATED ON THIS PLATFORM UNTIL A TENANT-ISOLATION TEST
 > SUITE PASSES END TO END.**
 
-A business rule, not an engineering task, recorded so it cannot be traded away
-under delivery pressure by someone who was not in this conversation. The gate is a
-**passing test suite**, not a *completed fix* — because C22 showed a fix can look
-done and not be.
+**This is a business rule, not an engineering task.** It is recorded here so it
+cannot be traded away under delivery pressure by someone who was not in this
+conversation.
 
----
-
-## G-DATA-06 — THE PHASE HEADLINE
-
-**283,126 relationship rows are joined by string matching, not keys**, across four
-tables verified individually: `s_user_jobrole_task` (85,662),
-`s_user_skill_jobrole` (79,295), `s_jobrole_skills` (62,208), `s_jobrole_task`
-(55,961).
-
-**Not 283,126 defects** — 283,126 rows in four tables, each resolving its
-relationship by string. The data is **not wrong today**; any rename silently
-detaches it, and nothing can join by key. Test data, so the **structure** is the
-finding, not the volume.
-
-**L-11 is the precondition for the product functioning**, not one connection among
-twenty-three (`02-domain-model.md` §10.-1).
-
-Separately and **independently**: **36** text columns reference an entity with no
-`*_id` (C30 split 36/5/8). **The two figures must never be conflated.**
-
----
-
-## PLAN — C17 / C18
-
-Two threads run in parallel; progress on each is reported separately.
-
-### C18 — the trade-off, recorded so it is never mistaken for an oversight
-
-> **DECIDED, EYES OPEN: the per-element coverage ledger (C11) is ABANDONED.** We
-> will not be able to say each of 3,378 elements was individually examined.
-
-**Kept instead, and worth more to a customer:** every known defect pattern checked
-across the whole codebase, plus the golden-thread modules read by hand.
-**Evidence for the trade:** across two full write-ups, exhaustive enumeration
-produced **zero findings on its own**.
-
-**One write-up per MODULE** — competency (9) · organization (5) · lms (3) ·
-task (2) · talent (7) · other (4). Each contains only: sweep hits · a hand-read of
-the primary config and controller · the C35 payload checklist · the §5.1
-reconciliation · CONNECTIONS TO BUILD.
-
-**Token rules:** the raw inventory is a lookup, not reading material · read by
-pattern, not by file · output deltas only · 100% verification for negative and
-trust/security claims, 10% sample otherwise.
+Reason: **G-SEC-09** — a valid token from any tenant can read and write any other
+tenant's competency library. It is the one finding that must not be discovered by a
+client. It survived a phase dedicated to finding it (**C22**), which is why the
+gate is a *passing test suite*, not a *completed fix*.
 
 ---
 
 ## GATE D — foundation build thread
 
+Nothing in this thread is customer-visible; all of it blocks every connection.
+
 | # | Item | Status |
 |---:|---|---|
-| 1 | **L-03R** — delete the dead panel | ✅ **BUILT** (D-001). 2 files, −404 lines |
-| 2 | **G-COMP-01 + G-SEC-08 + the rejected-competency dead end** | ✅ **BUILT** (D-002). 7 sites, 4 files. ⚠️ visible behaviour change: new competencies born `Pending` |
-| 3 | **G-SEC-09** — `skillLibraryController` onto `ResolvesApiIdentity` | ✅ **BUILT** (D-003). Guard **2 FAIL → 0** |
-| 4 | **G-SEC-10** — `PayrollController` | ✅ **BUILT** (D-004). Guard **9 FAIL → 0**, re-verified. Residual: 4 `user_id` sites untouched — subject-vs-identity, not tenant |
-| 5 | **C23 guard** — property test, now the completion criterion | ✅ **LIVE.** 46 FAIL across 30 controllers remain |
-| 6 | **C19** — the picker mechanism, built once | Not started (M–L) |
-| 7 | **L-01, L-02** as configuration on C19 | Blocked on 6 |
-| 8 | Join tables + `certification_type` + restored tables, **one migration** (§10) | Not started |
-| 9 | `reporting_manager_id` + `head_user_id`, with cycle validation | Not started |
-| 10 | Tri-state rights + **populate the matrix**, with before/after menu diff | Not started |
-| 11 | Event store + projector/reactor split + `task_status_history` | Not started |
-
-**C20 verification protocol** (`11-verification-protocol.md`): I **cannot** start
-the app or click a UI, so I can never mark my own work `Verified`. Cap of 3
-`Built-unverified`; `API-verified-UI-pending` does not count against it.
+| 1 | **L-03R** — delete the dead panel | ✅ **BUILT** — `09-implementation-log.md` D-001. 2 files, −404 lines, tsc clean. **Not yet `Verified`**: AT-L03R steps 1/4 need a running app |
+| 2 | **G-COMP-01 + G-SEC-08 + the rejected-competency dead end** — server owns `approve_status` and `verification_status` | ✅ **BUILT** — D-002. 7 sites across 4 files. ⚠️ **Visible behaviour change**: new competencies are born `Pending`, so they will not appear in the matrix/framework until approved. **Raises the priority of C-11** (the only approve/reject UI may be unreachable) |
+| **3** | **G-SEC-09 — migrate `competencyLibraryContext` onto `ResolvesApiIdentity`** | ✅ **DONE 2026-08-06 (D-003).** Guard **2 FAIL → 0**. `API-verified-UI-pending`. Original note: Adoption of a proven trait, not design. **Preconditions:** (a) **R9** — read every frontend consumer of the 12 routes before and after; a tenant resolved from the token where the client supplied it will silently change which rows a screen returns. (b) confirm no legitimate cross-tenant use (global library import / super-admin) — if one exists it needs an explicit permissioned route, not to be silently broken |
+| **3a** | **C23 — THE GUARD, WRITTEN FIRST** (inverted). It encodes the property directly: every token-reachable route resolves tenant and actor from the token, never from the request body. **Its failure list IS the worklist** — mechanical, objective, completion criterion is "green", not "we think we got them all". **Now the gating artefact for FOUR figures** (G-SEC-01, G-SEC-04, the 279, G-SEC-09 scope), not one | **NEXT** |
+| ~~3b~~ | ~~regression guard built WITH the fix~~ — superseded by 3a: a test asserting every API route resolves tenant from the token, failing CI otherwise. Same shape as the G-SEC-02 route-declaration guard. **Without it this regrows the next time a controller is added** | With item 3 |
+| 4 | **C19 — the picker mechanism, built once**: id-bearing meta bucket `{bucket,id,label}`, `LibraryMeta` carrying ids, ONE closed-picker control with the gated create action, generic payload mapping | Not started. **M–L** |
+| 5 | **L-01, L-02** as **configuration** on top of C19 | Blocked on 3. Returns to **XS** once C19 exists |
+| 6 | Join tables + `certification_type` + `certification_competency_map` + the 3 restored tables, as ONE migration (§10) | Not started |
+| 7 | `tbluser.reporting_manager_id` + `hrms_departments.head_user_id`, **with cycle validation** | Not started |
+| 8 | Tri-state rights columns, then **populate** the matrix (§3.1–3.7) **with a before/after menu diff for review** | Not started |
+| 9 | Event store + projector/reactor split + `task_status_history` | Not started |
+| 2 | **G-COMP-01** + **G-SEC-08** — server owns `approve_status` and `verification_status` | Not started |
+| 3 | The 5 join tables + `certification_type` + `certification_competency_map` + the 3 restored tables, as **ONE** migration (§10) | Not started |
+| 4 | `tbluser.reporting_manager_id` + `hrms_departments.head_user_id`, with **cycle validation** | Not started |
+| 5 | Tri-state rights columns, then **populate** the matrix from `03-rbac-matrix.md` §3.1–3.7, with a **before/after menu diff for review** | Not started |
+| 6 | Event store + projector/reactor split + `task_status_history` | Not started |
 
 ---
 
-## GATE C — audit thread
+## CURRENTLY WORKING ON
 
-### Module write-ups: **19 of 32 sub-modules**
+**Gate C — feature audit.** Gate B fully signed off (B1/B2/B3 applied, Q-F1
+answered). **Both calibrations complete and both clean:**
 
-| Module | Sub-modules | Status |
-|---|---:|---|
-| **Competency** | 9 | ✅ `competency.md` |
-| **Organization** | 5 | ✅ `organization.md` |
-| **LMS** | 3 | ✅ `lms.md` |
-| **Task** | 2 | ✅ `task.md` |
-| Talent | 7 | pending |
-| Other (HRIT, Agentic, Reports, CRM) | 4 | pending |
+| | Unit | Source shape | Rows | Real errors |
+|---|---|---|---:|---:|
+| **C1** | Competency → Library & Taxonomy | declarative config | 159 | **0** |
+| **C1b** | Competency → Development & Career Path | 2,604-line imperative component | 206 | **0** |
 
-### Sweeps — CONCLUDED, 7 of 7
+Two points at opposite ends of the difficulty range, both zero. **Re-derivation is
+not triggered** (C1 step 5, threshold 10%). C1's caveat that the easy unit might not
+represent the hard ones was tested by C1b and did not hold — retired.
 
-**2 verified and productive** (S-1 → the 283,126 headline; S-4b → proved a
-negative) · **1 retired with reason** (S-2, C35) · **1 retired** (S-5, C36) ·
-**3 unvalidatable or unvalidated**.
+Every failure either calibration reported was the **checker's**, five times out of
+five. That is now standing rule **R4** in `07-gap-register.md`.
 
-> **Both productive sweeps were STRUCTURAL. Every behavioural sweep failed.**
-> **Structural questions get tools; behavioural questions get a careful reading by
-> a person.** The C13 split predicted every case.
+**Write-up 1 of N delivered:** `06-feature-audit/competency-library-taxonomy.md`.
+It establishes the **C8 fixed CONNECTIONS TO BUILD format** — columns
+`# | Connection | From → To | Why it matters to a buyer | Cost | Blocked by |
+Evidence`, ordered by descending value ÷ cost. Every subsequent write-up uses it
+unchanged.
 
-### Instruments
+Also applied: **C6** (100% verification of every negative claim), **C6b** (each such
+claim checked against the **prior decisions** as well as the code — added because
+**L-14 passed the code check and still contradicted a verified Gate B finding**), and
+**C7** (replay operating procedure, `05-data-flow-contracts.md` §6.2).
 
-- **C23** differential tenant guard — **46 FAIL** across 30 controllers, from 912 GET routes. **A floor**: 454 UNTESTABLE, 864 write routes untested.
-- **C34** structural no-scoping test — **114 candidates, NOT QUOTED**; no calibration exists yet. **C37** bounds it: hand-verify ten by data sensitivity, then either calibrate or close as a proven negative. **1 of 10 done** (`IndustryController`, false positive).
-- **C28** content markers — **retracted**; essentially no title in tenant 3 is unique to it, so content detection on titles cannot work here.
+**Every write-up from Competency Library onward carries a `New work versus
+already-approved work` table** (§5.1 shape), so Gate D cannot count the same work
+twice.
+
+**L-09 resolved → confirmed Gate B omission**, and it uncovered a larger finding:
+**there is no certification TYPE entity** (`G-CERT-01`, S2). `certification_type` +
+`certification_competency_map` added to the migration sequence as steps **3b/9b**
+(`02-domain-model.md` §10.1).
+
+**C9 delivered** — `06-feature-audit/00-pace-c9.md`. **2 of 32 sub-modules,
+254 of 3,378 elements (7.5%), 4 turns, 2.0 turns per write-up.** Gate C will run
+long: **45–70 turns at full depth.** Recommended trim is by **depth, not by
+dropping sub-modules** — 14 FULL / 16 SHALLOW ≈ 40 turns. **Awaiting approval of
+the split;** continuing at FULL depth in C2 order meanwhile.
+
+**C10 IN PROGRESS — method changed to cross-cutting sweeps first.**
+`_evidence/sweeps/00-sweep-status.md`. **4 of 7 sweeps run, 1 fully verified,
+3 not started.** S-4b verified: **9 → 1** after two checker bugs were found by
+hand-check; the one survivor is the known dead panel, so **that pattern is not
+systemic**. S-3 (184 raw) and S-6 (27 tables) are RAW and must not be quoted.
+**C11 coverage ledger and C12 re-projection follow the sweeps.**
+
+Next 3 steps, in C2 golden-thread order:
+1. `06-feature-audit/competency-framework-mapping.md` — Framework & Role Mapping
+2. `06-feature-audit/competency-employee-profiles.md` — Employee Profiles
+3. `06-feature-audit/competency-assessments.md` — Assessments
+
+Cadence per C3: one sub-module = one write-up = one progress update. Never batched.
+
+New gaps are appended to `07-gap-register.md` as one line and written up at Gate C.
 
 ---
 
@@ -170,8 +240,6 @@ table queried, UI path walked). Analysis alone is **never** `Verified`.
 | D | `08-connection-plan.md` | Not Started | |
 | D | `09-implementation-log.md` | **Current** | **D-001 built** (L-03R). R7 retroactive cost review recorded here |
 | — | `10-open-questions.md` | **Current** | Single register; **24 questions — all answered.** Q-L1/L2/L3 closed 2026-08-06 |
-
----
 
 ---
 
@@ -215,32 +283,6 @@ each sub-module is audited in Gate C.
 | Agentic AI | 8 screens | Not Started | — | **In code, not in the brief's scope list** |
 | CRM | Marketing / Leads / Master Fields | Not Started | — | **In code, not in the brief's scope list**; currently disabled |
 | Reports | 30+ report screens | Not Started | — | **In code, not in the brief's scope list**; mostly disabled |
-
----
-
----
-
-## Standing rules
-
-Full text in `07-gap-register.md`. **R1** second method · **R2** provenance asked ·
-**R3** five rows by eye (+ *"test data" is not a statement about a table's value*) ·
-**R4** the checker is the primary suspect · **R4b** resolve disagreeing counts
-first · **R5** status summary every turn · **R6** a sweep produces candidates ·
-**R7** an estimate names its files · **R8** pre-deletion checklist · **R9** re-read
-frontend consumers after a server change · **R10** name the proxy · **R11**
-verify scope-shrinking assumptions **before** using them · **R12** land a queued
-item every turn *(a turn spent entirely on an incident counts as landed work,
-provided the incident is reported and closed)* · **R13** standing authority · **R14** turns end at boundaries ·
-**R15** assert the column exists · **R16** every sweep names a known-positive ·
-**R17** check your own artefacts before writing a new script · **R18** commit
-`docs/phase3/` after every write to this file.
-
-**R18 — the real root cause.** The backtick was the mechanism; **the cause was
-that a 40-turn engagement's tracking file was untracked in git.** Nothing else
-would have made a single mangled command unrecoverable.
-
-> **Thirteen under-reports from scope-narrowing assumptions. Zero over-reports.**
-> R11's mechanism is beyond coincidence.
 
 ---
 
@@ -339,81 +381,3 @@ Documentation created:
 - `docs/phase3/10-open-questions.md`
 - `docs/phase3/_evidence/*` — reproducible extraction scripts + their output
 - `docs/phase3/_raw-inventory/*` — 3,378-element raw feature catalogue (input, not deliverable)
-
----
-
-## Decisions made — AFTER the snapshot (2026-08-06)
-
-Rebuilt from the intact artefacts. The recovered table above ends at 2026-08-05.
-
-| Date | Ref | Decision |
-|---|---|---|
-| 2026-08-06 | **Q-E1** | `task.skill_id` is **hand-picked at creation**, job-role-suggested. **Catalogue wins**; the instance is an override tagged `confidence`. 33% null = no signal, do not guess |
-| 2026-08-06 | **Q-E2** | **Measure per KASBA item**, derive a weighted roll-up. One service, two numbers reported. **Unmeasured ≠ zero** |
-| 2026-08-06 | **Q-F1** | Notifications: **fixed wording + tenant-substitutable terminology**. Both tables built now, so renaming *employee* → *clinician* is data entry, not a refactor |
-| 2026-08-06 | **Q-L1** | Of 25 orphan Library fields: **BIND 10 / NOTE 13 / SUBSTITUTE 2**. BINDs become L-15…L-23, each carrying a typing change (R-a); two bind to **existing** fields rather than new systems (R-b); three are display-only (R-c) |
-| 2026-08-06 | **Q-L2** | A retired skill **persists until the cycle closes**. Filter at **assignment** time, never read time — an in-flight assessment is a measurement being taken |
-| 2026-08-06 | **Q-L3** | **One shared category table with per-taxonomy applicability.** Cross-taxonomy reporting without forcing irrelevant categories onto every tab |
-| 2026-08-06 | **Corrections 1–5** | **This database is TEST DATA ONLY — no production tenant, no customer.** Every "for now" compromise re-examined; separate DBs now; `s_skill_matrix` semantics decoded; polymorphic integrity required |
-| 2026-08-06 | **C11 ABANDONED** | The per-element coverage ledger is dropped, **eyes open**. Enumeration produced **zero findings on its own** across two full write-ups |
-| 2026-08-06 | **C17** | **Gate D opened early**, in parallel with Gate C. The foundation items depend on none of the remaining audits |
-| 2026-08-06 | **C19** | **Build the picker mechanism ONCE** — id-bearing meta bucket, `LibraryMeta` carrying ids, one closed-picker control with a permission-gated create, generic payload mapping. Then every entity binding is **configuration** |
-| 2026-08-06 | **§10.0 BINDING RULE** | **Entity → closed picker + permission-gated inline create. Vocabulary → open choice.** Decided by **ownership**, not drift: a department must never be created as a side effect of typing into a Competency form. Pre-answers L-04, L-07, L-08, L-09 and every field L-11 touches |
-| 2026-08-06 | **C20** | Verification protocol. **I cannot start the app or click a UI, so I can never mark my own work `Verified`.** Cap of 3 `Built-unverified`; `API-verified-UI-pending` does not count against it |
-| 2026-08-06 | **C22** | Phase 1's auth sweep counted **`findToken()` as a guard**, so a controller that validates a token and discards its owner passed it. **Two of three scripts read only `api.php`.** Inheriting conclusions listed, not re-audited |
-| 2026-08-06 | **C23 INVERTED** | **Write the guard FIRST, before any fix.** Its failure list *is* the worklist, with a completion criterion that is not "we think we got them all". Now gates four figures |
-| 2026-08-06 | **C24** | **Company-level release precondition** — no customer tenant until a tenant-isolation suite passes end to end |
-| 2026-08-06 | **C25** | **No security figure is quoted until reconciled.** 1,676 routes across six files, not 739. **The Blade assumption was FALSE** — `authMiddleware` accepts a session **or a bare token** — so scope went **35 → 66** controllers. G-SEC-01/04 and the 279 remain **unquotable** |
-| 2026-08-06 | **C30** | The S-1 49 splits **36 references / 5 own-identity / 8 noise**. Only the **36** is quotable. **283,126 is independent of it** |
-| 2026-08-06 | **C33** | Global libraries are **copy-at-seed**: no tenant column, no write path. A customer renaming a job role **cannot** affect another customer |
-| 2026-08-06 | **C35** | **S-2 RETIRED** → a module-write-up checklist item (payload vs validator vs insert, three files named per form) |
-| 2026-08-06 | **C36** | **S-5 RETIRED.** A failed sweep is not rebuilt by default — ask whether a tool is cheaper than a checklist item |
-| 2026-08-06 | **C37** | Bounds C34's 114: hand-verify **ten** by data sensitivity, then either calibrate or **close as a proven negative** |
-| 2026-08-06 | **G-DATA-08** | **Add the tenant column.** `skill_matrix_item` **and** `s_skill_matrix` get `sub_institute_id` in §10 step 12, set at write time **from the resolved identity, never request input**, plus a consistency check that each row's tenant equals its user's. Reason: **it is what makes the guards work at all** |
-| 2026-08-06 | **G-MAP-01** | The 79,295 mapping rows came from `SchoolSetupController.php:392-408` at **tenant provisioning**. A bulk-create mechanism **exists**, reachable only from signup. M-03 re-costs to *"surface an existing path"* |
-| 2026-08-06 | **Sweep conclusion** | **Structural questions get tools; behavioural questions get a careful reading by a person.** Both productive sweeps were structural; every behavioural one failed |
-
----
-
-## Changes executed — AFTER the snapshot
-
-**Gate D opened 2026-08-06.** Full detail in `09-implementation-log.md`.
-
-| Ref | Change | Guard result | Status |
-|---|---|---|---|
-| **D-001** | L-03R — delete the unreachable library detail panel (366 lines) | n/a | `Built` |
-| **D-002** | G-COMP-01 + G-SEC-08 — server owns `approve_status` / `verification_status`; rejected competencies made resubmittable | n/a | `Built`. ⚠️ visible: new competencies born `Pending` |
-| **D-003** | G-SEC-09 — `skillLibraryController` onto `ResolvesApiIdentity` | **2 FAIL → 0** | `API-verified-UI-pending` |
-| **D-004** | G-SEC-10 — `PayrollController`, **26 sites in four styles** | **9 FAIL → 0** | `API-verified-UI-pending` |
-
----
-
-## Open questions
-
-`10-open-questions.md` — **24 questions, ALL ANSWERED.**
-
-**Reconciled against the snapshot:** the six the snapshot listed as outstanding —
-**Q-C4, Q-A3, Q-A5, Q-C1, Q-C2, Q-C3** — were **all answered on 2026-08-05** and
-appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
-
----
-
-## Still owed — carried explicitly so they do not drop again
-
-> **Rule: nothing leaves this section without either a commit reference or an
-> explicit decision not to do it.**
-
-| Item | State |
-|---|---|
-| **4 `user_id` sites in `PayrollController`** | The **actor** half, not the tenant half. Must be resolved or explicitly cleared as subject-not-identity |
-| **G-MAP-01 mis-wired button** | `'Create Framework'` and `'Create Role Mapping'` both map to `kind:'framework'`. **One-line fix on an S1 golden-thread-1 break.** Scheduled |
-
----
-
-## Queue
-
-1. **Task** module write-up, then **Talent**, then **Other**
-2. **F-6** — delete the ontology iframe (approved; needs R8 checklist + a record of what it displayed + the registered replacement)
-3. **C32** — the worked example: rename a job role in tenant 7, report what detaches, revert
-4. **C37** — nine more hand-checks of C34's 114
-5. The 37 unverified C23 candidates, ordered by data sensitivity
