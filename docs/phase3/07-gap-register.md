@@ -122,6 +122,36 @@ deliberately, not inherited.**
 
 ---
 
+## G-CERT-01 addendum — `verified_by` was caller-supplied too · ✅ **BOTH HALVES CLOSED**
+
+**Recorded here, not only under G-SEC-12, because a reader looking at
+certifications must find it.**
+
+`CertificationController` had **two** trust defects on the same record, and they
+compound:
+
+| Half | Defect | Closed by |
+|---|---|---|
+| **1** | `verification_status` taken from the request — **a credential could declare itself verified** | **D-002** (`2026-08-06`) |
+| **2** | `verified_by` taken from the request — **a caller could also name WHO verified it** | **D-006** (`d70a204c`) |
+
+**Together they meant a credential could assert both that it was verified and who
+signed it off.** Neither claim was checkable, and nothing looked wrong.
+
+> **Certification trustworthiness is what a regulated customer tests first.** A
+> credential that verifies itself, signed by a person who never saw it, is the
+> exact artefact an auditor asks to see the provenance of.
+
+**Both halves are now closed.** `verification_status` is server-set to `pending` on
+create; `verified_by` resolves from the token via `g2gActorId()`. The legitimate
+verify path still works and still stamps `verified_by` / `verified_at` — but from
+identity, not from input.
+
+⚠️ **Still open:** that verify path is **not role-gated** (G-SEC-01). Anyone who can
+reach it can verify. Logged, not fixed here.
+
+---
+
 # G-DATA-07 — `s_library_map.skill_ids` packs ids into a TEXT column · **S2** (C31)
 
 **Worse than the string-join problem, and it deserves its own line.**
@@ -367,6 +397,7 @@ evidence.
 | **R18b** | **Anything merged verbatim from a recovery carries a DATE STAMP.** A stale line looks identical to a current one | *"2 of 32 delivered"* came back in a recovered Gate checklist and **survived three write-ups unnoticed**, contradicting a line 80 rows above it |
 | **R19** | **A NUMBER ASSEMBLED FROM OTHER NUMBERS IS A NEW CLAIM.** Re-derive it end to end, with one filter, before publishing. **Verifying each input separately does not verify their combination** | **V6.** Three of four headline errors came from combining figures derived at different moments with different filters — and all three **overstated**, flipping R11's direction. Under-reporting hid risk; over-reporting costs credibility |
 | **R17** | **(a) Before writing any new measurement script, check whether an existing artefact already answers the question — reuse it. (b) When a new measurement disagrees with an old one, resolve the discrepancy BEFORE either is used** — R4b applied to my own artefacts, not just to the codebase | **C38.** The tooling was right and the correct number was already in `c21-result.json`. I wrote a fresh, narrower grep, got 17 against its 30, and acted on mine without comparing |
+| **R10b** | **A PROXY THAT NAMES ONE COLUMN MEASURES ONE COLUMN, NOT THE CLASS.** Before writing down any scope figure, ask: **"what else does this pattern look like under a different name?"** Where the answer is unknown, mark it **ESTIMATE PENDING** rather than guess | **G-SEC-12.** S-3 counted `created_by` and reported **33**. The real class spans `created_by`, `updated_by`, `verified_by` and `reviewer_id` — **one pattern under four names — and the true figure was 76. Low by 2.3×.** ESTIMATE PENDING was correct and should be used the same way again |
 | **R11** | **A SCOPE-SHRINKING ASSUMPTION IS VERIFIED BEFORE IT IS USED TO SHRINK ANYTHING.** State it, test it, then apply it — never the reverse | **Four consecutive errors all ran in the reassuring direction.** Random tooling error would split evenly between overstating and understating; these did not. The cause is structural: **an assumption that shrinks the work is adopted more readily than one that expands it, and the result looks tidier, so nobody questions it.** This is the only rule that would have caught all four in advance |
 | **R10** | **EVERY CHECKER TESTS A PROXY — NAME IT.** Any document quoting a script's number must state (a) the property we care about, (b) the proxy actually measured, (c) how something passes the proxy and fails the property **and vice versa** | **C22** — Phase 1's sweep used *"calls `findToken()`"* as a proxy for *"resolves identity correctly"*. A controller that validates a token and discards its owner satisfies that proxy **perfectly**. That is how G-SEC-09 survived a phase dedicated to finding it |
 | **R4** | **When a checker disagrees with the artefact it is checking, THE CHECKER IS THE PRIMARY SUSPECT.** Investigate the tool before reporting the artefact as wrong. A failure list is a hypothesis, never a result | Calibration C1/C1b, the Q-L1 sweep, and sweep S-4b — **eight disagreements, eight times the tool was wrong, zero times the codebase was** |
@@ -468,6 +499,10 @@ remove.
 **Highest risk ahead: the rights-matrix population and the event store**, which
 change behaviour across many screens at once. A single re-read is not enough there;
 each changed endpoint needs its consumers enumerated.
+
+> **Anchor regexes must handle `\r\n`.** Line endings have now defeated a pattern
+> **twice** — once on a `$`-anchored trait-use match, once earlier in the phase.
+> Costs nothing to guard; prevents the third.
 
 Applied together: R3 before counting, R1 before quoting, R2 before interpreting,
 **R4 before accusing, R8 before deleting, R9 after changing a contract.**
