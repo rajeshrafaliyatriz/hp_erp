@@ -84,7 +84,7 @@ capability on the other.**
 |---|---|---|
 | **283,127** | rows whose relationships resolve by string, across four tables verified individually | not defects; not a column count; test data; the structure is the finding |
 | **3 confirmed cross-tenant leaks** — 2 fixed | one organisation could read another's data. `skillLibraryController` and `PayrollController` **are fixed and verified green**; `talent_interviewpanelController` remains | **A floor, not a total.** 46 route failures remain unverified candidates; 454 routes could not be tested; the write half is untested |
-| **2.7%** | share of active users with any capability measurement — **7 of 264** | **test data (R2).** It measures reach, not quality; all 8 resolve cleanly |
+| **2.7%** | share of active users with any capability measurement — **7 of 264** | **test data (R2).** It measures reach, not quality; all 7 resolve cleanly |
 
 **And the fact that changes everything about urgency:** **there are no customers.**
 This is a test database with no production tenant. Three times in this phase that
@@ -133,7 +133,7 @@ missing** — with the gap computed from real keys, not name matching.
 
 **Current state:** **half-built, and the half that exists is weak.** `task.skill_id`
 is populated on **1,514 of 2,271 tasks (66.7%)** — but it is hand-picked by whoever
-created the ticket. The **catalogue** (`s_user_jobrole_task`, 85,662 rows) has **no
+created the ticket. The **catalogue** (`s_user_jobrole_task`, 85,663 rows) has **no
 competency link at all**.
 
 **Ordered items:**
