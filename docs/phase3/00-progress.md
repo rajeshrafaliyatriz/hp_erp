@@ -677,6 +677,15 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | Dept Head + Reporting Manager re-grants | reporting-line **coverage** (G-ORG-02) |
 | `task.assigned`, `task.overdue` events | readiness gate: **task_hygiene** |
 
+### HP BRAIN SEPARATION — Q-C4 CONFIRMED 2026-08-10, separation still LIVE
+
+| Item | State |
+|---|---|
+| **C-SEP-01** — remove the `hpbrain_audit_logs` cross-write (**M**) | **UNBLOCKED.** `g2g_audit_log` now exists (D-031), so it is a redirection, not a new build |
+| **C-SEP-02** — move 105 `hpbrain_*` tables out of `hp_erp` (**L**) | **Infrastructure. Flagged, not scheduled** |
+
+`hpbrain_schema_migrations` (38 rows) still runs inside G2G's schema.
+
 ### PARKED — resume after foundations
 
 | Item | Why parked |

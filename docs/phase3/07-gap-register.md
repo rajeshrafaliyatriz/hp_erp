@@ -1121,6 +1121,61 @@ mapping — and checking rather than assuming it is the point.**
 
 ---
 
+# Q-C4 — RE-EXAMINED AND **CONFIRMED**, 2026-08-10. Not superseded.
+
+**HP Enterprise Brain and G2G are NOT to be merged. They stay separate products.**
+Q-C4 stands as written: no runtime dependency, no shared tables, no cross-writes,
+future integration **API only**. Harvesting the schema design **stays approved** -
+reusing a design is not coupling the products.
+
+**Marked CONFIRMED rather than superseded**, so the record shows it was
+re-examined and held rather than never revisited.
+
+**One correction to the record itself:** Q-C4's original text already said
+*"sharing this database"*. The shared database was **known when the decision was
+made** - it was recorded as *"a risk to document"*, not as a surprise.
+
+---
+
+## THE CHECK — reported from the live system
+
+| Question | Answer |
+|---|---|
+| Do `hpbrain_*` tables sit in G2G's schema? | **YES — 105 tables in `hp_erp`**, ~107,488 rows |
+| Does `hpbrain_schema_migrations` exist there? | **YES — 38 rows.** HP Brain's own migration system runs inside G2G's schema |
+| Does G2G code touch an `hpbrain_*` table? | **YES — one file.** `LmsGovernanceController` |
+| Is the cross-WRITE still live? | **YES — `:102` `DB::table('hpbrain_audit_logs')->insert([...])`.** Plus 4 READ sites (`:204`, `:1107`, `:1153`, `:1156`). The table holds **342 rows** |
+
+**A separate `hp_brain` database also still exists (57 tables)** — fewer than the
+105 co-located in `hp_erp`, so the co-located set is not a leftover copy.
+
+> ### SEPARATION IS LIVE WORK, NOT OBSOLETE
+> The tables are co-located, HP Brain's migrations run in G2G's schema, and the
+> single cross-write Q-C4 marked *"to be removed"* is **still there**.
+
+### The cross-write removal is now UNBLOCKED
+
+Q-C4 said the cross-write goes **because "G2G writes its own audit log"**. At the
+time G2G had none. **It does now:** `g2g_audit_log`, built in item 6 slice 2
+(D-031) as a projection of `g2g_event`.
+
+So the removal is no longer blocked on a missing destination - it is a
+redirection: `LmsGovernanceController` emits an event, and `AuditLogProjector`
+writes `g2g_audit_log`. **The same shape as `TaskAuditService`'s conversion**,
+which is already done and verified.
+
+### Registered as its own item, with a cost
+
+| Item | Cost | Files |
+|---|:-:|---|
+| **C-SEP-01** — remove the cross-write: `LmsGovernanceController` emits events instead of writing `hpbrain_audit_logs`; its 4 read sites move to `g2g_audit_log` | **M** | `app/Http/Controllers/Api/LmsGovernanceController.php` (5 sites), `app/Services/Events/` |
+| **C-SEP-02** — the schema separation itself: move 105 `hpbrain_*` tables and `hpbrain_schema_migrations` out of `hp_erp` | **L** | infrastructure, not application code. **Not Phase 3 work** unless Triz says otherwise |
+
+**C-SEP-01 is application work and can proceed. C-SEP-02 is infrastructure and is
+flagged, not scheduled.**
+
+---
+
 # G-RBAC-02b — THE SPEC-ASPIRATION PATTERN, IN CODE RATHER THAN IN THE SPEC · **S2**
 
 **An instance of G-RBAC-02, not a new class:** *a name promising a capability that
