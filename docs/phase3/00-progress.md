@@ -445,7 +445,7 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 
 **CURRENTLY WORKING ON — the build. Analysis is closed.**
 
-**FOUNDATIONS BUILT — 2 of 6.**
+**FOUNDATIONS BUILT — 3 of 6, with item 4 at 4a.**
 
 | # | Build item | State |
 |---:|---|---|
@@ -454,7 +454,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 | 3 | **The join-table migration, as ONE change** | ✅ done (`7df8c1c7`) — 12 tables, 3 columns |
 | 4a | Tri-state rights columns | ✅ done (`5e302651`) |
 | 4b | Populate the matrix | ⛔ **REVIEW GATE** — `_changes/X-01-REVIEW-GATE.md`. Two decisions needed |
-| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | **NEXT** — recommended ahead of 4b, it creates the role model 4b needs |
+| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | ✅ done (`f293edb0`) |
+| 4b-prep | **Nine roles + `role_key` + the screen→menu mapping**, for review | **NEXT** |
 | 5 | `reporting_manager_id` + `head_user_id` + cycle validation | after 4 |
 | 6 | Event store + projector/reactor split + `task_status_history` | after 5 |
 

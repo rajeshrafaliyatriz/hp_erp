@@ -68,7 +68,7 @@
 | 8 | **Join-table migration (one change)** | ✅ **APPLIED** (`7df8c1c7`) — 12 tables, 3 columns, all tenant-scoped |
 | 9a | **Tri-state rights columns** | ✅ **APPLIED** (`5e302651`) — additive, no behaviour change |
 | 9b | **Populate the matrix** | ⛔ **REVIEW GATE — NOT APPLIED.** Blocked: 8 roles specified, 3 exist; no screen→menu mapping. Backup taken; admin lockout asserted safe |
-| 10 | `reporting_manager_id` + `head_user_id` | **Not started** |
+| 10 | **`reporting_manager_id` + `head_user_id` + role_key + cycle validation** | ✅ **APPLIED** (`f293edb0`) — 6 columns, `tenant_setting`, validator tested |
 | 11 | Event store + projector/reactor split | **Not started. UNBLOCKED** — S-02 closed |
 | 12 | C19 picker mechanism | **Not started** |
 | 13 | `certification_type` + map | **Not started** |
@@ -76,9 +76,9 @@
 | 15 | `skill_matrix_item` + tenant column | **Not started** |
 | 16 | Text→FK migrations | **Not started** |
 
-**Built: 9.**
+**Built: 10.**
 
-**FOUNDATIONS BUILT — 2 of 6.**
+**FOUNDATIONS BUILT — 3 of 6, with item 4 at 4a.**
 
 ---
 
@@ -106,7 +106,7 @@ regression guard in CI.
 | ~~Event store~~ | ~~G-SEC-12~~ — **UNBLOCKED 2026-08-07** |
 | Threads 2 and 9 | the event store |
 | L-01, L-02, L-04 and every later entity binding | **C19** picker mechanism |
-| Rights matrix population (9b) | ~~tri-state columns~~ ✅ — **now blocked on the ROLE MODEL** (item 5) and a screen→menu mapping |
+| Rights matrix population (4b) | ~~tri-state columns~~ ✅ · ~~role model~~ ✅ **(f293edb0)** — **now blocked only on 4b-prep**: the nine roles seeded + the screen→menu mapping |
 | Everything in Tier 3 | the join tables |
 | The three mandatory reports | the joins — building them first yields three empty reports |
 | Write-route audit coverage figure | re-derivation from the router |

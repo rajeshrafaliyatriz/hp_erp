@@ -474,6 +474,41 @@ profile — what **one user** sees — it is **Employee 151 · HR 150 · Admin 1
 
 ---
 
+## D-010 · Item 5 — reporting line, role keys, cycle validation
+
+**2026-08-07** · **APPLIED** · commit **`f293edb0`**
+
+| | |
+|---|---|
+| **Changed** | `tbluser.reporting_manager_id` · `hrms_departments.head_user_id` · `tbluserprofilemaster.role_key` / `data_scope` / `is_system` · new `tenant_setting` table |
+| **Files** | `database/migrations/2026_08_07_120000_add_reporting_line_and_role_keys.php` · `app/Services/Org/ReportingLineValidator.php` |
+| **Verification** | 6 of 6 columns added · `tenant_setting` created · **0 of 387 users have a manager** (all NULL, as expected) · **0 cycles in existing data** |
+| **Acceptance** | Validator behaviour tested: **self-reference rejected · NULL manager allowed · clean assignment allowed · 0 existing cycles · default depth 1**. **Not `Verified`** — no UI path exercised |
+
+### The guarantee the schema cannot make
+
+MySQL has **no recursive CHECK**, so "this reporting graph has no cycles" cannot be
+a constraint. It lives in `ReportingLineValidator`, and **the migration header says
+so** rather than letting a later reader assume the schema enforces it:
+
+- **`canAssign()`** walks **up** from the proposed manager and refuses if it reaches the user. Rejects self-reference (the degenerate one-node cycle). **Refuses to extend a pre-existing cycle** rather than silently absorbing it.
+- **`teamOf()`** is bounded by `team_scope_depth` (A5, default **1 = direct reports only**) and carries a seen-set, so **even a corrupt graph terminates**.
+- **`findCycles()`** for the periodic check — same shape as the polymorphic-integrity check for `competency_kasba_item`.
+
+### `role_key` — why it exists
+
+The resolver keys on `role_key`, **never on `name`**. Renaming a role in a
+customer's UI must not break access. `data_scope` lives on the role because **scope
+is never individually overridable** (A6).
+
+### Ordered before 4b deliberately
+
+§3.1–3.7 is written against **nine** roles; three exist. This migration creates the
+model that matrix needs, so 4b can apply it faithfully rather than collapsing nine
+columns into three.
+
+---
+
 ## R7 applied retroactively — which costs move
 
 **R7: an estimate that does not name the files it touches is a guess.** Every
