@@ -40,8 +40,9 @@ class EventCatalogue
         'task.reopened' => [
             'CapabilityEvidenceProjector' => self::PROJECTOR,
         ],
+        // X-06: NotificationDispatcher REMOVED from this event. RemediationRecommender
+        // still consumes it, so the event survives the named-consumer test.
         'capability.flag_raised' => [
-            'NotificationDispatcher'      => self::REACTOR,
             'RemediationRecommender'      => self::REACTOR,
         ],
         'capability.flag_resolved' => [
@@ -58,9 +59,10 @@ class EventCatalogue
             'ProficiencyService'          => self::PROJECTOR,
             'GapRecalculator'             => self::PROJECTOR,
         ],
+        // X-06: NotificationDispatcher REMOVED - deferred until X-11 emits this
+        // event and gives its action link somewhere to point.
         'certification.issued' => [
             'CapabilityEvidenceProjector' => self::PROJECTOR,
-            'NotificationDispatcher'      => self::REACTOR,
         ],
         'certification.expiring' => [
             'NotificationDispatcher'      => self::REACTOR,
@@ -83,8 +85,9 @@ class EventCatalogue
             'LearningAssigner'            => self::REACTOR,
             'NotificationDispatcher'      => self::REACTOR,
         ],
+        // X-06: NotificationDispatcher REMOVED - FeatureGateApplier already does
+        // the only thing anyone wanted done. Nobody acts on being told.
         'readiness_gate.changed' => [
-            'NotificationDispatcher'      => self::REACTOR,
             'FeatureGateApplier'          => self::REACTOR,
         ],
         'rights.changed' => [
@@ -120,6 +123,39 @@ class EventCatalogue
             'verdict' => 'DROPPED',
             'trigger' => null,
             'reason'  => 'Gaps are DERIVED, not a state change. The gap is a query, not an event; emitting one per recompute would flood the store with the same standing gap.',
+        ],
+    ];
+
+    /**
+     * X-06 — THE NAMED-CONSUMER TEST APPLIED TO NOTIFICATIONS SPECIFICALLY.
+     *
+     * The test the events themselves passed was "does any consumer DO something".
+     * A notification has a stricter one, because its consumer is a PERSON:
+     *
+     *     WHO receives it, HOW do we find them, and WHAT do they do about it?
+     *
+     * Three of the nine events NotificationDispatcher used to claim cannot answer
+     * all three. They are recorded here rather than quietly dropped, with the
+     * trigger that would let them back in.
+     */
+    public const NOT_NOTIFIED = [
+        'capability.flag_raised' => [
+            'verdict'   => 'DEFERRED',
+            'recipient' => "the employee's manager",
+            'trigger'   => 'an employee->manager edge that resolves',
+            'reason'    => 'MEASURED: tbluser.reporting_manager_id is populated on 0 of 387 rows, and supervisor_opt is a flag (4 Supervisor / 57 Subordinate) with no edge between the two. Every other manager column in the schema belongs to a CASE, not to a person. A flag is an ESCALATION; redirecting it to the employee would change what it means, and that is a product decision, not a build one.',
+        ],
+        'certification.issued' => [
+            'verdict'   => 'DEFERRED',
+            'recipient' => 'the holder',
+            'trigger'   => 'X-11 CertificateIssuer ships',
+            'reason'    => 'The recipient and the action are both clear - it is the EMITTER that does not exist yet, and the action link would point at a certificate screen that has not been built. lms_certificates holds 0 rows. Nothing would fire, and if it did there would be nowhere to send the reader.',
+        ],
+        'readiness_gate.changed' => [
+            'verdict'   => 'DROPPED',
+            'recipient' => null,
+            'trigger'   => null,
+            'reason'    => 'FeatureGateApplier already applies the change. No human does anything on being told, which makes the notification an announcement rather than a message. Dropped, not deferred: there is nothing to wait for.',
         ],
     ];
 
@@ -184,6 +220,28 @@ class EventCatalogue
         foreach (self::NOT_SHIPPED as $event => $row) {
             if ($row['verdict'] === 'DEFERRED' && empty($row['trigger'])) {
                 $errors[] = "DEFERRED WITHOUT A TRIGGER: '$event' - nobody will remember to enable it.";
+            }
+        }
+
+        foreach (self::NOT_NOTIFIED as $event => $row) {
+            if ($row['verdict'] === 'DEFERRED' && empty($row['trigger'])) {
+                $errors[] = "NOT_NOTIFIED WITHOUT A TRIGGER: '$event' - nobody will remember to enable it.";
+            }
+            // A deferred notification must not still be wired up. This is the
+            // check that stops the register and the code drifting apart.
+            if (isset(self::SHIPPED[$event]['NotificationDispatcher'])) {
+                $errors[] = "CONTRADICTION: '$event' is in NOT_NOTIFIED but NotificationDispatcher still consumes it.";
+            }
+        }
+
+        // AND THE OTHER DIRECTION. An event the dispatcher notifies must be in the
+        // catalogue as one of its events - otherwise the catalogue is describing a
+        // system that no longer exists.
+        foreach (NotificationDispatcher::NOTIFIES as $event) {
+            if (!isset(self::SHIPPED[$event])) {
+                $errors[] = "UNKNOWN EVENT NOTIFIED: NotificationDispatcher sends on '$event', which is not a shipped event.";
+            } elseif (!isset(self::SHIPPED[$event]['NotificationDispatcher'])) {
+                $errors[] = "UNDECLARED CONSUMER: NotificationDispatcher sends on '$event' but is not listed as its consumer.";
             }
         }
 

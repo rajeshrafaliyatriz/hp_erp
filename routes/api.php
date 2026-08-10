@@ -1454,3 +1454,24 @@ Route::prefix('agentic')->group(function () {
     Route::post('/reflection/analyse', [AgenticReflectionController::class, 'analyse']);
     Route::put('/reflection/optimizations/{id}', [AgenticReflectionController::class, 'updateOptimization'])->whereNumber('id');
 });
+
+/*
+|--------------------------------------------------------------------------
+| X-06 — notifications and terminology
+|--------------------------------------------------------------------------
+| NO MIDDLEWARE GROUP, DELIBERATELY. Every method resolves the caller from
+| their own token and scopes to that person's inbox, so there is no "who may
+| call this" question separate from "whose rows come back" - the two are the
+| same question here, and the controller is the only place that can answer it.
+|
+| /api/terminology is read by screen labels and report headings, not only by
+| notifications. It is placed here because X-06 built it; the contract is the
+| path, not the namespace behind it.
+*/
+Route::get('/notifications', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'index']);
+Route::get('/notifications/unread-count', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'unreadCount']);
+Route::patch('/notifications/read-all', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'markAllRead']);
+Route::patch('/notifications/{id}/read', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'markRead'])->whereNumber('id');
+
+Route::get('/terminology', [App\Http\Controllers\Api\Notifications\TerminologyController::class, 'index']);
+Route::put('/terminology', [App\Http\Controllers\Api\Notifications\TerminologyController::class, 'update'])->middleware('profile:admin,hr');

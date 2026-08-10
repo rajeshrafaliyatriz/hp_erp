@@ -1640,3 +1640,96 @@ stripped** (the 9th matched prose describing an already-fixed defect).
 known-positive rule applies to restores, and a zero result must announce itself.
 
 **3 files** (R18d).
+
+## D-048 - X-06: the notification service, and the recipient that does not exist
+
+**The first reactor with a real send.** Until this item `NotificationDispatcher`
+wrote a log line, so the replay guard and the permanent ledger were correct in
+principle and untested in practice. They now stand between a rebuild and a real
+person's inbox.
+
+### What shipped
+
+| Piece | What it is |
+|---|---|
+| `g2g_terminology` | tenant-substitutable nouns; `sub_institute_id = 0` is the global default |
+| `g2g_notification_template` | fixed wording, **no tenant column** - the schema enforces Q-F1 |
+| `g2g_notification` | the inbox: one row per **(event, recipient, channel)** |
+| `TerminologyService` | two-layer resolution; also serves screen labels and report headings |
+| `NotificationComposer` | terminology pass, then payload pass |
+| `RecipientResolver` | the named-consumer test as code - who, and found how |
+| `NotificationSender` | in-app live; email built and **gated OFF** |
+| `GET /api/notifications`, `GET /api/terminology` | + mark-read, + tenant override (admin/hr) |
+
+### THE MEASUREMENT THAT SHAPED IT: **THERE IS NO EMPLOYEE -> MANAGER EDGE**
+
+| Source | Populated |
+|---|---|
+| `tbluser.reporting_manager_id` | **0 of 387** |
+| `tbluser.supervisor_opt` | a FLAG - 4 "Supervisor", 57 "Subordinate", **no link between them** |
+| the other 15 manager-ish columns | **per-CASE, not per-person** (`talent_offboarding_cases.manager_id` 3/3, `task_management_projects.manager_id` 3/3, `s_performance_reviews.manager_id` 16/228) |
+
+**Foundation 5 shipped `reporting_manager_id` and nothing ever filled it.** X-06 is
+the first item that NEEDED it, and that is how the emptiness surfaced - the column
+existing made every design review assume the relationship existed too.
+
+**Consequence, applied rather than noted:** a recipient comes from the EVENT or
+from the CASE the event references. There is no org-chart fallback because there
+is no org chart.
+
+### SIX EVENTS, NOT NINE
+
+| Event | Recipient | Verdict |
+|---|---|---|
+| `task.rejected` | assignee (`task.task_allocated_to`) | **SHIP** |
+| `assessment.completed` | the assessed employee | **SHIP** |
+| `certification.expiring` | the holder - **39 expire within 90 days, 37 already expired** | **SHIP** |
+| `development_plan.approved` | the plan owner - 25 pending approval | **SHIP** |
+| `employee.offboarded` | the **case** manager (3/3 populated) | **SHIP** |
+| `rights.changed` | the affected user - "report it if you did not expect it" | **SHIP** |
+| `capability.flag_raised` | the employee's manager | **DEFERRED** - no such edge |
+| `certification.issued` | the holder | **DEFERRED** - X-11 does not emit it yet |
+| `readiness_gate.changed` | nobody | **DROPPED** - FeatureGateApplier already acts |
+
+Recorded in `EventCatalogue::NOT_NOTIFIED` with triggers, and a new invariant
+fails if a deferred event is quietly re-wired.
+
+### THE DEFECT MY OWN PROOF CAUGHT
+
+`NotificationComposer` substituted **payload first, terminology second** - while
+its docblock argued at length for the opposite. A task titled literally
+`{term:competency}` would have had its title expanded by the terminology pass.
+
+**Harmless in that example, and the wrong shape in general: it is tenant DATA
+reaching a template engine.** Fixed to terminology-then-payload, so by the time
+any payload value exists in the string every pass that could interpret it has
+finished.
+
+> **The docblock was right and the code was wrong, and only running it told me
+> which.** The prose I write beside a change is not evidence about the change.
+
+Second defect in the same run: the proof's own detail string printed *"rendered as
+literal text"* on **both** branches, so the FAIL line described a pass. **A detail
+string that cannot be wrong is not evidence.**
+
+### The email channel is BUILT and OFF
+
+386 of 387 users carry a real address and `MAIL_MAILER` is live Gmail SMTP.
+`G2G_NOTIFY_EMAIL=false` is the default and the smoke suite FAILS if it flips.
+**Flipping it is Triz's decision to take deliberately, not one to inherit from a
+default** - a backfill, a test or a replay bug would otherwise mail real people at
+real companies.
+
+### The bell was a picture of a bell
+
+`gtg-header.tsx` and `gtg-header-base.tsx` each carried their own copy of a
+notification menu that **rendered "You're all caught up" and a hardcoded "New"
+badge simultaneously, with no request behind either**. Two contradictory claims,
+neither measured, and dead in two places at once. Now one shared component reading
+the real endpoint - and a failed fetch says so rather than reporting a connection
+error as an empty inbox.
+
+**Evidence:** `docs/phase3/_evidence/x06-notification-proof.php` - **18/18 GREEN**,
+all rows cleaned up. Smoke **25 -> 29 checks, GREEN**. Frontend `tsc`: 9 errors,
+**none in X-06's files** (pre-existing, in `admin-center`, `gtg-nav-visibility`,
+`offboarding-service`).

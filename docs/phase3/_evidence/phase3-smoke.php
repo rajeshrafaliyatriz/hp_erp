@@ -202,6 +202,70 @@ check('events', 'catalogue invariants', function () {
     return [$err === [] ? 'PASS' : 'FAIL', $err === [] ? 'all pass' : count($err) . ' violation(s)'];
 });
 
+/* ══════════════════════════ NOTIFICATIONS (X-06) ══════════════════════════ */
+echo "\nNOTIFICATIONS\n";
+
+check('notify', 'every notified event has a resolver AND a template', function () {
+    $events = App\Services\Events\NotificationDispatcher::NOTIFIES;
+    $src = file_get_contents(base_path('app/Services/Notifications/RecipientResolver.php'));
+    $tpl = DB::table('g2g_notification_template')->where('channel', 'inapp')
+        ->where('is_active', true)->pluck('event_type')->all();
+
+    $broken = [];
+    foreach ($events as $e) {
+        if (!str_contains($src, "'$e'")) $broken[] = "$e (no resolver)";
+        if (!in_array($e, $tpl, true))   $broken[] = "$e (no template)";
+    }
+    return [$broken === [] ? 'PASS' : 'FAIL',
+        $broken === [] ? count($events) . ' events, each with a named recipient and wording'
+                       : implode(' | ', $broken)];
+});
+
+check('notify', 'deferred events are not silently re-wired', function () {
+    // The register and the code drift apart quietly. This is the check that
+    // notices - a deferred notification that reappears in NOTIFIES would
+    // otherwise start sending the day someone edited one list and not the other.
+    $bad = array_intersect(
+        array_keys(App\Services\Events\EventCatalogue::NOT_NOTIFIED),
+        App\Services\Events\NotificationDispatcher::NOTIFIES
+    );
+    return [$bad === [] ? 'PASS' : 'FAIL',
+        $bad === [] ? count(App\Services\Events\EventCatalogue::NOT_NOTIFIED) . ' deferred/dropped, none wired'
+                    : 'RE-WIRED: ' . implode(', ', $bad)];
+});
+
+check('notify', 'tenant data cannot reach the template engine', function () {
+    // KNOWN-POSITIVE FIRST (R16): the probe must contain the shape being tested,
+    // or a pass means the check simply found nothing to expand.
+    $probe = '{term:competency}';
+    $ev = (object) [
+        'id' => 0, 'type' => 'task.rejected', 'sub_institute_id' => 7,
+        'entity_id' => 1, 'entity_type' => 'task', 'actor_id' => 1,
+        'payload' => json_encode(['task_title' => $probe, 'approve_remarks' => 'x']),
+    ];
+    $c = new App\Services\Notifications\NotificationComposer(
+        new App\Services\Notifications\TerminologyService()
+    );
+    $m = $c->compose($ev, 'inapp', 7);
+    if ($m === null) {
+        return ['SKIPPED', 'no inapp template for task.rejected - nothing to test'];
+    }
+    $intact = str_contains($m['body'], $probe);
+    return [$intact ? 'PASS' : 'FAIL',
+        $intact ? 'payload directive rendered as literal text'
+                : 'EXPANDED - payload substitution is running before terminology'];
+});
+
+check('notify', 'email channel is OFF', function () {
+    // NOT a correctness property - a DELIBERATE default. 386 of 387 users carry a
+    // real address and MAIL_MAILER is live SMTP. If this ever reads PASS->FAIL,
+    // someone enabled outbound mail, and that should be a decision, not a drift.
+    $on = app(App\Services\Notifications\NotificationSender::class)->emailEnabled();
+    return [$on ? 'FAIL' : 'PASS',
+        $on ? 'G2G_NOTIFY_EMAIL=true - real mail will leave the building'
+            : 'G2G_NOTIFY_EMAIL unset/false'];
+});
+
 /* ══════════════════════════ DATA ══════════════════════════ */
 echo "\nDATA\n";
 

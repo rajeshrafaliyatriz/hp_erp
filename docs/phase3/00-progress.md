@@ -682,8 +682,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **47** ·
-`09-implementation-log.md` entries = **47** · **AGREE.** · plan file **16 of 59 done** (R18c(iii))
+**RECONCILIATION (R18, every write):** queue "done" rows = **48** ·
+`09-implementation-log.md` entries = **48** · **AGREE.** · plan file **17 of 59 done** (R18c(iii))
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -696,7 +696,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | 3 | Join-table migration, as ONE change | ✅ `7df8c1c7` — 12 tables, 3 columns |
 | 4a | Tri-state rights columns | ✅ `5e302651` |
 | **4b** | **Populate the rights matrix** | ✅ **APPLIED** `5af9b26a` — 5,621 rows, 99 profiles, 0 orphans. Nine roles render through the real path (R9). Administrator retains 1/8/23 |
-| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | ✅ `f293edb0` |
+| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | ✅ `f293edb0` — **COLUMN ONLY. `reporting_manager_id` is populated on 0 of 387 rows** (G-DATA-09, found by X-06, the first item that tried to USE it). The schema is right; the edge does not exist. |
 | **6** | **Event store + projector/reactor split + `task_status_history`** | ✅ **DONE** (all 4 slices) (store D-030; `g2g_audit_log` projection + `TaskAuditService` converted to emit, D-031). store D-030 · audit projection D-031 · catalogue D-032 · **D-034: `task_status_history` (F2 detectable), `ReplayRunner` + runbook, first reactor throwing on replay, and a REAL REBUILD proving the reactor ledger permanent** |
 | **F-07b** | Backfill + unmatched report + drops (R8) | 🔄 **BACKFILL APPLIED** (D-036) - 229,681 of 244,253 populated, **14,572 HELD as NULL**, 0 cross-tenant fks. **2 of 4 tables BLOCKED**: their values match up to 10 tenants at once. **Awaiting decision on the 29,925 orphans.** Nothing created, nothing dropped |
 
@@ -784,6 +784,33 @@ the write, and **the leak nobody could see was the read**.
 
 **EXCEPTION:** only a **G-SEC-09-severity** finding jumps the queue.
 
+
+### Landed this turn
+
+- **X-06 — the notification service.** First reactor with a real send. Six events
+  ship, three fail the named-consumer test (`EventCatalogue::NOT_NOTIFIED`).
+  In-app live; **email built and gated OFF** (`G2G_NOTIFY_EMAIL`). Terminology
+  serves screen labels and report headings, not only notifications. Proof
+  **18/18**, smoke **25 → 29 GREEN**. See **D-048**.
+- **R6 SUPERSEDED** — *a pattern produces candidates; only a measurement produces
+  a finding.* Full text at the top of `07-gap-register.md`.
+
+### L-11 — what is actually left
+
+**4 sites, all in `CompetencyDashboardController`, all blocked on the 51-file
+decision.** The wider class produced **0 verified findings from 29 candidates**.
+The 3 `department` sites are scheduled against L-01/L-02 with the trigger
+"`department_id` populated" — scheduled, not parked.
+
+**The 51-file decision now blocks BUILD work, not housekeeping.**
+
+### Next
+
+- **X-12** — the learning assigner. `development_plan.approved` already notifies
+  its owner; X-12 is what puts courses on the plan for that message to be about.
+- **X-11** — `CertificateIssuer`. Unblocks `certification.issued`, which is
+  deferred on X-11 alone. **221 certifications exist and 37 have already expired**,
+  so `certification.expiring` has real work waiting the day something emits it.
 
 ### Still queued, not blocking
 

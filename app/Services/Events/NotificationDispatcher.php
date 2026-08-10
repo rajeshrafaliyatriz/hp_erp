@@ -2,11 +2,14 @@
 
 namespace App\Services\Events;
 
+use App\Services\Notifications\NotificationSender;
+use App\Services\Notifications\RecipientResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * REACTOR — the first one. (`05-data-flow-contracts.md` §2.0, kind = R)
+ * REACTOR — the first one, and as of X-06 the first one that actually SENDS.
+ * (`05-data-flow-contracts.md` §2.0, kind = R)
  *
  * IMPURE: it sends. Every dispatch is externally visible and cannot be undone by
  * truncating a table, which is the whole reason reactors are a separate category.
@@ -18,26 +21,50 @@ use Illuminate\Support\Facades\Log;
  *      has a bug worse than the one being fixed.
  *
  *   2. ITS DISPATCH LEDGER IS PERMANENT. Rows in g2g_event_delivery for a reactor
- *      are NEVER cleared by a rebuild - they are the record that a real email was
- *      really sent. Clearing them would make the system willing to send it again.
+ *      are NEVER cleared by a rebuild - they are the record that a real message
+ *      was really sent. Clearing them would make the system willing to send it
+ *      again.
  *
- * This class does not yet send anything: X-06 (the notification service and its
- * terminology tables, Q-F1) is a separate plan item. What is real here is the
- * dispatch discipline - the ledger, the replay guard, and the idempotency - which
- * is what slice 4 exists to prove.
+ * BOTH ARE NOW LOAD-BEARING RATHER THAN THEORETICAL. Until X-06 this class wrote
+ * a log line, so a replay leak would have produced a duplicate log entry. It now
+ * writes a person's inbox and, when the email channel is enabled, leaves the
+ * building. The guard and the ledger are the only things standing between a
+ * rebuild and 386 people being told the same thing twice.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SIX EVENT TYPES, NOT NINE. See EventCatalogue::NOT_NOTIFIED for the three that
+ * failed the named-consumer test and what would let them back in. The shortest
+ * version: two of them have no recipient that exists in the data, and one has no
+ * human who does anything.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 class NotificationDispatcher
 {
     public const CONSUMER = 'notification_dispatcher';
 
+    /**
+     * Events with a NAMED RECIPIENT and a NAMED ACTION. Kept in one place and
+     * cross-checked against RecipientResolver by the smoke suite, so an event
+     * cannot be listed here without someone to send it to.
+     */
+    public const NOTIFIES = [
+        'task.rejected',
+        'assessment.completed',
+        'certification.expiring',
+        'development_plan.approved',
+        'employee.offboarded',
+        'rights.changed',
+    ];
+
+    public function __construct(
+        private RecipientResolver $recipients,
+        private NotificationSender $sender,
+    ) {
+    }
+
     public function handles(string $type): bool
     {
-        return in_array($type, [
-            'task.rejected', 'assessment.completed', 'certification.issued',
-            'certification.expiring', 'employee.offboarded',
-            'development_plan.approved', 'readiness_gate.changed', 'rights.changed',
-            'capability.flag_raised',
-        ], true);
+        return in_array($type, self::NOTIFIES, true);
     }
 
     /**
@@ -48,8 +75,13 @@ class NotificationDispatcher
         // FIRST LINE. Before any work, before any ledger write.
         ReplayMode::assertNotReplaying(self::CONSUMER);
 
+        if (!$this->handles((string) $event->type)) {
+            return;
+        }
+
         // Idempotent per (event, consumer): a retry after a partial failure must
-        // not send twice. The unique key is what enforces it, not this check.
+        // not send twice. The unique key on g2g_notification is what ultimately
+        // enforces it per recipient; this is the cheap early exit.
         $already = DB::table('g2g_event_delivery')
             ->where('event_id', (int) $event->id)
             ->where('consumer', self::CONSUMER)
@@ -60,17 +92,67 @@ class NotificationDispatcher
             return;
         }
 
-        // X-06 will put a real send here. The ledger row below is the durable
-        // part, and it is what a rebuild must not erase.
-        Log::channel('single')->info('notification.dispatch', [
-            'event_id' => $event->id,
-            'type'     => $event->type,
-            'tenant'   => $event->sub_institute_id,
-        ]);
+        $tenant = (int) $event->sub_institute_id;
+        $people = $this->recipients->forEvent($event);
 
+        // NO RECIPIENT IS A RESULT, NOT AN ERROR. A task rejected on a row whose
+        // assignee was never set has nobody to tell. Recording it as `skipped`
+        // rather than `done` keeps the two cases distinguishable in the ledger -
+        // "we told nobody because there was nobody" is a different fact from "we
+        // told everybody", and only one of them is worth investigating later.
+        if ($people === []) {
+            $this->ledger($event, 'skipped', 'no recipient resolved');
+            Log::channel('single')->info('notification.no_recipient', [
+                'event_id' => $event->id,
+                'type'     => $event->type,
+                'tenant'   => $tenant,
+            ]);
+            return;
+        }
+
+        $sent = 0;
+        $failed = [];
+
+        foreach ($people as $person) {
+            try {
+                $channels = $this->sender->send($event, $person, $tenant);
+                if ($channels !== []) {
+                    $sent++;
+                }
+            } catch (\Throwable $e) {
+                $failed[] = $person['user_id'] . ': ' . $e->getMessage();
+            }
+        }
+
+        // PARTIAL FAILURE IS RECORDED AS FAILURE. Marking a dispatch `done` when
+        // one of three recipients threw would retire the event with a person
+        // unnotified and no way to notice.
+        $this->ledger(
+            $event,
+            $failed === [] ? 'done' : 'failed',
+            $failed === [] ? null : implode(' | ', array_slice($failed, 0, 3))
+        );
+
+        Log::channel('single')->info('notification.dispatch', [
+            'event_id'   => $event->id,
+            'type'       => $event->type,
+            'tenant'     => $tenant,
+            'recipients' => count($people),
+            'sent'       => $sent,
+            'email_on'   => $this->sender->emailEnabled(),
+        ]);
+    }
+
+    private function ledger(object $event, string $status, ?string $error): void
+    {
         DB::table('g2g_event_delivery')->updateOrInsert(
             ['event_id' => (int) $event->id, 'consumer' => self::CONSUMER],
-            ['status' => 'done', 'attempts' => DB::raw('attempts + 1'), 'completed_at' => now()]
+            [
+                'status'       => $status,
+                'attempts'     => DB::raw('attempts + 1'),
+                'last_error'   => $error,
+                'completed_at' => $status === 'done' ? now() : null,
+            ]
         );
     }
 }

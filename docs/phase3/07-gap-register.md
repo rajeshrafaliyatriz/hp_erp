@@ -104,6 +104,48 @@ remote database.
 
 ---
 
+---
+
+# G-DATA-09 - **THERE IS NO EMPLOYEE -> MANAGER EDGE** - **S2**
+
+> Foundation 5 shipped `reporting_manager_id`. **Nothing has ever written to it.**
+
+| Source | Populated |
+|---|---|
+| `tbluser.reporting_manager_id` | **0 of 387** |
+| `tbluser.supervisor_opt` | a FLAG (4 "Supervisor", 57 "Subordinate") - **it marks people, it does not link them** |
+| 15 other manager-ish columns | **per-CASE**: `talent_offboarding_cases.manager_id` 3/3, `task_management_projects.manager_id` 3/3, `s_performance_reviews.manager_id` 16/228 |
+
+**A manager exists per CASE, never per PERSON.**
+
+**Why it stayed invisible:** the column exists, so every design conversation that
+needed "the employee's manager" assumed the relationship was there. **X-06 is the
+first item that tried to USE it.** Nothing reads a column to check it is empty.
+
+**What it blocks:** every notification, approval route, escalation and dashboard
+roll-up that means "my team". `capability.flag_raised` is deferred on this alone -
+its whole purpose is escalation, and redirecting it to the employee would change
+what the flag MEANS.
+
+**This is a data gap, not a code gap.** The schema is right. Same family as
+L-01/L-02 - a capability built and never populated.
+
+---
+
+# G-NOTIF-01 - the notification bell was a picture of a bell - **S3**
+
+`gtg-header.tsx` and `gtg-header-base.tsx` each carried their own copy of a menu
+that rendered **"You're all caught up" and a hardcoded "New" badge at the same
+time**, unconditionally, with no request behind either. Two contradictory claims,
+neither measured, neither able to change.
+
+**Two copies is the finding, not the placeholder.** A control can be dead in two
+places at once and look maintained in both. **FIXED in X-06:** one shared
+component, reading `/api/notifications`; a failed fetch reports a failure instead
+of an empty inbox.
+
+---
+
 # ⭐ G-DATA-06 — THE HEADLINE FINDING · **S1**
 
 > ## 283,126 relationship rows are held together by string matching, not keys.
