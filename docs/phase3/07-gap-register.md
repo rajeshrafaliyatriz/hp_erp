@@ -1086,6 +1086,45 @@ elevated `role_key`.
 
 ---
 
+# G-SEC-23 — CROSS-TENANT READ BY AN ORDINARY EMPLOYEE · **S1** · **JUMPS THE PAUSE**
+
+**Found by the `{id}` read probe. Hand-verified (R6), not inferred from a status code.**
+
+An **Employee** token (user 198, tenant 7) reads **tenant 3's** records by changing
+the number in the URL.
+
+| Route | Reach chain (R20) | Evidence |
+|---|---|---|
+| **`api/user-signup/{id}`** | `routes/api.php:967` → `Api\signup_api\UserSignupController@show` → middleware **`api,api.token`** — authenticates, **does not tenant-scope** | id=6 (tenant 3) → **HTTP 200, 4,224 bytes**, containing tenant 3's user *"kalpesh"* |
+| **`api/feedback/{id}`** | `routes/api.php:812` → `talent\feedback\feedbackController@getFeedback` → **NO middleware** | id=18 (tenant 3) → **HTTP 200, 916 bytes**, containing *"rajaram@gmail.com"* |
+
+**Verification method:** fetch the tenant-3 row's own identifying field from the
+database, then assert it appears in the response body. Two other candidates
+(`skill_library/competency/{id}/detail`, `competency/library/skills/{id}`) returned
+**404 for the same ids** — correctly tenant-scoped, and **ruled out rather than
+counted**.
+
+## The probe's numbers — separate, with definitions attached (R10)
+
+| Measure | Definition | Count |
+|---|---|---|
+| Requests issued | GET, real ids, employee token, chunked | **1,819** |
+| Routes probed | `api/*` GET with exactly one `{param}` | **113 of 113** |
+| **REACHABLE** | HTTP 200 with a body > 60 bytes, using **other-tenant** ids | **23 routes** |
+| **DISCLOSING** | hand-verified to contain **another tenant's data** | **2 confirmed so far** |
+
+> **REACHABLE IS NOT DISCLOSING.** 23 is the candidate set; 2 are confirmed and
+> **21 remain unverified**. Quoting 23 as a leak count would be the same error as
+> quoting 132 unguarded routes as 132 open doors.
+
+**Also observed, for the capacity workstream (G-SEC-16):**
+`api/templates/{id}/versions` returned **3.4 MB** in one response.
+
+**192 HTTP 500s** across the run are unclassified — a route erroring on a foreign
+id is not evidence either way, and they are recorded rather than scored.
+
+---
+
 # G-CHAIN-01 — THE CHAIN NEITHER HALF SHOWS ALONE · **S1** · **CLOSED AT BOTH ENDS**
 
 > **door → catalogue → raw interpolation**
