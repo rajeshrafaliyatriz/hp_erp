@@ -1086,6 +1086,60 @@ elevated `role_key`.
 
 ---
 
+# G-SEC-19 — THE INJECTION SWEEP · **S1**
+
+**A class this phase had never asked about.** Every prior finding was identity or
+scoping. The question here is distinct, under G-SEC-18's discipline:
+
+> ### Does any request-supplied value reach raw SQL, a `raw()` call, a `whereRaw`, an `orderBy` on a request field, or a concatenated query string?
+
+**No count is quoted that has not been hand-verified.**
+
+## PROVEN — payload changed the result
+
+| Site | Evidence |
+|---|---|
+| `lmsmappingController::getData` / `getDataPre` | `chapter_id=1` → **0 rows**; `chapter_id=1' OR '1'='1` → **10 rows**. **FIXED**, payload now returns 0 |
+
+## CONFIRMED BY READ — request value reaches raw SQL, no payload fired
+
+Stated as a weaker claim than "proven", deliberately.
+
+| Site | Path | Status |
+|---|---|---|
+| `lms/courseController:112-113 → :137` | `$grade` / `$standard` from `$request->input()`, concatenated into `DB::select` | **FIXED** — `?` placeholders + `$bindings` |
+| `lms/counselling/counsellingExamController:345 → :399` | `$online_exam_id` from `$request->get()`, concatenated into `DB::select`. (`$user_id` came from the session) | **FIXED** — `?` placeholders + bindings array |
+
+## RULED OUT — ORDER BY and LIMIT, tested rather than assumed
+
+Included because they are *"commonly missed as they do not look like a WHERE
+clause"*. **They are not injectable here**, and the test says why:
+
+| Payload into `orderBy($col)` | Rendered SQL |
+|---|---|
+| `id` | ``order by `id` asc`` |
+| `id, (SELECT 1)` | ``order by `id, (SELECT 1)` asc`` |
+| ``id`; DROP TABLE x; --`` | ``order by `id``; DROP TABLE x; --` asc`` — **the backtick is DOUBLED, no break-out** |
+| direction `asc; DROP TABLE x` | **REJECTED** — *"Order direction must be asc or desc"* |
+
+**Laravel wraps the column as an identifier and escapes internal backticks, and
+validates the direction.** `AJAXController:377` passes `$request->sort_order`
+straight in, and the worst outcome is a SQL error on a non-existent column — a
+robustness issue, **not injection**.
+
+> **This leg produces ZERO findings, not a list of candidates.** Reporting the ~14
+> `orderBy($var)` sites as an injection count would have been a fabricated number.
+
+`whereRaw` / `orderByRaw` / `havingRaw` / `selectRaw` carrying a request value:
+**none found.**
+
+## STILL OPEN — named, not silently dropped
+
+- `CustomModuleController:225` — `DB::statement('DROP TABLE IF EXISTS ' . $table->table_name)`. The value comes from the **database**, not the request, so it is not directly injectable — but **whether `table_name` is user-controlled at creation time is unexamined.** A stored-then-executed path.
+- POST/PUT bodies were not swept; this pass covered controller source, so the coverage is by code, not by verb — but the `{id}` and write-verb probe remains the way to exercise them.
+
+---
+
 # G-SEC-19 — SQL INJECTION IN `lmsmappingController` · **S1** · **FIXED**
 
 **Found by running the fail-closed verification, not by looking for injection.**

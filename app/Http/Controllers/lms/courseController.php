@@ -118,12 +118,17 @@ class courseController extends Controller
 
         $mycourse_arr = [];
         $extra = "";
-        
+        // G-SEC-19: bound, not concatenated. $grade and $standard come from
+        // $request->input() (:112-113) and are spliced into raw SQL below.
+        $bindings = [];
+
         if ($grade != "") {
-            $extra .= " AND STD.grade_id = '".$grade."'";
+            $extra .= ' AND STD.grade_id = ?';
+            $bindings[] = $grade;
         }
         if ($standard != "") {
-            $extra .= " AND STD.id = '".$standard."'";
+            $extra .= ' AND STD.id = ?';
+            $bindings[] = $standard;
         }
 
         $arr = DB::select("SELECT STD.name AS standard_name,s.display_name AS subject_name,s.id as subject_id,STD.id AS standard_id,s.sub_institute_id,
@@ -135,7 +140,7 @@ class courseController extends Controller
                 LEFT JOIN content_master c ON c.subject_id = s.id AND c.standard_id = s.standard_id AND c.sub_institute_id = s.sub_institute_id
                 WHERE s.sub_institute_id = $sub_institute_id AND allow_content = 'Yes'
                  ".$extra." AND s.subject_category!='SEL'
-                GROUP BY s.id,s.standard_id,s.subject_category ORDER BY s.sort_order");
+                GROUP BY s.id,s.standard_id,s.subject_category ORDER BY s.sort_order", $bindings);
 
 		$arr = json_decode(json_encode($arr), true);
 				if (count($arr) > 0) {

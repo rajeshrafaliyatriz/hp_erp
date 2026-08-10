@@ -396,12 +396,12 @@ class counsellingExamController extends Controller
                 FROM (
                 SELECT question_id,ans_status, IFNULL(narrative_answer, GROUP_CONCAT(answer_id)) AS given_answer
                 FROM counselling_online_exam_answer
-                WHERE online_exam_id = '".$online_exam_id."' AND user_id = '".$user_id."'
+                WHERE online_exam_id = ? AND user_id = ?
                 GROUP BY question_id) AS a
                 INNER JOIN counselling_question_master q ON q.id = a.question_id
                 LEFT JOIN counselling_answer_master am ON a.question_id = am.question_id AND correct_answer = 1
                 GROUP BY am.question_id,a.question_id
-            ");
+            ", [$online_exam_id, $user_id]);
         //dd($online_answer_data);
         foreach ($online_answer_data as $key => $val) {
             $data['online_answer_data'][$val->question_id]['RIGHT_WRONG'] = $val->right_wrong;
