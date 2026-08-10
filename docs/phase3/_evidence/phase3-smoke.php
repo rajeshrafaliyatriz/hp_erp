@@ -74,6 +74,32 @@ check('security', 'G-SEC-23: the three routes NOT DISCLOSING', function () use (
     return [$leaks ? 'FAIL' : 'PASS', $leaks ? 'LEAKING: ' . implode(', ', $leaks) : 'tenant-3 markers absent'];
 });
 
+check('security', 'G-SEC-23 route 3: audit user-actions', function () use ($kernel) {
+    // The third confirmed-disclosing route. Leaving it unchecked would mean the
+    // one place it could silently reopen is the one place nobody looks.
+    $t = tok(198, 'smoke_s23c');
+    $victim = DB::table('tbluser')->where('sub_institute_id', 3)->orderBy('id')->first();
+    if (!$victim || empty($victim->first_name)) {
+        DB::table('personal_access_tokens')->where('name', 'smoke_s23c')->delete();
+        return ['SKIPPED', 'no tenant-3 user with a name to use as a marker'];
+    }
+    [$code, , $body] = call($kernel, '/api/competency/audit/user-actions/' . $victim->id, 'GET',
+        ['token' => $t, 'sub_institute_id' => 7, 'type' => 'API']);
+    DB::table('personal_access_tokens')->where('name', 'smoke_s23c')->delete();
+    $leaked = $code === 200 && stripos($body, (string) $victim->first_name) !== false;
+    return [$leaked ? 'FAIL' : 'PASS', $leaked ? 'LEAKING tenant-3 name' : "HTTP $code, marker absent"];
+});
+
+check('security', 'anonymous: api/kpis and DeepSeekChat', function () use ($kernel) {
+    // Both answered an anonymous caller in the original probe.
+    $open = [];
+    foreach (['api/kpis', 'DeepSeekChat'] as $uri) {
+        [$code, , $body] = call($kernel, '/' . $uri, 'GET', ['sub_institute_id' => 1]);
+        if ($code === 200 && strlen($body) > 40) $open[] = "$uri(200)";
+    }
+    return [$open ? 'FAIL' : 'PASS', $open ? 'STILL OPEN: ' . implode(', ', $open) : 'both refused or empty'];
+});
+
 check('security', 'G-SEC-15: unauthenticated GET refused', function () use ($kernel) {
     [$code] = call($kernel, '/getSkillCompetency', 'GET', ['sub_institute_id' => 1]);
     return [$code === 401 ? 'PASS' : 'FAIL', "HTTP $code (expected 401)"];
@@ -267,6 +293,28 @@ check('slice1', 'chain: required 3, measured 1, gap 2, survives rename', functio
         ($before ? 'gap 2 before rename' : 'GAP WRONG before') . '; ' . ($after ? 'holds after rename' : 'LOST after rename')];
 });
 
+check('slice1', 'rename: DASHBOARD counts still resolve', function () {
+    // THE CHECK THAT WOULD HAVE CAUGHT G-DASH-01. Slice 1's rename proof tested
+    // the path Slice 1 built; the dashboards were never in it.
+    $role = DB::table('s_user_jobrole as jr')
+        ->join('s_user_jobrole_task as jt', 'jr.id', '=', 'jt.jobrole_id')
+        ->whereNull('jt.deleted_at')->value('jr.id');
+    if (!$role) return ['SKIPPED', 'no job role with mapped tasks'];
+
+    $count = fn () => DB::table('s_user_jobrole as jr')
+        ->join('s_user_jobrole_task as jt', function ($j) { $j->on('jr.id', '=', 'jt.jobrole_id')->whereNull('jt.deleted_at'); })
+        ->where('jr.id', $role)->count();
+
+    $before = $count();
+    $old = DB::table('s_user_jobrole')->where('id', $role)->value('jobrole');
+    DB::table('s_user_jobrole')->where('id', $role)->update(['jobrole' => $old . ' SMOKE-RENAME']);
+    $after = $count();
+    DB::table('s_user_jobrole')->where('id', $role)->update(['jobrole' => $old]);
+
+    return [$before === $after && $before > 0 ? 'PASS' : 'FAIL',
+        "$before rows before rename, $after after"];
+});
+
 /* ══════════════════════════ STATIC ══════════════════════════ */
 echo "\nSTATIC\n";
 
@@ -298,4 +346,9 @@ if ($tally['SKIPPED']) {
     echo "\nSKIPPED (never counted as pass):\n";
     foreach ($RESULTS as [$g, $n, $s, $d]) if ($s === 'SKIPPED') printf("  [%s] %s — %s\n", $g, $n, $d);
 }
+echo "\nWHAT THIS SUITE DOES NOT COVER - it does not stand in for these:\n";
+echo "  - C23's FULL read half (912 routes). Separate command, far beyond this budget.\n";
+echo "  - Frontend types: run `npx tsc --noEmit` in g2gv0. Different repo, same runbook.\n";
+echo "  - Anything requiring a rendered screen (C20). See the human walkthrough list.\n";
+
 printf("\nVERDICT: %s\n", $tally['FAIL'] === 0 ? 'GREEN' : '*** RED — ' . $tally['FAIL'] . ' FAILURE(S) ***');
