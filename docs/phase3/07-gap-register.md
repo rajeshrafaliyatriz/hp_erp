@@ -1086,23 +1086,98 @@ elevated `role_key`.
 
 ---
 
-# G-ATT-SEC-01 — AN EMPLOYEE CAN CLOCK A COLLEAGUE IN OR OUT BY QUERY PARAMETER · **S1**
+# G-SEC-17 — HARDCODED TENANT LITERALS IN RESOLUTION PATHS · **S1**
 
-`AttendanceTrackingApiController` resolves the subject of **both** punch-in and
-punch-out as **`$request->input('employee')`**:
+The `?? 2` in `getSkillCompetency` was **the second instance of a signature**, not
+an incident: `AnalyzeJDController:28` falls back to tenant **3**, `getSkillCompetency`
+defaulted to tenant **2**. **Both were found by accident, neither by looking.**
 
-- `:223` — punch-in: `HrmsAttendance::where('user_id', $request->input('employee'))`
-- `:283` — punch-out: same
+Swept deliberately. **Nine sites across seven LMS controllers assign a tenant
+literal UNCONDITIONALLY** — not as a fallback:
 
-The tenant is taken from `$context`, so this stays inside one organisation. **It
-does not stay inside one person.**
+| File | Line |
+|---|---|
+| `lms/chapterController` | 113 |
+| `lms/contentController` | 35, 535 |
+| `lms/flashcard/flashcardController` | 37, 119 |
+| `lms/lmsmappingController` | 94, 155 |
+| `lms/teacher_resource/lms_teacherResourceController` | 52 |
+| `lms/topicController` | 35 |
 
-> **This is the one a customer's HR director reacts to instantly.**
+```php
+// chapterController::getData
+if ($request->has('preload_lms')) {
+    $sub_institute_id = 1;          // <- not a fallback. An assignment.
+    ...
+    $user_profile_name = 1;         // <- and the role, too
+}
 
-Attendance drives leave accrual, payroll input and disciplinary records. A punch
-written by a colleague is indistinguishable from a real one.
+// lmsmappingController::getDataPre
+$sub_institute_id = 1;              // <- unconditional
+```
 
-**Second of the three.**
+**Any caller who sets `preload_lms` reads tenant 1's LMS content**, whatever tenant
+they belong to. The role is hardcoded alongside it.
+
+### Why C23 could never have found this
+
+**C23's proxy is differential:** call as tenant A, call as tenant B, compare. A
+route hardcoded to tenant 1 returns **the same response both times** — so it scores
+**PASS**. C28's marker scan only searches for **tenant B** strings, and tenant 1 is
+neither A nor B.
+
+> **A route pinned to a THIRD tenant is invisible to a two-tenant differential
+> test.** This is a structural blind spot in the guard, not a bug in it — and it
+> is the second time the marker set's composition has decided what could be seen.
+>
+> **C24's read half needs a third-tenant marker pass before it can be called
+> complete.** Recorded against the gate.
+
+---
+
+# G-ATT-SEC-01 — PUNCH IN OR OUT AS A COLLEAGUE · **S1** · **FIXED**
+
+### Route file first, as required
+
+`routes/api.php:586-590`. The group carries **NO middleware**, and the route file's
+own comment declares the intent: *"Self service - my attendance calendar and
+punches"*. **Nothing at the route layer supplied the missing check** — so the
+controller reading `$request->input('employee')` was the whole of the control.
+
+`'employee' => 'required'` validated that the parameter was **present**, never that
+it was **the caller**.
+
+### Fixed
+
+`punchSubject()` resolves the subject to `$context['user_id']` — token-derived —
+across all three sites (`punchIn`, `punchOut`, and the punch-out fallback lookup at
+`:353`, which the first pass missed and a follow-up grep caught).
+
+A mismatched `employee` is **refused, not silently ignored**: rewriting it would
+hide a client bug and leave the audit trail disagreeing with what the client
+believed it sent.
+
+**Verified, one request per process (G-HARNESS-01):**
+
+| Request | Result |
+|---|---|
+| caller 2, `employee=3` (a colleague) | **403** — *"You may only record your own attendance."* |
+| caller 2, `employee=2` (self) | **200** — punch saved |
+
+**Test data removed** (R8: the row was read before deleting — id 994,
+`ipaddress_in=127.0.0.1`, today, no punch-out; unmistakably the probe's). **This is
+a shared remote database, so the cleanup is not optional.**
+
+### WHICH ROWS COME BACK — asked separately, and it is clean here
+
+`myAttendance` filters on `$context['user_id']` (`:44`, `:86`) — **token-derived,
+caller-scoped**. Unlike `assignmentController`, the row-scope half of this screen
+needs nothing.
+
+**Menu 100 is therefore a re-grant candidate; menu 101 (Attendance Reports) is
+NOT** — it is a different controller and has not been assessed.
+
+---
 
 ---
 
