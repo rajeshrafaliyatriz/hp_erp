@@ -445,14 +445,16 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 
 **CURRENTLY WORKING ON — the build. Analysis is closed.**
 
-**FOUNDATIONS BUILT — 1 of 6.**
+**FOUNDATIONS BUILT — 2 of 6.**
 
 | # | Build item | State |
 |---:|---|---|
 | 1 | `talent_interviewpanelController` | ✅ done (`15791bca`) |
 | 2 | G-SEC-12 actor identity | ✅ done (`d70a204c`) — **unblocks the event store** |
 | 3 | **The join-table migration, as ONE change** | ✅ done (`7df8c1c7`) — 12 tables, 3 columns |
-| 4 | **Rights matrix populated + before/after menu diff for review** | **NEXT** |
+| 4a | Tri-state rights columns | ✅ done (`5e302651`) |
+| 4b | Populate the matrix | ⛔ **REVIEW GATE** — `_changes/X-01-REVIEW-GATE.md`. Two decisions needed |
+| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | **NEXT** — recommended ahead of 4b, it creates the role model 4b needs |
 | 5 | `reporting_manager_id` + `head_user_id` + cycle validation | after 4 |
 | 6 | Event store + projector/reactor split + `task_status_history` | after 5 |
 

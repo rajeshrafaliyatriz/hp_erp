@@ -433,6 +433,47 @@ and the eventual text-key drops are a separate reviewed change (R8).
 
 ---
 
+## D-008 · 4a — tri-state rights columns (G-SEC-06)
+
+**2026-08-07** · **APPLIED** · commit **`5e302651`**
+
+| | |
+|---|---|
+| **Changed** | `right_view/add/edit/delete/dashboard` added to **both** rights tables as nullable `ENUM('allow','deny')`. **NULL = INHERIT, never deny** — absence is not a decision |
+| **Files** | `database/migrations/2026_08_07_110000_add_tristate_rights_columns.php` |
+| **Verification** | 5 of 5 columns on both tables · **4,879 legacy `can_view` rows untouched** · all 4,879 `right_view` values NULL |
+| **Acceptance** | Structural half passed. **No behaviour change** — nothing reads these yet; the legacy `can_*` columns stay authoritative until the resolver is live (§10 step 11) |
+
+Precedence stated in the header and to be implemented exactly:
+**individual DENY > group DENY > individual ALLOW > group ALLOW > role default > deny.**
+
+---
+
+## D-009 · 4b — populate the rights matrix · ⛔ **NOT APPLIED — REVIEW GATE**
+
+**2026-08-07** · `_changes/X-01-REVIEW-GATE.md`
+
+**Backup taken first:** 4,879 rows dumped to `_changes/`, with a restore script.
+
+**Admin lockout: asserted SAFE.** `Role & Permissions` (menu 23) has Admin
+`can_view=1` in 11 of 11 tenants, and §3.1 grants Admin `V C E D` on it.
+
+**STOPPED on two blockers:**
+
+1. **§3.1–3.7 specifies 8 roles; 3 exist.** `Reporting Mgr`, `Dept Head`, `Executive`, `Auditor` and the `HR Exec`/`HR Mgr` split have no profiles. Applying today means collapsing eight columns into three — and **choosing between HR Exec and HR Mgr for the single `HR` profile is re-deriving a decided permission**, which the instruction forbids.
+2. **No screen→menu mapping exists.** §3.x names screens; the table keys on `menu_id`. 157 menus in the rights table vs 188 in the master, names not one-to-one.
+
+**Recommendation: do item 5 first** — it creates the role model §3.1–3.7 is written
+against, and it is schema-only and invisible.
+
+### ⚠️ A correction to how G-SEC-07 is quoted
+
+*"Employee 1,657 vs Admin 1,500"* is an **aggregate across 11 tenants**. Per
+profile — what **one user** sees — it is **Employee 151 · HR 150 · Admin 136**.
+**The inversion is real and survives**, but those are the numbers to quote.
+
+---
+
 ## R7 applied retroactively — which costs move
 
 **R7: an estimate that does not name the files it touches is a guess.** Every

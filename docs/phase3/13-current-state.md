@@ -66,7 +66,8 @@
 | 6 | **S-01** `talent_interviewpanelController` | ✅ **API-verified-UI-pending** — guard 1 FAIL → 0 (`15791bca`) |
 | 7 | **S-02** G-SEC-12 actor fixes | ✅ **API-verified-UI-pending** — 76 sites / 16 files, 0 remain (`d70a204c`). **No longer blocks 11** |
 | 8 | **Join-table migration (one change)** | ✅ **APPLIED** (`7df8c1c7`) — 12 tables, 3 columns, all tenant-scoped |
-| 9 | Rights matrix populated + before/after diff | **Not started** |
+| 9a | **Tri-state rights columns** | ✅ **APPLIED** (`5e302651`) — additive, no behaviour change |
+| 9b | **Populate the matrix** | ⛔ **REVIEW GATE — NOT APPLIED.** Blocked: 8 roles specified, 3 exist; no screen→menu mapping. Backup taken; admin lockout asserted safe |
 | 10 | `reporting_manager_id` + `head_user_id` | **Not started** |
 | 11 | Event store + projector/reactor split | **Not started. UNBLOCKED** — S-02 closed |
 | 12 | C19 picker mechanism | **Not started** |
@@ -75,9 +76,9 @@
 | 15 | `skill_matrix_item` + tenant column | **Not started** |
 | 16 | Text→FK migrations | **Not started** |
 
-**Built: 8.**
+**Built: 9.**
 
-**FOUNDATIONS BUILT — 1 of 6.**
+**FOUNDATIONS BUILT — 2 of 6.**
 
 ---
 
@@ -105,7 +106,7 @@ regression guard in CI.
 | ~~Event store~~ | ~~G-SEC-12~~ — **UNBLOCKED 2026-08-07** |
 | Threads 2 and 9 | the event store |
 | L-01, L-02, L-04 and every later entity binding | **C19** picker mechanism |
-| Rights matrix population | tri-state rights columns |
+| Rights matrix population (9b) | ~~tri-state columns~~ ✅ — **now blocked on the ROLE MODEL** (item 5) and a screen→menu mapping |
 | Everything in Tier 3 | the join tables |
 | The three mandatory reports | the joins — building them first yields three empty reports |
 | Write-route audit coverage figure | re-derivation from the router |
