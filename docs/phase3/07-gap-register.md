@@ -106,29 +106,21 @@ remote database.
 
 ---
 
-# G-DATA-09 - **THERE IS NO EMPLOYEE -> MANAGER EDGE** - **S2**
+# G-DATA-09 - **DUPLICATE. SEE `G-ORG-02`.**
 
-> Foundation 5 shipped `reporting_manager_id`. **Nothing has ever written to it.**
+I raised this as a new finding on 2026-08-11. **It is not new.** `G-ORG-02` has
+recorded 0 of 387 since the Gate B review, and `G-ORG-01` records the unused
+validator beside it.
 
-| Source | Populated |
-|---|---|
-| `tbluser.reporting_manager_id` | **0 of 387** |
-| `tbluser.supervisor_opt` | a FLAG (4 "Supervisor", 57 "Subordinate") - **it marks people, it does not link them** |
-| 15 other manager-ish columns | **per-CASE**: `talent_offboarding_cases.manager_id` 3/3, `task_management_projects.manager_id` 3/3, `s_performance_reviews.manager_id` 16/228 |
+**What X-06 actually added was the CENSUS** - the 15 other manager columns, and
+the proof that every one of them is per-CASE. That evidence now lives in
+`G-ORG-02` where it belongs. **The ID is kept rather than deleted so that anything
+citing it still resolves.**
 
-**A manager exists per CASE, never per PERSON.**
-
-**Why it stayed invisible:** the column exists, so every design conversation that
-needed "the employee's manager" assumed the relationship was there. **X-06 is the
-first item that tried to USE it.** Nothing reads a column to check it is empty.
-
-**What it blocks:** every notification, approval route, escalation and dashboard
-roll-up that means "my team". `capability.flag_raised` is deferred on this alone -
-its whole purpose is escalation, and redirecting it to the employee would change
-what the flag MEANS.
-
-**This is a data gap, not a code gap.** The schema is right. Same family as
-L-01/L-02 - a capability built and never populated.
+> **Raising a duplicate is a reading failure, not a bookkeeping one.** The two
+> `Resolves*Context` traits I have edited this phase BOTH carry the string
+> `G-ORG-02` in a comment about this exact gap. **R20: the boundary of what you
+> read is the boundary of what you know** - and I had read those files.
 
 ---
 
@@ -138,6 +130,22 @@ L-01/L-02 - a capability built and never populated.
 that rendered **"You're all caught up" and a hardcoded "New" badge at the same
 time**, unconditionally, with no request behind either. Two contradictory claims,
 neither measured, neither able to change.
+
+### AN INSTANCE OF **S-4b's CLASS — DEAD UI — NOW FOUND IN THE FRONTEND
+
+S-4b swept for **state gates that can never change** and, after two checker bugs,
+confirmed **1**. This is the same class in its most user-visible form: not a gate
+that never flips, but **a control that renders two contradictory claims at once**
+— a "New" badge and "You're all caught up" — **with no request behind either.**
+
+**The escalation over S-4b's instance:** a dead state gate hides a feature. **A
+dead notification bell tells the user, continuously and in the shell of every
+screen, that nothing needs their attention.** It is the failure mode that looks
+most like working software.
+
+**S-4b's sweep could not have found it.** That sweep looked for `useState` gates
+whose setter is never called. This component had no state to gate — it had no
+DATA. **A sweep for gates that never flip cannot see a control that never asks.**
 
 **Two copies is the finding, not the placeholder.** A control can be dead in two
 places at once and look maintained in both. **FIXED in X-06:** one shared
@@ -378,7 +386,47 @@ criterion on each path.
 
 ---
 
-## G-ORG-02 — the role model has nobody in six of its nine roles · **S3, by design for now**
+## G-ORG-02 — the role model has nobody in six of its nine roles · **S3 → S2, RE-GRADED 2026-08-11**
+
+> **RE-GRADED because it stopped being "by design for now".** It was S3 while
+> nothing needed the reporting line. X-06 needed it, and could not deliver
+> `capability.flag_raised` to anybody. **A gap that blocks a shipped feature is
+> not a deferred nicety.**
+
+### THE CENSUS (added by X-06 — this is what makes it a measurement)
+
+| Source | Populated |
+|---|---|
+| `tbluser.reporting_manager_id` | **0 of 387** |
+| `tbluser.supervisor_opt` | a FLAG — 4 "Supervisor", 57 "Subordinate", **no link between them** |
+| the other 15 manager-ish columns | **per-CASE, never per-person**: `talent_offboarding_cases.manager_id` 3/3, `task_management_projects.manager_id` 3/3, `s_performance_reviews.manager_id` 16/228 |
+| **write paths that set `reporting_manager_id`** | **ZERO. There is no mechanism, not even a single-user one.** |
+
+**The last row is the finding.** F-05a is written as *"call the validator from
+every write path"* — **there are no write paths to call it from.** F-05a cannot be
+done before F-05b; the plan has them in the wrong order.
+
+### WHY IT STAYED INVISIBLE
+
+**THE COLUMN EXISTING IS WHY EVERY DESIGN CONVERSATION ASSUMED THE RELATIONSHIP
+DID TOO.** Nothing reads a column to check whether it is empty.
+
+### WHAT IT BLOCKS — more than was listed
+
+| Blocked | Where |
+|---|---|
+| `capability.flag_raised` notification | `EventCatalogue::NOT_NOTIFIED` (X-06) |
+| Dept Head + Reporting Manager re-grants | the 4b rights matrix, parked on coverage |
+| golden thread 2's manager-confirmation step | Slice 3 |
+| every approval flow in the plan | F-05's own "unblocks" column |
+| **`ResolvesCompetencyContext::COMPETENCY_ELEVATED`** | two roles deliberately absent |
+| **`ResolvesLeaveContext::LEAVE_ELEVATED`** | same two roles, same reason |
+
+The last two were already in the code as comments naming `G-ORG-02`.
+
+**BUILD ITEM: X-16.** Absorbs F-05a and F-05b, which have sat NOT STARTED since
+Gate B.
+
 
 **0 of 387 users have a `reporting_manager_id`**, and six of the nine roles were
 created empty. Both are **correct** — the columns are new and nothing has assigned

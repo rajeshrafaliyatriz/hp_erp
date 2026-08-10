@@ -18,15 +18,31 @@ use Illuminate\Support\Facades\Mail;
  *   email — leaves the building. NOT recoverable by any means available to us.
  *           OFF by default, behind G2G_NOTIFY_EMAIL.
  *
- * WHY EMAIL IS OFF BY DEFAULT AND STAYS OFF UNTIL SOMEONE SAYS OTHERWISE:
+ * WHY EMAIL IS OFF BY DEFAULT AND STAYS OFF:
  *   386 of 387 users carry a real email address, and MAIL_MAILER is a live Gmail
  *   SMTP account. Enabling this channel on a shared database means real mail to
  *   real people at real companies the moment any event fires - including a
- *   backfill, a test, or a replay bug. That is a decision for Triz to take
- *   deliberately, not one to inherit from a default.
+ *   backfill, a test, or a replay bug.
  *
- *   The channel is BUILT, not stubbed: flip G2G_NOTIFY_EMAIL=true and it sends.
- *   What is withheld is the trigger, not the capability.
+ *   ┌───────────────────────────────────────────────────────────────────────┐
+ *   │ THREE CONDITIONS BEFORE G2G_NOTIFY_EMAIL IS EVER SET TRUE.            │
+ *   │ ALL THREE. NOT ANY.  (Triz, 2026-08-11)                               │
+ *   │                                                                        │
+ *   │   1. The C23 WRITE HALF exists and passes. 772 write routes are        │
+ *   │      currently NOT TESTED AT ALL.                                      │
+ *   │   2. A TEST TENANT with fake addresses to send to.                     │
+ *   │   3. TRIZ'S EXPLICIT DECISION, IN WRITING, IN THE TURN IT HAPPENS.     │
+ *   │                                                                        │
+ *   │ "386 real addresses at real companies is not something to switch on    │
+ *   │  to see what happens."                                                 │
+ *   └───────────────────────────────────────────────────────────────────────┘
+ *
+ *   The regression suite FAILS if this flag flips, so it cannot drift on
+ *   quietly. That check is not a correctness test - it is a TRIPWIRE ON A
+ *   DELIBERATE DEFAULT.
+ *
+ *   The channel is BUILT, not stubbed: the send path below is complete and the
+ *   templates are seeded. What is withheld is the trigger, not the capability.
  */
 class NotificationSender
 {

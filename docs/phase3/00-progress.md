@@ -477,6 +477,29 @@ read stopped at the file containing the defect:
    on for any validation added to a column that already holds values** - against
    real customer data this is the difference between a fix and an outage.
 
+**R23 — A DETAIL STRING THAT CANNOT BE WRONG IS NOT EVIDENCE.**
+
+Every check reports a verdict and a detail. **The detail must be derived from what
+happened, never written alongside the branch that hoped for it.** If the same
+sentence can print under PASS and under FAIL, it carries no information and it
+actively misleads — the reader trusts a detail more than a verdict, because a
+detail looks like an observation.
+
+**X-06 produced both halves of this in one run:**
+
+| # | What happened |
+|---|---|
+| 1 | `NotificationComposer` substituted payload-then-terminology while **its own docblock argued at length for the opposite order**. The prose was right; the code was wrong. **Only running it told me which.** |
+| 2 | The proof's detail string printed *"payload directive rendered as literal text"* on **both branches**, so **the FAIL line described a pass** — and I read that FAIL and nearly looked past it. |
+
+**They are the same lesson twice in fifteen minutes:** *what I wrote about the code
+is not evidence about the code.* A docblock is a claim. A detail string composed
+before the result is a claim. **Only the run is evidence.**
+
+**Practice, from here:** a check's detail is computed from the observed value —
+the count, the offending string, the status code. When a detail is a fixed phrase,
+it belongs in the check's NAME, not in its result.
+
 **R22 — VALIDATE AT THE POINT OF USE, NOT ONLY ON WRITE. GENERALISES.**
 
 When a "validate on write" rule is added to a field that has been stored
@@ -817,6 +840,68 @@ The 3 `department` sites are scheduled against L-01/L-02 with the trigger
 - **X-11** — `CertificateIssuer`. Unblocks `certification.issued`, which is
   deferred on X-11 alone. **221 certifications exist and 37 have already expired**,
   so `certification.expiring` has real work waiting the day something emits it.
+
+### X-16 — REPORTING-LINE ASSIGNMENT · **the item that was already filed and never promoted**
+
+> **CORRECTION TO THE FRAMING, AND IT MATTERS.** The item did not fail to land —
+> **it landed twice.** `F-05a` and `F-05b` have been in the plan since the Gate B
+> review, both **NOT STARTED**, and `G-ORG-01`/`G-ORG-02` have carried the finding
+> beside them. **The miss was CLASSIFICATION, not omission:** it sat under *"still
+> queued, NOT BLOCKING"* while it blocked six things. **A correctly-filed item in
+> the wrong bucket is invisible in exactly the way an unfiled one is.**
+
+**X-16 supersedes F-05a + F-05b.** They stay in the plan file, marked absorbed.
+
+#### THE PLAN HAS F-05a AND F-05b IN THE WRONG ORDER
+
+F-05a reads *"call `canAssign()` from every write path that sets
+`reporting_manager_id`"*. **There are no such write paths.** Nothing in `app/`
+writes that column — not the importer, not an admin screen, nothing. **F-05a is
+not a small item blocked on care; it is empty until F-05b exists.**
+
+#### COST (R7 — every estimate names its files)
+
+| Part | Files | Size |
+|---|---|---|
+| Wire the validator | `app/Services/Org/ReportingLineValidator.php` — **exists, `canAssign()` has ZERO callers** (verified, not assumed) | **XS** — it is written and tested-by-inspection; it just needs a caller |
+| Single assign | **NEW** `app/Http/Controllers/Api/Org/ReportingLineController.php` + 4 routes in `routes/api.php` | **S** |
+| Bulk path | `app/Http/Controllers/Api/UserImportController.php` (132 lines) — add the manager column, resolve by employee code, validate per row | **M** — the row-level failure reporting is most of it |
+| `head_user_id` | same controller; `hrms_departments` write path | **S** |
+| Admin screen | **NEW** `g2gv0/components/domain/admin/reporting-line-editor.tsx` + `services/org/reporting-line.ts` | **M** |
+| Coverage report | a query + a row on the readiness surface | **XS** |
+
+**Total: M–L.** The validator being written already is the reason it is not L.
+
+#### ACCEPTANCE
+
+1. `canAssign()` is called on **every** write path — asserted by a smoke check, not by review.
+2. A cycle is **refused**, and the refusal names both users.
+3. Bulk import reports **per-row** failures; one bad row does not abort the file.
+4. **Coverage is REPORTED after**, as a number: `reporting_manager_id` populated / 387. It is **0% today**.
+
+#### SEQUENCING — **after X-12 and X-11. IT DOES NOT BLOCK THEM.**
+
+Checked rather than assumed. `X-11 CertificateIssuer` fires on `course.completed`
+and writes certification tables; `X-12 LearningAssigner` fires on
+`development_plan.approved` / `employee.role_assigned` and writes `lms_assignments`.
+**Neither routes to a manager, and neither has an approval step.** X-16 stays third.
+
+**But it now blocks the plan's approval flows, so it does not go back into
+"not blocking".**
+
+### EMAIL STAYS OFF — THREE CONDITIONS, ALL REQUIRED
+
+`G2G_NOTIFY_EMAIL` is **false** and I will not enable it. **386 real addresses at
+real companies is not something to switch on to see what happens.**
+
+| # | Condition |
+|---|---|
+| 1 | **The C23 write half exists and passes.** (772 write routes, currently NOT TESTED AT ALL.) |
+| 2 | **A test tenant with fake addresses to send to.** |
+| 3 | **Triz's explicit decision, in writing, in the turn it happens.** |
+
+The smoke suite **FAILS** if the flag flips, so this cannot drift on quietly. That
+check is not a correctness test — it is a tripwire on a deliberate default.
 
 ### Still queued, not blocking
 

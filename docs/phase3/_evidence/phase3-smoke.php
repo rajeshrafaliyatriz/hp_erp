@@ -256,13 +256,21 @@ check('notify', 'tenant data cannot reach the template engine', function () {
                 : 'EXPANDED - payload substitution is running before terminology'];
 });
 
-check('notify', 'email channel is OFF', function () {
-    // NOT a correctness property - a DELIBERATE default. 386 of 387 users carry a
-    // real address and MAIL_MAILER is live SMTP. If this ever reads PASS->FAIL,
-    // someone enabled outbound mail, and that should be a decision, not a drift.
+check('notify', 'email channel is OFF (tripwire, not a correctness test)', function () {
+    // A TRIPWIRE ON A DELIBERATE DEFAULT. 386 of 387 users carry a real address
+    // and MAIL_MAILER is live SMTP.
+    //
+    // THREE CONDITIONS BEFORE THIS MAY GO GREEN-WITH-EMAIL-ON, ALL REQUIRED
+    // (Triz, 2026-08-11):
+    //   1. the C23 WRITE half exists and passes (772 routes, untested today)
+    //   2. a TEST TENANT with fake addresses
+    //   3. TRIZ'S EXPLICIT WRITTEN DECISION in the turn it happens
+    //
+    // If this line ever flips to FAIL, someone enabled outbound mail. That must
+    // be a decision somebody made, never something that drifted.
     $on = app(App\Services\Notifications\NotificationSender::class)->emailEnabled();
     return [$on ? 'FAIL' : 'PASS',
-        $on ? 'G2G_NOTIFY_EMAIL=true - real mail will leave the building'
+        $on ? 'G2G_NOTIFY_EMAIL=true - REAL MAIL WILL LEAVE THE BUILDING. Three conditions apply; check all three were met.'
             : 'G2G_NOTIFY_EMAIL unset/false'];
 });
 
