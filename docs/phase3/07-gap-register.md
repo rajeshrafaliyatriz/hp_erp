@@ -1117,6 +1117,42 @@ counted**.
 > **21 remain unverified**. Quoting 23 as a leak count would be the same error as
 > quoting 132 unguarded routes as 132 open doors.
 
+## VERIFICATION OF ALL 23 — complete (option 2)
+
+**114 route+id pairs**, each tested to the same standard: fetch the tenant-3 row's
+own identifying field from the database, assert it appears in the response body.
+
+| Verdict | Routes |
+|---|---:|
+| **DISCLOSING** | **3** |
+| NOT DISCLOSING | 20 |
+| INDETERMINATE | 0 |
+
+### Grouped by reach chain — and they do NOT share one fix
+
+| Chain | Routes |
+|---|---|
+| **middleware `api`, NO auth** | `api/feedback/{id}` — *rajaram@gmail.com* · `api/competency/audit/user-actions/{userId}` — *kalpesh* |
+| **AUTHENTICATED BUT UNSCOPED** | **`api/user-signup/{id}`** — 4,224 bytes, *kalpesh* |
+
+> **`api/user-signup/{id}` is the more serious.** It carries `api.token`, so it
+> **authenticates and then does not tenant-scope**. The fix is NOT "add auth" —
+> it is **the same missing layer as G-SEC-09, in a route that LOOKS protected.**
+> A reviewer skimming the route file would call it guarded.
+
+### A harness correction inside the verification (R4, ~15th)
+
+The first verifier kept only the **largest** response per route and tested that one
+id against markers from whichever table it was pooled from. For
+`api/user-signup/{id}` that selected `id=1` — not the `tbluser` id actually
+disclosed — and returned **NOT DISCLOSING for a route already confirmed
+DISCLOSING at id=6**.
+
+**It would have reported 1 of 23.** Caught because a known-positive disagreed
+(R16). Corrected to test **every** 200-returning id against **its own** row's
+markers; a route discloses if **any** id discloses. The corrected run reproduces
+both original confirmations **and finds one more**.
+
 **Also observed, for the capacity workstream (G-SEC-16):**
 `api/templates/{id}/versions` returned **3.4 MB** in one response.
 
