@@ -1107,3 +1107,30 @@ of the four tables**. Those two tables are **BLOCKED**: establishing tenant is
 prior work, not backfill.
 
 **2 files** (R18d) + this log entry.
+
+
+## D-036 · F-07b — Q-C1 answered, orphans profiled, backfill applied
+
+**Q-C1:** the two tenantless tables resolve to **TENANT-OWNED** canonical rows,
+and the same string matches up to **10 tenants** (785 / 785 / 617 ambiguous
+values). **STOP on Triz's criterion** - a match there is a choice among ten ids,
+not a resolution. Blocked for a better-founded reason than "establishing tenant is
+prior work".
+
+**Orphan shape differs BY MAPPING:** jobrole orphans **CONCENTRATED** in tenant 9
+(89.9% / 76.4%) = seed junk from one import; skill orphans **SPREAD** across six
+tenants = genuine incompleteness. Both hypotheses true, of different mappings.
+
+**Backfill applied, three tenant-scoped mappings:** 244,253 rows, **229,316 exact
++ 365 recovered = 229,681 populated, 14,572 HELD as NULL.** Every figure matches
+the report's prediction exactly.
+
+**Verification:** 5-row sample all IDENTICAL with tenants matching; **cross-tenant
+foreign keys 0 / 0 / 0 across the whole population**, not a sample.
+
+**Corrected (R19):** my recommendation said 240,900 / 13,777 / 417. Actual
+**244,253 / 14,572 / 365** (417 was the all-six total).
+
+**Nothing created, nothing deleted, no text column dropped.**
+
+**3 files** (R18d): 1 migration + 1 evidence + 1 report addendum, plus this log.

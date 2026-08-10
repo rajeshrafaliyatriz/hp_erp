@@ -127,3 +127,95 @@ reach one.
    answer to what the string-matching era cost.
 4. **`s_jobrole_skills` and `s_jobrole_task` are BLOCKED** on the tenant question
    above. They are not a backfill problem.
+
+
+---
+
+# ADDENDUM — Q-C1 ANSWERED, ORPHANS PROFILED, BACKFILL APPLIED
+
+## 1. The two tenantless tables — the right question, answered
+
+You were right that "no `sub_institute_id`" is **Q-C1's decision, not a gap**, and
+that my framing was the wrong question. The right one — *what are they matching
+against?* — has a decisive answer.
+
+**They resolve to TENANT-OWNED canonical rows, not global ones.** Both
+`s_user_jobrole` and `s_users_skills` are tenant-scoped, and tenant 1 holds the
+bulk (2,875 of 4,610 jobroles; 2,395 of 3,976 skills) — it looks like the seed
+tenant, but it is **a tenant, not a global namespace**.
+
+**And the same string exists in many tenants at once:**
+
+| Mapping | Unambiguous | **AMBIGUOUS** | Worst case |
+|---|---:|---:|---:|
+| `s_jobrole_skills.jobrole` | 1,972 | **785** | matches **9 tenants** |
+| `s_jobrole_task.jobrole` | 1,971 | **785** | matches **9 tenants** |
+| `s_jobrole_skills.skill` | 1,480 | **617** | matches **10 tenants** |
+
+> **STOP, on your criterion.** A "match" here is not a resolution — it is a choice
+> among up to ten equally valid ids. Writing one would blend the seed library into
+> one customer's data, which is exactly what Q-C1 separated.
+>
+> **These two tables ARE blocked — but for a better reason than I first gave.**
+> "Establishing tenant is prior work" was right in conclusion and under-argued.
+> The real finding is that **the canonical tables are per-tenant, so a global
+> table cannot key into them at all** without deciding *whose* copy it means.
+
+## 2. Orphan concentration — the answer differs BY MAPPING
+
+| Mapping | Orphans | Shape |
+|---|---:|---|
+| `s_user_skill_jobrole.skill` | 9,332 | **SPREAD** — tenants 3 (28.7%), 9 (20.8%), 5 (19.1%), 6 (19.1%), 2, 11 |
+| `s_user_skill_jobrole.jobrole` | 1,665 | **CONCENTRATED** — tenant 9 holds **89.9%** |
+| `s_user_jobrole_task.jobrole` | 2,861 | **CONCENTRATED** — tenant 9 holds **76.4%** |
+
+**Both hypotheses are true, of different mappings.** The jobrole orphans are
+**seed junk from one import** — tenant 9. The skill orphans are **genuine
+incompleteness**, spread across six tenants.
+
+**Tenant 1 has almost no orphans** (0.1% and 0.4%), consistent with it being where
+the canonical data was authored.
+
+> **Different answers, so different fixes:** tenant 9's jobroles are one import to
+> review; the skills gap is a curation task across six customers.
+
+## 3. The backfill — applied, and its numbers CORRECTED
+
+| Mapping | Rows | Exact | Recovered | **HELD as NULL** |
+|---|---:|---:|---:|---:|
+| `s_user_skill_jobrole.jobrole_id` | 79,295 | 77,630 | 0 | **1,665** |
+| `s_user_skill_jobrole.skill_id` | 79,295 | 68,884 | **354** | **10,057** |
+| `s_user_jobrole_task.jobrole_id` | 85,663 | 82,802 | **11** | **2,850** |
+| **TOTAL** | **244,253** | **229,316** | **365** | **14,572** |
+
+**Every figure matches the report's prediction exactly** — 77,630 / 69,238 /
+82,813 populated, against 77,630 / 68,884+354 / 82,802+11 predicted. **The report
+was a measurement, not an estimate.**
+
+### Two numbers in my recommendation were wrong (R19)
+
+I wrote *"240,900 resolutions, 13,777 unmatched"*. **Actual: 244,253 and 14,572.**
+And *"417 recoverable"* is the total across **all six** mappings; within the three
+backfilled it is **365**. Corrected here rather than left to be found.
+
+### Verification
+
+**Sample — the populated id resolves to the record the text named:** five random
+rows across all three mappings, **all IDENTICAL**, tenant matching on both sides
+(1/1, 8/8, 11/11, 5/5).
+
+**Whole-population integrity — cross-tenant foreign keys: 0, 0, 0.** Not a sample:
+every populated id was checked against its canonical row's tenant.
+
+### What was NOT done
+
+**No canonical rows created. Nothing deleted. No text column dropped.** The 14,572
+unmatched are **held as NULL** — the fact that the text names something which does
+not exist is now stored rather than guessed away.
+
+### One operational note
+
+The first backfill used `BINARY` in the JOIN's `ON` clause, which **defeats every
+index** — it ran three minutes and populated zero rows. Rewritten so the indexed
+columns do the join and `BINARY` is a residual `WHERE` filter. Same semantics,
+and it completes. The stuck query was killed by id; no data was affected.
