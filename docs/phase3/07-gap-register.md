@@ -108,48 +108,62 @@ remote database.
 
 ---
 
-# G-DATA-10 - **THE COURSE BRIDGES ARE BUILT AND EMPTY** - **S2**
+# G-DATA-10 - **`course_competency_map` IS EMPTY. THAT IS THE WHOLE GAP.** - **S2**
+### RE-FILED 2026-08-11. My first framing called it a schema gap. **It is not.**
 
-> Found by X-12, which is the first item that needed them.
+> **THE CORRECTION, AND IT IS TRIZ'S:** the plan->course path was never meant to run
+> through a `course_id` on the plan action. It runs **plan action names a
+> COMPETENCY -> `course_competency_map` finds the courses that build it** - the
+> competency-derived path, decided as the DEFAULT, with `course_jobrole_map`
+> reserved for role-mandatory learning that is not gap-driven (the S4 ruling).
+>
+> **Adding `course_id` to `s_competency_plan_actions` would create a SECOND PATH TO
+> THE SAME ANSWER - the duplication this phase exists to remove.**
+> **THE PROPOSAL IS WITHDRAWN. No column is being added.**
 
-| Bridge | Rows | Consequence |
-|---|---|---:|
-| `course_competency_map` | **0** | a development plan can name the COMPETENCY that needs work and **cannot name a COURSE** |
-| `course_jobrole_map` | **0** | the key path from a role to its courses is dead |
+**VERIFIED IN CODE, not accepted on argument.** `LearningAssigner::fromDevelopmentPlan()`
+already resolves exactly that way: collect `competency_id` from the plan's actions
+and the plan itself, then query `course_competency_map`. **The code was right and my
+prose about it was wrong** - the same shape as the `NotificationComposer` docblock,
+inverted.
 
-**But the role relationship EXISTS - held by NAME, on the course row itself:**
+**So this is Q-B4, the highest-priority connection item, and it is an EMPTY-TABLE
+gap: populate `course_competency_map`.**
 
-| Measure | Value |
+### WHAT EXISTS TO POPULATE IT FROM - reported before proposing how
+
+| Candidate source | Finding |
 |---|---|
-| courses (`sub_std_map`, not deleted) | **95** |
-| ...carrying a `jobrole` NAME | **72** |
-| ...resolving to a job role by (name, tenant) | **73 join rows** |
+| **`lms_assignments`** | **48 distinct (course, competency) pairs. 48 of 48 course_ids resolve to a real course; 48 of 48 competency_ids resolve in `master_skills`.** All carry `source='competency'` - somebody already assigned these courses FOR these competencies. **THE MAPPING IS IMPLICIT IN THE ASSIGNMENT HISTORY.** |
+| `sub_std_map.subject_category` | 94 of 95 populated, but the values are `Task`, `Technical`, `Skill`, `course`, `jobrole`, `Functional`, `Creative` - **categories, not competencies** |
+| `sub_std_map.proficiency` | **2 of 95.** Negligible |
+| `sub_std_map.certificate_validity_months` | **0 of 95** |
+| `sub_std_map.jobrole` | 72 of 95 - the ROLE side (X-18), not the competency side |
+| chain `course.jobrole -> s_competency_certification_requirements.jobrole -> competency_id` | **0 pairs derivable.** Dead end, though it looked promising: that table does hold (jobrole, competency_id) on 15 rows |
+| `ai_course_outlines` | 59 rows, **no competency column**. `outline`/`input_fields` are longtext; reading competencies out of prose is inference, not a source |
+| `certification_competency_map` | **0 rows** |
 
-**73 rows from 72 courses: one course name matches TWO job roles.** That fan-out is
-the text join's own argument against itself, and it is why the backfill matters
-rather than being cosmetic.
+### HOW FAR THE ONE REAL SOURCE WOULD GET US
 
-### THIS IS `G-DATA-06` AGAIN, IN A PLACE NOBODY SWEPT
+| | |
+|---|---|
+| distinct competencies named by plan actions | **167** |
+| distinct competencies in `lms_assignments` | **42** |
+| **overlap - plan competencies a 48-pair bridge would cover** | **41** |
 
-L-11 swept join clauses. **This is not a join defect** - it is the same disease one
-level up: **the relationship is stored as a name and the key column that should
-hold it was never filled.** The sweep could not have found it, because there is no
-bad join to find. There is a table with nothing in it.
+**A 48-row backfill makes roughly a quarter of plan competencies resolvable to a
+course.** Real, incomplete, and honest about which.
 
-### THE PLAN SIDE IS WORSE AND IS NOT THE SAME PROBLEM
+### ⚠ A NEIGHBOUR FOUND WHILE MEASURING: `jobrole_competency_map` IS ALSO 0 AT REST
 
-`s_competency_plan_actions` holds **377 rows, 377 with a `competency_id`** - and
-**no `course_id` column at all**. There is no text fallback because there is no
-text. **The plan side needs a schema decision, not a backfill.**
+Slice 1's chain seeds it and cleans up, so the passing smoke check does **not** mean
+the table holds production data. **The role->competency link is as empty as the
+course->competency one.** Same family, and it is not the same item.
 
-### PROPOSED: **X-18, BACKFILL `course_jobrole_map` FROM THE TEXT**
+### PROPOSED: **X-19, POPULATE `course_competency_map` FROM ASSIGNMENT HISTORY**
 
-Exactly what F-07b did for three other mappings: 73 candidate rows, resolve by
-(name, tenant), report what does not match and **keep every unmatched row**.
-
-> **NOT DONE HERE. It is a bulk write, and bulk writes are asked for, never
-> assumed (R13).** X-12 reads key-first, so the day the table is populated the
-> text fallback stops being used **without a code change**.
+48 pairs, F-07b's discipline: derive, verify both ends resolve, **hold anything that
+does not, delete nothing**. Bulk write - **raised for decision, not taken (R13).**
 
 ---
 
@@ -167,6 +181,20 @@ events it DID ship, and I checked none of them.**
 | `development_plan.approved` | `/competency/development-plan/{id}` | **no** |
 | `employee.offboarded` | `/talent/offboarding/{id}` | **no** |
 | `rights.changed` | `/settings/my-access` | **no - `/settings` exists, that child does not** |
+
+### THE USEFUL PART IS NOT THE BUG. IT IS THAT I STATED THE TEST AND DID NOT RUN IT.
+
+X-06's own deferral reason for `certification.issued` was, verbatim:
+
+> *"its action link would point at a certificate screen that has not been built"*
+
+**I wrote that sentence, applied it to one event, and shipped six others with the
+same defect in the same file, in the same hour.** The test was not missing. It was
+written down, correct, and applied exactly once.
+
+**A stated test is not an applied test**, and the gap between them is invisible
+precisely because the statement makes it feel handled. This is R23's family again:
+**writing the right thing next to the code is not evidence about the code.**
 
 **Every path was invented from the shape of the domain rather than read from the
 router.** The check that would have caught it costs one `find app -name page.tsx`.

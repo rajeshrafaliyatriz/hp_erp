@@ -25,16 +25,24 @@ use Illuminate\Support\Facades\Log;
  *     => the relationship EXISTS and is held by TEXT. G-DATA-06 exactly.
  *        Read key-first, text-fallback, and the source is reported per event.
  *
- *   PLAN SIDE — DOES NOT WORK, AND CANNOT YET
- *     s_competency_plan_actions ... 377 rows, 377 WITH a competency_id
- *     course_competency_map ....... 0 rows          <- the only bridge: EMPTY
- *     ...and s_competency_plan_actions has NO course_id COLUMN AT ALL
- *     => the plan knows which COMPETENCY needs work and cannot name a COURSE.
- *        There is no text fallback here: nothing anywhere links the two.
+ *   PLAN SIDE — CORRECT BY DESIGN, BLOCKED ONLY ON AN EMPTY TABLE
+ *     s_competency_plan_actions ... 377 rows, 377 WITH a competency_id,
+ *                                   377 of 377 resolving in master_skills
+ *     course_competency_map ....... 0 rows          <- the bridge: EMPTY
+ *     => the plan names a COMPETENCY; the bridge finds the courses that build
+ *        it. That indirection IS the design (Q-B4, the competency-derived path,
+ *        with course_jobrole_map reserved for role-mandatory learning that is
+ *        not gap-driven). The path below implements exactly that.
  *
- * MY FIRST VERSION OF THIS COMMENT SAID "ALMOST NOTHING TO ASSIGN" FOR BOTH.
- * That was written after reading the two bridge tables and before finding the
- * course table - which is called `sub_std_map`, a name no search for "course"
+ * ⚠ DO NOT ADD `course_id` TO s_competency_plan_actions.
+ *   An earlier version of this comment called the plan side a SCHEMA gap, which
+ *   invited exactly that column. It would create a SECOND PATH TO THE SAME
+ *   ANSWER - the duplication this phase exists to remove. THE GAP IS THE EMPTY
+ *   TABLE, NOT A MISSING COLUMN. See G-DATA-10, re-filed 2026-08-11.
+ *
+ * MY FIRST VERSION OF THIS COMMENT ALSO SAID "ALMOST NOTHING TO ASSIGN" FOR BOTH
+ * SIDES. That was written after reading the two bridge tables and before finding
+ * the course table - which is called `sub_std_map`, a name no search for "course"
  * returns. R20 again: I had read the empty tables and stopped there.
  *
  * THE MECHANISM IS BUILT REGARDLESS, AND COVERAGE IS REPORTED AS A NUMBER rather

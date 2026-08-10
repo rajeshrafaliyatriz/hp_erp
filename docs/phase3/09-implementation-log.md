@@ -1747,7 +1747,27 @@ wrong.
 | key table | `course_jobrole_map` **0 rows** | `course_competency_map` **0 rows** |
 | text fallback | **`sub_std_map.jobrole`: 72 of 95 courses carry a role NAME** | **none exists** |
 | resolves | **73 join rows** by (name, tenant) | - |
-| verdict | **WORKS TODAY, by name** | **cannot work** - `s_competency_plan_actions` has 377 rows, 377 with a `competency_id`, and **no `course_id` column at all** |
+| verdict | **WORKS TODAY, by name** | **blocked on an empty table, and the design is correct** — see the correction below |
+
+> ### ⚠ CORRECTION, 2026-08-11 — THIS ENTRY'S ORIGINAL FRAMING OF THE PLAN SIDE WAS WRONG
+>
+> It read: *"`s_competency_plan_actions` has no `course_id` column at all… the plan
+> side needs a schema decision, not a backfill."* **That invited a column that must
+> not be added.**
+>
+> The plan→course path was never meant to run through a `course_id` on the action.
+> It runs **plan action names a COMPETENCY → `course_competency_map` finds the
+> courses that build it** — the competency-derived default, with
+> `course_jobrole_map` reserved for role-mandatory learning that is not gap-driven.
+> **Adding `course_id` would create a second path to the same answer**, which is the
+> duplication this phase exists to remove.
+>
+> **`LearningAssigner::fromDevelopmentPlan()` already resolves exactly that way** —
+> verified in code, not accepted on argument. **The code was right and this entry's
+> prose about it was wrong.**
+>
+> **Re-filed as G-DATA-10: an EMPTY-TABLE gap (Q-B4), not a schema gap.** Proposal
+> withdrawn; **no column is being added.**
 
 **73 resolving rows from 72 named courses** means one course name matches two job
 roles. That fan-out is the text join's own argument against itself.

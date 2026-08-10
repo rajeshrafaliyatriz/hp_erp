@@ -477,6 +477,33 @@ read stopped at the file containing the defect:
    on for any validation added to a column that already holds values** - against
    real customer data this is the difference between a fix and an outage.
 
+**R18d(ii) — A STAGED COUNT IS ONLY A CHECK WHEN THE EXPECTATION IS COMPUTED,
+NOT GUESSED.**
+
+Derive the expected number from **the length of the file list being staged**, never
+from a number stated alongside it.
+
+**Why, from the case that earned it:** X-06's proof script was passed to `git add`
+and did not end up staged. The guard reported *"staged: 14 (expected 14)"* and went
+green — because the list held **15** paths. **A wrong prediction and a missing file
+cancelled out.** The proof lived only on disk for a full turn.
+
+```bash
+# WRONG - the expectation is a claim, and claims can be wrong in the same
+# direction as the failure they are meant to catch.
+git add -- a b c d; echo "staged: $(git diff --cached --name-only | wc -l) (expected 4)"
+
+# RIGHT - the expectation is DERIVED, so the two cannot cancel.
+FILES=(a b c d)
+git add -- "${FILES[@]}"
+[ "$(git diff --cached --name-only | wc -l)" -eq "${#FILES[@]}" ] || echo "MISMATCH"
+```
+
+**Generalises beyond git:** any check whose expected value is typed by the same
+hand that typed the input is a check that can agree with its own mistake. This is
+R23's sibling — R23 says a detail must be observed; this says an expectation must be
+derived.
+
 **R23 — A DETAIL STRING THAT CANNOT BE WRONG IS NOT EVIDENCE.**
 
 Every check reports a verdict and a detail. **The detail must be derived from what
@@ -816,6 +843,26 @@ the write, and **the leak nobody could see was the read**.
 
 ### Landed this turn
 
+> **THE FIRST DEFERRAL TRIGGER IN THE PHASE FIRED ON ITS OWN.**
+>
+> X-06 deferred `certification.issued` with the trigger *"X-11 CertificateIssuer
+> ships"*. X-11 shipped, and the event moved back into `NOTIFIES` **because the
+> condition was written down in a place the next item had to read** — not because
+> anyone remembered it.
+>
+> **That is what `EventCatalogue::NOT_SHIPPED` / `NOT_NOTIFIED` and their `trigger`
+> field were built for**, and it is the first evidence they work. The invariant
+> that a DEFERRED entry without a trigger is a violation is what makes the
+> mechanism load-bearing rather than decorative: **an item deferred without a
+> trigger is an item nobody will remember to enable**, and that is now enforced
+> rather than hoped for.
+>
+> Contrast **F-05b**, deferred with no trigger and no owner, which sat NOT STARTED
+> from Gate B until X-06 tripped over it (see X-16). **Same project, same period,
+> two deferrals, one mechanism between them.**
+
+
+
 - **X-12 — LearningAssigner** (absorbing MandatoryLearningAssigner). Role path
   **works today via the TEXT link** (72 of 95 courses carry a role name, 73
   resolving); plan path **cannot work** — `course_competency_map` is empty and
@@ -825,8 +872,37 @@ the write, and **the leak nobody could see was the read**.
   enrolment in the database. **X-06's deferral trigger fired** — the first one in
   the phase to do so. D-050.
 - **G-NOTIF-02** — six X-06 notifications whose action link 404s, fixed. D-051.
-- **X-18 PROPOSED** — backfill `course_jobrole_map` from the text, F-07b's shape,
-  73 candidate rows. **Bulk write: awaiting a decision, not scheduled.**
+- **X-18 — backfill `course_jobrole_map`. THE 73 SPLIT, ANSWERED.**
+
+  | Bucket | Count |
+  |---|---:|
+  | **UNAMBIGUOUS** — one course, one job role | **71** |
+  | fan-out from a genuine multi-role course | **0** |
+  | **fan-out from DUPLICATE JOB-ROLE NAMES** — **HELD** | **1** |
+
+  The single fan-out: **course 144, tenant 7, "Uplift professional practice"**,
+  `jobrole = 'Beginning Early Years Educator'`, matching job-role rows **4538 and
+  6233** — **one distinct name between them.** A name collision, not a course
+  serving two roles.
+
+  **It could not have been anything else, and that is worth stating:**
+  `sub_std_map.jobrole` is ONE text column holding ONE name. A course cannot
+  express "these two roles". **So every fan-out in this backfill is by
+  construction a duplicate-name collision** — measured on all 73 rather than
+  argued from the schema.
+
+  Context: **91 duplicated (tenant, jobrole) groups exist** (G-DASH-01), but only
+  **1** course name lands in one. The exposure is real and small.
+
+  **Proposal: write 71, HOLD 1, delete nothing (F-07b discipline).** Course 144
+  needs a human to say which of 4538/6233 it means — **guessing would create a
+  mapping that looks correct**, which is exactly the failure mode raised.
+  **Still a bulk write: awaiting the decision.**
+
+- **X-19 PROPOSED** — populate `course_competency_map` (**Q-B4**) from assignment
+  history: **48 pairs, both ends resolving**, covering **41 of 167** plan
+  competencies. See G-DATA-10 for every source considered. **Bulk write: awaiting
+  a decision.**
 
 ### L-11 — what is actually left
 
