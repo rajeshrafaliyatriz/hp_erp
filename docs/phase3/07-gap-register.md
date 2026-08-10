@@ -745,9 +745,55 @@ passes the proxy and is still safe if some other guard runs first; it fails the
 proxy and is still dangerous if its check is weak for another reason. **The
 behavioural probe is the settling instrument.**
 
-> **A behavioural probe of all 132 was attempted and HUNG** — at least one endpoint
-> blocks on an outbound call. Recorded rather than quietly dropped: the probe needs
-> a per-request timeout before it can give the definitive answer.
+### CORRECTION — the probe did not hang, and the numbers below supersede the 132
+
+I reported the first probe as **hung, blocking on an outbound call**. **That was
+wrong.** It died with `Allowed memory size of 536870912 bytes exhausted` before
+printing anything. Diagnosed from its own output once it completed, not guessed.
+
+**The 132 is a route-level count across ALL verbs, including `{id}` routes that
+cannot be probed blind.** It is the right number for *"routes with no auth
+middleware reaching the signature"* and the wrong number for *"routes an anonymous
+caller can reach"*. Both are stated so neither is quoted for the other (R10).
+
+### The behavioural result — chunked so one fatal costs one chunk
+
+| Measure | Count |
+|---|---:|
+| GET routes, no `{id}`, no auth middleware | **57** |
+| Probed to completion | **52** |
+| **Died mid-request** | **1** |
+| **Answered 200 to an anonymous caller** | **4** |
+
+**The four:**
+
+| Route | Body |
+|---|---|
+| `api/kpis` | `{"status":true,...,"overallSkillCoverage":0,...}` — **a live metrics endpoint answering anonymously**. Zeroes here because this tenant has no data, not because it refuses |
+| `DeepSeekChat` | Proxies to the DeepSeek API and returned its upstream error. **Anonymous access to a paid AI proxy** — cost and abuse, not disclosure |
+| `api/ai-generated-assessment/question/index` | `"data":[]` — structure works, table empty |
+| `api/candidate` | `"data":[]` — **re-probed against tenants 7 (150 rows) and 3 (107 rows) and still returned 0**, so a further filter is applied. Reachable, not proven to disclose |
+
+**Honest reading: reachable surface is proven; record disclosure is not** — apart
+from `assignmentController`, which is proven and fixed. The 121 remaining
+candidates are **not** thereby cleared: `{id}` routes and all POST/PUT/DELETE
+routes were never probed, and that is where `assignmentController`'s approval path
+sat.
+
+---
+
+# G-SEC-15 — AN ANONYMOUS REQUEST CAN EXHAUST SERVER MEMORY · **S2**
+
+`AJAXController@getSkillCompetency`, route `getSkillCompetency` — **no auth
+middleware, no `{id}` parameter**.
+
+An unauthenticated GET **exhausted a 512MB PHP memory limit** inside
+`Connection::execute()`. It is the one route of 57 that killed its own probe
+process.
+
+**Two problems in one route:** it is reachable without a token, and it loads an
+unbounded result set into memory. **A single anonymous request is a denial of
+service**, and no credential is needed to repeat it.
 
 ---
 
