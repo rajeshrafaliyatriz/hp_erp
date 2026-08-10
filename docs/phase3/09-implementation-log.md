@@ -978,3 +978,26 @@ if one does not** - an event deferred without a trigger is one nobody will
 remember to enable.
 
 **2 files** (R18d): 1 app + 1 doc.
+
+
+## D-033 · Reactor/plan reconciliation — five items added to 08
+
+**Reframed per Triz: an UNDERSTATED PLAN, not scope creep.** All six missing
+consumers serve threads the plan already commits to; it carried the threads and
+missed the machinery.
+
+3 of 9 reactors were carried (`NotificationDispatcher` = X-06, `AccessRevoker` and
+`TaskReassigner` = the line-336 offboarding item). 6 were not.
+
+**Assigner decision, from the write path rather than preference:**
+`MandatoryLearningAssigner` + `LearningAssigner` **collapse** - both write
+`lms_assignments` with the same record shape, differing only in trigger.
+`RemediationRecommender` does **not** - its primary act is to SHOW a
+competency-derived course, not to write one. **Five new items, not six or four.**
+
+**Reverse check run, and its limit recorded:** `08` names no events at all, so it
+**cannot** imply a missing one by name. **The empty result is not a clean bill.**
+
+Plan item count **~40 → ~45**.
+
+**3 files** (R18d): 2 docs + 1 count update.

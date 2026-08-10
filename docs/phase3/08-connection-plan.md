@@ -850,3 +850,70 @@ that a person cannot talk their way past.
 ---
 
 **END OF PLAN. Awaiting approval. Nothing is built from this until approved.**
+
+---
+
+## AMENDMENT 2026-08-10 — THE MACHINERY THE PLAN CARRIED THREADS FOR
+
+**This is not scope creep. It is an UNDERSTATED PLAN.**
+
+All of the consumers below were specified in `05-data-flow-contracts.md` §2.1 and
+**never absorbed here**. Every one serves a thread this plan already commits to
+completing: **the plan carried the THREADS and missed the MACHINERY.**
+
+Found by checking the catalogue's 9 reactors against this document during item 6,
+slice 3 - **3 were carried, 6 were not.**
+
+### Already carried, under different names — no new work
+
+| Reactor | Carried as |
+|---|---|
+| `NotificationDispatcher` | **X-06** — Notification service + terminology (Q-F1), **M** |
+| `AccessRevoker` | line 336 — offboarding reactor, **T3** |
+| `TaskReassigner` | same line 336 item — the plan treats both as one deliverable |
+
+### DECISION — the three assigners collapse to TWO, not one
+
+Decided from the write path and record shape, not preference:
+
+- **`MandatoryLearningAssigner` + `LearningAssigner` COLLAPSE.** Both assign
+  courses into **`lms_assignments`** (`LearningAssignmentController:31`), same
+  record shape, differing only in trigger — role-mandatory vs plan-approved.
+  **One service, two entry points.**
+- **`RemediationRecommender` DOES NOT collapse.** §2.1:232 has it *"find the
+  course via the competency-derived path and SHOW IT immediately"* — **a
+  recommendation, not a write.** Its second use (:244, renewal assignment) writes,
+  but its distinguishing work is *finding* the course. **Different
+  responsibility, kept separate.**
+
+**So five new items, not six or four.** Reported as measured rather than rounded
+to the tidier number.
+
+### NEW ITEMS
+
+| # | Item | Thread | Tier | Cost (R7) | Files |
+|---|---|---|:-:|:-:|---|
+| X-11 | **`CertificateIssuer`** — auto-issue on `course.completed`. Closes **G-FLOW-05's manual-claim gap**; the plan carried certificate *upload/resolve* only | 3 | T2 | **M** | `app/Services/Events/CertificateIssuer.php`, certification tables |
+| X-12 | **`LearningAssigner`** (absorbing `MandatoryLearningAssigner`) — two entry points | 2, 3 | T2 | **M** | `app/Services/Events/LearningAssigner.php`, `lms_assignments` |
+| X-13 | **`RemediationRecommender`** — competency-derived course lookup (S4), shown immediately per Q-B3 | 3, 8 | T3 | **M** | `app/Services/Events/RemediationRecommender.php` |
+| X-14 | **`OnboardingLauncher`** — creates the journey on `employee.hired` | 1 | T2 | **M** | `app/Services/Events/OnboardingLauncher.php`, `talent_onboarding_journeys` |
+| X-15 | **`FeatureGateApplier`** — applies a gate on `readiness_gate.changed`; **ON automatic, OFF never** (§4) | M1 | T3 | **S** | `app/Services/Events/FeatureGateApplier.php` |
+
+**Plan item count moves: ~40 → ~45.** The figure quoted before this amendment
+was understated by these five.
+
+### THE REVERSE CHECK — run, and its LIMIT stated
+
+*Does this plan imply an event the catalogue lacks?* **Nothing found — and the
+reason matters more than the result.**
+
+**This document names no events at all.** The only dotted tokens in it are column
+references (`task.skill_id`, `task.status`). The plan speaks in **capabilities**;
+the contracts speak in **events**.
+
+> **So the reverse check cannot find a missing event by name, and returning
+> nothing is NOT evidence that the catalogue is complete.** The reconciliation is
+> one-directional because the two documents use different vocabularies. Recorded
+> so the empty result is never read as a clean bill.
+
+---
