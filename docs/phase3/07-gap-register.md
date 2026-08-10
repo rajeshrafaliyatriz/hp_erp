@@ -1121,6 +1121,58 @@ mapping — and checking rather than assuming it is the point.**
 
 ---
 
+# G-DASH-01 - THE TEXT JOINS ARE OVER-COUNTING TODAY, NOT JUST FRAGILE - **S1**
+
+**Found by the equivalence check L-11's conversion required, before converting
+anything.** I expected text-join and id-join to return the same counts and to be
+converting for rename-safety. **They do not agree, and the text join is wrong.**
+
+| Join | Distinct job roles |
+|---|---:|
+| `jr.jobrole = jt.jobrole` (**what ships today**) | **4,716** |
+| the same, plus a tenant condition | 4,522 |
+| `jr.id = jt.jobrole_id` (**by key**) | **4,393** |
+
+**The dashboards over-report by 323 roles - 7.4% - and the error has TWO distinct
+causes.**
+
+### Cause 1: the join crosses tenants. 64% of joined rows.
+
+`jr.jobrole = jt.jobrole` carries **no tenant condition in the ON clause**. Tenant
+scoping is applied afterwards to ONE side, so a job role in one tenant matches
+task rows in another that merely share a name.
+
+| Joined rows | Count |
+|---|---:|
+| same tenant | 91,784 |
+| **CROSS-TENANT** | **161,695** |
+
+**Nearly two thirds of the rows feeding these dashboards belong to another
+organisation.** This is a live cross-tenant data-correctness defect, and it is
+invisible in the output: the number just reads high.
+
+### Cause 2: duplicate names within one tenant
+
+**91 (tenant, jobrole) groups are duplicated - 129 extra rows.** Tenant 1 has
+**"Vice President" eleven times**, "Marketing Manager" six, "Product Manager"
+five. A name join matches all of them; **a key join resolves to the one row that
+was meant.**
+
+### Why this changes L-11's justification
+
+L-11 was scoped as *"a rename would detach these queries"* - a FUTURE risk.
+**It is a PRESENT defect.** The conversion does not merely make the dashboards
+rename-safe; **it corrects numbers that are wrong on screen right now.**
+
+> **The equivalence check was meant to prove the conversion was behaviour-
+> preserving. It proved the opposite, and that is the more valuable result:
+> converting will CHANGE these figures, and the new ones are the correct ones.**
+
+**Nothing converted yet.** Doing so silently would have moved a headline number
+with no explanation attached.
+
+---
+
 # G-XPROD-01 - CROSS-PRODUCT READ LEAK: HP BRAIN'S HR DATA IN G2G'S ADMIN UI - **S1** - **FIXED**
 
 **A G2G tenant-1 administrator was shown 141 of HP BRAIN's audit rows** - `Person`

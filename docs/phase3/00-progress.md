@@ -317,6 +317,27 @@ this rule was introduced: twelve security fixes were in the register and in git 
 had never been written to the log. **Report the reconciliation in the status line
 each time.**
 
+**R18f - BULK DOCUMENT EDITS: FOUR RULES.**
+
+Written after ONE edit produced TWO failure modes at once, neither announcing
+itself: a partial-line regex **TRUNCATED four table rows** to three columns
+(destroying gap refs, costs, dependencies and acceptance tests), while
+exact-string edits **SILENTLY NO-OP'D** against real arrow characters.
+
+> **One destroyed data, one did nothing.** The structural check caught the
+> truncation; **nothing would have caught the no-op except noticing the file had
+> not changed.**
+
+1. **Whole-row or whole-block replacement. NEVER partial-line regex** on a
+   structured file.
+2. **Assert a STRUCTURAL INVARIANT after the edit** - row count, column count,
+   pipe count. That is what caught the truncation.
+3. **Assert the edit ACTUALLY APPLIED** - count changed lines against expected.
+   A silent no-op is the same class as a checker reporting a confident wrong
+   number.
+4. **`git revert` is the recovery.** Do NOT hand-repair a damaged structured
+   file.
+
 **R18e - RUN THE SMOKE SUITE BEFORE AND AFTER EVERY ITEM.**
 `_evidence/phase3-smoke.php`, one command, ~90 seconds, 21 checks.
 
