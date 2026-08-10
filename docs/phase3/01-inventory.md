@@ -1,5 +1,11 @@
 # 01 — Inventory: what actually exists
 
+> ⚠️ **SCOPE QUALIFIER (2026-08-07):** this figure describes the **Next.js sidebar**
+> (`tblmenumaster_g2g`). It says nothing about the Blade UI, which has its own menu
+> tree of 200 rows — 30 of them not present here. **No number needs re-deriving;
+> the qualifier travels with it.** See `G-SCOPE-01`.
+
+
 **Gate A deliverable 1 of 3.** Read-only analysis. No application code was changed.
 Date: 2026-08-05
 

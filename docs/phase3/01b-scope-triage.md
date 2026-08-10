@@ -1,5 +1,11 @@
 # 01b — Scope triage: the 104 non-live navigation rows
 
+> ⚠️ **SCOPE QUALIFIER (2026-08-07):** this figure describes the **Next.js sidebar**
+> (`tblmenumaster_g2g`). It says nothing about the Blade UI, which has its own menu
+> tree of 200 rows — 30 of them not present here. **No number needs re-deriving;
+> the qualifier travels with it.** See `G-SCOPE-01`.
+
+
 **Answers Q-A3.** One pass, grouped by module, with a recommendation and a
 one-line reason for every row. Approve or amend in a single review; flows will be
 designed only for rows marked **SHIP**.

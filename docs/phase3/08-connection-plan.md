@@ -515,7 +515,7 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | X-01 | **Rights matrix populated** — targets **`tblgroupwise_rights_g2g`** (the Next.js sidebar). **INVISIBLE to current users** | ~~G-SEC-07~~ (corrected) | 9 | **L** · seeder from §3.1-3.7 | X-02, thread 9 | F-06 ✅, roles ✅, screen→menu map | AT-X01 | DB *(not SCREEN — nothing reads it yet)* | Blocked on the mapping |
-| **X-01c** | **RIGHTS-TABLE CONSOLIDATION** — reconcile the two systems, decide which survives, migrate `MenuMiddleware`, retire the loser | **G-DUP-01** | 9 | **ESTIMATE PENDING** | the single rights model | X-01 | AT-X01c | **SCREEN** | **NOT STARTED — this is the behaviour-changing item, and where R9 applies** |
+| **X-01c** | **RIGHTS-TABLE RECONCILIATION — a DECISION LIST, not a switchover.** Per-role, per-menu, with direction. Triz decides each; only then does it apply | **G-DUP-01** | 9 | **ESTIMATE PENDING** | the single rights model | X-01 | AT-X01c | **SCREEN** | **NOT STARTED.** Admin −43 / HR +79 — **gains are an unapproved permission increase and get the closer look** |
 | X-02 | Route permission declarations | G-SEC-04 | all | **ESTIMATE PENDING** | authorization | X-01 | — | API | Not started |
 | X-03 | **C19 picker mechanism** | G-LIB-08 | 1 | **M-L** · `LibraryController` meta, `library-form.tsx`, `library-config.ts`, `services/competency/libraries.ts` | L-01/02/04 | §10.0 *(decided)* | AT-X03 | SCREEN | Not started |
 | X-04 | **Event store + projector/reactor split** | G-STR-04 | 2, 9 | **L** · `05-data-flow-contracts.md` §1 DDL | X-05, threads 2/9 | ~~S-02~~ **now unblocked** | AT-X04 | DB | Not started |
@@ -780,6 +780,7 @@ Folded in as a Tier 0 sub-plan. Order is **§4's data-class rule**, not route co
 | Item | Reason | Ref |
 |---|---|---|
 | **CRM** (Marketing, Leads, Master Fields) | Deferred. Code and data intact, hidden from nav, no Phase 3 work | Q-A4 |
+| **The Blade UI** — 173 views, 21 controllers, its own menu tree (200 rows, 30 not in `_g2g`) and rights table (1,254 rows) | **RECOMMENDED DEFERRED, awaiting Triz's decision.** Live and maintained (last touched 2026-07-31). Its **routes** are covered by the C23 tenant guard; its **screens, menus and rights** were never audited | **G-SCOPE-01** |
 | **Applicant-facing candidate portal** | Phase 3 defines the identity model, isolation boundary and conversion step. **Building the portal is a separate deliverable** | Q-D4 |
 | **External trainer / vendor identities** | Same pattern as Candidate, deferred. The model must generalise (`portal_identity` + type discriminator) but they are not designed now | Q-D4 |
 | **Delegation / acting manager** | Not Phase 3 build work. Two rules designed in now: audit records both parties; delegation never widens scope | A4 |
