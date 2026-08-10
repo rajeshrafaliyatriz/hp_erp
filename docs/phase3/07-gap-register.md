@@ -108,6 +108,72 @@ remote database.
 
 ---
 
+---
+
+# G-DATA-11 - **THERE ARE TWO COMPETENCY ID SPACES AND THEY DO NOT MEET** - **S1**
+
+> Found while preparing X-19. **It stops X-19 and it is bigger than X-19.**
+
+`competency_id` appears on five tables. **805 rows carry one. Not one of them
+resolves in `competency`.**
+
+| Holder | rows | resolves in `competency` | resolves in `master_skills` / `s_users_skills` |
+|---|---:|---:|---:|
+| `s_competency_certifications` | 220 | **0%** | **100%** |
+| `s_competency_plan_actions` | 377 | **0%** | **100%** |
+| `s_competency_development_plans` | 160 | **0%** | **100%** |
+| `lms_assignments` | 48 | **0%** | **100%** |
+| `jobrole_competency_map` | 0 | - | - |
+
+**`competency` held 0 rows until this seed.** It is the table the CAPABILITY CHAIN
+resolves against - `CompetencyGapController` joins
+`jobrole_competency_map -> competency`, and `ProficiencyService` reads
+`competency_kasba_item`.
+
+### SO THE PRODUCT HAS TWO DISJOINT MEANINGS OF "COMPETENCY"
+
+| | Space A - **the chain** | Space B - **everything else** |
+|---|---|---|
+| master | `competency` (+ `competency_kasba_item`) | `master_skills` / `s_users_skills` |
+| used by | gap view, proficiency roll-up, Slice 1 | plans, plan actions, certifications, assignments |
+| rows before this turn | **0** | **805 referencing rows** |
+
+**Slice 1 built the chain on the new, empty space while every row of real
+competency data sat in the old one.** Both are internally consistent. Nothing
+crosses.
+
+### WHY IT SURFACED ONLY NOW
+
+Both spaces were consistent as long as nothing joined them. **X-19 is the first
+item that would have written a single table (`course_competency_map`) from BOTH** -
+48 pairs recovered from `lms_assignments` (space B) into a table the gap chain
+reads (space A).
+
+> **`course_competency_map.competency_id` HAS NO DECLARED REFERENT.** Writing both
+> spaces into it would make the column meaningless, and the corruption would look
+> like data.
+
+### X-19 IS HELD IN FULL. NOT PARTIALLY - ENTIRELY.
+
+F-07b discipline says ambiguous rows are held, never guessed. **The ambiguity here
+is not in individual rows; it is in what the destination column MEANS.** All 48 are
+held.
+
+**This is Triz's decision, and it is a product decision, not a build one:**
+
+1. **Space A wins** - the chain is canonical; plans/certifications/assignments must
+   migrate their `competency_id` to `competency` ids. Largest change, one meaning.
+2. **Space B wins** - `competency` is abandoned and the chain re-points at
+   `s_users_skills`. Discards Slice 1's KASBA model, which space B cannot express.
+3. **Both, bridged** - a mapping table between them. **A second path to the same
+   answer** - the thing G-DATA-10 was just corrected for proposing.
+
+**The seed took option 1 for tenant 3 only**, because the chain had to work for the
+walkthrough: its `course_competency_map` rows are space A. **That is 8 rows in one
+tenant and it is not a decision** - it is a demonstration, recorded and removable.
+
+---
+
 # G-DATA-10 - **`course_competency_map` IS EMPTY. THAT IS THE WHOLE GAP.** - **S2**
 ### RE-FILED 2026-08-11. My first framing called it a schema gap. **It is not.**
 

@@ -1894,3 +1894,76 @@ across tenants so it actually runs - **and it passes.**
 **Evidence:** `docs/phase3/_evidence/x11-x12-loop-proof.php` - **15/15 GREEN, 0
 skipped**, all rows removed, `lms_assignments` back to 49 and coverage unchanged.
 Smoke **29 -> 31 checks, GREEN**.
+
+## D-052 - X-18 applied, X-19 HELD, and one organisation seeded end to end
+
+### X-18 - APPLIED
+
+| | |
+|---|---|
+| candidates | 73 join rows / 72 courses |
+| **written** | **71** - tenant 3: 61, tenant 6: 7, tenant 7: 3 |
+| **held** | **1** - course 144, "Uplift professional practice" |
+| reconciles | 0 -> 71, written 71. **YES** |
+| cross-tenant rows created | **0** |
+| `sub_std_map.jobrole` values cleared | **0** - the text stays, nothing deleted |
+
+The held row: `jobrole = 'Beginning Early Years Educator'` matching job-role ids
+**4538 and 6233**, one distinct name between them. **A human must say which role
+that course means.** The script REFUSES TO RUN if the split has moved from the
+71/1 that was approved - writing a different set would be writing something nobody
+agreed to.
+
+### X-19 - HELD IN FULL. See **G-DATA-11**.
+
+Preparing it surfaced that **`competency_id` means two different things in this
+database**: 805 rows across four tables resolve 100% in `master_skills`/
+`s_users_skills` and **0% in `competency`** - the table the capability chain
+resolves against, which held **0 rows**. X-19 would have written one table from
+both spaces. **All 48 held; the decision is Triz's and it is a product decision.**
+
+### THE SEED - tenant 3, "healthcare"
+
+Chosen on measurement: 70 courses (more than every other tenant combined), 108
+users, and **the only tenant holding all nine `role_key` profiles**.
+
+**Every person is new, and that follows from the rules rather than from
+convenience.** All 108 existing tenant-3 users already hold `allocated_standards`,
+so there was no user to assign without overwriting one. And a login needs a known
+password - **setting a password on a real account is the most destructive overwrite
+available here.**
+
+**126 rows created**, every id in `docs/phase3/_changes/SEED-REGISTER-2026-08-11.md`.
+
+| Link | Result |
+|---|---|
+| departments | 3, **`head_user_id` populated - first use of that column ever** |
+| job roles | 7 across the 3 departments |
+| competencies | 10, as KASBA bundles - **27 items: 1 TARGET, 26 HOLDING** |
+| `jobrole_competency_map` | **23 rows - was 0** |
+| people | 14 new users, **9 of 9 role_keys have a live login** |
+| reporting lines | 8 written, **every one through `canAssign()`**; a deliberate cycle was **REFUSED** |
+| ratings | 34 rated, **15 left unmeasured on purpose** |
+| courses | 8 mapped to competencies |
+
+**THE CHAIN RESOLVES, AND THE THREE STATES ARE VISIBLY DIFFERENT:**
+
+| Person | required | met | gap | not yet assessed |
+|---|---:|---:|---:|---:|
+| Meera Pillai | 4 | **4** | 0 | 0 |
+| Vikram Sethi | 4 | 1 | **2** | **1** |
+| Joseph Mathew | 3 | 0 | **2** | **1** |
+| **Divya Nair** | 2 | 0 | **0** | **2** |
+
+**Divya Nair is the important row.** A real job role, real requirements, and no
+measurements: **0 gap is not 0 shortfall, it is nothing measured.** That is the
+distinction ProficiencyService was built to preserve, now visible on a screen
+rather than in a test.
+
+**26 of 27 KASBA items are HOLDING labels** - the tenant's `s_users_skills` titles
+do not match clinical competency item names. **That is the holding state working as
+designed**, and it is also a measurement of how far the canonical skill library is
+from competency vocabulary.
+
+**Reporting-line coverage: 0 of 387 -> 8 of 401 platform-wide, 8 of 122 in tenant 3.**
+First data ever in that column.
