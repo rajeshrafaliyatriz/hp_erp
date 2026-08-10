@@ -76,7 +76,7 @@
 | 15 | `skill_matrix_item` + tenant column | **Not started** |
 | 16 | Text→FK migrations | **Not started** |
 
-**Built: 10.**
+**Built: 11.**
 
 **FOUNDATIONS BUILT — 3 of 6, with item 4 at 4a.**
 
@@ -106,7 +106,7 @@ regression guard in CI.
 | ~~Event store~~ | ~~G-SEC-12~~ — **UNBLOCKED 2026-08-07** |
 | Threads 2 and 9 | the event store |
 | L-01, L-02, L-04 and every later entity binding | **C19** picker mechanism |
-| Rights matrix population (4b) | ~~tri-state columns~~ ✅ · ~~role model~~ ✅ **(f293edb0)** — **now blocked only on 4b-prep**: the nine roles seeded + the screen→menu mapping |
+| Rights matrix population (4b) | ~~tri-state columns~~ ✅ · ~~role model~~ ✅ · ~~nine roles~~ ✅ **(dd25e450)** — **now blocked only on the screen→menu mapping (4b-prep c) and approval of the Recruiter expansion** |
 | Everything in Tier 3 | the join tables |
 | The three mandatory reports | the joins — building them first yields three empty reports |
 | Write-route audit coverage figure | re-derivation from the router |

@@ -226,6 +226,49 @@ of `assignmentController` (6 routes) and `HrmsController` (3).
 
 ---
 
+## G-ORG-01 — the no-cycle guarantee is theoretical until every write path calls it · **S2**
+
+**`ReportingLineValidator` exists (`f293edb0`) and nothing calls it.**
+
+MySQL cannot express "no cycles", so the guarantee lives in application code — which
+means it holds **only where the code runs**. Every path that sets
+`reporting_manager_id` must call `canAssign()` first:
+
+| Write path | Must call `canAssign()` |
+|---|---|
+| Employee create | ☐ |
+| Employee edit | ☐ |
+| Onboarding (assigning a new hire to a manager) | ☐ |
+| **Bulk import** | ☐ — **the most likely to create the first cycle** |
+| Any admin/org-chart screen | ☐ |
+
+> **A validator nothing calls is documentation.** The first bulk import that sets
+> managers without it creates exactly the cycle the validator was written to
+> prevent, and team-scope resolution stops terminating.
+
+**Tracked as plan item F-05a**, with "must call `canAssign()`" as an acceptance
+criterion on each path.
+
+---
+
+## G-ORG-02 — the role model has nobody in six of its nine roles · **S3, by design for now**
+
+**0 of 387 users have a `reporting_manager_id`**, and six of the nine roles were
+created empty. Both are **correct** — the columns are new and nothing has assigned
+them yet.
+
+But the consequence is worth stating: **reporting coverage is 0%, so every
+manager-dependent flow is gated off**, and a role model with nobody in it
+demonstrates nothing. Slice 2's demo ("three roles, three different products")
+needs users actually holding those roles, and Slice 3's manager-confirmation step
+needs a reporting line that exists.
+
+**The assignment mechanism — bulk and individual, for `reporting_manager_id` and
+`head_user_id` — is tracked as plan item F-05b.** It was not in the plan before
+this review; it is now.
+
+---
+
 ## G-SEC-12 — caller-supplied audit provenance · **S1** · ✅ **CLOSED 2026-08-07** (`d70a204c`)
 
 **`created_by` / `updated_by` taken from the request body.** S-3 found the pattern

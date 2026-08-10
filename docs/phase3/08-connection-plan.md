@@ -501,7 +501,9 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 | F-02 | `certification_type` + `certification_competency_map` | G-CERT-01 | 3, 8 | **M** · §10.1 DDL, steps 3b/9b | L-09, thread 8 | F-01 | AT-F02 | DB | ✅ **APPLIED** (`7df8c1c7`) |
 | F-03 | **Two** restored tables *(not three — see D-007)* | Q-B5 | 2, 3, 8 | **S** · §4.2 idempotent DDL | evidence projector | — | AT-F03 | DB | ✅ **APPLIED** (`7df8c1c7`) |
 | F-04 | `skill_matrix_item` + `sub_institute_id` | G-DATA-08 | 1, 5, 6 | **M** · step 12 normalisation | guards seeing tenancy | F-01 | AT-F04 | DB | ✅ **APPLIED** (`7df8c1c7`) |
-| F-05 | `reporting_manager_id` + `head_user_id` + cycle validation | Q-B1 | 2, 4, 9 | **M** · `tbluser`, `hrms_departments` migration | every approval flow | — | AT-F05 | DB | Not started |
+| F-05 | `reporting_manager_id` + `head_user_id` + cycle validation | Q-B1 | 2, 4, 9 | **M** · `tbluser`, `hrms_departments` migration | every approval flow | — | AT-F05 | DB | ✅ **APPLIED** (`f293edb0`) |
+| **F-05a** | **Call `ReportingLineValidator::canAssign()` from EVERY write path that sets `reporting_manager_id`** | Q-B1 | 2, 4, 9 | **S** · employee create/edit · onboarding · bulk import · admin screens | the guarantee itself | F-05 | AT-F05a | API | **NOT STARTED — the guarantee is theoretical until this lands** |
+| **F-05b** | **Manager assignment mechanism** — bulk and individual, for `reporting_manager_id` **and** `head_user_id` | Q-B1 | 2, 4, 9 | **M** | Slice 2's demo | F-05, F-05a | AT-F05b | SCREEN | **NOT STARTED** |
 | F-06 | Tri-state rights columns | G-SEC-06 | 9 | **S** · both rights tables | rights population | — | AT-F06 | DB | Not started |
 | F-07a | Text→FK **columns added**, nullable, unread | G-DATA-06 | all | **M** | F-07b | F-01 | AT-F07 | DB | ✅ **APPLIED** (`7df8c1c7`) |
 | F-07b | Text→FK **backfill + unmatched report + drops** | G-DATA-06 | all | **L** · R8 on the drops | joins by key | F-07a | AT-F07b | DB | Not started |

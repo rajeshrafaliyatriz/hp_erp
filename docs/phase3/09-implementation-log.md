@@ -509,6 +509,60 @@ columns into three.
 
 ---
 
+## D-011 · 4b-prep (a) and (b)
+
+**2026-08-07** · commit **`dd25e450`**
+
+### (a) Does §3.1–3.7 carry a Recruiter column? — **NO, and no derivation is needed**
+
+**All seven §3.x tables carry eight columns.** Recruiter is absent from every one.
+
+**But its permissions are already decided** — `03-rbac-matrix.md` **Q-D1**
+(line 736) holds a complete Recruiter table. It is **module-level, not
+screen-level**, which is why it never merged into §3.1–3.7:
+
+| Module | Recruiter |
+|---|---|
+| Talent → Recruitment | **V C E D A** |
+| Talent → Onboarding | V *(handover of hired candidates only)* |
+| Organization → Employee Directory | V *(basic fields only, per A1)* |
+| Competency → Framework & Role Mapping | V *(read required competencies for a requisition)* |
+| Competency → Employee Profiles / ratings | **–** |
+| Talent → Performance | **–** |
+| HRIT → Payroll | **–** |
+| Everything else | – |
+
+**So the gap is a FORMAT gap, not a decision gap.** Recruiter needs expanding from
+8 module rows to per-screen rows for the seed — mechanical, since *"everything else
+= –"*. **No permission is being re-derived.**
+
+⚠️ **For approval before 4b runs:** the expansion itself. Every screen inside the
+four granted modules inherits that module's mark; every other screen is `–`.
+
+### (b) The nine canonical roles — **APPLIED**
+
+| | |
+|---|---|
+| **Changed** | `role_key` + `data_scope` + `is_system` stamped on the three existing profiles; six missing roles created, empty, per tenant |
+| **Files** | `database/seeders/Phase3RoleSeeder.php` |
+| **Verification** | **9 role_keys × 11 tenants** · 99 of 103 profiles keyed · **user assignment unchanged** (employee 238 · administrator 76 · hr_manager 72) |
+| **Acceptance** | Idempotent, re-runnable. **Touches no rights rows** — that is 4b |
+
+Mapping applied as directed: Employee → `employee` (self) · HR → `hr_manager`
+(organization) · Admin → `administrator` (organization). Created empty:
+`reporting_manager` (team), `department_head` (department), `hr_executive`
+(department), `executive`, `auditor`, `recruiter`.
+
+**4 profiles remain unkeyed** — `ZZ Audit Role v2` ×2, `Organization Administrator`,
+`Deparment Administrator` *(sic)*. Left alone deliberately: they are not among the
+nine, and one has a live user. **Flagged, not touched.**
+
+### (c) The screen→menu mapping — **NOT STARTED**
+
+The reviewable deliverable. Next turn.
+
+---
+
 ## R7 applied retroactively — which costs move
 
 **R7: an estimate that does not name the files it touches is a guess.** Every
