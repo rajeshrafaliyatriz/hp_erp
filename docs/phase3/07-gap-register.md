@@ -1121,6 +1121,56 @@ mapping — and checking rather than assuming it is the point.**
 
 ---
 
+# G-SEC-24b - I INTRODUCED C27's DEFECT WHILE FIXING A SECURITY HOLE - **S2** - **FIXED, AND NOW CHECKED**
+
+**At item 46, with every rule and guard in place.** The G-SEC-24 fix resolved the
+identity and then, five lines later, read the tenant from the request:
+
+```php
+$identity = $this->resolveApiIdentity($request);     // authenticated
+...
+$subInstituteId = $request->sub_institute_id ?? $request->header(...);  // then trusted the caller
+```
+
+**Authenticated, then trusted the caller's tenant.** C27's exact class - *trait
+present, still reads from request* - written by me, during a fix for the same
+family of defect.
+
+> **This is not a lapse to apologise for. It is evidence that the defect is
+> genuinely easy to write**, which is an argument for A CHECK rather than for more
+> care.
+
+## The check now exists, and it would have caught it as it was typed
+
+Added to the smoke suite: **no method that resolves an identity may also read
+`sub_institute_id` or `user_profile_name` from the request.** Static, cheap, runs
+in the standard 70-second pass.
+
+### Two refinements the first version needed - both from its own false positives
+
+1. **`user_id` EXCLUDED.** The first version flagged 9 methods; **8 were reading
+   `user_id` as a legitimate SUBJECT** (the person being assessed). That is
+   G-SEC-12's own IDENTITY vs SUBJECT distinction, and flagging it would cry wolf
+   on eight valid methods until the check was ignored.
+2. **COMMENTS STRIPPED.** The 9th - `LmsLearningController::isInstructor` - matched
+   a **comment describing a defect that had already been fixed**. *A pattern that
+   reads prose is not reading code.*
+
+**After both: 0 offenders. The suite is GREEN at 25 checks.**
+
+## A related discipline, from the restore that silently missed
+
+`restore.py` searched for `$request->sub_institute_id;` against a file reading
+`$request->sub_institute_id ?? $request->header(...)`. **It matched nothing,
+reported nothing, and restored nothing** - the fourth pattern-match failure of the
+session.
+
+**R16's extension now applies to RESTORES as well as sweeps:** validate the
+pattern against a known positive before trusting a zero result, and **a restore
+that finds nothing must say so loudly rather than completing quietly.**
+
+---
+
 # G-DASH-01 - THE TEXT JOINS ARE OVER-COUNTING TODAY, NOT JUST FRAGILE - **S1**
 
 **Found by the equivalence check L-11's conversion required, before converting

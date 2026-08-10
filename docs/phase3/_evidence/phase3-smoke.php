@@ -318,6 +318,58 @@ check('slice1', 'rename: DASHBOARD counts still resolve', function () {
 /* ══════════════════════════ STATIC ══════════════════════════ */
 echo "\nSTATIC\n";
 
+check('static', 'no method resolves identity then reads request tenant', function () {
+    // G-SEC-24b. I WROTE THIS DEFECT AT ITEM 46, with every rule in place: the
+    // fix resolved the identity and then five lines later read the tenant from
+    // the request. Authenticated, then trusted the caller's tenant - C27's class,
+    // introduced DURING a security fix.
+    //
+    // It is easy to write, which is the argument for a CHECK rather than more
+    // care. This is that check, and it would have caught it as it was typed.
+    $resolvers = '/\$this->(resolveApiIdentity|lmsIdentity|competencyContext|leaveContext|attendanceContext|taskContext)\s*\(/';
+    // TENANT and ROLE only. `user_id` from a request is often a legitimate
+    // SUBJECT (the person being assessed) - G-SEC-12's own IDENTITY vs SUBJECT
+    // distinction. Flagging it would cry wolf on 8 valid methods.
+    $fromRequest = '/\$request->(sub_institute_id|user_profile_name)\b|input\(\s*[\'"](sub_institute_id|user_profile_name)[\'"]\s*\)|header\(\s*[\'"]sub_institute_id[\'"]\s*\)/';
+
+    $files = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator('C:/Users/MILAN/Downloads/hp_erp/app/Http/Controllers'));
+    foreach ($it as $f) {
+        if ($f->getExtension() === 'php') $files[] = $f->getPathname();
+    }
+
+    $offenders = [];
+    foreach ($files as $path) {
+        $src = file_get_contents($path);
+        // STRIP COMMENTS FIRST. The first version matched a COMMENT describing a
+        // defect already fixed (LmsLearningController::isInstructor) and reported
+        // it as live. A pattern that reads prose is not reading code.
+        $src = preg_replace('#/\*.*?\*/#s', '', $src);
+        $src = preg_replace('#^\s*//.*$#m', '', $src);
+        if (!preg_match($resolvers, $src)) continue;
+
+        // split into method bodies - crude but sufficient: a method starts at
+        // "function name(" and ends at the next one.
+        $parts = preg_split('/(?=\n    (?:public|private|protected)\s+function\s)/', $src);
+        foreach ($parts as $body) {
+            if (!preg_match($resolvers, $body)) continue;
+            if (!preg_match($fromRequest, $body, $m)) continue;
+            preg_match('/function\s+(\w+)\s*\(/', $body, $fn);
+            $offenders[] = basename($path) . '::' . ($fn[1] ?? '?') . ' (' . trim($m[0]) . ')';
+        }
+    }
+
+    // KNOWN-POSITIVE VALIDATION (R16 extension): the pattern must be able to see
+    // the shape it is looking for, or a zero result means nothing.
+    $probe = '<?php function x($request){ $i = $this->resolveApiIdentity($request); $t = $request->sub_institute_id; }';
+    $sees = preg_match($resolvers, $probe) && preg_match($fromRequest, $probe);
+    if (!$sees) return ['SKIPPED', 'pattern failed its own known-positive - a zero result would be meaningless'];
+
+    return [$offenders ? 'FAIL' : 'PASS',
+        $offenders ? count($offenders) . ': ' . implode(' | ', array_slice($offenders, 0, 3))
+                   : 'no method mixes resolved identity with a request-supplied tenant'];
+});
+
 check('static', 'php -l on changed controllers/services', function () {
     $files = array_merge(
         glob('C:/Users/MILAN/Downloads/hp_erp/app/Services/Events/*.php'),

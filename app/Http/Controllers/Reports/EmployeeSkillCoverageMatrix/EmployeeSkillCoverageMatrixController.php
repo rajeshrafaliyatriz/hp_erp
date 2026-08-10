@@ -99,7 +99,9 @@ class EmployeeSkillCoverageMatrixController extends Controller
             return $identity;
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        // Tenant from the RESOLVED IDENTITY, never the request (C27: a trait
+        // being present is not the same as it being used).
+        $subInstituteId = $identity['sub_institute_id'];
 
         try {
             $department = $request->query('department', 'all');
@@ -228,7 +230,9 @@ class EmployeeSkillCoverageMatrixController extends Controller
             return $identity;
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        // Tenant from the RESOLVED IDENTITY, never the request (C27: a trait
+        // being present is not the same as it being used).
+        $subInstituteId = $identity['sub_institute_id'];
 
         try {
             $department = $request->query('department', 'all');

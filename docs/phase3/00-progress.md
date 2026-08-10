@@ -317,6 +317,17 @@ this rule was introduced: twelve security fixes were in the register and in git 
 had never been written to the log. **Report the reconciliation in the status line
 each time.**
 
+**R18f(v) - BEFORE ANY `git checkout`, `git restore` OR REVERT, RUN `git status`
+ON THAT FILE.** If it shows PRE-EXISTING modification, **STOP AND ASK**. "Git
+revert is the recovery" was written for files I had just edited; on a file
+carrying someone else's uncommitted work **it destroys two people's changes at
+once**, which is what happened to
+`EmployeeSkillCoverageMatrixController.php`.
+
+**R16(iii) - APPLIES TO RESTORES TOO.** Validate the pattern against a known
+positive before trusting a ZERO result, and **a restore that finds nothing must
+say so loudly rather than completing quietly.**
+
 **R18f - BULK DOCUMENT EDITS: FOUR RULES.**
 
 Written after ONE edit produced TWO failure modes at once, neither announcing
@@ -671,8 +682,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **46** ·
-`09-implementation-log.md` entries = **46** · **AGREE.** · plan file **16 of 59 done** (R18c(iii))
+**RECONCILIATION (R18, every write):** queue "done" rows = **47** ·
+`09-implementation-log.md` entries = **47** · **AGREE.** · plan file **16 of 59 done** (R18c(iii))
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 

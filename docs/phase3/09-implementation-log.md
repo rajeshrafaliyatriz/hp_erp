@@ -1614,3 +1614,29 @@ question that prompted it**, and it was not knowable before this ran.
 for exactly what it tests.
 
 **3 files** (R18d).
+
+
+## D-047 - G-SEC-24b: the defect I wrote, and the check that now catches it
+
+**I introduced C27's class while fixing G-SEC-24** - resolved the identity, then
+read the tenant from the request five lines later. Fixed: both guarded methods
+take the tenant from `$identity`.
+
+**The static check is the real deliverable.** No method that resolves an identity
+may read `sub_institute_id` or `user_profile_name` from the request. It needed two
+refinements, both found by its own false positives: **`user_id` excluded** (8 of 9
+hits were legitimate SUBJECT reads - G-SEC-12's own distinction) and **comments
+stripped** (the 9th matched prose describing an already-fixed defect).
+
+**Smoke: 25 checks, GREEN.**
+
+### The wider-class scope, resolved from 29 candidates
+
+- **2 excluded**: commented-out joins in `skillLibraryController`.
+- Remaining sites still need both-sides-tenant-scoped confirmation before the
+  count is a finding rather than a candidate set (R6). **Not yet done.**
+
+**Rules added:** R18f(v) - check `git status` before any revert; R16(iii) - the
+known-positive rule applies to restores, and a zero result must announce itself.
+
+**3 files** (R18d).
