@@ -1121,6 +1121,64 @@ mapping — and checking rather than assuming it is the point.**
 
 ---
 
+# L-11's WIDER CLASS - THE CHECKER WAS WRONG THREE TIMES. **THE COUNT IS NOT A FINDING.**
+
+**I was one command away from converting four joins that were already correct.**
+Stopped by reading the code at each site instead of trusting the count.
+
+## The sequence: 29 -> 13 -> 4 -> **0 verified outside the dashboards**
+
+| Stage | Count | What removed the rest |
+|---|---:|---|
+| raw pattern | 29 | - |
+| minus commented-out | 27 | - |
+| minus one-side-global | 19 | the both-sides check (correct, and predicted) |
+| minus `.id` key joins | **13** | filter excluded `_id` but not a bare `id` - **9 key joins reported as text joins** |
+| minus foreign-work files | 4 convertible | `jobrolecontroller` carries uncommitted work |
+| **minus false positives found by READING** | **0** | see below |
+
+## The three checker flaws, each found only by reading the site
+
+1. **SINGLE-LINE MATCHING.** `AJAXController:1112` and `:1116` DO carry tenant
+   conditions - on the NEXT line:
+   ```php
+   $join->on('us.skill', '=', 'u.title')
+        ->on('us.sub_institute_id', '=', 'u.sub_institute_id');   // <- never seen
+   ```
+   A multi-line ON clause looked bare to a line-at-a-time pattern.
+
+2. **FILE-WIDE ALIAS MAP.** `AJAXController:834` joins **`s_jobrole` - the GLOBAL
+   library** - to `s_user_skill_jobrole`. The alias `s` is bound twice in that
+   file (`s_jobrole` and `s_skill_knowledge_ability`); my map kept the last, so a
+   global-table join was scored as tenant-scoped. **Aliases are scoped to a query,
+   not to a file.**
+
+3. **whereColumn WITHOUT ITS SIBLING CLAUSE.** `CommandCenterService:72` pairs
+   `whereColumn('sj.jobrole','jr.jobrole')` with
+   `->where('sj.sub_institute_id', $subInstituteId)` two lines down, inside the
+   same EXISTS. Tenant IS applied.
+
+## What survives, and on what evidence
+
+**Only `CompetencyDashboardController`'s 4 sites - and they survive because they
+were MEASURED, not matched:** 4,716 roles by text vs 4,393 by key, with 161,695
+of 253,479 joined rows cross-tenant (G-DASH-01). **That is data, not a pattern.**
+
+> **The wider class does not exist on current evidence.** 29 candidates produced
+> **zero** verified findings outside the file already known from measurement.
+>
+> **A count from a pattern is not a finding count**, and this is the strongest
+> instance of that in the phase: three independent flaws, each invisible to the
+> others, all pointing the same way - **over-reporting.**
+
+## The rule this earns
+
+**Before converting ANY site a pattern found, read the site.** The both-sides
+check turned 29 into 13 and felt like verification; it was still pattern work.
+**Only reading the four lines around each join produced the truth.**
+
+---
+
 # G-SEC-24b - I INTRODUCED C27's DEFECT WHILE FIXING A SECURITY HOLE - **S2** - **FIXED, AND NOW CHECKED**
 
 **At item 46, with every rule and guard in place.** The G-SEC-24 fix resolved the
