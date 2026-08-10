@@ -526,6 +526,30 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 
 ## Tier 3 — Connections
 
+### C-T3-ONT · Wire the ontology graph to real adjacency · **M**
+
+**Re-filed from F-6's replacement.** No longer a rebuild of a deleted screen —
+an **enhancement of a screen we have decided to keep** (D-012).
+
+**Today** the graph is a third-party reference view: adjacency is not computed
+from our data, and only `sub_institute_id` is sent to an external host.
+
+**Target:** adjacency computed from **`jobrole_competency_map`** — one of the five
+join tables created in the Phase 3 foundation migration (D-007) — so the graph
+shows *this organisation's* role/competency structure.
+
+**Blocked on:** `jobrole_competency_map` being populated. That is **F-07b's
+backfill**, already queued.
+
+**Cost — M.** Endpoint returning nodes/edges from the join table, a swap of the
+iframe for an in-app graph, and the existing screen's loading/error states reused.
+**The external host and the tenant-id-in-URL question both disappear with it**,
+which is the second reason to do it.
+
+**Until then the interim label (D-012, Check B) is what prevents the screen from
+being read as organisational fact.**
+
+
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | L-01 | `department_id` from the Job Role form | G-LIB-01 | 1 | **XS** *(after X-03)* · `library-config.ts` | — | X-03 | AT-L01 | SCREEN | Not started |

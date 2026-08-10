@@ -722,3 +722,52 @@ once.
 **The C19 decision is worth more than it looked.** It converts L-01, L-02 and L-04
 from three bespoke S–M changes into one M–L mechanism plus three configuration
 entries — and every later entity binding after that is configuration too.
+
+
+---
+
+## D-012 · F-6 CANCELLED — Taxonomy Ontology (menu 43) is KEPT
+
+**Decision, 2026-08-10: we want the ontology screen.** F-6 is **cancelled, not
+deferred** — there is no pending removal and no scheduled revisit.
+
+**Consequences, all three applied:**
+
+1. The instruction to drop menu 43 from the seed is **withdrawn**. The grant
+   stands **as §3.x specifies** — Employee holds `V` on menu 43 in the applied
+   4b seed. Nothing else about 4b changed.
+2. **R8's pre-deletion checklist for F-6 is closed out.** A checklist that guards
+   a deletion has nothing to guard once the deletion is cancelled.
+3. The registered replacement is **re-filed as an ENHANCEMENT of this screen**,
+   not a rebuild of a deleted one. See C-T3-ONT below.
+
+### Check A — what the iframe loads
+
+`components/domain/competency/cm-taxonomy-ontology.tsx:28`
+
+| Question | Answer |
+|---|---|
+| Host | **`https://skill-ontology-neo4j.vercel.app` — EXTERNAL**, a third-party Vercel deployment, not ours |
+| Employee identifier passed? | **No** |
+| Tenant identifier passed? | **YES** — `:50` builds `?sub_institute_id=${encodeURIComponent(subInstituteId)}` |
+
+**So a tenant identifier leaves our origin, in the URL, to a third-party host on
+every load of this screen.** That host also sees the customer's IP. **This is the
+same question already answered for the Skills and Pal links under Q-A5, and a
+corporate security review will ask it.**
+
+**What is already right**, and should not be re-litigated: the iframe carries
+`sandbox` **without** `allow-same-origin`, so it cannot reach our cookies or DOM,
+and `referrerPolicy="no-referrer"`, so our own URLs do not leak. The exposure is
+the tenant id and the request itself, not the session.
+
+### Check B — the original concern survives the decision
+
+**Keeping the screen is fine. Keeping it UNLABELLED is the risk.** It shows
+adjacency **not derived from our mapping data**, so a user may reasonably believe
+it reflects their organisation when it does not.
+
+**Interim, now: label it plainly as a reference/example view.** One component,
+one banner — **S**.
+
+**The real fix is registered as C-T3-ONT.**
