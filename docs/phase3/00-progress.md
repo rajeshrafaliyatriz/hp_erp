@@ -283,7 +283,7 @@ frontend consumers after a server change · **R10** name the proxy · **R11**
 verify scope-shrinking assumptions **before** using them · **R12** land a queued
 item every turn *(a turn spent entirely on an incident counts as landed work,
 provided the incident is reported and closed)* · **R13** standing authority · **R14** turns end at boundaries ·
-**R15** assert the column exists · **R16** every sweep names a known-positive — **the rule with the best strike rate: it caught S-2's 111 phantom endpoints AND G-SEC-23's under-count, two of the three most consequential measurement errors of the phase** ·
+**R15** assert the column exists · **R16** every sweep names a known-positive - **and when the property is "every X", the EXTRACTION must be validated against a known-positive list BEFORE it is trusted: pick two or three instances by eye, confirm the pattern finds them, then run.** The vocabulary rename took three passes because the property was "every user-visible string" and the proxy was "strings shaped like these two patterns" - the third pattern-shaped extraction to under-report this session — **the rule with the best strike rate: it caught S-2's 111 phantom endpoints AND G-SEC-23's under-count, two of the three most consequential measurement errors of the phase** ·
 **R17** check your own artefacts before writing a new script · **R18** commit
 `docs/phase3/` after every write to this file, **and assert after every write that
 the file is non-empty and still contains an expected marker line**.
@@ -618,8 +618,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **42** ·
-`09-implementation-log.md` entries = **42** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **43** ·
+`09-implementation-log.md` entries = **43** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 

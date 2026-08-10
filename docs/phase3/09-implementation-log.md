@@ -1406,3 +1406,52 @@ broader grep afterwards, then a third pass found two more in the command centre.
 the property.
 
 **2 files** (R18d).
+
+
+## D-043 - Slice 1b item 8: the employee's own capability view
+
+`services/competency/gap.ts` + `components/domain/competency/cm-my-capability.tsx`.
+Menu 156, re-granted in 4b.
+
+### The security property, verified with a COLLEAGUE'S id
+
+| Employee 2 asks for | Result |
+|---|---|
+| their OWN gap | **200** |
+| **a colleague's gap** | **403** - *"You may only access your own competency profile."* |
+| a stranger's id | **404** |
+
+Verified through the real request path, not from the UI. **The screen does not
+police this; the server does.**
+
+### Unmeasured is neither zero nor pass - and it matters most here
+
+A person reading their own record **must never see "0" and take it for a failing
+score when it means nobody has assessed them.**
+
+Unmeasured rows render **"Not yet assessed"** - no number, no bar, no red, and a
+neutral slate rather than amber. The coverage column shows an em-dash rather than
+0%. Only a MEASURED shortfall is amber.
+
+### Coverage travels with the level
+
+Coverage is **a column, not a footnote**. A level is never shown without how much
+of the competency's weight it speaks for - a 4 measured on 20% of a competency is
+not a 4.
+
+### Tone, since coverage is 2.7% today
+
+Most employees will see mostly unmeasured, so the banner states it plainly and
+neutrally: *"N of M competencies have not been assessed yet. That is not a score
+of zero and not a shortfall."* The empty state says the requirements are not set
+up **rather than implying the person is lacking**.
+
+### The second number is listed, not folded in
+
+`mandatory_below_required` renders as its own section: an average can sit above
+the bar while an item inside it does not.
+
+**No arithmetic in the client.** Every number comes from the API, which gets it
+from ProficiencyService - still the one named roll-up.
+
+**2 files** (R18d), frontend only.
