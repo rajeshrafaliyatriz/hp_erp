@@ -942,3 +942,39 @@ yet, so replay-mode reactor dispatch is untested** - it is specified and unbuilt
 not assumed working.
 
 **6 files** (R18d): 1 migration + 3 app + 2 docs.
+
+
+## D-032 · Item 6, slice 3 — the event catalogue
+
+`EventCatalogue` encodes §2.1 and §2.2 as code. It is a class, not a table,
+because these are **design decisions, not tenant data**: a tenant cannot make a
+reactor replayable.
+
+**15 shipped events · 32 consumer rows · 0 blank `kind` · 5 projectors · 9 reactors.**
+
+**Three invariants enforced by `assertInvariants()`, not by review** - ALL PASS:
+
+1. **`kind` on every consumer row.** P or R, never blank.
+2. **Named-consumer test.** 0 shipped events with no consumer.
+3. **No reactor downstream of a projector.** `AuditLogProjector` is the only built
+   projector and was checked directly: it touches nothing outside its own table.
+
+A fourth invariant emerged while writing it and is enforced too: **a consumer
+cannot be P in one event and R in another.** Replay safety is a property of the
+CONSUMER, not of the pairing - and a split kind would make rebuild safe for one
+event and unsafe for another under the same name.
+
+**Failed the named-consumer test, kept visible so nobody re-proposes them:**
+
+| Event | Verdict | Trigger |
+|---|---|---|
+| `task.assigned` | DEFERRED | readiness gate: **task_hygiene** |
+| `task.overdue` | DEFERRED | readiness gate: **task_hygiene** - would fire **2,245 times today** |
+| `task.completed` | DROPPED | no consumer DOES anything |
+| `competency.gap_detected` | DROPPED | gaps are DERIVED; the gap is a query, not an event |
+
+**Every deferred event carries a trigger, and the invariant check fails the build
+if one does not** - an event deferred without a trigger is one nobody will
+remember to enable.
+
+**2 files** (R18d): 1 app + 1 doc.

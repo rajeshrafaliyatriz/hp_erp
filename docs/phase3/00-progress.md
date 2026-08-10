@@ -618,8 +618,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **31** ·
-`09-implementation-log.md` entries = **31** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **32** ·
+`09-implementation-log.md` entries = **32** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -633,7 +633,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | 4a | Tri-state rights columns | ✅ `5e302651` |
 | **4b** | **Populate the rights matrix** | ✅ **APPLIED** `5af9b26a` — 5,621 rows, 99 profiles, 0 orphans. Nine roles render through the real path (R9). Administrator retains 1/8/23 |
 | 5 | `reporting_manager_id` + `head_user_id` + cycle validation | ✅ `f293edb0` |
-| **6** | **Event store + projector/reactor split + `task_status_history`** | 🔄 **SLICES 1–2 DONE** (store D-030; `g2g_audit_log` projection + `TaskAuditService` converted to emit, D-031). Slice 3 catalogue, slice 4 `task_status_history` + replay procedure |
+| **6** | **Event store + projector/reactor split + `task_status_history`** | 🔄 **SLICES 1–3 DONE** (store D-030; `g2g_audit_log` projection + `TaskAuditService` converted to emit, D-031). catalogue D-032. **Slice 4 next:** `task_status_history`, §6.2 replay procedure, and the first REACTOR with its throw-on-replay test |
 | **F-07b** | Backfill + unmatched report + drops (R8) | **NOT STARTED — after item 6** |
 
 ### SECURITY STREAM — **16 fixes shipped**. **THE PAUSE IS NOW IN FORCE.**
@@ -676,6 +676,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | The **write-verb probe** | Needs the two-tenant precondition answered **and** an isolation approach approved before running. **The untested write half is 3 for 3 on real findings** |
 | G-NAV-02 + nine-token harness | One-line fix; harness must change in the same commit or verification breaks silently |
 | ~~`ResolvesLmsIdentity:101`, `LmsLearningController:1537`~~ | ✅ **DONE** — G-AUTH-02 |
+| **SHAPE-02** — *a sentinel value is a schema saying something it was not designed to say* (`task_id = 0` meaning "configuration"). Filed with 1 instance; sweep on Triz's call | not swept |
 | SHAPE-01 sweep | *"Trusted because of where it came from"* — filed with 2 instances, sweep on Triz's call |
 | G-SEC-16 | **Capacity workstream, not security** — ~100 unbounded queries; heaviest six first, **plus `api/templates/{id}/versions` which returned 3.4 MB in ONE response** |
 | F-05a / F-05b | `canAssign()` unused (G-ORG-01); no manager-assignment mechanism (G-ORG-02) |
