@@ -440,6 +440,28 @@ plan** — the first thing in this phase a person will see.
 
 ---
 
+# G-NAV-02 — THE SIDEBAR ENDPOINT TAKES profile_id FROM THE REQUEST · **S3**
+
+Found while building the R9 harness, not by looking for it.
+
+`tblmenumasterG2gController::displaySidebarMenu:32` reads
+`$profile_id = $request->input('profile_id')` and the guard (`:326`) checks only
+that **a** valid token was supplied — **never that the caller holds that profile.**
+
+Any authenticated user can request **any** profile's sidebar.
+
+**S3, not S1**, and the reason matters: the sidebar is a **display** control. It
+returns menu structure, not records. Every finding above concerns endpoints that
+return or write **data**, and those enforce — or fail to enforce — independently.
+Ranking this with them would misrepresent both.
+
+**Same class as the subject-from-request findings**, and it is the reason the R9
+harness can vary `profile_id` on one token to check nine roles. **The defect is
+what makes the test convenient**, which is worth stating plainly rather than
+quietly relying on.
+
+---
+
 # G-SEED-01 — THE MARK PARSER READ QUALIFIER TEXT AS PERMISSIONS · **S1, CAUGHT PRE-APPLY**
 
 **Found by inspecting Employee's AFTER list by name** — Learning Dashboard showed
