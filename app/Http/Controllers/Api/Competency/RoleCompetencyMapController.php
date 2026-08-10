@@ -38,6 +38,10 @@ use Illuminate\Support\Facades\Validator;
  * A user CAN trip that key by mapping the same competency twice, so it is
  * checked here and answered with a sentence - a raw SQLSTATE reaching a user is
  * the API failing to own its own schema.
+ *
+ * store() is a SYNC, not an append: competencies absent from the payload are
+ * REMOVED from that role. Without it a dropped requirement would persist and
+ * every later gap would include something nobody asked for.
  */
 class RoleCompetencyMapController extends Controller
 {
@@ -155,7 +159,20 @@ class RoleCompetencyMapController extends Controller
             ], 422);
         }
 
-        $written = DB::transaction(function () use ($request, $sid, $actor, $jobroleId) {
+        $result = DB::transaction(function () use ($request, $sid, $actor, $jobroleId, $seen) {
+            // SYNC SEMANTICS, not append.
+            //
+            // The first version only added and updated, so a competency DROPPED
+            // from a role's list survived forever and every later gap
+            // calculation included a requirement nobody asked for. Rows absent
+            // from the payload are removed - scoped to THIS role and THIS
+            // tenant, never wider.
+            $removed = DB::table('jobrole_competency_map')
+                ->where('sub_institute_id', $sid)
+                ->where('jobrole_id', $jobroleId)
+                ->whereNotIn('competency_id', array_keys($seen))
+                ->delete();
+
             $n = 0;
             foreach ($request->input('items') as $item) {
                 DB::table('jobrole_competency_map')->updateOrInsert(
@@ -174,13 +191,15 @@ class RoleCompetencyMapController extends Controller
                 $n++;
             }
 
-            return $n;
+            return ['written' => $n, 'removed' => $removed];
         });
 
         return response()->json([
             'status'  => 1,
             'message' => 'Requirements saved.',
-            'data'    => ['jobrole_id' => $jobroleId, 'written' => $written],
+            // `removed` is reported because a silent deletion is worse than none:
+            // the caller can see that dropping an item from the list took effect.
+            'data'    => ['jobrole_id' => $jobroleId] + $result,
         ], 201);
     }
 

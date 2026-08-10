@@ -618,8 +618,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **39** ·
-`09-implementation-log.md` entries = **39** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **40** ·
+`09-implementation-log.md` entries = **40** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -672,7 +672,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
 | Item | Trigger |
 |---|---|
-| **Rename the Competency Library screen's vocabulary to Skill** — one pass (S). Today the product has one concept wearing the wrong name (G-RBAC-02b) | **item 2 shipped** |
+| **Rename the Competency Library screen's vocabulary to Skill** — one pass (S) | **NEXT IN THE QUEUE** — item 9 is done, so this is no longer 'eligible', it is scheduled |
 | **Semantic event/plan reconciliation** (G-RECON-01) — read each of the plan's ~45 items and ask what state change it implies | **when Tier 3 connection work starts** |
 | Dept Head + Reporting Manager re-grants | reporting-line **coverage** (G-ORG-02) |
 | `task.assigned`, `task.overdue` events | readiness gate: **task_hygiene** |

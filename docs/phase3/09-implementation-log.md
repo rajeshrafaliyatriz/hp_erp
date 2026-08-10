@@ -1287,3 +1287,74 @@ row (G-RBAC-02b).
 Test rows removed.
 
 **hp_erp 4 files · g2gv0 2 files** (R18d).
+
+
+## D-040 · Slice 1, items 5-7 and 9 — the chain closes
+
+### The upsert question, answered from the code: IT DID NOT HANDLE REMOVAL
+
+`store()` looped the payload calling `updateOrInsert` and **never touched rows
+absent from it**. A competency dropped from a role's list would have **survived
+forever**, and every later gap would have included a requirement nobody asked for.
+
+**Fixed in item 3, not discovered in item 7.** `store()` is now a **SYNC**: rows
+absent from the payload are removed, scoped to that role and tenant, never wider.
+`removed` is returned in the response - **a silent deletion is worse than none.**
+
+### Item 5 — `competency_kasba_rating`
+
+Per KASBA item, per employee. **Tenant column from the start** (G-DATA-08): this
+is measurement data and it decides readiness.
+
+**No row means UNMEASURED.** There is deliberately no "not measured" value -
+absence is the state, because **0 is a score and absence is not**.
+
+### Item 6 — `ProficiencyService`, THE ONE NAMED ROLL-UP
+
+**Verified, not assumed.** Only two other files mention the KASBA tables and
+**both mentions are comments**. Nothing else reads ratings; nothing else averages.
+
+**Unmeasured items are EXCLUDED from the weighted average** - averaging them as
+zero understates, treating them as met overstates. The service returns
+`measured_weight`, `total_weight` and `coverage` alongside the level, because
+**a level without its coverage is not interpretable**. Nothing measured returns
+**level NULL, not 0**.
+
+### Item 7 — the gap, TWO NUMBERS
+
+1. the weighted roll-up; **2.** the list of **mandatory ITEMS** below required.
+An average of 3.4 against a required 3 reads as met while an item inside it sits
+at 1 - **one number would lose that.**
+
+Three states kept apart: `met`, `gap`, **`unmeasured`**. Unmeasured is **not a
+gap** (asserting a shortfall nobody measured) and **not met** (asserting a pass
+nobody earned).
+
+### Item 9 — THE PROOF, run end to end
+
+```
+employee 2, job role 15 = "Finance Manager"
+1. define competency        HTTP 201
+2. map to role (required 3) HTTP 201  written=1 removed=0
+3. gap BEFORE rating        state=unmeasured  level=NULL  gap=NULL  coverage=0
+   unmeasured count         1 of 1
+4. rate the SKILL item at 1 (other two items stay UNRATED)
+5. gap AFTER rating         required=3  measured=1  GAP=2  state=gap
+   coverage=0.5            <- the level speaks for half the competency
+   mandatory items below required: 1  (skill rated 1, required 3)
+6. RENAMED the job role to "Finance Manager — RENAMED"
+   (a) mapping holds         YES
+   (b) gap still computes    YES  required=3 measured=1 gap=2
+   (c) rating still resolves YES
+```
+
+**All three legs, not just the mapping.** Name restored, test rows removed.
+
+### A defect found by running it
+
+`CompetencyGapController` first resolved the employee's role from
+**`s_user_jobrole_map` - a table that does not exist.** The real link is
+`tbluser.allocated_standards` (287 of 387 populated). **Caught by executing, not
+by review.**
+
+**8 files** (R18d): 1 migration + 3 app + 1 evidence + routes + 2 docs.

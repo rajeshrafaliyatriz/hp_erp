@@ -364,6 +364,10 @@ Route::get('/competency/employee-profiles/{id}/career-path', [EmployeeCompetency
  * Distinct from /competency/competencies above, which serves the SKILL library
  * (s_users_skills). Writes are HR/Admin only; the gate is RequireProfile, exact
  * role_key matching since G-AUTH-02. */
+/* SLICE 1 item 7 - THE GAP. Read-only, so no profile gate: an employee may read
+ * their OWN gap (competencySubject), anyone else needs an elevated role_key. */
+Route::get('/competency/gap', [\App\Http\Controllers\Api\Competency\CompetencyGapController::class, 'show']);
+
 /* SLICE 1 item 3 - what a job role REQUIRES. jobrole_competency_map holds NO
  * text key, which is what makes the rename proof possible. Writes are HR/Admin. */
 Route::get('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'index']);
