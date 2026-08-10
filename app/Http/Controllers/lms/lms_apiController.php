@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\lms;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\lms\answermasterModel;
 use App\Models\lms\lmsOnlineExamAnswerModel;
 use App\Models\lms\lmsOnlineExamModel;
@@ -20,12 +21,19 @@ use function App\Helpers\aut_token;
 
 class lms_apiController extends Controller
 {
+    // Was GenTux\Jwt\GetsJwtToken. That package is absent from
+    // composer.json and not installed, so this class could not be
+    // loaded at all - fatal on every request, and fatal for
+    // route:list / route:cache application-wide. Authentication now
+    // uses Sanctum, like the rest of the codebase.
+    use ResolvesApiIdentity;
+
     // use GetsJwtToken;
 
     public function studentVirtualClassroomAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -52,7 +60,7 @@ class lms_apiController extends Controller
     public function studentPortfolioAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -94,7 +102,7 @@ class lms_apiController extends Controller
     public function studentSocialCollabrativeAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -121,7 +129,7 @@ class lms_apiController extends Controller
     public function studentSubjectAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
 
                 return response()->json($response, 401);
@@ -148,7 +156,7 @@ class lms_apiController extends Controller
     
     public function studentContentAPI(Request $request) {
        try {
-            if (!$this->jwtToken()->validate()) {
+            if (!$this->apiTokenIsValid()) {
                 $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
                 return response()->json($response, 401);
             }
@@ -184,7 +192,7 @@ class lms_apiController extends Controller
     public function studentQuestionPaperListAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -213,7 +221,7 @@ class lms_apiController extends Controller
     public function studentQuestionPaperAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
 
                 return response()->json($response, 401);
@@ -278,7 +286,7 @@ class lms_apiController extends Controller
     public function studentAssessmentAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -359,7 +367,7 @@ $data['attempted_data'][$key]['PROGRESSBAR_DATA'][$pval['parent_name']][] = $pva
     public function studentLeaderBoardAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
 
                 return response()->json($response, 401);
@@ -384,7 +392,7 @@ $data['attempted_data'][$key]['PROGRESSBAR_DATA'][$pval['parent_name']][] = $pva
     public function studentTransportAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -436,7 +444,7 @@ t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_nam
     public function studentActivityStreamAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -462,7 +470,7 @@ t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_nam
     public function studentBookListAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -488,7 +496,7 @@ t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_nam
     public function studentSyllabusAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -515,7 +523,7 @@ t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_nam
     public function studentQuestionPaperSaveAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
 
                 return response()->json($response, 401);
@@ -606,7 +614,7 @@ t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_nam
     public function studentAssessmentDetailAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
 
                 return response()->json($response, 401);
@@ -685,7 +693,7 @@ GROUP BY am.question_id,a.question_id
     public function lmsCategorywiseSubjectAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
 
                 return response()->json($response, 401);

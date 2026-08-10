@@ -14,6 +14,33 @@ use function App\Helpers\is_mobile;
 
 class lmsmappingController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
+    /**
+     * The caller's own organisation. NEVER a literal.
+     *
+     * G-SEC-17. These controllers assigned `$sub_institute_id = 1` outright -
+     * not as a fallback - so any caller reaching the affected method read
+     * TENANT 1's content whatever tenant they belonged to. chapterController
+     * hardcoded the ROLE alongside it (`$user_profile_name = 1`).
+     *
+     * The token wins when one is present; the session is used for the Blade
+     * screens that have no token. When neither identifies the caller this
+     * returns null, so every `where sub_institute_id = ?` matches NOTHING -
+     * failing closed, the same contract ResolvesApiIdentity documents.
+     */
+    private function resolvedTenantId($request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return (int) $fromToken;
+        }
+
+        $fromSession = $request->session()?->get('sub_institute_id');
+
+        return $fromSession ? (int) $fromSession : null;
+    }
+
     /**
      * Display a listing of the resource.
      *
@@ -91,7 +118,7 @@ class lmsmappingController extends Controller
     }
     public function getDataPre($request)
     {
-        $sub_institute_id = 1;
+        $sub_institute_id = $this->resolvedTenantId($request);
         $final_data = $res['chapter_topic_data'] = $data = array();
 
         $extra = "";
@@ -152,7 +179,7 @@ class lmsmappingController extends Controller
     public function create(Request $request)
     {
         $type = $request->input('type');
-        $sub_institute_id = 1;
+        $sub_institute_id = $this->resolvedTenantId($request);
 
         $data = array();
         if ($request->has('chapter_id')) {

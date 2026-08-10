@@ -3,9 +3,8 @@
 namespace App\Http\Controllers\lms\content_library;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
-use GenTux\Jwt\GetsJwtToken;
-use GenTux\Jwt\JwtToken;
 use function App\Helpers\is_mobile;
 use Illuminate\Support\Facades\Storage;
 use App\Models\lms\contentLibraryModel;
@@ -17,7 +16,12 @@ use DB;
 
 class contentLibraryController extends Controller
 {
-    use GetsJwtToken;
+    // Replaces GenTux\Jwt\GetsJwtToken. That package is absent from
+    // composer.json and not installed, so this class could not even be
+    // loaded - fatal on every request, and fatal for route:list and
+    // route:cache application-wide.
+    use ResolvesApiIdentity;
+
 
     public function index(Request $request)
     {
@@ -27,7 +31,7 @@ class contentLibraryController extends Controller
         
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);
@@ -75,7 +79,7 @@ class contentLibraryController extends Controller
         
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);
@@ -123,7 +127,7 @@ class contentLibraryController extends Controller
         
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);
@@ -171,7 +175,7 @@ class contentLibraryController extends Controller
        
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);
@@ -288,7 +292,7 @@ class contentLibraryController extends Controller
         // echo "<pre>";print_r($request->all());exit;
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);
@@ -376,7 +380,7 @@ class contentLibraryController extends Controller
         
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);
@@ -464,7 +468,7 @@ class contentLibraryController extends Controller
     //    echo "<pre>";print_r($request->keywords);exit;
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);

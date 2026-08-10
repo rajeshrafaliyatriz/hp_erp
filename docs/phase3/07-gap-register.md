@@ -1086,6 +1086,96 @@ elevated `role_key`.
 
 ---
 
+# G-SEC-18 — **A REQUEST FIELD SWITCHING THE IDENTITY MODEL** · **S1** · the named pattern
+
+Three variants of **one idea**, each found separately, each treated as its own
+incident until now. **They are one pattern, and the sweep should look for the
+pattern — not run three greps.**
+
+> **The caller supplies a field, and the server changes WHO IT THINKS THEY ARE —
+> or whether it asks at all.**
+
+### The three known forms
+
+| # | Form | Instance | What the field does |
+|---|---|---|---|
+| 1 | **Switches the CHECK off** | `if ($type == "API") { …verify token… }` | Omit `type` → **authentication does not run** (G-SEC-13: 46 controllers, 132 unguarded routes) |
+| 2 | **Switches the TENANT by default** | `$sub_institute_id = $request->sub_institute_id ?? 2` | Omit the field → **become tenant 2** (G-SEC-15; `AnalyzeJDController:28` → tenant 3) |
+| 3 | **Switches the IDENTITY by flag** | `if ($request->has('preload_lms')) { $sub_institute_id = 1; $user_profile_name = 1; }` | Set the flag → **become tenant 1 with an elevated role** (G-SEC-17) |
+
+Form 3 is not a fallback at all. It is *"if the caller sets a flag, become tenant 1
+with an elevated role"* — **the identity model itself is selected by the request.**
+
+### The worst instance carries no flag at all
+
+**`lmsmappingController::getDataPre` — `$sub_institute_id = 1;` unconditionally.**
+
+Forms 1 and 2 need the caller to omit something; form 3 normally needs them to set
+something. **This one needs nothing.** Every caller of that method reads tenant 1,
+always, with no parameter involved. There is no attack to construct — it is simply
+what the method does.
+
+### What the sweep looks for, from now on
+
+**One question, not three greps:** *does any request-supplied value reach a
+decision about who the caller is, what tenant they are in, or whether a check
+runs?* Tenant literals, role literals, and guard conditions keyed on a request
+field are all the same finding.
+
+### FIXED — all nine sites of form 3
+
+`resolvedTenantId()` in the six affected controllers: **token first, session for
+the Blade screens that have no token, and `null` when neither identifies the
+caller** — so every `where sub_institute_id = ?` matches nothing. Failing closed,
+the contract `ResolvesApiIdentity` already documents. `chapterController`'s
+hardcoded `$user_profile_name = 1` is resolved from the session the same way.
+
+All six controllers verified to load with the trait resolved.
+
+---
+
+# C23 / C24 — THE THIRD-TENANT BLIND SPOT · recorded against BOTH
+
+**A route pinned to a THIRD tenant is invisible to a two-tenant differential
+test.** It returns the same response as tenant A and as tenant B, so it scores
+**PASS**. C28's marker scan searches only for tenant-B strings, and tenant 1 is
+neither A nor B.
+
+> **Today's verified-green read half has a known shape it cannot detect.**
+
+### Second time the marker set's composition decided what could be seen
+
+| | Limit |
+|---|---|
+| **C28** | Every tenant is seeded from the same global libraries, so no title was unique — markers had to be hand-picked, and personal names excluded |
+| **G-SEC-17** | A route pinned to tenant 1 produces no difference for a comparison set of {A, B} to express |
+
+**Both times the limit was in WHAT WAS COMPARED, not in how.**
+
+> ## A differential test can only see differences its comparison set can express.
+
+### The fix needs both legs — neither covers it alone
+
+**(a) a third-tenant marker pass** — necessary, but **it generalises badly**: a
+route pinned to tenant 5 would still pass.
+
+**(b) the STATIC check for tenant and role literals in resolution paths**, which
+G-SEC-17 has now produced and which is bounded by the code rather than by the
+sample of tenants.
+
+**(b) folds into C23's suite as a standing check — it runs WITH the guard, not
+beside it.** A static check kept in a separate script is a check that stops being
+run.
+
+### Before the write half is built
+
+**Confirm the write half does not inherit the two-tenant design.** If it does, it
+inherits this blind spot, and discovering that after building 772 routes' worth of
+coverage would be expensive. **Registered as a precondition on the write half, not
+a follow-up.**
+
+---
+
 # G-SEC-17 — HARDCODED TENANT LITERALS IN RESOLUTION PATHS · **S1**
 
 The `?? 2` in `getSkillCompetency` was **the second instance of a signature**, not

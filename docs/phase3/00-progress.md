@@ -56,6 +56,15 @@ Gate B: **SIGNED OFF** · Gate A: **SIGNED OFF**
 
 > **C24 IS NOT SATISFIABLE UNTIL THE WRITE HALF EXISTS.**
 >
+> **AND THE READ HALF HAS A KNOWN BLIND SPOT.** A route pinned to a THIRD tenant
+> returns the same response as A and as B, so it scores PASS - G-SEC-17 found
+> nine such sites that C23 structurally could not see. Closing it needs a
+> third-tenant marker pass **and** the static tenant/role-literal check, the
+> latter folded into C23's suite as a standing check.
+>
+> **PRECONDITION ON THE WRITE HALF:** confirm it does not inherit the two-tenant
+> design before it is built.
+>
 > The read half being green says the read half is green. It says **nothing** about
 > 772 write routes, and `assignmentController`'s approval path — the one proven
 > unauthenticated write — sat in exactly that untested half.
