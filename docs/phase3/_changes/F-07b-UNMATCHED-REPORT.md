@@ -219,3 +219,58 @@ The first backfill used `BINARY` in the JOIN's `ON` clause, which **defeats ever
 index** — it ran three minutes and populated zero rows. Rewritten so the indexed
 columns do the join and `BINARY` is a residual `WHERE` filter. Same semantics,
 and it completes. The stuck query was killed by id; no data was affected.
+
+
+---
+
+# ADDENDUM 2 — EXCLUDED BY DESIGN, AND THE ORPHANS ARE ONE DEFECT NOT TWO
+
+## `s_jobrole_skills` and `s_jobrole_task` — EXCLUDED BY DESIGN. Question closed.
+
+**Not blocked. Never resolvable, and correctly so.**
+
+785 job role names exist in up to **nine** tenants. A global table **cannot key
+into per-tenant canonical tables at all** — not "not yet", but never, without
+inventing an answer to *"whose copy?"*.
+
+**That is Q-C1 working, not failing.** `s_jobrole_skills` is a **SEED LIBRARY
+customers import from**; `jobrole_competency_map` holds the tenant-owned version.
+**A library's text keys are correct AS TEXT** — it is a catalogue of names, not a
+relationship table.
+
+> **Resolution belongs at IMPORT TIME, into the importing tenant's own rows,
+> where there is exactly one right answer.** Folded into Q-C1's seed-library
+> import feature.
+
+**No `*_id` columns were added to either table** — the F-07b migration touched only
+the two tenant-scoped tables. **Nothing to remove under R8.**
+
+## THE ORPHANS ARE THE SAME DEFECT — the "genuine incompleteness" reading is WRONG
+
+You directed one check on the jobrole orphans. **I ran it on the skill orphans
+too, and the assumption did not survive.**
+
+| Orphan set | Distinct names | **Present in a library** |
+|---|---:|---:|
+| `s_user_skill_jobrole.jobrole` | 99 | **99 — 100%** in `s_jobrole` (global, 3,347 rows) |
+| `s_user_jobrole_task.jobrole` | 116 | **116 — 100%** in `s_jobrole` |
+| `s_user_skill_jobrole.skill` | 434 | **433 — 99.8%** in the seed library |
+
+> ### Every orphan set is the SAME fixable import defect
+>
+> **An import created RELATIONSHIPS without creating the tenant's own CANONICAL
+> COPIES.** The names were never invented and are not junk — they are all in a
+> library. The importer wrote the join rows and skipped the master rows.
+>
+> **The fix is re-running that import correctly, for all three** — not curation,
+> not review, and not two separate tracks.
+
+**"Spread vs concentrated" describes WHICH TENANTS imported badly, not what went
+wrong.** Tenant 9 did it worst on job roles; six tenants did it on skills. Same
+defect, different blast radius.
+
+**Corrects my own earlier framing too:** I called the skill orphans "an imported
+taxonomy never reconciled with `s_users_skills`". **It is the reverse** — the
+taxonomy is fine and the tenant's copy of it was never created.
+
+**Still held: NULL ids, text retained, nothing created, nothing deleted.**
