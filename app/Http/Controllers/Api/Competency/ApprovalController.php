@@ -31,7 +31,13 @@ class ApprovalController extends Controller
     private const TABLE = 's_competency_approvals';
 
     /**
-     * subject_type => [table, name column, pending value, approved value]
+     * subject_type => [table, name column, pending value, approved value,
+     *                  rejected value]
+     *
+     * `rejected` exists because a rejected subject used to be left sitting at
+     * `pending`, and the Library hides "Submit for Approval" for pending items -
+     * so a rejection could never be resubmitted. It must be a state that is
+     * neither pending nor approved, so the author can revise and resubmit.
      */
     private const SUBJECTS = [
         'competency' => [
@@ -40,6 +46,7 @@ class ApprovalController extends Controller
             'column'   => 'approve_status',
             'pending'  => 'Pending',
             'approved' => 'Approved',
+            'rejected' => 'Rejected',
             'label'    => 'Competency',
         ],
         'framework' => [
@@ -48,6 +55,9 @@ class ApprovalController extends Controller
             'column'   => 'status',
             'pending'  => 'draft',
             'approved' => 'active',
+            // A framework's pre-submission state IS 'draft', so returning a
+            // rejected one there is already resubmittable.
+            'rejected' => 'draft',
             'label'    => 'Framework',
         ],
     ];
@@ -323,13 +333,17 @@ class ApprovalController extends Controller
             'updated_at'    => now(),
         ]);
 
-        if ($approve) {
-            DB::table($subject['table'])->where('id', $approval->subject_id)->update([
-                $subject['column'] => $subject['approved'],
-                'updated_by'       => $context['user_id'],
-                'updated_at'       => now(),
-            ]);
-        }
+        // The subject moves on EITHER decision. Rejection previously left it at
+        // 'Pending', and the Library hides "Submit for Approval" for pending
+        // items - so a rejected competency could never be resubmitted and the
+        // only way out was the self-approval bypass (G-COMP-01). Moving it to a
+        // distinct rejected state makes it resubmittable through the normal
+        // route.
+        DB::table($subject['table'])->where('id', $approval->subject_id)->update([
+            $subject['column'] => $approve ? $subject['approved'] : $subject['rejected'],
+            'updated_by'       => $context['user_id'],
+            'updated_at'       => now(),
+        ]);
 
         $this->logCompetencyActivity(
             $sid,

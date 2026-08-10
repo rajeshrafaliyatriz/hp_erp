@@ -281,6 +281,15 @@ the file is non-empty and still contains an expected marker line**.
    populated the detector with false positives.** Only a `where()` on the
    caller's id **in the read path** counts.
 
+3. **A harness can measure the wrong key and look clean.** The R9 sidebar check
+   guessed the child key (`children` / `submenu`) and reported
+   **`leaves == modules` for every one of the nine roles** — nine identical
+   suspicious rows that still read as *renders*, because the assertion under test
+   (non-empty) passed. The controller nests under `menus`, then `submenus`.
+   **Same class as every other proxy failure this phase: the harness was
+   measuring the wrong thing, not measuring nothing.** A uniform result across
+   independent subjects is the tell.
+
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else
 would have made a single mangled command unrecoverable.

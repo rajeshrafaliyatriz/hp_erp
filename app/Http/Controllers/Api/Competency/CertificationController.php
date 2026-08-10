@@ -361,7 +361,9 @@ class CertificationController extends Controller
             'department_id'       => 'nullable|integer',
             'jobrole'             => 'nullable|string|max:191',
             'status'              => 'nullable|in:valid,expiring,expired,revoked',
-            'verification_status' => 'nullable|in:pending,verified,rejected',
+            // G-SEC-08: verification_status is no longer accepted on create.
+            // Validating a field the server then ignores would advertise a
+            // capability that does not exist.
             'issued_date'         => 'nullable|date',
             'expiry_date'         => 'nullable|date',
             'notes'               => 'nullable|string',
@@ -387,7 +389,12 @@ class CertificationController extends Controller
             'department_id'       => $request->input('department_id'),
             'jobrole'             => $request->input('jobrole'),
             'status'              => $request->input('status', 'valid'),
-            'verification_status' => $request->input('verification_status', 'pending'),
+            // G-SEC-08: verification state is SERVER-OWNED. It was taken from the
+            // request, so an uploaded credential could declare itself already
+            // verified. A credential must never verify itself: it is born
+            // 'pending' and only the update path (which stamps verified_by /
+            // verified_at) may move it.
+            'verification_status' => 'pending',
             'issued_date'         => $request->input('issued_date'),
             'expiry_date'         => $request->input('expiry_date'),
             'notes'               => $request->input('notes'),

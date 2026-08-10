@@ -440,7 +440,30 @@ plan** — the first thing in this phase a person will see.
 
 ---
 
-# G-NAV-02 — THE SIDEBAR ENDPOINT TAKES profile_id FROM THE REQUEST · **S3**
+# Q-A5 — EXTERNAL DESTINATIONS, ALL THREE IN ONE PLACE
+
+**For a security review.** Every destination outside our origin that the product
+loads or links to, and what leaves with the request.
+
+| Screen | Host | What leaves our origin |
+|---|---|---|
+| Taxonomy Ontology (menu 43) | **`skill-ontology-neo4j.vercel.app`** | **`sub_institute_id` in the URL**, plus the customer's IP, **on every page load** |
+| Skills link | *(recorded under Q-A5)* | — |
+| Pal link (menu 187) | *(recorded under Q-A5; `status=0`, removed from the seed)* | — |
+
+**The ontology iframe carries `sandbox` without `allow-same-origin` and
+`referrerPolicy="no-referrer"`.** Those are right and are not being
+re-litigated — **but they do not answer a procurement question about data leaving
+our origin on every page load.** The exposure is the **tenant id and the request
+itself**, not the session.
+
+**C-T3-ONT (M) is the real fix, not an enhancement** — it removes the external
+host and the tenant id from the URL *as well as* making the graph true. Blocked
+on F-07b, as scheduled.
+
+---
+
+# G-NAV-02 — THE SIDEBAR ENDPOINT TAKES profile_id FROM THE REQUEST · **S2**
 
 Found while building the R9 harness, not by looking for it.
 
@@ -450,10 +473,20 @@ that **a** valid token was supplied — **never that the caller holds that profi
 
 Any authenticated user can request **any** profile's sidebar.
 
-**S3, not S1**, and the reason matters: the sidebar is a **display** control. It
-returns menu structure, not records. Every finding above concerns endpoints that
-return or write **data**, and those enforce — or fail to enforce — independently.
-Ranking this with them would misrepresent both.
+**RAISED TO S2 from S3.** The impact reasoning — structure, not data — is right,
+but it under-weighted what structure gives away: **an employee can enumerate which
+screens every role holds.** That is **reconnaissance** — it maps where the
+interesting endpoints are, and it erodes the value of the rights that were just
+applied.
+
+**Effort is one line, in G-SEC-12's family: resolve `profile_id` from the token's
+user, never from the request.** Fixed with the security queue, not after it.
+
+> **THIS DEFECT IS WHY ONE TOKEN COULD TEST NINE ROLES.**
+> When it is fixed the R9 harness needs **nine tokens**, one per role.
+> **The harness must be updated in the same commit**, or verification breaks
+> silently — passing because it can no longer ask the question, not because the
+> answer is good.
 
 **Same class as the subject-from-request findings**, and it is the reason the R9
 harness can vary `profile_id` on one token to check nine roles. **The defect is
@@ -532,7 +565,32 @@ independently of the read that found it.
 
 ---
 
-# G-COMP-SEC-01 — ANY EMPLOYEE CAN READ *AND WRITE* ANY COLLEAGUE'S COMPETENCY PROFILE · **S1**
+# G-COMP-SEC-01 — ANY EMPLOYEE CAN READ ANY COLLEAGUE'S COMPETENCY PROFILE · **S1** · **FIXED**
+
+> ## CORRECTION — THE WRITE CLAIM WAS WRONG
+>
+> I reported this as **read AND write**, and called it *"silent corruption of the
+> product's core asset"* — worse than payroll. **The write half was wrong.**
+>
+> **All five write routes already carried `middleware('profile:admin,hr,manager')`**
+> — `addSkill`, `updateSkill`, `saveNotes`, `storeEvidence`, `deleteEvidence`
+> (`routes/api.php:347,348,351,355,356`). `RequireProfile` resolves the profile
+> from the token's user and refuses an unresolvable one. **An ordinary employee
+> could not raise their own ratings or lower a colleague's.**
+>
+> **How I got it wrong:** I read the controller and never read the route file.
+> The controller genuinely has no ownership check — that part is accurate — but
+> **a route-level guard is part of the endpoint's protection and I treated the
+> controller as the whole of it.**
+>
+> **This is R10c in a new place: the controller's code is not the endpoint's
+> behaviour.** The same mistake as taking a seeder's intent for its effect.
+>
+> **What remains, and it is still S1:** all **eight READ routes carry no
+> middleware at all**, so any authenticated employee could read any colleague's
+> full competency profile — skills, ratings, assessor, manager, notes, evidence,
+> career path. That is exposure of the same kind as payroll, on the data this
+> phase exists to build.
 
 **The most serious finding of the build phase, and worse than payroll.**
 
@@ -546,17 +604,19 @@ never compares it to the caller:
 | `updateSkill(Request $request, $id, $matrixId)` | `:318` | `$id` — route parameter |
 
 `competencyContext()` authenticates the caller and yields the tenant, so the
-**tenant** boundary holds. **The ownership boundary does not exist.**
+**tenant** boundary holds. **The ownership boundary does not exist** in the
+controller — and on the eight read routes nothing else supplies it.
 
-### Why this outranks payroll
+### Why it still ranks first
 
-Payroll was **exposure**. This is **silent corruption of the product's core asset.**
+**Read exposure, on the data the whole phase is built to produce.** Competency
+ratings are more sensitive than most HR fields: they drive promotion readiness and
+succession shortlists, and an employee who can see a colleague's ratings can see
+where they stand against them.
 
-**Any employee can raise their own ratings, or lower a colleague's.** Every number
-this phase exists to build — gap analysis, readiness, succession, the whole
-capability chain — **resolves against a table anyone can edit for anyone.** A
-tampered rating does not announce itself; it propagates into every derived view
-and every decision made from them.
+**And it is the screen that must come back first** — golden thread 1 cannot be
+demonstrated to an employee until Competency 154–158 is re-granted, which cannot
+happen until this is closed.
 
 ### Fix
 
@@ -564,7 +624,38 @@ and every decision made from them.
 `ResolvesLmsIdentity`. Self-service reads and writes must resolve `$id` to the
 caller unless the caller holds a role that legitimately acts on others.
 
-**Sequenced immediately after 4b, ahead of the event store. First of the three.**
+### FIXED — 2026-08-10
+
+`ResolvesCompetencyContext::competencySubject()` resolves the route's `$id` to a
+subject the caller may act on, and **all 13 methods** call it — not only the
+three originally named. Two checks, both required:
+
+1. **the subject must be in the caller's own tenant**, checked first so an
+   elevated caller cannot probe a cross-tenant id for existence;
+2. **the caller must be the subject, or hold an elevated `role_key`.**
+
+Keyed on `role_key` (D-010), not on a substring of the display name.
+
+**`department_head` and `reporting_manager` are deliberately absent from the
+elevated set.** Their legitimate scope is *my department* / *my team*, and neither
+is evaluable while `reporting_manager_id` is NULL for every user (**G-ORG-02**).
+Granting them org-wide access would be **wider than the grant being closed**.
+
+**Verified through the real request path:**
+
+| Request | Result |
+|---|---|
+| own profile | **200** |
+| colleague's profile | **403** |
+| absent / cross-tenant id | **404** |
+
+**Side effect worth its own line.** `RequireProfile` matches by **substring**, so
+`str_contains('reporting manager', 'manager')` is true — a Reporting Manager
+passed the *write* gate for **any** employee in the tenant, not just their team.
+The new ownership check closes that too, because `reporting_manager` is not an
+elevated `role_key`.
+
+**Re-grant of Competency 154–158 is now unblocked** — first on the re-grant list.
 
 ---
 

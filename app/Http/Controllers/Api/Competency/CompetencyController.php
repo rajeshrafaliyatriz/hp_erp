@@ -101,7 +101,10 @@ class CompetencyController extends Controller
             'category'         => $request->input('category'),
             'department_id'    => $request->input('department_id'),
             'status'           => 'Active',
-            'approve_status'   => $request->input('status') === 'published' ? 'Approved' : 'Pending',
+            // G-COMP-01: approval state is SERVER-OWNED. Sending status=published
+            // used to mint an Approved competency with no review. Always Pending;
+            // only ApprovalController may move it.
+            'approve_status'   => 'Pending',
             'created_by'       => $context['user_id'],
             'updated_by'       => $context['user_id'],
             'created_at'       => now(),
