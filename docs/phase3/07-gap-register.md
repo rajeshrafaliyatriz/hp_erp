@@ -440,6 +440,69 @@ plan** — the first thing in this phase a person will see.
 
 ---
 
+# G-RBAC-01 — 121 GRANTS CARRY A QUALIFIER THE TABLE CANNOT EXPRESS · **S2**
+
+**Measured 2026-08-10, not asserted.** Of the grants in `03-rbac-matrix.md`
+§3.1–3.7, **121 carry a parenthetical qualifier that is doing the real work** —
+and `tblgroupwise_rights_g2g` **cannot express any of it.**
+
+| Role | Qualified grants |
+|---|---:|
+| Department Head | **36** |
+| Reporting Manager | **35** |
+| **Employee** | **31** |
+| HR Executive | **19** |
+| **Total** | **121** |
+
+The table holds **one boolean per action per menu**. No row scope. No field scope.
+So `V (own payslip)`, `V (team)`, `V (dept)` and `V (org — basic fields)` all
+flatten to the same thing: **full access to the screen**.
+
+**This is exactly what §3.8's field-level layer exists for**, and its scope is now
+**measured rather than asserted**.
+
+### The two kinds, and they resolve differently
+
+| Kind | Examples | Resolution |
+|---|---|---|
+| **"OWN X"** | own payslip · own checklist · self · own exit · referrals | **Read the controller.** If it already scopes by the caller's `user_id`, the qualifier describes behaviour that exists and a bare `V` is safe. **Record the file:line proving it** |
+| **"TEAM / DEPT X"** | team · dept · own dept | **DENY for now.** Enforcement needs `reporting_manager_id`, which exists but is **NULL for all 387 users**. Registered against the reporting-coverage readiness gate — they turn on when coverage does |
+
+> **Where the controller does not scope, DENY.** A missing menu is a support
+> ticket; an over-grant on compensation is a security finding. Same asymmetry as
+> additive-vs-subtractive.
+
+---
+
+# G-RBAC-02 — SPEC-ASPIRATION MASQUERADING AS A PERMISSION DECISION · **S2**
+
+**§3.1–3.7 was written from role-wise feature specs describing what the product
+SHOULD do.** Where a qualifier refers to a capability that was **never built**,
+there is nothing to enforce the qualifier on — **and the safe reading is always
+DENY.**
+
+### The proven instance
+
+**`Payroll (all 7 screens)` → Employee `V (own payslip)`.**
+
+**There is no payslip screen among the seven.** The seven are Payroll Type, Salary
+Structure, Rollover Salary Structure (disabled), Payroll Deduction, Form 16, Salary
+Certificate and Monthly Payroll Report — **four configuration screens, two personal
+documents that take `employee_id` from the request, and one org-wide report.**
+
+Granting the bare `V` would have shown **238 employees the organisation's salary
+structure and payroll deductions** on the day the permissions fix shipped.
+
+### Flagged as likely siblings
+
+- **Skill Gap Analysis** `V (self)` — marked (SHIP), but the menu is `status=0` with no component behind it (**G-A-04**). A qualifier on a capability that does not exist.
+- **Every other §3.x grant whose qualifier implies a capability that cannot be located** — to be flagged as each batch is read.
+
+**These are not permission decisions. They are aspirations, and they must not be
+seeded as grants.**
+
+---
+
 # G-DUP-01 — TWO PARALLEL RIGHTS SYSTEMS FOR ONE CONCEPT · **S2**
 
 **One live with real data, one placeholder for a newer sidebar.** Same duplication
