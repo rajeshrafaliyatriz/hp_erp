@@ -28,6 +28,41 @@ Already inside the C23 candidate set; recorded here so the evidence is not lost.
 
 ---
 
+## WHY THE TWO CORRECT FAMILIES ARE CORRECT
+
+**Task and LMS are safe BECAUSE G-SEC-12's fix already landed on them.**
+
+`ResolvesLmsIdentity`'s own header names the exact bug it closed:
+
+> *"my courses, my sessions, my deadlines returned whoever the caller named
+> instead of the caller"*
+
+**The leaks found in this batch are the areas the trait has not reached yet — not
+a new class of defect.** Competency, Attendance, Leave and Talent are simply
+downstream of where the fix stopped.
+
+> **This is the clearest evidence so far that the foundation work is doing what it
+> was sequenced to do.** The fix did not merely close 76 sites; it made the
+> screens every employee touches daily correct, and the remaining exposure is
+> now a *coverage* question with a known shape, not an unknown one.
+
+---
+
+## COUNT RECONCILED — 31, AND MY 29 WAS WRONG
+
+The generator reads §3.1–3.7 directly. Counting Employee marks that carry both a
+`V` and a parenthetical qualifier gives **31**, matching the original figure.
+
+**My hand-count of 29 was the error.** It missed the three report rows —
+*competency gap*, *development plan*, *certification expiry* — which **are**
+qualified grants (`V (self)`) that happen to resolve to `NOT_BUILT`.
+
+**31 = 5 GRANT + 26 DENY** (23 denied by controller evidence, 3 denied because not
+built). The generator applies **29 menu-level denies**, which is a different unit:
+one grant can cover several menus (Payroll → 6, Leave Dashboard/Requests → 2).
+
+---
+
 ## THE VERDICTS — ALL FAMILIES READ
 
 **Reported LMS and Task first, as directed.**

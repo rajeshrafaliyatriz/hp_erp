@@ -266,6 +266,21 @@ provided the incident is reported and closed)* · **R13** standing authority · 
 `docs/phase3/` after every write to this file, **and assert after every write that
 the file is non-empty and still contains an expected marker line**.
 
+**R10 — two worked examples, both from the Employee qualifier batch.**
+
+1. **A proxy that assumes a file layout fails silently when the layout is
+   dynamic.** "Does a component directory exist for this screen?" returned *no*
+   for menu 26 — **and also for menu 22, which is live.** The Next.js tree is
+   `app/module/[moduleId]/[menuId]/[submenuId]`, fully dynamic, so **no** screen
+   has a static directory. The known-positive (R16) is what exposed it.
+   Re-tested through the component registry instead.
+2. **A proxy can be inverted by an unrelated fix.** Counting references to
+   `$context['user_id']` per controller, as a stand-in for caller-scoping, reads
+   backwards after G-SEC-12: `ProjectController` has 13 and **none scope a read**
+   — they are `created_by` / `updated_by` / `archived_by`. **The provenance fix
+   populated the detector with false positives.** Only a `where()` on the
+   caller's id **in the read path** counts.
+
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else
 would have made a single mangled command unrecoverable.

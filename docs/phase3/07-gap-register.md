@@ -440,6 +440,116 @@ plan** — the first thing in this phase a person will see.
 
 ---
 
+# G-COMP-SEC-01 — ANY EMPLOYEE CAN READ *AND WRITE* ANY COLLEAGUE'S COMPETENCY PROFILE · **S1**
+
+**The most serious finding of the build phase, and worse than payroll.**
+
+`EmployeeCompetencyProfileController` takes the subject from the **route**, and
+never compares it to the caller:
+
+| Method | Line | Subject |
+|---|---|---|
+| `show(Request $request, $id)` | `:15`, filters at `:26, 95, 159` | `$id` — route parameter |
+| `addSkill(Request $request, $id)` | `:238`, writes at `:260, 273` | `$id` — route parameter |
+| `updateSkill(Request $request, $id, $matrixId)` | `:318` | `$id` — route parameter |
+
+`competencyContext()` authenticates the caller and yields the tenant, so the
+**tenant** boundary holds. **The ownership boundary does not exist.**
+
+### Why this outranks payroll
+
+Payroll was **exposure**. This is **silent corruption of the product's core asset.**
+
+**Any employee can raise their own ratings, or lower a colleague's.** Every number
+this phase exists to build — gap analysis, readiness, succession, the whole
+capability chain — **resolves against a table anyone can edit for anyone.** A
+tampered rating does not announce itself; it propagates into every derived view
+and every decision made from them.
+
+### Fix
+
+`resolveApiIdentity()` **plus an ownership check on `$id`**, the same shape as
+`ResolvesLmsIdentity`. Self-service reads and writes must resolve `$id` to the
+caller unless the caller holds a role that legitimately acts on others.
+
+**Sequenced immediately after 4b, ahead of the event store. First of the three.**
+
+---
+
+# G-ATT-SEC-01 — AN EMPLOYEE CAN CLOCK A COLLEAGUE IN OR OUT BY QUERY PARAMETER · **S1**
+
+`AttendanceTrackingApiController` resolves the subject of **both** punch-in and
+punch-out as **`$request->input('employee')`**:
+
+- `:223` — punch-in: `HrmsAttendance::where('user_id', $request->input('employee'))`
+- `:283` — punch-out: same
+
+The tenant is taken from `$context`, so this stays inside one organisation. **It
+does not stay inside one person.**
+
+> **This is the one a customer's HR director reacts to instantly.**
+
+Attendance drives leave accrual, payroll input and disciplinary records. A punch
+written by a colleague is indistinguishable from a real one.
+
+**Second of the three.**
+
+---
+
+# G-LEAVE-SEC-01 — REQUEST-FIRST WITH A SAFE-LOOKING FALLBACK · **S1**
+
+```php
+$userId = (int) ($request->input('employee_id') ?: $context['user_id']);
+```
+`LeaveRequestApiController:174` — and `LeaveOptionsController:103`, same shape.
+
+### The pattern gets its own name because of how it survives review
+
+**A bare `$request->input('employee_id')` is caught on sight.** This is not caught,
+**because the caller appears in the expression.** A reviewer scanning for
+"where does the subject come from" sees `$context['user_id']` and moves on. **It is
+never reached when the attacker supplies the parameter** — the fallback only fires
+for the honest caller.
+
+**The operator is not the tell. Which side the identity sits on is the tell.**
+
+### The contrast case, which is why the shape alone cannot be banned
+
+`ResolvesApiIdentity:57-75` uses the same operators the other way round — the
+token owner's tenant **wins always**, and the request is consulted **only** when
+the caller has no tenant of their own. **Identity first, request as fallback.**
+Correct, and documented in place.
+
+### The sweep, run
+
+| Site | Shape | Verdict |
+|---|---|---|
+| `LeaveRequestApiController:174` | `input('employee_id') ?: $context['user_id']` | **FINDING** |
+| `LeaveOptionsController:103` | `activeFilter(input('employee_id')) ?: $context['user_id']` | **FINDING** |
+| `MobilityApplicationController:87` | `input('user_id') ?: $actorId` | **FINDING — third instance, Talent module** |
+| `AnalyzeJDController:28` | `session(...) ?? $this->apiTenantId($request) ?? 3` | **SEPARATE FINDING — falls back to a hardcoded tenant `3` when both identity sources fail** |
+| `ResolvesApiIdentity:69` | identity first, request as fallback | correct — the inverse |
+| `OffboardingClearance:147`, `OnboardingDocument:186` | `$x_by ?: $context['user_id']` | correct — field absent from `validate()`, preserves the original signer |
+
+**Third of the three.**
+
+---
+
+# G-TALENT-01 — TALENT HAS NO SELF-SERVICE SCOPING AT ALL · **BUILD ITEM, NOT A PATCH**
+
+**Zero caller-scoped queries across all 11 Talent controllers.** Not a leak to
+patch — **a module where the self-service concept was never built.**
+
+§3.x grants Employee five Talent screens on qualifiers — *referrals · own
+checklist · self-appraisal · internal jobs · own exit* — and **none of those flows
+exist in enforceable form.**
+
+**Filed against §3.8 and the Talent connection items**, not against the security
+queue. Patching a boundary that was never drawn is not a fix; the flows have to
+be built.
+
+---
+
 # G-RBAC-01 — 121 GRANTS CARRY A QUALIFIER THE TABLE CANNOT EXPRESS · **S2**
 
 **Measured 2026-08-10, not asserted.** Of the grants in `03-rbac-matrix.md`
@@ -492,6 +602,21 @@ documents that take `employee_id` from the request, and one org-wide report.**
 
 Granting the bare `V` would have shown **238 employees the organisation's salary
 structure and payroll deductions** on the day the permissions fix shipped.
+
+### CONFIRMED AS A PATTERN, NOT AN ANECDOTE
+
+**Two independent cases, different modules, different evidence:**
+
+| Case | Evidence |
+|---|---|
+| **Payroll** `V (own payslip)` | No payslip screen exists among the seven |
+| **Skill Gap Analysis** `V (self)` | `status=0`, **no component and no nav entry** in the Next.js app |
+
+> **§3.1–3.7 CANNOT be read as a description of current behaviour.**
+> It is a specification of *intended* behaviour. Every qualifier in it must be
+> tested against the controller before it becomes a grant.
+
+**This is now load-bearing in the §3.8 scoping argument.**
 
 ### Flagged as likely siblings
 
