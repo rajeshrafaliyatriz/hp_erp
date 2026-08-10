@@ -565,6 +565,114 @@ independently of the read that found it.
 
 ---
 
+# G-LMS-SEC-01 — LMS ASSIGNMENT ENDPOINTS WERE UNAUTHENTICATED · **S1** · **FIXED**
+
+Queue item 1. `assignmentController` carried **four** stacked defects, and the
+worst was not the one it was queued for.
+
+### 1. Authentication was OPTIONAL — the one that matters
+
+```php
+private function validateToken(Request $request) {
+    $type = $request->type;
+    if ($type == "API") { ...check the token... }
+    return null;              // <- no type, no check, request proceeds
+}
+```
+
+**Omitting the `type` parameter skipped authentication entirely.** These are API
+routes (`routes/api.php:615-625`) and **none of them carries middleware**, so this
+method was the only control on the endpoint.
+
+**Proven through the full stack before the fix:**
+
+| Request | Result |
+|---|---|
+| `GET /api/lmsAssignment`, **no token, no `type`** | **HTTP 200, 20,777 bytes** of learner names and course names |
+| `POST /api/lmsAssignment/review/{id}`, **no token** | reached the record lookup — **404 only because the id did not exist** |
+
+An anonymous caller could **read the enrolment register and approve enrolments.**
+
+### 2. The role came from the request
+
+`$request->input('user_profile_name')` — so `user_profile_name=admin` granted
+review rights.
+
+### 3. Failure-open on an empty profile
+
+`if ($profile !== '' && !str_contains(...))` — **omitting the parameter passed the
+guard altogether.** This is what the item was queued for, and it is the third
+defect, not the first.
+
+### 4. Tenant from the request
+
+`$request->sub_institute_id ?? $request->header(...)`, at **9 sites**.
+
+> **All four are the exact defects `ResolvesLmsIdentity`'s own header records as
+> CLOSED for the other LMS controllers.** They were still live here — so this is a
+> **regression as well as a hole**, and evidence that the G-SEC-12 sweep was
+> scoped by controller, not by defect.
+
+### Fixed
+
+The controller now `use`s `ResolvesLmsIdentity`. `validateToken()` delegates to
+`guardLmsToken()` — **always, with no opt-out**; both profile guards delegate to
+`guardLmsProfile()`, which resolves the role from the **token's** user and
+**refuses an unresolvable profile**; all 9 tenant reads go through `lmsTenantId()`.
+
+### Verified — and the two questions kept separate
+
+**WHO MAY CALL THIS** — closed:
+
+| | before | after |
+|---|---|---|
+| no token, no `type` | **200, 20,777 bytes** | **401** |
+| forged `user_profile_name=admin` | **200** | **401** |
+| `review` as employee | permitted | **403** |
+| `review` as administrator | permitted | **404** (passes the gate; record absent) |
+
+**WHICH ROWS COME BACK** — **NOT closed, and route/auth guards do not answer it:**
+
+| | after |
+|---|---|
+| `GET /api/lmsAssignment` as **employee** | **200, all 48 rows** — the whole tenant's enrolment register |
+
+**An employee still sees every learner's enrolments.** That is a **row-scope**
+question of exactly the kind G-RBAC-01's 121 qualifiers are about, and it is
+**unresolved**. Authentication being fixed must not be read as the screen being
+safe.
+
+---
+
+# G-HARNESS-01 — IDENTITY LEAKS BETWEEN REQUESTS IN A SINGLE-PROCESS HARNESS · **METHOD DEFECT**
+
+Reusing one HTTP kernel for several requests in one PHP process **caches the first
+request's resolved identity and reuses it for every later request.**
+
+**Demonstrated, not inferred** — the same two calls, order reversed:
+
+```
+order: emp-first     employee -> 403      admin -> 403      <- admin wrongly refused
+order: admin-first   admin    -> 404      employee -> 404   <- employee wrongly allowed
+```
+
+**Whoever goes first decides both outcomes.** A production request is a fresh
+container, so this is a **harness defect, not a product defect** — but it silently
+falsifies any identity-dependent multi-request check.
+
+### What it affects, stated precisely
+
+| Check | Affected? |
+|---|---|
+| **G-LMS-SEC-01 verification** | **Was affected — re-run one request per process.** The table above is the corrected result |
+| **G-COMP-SEC-01 verification** | **Re-run and unchanged** (own 200 / colleague 403 / cross-tenant 404). The leak held identity at the intended caller throughout, so the original result was right — **by luck, not by design** |
+| **R9 nine-role sidebar check** | **Not affected.** It varies `profile_id` in the request, not the identity, and one acting user is intended throughout. Its nine counts differ from each other and match Gate A independently |
+| **C23 tenant guard** | **FLAGGED, not cleared.** It issues two requests per URI in one process. Its calls carry **no token**, so there is no identity to cache — but **C24's release gate rests on this guard**, so it gets its own verification rather than an argument. Not re-run here |
+
+**Rule going forward: one request per process for anything identity-dependent.**
+
+---
+
 # G-AUTH-01 — AUTHORIZATION MATCHED ON DISPLAY-NAME SUBSTRINGS · **S2** · **FIXED**
 
 `RequireProfile::profileMatches()` compared the caller's **profile display name**
