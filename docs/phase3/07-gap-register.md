@@ -567,6 +567,19 @@ independently of the read that found it.
 
 # G-LMS-SEC-01 — LMS ASSIGNMENT ENDPOINTS WERE UNAUTHENTICATED · **S1** · **FIXED**
 
+> ## THE FIRST UNAUTHENTICATED EXPOSURE OF THE PHASE
+>
+> **Every other finding in this register required a valid token.** Tenant
+> breaches, forged provenance, missing ownership checks, over-broad grants - all
+> presuppose an authenticated caller who then reaches too far.
+>
+> **This one required nothing.** No token, no account, no session. An anonymous
+> caller could read the enrolment register and reach the approval path.
+>
+> **The distinction matters to a buyer**, and it is why this outranks findings
+> with a larger blast radius: everything else is a privilege question. This was
+> an open door.
+
 Queue item 1. `assignmentController` carried **four** stacked defects, and the
 worst was not the one it was queued for.
 
@@ -670,6 +683,102 @@ falsifies any identity-dependent multi-request check.
 | **C23 tenant guard** | **FLAGGED, not cleared.** It issues two requests per URI in one process. Its calls carry **no token**, so there is no identity to cache — but **C24's release gate rests on this guard**, so it gets its own verification rather than an argument. Not re-run here |
 
 **Rule going forward: one request per process for anything identity-dependent.**
+
+### The same class, found alongside it - the wrong model
+
+`App\Models\User` is backed by the **`users`** table. Real tokens are issued
+against `App\Models\auth\tbluserModel`, backed by **`tbluser`**:
+
+| tokenable_type | tokens |
+|---|---:|
+| `App\Models\auth\tbluserModel` | **4,511** |
+| `App\Models\User` | 14 |
+
+The first tests minted tokens on `App\Models\User` - **a different table, with
+different ids and a NULL `user_profile_id`**. It produced a plausible false
+"admin regression".
+
+> **A test against the wrong model proves nothing about the running system.**
+> Both affected verifications were re-run against `tbluserModel` and hold.
+
+---
+
+# G-SEC-13 — `if ($type == "API")` IS A SIGNATURE, NOT AN INCIDENT · **S1** · **CANDIDATES (R6)**
+
+`PayrollController` had it. `assignmentController` had it. Both times it meant the
+same thing: **THE CALLER DECIDES WHETHER CHECKS RUN.**
+
+Swept across the whole codebase rather than treated as two incidents.
+
+| Measure | Count |
+|---|---:|
+| Controllers where a token check is gated on `$type == "API"` | **46** |
+| Routes reaching them | **420** |
+| **Routes with NO auth middleware of any kind** | **132** |
+
+**132 routes** whose only authentication control is a check the caller switches
+off by omitting one parameter.
+
+### Top of the candidate set
+
+| Controller | Routes with no middleware |
+|---|---:|
+| `AJAXController` | 18 |
+| `libraries\skillLibraryController` | 17 |
+| `lms\assignment\assignmentController` | **11 — PROVEN exposed, now fixed** |
+| `talent\talent_interviewschedulescontroller` | 10 |
+| `talent\talent_jobapplicationcontroller` | 10 |
+| `talent\talent_jobpostingcontroller` | 8 |
+| `libraries\jobroletaskcontroller` | 7 |
+| `libraries\jobroletexonomycontroller` | 7 |
+| `Api\skillcontroller` | 7 |
+| `dashboards\SkillDashboardController` | 7 |
+
+**CANDIDATES, not findings (R6).** One is proven — `assignmentController` returned
+**HTTP 200 and 20,777 bytes to an anonymous caller**. The other 121 are
+**presumed dangerous until read or probed**: the signature is identical and the
+middleware is absent.
+
+**Proxy named (R10):** *controller contains `$type == "API"` near a token check*
+**and** *no route middleware matches `/auth|sanctum|profile|token/`*. A controller
+passes the proxy and is still safe if some other guard runs first; it fails the
+proxy and is still dangerous if its check is weak for another reason. **The
+behavioural probe is the settling instrument.**
+
+> **A behavioural probe of all 132 was attempted and HUNG** — at least one endpoint
+> blocks on an outbound call. Recorded rather than quietly dropped: the probe needs
+> a per-request timeout before it can give the definitive answer.
+
+---
+
+# G-SEC-14 — THE G-SEC-12 SWEEP WAS SCOPED BY CONTROLLER, NOT BY DEFECT · **S1**
+
+**The third time a sweep's SCOPE rather than its LOGIC produced the miss.**
+
+All four defects in `assignmentController` are ones `ResolvesLmsIdentity`'s header
+records as **CLOSED**. They were closed *in the controllers the sweep visited*. The
+sweep asked *"is this controller fixed?"* — never *"where else does this shape
+occur?"*
+
+### Re-swept by DEFECT SHAPE. Live instances, in files already "fixed"
+
+| Site | Shape | Why it is live |
+|---|---|---|
+| **`libraries\skillLibraryController:300`** | role from request | `if ($request->user_profile_name == "Admin") { $appStatus = 'Approved'; }` — **a caller sets their own submission to Approved by passing `user_profile_name=Admin`.** A self-approval bypass. **This file was fixed by D-003 — for TENANT, not for role** |
+| **`Payroll\PayrollController:1304-1307`** | role from request | `$user_profile = $request->user_profile_name` |
+| **`Payroll\PayrollController:2116`** | role from request | `$userProfile = $request->user_profile_name`, passed straight into `employeeDetails($sid, …, $userProfile, $profileUserId)` — **an attacker-supplied role decides which employees are returned.** Sits **two lines** from `payrollTenantId()` and `payrollActorId()`, the D-004 fixes |
+| `lms\lms_apiController:741` | role from request | candidate, use not yet traced |
+| `lms\questionpaperController:57` | role from request | session-first, request as fallback |
+
+**`PayrollController:2116` is the clearest evidence of the class:** the identity and
+tenant on that line were fixed, and the **role on the next line was not** — because
+the sweep was looking for tenant and actor, not for role.
+
+### The correction to method
+
+**A sweep must be defined by the DEFECT SHAPE and run across the whole codebase,
+never by a list of files.** A file is "fixed" only for the shapes that were
+searched in it.
 
 ---
 
