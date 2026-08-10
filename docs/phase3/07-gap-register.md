@@ -1121,6 +1121,32 @@ mapping — and checking rather than assuming it is the point.**
 
 ---
 
+# G-FLOW-25 — REOPEN UNDETECTABLE · **CLOSED 2026-08-10**
+
+**Golden thread 2's F2 signal is buildable for the first time.**
+
+`task_status_history` (D-034) makes a reopen detectable: a transition INTO an
+active status FROM a terminal one. Verified on four transitions, **2 of 2 reopens
+detected**, including the case where `approve_status='approved'` is the terminal
+marker rather than the status.
+
+### Why it was undetectable, and why that vindicates M2
+
+**A reopen cannot be seen from the task row at all.** By the time a task is
+reopened, the row that said *"completed"* **has been overwritten** — the task table
+holds only the CURRENT state. The transition exists nowhere except the event
+stream.
+
+> **M2 split F2 from F1 and made F2 wait for transition history. That was
+> right, and this is the retroactive proof: the signal genuinely did not exist
+> until the store did.** It could not have been built earlier by trying harder —
+> there was nothing to read.
+
+A projection is exactly the tool for this: **it holds what the source table
+forgets.**
+
+---
+
 # G-RECON-01 — A NAME-BASED CHECK CANNOT FIND WHAT THE OTHER SIDE DOES NOT NAME · **METHOD**
 
 Raised as its own entry, not a footnote, because **it is the more valuable half of

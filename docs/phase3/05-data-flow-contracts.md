@@ -566,7 +566,12 @@ down, it is routine. Undocumented, it is the outage.
 
 #### Preconditions — all four, every time
 
-1. **The store is intact.** `g2g_event_store` row count and max `id` recorded before starting. If the store is damaged, replay is not recovery — restore is.
+1. **The store is intact.** `g2g_event` row count and max `id` recorded before starting.
+   *(**Corrected 2026-08-10** — this read `g2g_event_store`, a name §1's DDL never
+   used. A typo, not a design change: the built table matches §1. **A contract
+   carrying two names for one table is a defect generator** — the same family as
+   the mark and the qualifier sharing a cell, which produced three separate
+   defects.)* If the store is damaged, replay is not recovery — restore is.
 2. **The projector is idempotent under a full rebuild**, proven by the dry run below, not by inspection.
 3. **The projection has no independent writer.** If anything writes it outside the projector, truncation destroys data the store cannot regenerate. Check §1's exceptions table — the *justified independent writers* listed there are **not replayable** and must never be targets.
 4. **A dated backup of the target table exists** and its row count is written into the change record.
