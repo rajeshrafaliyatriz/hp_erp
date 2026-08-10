@@ -37,7 +37,11 @@ class chapterController extends Controller
             return (int) $fromToken;
         }
 
-        $fromSession = $request->session()?->get('sub_institute_id');
+        // hasSession() first: $request->session() THROWS "Session store not set
+        // on request" when there is none, so the null-safe operator never gets a
+        // chance to help. An API call with an unusable token would have died with
+        // a 500 instead of failing closed.
+        $fromSession = $request->hasSession() ? $request->session()->get('sub_institute_id') : null;
 
         return $fromSession ? (int) $fromSession : null;
     }
@@ -140,7 +144,7 @@ class chapterController extends Controller
             $sub_institute_id = $this->resolvedTenantId($request);
             $year = DB::table('academic_year')->where('sub_institute_id',$sub_institute_id)->get()->toArray();
             $syear =$year[0]->syear;
-            $user_profile_name = $request->session()?->get('user_profile_name');
+            $user_profile_name = $request->hasSession() ? $request->session()->get('user_profile_name') : null;
         }
         elseif($request->type=="API"){
             

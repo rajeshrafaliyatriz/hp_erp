@@ -37,7 +37,11 @@ class lms_teacherResourceController extends Controller
             return (int) $fromToken;
         }
 
-        $fromSession = $request->session()?->get('sub_institute_id');
+        // hasSession() first: $request->session() THROWS "Session store not set
+        // on request" when there is none, so the null-safe operator never gets a
+        // chance to help. An API call with an unusable token would have died with
+        // a 500 instead of failing closed.
+        $fromSession = $request->hasSession() ? $request->session()->get('sub_institute_id') : null;
 
         return $fromSession ? (int) $fromSession : null;
     }

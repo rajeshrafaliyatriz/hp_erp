@@ -1086,6 +1086,111 @@ elevated `role_key`.
 
 ---
 
+# G-SEC-19 — SQL INJECTION IN `lmsmappingController` · **S1** · **FIXED**
+
+**Found by running the fail-closed verification, not by looking for injection.**
+
+`getData` and `getDataPre` both build `$extra` by **string concatenation** and
+splice it into raw SQL:
+
+```php
+$extra .= " AND chapter_id = '".$chapter_id."'";   // $chapter_id = $request->get('chapter_id')
+...
+$data = Db::select('SELECT * FROM lms_mapping_type AS a WHERE a.parent_id=0 '.$extra.'
+    UNION SELECT * FROM lms_mapping_type AS b WHERE b.parent_id != 0 '.$extra);
+```
+
+**The request value reaches the database as SYNTAX, not as data.**
+
+### Proven behaviourally
+
+| `chapter_id` | rows |
+|---|---:|
+| absent | 10 |
+| `1` (honest, no match) | **0** |
+| `1' OR '1'='1` | **10** |
+
+The payload changed the result. That is the whole proof.
+
+### Fixed — bound, both methods
+
+`?` placeholders with a `$bindings` array, passed as `Db::select($sql, array_merge($bindings, $bindings))`
+(the UNION repeats `$extra`, so the bindings are supplied twice, in order).
+`AND globally = '1'` stays a literal — no request input is involved.
+
+**After the fix:** absent → 10, `1` → 0, payload → **0**. The payload now behaves
+exactly like an honest non-matching value, and the legitimate paths are unchanged.
+
+---
+
+# THE FAIL-CLOSED VERIFICATION — WHAT IT ACTUALLY FOUND
+
+Asked for as a one-line-each confirmation. It found **two defects and one
+correction**, which is why it was worth asking for.
+
+### 1. A bug in my own fix — `session()` throws, it does not return null
+
+```php
+$request->session()?->get('sub_institute_id')   // WRONG
+```
+
+`$request->session()` raises **"Session store not set on request"** when there is
+none, so the null-safe operator never gets the chance to help. **An API call with
+an unusable token would have died with a 500 instead of failing closed.**
+
+Corrected to `$request->hasSession() ? $request->session()->get(...) : null` in all
+six controllers.
+
+> **`null` failing closed was the right instinct; `null` never arrived.** The
+> requirement *"not an error, and not a query with the clause silently dropped"*
+> is exactly what caught it.
+
+### 2. The routes are behind auth middleware — so 401 proves the route, not the resolver
+
+An anonymous HTTP request returns **401** and never reaches the fixed code. The
+property had to be exercised **at the method**, with a Request carrying no token
+and no session. **A green HTTP probe here would have proved nothing.**
+
+### 3. Correction — `lms_mapping_type` is a GLOBAL reference table
+
+The verification reported *"10 rows returned, query has no tenant clause"* and I
+first read that as a leak. **It is not.** `lms_mapping_type` has **no
+`sub_institute_id` column** (56 rows, global). **No tenant clause is correct
+there**, and my check counted `final_data` — which comes from that global table —
+rather than the tenant-scoped `chapter_topic_data`.
+
+**Confirmed fail-closed:** the two tenant-scoped queries
+(`chapter_master`, `topic_master`) both filter on `sub_institute_id` and return
+empty when it is null.
+
+---
+
+# CORRECTION — `getDataPre` IS FLAG-GATED
+
+I reported it as the worst instance because it *"needs nothing — no flag, no
+omission"*, and proposed the framing that it is **currently wrong for every
+caller**. **That was wrong, and I am correcting it before it is recorded.**
+
+`lmsmappingController::index:51-52` calls `getDataPre($request)` **only when
+`$request->has('preload_lms')`**. The literal assignment is unconditional *inside*
+the method; the method is not unconditionally reached.
+
+**So it is form 3 like the others**, not a fourth and worse form. No customer has
+been silently reading tenant 1's content on every request; they would have to hit
+a `preload_lms` URL.
+
+> **This is the same error as G-COMP-SEC-01, one level down: I read the method and
+> not its caller.** There the controller's code was not the endpoint's behaviour;
+> here the method's code was not the method's reachability. **Same shape, second
+> occurrence — the boundary of what you read is the boundary of what you know.**
+
+**The downstream-consumer check was still run** and is what produced the
+correction: the only caller is `index()`, and one other controller
+(`lms_lessonplanController:29`) uses `preload_lms` **correctly**, resolving the
+tenant from the session — so it was never in the affected set.
+
+---
+
 # G-SEC-18 — **A REQUEST FIELD SWITCHING THE IDENTITY MODEL** · **S1** · the named pattern
 
 Three variants of **one idea**, each found separately, each treated as its own
@@ -1106,20 +1211,19 @@ pattern — not run three greps.**
 Form 3 is not a fallback at all. It is *"if the caller sets a flag, become tenant 1
 with an elevated role"* — **the identity model itself is selected by the request.**
 
-### The worst instance carries no flag at all
+### `lmsmappingController::getDataPre` — CORRECTED, see the correction above
 
-**`lmsmappingController::getDataPre` — `$sub_institute_id = 1;` unconditionally.**
-
-Forms 1 and 2 need the caller to omit something; form 3 normally needs them to set
-something. **This one needs nothing.** Every caller of that method reads tenant 1,
-always, with no parameter involved. There is no attack to construct — it is simply
-what the method does.
+The assignment is unconditional **inside** the method, but the method is reached
+**only** via `preload_lms` (`index:51-52`). **It is form 3, not a worse fourth
+form.** My original framing — *"needs nothing, wrong for every caller"* — came
+from reading the method without its caller and is withdrawn.
 
 ### What the sweep looks for, from now on
 
-**One question, not three greps:** *does any request-supplied value reach a
-decision about who the caller is, what tenant they are in, or whether a check
-runs?* Tenant literals, role literals, and guard conditions keyed on a request
+**ONE QUESTION, NOT THREE GREPS** — kept verbatim, because three greps each miss
+what they were not written for and one question does not:
+
+> ### Does any request-supplied value reach a decision about WHO the caller is, WHAT TENANT they are in, or WHETHER A CHECK RUNS? Tenant literals, role literals, and guard conditions keyed on a request
 field are all the same finding.
 
 ### FIXED — all nine sites of form 3

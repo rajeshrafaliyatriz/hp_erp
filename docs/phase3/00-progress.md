@@ -355,6 +355,11 @@ that a 40-turn engagement's tracking file was untracked in git.** Nothing else
 would have made a single mangled command unrecoverable.
 
 > **Thirteen under-reports from scope-narrowing assumptions. Zero over-reports.**
+>
+> **R4 checker-artefact tally: ~14 and counting** (latest: shell escaping turned
+> ``/`	` into control characters and produced three false 'class does not
+> load' results). **The shape is now the norm, not a surprise** - logged as a
+> count, not as a new example, unless the shape itself is new.
 > R11's mechanism is beyond coincidence.
 
 ---
