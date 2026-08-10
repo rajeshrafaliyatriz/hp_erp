@@ -1577,3 +1577,40 @@ queue-log reconciliation as a third number.
 | **S-05** | **RESTATED, not retired.** C37 is definable from three places in the record: hand-verify TEN of C34's 114 candidates by data sensitivity, then calibrate or close as a proven negative. NINE remain |
 
 **3 files** (R18d).
+
+
+## D-046 - the regression suite, and its BASELINE
+
+`_evidence/phase3-smoke.php`. One command, **21 checks, 88 seconds**, PASS/FAIL
+per check and one verdict.
+
+### BASELINE 2026-08-10: **21 PASS, 0 FAIL, 0 SKIPPED - GREEN**
+
+Nothing has regressed across 44 shipped items. **That is the answer to the
+question that prompted it**, and it was not knowable before this ran.
+
+| Group | Checks |
+|---|---|
+| SECURITY | G-SEC-23 not disclosing · G-SEC-15 401 + bounded · G-LMS-SEC-01 401 · G-XPROD-01 zero HP Brain rows |
+| PERMISSIONS | nine roles non-empty · Administrator 1->8->23 · Employee **18** leaves |
+| EVENT STORE | emit->project->re-project idempotent · **reactor THROWS on replay** · catalogue invariants |
+| DATA | link resolution 100/100/100 · cross-tenant fks 0/0/0 · `hpbrain_audit_logs` **342, untouched** |
+| SLICE 1 | colleague's gap **403** · full chain required 3 / measured 1 / gap 2, **surviving a rename** |
+| STATIC | `php -l` across 29 files |
+
+### WHAT THE SUITE DOES NOT COVER - stated, not implied
+
+- **C23's full read half (912 routes) is NOT in it.** It takes far longer than the
+  10-minute budget. It remains a separate command and **the suite does not stand
+  in for it.**
+- **G-SEC-23 covers 2 of its 3 routes** - `user-signup` and `feedback`.
+  `competency/audit/user-actions` is not checked.
+- **The anonymous probe covers 2 routes, not the 4** previously reachable
+  (`api/kpis`, `DeepSeekChat`, `api/candidate`,
+  `api/ai-generated-assessment/question/index` are unchecked).
+- **No frontend `tsc`** - it is a separate repo and a separate command.
+
+**These are gaps in coverage, not passes.** Recorded so the GREEN verdict is read
+for exactly what it tests.
+
+**3 files** (R18d).

@@ -317,6 +317,16 @@ this rule was introduced: twelve security fixes were in the register and in git 
 had never been written to the log. **Report the reconciliation in the status line
 each time.**
 
+**R18e - RUN THE SMOKE SUITE BEFORE AND AFTER EVERY ITEM.**
+`_evidence/phase3-smoke.php`, one command, ~90 seconds, 21 checks.
+
+**Why it exists:** 44 items had shipped, each verified when it landed, **none
+re-run since**. If something had broken three items ago nothing would have said
+so. **BASELINE 2026-08-10: 21 PASS, 0 FAIL, 0 SKIPPED - GREEN.**
+
+**A check that cannot run reports SKIPPED, never PASS.** Every check cleans up
+after itself; this is a shared database.
+
 **R18c(iii) - THE PLAN FILE JOINS THE RECONCILIATION.** `08-connection-plan.md`'s
 status column is the THIRD instance of one pattern: "2 of 32", the stale queue,
 and now six rows reading "Not started" for work that had shipped. **A status
@@ -640,8 +650,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **45** ·
-`09-implementation-log.md` entries = **45** · **AGREE.** · plan file **16 of 59 done** (R18c(iii))
+**RECONCILIATION (R18, every write):** queue "done" rows = **46** ·
+`09-implementation-log.md` entries = **46** · **AGREE.** · plan file **16 of 59 done** (R18c(iii))
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
