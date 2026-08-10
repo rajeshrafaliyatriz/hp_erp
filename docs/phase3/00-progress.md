@@ -677,7 +677,7 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 ## Queue
 
 > ### ⚠️ THIS SECTION IS REWRITTEN, NEVER APPENDED TO (R18)
-> Last rewritten **2026-08-10**. It went stale for ~8 shipped items once — the
+> Last rewritten **2026-08-11**. It went stale for ~8 shipped items once — the
 > "2 of 32" incident repeating — while the gap register stayed current. **The
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
@@ -687,7 +687,13 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
-### FOUNDATIONS — **5 of 6**
+### FOUNDATIONS — **6 of 6**
+
+> **The counter said "5 of 6" while all seven rows below read ✅.** R18b’s own
+> failure mode, in the section that documents it. Corrected 2026-08-11.
+>
+> **Foundation 5 is done AS SCOPED and its data is empty** — the column shipped,
+> nothing ever wrote to it (G-DATA-09). Built ≠ populated.
 
 | # | Build item | State |
 |---:|---|---|
