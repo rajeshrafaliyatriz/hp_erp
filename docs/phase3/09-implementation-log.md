@@ -876,3 +876,32 @@ profiles and the only argument set in use — **1 profile differs, 0 users**
 (id 38 "Deparment Administrator", the same deliberate denial).
 
 **5 files** (R18d): 2 controllers/traits + 3 docs.
+
+
+## D-030 · Item 6, slice 1 — the event store
+
+`g2g_event` + `g2g_event_delivery`, built exactly to `05-data-flow-contracts.md`
+§1. **Nothing adapted** - that document is the contract for six other items.
+
+**Confirmed as built, not as intended:**
+
+- **`sub_institute_id` NOT NULL on every event.** This is the one table that will
+  hold every tenant's history, so it is the worst place for G-DATA-08 to recur.
+- **`actor_id` nullable, where NULL means SYSTEM** - a real value, not "unknown".
+  Any non-null value comes from the resolved identity, never a request field.
+  **G-SEC-12 is what makes that true, and it was this item's precondition (§1.9).**
+- **`occurred_at` and `recorded_at` separate**, both `DATETIME(3)`.
+- **Delivery state per CONSUMER**, not a column on the event.
+- All five indexes and both unique keys present, verified against the DDL.
+
+**One representation note, not a contract change:** MariaDB stores `JSON` as
+`LONGTEXT` with a check constraint, so `payload`/`metadata` report as `longtext`.
+The column type in the contract is honoured; the engine's storage differs.
+
+**Deliberately NOT built in this slice:** the projections. `05`'s §1 names
+`g2g_audit_log`, which does not exist, while `task_management_audit_logs` (6 rows)
+and `tbl_user_journey_logs` (5,234 rows) are **live independent writers the
+document does not mention**. **Raised, not decided** - and the store is required
+under every resolution, so it was safe to build while that is open.
+
+**3 files** (R18d): 1 migration + 2 docs.

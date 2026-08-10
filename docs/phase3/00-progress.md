@@ -618,8 +618,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **29** ·
-`09-implementation-log.md` entries = **29** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **30** ·
+`09-implementation-log.md` entries = **30** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -633,7 +633,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | 4a | Tri-state rights columns | ✅ `5e302651` |
 | **4b** | **Populate the rights matrix** | ✅ **APPLIED** `5af9b26a` — 5,621 rows, 99 profiles, 0 orphans. Nine roles render through the real path (R9). Administrator retains 1/8/23 |
 | 5 | `reporting_manager_id` + `head_user_id` + cycle validation | ✅ `f293edb0` |
-| **6** | **Event store + projector/reactor split + `task_status_history`** | **NOT STARTED — NEXT AFTER THE SECURITY PAUSE** |
+| **6** | **Event store + projector/reactor split + `task_status_history`** | 🔄 **SLICE 1 DONE** (`g2g_event` + `g2g_event_delivery`, D-030). **Projections BLOCKED** on the `g2g_audit_log` question below |
 | **F-07b** | Backfill + unmatched report + drops (R8) | **NOT STARTED — after item 6** |
 
 ### SECURITY STREAM — **16 fixes shipped**. **THE PAUSE IS NOW IN FORCE.**
@@ -667,6 +667,30 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | Leave 102/103/104 | ❌ stay denied — identity fixed, **row scope open** (`show():98` has no caller check, `index():40` is tenant-wide) |
 | Payroll, Directory 22, Skill Gap 26, Talent, Reports, Task 210/212–215 | ❌ denied — see G-RBAC-01/02 |
 | Dept Head + Reporting Manager | ⏸ **parked on reporting-line COVERAGE, not on a fix** (G-ORG-02) |
+
+### ⛔ OPEN DECISION BLOCKING ITEM 6's PROJECTIONS
+
+`05-data-flow-contracts.md` §1 names **`g2g_audit_log`** as one of three
+projections. **It does not exist.** Meanwhile two audit stores DO exist, are
+written directly, and appear nowhere in the document:
+
+| Table | Rows | Written by |
+|---|---:|---|
+| `task_management_audit_logs` | 6 | `TaskAuditService` |
+| `tbl_user_journey_logs` | **5,234** | direct writes |
+
+**These are second sources of truth - what §1 exists to prevent - and neither is
+one of the two justified independent writers** (a manager's manual observation,
+imported history).
+
+**Recommended: option 2.** `g2g_audit_log` becomes a projection superseding
+`task_management_audit_logs` (6 rows, trivially migrated); `tbl_user_journey_logs`
+is declared a third independent writer, because 5,234 rows of NAVIGATION TELEMETRY
+is a different concern from compliance audit and forcing it into the model would
+be tidiness, not truth.
+
+**Not decided unilaterally. The store was built because it is required under every
+resolution.**
 
 ### PARKED — resume after foundations
 
