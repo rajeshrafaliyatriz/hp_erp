@@ -703,6 +703,57 @@ different ids and a NULL `user_profile_id`**. It produced a plausible false
 
 ---
 
+# C23 HARNESS — VERIFIED, NOT ARGUED
+
+**C24's release gate rests on this guard, so it was measured rather than reasoned
+about.**
+
+### The argument I gave was wrong
+
+I said C23 was probably unaffected by G-HARNESS-01 "because its calls carry no
+token". **It does carry one.** `c23-tenant-guard.php:34` defines `TOKEN_A` and
+`call_route()` sends it **both** as a request parameter **and** as a Bearer
+header. The question was open, not closed.
+
+### Method
+
+For a sample stratified across **every verdict class**, re-run the same
+baseline/attack pair **one request per process** and compare against the recorded
+verdict. Agreement on FAIL and PASS is what clears the guard; any disagreement
+invalidates it.
+
+### Result — 20 of 23 agree
+
+| Recorded | Isolated re-run | Agreement |
+|---|---|---|
+| **PASS** ×8 | identical body ×8 | **8/8** |
+| **FAIL** ×5 (`job-role-tasks`, `jobroletexonomies`, `skills`, `role-similarity`, `audit/export`) | **CHANGED** ×5 | **5/5** |
+| **VACUOUS** ×3 | identical ×3 | **3/3** |
+| **LEAK-NOSCOPE** ×3 | identical ×3 | **3/3** — correct: LEAK-NOSCOPE *is* identical-but-carrying-tenant-B-markers |
+| **FAIL** ×3 (`api/lmsAssignment/stats`, `/learners`, `/enrollments`) | identical | **explained, see below** |
+
+### The three disagreements are my own fix, not a harness defect
+
+All three are `assignmentController` routes. **G-LMS-SEC-01 replaced its nine
+`$request->sub_institute_id` reads with `lmsTenantId()` earlier in this same
+session.** The recorded run predates that change. The route now ignores the
+supplied tenant, so the two responses are identical — which is the fix working.
+
+**Incidental confirmation:** the tenant half of G-LMS-SEC-01 is now independently
+verified by C23's own instrument, not only by my targeted test.
+
+### Why it holds
+
+Both requests in a C23 pair use the **same token**, so a cached identity is the
+**same** identity and the leak has nothing to change. The tenant claim under test
+travels in a **request parameter**, which is not what gets cached.
+
+**VERIFIED — with its limit stated:** this is a **23-route stratified sample of
+912**, not an exhaustive re-run. It covers every verdict class and both
+directions. **C23's verdicts stand, and C24's gate may rest on them.**
+
+---
+
 # G-SEC-13 — `if ($type == "API")` IS A SIGNATURE, NOT AN INCIDENT · **S1** · **CANDIDATES (R6)**
 
 `PayrollController` had it. `assignmentController` had it. Both times it meant the
@@ -782,7 +833,16 @@ sat.
 
 ---
 
-# G-SEC-15 — AN ANONYMOUS REQUEST CAN EXHAUST SERVER MEMORY · **S2**
+# G-SEC-15 — AN ANONYMOUS REQUEST CAN EXHAUST SERVER MEMORY · **S1**
+
+> **RAISED FROM S2.** It discloses nothing, which is why it first read as S2 —
+> but **availability is a security property.** No credential, no rate limit to
+> defeat, no skill: one URL, repeated from a browser. *"Anyone on the internet can
+> take the API down"* ends a procurement conversation as fast as a data leak.
+>
+> **Fix is BOTH, not either: auth middleware AND a bounded result set.**
+> Auth alone leaves an authenticated user able to do it; a bound alone leaves the
+> endpoint open.
 
 `AJAXController@getSkillCompetency`, route `getSkillCompetency` — **no auth
 middleware, no `{id}` parameter**.

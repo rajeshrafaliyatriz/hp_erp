@@ -299,6 +299,21 @@ the file is non-empty and still contains an expected marker line**.
    alone is the behaviour.** Read the route file and the controller, or call the
    endpoint.
 
+**R4 — two worked examples, both from the security queue.**
+
+1. **INFERRING A CAUSE FROM A SILENT PROCESS.** A probe produced no output and I
+   reported it as *"hung, blocking on an outbound call"*. It had died of
+   **memory exhaustion**. **"No output" means the process stopped - it does not
+   name why.** Same shape as reading `last_used_at IS NULL` as *"no token was
+   ever used"*: an absence being read as a specific cause. It is the same family
+   as a proxy, **one step earlier** - before there is even a measurement to be
+   wrong about.
+2. **A HARNESS THAT DIES ON A SPECIFIC INPUT IS TELLING YOU SOMETHING ABOUT THE
+   INPUT.** The route that killed the probe was the finding (G-SEC-15): an
+   unauthenticated GET loading an unbounded result set. **Second time this phase
+   a harness failure was the signal rather than the noise** - the first being the
+   container conflict that an empty sidebar exposed.
+
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else
 would have made a single mangled command unrecoverable.
