@@ -47,6 +47,49 @@ disagree is worse than no log.**
    section exists to prevent.
 4. **No projector writes to another projection.** Each reads only the store.
 
+### AMENDMENTS — 2026-08-10
+
+Two changes to the model above, made explicitly because §1 is the contract for six
+other items and a silent change would be a change to all of them.
+
+#### A1 — `g2g_audit_log` supersedes `task_management_audit_logs`, and THE WORK IS THE WRITER
+
+`g2g_audit_log` is built as a projection. **The six rows in
+`task_management_audit_logs` are not the work.** `TaskAuditService` **writes
+directly** today, so the deliverable is converting it to **EMIT EVENTS**.
+
+> **A projection and a direct writer existing at once is exactly what §1 prevents,
+> dressed as compliance with it.**
+
+#### A2 — navigation telemetry is OUT OF SCOPE OF THE MODEL, not an exception to it
+
+`tbl_user_journey_logs` (5,234 rows) is **not** declared a third independent
+writer.
+
+The two existing exceptions are **facts that BELONG in the store but originate
+outside it** — a manager's observation, imported history. **Navigation telemetry
+does not belong in the store at all:** nobody acts on a page view, so every such
+event **fails the named-consumer test by construction**, and 5,234 rows of
+navigation would flood the store with consumerless events.
+
+> **THE MODEL COVERS BUSINESS FACTS WITH NAMED CONSUMERS.** Telemetry is a
+> separate concern with its own table — **not an exception to the model.**
+>
+> An exception list that grows invites more exceptions. *"Not in scope"* closes
+> the question; *"a third exception"* opens it.
+
+#### A3 — engine note, not a contract change
+
+MariaDB stores `JSON` as `LONGTEXT` with a check constraint, so `payload` and
+`metadata` report as `longtext` in `DESCRIBE`. **The contract's column type is
+honoured; the engine's storage differs.** Recorded so a future reader diffing DDL
+against this document does not raise it as a violation.
+
+**Schema claims are verified against the CREATED SCHEMA, never the migration
+source** — the migration is what was meant, the database is what happened.
+
+---
+
 ### Justified independent writers — the exceptions
 
 Per your instruction to justify explicitly, there are exactly **two**:

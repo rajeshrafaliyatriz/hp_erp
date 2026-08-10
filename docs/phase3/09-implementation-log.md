@@ -905,3 +905,40 @@ document does not mention**. **Raised, not decided** - and the store is required
 under every resolution, so it was safe to build while that is open.
 
 **3 files** (R18d): 1 migration + 2 docs.
+
+
+## D-031 · Item 6, slice 2 — g2g_audit_log as a projection, TaskAuditService converted
+
+**§1 amendments A1/A2/A3 recorded in `05-data-flow-contracts.md`, dated, because
+that document is the contract for six other items.**
+
+**The deliverable was the WRITER, not the six rows.** `TaskAuditService` inserted
+into `task_management_audit_logs` directly; it now calls `EventRecorder::record()`.
+**No direct write path remains** - the only surviving mention of the old table in
+`app/` is the comment explaining the change.
+
+Built: `EventRecorder` (the only writer of `g2g_event`), `g2g_audit_log`
+(projection, UNIQUE on `event_id` so re-projection cannot duplicate),
+`AuditLogProjector` (kind = **P**, pure, `catchUp()` and `rebuild()`).
+
+`configChanged` now emits `entity_type='task_config'` instead of the `task_id = 0`
+sentinel - a workaround for a table with no way to say "this is configuration".
+
+**Acceptance test, end to end:**
+
+| Check | Result |
+|---|---|
+| emit → `g2g_event` | `task.status_changed`, tenant 7, actor 198, entity `task/999999` |
+| project | 1 event → **1 audit row** |
+| **re-project the same event** | **still 1 row** — idempotent by construction |
+| **rebuild** (truncate + clear ledger + re-derive) | **1 row re-derived** |
+| **tenant guard** | `sub_institute_id = 0` **REFUSED** — *"An event requires a tenant."* |
+
+Test data removed afterwards; this is a shared database.
+
+**Not yet built:** the catalogue with `kind` per row (slice 3),
+`task_status_history` and §6.2's replay procedure (slice 4). **No reactor exists
+yet, so replay-mode reactor dispatch is untested** - it is specified and unbuilt,
+not assumed working.
+
+**6 files** (R18d): 1 migration + 3 app + 2 docs.
