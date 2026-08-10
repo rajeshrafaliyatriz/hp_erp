@@ -1001,3 +1001,75 @@ competency-derived course, not to write one. **Five new items, not six or four.*
 Plan item count **~40 → ~45**.
 
 **3 files** (R18d): 2 docs + 1 count update.
+
+
+## D-034 · Item 6, slice 4 — first consumer, replay procedure, first reactor, REAL REBUILD
+
+**ITEM 6 CLOSES.** All four claims RUN, not summarised.
+
+### 1. `task_status_history` — F2 is DETECTABLE, not describable
+
+`TaskStatusProjector` (kind **P**). A reopen is a transition INTO an active status
+FROM a terminal one, and **it cannot be seen from the task row at all** - by the
+time a task is reopened, the row that said "completed" has been overwritten. The
+transition exists only in the event stream.
+
+| from | to | from_terminal | to_active | is_reopen |
+|---|---|---|---|---|
+| OPEN | COMPLETED | no | no | no |
+| COMPLETED | IN_PROGRESS | yes | yes | **YES** |
+| IN_PROGRESS | IN_REVIEW/approved | no | no | no |
+| IN_REVIEW/approved | IN_PROGRESS | yes | yes | **YES** |
+
+**2 reopens detected of 2 expected** - including the approval-withdrawn case,
+where `approve_status='approved'` is the terminal marker rather than the status.
+
+### 2. §6.2 as code — `ReplayRunner`, with its refusals verified
+
+| Attempt | Result |
+|---|---|
+| replay mode not passed | **REFUSED** |
+| no recorded store `max(id)` | **REFUSED** |
+| **a REACTOR as the target** | **REFUSED** |
+
+**Dry run: shadow=4, live=4, verdict PROCEED — and the live table was NOT touched**
+(4 rows before and after). Projectors were made target-table aware so the shadow
+run writes nowhere near live; the first version moved rows through the live table
+and that was fixed, not documented as acceptable.
+
+Runbook written to `_changes/REPLAY-RUNBOOK.md`. **Rollback is RESTORE, and
+`ReplayRunner` has no `rollback()` method** - offering one would imply replay can
+undo itself.
+
+### 3. First reactor — THROW-ON-REPLAY, exception shown
+
+```
+RuntimeException: Reactor [notification_dispatcher] was dispatched during replay.
+Reactors never run on replay (05-data-flow-contracts.md §2.0). This means a
+reactor is registered as a projector, or a projector invoked a reactor.
+```
+
+A **throw**, not a no-op: a no-op would let a rebuild complete while silently
+skipping every side effect, and the operator would see success.
+
+### 4. A REAL REBUILD — the last unproven claim, now VERIFIED
+
+| Ledger | before | after | |
+|---|---:|---:|---|
+| **projector** (`task_status_projector`) | 4 | 4 | **cleared, then re-derived** |
+| **reactor** (`notification_dispatcher`) | **1** | **1** | **PERMANENT — SURVIVED** |
+
+4 rows re-derived; **F2 reopens still 2 after the rebuild** - the projection is
+identical, so the projector is idempotent under a full rebuild (precondition 2,
+proven by running it rather than by inspection).
+
+**"Specified" and "verified" have been kept distinct through this whole build.
+This is the item that distinction was for, and it is now verified.**
+
+Test data removed - shared database. Events 0, history 0, audit 0, delivery 0.
+
+**One discrepancy reported, not silently fixed:** §6.2 precondition 1 says
+`g2g_event_store`; the table built to §1's DDL is `g2g_event`. §1 is
+authoritative. **Not edited** - `05` is the contract for six other items.
+
+**8 files** (R18d): 1 migration + 5 app + 2 docs... plus the runbook and evidence = 10.

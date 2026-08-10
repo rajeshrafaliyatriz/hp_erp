@@ -31,9 +31,18 @@ class AuditLogProjector
     /**
      * Project one event. Safe to call repeatedly.
      */
-    public function project(object $event): void
+    /**
+     * $target lets a DRY RUN write into a shadow table without the live table
+     * being touched at all (§6.2 step 1). Threading the table through is the
+     * honest way to do it: the alternative - writing live then moving the row -
+     * touches the live table transiently, which is exactly what the dry run
+     * exists to avoid.
+     */
+    public function project(object $event, ?string $target = null): void
     {
-        DB::table('g2g_audit_log')->updateOrInsert(
+        $target ??= 'g2g_audit_log';
+
+        DB::table($target)->updateOrInsert(
             ['event_id' => (int) $event->id],
             [
                 'sub_institute_id' => (int) $event->sub_institute_id,
@@ -47,10 +56,15 @@ class AuditLogProjector
             ]
         );
 
-        DB::table('g2g_event_delivery')->updateOrInsert(
-            ['event_id' => (int) $event->id, 'consumer' => self::CONSUMER],
-            ['status' => 'done', 'attempts' => DB::raw('attempts + 1'), 'completed_at' => now()]
-        );
+        // A shadow run must leave no trace in the delivery ledger either -
+        // otherwise the dry run would mark events as delivered that the live
+        // projection has never seen.
+        if ($target === 'g2g_audit_log') {
+            DB::table('g2g_event_delivery')->updateOrInsert(
+                ['event_id' => (int) $event->id, 'consumer' => self::CONSUMER],
+                ['status' => 'done', 'attempts' => DB::raw('attempts + 1'), 'completed_at' => now()]
+            );
+        }
     }
 
     /**

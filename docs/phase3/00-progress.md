@@ -618,12 +618,12 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **33** ·
-`09-implementation-log.md` entries = **33** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **34** ·
+`09-implementation-log.md` entries = **34** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
-### FOUNDATIONS — **4 of 6**
+### FOUNDATIONS — **5 of 6**
 
 | # | Build item | State |
 |---:|---|---|
@@ -633,7 +633,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | 4a | Tri-state rights columns | ✅ `5e302651` |
 | **4b** | **Populate the rights matrix** | ✅ **APPLIED** `5af9b26a` — 5,621 rows, 99 profiles, 0 orphans. Nine roles render through the real path (R9). Administrator retains 1/8/23 |
 | 5 | `reporting_manager_id` + `head_user_id` + cycle validation | ✅ `f293edb0` |
-| **6** | **Event store + projector/reactor split + `task_status_history`** | 🔄 **SLICES 1–3 DONE** (store D-030; `g2g_audit_log` projection + `TaskAuditService` converted to emit, D-031). catalogue D-032. **Slice 4 next:** `task_status_history`, §6.2 replay procedure, and the first REACTOR with its throw-on-replay test |
+| **6** | **Event store + projector/reactor split + `task_status_history`** | ✅ **DONE** (all 4 slices) (store D-030; `g2g_audit_log` projection + `TaskAuditService` converted to emit, D-031). store D-030 · audit projection D-031 · catalogue D-032 · **D-034: `task_status_history` (F2 detectable), `ReplayRunner` + runbook, first reactor throwing on replay, and a REAL REBUILD proving the reactor ledger permanent** |
 | **F-07b** | Backfill + unmatched report + drops (R8) | **NOT STARTED — after item 6** |
 
 ### SECURITY STREAM — **16 fixes shipped**. **THE PAUSE IS NOW IN FORCE.**
