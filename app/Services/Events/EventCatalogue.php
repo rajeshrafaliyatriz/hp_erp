@@ -59,10 +59,11 @@ class EventCatalogue
             'ProficiencyService'          => self::PROJECTOR,
             'GapRecalculator'             => self::PROJECTOR,
         ],
-        // X-06: NotificationDispatcher REMOVED - deferred until X-11 emits this
-        // event and gives its action link somewhere to point.
+        // X-06 deferred this; X-11 UN-DEFERS it. CertificateIssuer now emits it,
+        // and the certificate row it announces exists before the emit happens.
         'certification.issued' => [
             'CapabilityEvidenceProjector' => self::PROJECTOR,
+            'NotificationDispatcher'      => self::REACTOR,
         ],
         'certification.expiring' => [
             'NotificationDispatcher'      => self::REACTOR,
@@ -71,7 +72,10 @@ class EventCatalogue
         'employee.role_assigned' => [
             'GapRecalculator'             => self::PROJECTOR,
             'ProficiencyService'          => self::PROJECTOR,
-            'MandatoryLearningAssigner'   => self::REACTOR,
+            // X-12: MandatoryLearningAssigner ABSORBED into LearningAssigner.
+            // They differed only in where the course list came from, and two
+            // classes meant two places to get idempotency wrong.
+            'LearningAssigner'            => self::REACTOR,
         ],
         'employee.hired' => [
             'OnboardingLauncher'          => self::REACTOR,
@@ -145,12 +149,9 @@ class EventCatalogue
             'trigger'   => 'an employee->manager edge that resolves',
             'reason'    => 'MEASURED: tbluser.reporting_manager_id is populated on 0 of 387 rows, and supervisor_opt is a flag (4 Supervisor / 57 Subordinate) with no edge between the two. Every other manager column in the schema belongs to a CASE, not to a person. A flag is an ESCALATION; redirecting it to the employee would change what it means, and that is a product decision, not a build one.',
         ],
-        'certification.issued' => [
-            'verdict'   => 'DEFERRED',
-            'recipient' => 'the holder',
-            'trigger'   => 'X-11 CertificateIssuer ships',
-            'reason'    => 'The recipient and the action are both clear - it is the EMITTER that does not exist yet, and the action link would point at a certificate screen that has not been built. lms_certificates holds 0 rows. Nothing would fire, and if it did there would be nowhere to send the reader.',
-        ],
+        // 'certification.issued' WAS HERE. X-11 shipped, so its trigger fired and
+        // it moved back into NOTIFIES. Left as a comment rather than deleted so
+        // the deferral and its resolution stay visible together.
         'readiness_gate.changed' => [
             'verdict'   => 'DROPPED',
             'recipient' => null,

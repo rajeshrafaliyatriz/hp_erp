@@ -106,6 +106,87 @@ remote database.
 
 ---
 
+---
+
+# G-DATA-10 - **THE COURSE BRIDGES ARE BUILT AND EMPTY** - **S2**
+
+> Found by X-12, which is the first item that needed them.
+
+| Bridge | Rows | Consequence |
+|---|---|---:|
+| `course_competency_map` | **0** | a development plan can name the COMPETENCY that needs work and **cannot name a COURSE** |
+| `course_jobrole_map` | **0** | the key path from a role to its courses is dead |
+
+**But the role relationship EXISTS - held by NAME, on the course row itself:**
+
+| Measure | Value |
+|---|---|
+| courses (`sub_std_map`, not deleted) | **95** |
+| ...carrying a `jobrole` NAME | **72** |
+| ...resolving to a job role by (name, tenant) | **73 join rows** |
+
+**73 rows from 72 courses: one course name matches TWO job roles.** That fan-out is
+the text join's own argument against itself, and it is why the backfill matters
+rather than being cosmetic.
+
+### THIS IS `G-DATA-06` AGAIN, IN A PLACE NOBODY SWEPT
+
+L-11 swept join clauses. **This is not a join defect** - it is the same disease one
+level up: **the relationship is stored as a name and the key column that should
+hold it was never filled.** The sweep could not have found it, because there is no
+bad join to find. There is a table with nothing in it.
+
+### THE PLAN SIDE IS WORSE AND IS NOT THE SAME PROBLEM
+
+`s_competency_plan_actions` holds **377 rows, 377 with a `competency_id`** - and
+**no `course_id` column at all**. There is no text fallback because there is no
+text. **The plan side needs a schema decision, not a backfill.**
+
+### PROPOSED: **X-18, BACKFILL `course_jobrole_map` FROM THE TEXT**
+
+Exactly what F-07b did for three other mappings: 73 candidate rows, resolve by
+(name, tenant), report what does not match and **keep every unmatched row**.
+
+> **NOT DONE HERE. It is a bulk write, and bulk writes are asked for, never
+> assumed (R13).** X-12 reads key-first, so the day the table is populated the
+> text fallback stops being used **without a code change**.
+
+---
+
+# G-NOTIF-02 - **SIX NOTIFICATIONS WHOSE "ACT ON IT" LINK 404s** - **S3** - FIXED
+
+X-06 deferred `certification.issued` partly because *"its action link would point
+at a certificate screen that has not been built"*. **That reason applied to all six
+events it DID ship, and I checked none of them.**
+
+| Template | Path shipped | Exists? |
+|---|---|---|
+| `task.rejected` | `/tasks/{id}` | **no** |
+| `assessment.completed` | `/competency/my-capability` | **no - there is no `/competency` route** |
+| `certification.expiring` | `/competency/my-capability` | **no** |
+| `development_plan.approved` | `/competency/development-plan/{id}` | **no** |
+| `employee.offboarded` | `/talent/offboarding/{id}` | **no** |
+| `rights.changed` | `/settings/my-access` | **no - `/settings` exists, that child does not** |
+
+**Every path was invented from the shape of the domain rather than read from the
+router.** The check that would have caught it costs one `find app -name page.tsx`.
+
+**They cannot simply be corrected.** Competency, task and talent screens are
+reached through `/module/[moduleId]/[menuId]/[submenuId]`, and those ids come from
+`tblmenumaster_g2g` **at runtime, per tenant**. **There is no static path to
+hardcode.**
+
+**FIXED:** all set NULL except `development_plan.approved`, which keeps
+`/lms/training-records/assignment` - real, and genuinely where X-12 writes. The
+bell already renders a link-less message. **A message that says what happened is
+worth having; a link that breaks is not.**
+
+**A smoke check now compares every `action_path` against a route list verified from
+`g2gv0/app/**/page.tsx`.** A deep-link resolver (menu ids -> path) is the real fix
+and belongs with X-17's flows, which will need it anyway.
+
+---
+
 # G-DATA-09 - **DUPLICATE. SEE `G-ORG-02`.**
 
 I raised this as a new finding on 2026-08-11. **It is not new.** `G-ORG-02` has

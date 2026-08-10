@@ -1733,3 +1733,144 @@ error as an empty inbox.
 all rows cleaned up. Smoke **25 -> 29 checks, GREEN**. Frontend `tsc`: 9 errors,
 **none in X-06's files** (pre-existing, in `admin-center`, `gtg-nav-visibility`,
 `offboarding-service`).
+
+## D-049 - X-12: the learning assigner, and two entry points in different health
+
+**One class, absorbing `MandatoryLearningAssigner`.** They differed only in where
+the course list came from, and two classes meant two places to get idempotency
+wrong.
+
+### THE TWO PATHS ARE NOT IN THE SAME STATE, AND THE DIFFERENCE IS MEASURED
+
+| | ROLE -> COURSE | PLAN -> COURSE |
+|---|---|---|
+| key table | `course_jobrole_map` **0 rows** | `course_competency_map` **0 rows** |
+| text fallback | **`sub_std_map.jobrole`: 72 of 95 courses carry a role NAME** | **none exists** |
+| resolves | **73 join rows** by (name, tenant) | - |
+| verdict | **WORKS TODAY, by name** | **cannot work** - `s_competency_plan_actions` has 377 rows, 377 with a `competency_id`, and **no `course_id` column at all** |
+
+**73 resolving rows from 72 named courses** means one course name matches two job
+roles. That fan-out is the text join's own argument against itself.
+
+### THE COURSE TABLE IS CALLED `sub_std_map`
+
+Two guesses (`lms_courses`, `courses`) returned *table missing*. Found by reading
+the join in `LmsCourseController` - `->on('e.course_id', '=', 's.id')`.
+**My first version of the class docblock said "almost nothing to assign" for BOTH
+paths.** That was written after reading the two empty bridge tables and before
+finding the course table, which no search for "course" returns. **R20 again: I had
+read the empty tables and stopped there.**
+
+### DECISIONS TAKEN AND SAID OUT LOUD
+
+- **Text fallback is used knowingly**, tagged `source='jobrole_text'` on every row
+  so it is never mistaken for the key path, and **both sides carry the tenant
+  condition** - the L-11 failure mode cannot occur.
+- **`skipped` is not `done`.** An empty bridge records *"no course mapped"* with
+  its reason. `done` with zero assignments would make an empty table and a broken
+  assigner look identical.
+- **Nothing was seeded in tenant data.** The proof inserts ONE bridge row, proves
+  the plan path works, and removes it. **A fabricated mapping is a lie that
+  survives the demo.**
+
+### IDEMPOTENCY - AND THE CONSTRAINT I COULD NOT HAVE
+
+The natural key is (user, course, plan). **`lms_assignments` already holds 4 rows
+that violate it** and 11 duplicate (user, course) pairs, all with
+`source='competency'` - no NULL to hide behind. Enforcing it would mean editing
+existing rows, **which the no-deletion rule forbids and rightly**.
+
+So `origin_event_id` was added, NULL on all 49 existing rows, and the unique index
+is `(user_id, course_id, origin_event_id)`. MySQL treats NULLs as distinct, so the
+pre-existing duplicates sit outside the constraint **by construction** and the
+index built without touching one of them.
+
+> The same NULL-distinctness that made NULL the WRONG choice for
+> `g2g_terminology`'s global sentinel is exactly the property wanted here.
+
+**Guaranteed:** one assignment per (person, course, originating event).
+**NOT guaranteed:** that two different events cannot assign the same course. That
+is guarded by a query, **and is stated as weaker rather than described as if it
+were an index.**
+
+---
+
+## D-050 - X-11: the certificate issuer. THE LOOP CLOSES.
+
+`course.completed` -> certificate -> `certification.issued` -> **the holder is
+told**. Proven end to end on the one real completed enrolment in the database
+(tenant 3, user 6, course 103, certificate `G2G-3-10297`).
+
+### IDEMPOTENCY ON AN IRREVERSIBLE ACT - THREE OVERLAPPING LAYERS
+
+1. `g2g_event_delivery` - this event, this consumer, once.
+2. **UNIQUE index on `lms_certificates.enrollment_id`** - added while the table was
+   still empty, so X-11 got the strong constraint X-12 could not have.
+3. **The certificate number and verification code are DERIVED, not random.**
+
+Layer 3 is the one worth explaining. A random UUID makes every retry produce a NEW
+number that the unique index cannot recognise as a duplicate. Deriving both from
+(tenant, enrolment) means **a retry computes the same certificate and collides on
+its own uniqueness** - the identifier carries the idempotency. Proven by clearing
+the ledger and re-dispatching: still one certificate.
+
+### THE ENROLMENT WINS OVER THE EVENT
+
+An event saying `course.completed` is **not** evidence that the enrolment says so.
+X-11 re-reads the enrolment and refuses if it is not `completed`. Tested with a
+deliberately lying event: **0 certificates minted.**
+
+### NO GUESSED EXPIRY
+
+`sub_std_map.certificate_validity_months` is the right source and is populated on
+**0 of 95** courses, so every certificate issued today is open-ended. **A guessed
+expiry is worse than none** - `certification.expiring` would later tell a real
+person to renew something that never lapsed.
+
+### `certification.issued` CAME BACK
+
+X-06 deferred it with the trigger *"X-11 CertificateIssuer ships"*. **The trigger
+fired.** It is out of `NOT_NOTIFIED`, into `NOTIFIES`, with a resolver and a
+template. **That is what writing triggers down is for**, and it is the first one in
+this phase to actually fire.
+
+---
+
+## D-051 - G-NOTIF-02: I shipped six notifications whose action link 404s
+
+**X-06 deferred `certification.issued` partly because "its action link would point
+at a certificate screen that has not been built". THAT REASON APPLIED TO ALL SIX
+EVENTS I DID SHIP, and I checked none of them.**
+
+Every path was invented from the shape of the domain rather than read from the
+router: `/tasks/{id}`, `/competency/my-capability`,
+`/competency/development-plan/{id}`, `/talent/offboarding/{id}`,
+`/settings/my-access`. **There is no `/competency` route at all.**
+
+**They cannot simply be corrected.** The competency, task and talent screens are
+reached through `/module/[moduleId]/[menuId]/[submenuId]`, and those ids come from
+`tblmenumaster_g2g` **at runtime, per tenant**. There is no static path to
+hardcode; a correct deep link needs a resolver that does not exist.
+
+**Fixed by setting them NULL**, except `development_plan.approved`, which keeps
+`/lms/training-records/assignment` - a route that genuinely exists and is genuinely
+where X-12 writes. A message that says what happened is worth having; a link that
+breaks is not. **A smoke check now compares every `action_path` against a route
+list verified from `g2gv0/app/**/page.tsx`.**
+
+### AND THE HARNESS FAILED R23 AGAIN, ONE ITEM LATER
+
+The loop proof's `check()` did `$ok ? 'PASS' : 'FAIL'`. Checks opting out returned
+the **string** `'SKIPPED'`, which is truthy - so *"plan path WORKS the moment the
+bridge is populated"* printed **PASS** beside the detail *"no plan+course pair in
+this tenant"*. **A check that never ran was counted as evidence that it
+succeeded.**
+
+Same class as X-06's both-branches detail string: **the verdict and the detail
+disagreed and the verdict won.** Now three states, SKIPPED counted separately, and
+a non-boolean verdict is itself a FAIL. The check was then re-scoped to search
+across tenants so it actually runs - **and it passes.**
+
+**Evidence:** `docs/phase3/_evidence/x11-x12-loop-proof.php` - **15/15 GREEN, 0
+skipped**, all rows removed, `lms_assignments` back to 49 and coverage unchanged.
+Smoke **29 -> 31 checks, GREEN**.

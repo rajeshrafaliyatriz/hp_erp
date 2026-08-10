@@ -53,6 +53,10 @@ class RecipientResolver
             'development_plan.approved' => $this->developmentPlanOwner($event, $payload, $tenant),
             'employee.offboarded'       => $this->offboardingCaseManager($event, $payload, $tenant),
             'rights.changed'            => $this->subjectOfEvent($payload, 'affected_user'),
+            // X-11. The holder, from the payload CertificateIssuer wrote - the
+            // certificate row exists before the event is emitted, so this
+            // user_id is our record, not a caller's claim.
+            'certification.issued'      => $this->subjectOfEvent($payload, 'certificate_holder'),
             default                     => [],
         };
 

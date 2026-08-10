@@ -32,10 +32,12 @@ use Illuminate\Support\Facades\Log;
  * rebuild and 386 people being told the same thing twice.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * SIX EVENT TYPES, NOT NINE. See EventCatalogue::NOT_NOTIFIED for the three that
- * failed the named-consumer test and what would let them back in. The shortest
- * version: two of them have no recipient that exists in the data, and one has no
- * human who does anything.
+ * SEVEN EVENT TYPES. It was six at X-06 and `certification.issued` came back when
+ * X-11 shipped - the deferral had a TRIGGER, and the trigger fired. That is the
+ * whole point of writing triggers down.
+ *
+ * The two still out are in EventCatalogue::NOT_NOTIFIED: one has no recipient that
+ * exists in the data, one has no human who does anything.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 class NotificationDispatcher
@@ -54,6 +56,8 @@ class NotificationDispatcher
         'development_plan.approved',
         'employee.offboarded',
         'rights.changed',
+        // X-11 un-defers this: CertificateIssuer now emits it.
+        'certification.issued',
     ];
 
     public function __construct(

@@ -705,8 +705,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **48** ·
-`09-implementation-log.md` entries = **48** · **AGREE.** · plan file **17 of 59 done** (R18c(iii))
+**RECONCILIATION (R18, every write):** queue "done" rows = **51** ·
+`09-implementation-log.md` entries = **51** · **AGREE.** · plan file **19 of 59 done** (R18c(iii))
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -816,13 +816,17 @@ the write, and **the leak nobody could see was the read**.
 
 ### Landed this turn
 
-- **X-06 — the notification service.** First reactor with a real send. Six events
-  ship, three fail the named-consumer test (`EventCatalogue::NOT_NOTIFIED`).
-  In-app live; **email built and gated OFF** (`G2G_NOTIFY_EMAIL`). Terminology
-  serves screen labels and report headings, not only notifications. Proof
-  **18/18**, smoke **25 → 29 GREEN**. See **D-048**.
-- **R6 SUPERSEDED** — *a pattern produces candidates; only a measurement produces
-  a finding.* Full text at the top of `07-gap-register.md`.
+- **X-12 — LearningAssigner** (absorbing MandatoryLearningAssigner). Role path
+  **works today via the TEXT link** (72 of 95 courses carry a role name, 73
+  resolving); plan path **cannot work** — `course_competency_map` is empty and
+  `s_competency_plan_actions` has no `course_id` column (**G-DATA-10**). D-049.
+- **X-11 — CertificateIssuer. THE LOOP CLOSES.** `course.completed` → certificate
+  → `certification.issued` → the holder is told. Proven on the one real completed
+  enrolment in the database. **X-06's deferral trigger fired** — the first one in
+  the phase to do so. D-050.
+- **G-NOTIF-02** — six X-06 notifications whose action link 404s, fixed. D-051.
+- **X-18 PROPOSED** — backfill `course_jobrole_map` from the text, F-07b's shape,
+  73 candidate rows. **Bulk write: awaiting a decision, not scheduled.**
 
 ### L-11 — what is actually left
 
@@ -840,6 +844,51 @@ The 3 `department` sites are scheduled against L-01/L-02 with the trigger
 - **X-11** — `CertificateIssuer`. Unblocks `certification.issued`, which is
   deferred on X-11 alone. **221 certifications exist and 37 have already expired**,
   so `certification.expiring` has real work waiting the day something emits it.
+
+### X-17 — ROLE-WISE USER FLOWS · **UNBLOCKED 2026-08-11. X-12 and X-11 landed; the trigger fired.**
+
+> **The original Phase 3 brief named this as THE core problem: no proper role-wise
+> user flow.** `03-rbac-matrix.md` says who can SEE what. **It does not say what an
+> HR Manager DOES, end to end.**
+
+**Status: 2 of 9 written.** `04-user-flows/employee.md` and `manager.md`.
+**7 never written and never formally deferred** — they fell behind when work moved
+to the domain model, then Gate C, then the build. **That is F-05b's failure mode
+again** (see X-16): not omitted, just never classified, and therefore invisible.
+Recording the trigger here is the fix.
+
+#### SCOPE — deliberately NOT all seven
+
+| Depth | Roles | Format |
+|---|---|---|
+| **FULL FLOWS** | `administrator` · `hr_manager` · `department_head` | same as `employee.md`/`manager.md`: the journey · what they can do · dead ends today · **§12 "what this role must never see"** |
+| **SHORT SECTIONS** | `hr_executive` (subset of hr_manager — **only where it differs**) · `recruiter` (4 screens, Q-D1's grants) · `executive` + `auditor` (read-only — what they see and **why they cannot act**) | one page each, **one file** |
+
+#### WRITTEN AGAINST WHAT EXISTS, NOT AGAINST THE PLAN
+
+Permissions are live, the gap view exists, mapping screens exist, notifications
+work. **`employee.md` and `manager.md` were written when NOTHING was built** — both
+must be re-read for statements now out of date and **corrected in place, marked as
+corrections with dates**.
+
+#### EVERY FLOW STATES THREE THINGS
+
+1. **What works TODAY, end to end.**
+2. **What is dead-ended, and on which item it waits.**
+3. **Which of the 42 remaining connection items that role depends on.**
+
+> **Item 3 is the point.** It turns the flows into **a check on the plan** rather
+> than another document to maintain. A flow that cannot name its blocking items is
+> describing an intention, not a product.
+
+#### WHY IT WAITS
+
+**X-12 and X-11 close the loop, and the loop changes what three of these flows
+say.** `department_head` and `hr_manager` both end at "assign learning"; `employee`
+ends at "prove it". Writing them first would document a dead end that is about to
+stop being one.
+
+**Taken as ONE focused piece of work, not spread across turns.**
 
 ### X-16 — REPORTING-LINE ASSIGNMENT · **the item that was already filed and never promoted**
 

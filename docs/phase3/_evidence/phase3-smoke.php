@@ -274,6 +274,34 @@ check('notify', 'email channel is OFF (tripwire, not a correctness test)', funct
             : 'G2G_NOTIFY_EMAIL unset/false'];
 });
 
+check('notify', 'no action link points at a route that does not exist', function () {
+    // G-NOTIF-02. X-06 shipped SIX notifications whose "act on it" link 404s -
+    // every path invented from the shape of the domain instead of read from the
+    // router. Most are NULL now, because the real screens live under
+    // /module/[moduleId]/[menuId]/[submenuId] with ids that come from
+    // tblmenumaster_g2g AT RUNTIME. There is no static path to hardcode.
+    $verified = (require base_path('database/migrations/2026_08_11_000300_correct_notification_action_paths.php'))::VERIFIED_ROUTES;
+    $bad = DB::table('g2g_notification_template')->whereNotNull('action_path')
+        ->get(['event_type', 'action_path'])
+        ->filter(fn ($r) => !in_array($r->action_path, $verified, true))
+        ->map(fn ($r) => $r->event_type . ' -> ' . $r->action_path)
+        ->all();
+    $n = DB::table('g2g_notification_template')->whereNotNull('action_path')->count();
+    return [$bad === [] ? 'PASS' : 'FAIL',
+        $bad === [] ? "$n linked template(s), all to verified routes" : implode(' | ', $bad)];
+});
+
+check('notify', 'X-12 can still read the role -> course link', function () {
+    // The KEY table (course_jobrole_map) is empty, so the TEXT link on
+    // sub_std_map.jobrole is the only thing making X-12 assign anything at all.
+    // If this reaches 0, the assigner goes quiet and nothing else would say so.
+    $c = App\Services\Events\LearningAssigner::coverage();
+    $live = $c['jobrole_map'] > 0 || $c['jobrole_text_resolves'] > 0;
+    return [$live ? 'PASS' : 'FAIL',
+        sprintf('key %d, text %d resolving (%d courses named)',
+            $c['jobrole_map'], $c['jobrole_text_resolves'], $c['courses_with_jobrole_text'])];
+});
+
 /* ══════════════════════════ DATA ══════════════════════════ */
 echo "\nDATA\n";
 
