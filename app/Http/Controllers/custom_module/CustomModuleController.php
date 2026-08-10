@@ -24,7 +24,8 @@ class CustomModuleController extends Controller
         $subInstituteId = $request->session()->get('sub_institute_id');
         $tables = CustomModuleTable::where('sub_institute_id', $subInstituteId)->get();
         $data = ['data' => $tables->map(function ($table) {
-            $tableExists = DB::select("SHOW TABLES LIKE '{$table['table_name']}'");
+            // Bound, not interpolated - same value, same exposure.
+            $tableExists = DB::select('SHOW TABLES LIKE ?', [$table['table_name']]);
             $table['is_exists'] = count($tableExists);
             return $table;
         })];
@@ -71,7 +72,12 @@ class CustomModuleController extends Controller
             'module_name' => 'required',
             'module_type' => 'required',
             'display_under' => 'required',
-            'table_name' => 'required|string|unique:custom_module_tables,table_name,' . $request->id,
+            // G-SEC-20: a strict whitelist. This value is concatenated into
+            // DDL later (tableDelete, and the SHOW TABLES LIKE at :27), and
+            // DB::statement was confirmed to execute MULTIPLE statements - so
+            // anything outside [A-Za-z0-9_] is SQL, not a table name.
+            'table_name' => ['required', 'string', 'max:60', 'regex:/^[A-Za-z0-9_ ]+$/',
+                             'unique:custom_module_tables,table_name,' . $request->id],
         ]);
 // echo "<pre>";print_r($subInstituteId);exit;
         if ($request->id > 0) {
@@ -211,6 +217,32 @@ class CustomModuleController extends Controller
         return is_mobile($type, "custom-module.tables", $res, "redirect");
     }
 
+
+    /**
+     * A stored table name that is safe to concatenate into DDL.
+     *
+     * G-SEC-20 - SECOND-ORDER INJECTION. `table_name` is written at :99 from
+     * $request->table_name, sanitised only by str_replace(' ','_') plus a "Z_"
+     * prefix, and SAVED BEFORE any table is created - so the row persists with
+     * whatever the caller sent. It is later concatenated into
+     * `DROP TABLE IF EXISTS ...`, and DB::statement was confirmed by test to
+     * execute MULTIPLE statements: `Z_probe;SELECT<empty-comment>1` ran.
+     *
+     * Spaces become underscores, so the naive `; DROP TABLE x` is defeated by
+     * accident - but MySQL accepts an empty block comment as a separator, so a
+     * payload needs no spaces at all.
+     *
+     * Validation at the door is the primary fix; this is the second lock, for
+     * rows written before it existed. Returns null when the name is not safe,
+     * and callers must skip the statement rather than run it.
+     */
+    private function safeTableName(?string $name): ?string
+    {
+        $name = (string) $name;
+
+        return preg_match('/^[A-Za-z0-9_]+$/', $name) === 1 ? $name : null;
+    }
+
     public function tableDelete(Request $request, $id)
     {
         $type = $request->input('type');
@@ -221,8 +253,10 @@ class CustomModuleController extends Controller
             // check in menumaster 09-04-2025
             $accessLink = (isset($table->access_link) && $table->access_link!='') ? $table->access_link : str_replace('_',' ',$table->module_name).'.index';
 
-            if (!empty($table)) {
-                DB::statement('DROP TABLE IF EXISTS ' . $table->table_name);
+            // Only ever a validated identifier. A name that fails the check is
+            // left alone: dropping the wrong thing is worse than not dropping.
+            if (!empty($table) && ($safeName = $this->safeTableName($table->table_name))) {
+                DB::statement('DROP TABLE IF EXISTS ' . $safeName);
             }
             CustomModuleTable::where('id', $id)->delete();
         }

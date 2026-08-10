@@ -1086,6 +1086,85 @@ elevated `role_key`.
 
 ---
 
+# G-SEC-20 — SECOND-ORDER SQL INJECTION: ARBITRARY TABLE DROP · **S1** · **FIXED**
+
+**The most severe finding of the phase.** One read settled it, as scoped.
+
+### The question that decided it: CAN A USER INFLUENCE `table_name` AT CREATION?
+
+**Yes.**
+
+| Step | Line | What happens |
+|---|---|---|
+| Validation | `:74` | `'required|string|unique:...'` — **no character constraint** |
+| "Sanitising" | `:82-84` | `str_replace(' ','_')` and a `Z_` prefix. **Nothing else** |
+| Storage | `:99`, `:106` | `$customModuleTable->save()` — **saved BEFORE any table is created**, so the row persists whatever the caller sent |
+| Execution | `:225` | `DB::statement('DROP TABLE IF EXISTS ' . $table->table_name)` |
+
+**Not injectable where it executes; injectable where it is stored.** Exactly the
+second-order shape.
+
+### The accidental mitigation, and why it fails
+
+`str_replace(' ','_')` defeats the naive `; DROP TABLE x` — the spaces become
+underscores and the keywords break. **But MySQL accepts an empty block comment as
+a separator, so a payload needs no spaces at all.**
+
+### Proven by test, safely
+
+```
+payload            : Z_probe;SELECT/**/1
+after sanitiser    : Z_probe;SELECT/**/1     <- survives intact, no space to replace
+would execute      : DROP TABLE IF EXISTS Z_probe;SELECT/**/1
+RESULT             : *** ACCEPTED - multi-statement executes ***
+```
+
+The DROP named a table that does not exist and the injected statement was a
+`SELECT`. **Nothing real was touched** — but the acceptance is the whole finding:
+`Z_a;DROP/**/TABLE/**/tbluser;--` would have run.
+
+### REACH CHAIN (R20)
+
+| Layer | Finding |
+|---|---|
+| **Route** | `routes/web.php:190` — `DELETE /custom-module/table-delete/{id}` |
+| **Group** | `Route::group(['prefix' => 'custom-module'], ...)` — **prefix only** |
+| **Middleware** | **`web` only** — session and CSRF. **NO `auth`** |
+| **Method** | `tableDelete():214` — **no authentication check, no tenant check, no user check.** It takes `$id`, finds the row, and executes |
+
+**Stated precisely, not maximally:** CSRF means a pure outsider needs a token from
+a page first, which is a real barrier. **But there is no authentication and no
+tenant scoping**, so any session that can obtain a CSRF token can delete **any
+tenant's** module and drop whatever its stored name expands to.
+
+### FIXED — both locks, per the G-SEC-15 principle
+
+1. **At the door** — `'regex:/^[A-Za-z0-9_ ]+$/'` and `max:60` on `table_name`.
+2. **At the execution site** — `safeTableName()` returns null unless the stored
+   value matches `^[A-Za-z0-9_]+$`, and the caller **skips the statement** rather
+   than running it. For rows written before the validation existed.
+3. **`SHOW TABLES LIKE` at `:27`** — the same value, the same exposure — is now
+   **bound** rather than interpolated.
+
+**Verified:**
+
+| Stored name | Result |
+|---|---|
+| `Z_customers` | allowed |
+| `Z_probe;SELECT/**/1` | **REFUSED — statement skipped** |
+| `Z_a;DROP/**/TABLE/**/tbluser;--` | **REFUSED** |
+
+**Existing data checked before the fix: 1 row, and it matches the whitelist** — so
+nothing legitimate is broken and no stored payload is sitting in the table.
+
+### STILL OPEN — deliberately not fixed in this pass
+
+**`tableDelete` has no tenant scoping and no auth check.** The injection is
+closed; **the missing authorisation is not**. It needs the same treatment as the
+other identity findings and is queued rather than bundled into an injection fix.
+
+---
+
 # G-SEC-19 — THE INJECTION SWEEP · **S1**
 
 **A class this phase had never asked about.** Every prior finding was identity or
@@ -1127,11 +1206,19 @@ validates the direction.** `AJAXController:377` passes `$request->sort_order`
 straight in, and the worst outcome is a SQL error on a non-existent column — a
 robustness issue, **not injection**.
 
+> ## CLASS CLOSED, WITH EVIDENCE — NOT LEFT UNEXAMINED
+>
 > **This leg produces ZERO findings, not a list of candidates.** Reporting the ~14
 > `orderBy($var)` sites as an injection count would have been a fabricated number.
 
 `whereRaw` / `orderByRaw` / `havingRaw` / `selectRaw` carrying a request value:
 **none found.**
+
+> **Do not re-open the ORDER BY / LIMIT leg on a pattern match.** A grep returns
+> ~14 `orderBy($var)` sites; the builder's own output shows every one of them is
+> wrapped and escaped. **The class is closed by test**, the same standing as any
+> proven negative — and reporting those 14 would have been a fabricated count of a
+> vulnerability that does not exist here.
 
 ## STILL OPEN — named, not silently dropped
 
