@@ -1189,3 +1189,48 @@ label rather than pointed at another tenant's row.**
 Test rows removed afterwards - shared database.
 
 **5 files** (R18d): 2 migrations/controllers + routes + 2 docs.
+
+
+## D-038 · Slice 1, item 2 — the competency composer UI
+
+`services/competency/definitions.ts` + `components/domain/competency/cm-competency-composer.tsx`,
+plus a validation fix in `CompetencyDefinitionController`.
+
+### The two constraints, built in rather than described
+
+**1. TARGET vs HOLDING is visible WHILE COMPOSING.** Every item row carries a
+badge - **"Resolved by key"** (green, key icon) or **"Held as label"** (amber, tag
+icon) - and a running banner states *"N of M items will be held as labels ...
+they count as unresolved in capability coverage"*. **Not a hidden field and not a
+later report.**
+
+**2. No picker without a list behind it.** Only `skill` renders a dropdown.
+Knowledge, ability, attitude and behaviour render **free text, explicitly labelled**
+*"...have no central list yet, so this is recorded as a label"*. **An empty
+dropdown would imply a list that does not exist.** Switching an item to one of
+those four **drops any id it was carrying**, because it could not have meant
+anything there.
+
+**No canonical tables were added for the four dimensions. Slice 1 did not grow.**
+
+### Verified through the real request path
+
+| Case | Result |
+|---|---|
+| POST as **employee** | **403** — `profile:admin,hr`, exact `role_key` (G-AUTH-02) |
+| item with **neither id nor label** | **422** — *"Item 1 needs an item_id or an item_label."* |
+| **skill id from ANOTHER tenant** | **201, and HELD BY LABEL** — `item_id=NULL`. The safeguard fired |
+| valid competency | **201** — skill `item_id=1` **TARGET**, behaviour **HOLDING** |
+| duplicate code | **422** with a readable message |
+
+### A defect found by testing, not by review
+
+The happy path first returned a **500 leaking `SQLSTATE[23000]`**: `competency`
+carries `uq_competency_tenant_code (sub_institute_id, code)`, and a duplicate code
+escaped as an integrity-constraint error. **A constraint the user can trip is a
+validation rule from their side**, so it is now a clean 422. Found only because
+the test reused a code.
+
+Test rows removed - shared database.
+
+**3 files** (R18d): 1 controller + 2 frontend, plus docs.

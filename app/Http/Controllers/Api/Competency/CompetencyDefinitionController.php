@@ -130,6 +130,23 @@ class CompetencyDefinitionController extends Controller
         $sid    = $context['sub_institute_id'];
         $actor  = $context['user_id'];
 
+        // `uq_competency_tenant_code (sub_institute_id, code)` is doing its job,
+        // but a duplicate reached the caller as a raw SQLSTATE[23000] 500. A
+        // constraint the user can trip is a VALIDATION rule from their side.
+        if ($request->filled('code')) {
+            $clash = DB::table('competency')
+                ->where('sub_institute_id', $sid)
+                ->where('code', $request->input('code'))
+                ->exists();
+
+            if ($clash) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'That competency code is already used in this organisation.',
+                ], 422);
+            }
+        }
+
         $competencyId = DB::transaction(function () use ($request, $sid, $actor) {
             $id = DB::table('competency')->insertGetId([
                 'sub_institute_id' => $sid,
