@@ -488,7 +488,7 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 | S-02 | G-SEC-12 actor identity | G-SEC-12 | 2, 9 | **M** — **76 sites / 16 files** (est. was 33; low by 2.3×) | ~~event store~~ **UNBLOCKED** | — | AT-S02 | API | ✅ **API-verified** (`d70a204c`) |
 | S-03 | Remaining leaks, data-class order | G-SEC-11 | all | **ESTIMATE PENDING** | customer readiness | — | AT-S03 | API | Not started |
 | S-04 | 37 guard candidates hand-verified | G-SEC-11 | — | **S** · from `c23-result-FULL-912.json`, **no re-run** | S-03 scope | — | — | DB | Not started |
-| S-05 | C37 ten hand-checks of C34's 114 (1 done) | **RESTATED, not retired.** C37 is definable: hand-verify TEN of C34's 114 structural no-scoping candidates BY DATA SENSITIVITY, then calibrate or close as a proven negative. 1 done (`IndustryController`, false positive); NINE remain| — | **S** | C34 calibration | — | — | API | 1 of 10 |
+| S-05 | C37 ten hand-checks of C34's 114, by data sensitivity (1 done) | — | — | **S** | C34 calibration | — | — | API | **RESTATED 2026-08-10** — definable; NINE remain |
 | S-06 | C23 write-half phase | — | — | **ESTIMATE PENDING** | C24 gate | tenant + row register | — | API | Not started |
 | S-07 | C23 regression guard in CI | G-QUAL-02 | — | **S** · guard exists; needs a CI hook | prevents regrowth | — | — | API | Not started |
 | S-08 | G-SEC-01 authorization coverage | G-SEC-01 | all | **ESTIMATE PENDING** — superseded counts | — | rights matrix | — | API | Not started |
@@ -504,22 +504,22 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 | F-05 | `reporting_manager_id` + `head_user_id` + cycle validation | Q-B1 | 2, 4, 9 | **M** · `tbluser`, `hrms_departments` migration | every approval flow | — | AT-F05 | DB | ✅ **APPLIED** (`f293edb0`) |
 | **F-05a** | **Call `ReportingLineValidator::canAssign()` from EVERY write path that sets `reporting_manager_id`** | Q-B1 | 2, 4, 9 | **S** · employee create/edit · onboarding · bulk import · admin screens | the guarantee itself | F-05 | AT-F05a | API | **NOT STARTED — the guarantee is theoretical until this lands** |
 | **F-05b** | **Manager assignment mechanism** — bulk and individual, for `reporting_manager_id` **and** `head_user_id` | Q-B1 | 2, 4, 9 | **M** | Slice 2's demo | F-05, F-05a | AT-F05b | SCREEN | **NOT STARTED** |
-| F-06 | Tri-state rights columns | G-SEC-06 | 9 | **S** · both rights tables | rights population | — | AT-F06 | DB | Not started |
+| F-06 | Tri-state rights columns | G-SEC-06 | 9 | **S** · both rights tables | rights population | — | AT-F06 | DB | ✅ **DONE** `5e302651` |
 | F-07a | Text→FK **columns added**, nullable, unread | G-DATA-06 | all | **M** | F-07b | F-01 | AT-F07 | DB | ✅ **APPLIED** (`7df8c1c7`) |
-| F-07b | Text→FK **backfill + unmatched report + drops** | G-DATA-06 | all | **L** · R8 on the drops | joins by key | F-07a | AT-F07b | DB | Not started |
-| F-08 | `portal_identity` | **DROPPED 2026-08-10** - no consumer, and Q-D4 deferred the candidate portal deliberately. An identity model for a portal nobody is building fails the named-consumer test| 7 | **M** · §7.3 DDL | candidate conversion | — | AT-F08 | DB | Not started |
+| F-07b | Text→FK **backfill + unmatched report** *(drops NOT done, not scheduled)* | G-DATA-06 | all | **L** · R8 on the drops | joins by key | F-07a | AT-F07b | DB | ✅ **DONE** (D-044) — 100% link resolution; text columns STAY |
+| F-08 | ~~`portal_identity`~~ | Q-D4 | 7 | **M** · §7.3 DDL | candidate conversion | — | AT-F08 | DB | ❌ **DROPPED 2026-08-10** — no consumer; Q-D4 deferred the candidate portal deliberately. Fails the named-consumer test |
 | F-09 | `library_map_skill` join table | G-DATA-07 | 1 | **S** · 3,270 rows to split | — | F-01 | AT-F09 | DB | ✅ **APPLIED** (`7df8c1c7`) |
 
 ## Tier 2 — Mechanisms
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| X-01 | **Rights matrix populated** — targets **`tblgroupwise_rights_g2g`** (the Next.js sidebar). **THE MOST VISIBLE CHANGE IN THE PLAN** | ~~G-SEC-07~~ (corrected) | 9 | **L** · seeder from §3.1-3.7 | X-02, thread 9 | F-06 ✅, roles ✅, screen→menu map | AT-X01 | **SCREEN** | Blocked on the mapping |
+| X-01 | **Rights matrix populated** — targets **`tblgroupwise_rights_g2g`** (the Next.js sidebar). **THE MOST VISIBLE CHANGE IN THE PLAN** | ~~G-SEC-07~~ (corrected) | 9 | **L** · seeder from §3.1-3.7 | X-02, thread 9 | F-06 ✅, roles ✅, screen→menu map | AT-X01 | **SCREEN** | ✅ **DONE** — 4b applied (`5af9b26a`); nine roles render |
 | ~~X-01c~~ | ~~rights-table consolidation~~ | — | — | — | — | — | — | — | ❌ **CANCELLED** — two products, two tables, each keeps its own (G-SCOPE-01) |
 | X-02 | Route permission declarations | G-SEC-04 | all | **ESTIMATE PENDING** | authorization | X-01 | — | API | Not started |
 | X-03 | **C19 picker mechanism** | G-LIB-08 | 1 | **M-L** · `LibraryController` meta, `library-form.tsx`, `library-config.ts`, `services/competency/libraries.ts` | L-01/02/04 | §10.0 *(decided)* | AT-X03 | SCREEN | Not started |
-| X-04 | **Event store + projector/reactor split** | G-STR-04 | 2, 9 | **L** · `05-data-flow-contracts.md` §1 DDL | X-05, threads 2/9 | ~~S-02~~ **now unblocked** | AT-X04 | DB | Not started |
-| X-05 | `task_status_history` | G-STR-04 | 2 | **M** | thread 2 | X-04 | AT-X05 | DB | Not started |
+| X-04 | **Event store + projector/reactor split** | G-STR-04 | 2, 9 | **L** · `05-data-flow-contracts.md` §1 DDL | X-05, threads 2/9 | ~~S-02~~ **now unblocked** | AT-X04 | DB | ✅ **DONE** (D-030…D-034) |
+| X-05 | `task_status_history` | G-STR-04 | 2 | **M** | thread 2 | X-04 | AT-X05 | DB | ✅ **DONE** (D-034) — F2 reopen detectable |
 | X-06 | Notification service + terminology | Q-F1 | 4, 9 | **M** · §8 DDL | readiness gates | — | AT-X06 | API | Not started |
 | X-07 | Readiness gates + asymmetric switching | M1 | 6, 8 | **M** · §8 | honest surfaces | X-04 | AT-X07 | DB | Not started |
 | X-08 | **Seed-library import flow** | G-FLOW-03, Q-C1 | 1, 6 | **L** · §9 | coverage | F-01 | AT-X08 | SCREEN | Not started |
@@ -558,12 +558,12 @@ being read as organisational fact.**
 | L-03R | Delete the dead panel | G-LIB-06 | — | **XS** | — | — | AT-L03R | SCREEN | ✅ **BUILT** (D-001) |
 | L-04 | Job Level → `s_level_responsibility` | G-LIB-07 | 1 | **XS** *(after X-03)* | — | X-03 | AT-L04 | SCREEN | Not started |
 | L-05 | Honour Status at assignment time | G-LIB-05 | 3 | **S** · `RoleMappingController`, `StudioController` | — | F-01 | AT-L05 | API | Not started |
-| L-06 | **Show what depends on this** *(was: delete impact count / block)* | **REFRAMED 2026-08-10.** Under the no-deletion rule an impact count is MORE valuable, not less: it shows what a deletion would break WITHOUT deleting. Block-don't-cascade stays| — | **S** · `library-tab.tsx` | — | — | AT-L06 | SCREEN | Not started |
+| L-06 | **Show what depends on this** *(was: delete impact count / block)* | G-LIB-02 | — | **S** · `library-tab.tsx` | — | — | AT-L06 | SCREEN | **REFRAMED 2026-08-10** — under the no-deletion rule an impact count is MORE valuable: it shows what a deletion would break WITHOUT deleting. Block-don't-cascade stays |
 | L-07 | Job Titles → `s_user_skill_jobrole` | G-LIB-02 | 1 | **M** | — | F-07 | AT-L07 | DB | Not started |
 | L-08 | Learning Resources → course refs | G-FLOW-26 | 3, 4 | **M** | thread 4 | F-01 | AT-L08 | SCREEN | Not started |
 | L-09 | Certifications → `certification_type` | G-CERT-01 | 3, 8 | **M** | thread 8 | F-02 | AT-L09 | SCREEN | Not started |
 | L-10 | Import on every library tab | G-LIB-04 | 1 | **M** | — | X-08 | AT-L10 | SCREEN | Not started |
-| L-11 | Join on ids, not titles | **NEXT, and re-costed. NOT what the one-line description implied.** The backfill made a rename SURVIVABLE, not SAFE: 12 name-to-name join sites across 6 files still resolve by text. **M**| all | **L** | — | *(= F-07)* | AT-F07 | DB | Not started |
+| L-11 | Join on ids, not titles — **12 name-to-name join sites, 6 files** | G-DATA-06 | all | **M** *(re-costed from L; it is 12 joins, not 45 references)* | every connection built on these | F-07b | AT-F07 + **extended rename test** | DB | ⏭ **NEXT** — data resolves by key, queries do not |
 | L-12 | One shared category table + applicability | G-LIB-02 | 1 | **L** | L-13, L-20 | F-01 | AT-L12 | DB | Not started |
 | L-13 | Propagate taxonomy renames | G-LIB-02 | 1 | **M** | — | L-12 | AT-L13 | DB | Not started |
 | L-14 | Task catalogue → competency | G-LIB-03 | 2 | **L** | thread 2 | *(= F-01)* | AT-F01 | DB | Not started |
@@ -579,7 +579,7 @@ being read as organisational fact.**
 | C-10 | Library drawer: 5 unrendered fields | — | — | **display** · data already on the wire | — | — | AT-C10 | SCREEN | Not started |
 | M-01 | Learning edit controls | G-FLOW-26 | 4 | **XS** · endpoint already accepts both | — | — | AT-M01 | SCREEN | Not started |
 | M-02 | Learning assignment records its gap | G-FLOW-26 | 4 | **M** | thread 4 | F-01 | AT-M02 | SCREEN | Not started |
-| M-03 | **Role-mapping create path** + reinstate the button | **G-MAP-01** | 1 | **S-M** · surface `SchoolSetupController.php:392-408` | thread 1 | F-01 | AT-M03 | SCREEN | Not started |
+| M-03 | **Role-mapping create path** + reinstate the button | **G-MAP-01** | 1 | **S-M** · surface `SchoolSetupController.php:392-408` | thread 1 | F-01 | AT-M03 | SCREEN | ✅ **DONE** (Slice 1, D-039) — button reinstated as "Map Role Requirements" |
 | M-04 | `skill_matrix_item` tenant column | G-DATA-08 | 1, 5 | **XS** *(inside F-04)* | — | *(= F-04)* | AT-F04 | DB | Not started |
 | O-01 | Skill Deficit KPI honesty | G-DATA-05 | — | **XS** · `employee-directory.tsx` | — | — | AT-O01 | SCREEN | Not started |
 | O-02 | Directory ratings via one service | — | 1 | **S** | — | F-04 | AT-O02 | API | Not started |
