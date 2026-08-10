@@ -28,38 +28,94 @@ Already inside the C23 candidate set; recorded here so the evidence is not lost.
 
 ---
 
-## THE GROUPING — 30 remaining screens, ~11 controller families
+## THE VERDICTS — ALL FAMILIES READ
 
-**Not thirty reads.** One read per family, verdict applied to every screen it
-serves.
+**Reported LMS and Task first, as directed.**
 
-| # | Family | Screens (menu ids) | Qualifier pattern |
-|---:|---|---|---|
-| 1 | **Competency** — `RoleMappingController`, `AssessmentController`, `EmployeeCompetencyProfileController`, `DevelopmentPlanController`, `CertificationController` | 154, 155, 156, 157, 158 | *own role · self-assessment · self · own* |
-| 2 | **Task** — `MyTasksController`, `TaskController`, `ProjectController`, `DependencyController` | 210, 211, 212, 213, 214, 215 | *self · own · member* |
-| 3 | **LMS** — `LmsLearningController`, `LmsCourseEnrollController` | 80, 81, 83, 209 | *self · own* |
-| 4 | **Talent** — `talent_*`, Onboarding, Mobility, Offboarding controllers | 47, 48, 49, 52, 171 | *referrals · own checklist · self-appraisal · internal jobs · own exit* |
-| 5 | **HRIT Attendance** | 100, 101 | *own punch · self* |
-| 6 | **HRIT Leave** — `ApplyLeaveController`, `LeaveRequestApiController` | 102, 103, 104 | *own · self* |
-| 7 | **Employee Directory** | 22 | ***field-level** — basic fields only* |
-| 8 | **Skill Gap Analysis** | 26 | *self* — ⚠️ **menu 26 is `status=0` and has no component (G-A-04)** |
-| 9 | **Consolidated Reports** | 122 | *self* |
-| 10 | **The three reports** | — | **already denied — not built** |
+### GRANT — 2 families, 10 screens. Genuinely and correctly self-scoped
 
-### Two called out before the reads
+| Screens | Evidence | Verdict |
+|---|---|---|
+| **210–215 Task** (My Tasks, Task, Project, Dependency) | `MyTasksController.php:136,180,301,319` filters on `$context['user_id']`, and `ResolvesTaskContext.php:40` derives that id from `PersonalAccessToken::findToken($token)->tokenable` — **the token, not the request** | **GRANT** |
+| **80, 81, 83, 209 LMS** (Learning Dashboard, Assignments, Certifications & Records, My Learning) | All 15 subject reads go through `requireUser()` → `contextUserId()` → `ResolvesLmsIdentity::lmsIdentity()` → `resolveApiIdentity($request)` — **token-derived** (`LmsLearningController.php:53-56`, `ResolvesLmsIdentity.php:138-142`) | **GRANT** |
 
-- **#7 Employee Directory** is the only **field-level** qualifier in Employee's set. It cannot be expressed by a menu boolean **even if the controller scopes perfectly** — it belongs to §3.8 regardless of what the read finds.
-- **#8 Skill Gap Analysis** is marked (SHIP) but the menu is disabled with no component behind it. **Likely the same class as Payroll: a qualifier on a capability that does not exist.** Confirm on the read.
+**The prediction was wrong here, and that is the good outcome.** I predicted several
+"own X" screens would take their subject from the request. **The two families used
+constantly by everyone are the two that are correct** — because G-SEC-12's fix
+already landed on them. `ResolvesLmsIdentity`'s own header names the exact bug that
+was closed: *"my courses, my sessions, my deadlines returned whoever the caller
+named instead of the caller."*
 
-### Expected outcome, stated as a prediction so it can be wrong
+### DENY — 5 families, 12 screens. Controller does not scope to the caller
 
-Given the Payroll result, I expect **several "own X" screens also take their
-subject from the request** and land on DENY. **That is a prediction, not a
-finding**, and each needs its file:line.
+| Screens | Evidence (file:line) | Why |
+|---|---|---|
+| **154–158 Competency** | `EmployeeCompetencyProfileController.php:15` `show(Request $request, $id)` then `:26,95,159` filter on **`$id`, a route parameter**. `competencyContext()` authenticates and gives the tenant but **`$id` is never compared to `$context['user_id']`** | Any employee reads any colleague's full competency profile — skills, ratings, assessor, manager. **`addSkill():238` and `updateSkill():318` take the same unchecked `$id`** — so it is **write**, not just read |
+| **100, 101 Attendance** | `AttendanceTrackingApiController.php:223,283` — punch-in and punch-out both resolve the subject as **`$request->input('employee')`** | An employee can **punch in and out as a colleague**. Attendance fraud, by query parameter |
+| **102, 103, 104 Leave** | `LeaveRequestApiController.php:174` — `$userId = (int) ($request->input('employee_id') ?: $context['user_id']);` — and `LeaveOptionsController.php:103`, same shape | **Request-first with the caller as fallback.** Reads as safe, is not: passing `employee_id` returns a colleague's leave |
+| **47, 48, 49, 52, 171 Talent** | **Zero caller-scoped queries across all 11 Talent controllers** — `grep '$context['user_id']' … | where` returns nothing | Nothing enforces *referrals · own checklist · self-appraisal · own exit* |
+| **122 Consolidated Reports** | Menu 122 is **Organization Management Report** — org-wide by definition | No self-scope to enforce |
+
+### DENY — the two pre-flagged, both confirmed
+
+| Screen | Verdict |
+|---|---|
+| **22 Employee Directory** | **DENY — decided as a permission, not pending a read.** "Basic fields only" is field-level and no menu boolean can express it. What a bare `V` delivers today is the full employee record, org-wide. See §3.8 note below |
+| **26 Skill Gap Analysis** | **DENY — G-RBAC-02 confirmed a SECOND time.** `status=0`; **no component and no nav entry** in the Next.js app |
+
+---
+
+## TWO INSTANCES MAKE IT A PATTERN
+
+**G-RBAC-02 is no longer an anecdote.** Payroll and Skill Gap Analysis are two
+independent §3.x grants whose qualifier describes a capability **that was never
+built** — in different modules, found by different evidence.
+
+**This strengthens the §3.8 scoping argument considerably.** §3.1–3.7 cannot be
+read as a specification of current behaviour. It is a specification of *intended*
+behaviour, and every qualifier in it needs the same test before it becomes a grant.
+
+---
+
+## EMPLOYEE DIRECTORY — THE REASON, RECORDED
+
+**A staff directory is something employees legitimately expect, and this removes
+it.** That is the real cost and it is not being minimised.
+
+It is denied anyway because **an org-wide directory returning full employee records
+is exactly what a security review flags**, and *"employees cannot look up a
+colleague's extension yet"* is **a support ticket, not a finding**.
+
+> **Registered as one of the FIRST things §3.8 unlocks.**
+> **The basic-fields view is a real product requirement, not merely a permission.**
+> Field-level scoping is what makes the directory shippable — the permission
+> layer alone can only choose between *everything* and *nothing*, and *nothing*
+> is the only safe half of that choice.
+
+---
+
+## ONE THING CHECKED AND CLEARED
+
+`OffboardingClearanceController.php:147` and `OnboardingDocumentController.php:186`
+both write `X_by = X_by ?: $context['user_id']`, which pattern-matches the
+request-first anti-pattern above. **It is not one.** `cleared_by` and `verified_by`
+are **absent from the `$request->validate()` allow-list** (`:127-137`), so
+`fill($validated)` cannot set them. The `?:` preserves the **original** signer
+across a re-save, which is correct. **No finding.**
+
+---
+
+## A COUNT TO RECONCILE, NOT TO ASSERT
+
+My hand-count of the grouping gives **29 grants across 28 live screens**, against
+the **31** stated earlier. **I am not resolving that by hand.** The seed is
+generated from §3.1–3.7 directly, so the authoritative count comes out of the
+generator. **Flagged so it is checked at regeneration rather than carried forward
+as a settled number** (R19).
 
 ---
 
 ## Status
 
-**1 of 31 resolved. 30 remaining across ~11 controller families.**
-**4b does not apply until all 31 resolve and the seed regenerates.**
+**All families read. 10 screens GRANT, 20+ DENY.**
+**Next: regenerate the seed, re-run the three gates.**
