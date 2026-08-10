@@ -47,6 +47,19 @@ Gate B: **SIGNED OFF** · Gate A: **SIGNED OFF**
 > **NO CUSTOMER TENANT IS CREATED ON THIS PLATFORM UNTIL A TENANT-ISOLATION TEST
 > SUITE PASSES END TO END.**
 
+### WHAT THE SUITE COVERS TODAY — stated so a green read-half is never read as the gate passing
+
+| Half | Routes | Status |
+|---|---:|---|
+| **READ** (GET) | **912** | **Instrument VERIFIED** by isolated re-run (23-route stratified sample, 20/23 agree, 3 explained by the G-LMS-SEC-01 fix). 46 FAIL + 4 LEAK-NOSCOPE worked |
+| **WRITE** (POST/PUT/PATCH/DELETE) | **772** | **NOT TESTED AT ALL** |
+
+> **C24 IS NOT SATISFIABLE UNTIL THE WRITE HALF EXISTS.**
+>
+> The read half being green says the read half is green. It says **nothing** about
+> 772 write routes, and `assignmentController`'s approval path — the one proven
+> unauthenticated write — sat in exactly that untested half.
+
 A business rule, not an engineering task, recorded so it cannot be traded away
 under delivery pressure by someone who was not in this conversation. The gate is a
 **passing test suite**, not a *completed fix* — because C22 showed a fix can look
@@ -313,6 +326,20 @@ the file is non-empty and still contains an expected marker line**.
    unauthenticated GET loading an unbounded result set. **Second time this phase
    a harness failure was the signal rather than the noise** - the first being the
    container conflict that an empty sidebar exposed.
+
+**THE CASE FOR THE MEASUREMENT REQUIREMENT ITSELF.** C23 is the worked example.
+I argued the guard was unaffected by G-HARNESS-01 *"because its calls carry no
+token"* - and the guard **does** carry one, at `c23-tenant-guard.php:34`. The
+argument was factually wrong. **The verification holds anyway, because it was
+measured rather than argued.** A correct conclusion reached from a false premise
+is not evidence; only the measurement was.
+
+**KEEPING RAW RESULTS RATHER THAN SUMMARIES MEANS A STALE RUN BECOMES A
+REGRESSION BASELINE.** `c23-result-FULL-912.json` predates the G-LMS-SEC-01 fix,
+so re-running three of its routes showed FAIL -> identical: **C23's independent
+instrument confirmed the fix from a run recorded before the fix existed.** A
+summary ("46 failures") could not have done that. **This is why the full result
+file was worth recovering.**
 
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else

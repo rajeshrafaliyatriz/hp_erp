@@ -32,6 +32,12 @@ use Dompdf\Options;
 
 class AJAXController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
+    /** Default and hard ceiling for getSkillCompetency's page size (G-SEC-15). */
+    private const SKILL_COMPETENCY_PAGE = 500;
+    private const SKILL_COMPETENCY_MAX  = 2000;
+
     /**
      * Columns table_data must never return, whatever table is asked for.
      *
@@ -789,10 +795,29 @@ class AJAXController extends Controller
         // }
     }
 
+    /**
+     * GET /api/get-employee-tasks - the tasks or skills mapped to one employee.
+     *
+     * `user_id` is genuinely the SUBJECT here (a manager looking at somebody
+     * else's record), so unlike the other fixes in this pass it is left coming
+     * from the request. What was wrong is that the route carried no
+     * authentication at all and took the tenant from the request too, so
+     * anyone could read any employee in any organisation.
+     *
+     * The route now requires a token (see routes/api.php), and the tenant is
+     * taken from that token. The existing `where u.sub_institute_id` filter
+     * then does the rest: a subject outside the caller's organisation simply
+     * does not match.
+     */
     public function getUsersMappings(Request $request)
     {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
         $emp_id = $request->user_id ?? $request->emp_id;
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = $identity['sub_institute_id'];
         $getType = $request->getType ?? 'tasks'; // skills or tasks, default to tasks
         $res['status_code'] = 0;
         $res['message'] = 'User not found';
@@ -1025,9 +1050,33 @@ class AJAXController extends Controller
 
     public function getSkillCompetency(Request $request)
     {
-        //$subInstituteId = $request->get('sub_institute_id', 4); // default 3
-        $type = $request->input('type');
-        $sub_institute_id = $request->sub_institute_id ?? 2;
+        // G-SEC-15. This endpoint had THREE defects at once and all three are
+        // closed here, because any one of them alone leaves it exploitable:
+        //
+        //   1. NO AUTHENTICATION. Declared in routes/web.php ("Rajesh for only
+        //      API temporary created for data fetch") with no middleware, so it
+        //      answered anonymous callers.
+        //   2. UNBOUNDED RESULT SET. A four-way join over the largest tables
+        //      ending in ->get() with no limit. An unauthenticated GET
+        //      exhausted a 512MB memory limit inside Connection::execute().
+        //      One URL, repeated from a browser, is a denial of service needing
+        //      no credential.
+        //   3. TENANT FROM THE REQUEST, defaulting to a hardcoded `?? 2` - so an
+        //      absent parameter silently served tenant 2's data.
+        //
+        // Auth alone would still let an authenticated user exhaust memory; a
+        // bound alone would leave the door open. Both, not either.
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $sub_institute_id = $identity['sub_institute_id'];
+
+        // Bounded, and paginated so the data stays reachable in pages rather
+        // than being truncated silently.
+        $limit  = min(max((int) $request->input('limit', self::SKILL_COMPETENCY_PAGE), 1), self::SKILL_COMPETENCY_MAX);
+        $offset = max((int) $request->input('offset', 0), 0);
 
         $jobRoles = DB::table('s_user_jobrole')
             ->select('jobrole')
@@ -1071,11 +1120,16 @@ class AJAXController extends Controller
                 's.classification_sub_category',
                 's.classification_item'
             ])
+            ->offset($offset)
+            ->limit($limit)
             ->get();
 
         return response()->json([
             'status' => 'success',
-            'data' => $data
+            'limit'  => $limit,
+            'offset' => $offset,
+            'count'  => $data->count(),
+            'data'   => $data
         ]);
     }
 

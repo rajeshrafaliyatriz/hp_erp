@@ -851,9 +851,65 @@ An unauthenticated GET **exhausted a 512MB PHP memory limit** inside
 `Connection::execute()`. It is the one route of 57 that killed its own probe
 process.
 
-**Two problems in one route:** it is reachable without a token, and it loads an
-unbounded result set into memory. **A single anonymous request is a denial of
-service**, and no credential is needed to repeat it.
+**THREE problems in one route**, and any one alone leaves it exploitable:
+
+1. **No authentication** — declared in `routes/web.php` with the comment *"Rajesh for only API temporary created for data fetch"* and no middleware.
+2. **Unbounded result set** — a four-way join over the largest tables ending in `->get()` with no limit.
+3. **Tenant from the request, defaulting to a hardcoded `?? 2`** — an absent parameter silently served tenant 2's data.
+
+### FIXED — all three, because the fix had to be both and turned out to be three
+
+`resolveApiIdentity()` supplies authentication **and** tenant; the query is bounded
+and paginated (`limit` default 500, hard ceiling 2000, with `offset`, and
+`limit`/`offset`/`count` returned so truncation is visible rather than silent).
+
+| | before | after |
+|---|---|---|
+| anonymous GET | **512MB memory exhaustion** | **401** |
+| authenticated GET | unbounded | **200, 500 rows, paginated** |
+| absent `sub_institute_id` | served **tenant 2** | resolved from the token |
+
+---
+
+# G-SEC-16 — UNBOUNDED RESULT SETS ARE SYSTEMIC, NOT SPECIFIC · **S2** · **CANDIDATES (R6)**
+
+The question *"do other routes load unbounded sets?"* is **different from
+disclosure and had never been asked.** Asked now.
+
+**108 GET routes** with no auth middleware reach a method that calls `->get()` with
+no `limit`, `paginate`, `take`, `first`, `chunk` or `cursor` anywhere in its body.
+The heaviest carry **three joins**:
+
+| Route | Action | Joins |
+|---|---|---:|
+| `api/skill-development/progress` | `SkillDevelopmentController@getSkillProgress` | 3 |
+| `api/leave-distribution` | `HRITDashboard\LeaveDistribution@leaveDistribution` | 3 |
+| `api/leave/distribution` | `Leave\LeaveDistributionApiController@index` | 3 |
+| `api/candidate` | `talent\candidate\candidateController@getCandidate` | 3 |
+| `api/feedback` | `talent\feedback\feedbackController@getAllFeedback` | 3 |
+| `api/pending-feedback` | `talent\feedback\feedbackController@getPendingFeedback` | 3 |
+
+### Read this carefully — "no auth middleware" is NOT "unauthenticated"
+
+**The controller's code is not the endpoint's behaviour**, and the inverse applies
+here: **most of these controllers authenticate INSIDE the controller** through
+`ResolvesApiIdentity`. Only **4 of 57** probed routes answered an anonymous caller.
+So:
+
+- **the anonymous-DoS surface is small** — G-SEC-15 was the live instance;
+- **the authenticated-DoS surface is 108 routes wide**, and that still matters,
+  because **any logged-in employee can exhaust server memory** on a tenant with
+  real data volumes.
+
+**This is why the fix had to be BOTH.** Auth alone would have left 108 routes
+reachable by every authenticated user in the product.
+
+**Proxy named (R10):** *method body contains `->get()` and no bounding call*. Wrong
+in both directions — a naturally-small `WHERE` bounds without a `limit` (false
+positive), and a method can paginate one query while another runs unbounded (false
+negative). **Candidates, not findings.**
+
+---
 
 ---
 
