@@ -350,6 +350,26 @@ instrument confirmed the fix from a run recorded before the fix existed.** A
 summary ("46 failures") could not have done that. **This is why the full result
 file was worth recovering.**
 
+**R20 — THE BOUNDARY OF WHAT YOU READ IS THE BOUNDARY OF WHAT YOU KNOW.**
+*A check, not a caution.* **Before reporting on any code path, establish what
+reaches it, and state that chain explicitly in the write-up:**
+
+| Reading | Establish |
+|---|---|
+| a method | its **callers** |
+| a controller | its **route file** |
+| a route | its **middleware** |
+
+Two instances, and both times **the missing layer was ONE HOP AWAY** while the
+read stopped at the file containing the defect:
+
+- **G-COMP-SEC-01** - the controller's code was not the endpoint's behaviour; the
+  five write routes carried `profile:admin,hr,manager` and I never opened
+  `routes/api.php`.
+- **getDataPre** - the method's code was not the method's reachability; the
+  literal is unconditional inside the method, but `index()` reaches it only via
+  `preload_lms`.
+
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else
 would have made a single mangled command unrecoverable.

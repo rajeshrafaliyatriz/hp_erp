@@ -1375,42 +1375,58 @@ NOT** — it is a different controller and has not been assessed.
 
 ---
 
-# G-LEAVE-SEC-01 — REQUEST-FIRST WITH A SAFE-LOOKING FALLBACK · **S1**
+# G-LEAVE-SEC-01 — **FIXED**, and it was a WRITE, not only a read
 
-```php
-$userId = (int) ($request->input('employee_id') ?: $context['user_id']);
-```
-`LeaveRequestApiController:174` — and `LeaveOptionsController:103`, same shape.
+### REACH CHAIN — established before reporting, per the boundary rule
 
-### The pattern gets its own name because of how it survives review
+| Layer | Finding |
+|---|---|
+| **Route** | `routes/api.php:521` — `Route::prefix('leave')->group(...)` |
+| **Middleware** | **NONE on the group.** The controller's own context guard is the entire control |
+| **Callers** | `LeaveRequestApiController::store():146` and `LeaveOptionsController::balances():96` |
 
-**A bare `$request->input('employee_id')` is caught on sight.** This is not caught,
-**because the caller appears in the expression.** A reviewer scanning for
-"where does the subject come from" sees `$context['user_id']` and moves on. **It is
-never reached when the attacker supplies the parameter** — the fallback only fires
-for the honest caller.
+**Nothing upstream supplied the missing check.**
 
-**The operator is not the tell. Which side the identity sits on is the tell.**
+### Correction to my own severity framing
 
-### The contrast case, which is why the shape alone cannot be banned
+I described this as *"passing `employee_id` returns a colleague's leave"* — a read.
+**Line 174 is inside `store()`.** So an employee could **file a leave request AS a
+colleague**: a write, attributed to someone else, entering an approval workflow.
+`balances():96` is the read half.
 
-`ResolvesApiIdentity:57-75` uses the same operators the other way round — the
-token owner's tenant **wins always**, and the request is consulted **only** when
-the caller has no tenant of their own. **Identity first, request as fallback.**
-Correct, and documented in place.
+### Fixed
 
-### The sweep, run
+`leaveSubject()` in `ResolvesLeaveContext`, the same shape as
+`competencySubject()`: the subject must be the caller, or the caller must hold an
+elevated `role_key`, and the subject must be in the caller's own tenant (checked
+first, so a cross-tenant id cannot be probed for existence).
 
-| Site | Shape | Verdict |
-|---|---|---|
-| `LeaveRequestApiController:174` | `input('employee_id') ?: $context['user_id']` | **FINDING** |
-| `LeaveOptionsController:103` | `activeFilter(input('employee_id')) ?: $context['user_id']` | **FINDING** |
-| `MobilityApplicationController:87` | `input('user_id') ?: $actorId` | **FINDING — third instance, Talent module** |
-| `AnalyzeJDController:28` | `session(...) ?? $this->apiTenantId($request) ?? 3` | **SEPARATE FINDING — falls back to a hardcoded tenant `3` when both identity sources fail** |
-| `ResolvesApiIdentity:69` | identity first, request as fallback | correct — the inverse |
-| `OffboardingClearance:147`, `OnboardingDocument:186` | `$x_by ?: $context['user_id']` | correct — field absent from `validate()`, preserves the original signer |
+`department_head` and `reporting_manager` are **absent** from the elevated set for
+the same reason as in competency — their scope is *my department* / *my team*, and
+neither is evaluable while `reporting_manager_id` is NULL for every user
+(**G-ORG-02**). They return with reporting coverage, not with a fix.
 
-**Third of the three.**
+**Verified, one request per process:**
+
+| Request | Result |
+|---|---|
+| `employee_id=3` (a colleague) | **403** — *"You may only act on your own leave."* |
+| `employee_id=2` (self) | **200** |
+| no `employee_id` at all | **200** — the honest path is unchanged |
+
+### WHICH ROWS COME BACK — asked separately, and it is NOT clean
+
+Two things the identity fix does **not** address, both still open:
+
+| Site | Problem |
+|---|---|
+| `LeaveRequestApiController::show():98` | Filters `hel.id = $id` and the tenant, **no caller check** — any employee reads any colleague's leave request by id. **This is an `{id}` route, i.e. exactly the half the probe has not reached** |
+| `LeaveRequestApiController::index():40` | No caller filter — appears tenant-wide |
+
+**Menus 102/103/104 stay DENIED.** The identity defect is closed; the row-scope
+question is not, and a route guard would not answer it either.
+
+---
 
 ---
 

@@ -100,7 +100,12 @@ class LeaveOptionsController extends Controller
             return $context;
         }
 
-        $employeeId = (int) ($this->activeFilter($request->input('employee_id')) ?: $context['user_id']);
+        // G-LEAVE-SEC-01: request-first with a safe-looking fallback.
+        // The subject is now resolved AGAINST the caller, not merged with them.
+        $employeeId = $this->leaveSubject($request, $context);
+        if (!is_int($employeeId)) {
+            return $employeeId;
+        }
 
         if (!$employeeId) {
             return response()->json(['status' => 0, 'message' => 'employee_id is required'], 400);
