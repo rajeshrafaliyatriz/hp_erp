@@ -387,6 +387,136 @@ that are not mine, and pushing is outward-facing.
 
 ---
 
+---
+
+# ⭐ G-SEC-07 — **SUBSTANTIALLY CORRECTED 2026-08-07** · ~~S1~~ → **S3**
+
+> ## ⛔ THE ORIGINAL CLAIM IS WITHDRAWN
+>
+> ~~"The rights matrix carries no information. `can_view`=1 on all 4,879 rows,
+> every other action 0, and Employee sees more menus than Admin. Enforcing it as
+> it stands would grant everyone everything."~~
+>
+> **That was measured on `tblgroupwise_rights_g2g` — a table the live sidebar does
+> not read, holding a DELIBERATE PLACEHOLDER.** It was quoted as *"our user roles
+> do not actually mean anything."* **That is not true. Do not repeat it.**
+
+## What is actually the case
+
+**There are two rights systems, one per front-end.**
+
+| | `tblgroupwise_rights` | `tblgroupwise_rights_g2g` |
+|---|---|---|
+| Serves | **Blade UI**, via `MenuMiddleware` | **Next.js sidebar**, via `displaySidebarMenu` |
+| Rows | **1,254** | 4,879 |
+| `can_view=1` | 1,253 | all 4,879 |
+| `can_add/edit/delete=1` | **784 rows** | **0** |
+| Menu tree | `tblmenumaster` (200) | `tblmenumaster_g2g` (188) |
+
+### 1. The live table HAS differentiated rights
+
+| Role | `can_view` per profile | `can_edit` per profile |
+|---|---:|---:|
+| **Admin** | **95** | 63 |
+| HR | 71 | 0 |
+| **Employee** | **58** | 38 |
+
+**Admin correctly sees more than Employee.** Roles mean something today.
+
+### 2. The uniform `can_view=1` is DELIBERATE, and says so
+
+`app/Console/Commands/SeedG2gDefaultViewRights.php`, its own `$description`:
+
+> *"Grants `can_view=1` in `tblgroupwise_rights_g2g` for every active profile ×
+> menu row that has no rights row yet, **so the new sidebar is not empty until an
+> admin curates real rights**."*
+
+**A placeholder awaiting exactly the curation item 4b performs** — not a defect.
+
+### 3. The inversion exists only in the placeholder
+
+**151 / 150 / 136** (Employee / HR / Admin) is the **_g2g** table. In the live
+table the ordering is correct. The inversion was an artefact of the placeholder
+seeding every profile × menu row uniformly.
+
+### 4. My R9 claim was wrong
+
+I said populating would be visible on the next page load. **`MenuMiddleware` does
+not read `_g2g`, so populating it changes nothing on screen.** 4b is **invisible**
+to current users.
+
+## What survives
+
+**The action flags are genuinely empty in the new table** — `can_add`, `can_edit`,
+`can_delete` are 0 on all 4,879 rows. The new sidebar has **view-only placeholder
+rights and no action rights at all.** That is real, and it is what 4b fixes.
+**Severity S3**: it blocks curation of the new UI, not the running product.
+
+## How this happened, and the lesson
+
+The measurement was correct; **the table was wrong**. Nothing in the number
+revealed that — 4,879 uniform rows look exactly like a broken matrix and exactly
+like a fresh placeholder.
+
+> **R17 applied twice this turn, and both times the answer was already written
+> down** — Recruiter's permissions in Q-D1, and the placeholder's purpose in the
+> seeder's own description. **Check what is already written before concluding a
+> defect.**
+
+---
+
+# G-DUP-01 — TWO PARALLEL RIGHTS SYSTEMS FOR ONE CONCEPT · **S2**
+
+**One live with real data, one placeholder for a newer sidebar.** Same duplication
+pattern this phase exists to remove, and **the plan must decide it explicitly
+rather than inherit it.**
+
+| | Blade | Next.js |
+|---|---|---|
+| Menu tree | `tblmenumaster` (200) | `tblmenumaster_g2g` (188) |
+| Rights | `tblgroupwise_rights` (1,254) | `tblgroupwise_rights_g2g` (4,879) |
+| Reader | `MenuMiddleware` | `tblmenumasterG2gController::displaySidebarMenu` |
+| Individual rights | `tblindividual_rights` (0 rows) | *(shared)* |
+
+**Menu trees overlap but do not match: 170 ids in both · 30 legacy-only · 18
+g2g-only.**
+
+Reconciliation by profile — distinct menus with `can_view=1`:
+
+| Role | Legacy | _g2g |
+|---|---:|---:|
+| Admin | **200** | 157 |
+| HR | **71** | 150 |
+| Employee | **169** | 157 |
+
+**Admin loses 43 menus and HR gains 79 if the _g2g seed were taken as-is.** That
+diff is the deliverable for the consolidation item, not a side effect of 4b.
+
+**Tracked as plan item X-01c — rights-table consolidation**, its own reviewed
+change: reconcile, decide which survives, migrate `MenuMiddleware`, retire the
+loser under R8 **with a backup of BOTH tables**. **That is where R9 actually
+applies.**
+
+---
+
+# ⚠️ WHAT ELSE WAS MEASURED ON THE _g2g TABLES — inheritance check
+
+| Artefact | Table used | Inherits the error? |
+|---|---|---|
+| `audit-authorization.py` → **G-SEC-04** | `tblgroupwise_rights_g2g` | ⚠️ **Partly.** Its route-to-menu map is against the **Next.js** tree. Correct **for the Phase 3 product**, but it does **not** describe the Blade UI |
+| `dump-menu.php`, `nav-crossref.py` → **Gate A inventory**, `01-inventory.md`, `01b-scope-triage.md` | `tblmenumaster_g2g` | ⚠️ **Same.** The 104-row triage and the whole nav inventory describe the **Next.js** sidebar |
+| `audit-auth-sweep.py`, `audit-route-controllers.py` | no rights/menu table | ✅ unaffected |
+| **G-NAV-01** (menu row 219 fix) | `tblmenumaster_g2g` | ⚠️ fixed the **Next.js** tree only |
+
+**The honest reading: this is not an error, it is a SCOPE that was never stated.**
+Phase 3's product is the **Next.js** front-end, so measuring its tree was right.
+**But every nav and menu figure in this phase describes the Next.js sidebar and
+says nothing about the Blade UI**, and no document said so until now.
+
+**No number needs re-deriving.** They need the qualifier attached.
+
+---
+
 ## Data provenance — read before any row-count conclusion
 
 **M3.** Several findings rest on row counts (99% overdue, 1 progress row, 0
@@ -1120,4 +1250,4 @@ More will be added as the Gate C audit proceeds, one write-up at a time.
 | **G-SEC-11** | **S1** | **28 further controllers fail the tenant-isolation property under execution.** The C23 read-half guard called 912 GET routes twice as one tenant-7 user, varying only `sub_institute_id`; **48 routes across 30 controllers returned different data.** Beyond the two already known: `assignmentController` (6), `HrmsController` (3), `ExcelAutomationAgentController` (2), `HolidayController` (2), and 24 controllers with one each — spanning Payroll, Leave, Talent, LMS, Task, Org and Audit. **HEADLINE INSTANCE, quote this one:** a tenant-7 employee calling **`GET /api/skills`** with `sub_institute_id=3` receives **297,582 bytes of another organisation's skill library** — against **84,363 bytes** of their own. **3.5× more data from an organisation they have no relationship with.** One concrete example carries more weight with a buyer or a board than a count of 48. **48 is a FLOOR** — 454 GET routes were UNTESTABLE and 864 write routes are untested. **Each of the 37 not corroborated by source reading is a CANDIDATE (R6)**; one (`CompetencyDashboardController@getRoleSimilarity`, differing at identical length) is a likely false positive pending hand check. Worklist: `_evidence/sweeps/c23-worklist.md` |
 | **G-CERT-01** | **S2** | **There is no certification TYPE entity — only a policy and a per-person instance.** `s_competency_certification_requirements` expresses *"certification Y is required for role/department/competency X"*; `s_competency_certifications` is the held credential (`user_id`, `issued_date`, `expiry_date`, `credential_id`). **Neither references a catalogue** — both carry their own free-text `name` and `issuing_body`, and the instance has no `certification_type_id`. So two employees holding the same real-world certification are two unrelated strings, no coverage or expiry roll-up can be trusted, and the competency mapping has nowhere correct to live (on the policy = wrong relation; on each instance = two employees could disagree about what one certification means). **Larger than L-09 and its prerequisite.** Design: `02-domain-model.md` §10.1, migration steps 3b and 9b. |
 | **G-COMP-01** | **S1** | **The competency approval workflow is optional in four independent ways, and rejection is a dead end.** (1) Create takes `approve_status` **from the client**, defaulting to `Approved` (`skillLibraryController.php:2527`) — stronger than a default; there is no server-side constraint. (2) Edit writes `approve_status` straight through with no reviewer or role check (2587-2589), reachable from a dropdown on the form. (3) **Restore is unconditionally `Approved`** (2222-2223) — archive a Pending competency, restore it, and it is approved with no reviewer recorded. (4) On **reject**, `ApprovalController` marks the approval row rejected but leaves the subject `Pending` (316-332), while the UI hides *Submit for Approval* when status is Pending (`cm-competency-library.tsx:1223`) — so a rejected competency **can never be resubmitted**, and the only escape is bypass (2). The backend approval API works; the only UI that can approve/reject sits in the Audit & Activity Center, which `content-map-m2.ts:17-20` says has **no `tblmenumaster_g2g` row**. **Distinct from G-SEC-01: these bypasses would survive a perfect RBAC fix.** Connections C-01, C-02. |
-| **G-SEC-07** | **S1** | **The rights matrix carries no information.** `can_view` = 1 on **all 4,879 rows**; `can_add`/`can_edit`/`can_delete`/`dashboard_right` = **0 on every row**. Everyone may view everything, nobody may edit anything — and breadth is **inverted**: Employee 1,657 menus vs Admin 1,500. Enforcing the matrix as it stands would grant everyone everything. Populating it correctly is a **prerequisite** to G-SEC-01's fix, not a detail of it. Corrects `03-rbac-matrix.md` §1.2. |
+| **G-SEC-07** | ~~S1~~ → **S3, SUBSTANTIALLY CORRECTED 2026-08-07** | **See the full correction above the provenance section. The original claim — that user roles carry no meaning — was measured on the wrong table and is WITHDRAWN.** |

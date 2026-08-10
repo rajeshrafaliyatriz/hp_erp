@@ -514,7 +514,8 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| X-01 | **Rights matrix populated** + before/after menu diff | G-SEC-07 | 9 | **L** · seeder from `03-rbac-matrix.md` §3.1-3.7 | X-02, thread 9 | F-06 | AT-X01 | **SCREEN** | Not started |
+| X-01 | **Rights matrix populated** — targets **`tblgroupwise_rights_g2g`** (the Next.js sidebar). **INVISIBLE to current users** | ~~G-SEC-07~~ (corrected) | 9 | **L** · seeder from §3.1-3.7 | X-02, thread 9 | F-06 ✅, roles ✅, screen→menu map | AT-X01 | DB *(not SCREEN — nothing reads it yet)* | Blocked on the mapping |
+| **X-01c** | **RIGHTS-TABLE CONSOLIDATION** — reconcile the two systems, decide which survives, migrate `MenuMiddleware`, retire the loser | **G-DUP-01** | 9 | **ESTIMATE PENDING** | the single rights model | X-01 | AT-X01c | **SCREEN** | **NOT STARTED — this is the behaviour-changing item, and where R9 applies** |
 | X-02 | Route permission declarations | G-SEC-04 | all | **ESTIMATE PENDING** | authorization | X-01 | — | API | Not started |
 | X-03 | **C19 picker mechanism** | G-LIB-08 | 1 | **M-L** · `LibraryController` meta, `library-form.tsx`, `library-config.ts`, `services/competency/libraries.ts` | L-01/02/04 | §10.0 *(decided)* | AT-X03 | SCREEN | Not started |
 | X-04 | **Event store + projector/reactor split** | G-STR-04 | 2, 9 | **L** · `05-data-flow-contracts.md` §1 DDL | X-05, threads 2/9 | ~~S-02~~ **now unblocked** | AT-X04 | DB | Not started |
