@@ -370,6 +370,18 @@ read stopped at the file containing the defect:
   literal is unconditional inside the method, but `index()` reaches it only via
   `preload_lms`.
 
+**R21 — TWO PRACTICES CARRIED FORWARD FROM G-SEC-20.**
+
+1. **STATE IT PRECISELY, NOT MAXIMALLY.** G-SEC-20 records that CSRF means an
+   outsider needs a token from a page first *and* that any session holding one can
+   delete any tenant's module. **Conceding the barrier makes the finding more
+   credible, not less** - a security reviewer trusts a document that does it.
+2. **CHECK EXISTING DATA BEFORE ADDING VALIDATION TO A POPULATED COLUMN.**
+   `custom_module_tables` was read first: 1 row, matching the new whitelist, so
+   nothing legitimate broke and no payload was already stored. **Standard from now
+   on for any validation added to a column that already holds values** - against
+   real customer data this is the difference between a fix and an outage.
+
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else
 would have made a single mangled command unrecoverable.

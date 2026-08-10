@@ -1086,6 +1086,69 @@ elevated `role_key`.
 
 ---
 
+# G-SEC-21 — STORED-THEN-EXECUTED: IT IS A DESIGN ISSUE, NOT A LIST OF SITES · **S1** · **FIXED**
+
+**Bounded sweep, one question:** *does any DB-sourced string reach DDL, a raw
+statement, or a dynamic table/column name?*
+
+## Size — within the bound, so fixed rather than escalated
+
+| Surface | Result |
+|---|---|
+| `Schema::create/drop/table/rename` taking a variable | **none** |
+| `DB::statement` / `DB::unprepared` splicing a variable | **one** — `CustomModuleController:259`, already guarded by G-SEC-20 |
+| Dynamic table names | **`CustomModuleController` + `DynamicModel`** — 21 uses, plus 6 external call sites |
+| `DB::table($var)` elsewhere (`ApprovalController`, `LibraryController`, `DevelopmentPlanController`) | **not in scope** — the value comes from **hardcoded PHP maps**, not the database, and the builder wraps identifiers |
+| `AJAXController:226` — `DB::select("SHOW COLUMNS FROM \`$tableName\`")` | `$tableName` comes from **`SHOW TABLES`**, i.e. MySQL's own catalogue — **not the request**. See the chain below |
+
+## THE STRUCTURAL ANSWER — validation existed ONLY at creation
+
+**No.** The custom-module feature validates `table_name` **nowhere except
+`tableStore`**. Every downstream use — `Schema::hasTable`, `Schema::hasColumn`,
+`DynamicModel::readRecords/readSingleRecord/createRecord/updateRecord/deleteRecord`
+— **trusts the stored value.**
+
+> **So it is a DESIGN issue, and the fix is validation at each execution site —
+> not a per-site patch.**
+>
+> **Validation at the door is necessary and NOT sufficient**, because the door was
+> open for the entire life of the feature and the values are already stored.
+> G-SEC-20 proved the door was unlocked.
+
+## FIXED — one guard, at the point of use
+
+`DynamicModel::assertSafeTable()` — **every** dynamic table name passes through
+it, and nothing else can set one:
+
+- `setTable()` (so `initialize()` inherits it),
+- all five static entry points.
+
+A table name is an **identifier, never data**. Anything outside `[A-Za-z0-9_]`
+throws — **loudly, not silently**: failing quiet would return an empty result that
+reads like *"no records"*.
+
+**Verified:**
+
+| Input | Result |
+|---|---|
+| `tbluser` | allowed |
+| `Z_probe;SELECT/**/1` (the G-SEC-20 payload) | **refused** |
+| ``x`; DROP TABLE y; --`` | **refused** |
+| `readRecords` / `deleteRecord` with a payload | **refused** |
+
+## A CHAIN WORTH RECORDING, now broken at both ends
+
+`AJAXController:226` interpolates a table name from `SHOW TABLES` into a raw
+statement. That is safe **only because MySQL's catalogue cannot contain a
+backtick-bearing name unless one was deliberately created** — and until G-SEC-20,
+`table_name` accepted arbitrary characters and the feature created tables from it.
+
+**Door (G-SEC-20) → catalogue → raw statement (`AJAXController:226`).** Closed at
+the door and now at the point of use; recorded because the chain is only visible
+when the two findings are read together.
+
+---
+
 # G-SEC-20 — SECOND-ORDER SQL INJECTION: ARBITRARY TABLE DROP · **S1** · **FIXED**
 
 **The most severe finding of the phase.** One read settled it, as scoped.
