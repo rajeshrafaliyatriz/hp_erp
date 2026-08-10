@@ -116,6 +116,27 @@ class CompetencyDefinitionController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        // uq_ck_item (competency_id, kasba_type, item_id) is the SECOND
+        // user-trippable constraint in this table - adding the same skill twice
+        // under the same dimension would escape as a raw SQLSTATE. Checked here
+        // so the caller gets a sentence instead. (item_id NULL does not collide:
+        // MySQL permits repeated NULLs in a unique index, so label-only items
+        // are unaffected.)
+        $pairs = [];
+        foreach ($request->input('items') as $i => $item) {
+            if (empty($item['item_id'])) {
+                continue;
+            }
+            $key = $item['kasba_type'] . ':' . $item['item_id'];
+            if (isset($pairs[$key])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => "Item " . ($i + 1) . " repeats the same {$item['kasba_type']} item already listed.",
+                ], 422);
+            }
+            $pairs[$key] = true;
+        }
+
         // A row naming nothing at all is refused - the holding state is a LABEL,
         // not an absence.
         foreach ($request->input('items') as $i => $item) {

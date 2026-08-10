@@ -1234,3 +1234,56 @@ the test reused a code.
 Test rows removed - shared database.
 
 **3 files** (R18d): 1 controller + 2 frontend, plus docs.
+
+
+## D-039 · Slice 1, items 3-4 — the mapping, and G-MAP-01 reinstated
+
+### The constraint sweep (S), first
+
+Asked after the duplicate-code 500. **One more user-trippable constraint found:**
+`uq_ck_item (competency_id, kasba_type, item_id)` - the same skill listed twice
+under one dimension. Now a 422 naming the row. The `g2g_*` unique keys are
+system-generated and cannot be tripped by a caller. `uq_jcm` was built with its
+guard from the start rather than added after.
+
+### Item 3 — `RoleCompetencyMapController`, everything BY KEY
+
+Bulk upsert into `jobrole_competency_map`. **Upsert, not insert**: re-saving a
+role's requirements is the ordinary case, and making the caller delete first
+would lose the mapping on any failure between the two calls.
+
+**Verified through the real request path:**
+
+| Case | Result |
+|---|---|
+| POST as **employee** | **403** |
+| job role from **another tenant** | **404 Job role not found** |
+| same competency twice | **422** naming the row |
+| competency that does not exist | **422** listing the ids |
+| valid | **201** |
+
+**THE BY-KEY PROPERTY, PROVEN NOT ASSERTED.** Every column of a stored row was
+printed: `id, sub_institute_id, jobrole_id, competency_id, required_proficiency,
+is_mandatory, created_by, created_at, updated_at`. **Text-bearing columns: 0.**
+
+**Rename preview (item 9, early):** renamed the job role to *"… (RENAMED)"*, and
+the mapping **still resolved**. Name restored afterwards.
+
+### Item 4 — G-MAP-01 reinstated
+
+The button had been **REMOVED, not mis-wired** - it carried `kind:'framework'` and
+silently created a framework, so it was taken out with a comment saying it stays
+gone until M-03 exists. **M-03 now exists**, so it returns as **"Map Role
+Requirements"** → `role-map` → `/competency/role-map`.
+
+**The type system caught an incomplete change:** adding a `QuickCreateKind` broke
+`Record<QuickCreateKind, …>` until `'role-map'` was given an entry. It gets an
+**empty** status list - a role mapping is a requirement, not a record with a
+lifecycle - **empty rather than invented**.
+
+`CREATE_ENDPOINTS.competency` now carries a warning that it writes a flat skill
+row (G-RBAC-02b).
+
+Test rows removed.
+
+**hp_erp 4 files · g2gv0 2 files** (R18d).

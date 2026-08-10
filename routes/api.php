@@ -364,6 +364,12 @@ Route::get('/competency/employee-profiles/{id}/career-path', [EmployeeCompetency
  * Distinct from /competency/competencies above, which serves the SKILL library
  * (s_users_skills). Writes are HR/Admin only; the gate is RequireProfile, exact
  * role_key matching since G-AUTH-02. */
+/* SLICE 1 item 3 - what a job role REQUIRES. jobrole_competency_map holds NO
+ * text key, which is what makes the rename proof possible. Writes are HR/Admin. */
+Route::get('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'index']);
+Route::post('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/role-map/{id}', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
 Route::get('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'index']);
 Route::post('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'store'])->middleware('profile:admin,hr');
 
