@@ -62,6 +62,11 @@ const QUALIFIED = [
              * delivers the caller's own profile and 403s on anyone else's.
              * Verified own=200 / colleague=403 / cross-tenant=404. */
             154, 155, 156, 157, 158,        // Competency - ResolvesCompetencyContext::competencySubject()
+            /* RE-GRANTED once G-ATT-SEC-01 was fixed. punchIn/punchOut resolve
+             * the subject from the token (punchSubject), and myAttendance:44,86
+             * already filtered on $context['user_id']. Row scope was checked
+             * separately and is clean. Menu 101 is NOT re-granted. */
+            100,                            // Attendance Tracking
             211,                            // My Tasks ONLY - MyTasksController:136,180 index
                                             // and :132-139 show, all filtered on the caller.
                                             // 210/212/213/214/215 moved to DENY - see below.
@@ -73,7 +78,8 @@ const QUALIFIED = [
             105, 106, 107, 108, 109, 110, 140,  // Payroll - no payslip screen exists (G-RBAC-02)
             22,                                  // Employee Directory - field-level, awaits 3.8
             26,                                  // Skill Gap Analysis - no component (G-RBAC-02)
-            100, 101,                            // Attendance - punch takes employee from request
+            101,                                 // Attendance REPORTS - different controller,
+                                                 //   not assessed. Stays denied.
             102, 103, 104,                       // Leave - request-first with caller as fallback
             47, 48, 49, 52, 171,                 // Talent - zero caller-scoped queries
             122,                                 // Consolidated Reports - org-wide by definition

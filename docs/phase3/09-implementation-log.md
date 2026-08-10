@@ -771,3 +771,62 @@ it reflects their organisation when it does not.
 one banner — **S**.
 
 **The real fix is registered as C-T3-ONT.**
+
+
+---
+
+> **The twelve security-stream entries below were shipped and recorded in
+> `07-gap-register.md` and in git, but were missing from this log for ~8 turns.
+> Added 2026-08-10 when the queue/log reconciliation was introduced (R18).**
+
+## D-013 · 4b APPLIED — the rights matrix populated
+
+`5af9b26a` — 5,621 rows across 99 profiles, 0 orphans, backup taken. Nine roles render through the REAL request path (R9). Administrator retains 1/8/23.
+
+## D-014 · G-COMP-SEC-01 — competency profile ownership
+
+`27f3ab10` — competencySubject() on all 13 methods. Own 200 / colleague 403 / cross-tenant 404. The write claim was overstated and is corrected in the register.
+
+## D-015 · G-AUTH-01 — exact role_key matching
+
+`f9cd7ede` — RequireProfile matched display-name SUBSTRINGS. Differenced old vs new across all 112 profiles and both arg-sets: exactly 1 profile changes, 0 users. Competency 154-158 re-granted.
+
+## D-016 · G-LMS-SEC-01 — assignment endpoints were UNAUTHENTICATED
+
+`18b3147b` — if ($type == "API") made auth optional. Proven: 200 and 20,777 bytes with no token. The first unauthenticated exposure of the phase.
+
+## D-017 · G-SEC-15 — anonymous memory exhaustion
+
+`9fc3a42f` — getSkillCompetency: no auth, unbounded ->get(), and a hardcoded `?? 2` tenant. Auth AND a bound, because either alone leaves it exploitable.
+
+## D-018 · G-ATT-SEC-01 — punch as a colleague
+
+`33f45571` — punchSubject() resolves the subject from the token at all three sites. Colleague 403 / self 200. Test row read before deletion (R8).
+
+## D-019 · G-SEC-17 — hardcoded tenant and role literals
+
+`6dfdd2a2` — Nine sites across seven LMS controllers. Exposed C23's third-tenant blind spot, recorded against C24.
+
+## D-020 · G-SEC-19a — SQL injection
+
+`24d63869` — lmsmappingController: chapter_id concatenated into raw SQL. Payload 1' OR '1'='1 returned 10 rows against an honest 0. Found by running the fail-closed check.
+
+## D-021 · G-SEC-19b — the injection sweep
+
+`7458b4a1` — Two more concatenation sites bound. ORDER BY / LIMIT ruled out BY TEST, not omission - class closed.
+
+## D-022 · G-LEAVE-SEC-01 — request-first with a safe-looking fallback
+
+`acfcf4d1` — leaveSubject(). The defect was in store(), so it was a WRITE: filing leave as a colleague. Row scope remains open.
+
+## D-023 · G-SEC-20 — second-order injection, arbitrary table drop
+
+`17fa3b2f` — table_name stored unvalidated, concatenated into DROP TABLE, and DB::statement executes multiple statements. Existing data read first: 1 row, clean.
+
+## D-024 · G-SEC-21 — dynamic table names validated at the point of use
+
+`80ea67a7` — The structural fix: validation existed ONLY at creation. assertSafeTable() on every DynamicModel entry point. Throws loudly.
+
+## D-025 · G-SEC-22 — tableDelete auth and tenant scoping
+
+`c3dd4b71` — No auth, no tenant, no user check. Anonymous 401 / foreign id 404 / legitimate row untouched.

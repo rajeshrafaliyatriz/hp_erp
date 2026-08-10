@@ -288,6 +288,19 @@ provided the incident is reported and closed)* · **R13** standing authority · 
 `docs/phase3/` after every write to this file, **and assert after every write that
 the file is non-empty and still contains an expected marker line**.
 
+**R18b — THE QUEUE SECTION AND THE FOUNDATIONS COUNTER ARE REWRITTEN ON EVERY
+WRITE TO THIS FILE, NOT APPENDED TO.** A section that is only appended to **goes
+stale silently while the file's timestamp says it is current** - which is how
+"FOUNDATIONS 3 of 6" survived ~8 shipped items while `07-gap-register.md` stayed
+correct. **The register being right while the queue is wrong is the dangerous
+combination, because the QUEUE is the recovery path a context reset reads first.**
+
+**R18c — RECONCILE ON EVERY WRITE, AND REPORT IT.** The queue's "done" count must
+agree with `09-implementation-log.md`'s entry count. They disagreed by **13** when
+this rule was introduced: twelve security fixes were in the register and in git but
+had never been written to the log. **Report the reconciliation in the status line
+each time.**
+
 **R10 — two worked examples, both from the Employee qualifier batch.**
 
 1. **A proxy that assumes a file layout fails silently when the layout is
@@ -581,37 +594,73 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 
 ## Queue
 
-**CURRENTLY WORKING ON — the build. Analysis is closed.**
+> ### ⚠️ THIS SECTION IS REWRITTEN, NEVER APPENDED TO (R18)
+> Last rewritten **2026-08-10**. It went stale for ~8 shipped items once — the
+> "2 of 32" incident repeating — while the gap register stayed current. **The
+> register being right while the queue is wrong is the dangerous combination,
+> because the queue is the recovery path.**
 
-**FOUNDATIONS BUILT — 3 of 6, with item 4 at 4a.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **25** ·
+`09-implementation-log.md` entries = **25** · **AGREE.**
+*(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
+that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
+
+### FOUNDATIONS — **4 of 6**
 
 | # | Build item | State |
 |---:|---|---|
-| 1 | `talent_interviewpanelController` | ✅ done (`15791bca`) |
-| 2 | G-SEC-12 actor identity | ✅ done (`d70a204c`) — **unblocks the event store** |
-| 3 | **The join-table migration, as ONE change** | ✅ done (`7df8c1c7`) — 12 tables, 3 columns |
-| 4a | Tri-state rights columns | ✅ done (`5e302651`) |
-| 4b | Populate the matrix | ⛔ **REVIEW GATE** — `_changes/X-01-REVIEW-GATE.md`. Two decisions needed |
-| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | ✅ done (`f293edb0`) |
-| 4b-prep(a) | Recruiter column check | ✅ done — **no Recruiter column in §3.x; Q-D1 has it module-level.** A format gap, not a decision gap. **Expansion awaits approval** |
-| 4b-prep(b) | Nine roles + `role_key` + `data_scope` | ✅ done (`dd25e450`) — 9 × 11 tenants |
-| 4b-prep(c) | **Screen→menu mapping CSV** against `tblmenumaster_g2g`, for review | **NEXT** |
-| ~~X-01c~~ | ~~rights-table reconciliation~~ | ❌ **CANCELLED** — nothing to consolidate |
-| **G-SCOPE-01** | Blade UI | ✅ **CLOSED — OUT OF SCOPE.** Not the product. Leave it entirely alone. Its routes stay in C23's security scope |
-| **F-05a** | **Call `canAssign()` from every write path** | **NOT STARTED — G-ORG-01.** The no-cycle guarantee is theoretical until this lands |
-| **F-05b** | Manager assignment mechanism (bulk + individual) | **NOT STARTED — G-ORG-02.** Slice 2's demo needs it |
-| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | after 4 |
-| 6 | Event store + projector/reactor split + `task_status_history` | after 5 |
+| 1 | `talent_interviewpanelController` | ✅ `15791bca` |
+| 2 | G-SEC-12 actor identity — 76 sites, 16 files | ✅ `d70a204c` — unblocked the event store |
+| 3 | Join-table migration, as ONE change | ✅ `7df8c1c7` — 12 tables, 3 columns |
+| 4a | Tri-state rights columns | ✅ `5e302651` |
+| **4b** | **Populate the rights matrix** | ✅ **APPLIED** `5af9b26a` — 5,621 rows, 99 profiles, 0 orphans. Nine roles render through the real path (R9). Administrator retains 1/8/23 |
+| 5 | `reporting_manager_id` + `head_user_id` + cycle validation | ✅ `f293edb0` |
+| **6** | **Event store + projector/reactor split + `task_status_history`** | **NOT STARTED — NEXT AFTER THE SECURITY PAUSE** |
+| **F-07b** | Backfill + unmatched report + drops (R8) | **NOT STARTED — after item 6** |
 
-### Next 3 steps
+### SECURITY STREAM — **12 fixes shipped**, then it PAUSES
 
-1. **F-06 + X-01** — tri-state rights columns, then populate the matrix with the
-   before/after menu diff **for Triz's review before rollout**
-2. **F-05** — reporting line with cycle validation
-3. **X-04** — event store + projector/reactor split *(unblocked by S-02)*
+| Finding | Fix | Commit |
+|---|---|---|
+| G-COMP-SEC-01 | Ownership check on all 13 competency-profile methods | `27f3ab10` |
+| G-AUTH-01 | `RequireProfile` exact `role_key` match, not name substrings | `f9cd7ede` |
+| G-LMS-SEC-01 | Assignment endpoints were **unauthenticated** — adopt `ResolvesLmsIdentity` | `18b3147b` |
+| G-SEC-15 | `getSkillCompetency` — auth + bounded pagination + token tenant | `9fc3a42f` |
+| G-ATT-SEC-01 | Punches resolve the subject from the token | `33f45571` |
+| G-SEC-17 | Nine hardcoded tenant/role literals | `6dfdd2a2` |
+| G-SEC-19a | SQL injection, `lmsmappingController` | `24d63869` |
+| G-SEC-19b | Injection sweep — 2 more sites bound; ORDER BY ruled out by test | `7458b4a1` |
+| G-LEAVE-SEC-01 | `leaveSubject()` resolves the subject against the caller | `acfcf4d1` |
+| G-SEC-20 | Second-order injection — arbitrary table drop | `17fa3b2f` |
+| G-SEC-21 | Dynamic table names validated at the point of use | `80ea67a7` |
+| G-SEC-22 | `tableDelete` auth + tenant scoping | `c3dd4b71` |
 
-**Also now unblocked by D-007:** F-07b (backfill + unmatched report + drops, R8),
-and every Tier 3 connection that was waiting on the join tables.
+### RE-GRANTS — as each fix lands
+
+| Menus | State |
+|---|---|
+| Competency 154–158 | ✅ re-granted (`f9cd7ede`) — golden thread 1 demonstrable to an employee again |
+| **Attendance 100** | ✅ **re-granted this turn.** Employee 17 → **18 leaves**, HRIT Management returns, nine roles still render |
+| Attendance **101** | ❌ stays denied — different controller, **not assessed** |
+| Leave 102/103/104 | ❌ stay denied — identity fixed, **row scope open** (`show():98` has no caller check, `index():40` is tenant-wide) |
+| Payroll, Directory 22, Skill Gap 26, Talent, Reports, Task 210/212–215 | ❌ denied — see G-RBAC-01/02 |
+| Dept Head + Reporting Manager | ⏸ **parked on reporting-line COVERAGE, not on a fix** (G-ORG-02) |
+
+### PARKED — resume after foundations
+
+| Item | Why parked |
+|---|---|
+| The `{id}` read probe | Real ids from tenant 7, read verbs only, chunked, one request per process |
+| The **write-verb probe** | Needs the two-tenant precondition answered **and** an isolation approach approved before running. **The untested write half is 3 for 3 on real findings** |
+| G-NAV-02 + nine-token harness | One-line fix; harness must change in the same commit or verification breaks silently |
+| `ResolvesLmsIdentity:101`, `LmsLearningController:1537` | Substring matchers, same class as G-AUTH-01 |
+| SHAPE-01 sweep | *"Trusted because of where it came from"* — filed with 2 instances, sweep on Triz's call |
+| G-SEC-16 | **Capacity workstream, not security** — ~100 unbounded queries; heaviest six first |
+| F-05a / F-05b | `canAssign()` unused (G-ORG-01); no manager-assignment mechanism (G-ORG-02) |
+| C24's write half | **772 write routes, NOT TESTED AT ALL.** Precondition: confirm it does not inherit C23's two-tenant blind spot |
+
+**EXCEPTION:** only a **G-SEC-09-severity** finding jumps the queue.
+
 
 ### Still queued, not blocking
 
