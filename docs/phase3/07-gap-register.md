@@ -1086,6 +1086,41 @@ elevated `role_key`.
 
 ---
 
+# G-AUTH-02 — THE LAST TWO SUBSTRING MATCHERS · **S2** · **FIXED**
+
+`ResolvesLmsIdentity::guardLmsProfile` and `LmsLearningController::canAuthor` both
+matched a **substring of the display name**. Same class as G-AUTH-01.
+
+**Neither was failure-open** — both already refused an empty profile. The defect
+was collision only: `str_contains('reporting manager', 'manager')`, and the same
+trap waiting for `hr_executive`/`hr_manager` and `department_head`/`head`.
+
+**`assignmentController:376,441`'s failure-open clause is CONFIRMED already fixed**
+under G-LMS-SEC-01 — only the comments describing it remain. **Not re-fixed, not
+left half-recorded.**
+
+### Fixed — one shared matcher, so the two gates cannot drift
+
+`lmsRoleMatches()` on the trait, used by both. Exact `role_key` comparison, the
+**same ALIASES and LEGACY_NAMES mapping as `RequireProfile`**, so all three gates
+agree by construction rather than by coincidence. Call sites keep their `admin`/`hr`
+vocabulary and none moved.
+
+### Verified to G-AUTH-01's standard
+
+Old differenced against new across **all 112 profiles** and **every argument set
+actually in use** (`['admin','hr']` — the only one either gate passes):
+
+**1 profile decides differently. 0 users hold it.**
+Id 38 *"Deparment Administrator"*, which passed only because its name contains
+`admin` — the collision being removed, and the same profile G-AUTH-01 denied
+deliberately.
+
+**Identical outcome to G-AUTH-01, which is the expected result of a shared
+mapping — and checking rather than assuming it is the point.**
+
+---
+
 # G-SEC-23 — CROSS-TENANT READ BY AN ORDINARY EMPLOYEE · **S1** · **JUMPS THE PAUSE**
 
 **Found by the `{id}` read probe. Hand-verified (R6), not inferred from a status code.**
@@ -1147,6 +1182,11 @@ own identifying field from the database, assert it appears in the response body.
 | **A** — `api` group, no auth | `api/feedback/{id}` | Auth **and** tenant clause. `$subInstituteId` was already being *resolved and then never used*; auth was gated on `$type == "API"` (G-SEC-18 form 1) |
 | **A** | `api/competency/audit/user-actions/{userId}` | Both activity queries were already scoped - **the NAME lookup at `:556` was not**, so a foreign user's activity was empty but their name was still returned. Narrow, and real: it confirms an id exists in another tenant and attaches a person to it |
 | **B** — authenticated, unscoped | `api/user-signup/{id}` | Tenant clause only. **The fix is not "add auth"** |
+
+> **THE GROUPING EARNED ITSELF TWICE.** The audit route's leak is **name-only**,
+> not record-level — materially narrower than the other two. **Patched ad hoc, all
+> three would have been written up as equivalent cross-tenant leaks.**
+> **Overstating a finding costs the same credibility as understating one.**
 
 **Re-verified with the corrected verifier, all 23 routes, 114 route+id pairs:**
 

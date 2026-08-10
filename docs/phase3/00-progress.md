@@ -301,6 +301,16 @@ this rule was introduced: twelve security fixes were in the register and in git 
 had never been written to the log. **Report the reconciliation in the status line
 each time.**
 
+**R18d — GIT DISCIPLINE IS A GUARD, NOT VIGILANCE.** Third repeat of the same
+pattern, and the one with real blast radius: **~75 pre-existing modified files sit
+in this tree that are not mine**, and a swept commit puts someone else's
+half-finished work into history under my name.
+
+- **NEVER `git add <directory>` or `git add -A`. Explicit file paths only.**
+- **Before every commit:** `git status --short`, and confirm the staged list
+  matches the files touched THIS turn, **by name and by count**.
+- **State the file count in the D-entry.** That number is the check.
+
 **R18c(ii) — A CHANGE IS DONE ONLY WHEN IT IS IN THE LOG WITH A COMMIT.** A
 sentence in a reply is an **intention**, not an outcome. **Menu 100's re-grant was
 described as done and was never applied** - it sat unlisted for five turns because
@@ -608,8 +618,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **28** ·
-`09-implementation-log.md` entries = **28** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **29** ·
+`09-implementation-log.md` entries = **29** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -626,7 +636,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | **6** | **Event store + projector/reactor split + `task_status_history`** | **NOT STARTED — NEXT AFTER THE SECURITY PAUSE** |
 | **F-07b** | Backfill + unmatched report + drops (R8) | **NOT STARTED — after item 6** |
 
-### SECURITY STREAM — **15 fixes shipped**, then it PAUSES
+### SECURITY STREAM — **16 fixes shipped**. **THE PAUSE IS NOW IN FORCE.**
 
 | Finding | Fix | Commit |
 |---|---|---|
@@ -645,6 +655,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | **G-SEC-23a** | `api/feedback/{id}` — auth + tenant clause (chain A) | see D-027 |
 | **G-SEC-23b** | `api/competency/audit/user-actions/{userId}` — name lookup scoped (chain A) | see D-027 |
 | **G-SEC-23c** | `api/user-signup/{id}` — **authenticated then unscoped** (chain B) | see D-027 |
+| **G-AUTH-02** | Last two substring matchers → shared exact `role_key` gate | see D-029 |
 
 ### RE-GRANTS — as each fix lands
 
@@ -664,7 +675,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | The `{id}` read probe | Real ids from tenant 7, read verbs only, chunked, one request per process |
 | The **write-verb probe** | Needs the two-tenant precondition answered **and** an isolation approach approved before running. **The untested write half is 3 for 3 on real findings** |
 | G-NAV-02 + nine-token harness | One-line fix; harness must change in the same commit or verification breaks silently |
-| `ResolvesLmsIdentity:101`, `LmsLearningController:1537` | Substring matchers, same class as G-AUTH-01 |
+| ~~`ResolvesLmsIdentity:101`, `LmsLearningController:1537`~~ | ✅ **DONE** — G-AUTH-02 |
 | SHAPE-01 sweep | *"Trusted because of where it came from"* — filed with 2 instances, sweep on Triz's call |
 | G-SEC-16 | **Capacity workstream, not security** — ~100 unbounded queries; heaviest six first, **plus `api/templates/{id}/versions` which returned 3.4 MB in ONE response** |
 | F-05a / F-05b | `canAssign()` unused (G-ORG-01); no manager-assignment mechanism (G-ORG-02) |

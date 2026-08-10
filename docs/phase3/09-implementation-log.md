@@ -861,3 +861,18 @@ The first verifier kept only the largest response per route and tested that id
 against markers from whichever table it was pooled from. **It would have published
 "1 of 23" - an under-count presented as complete.** Caught only because a
 known-positive disagreed (R16). `_evidence/id-verify.php`.
+
+
+## D-029 · G-AUTH-02 — the last two substring matchers
+
+`guardLmsProfile` and `canAuthor` moved to one shared `lmsRoleMatches()` with
+exact `role_key` comparison and the **same mapping as `RequireProfile`**, so all
+three gates agree by construction. Neither was failure-open;
+`assignmentController`'s failure-open clause was confirmed already fixed under
+G-LMS-SEC-01.
+
+**Verified to G-AUTH-01's standard:** old differenced against new across all 112
+profiles and the only argument set in use — **1 profile differs, 0 users**
+(id 38 "Deparment Administrator", the same deliberate denial).
+
+**5 files** (R18d): 2 controllers/traits + 3 docs.

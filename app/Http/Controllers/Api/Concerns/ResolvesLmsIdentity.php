@@ -52,6 +52,67 @@ trait ResolvesLmsIdentity
         return $this->lmsIdentityCache = $identity;
     }
 
+
+    /**
+     * Exact role_key matching, shared by every LMS profile gate.
+     *
+     * G-AUTH-02 - the last two instances of G-AUTH-01's class. Matching was by
+     * SUBSTRING of the display name, so str_contains('reporting manager',
+     * 'manager') is true and any future role whose name contains another's
+     * collides: hr_executive/hr_manager, department_head/head.
+     *
+     * The route/guard vocabulary ('admin', 'hr') is unchanged so no call site
+     * moves; ALIASES maps each term to the role_keys it means. Identical
+     * mapping to RequireProfile, so the two agree by construction.
+     *
+     * LEGACY_NAMES covers the 13 profiles that predate role_key, matched EXACTLY
+     * on the lowercased name - never by substring.
+     */
+    private const LMS_ALIASES = [
+        'admin'     => ['administrator'],
+        'hr'        => ['hr_manager', 'hr_executive'],
+        'manager'   => ['hr_manager', 'reporting_manager'],
+        'employee'  => ['employee'],
+        'executive' => ['executive'],
+        'auditor'   => ['auditor'],
+        'recruiter' => ['recruiter'],
+    ];
+
+    private const LMS_LEGACY_NAMES = [
+        'admin'                      => 'administrator',
+        'organization administrator' => 'administrator',
+        'hr'                         => 'hr_manager',
+    ];
+
+    protected function lmsRoleMatches(object $user, array $allowed): bool
+    {
+        $profileId = (int) ($user->user_profile_id ?? 0);
+        if ($profileId <= 0 || $allowed === []) {
+            return false;
+        }
+
+        $profile = DB::table('tbluserprofilemaster')->where('id', $profileId)->first(['role_key', 'name']);
+        if (!$profile) {
+            return false;
+        }
+
+        $roleKey = trim((string) ($profile->role_key ?? ''));
+        if ($roleKey === '') {
+            $roleKey = self::LMS_LEGACY_NAMES[strtolower(trim((string) $profile->name))] ?? '';
+        }
+        if ($roleKey === '') {
+            return false;
+        }
+
+        foreach ($allowed as $permitted) {
+            if (in_array($roleKey, self::LMS_ALIASES[strtolower(trim($permitted))] ?? [], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * The caller's profile name from tbluser.user_profile_id, lowercased.
      * Empty string when the account has no resolvable profile - historical rows
@@ -94,14 +155,8 @@ trait ResolvesLmsIdentity
             return $identity;
         }
 
-        $profile = $identity['profile_name'];
-
-        if ($profile !== '') {
-            foreach ($allowed as $permitted) {
-                if (str_contains($profile, $permitted)) {
-                    return null;
-                }
-            }
+        if ($this->lmsRoleMatches($identity['user'], $allowed)) {
+            return null;
         }
 
         return response()->json(['status' => false, 'message' => $message], 403);
