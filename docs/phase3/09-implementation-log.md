@@ -1455,3 +1455,70 @@ the bar while an item inside it does not.
 from ProficiencyService - still the one named roll-up.
 
 **2 files** (R18d), frontend only.
+
+
+## D-044 - the orphan re-import, applied, then resolved
+
+**One track, as one defect.** An import had created RELATIONSHIPS without the
+tenant's own CANONICAL COPIES; this creates those copies **from the library row**,
+never from the orphan text. **Nothing deleted, no delete path in the script.**
+
+### Step 1 - canonical rows created, against prediction
+
+| Table | Predicted | Created | |
+|---|---:|---:|---|
+| `s_user_jobrole` | 119 | **119** | exact |
+| `s_users_skills` | 1,195 | **1,195** | exact (39 + 1,156 across two runs) |
+
+**No divergence.** The first run was cut short by my own `timeout 170`; the script
+skips rows that already exist, so re-running completed it and the second pass
+reported `CREATED 0` for job roles - **idempotent, as designed**.
+
+### Step 2 - the backfill pass. LINK RESOLUTION before and after
+
+| Column | Before | After | |
+|---|---:|---:|---:|
+| `s_user_skill_jobrole.jobrole_id` | 77,630 (97.9%) | **79,294** | **100.0%** |
+| `s_user_skill_jobrole.skill_id` | 69,238 (87.3%) | **79,294** | **100.0%** |
+| `s_user_jobrole_task.jobrole_id` | 82,813 (96.7%) | **85,662** | **100.0%** |
+
+**14,569 of 14,572 orphans resolved.**
+
+> **THIS MOVES LINK RESOLUTION, NOT CAPABILITY COVERAGE.** They are different
+> measures: link resolution is text-to-key integrity; capability coverage (2.7%)
+> is how much of the workforce has been ASSESSED. This created skills and job
+> roles, **not ratings**, so 2.7% is unchanged. Neither number may be quoted for
+> the other.
+
+### Step 3 - what remains, and why. THREE ROWS
+
+| Row | Reason |
+|---|---|
+| `s_user_skill_jobrole` id 62338, tenant 1 | `jobrole` is **NULL** |
+| `s_user_skill_jobrole` id 62338, tenant 1 | `skill = "1"` - a stray digit, in no library |
+| `s_user_jobrole_task` id 74104, tenant 3 | `jobrole` is **NULL** |
+
+**Two are NULL and one is the string "1".** None names anything a library could
+supply, so none was created and none was guessed. **All three remain, text intact,
+ids NULL** - the honest record that they name nothing.
+
+### Step 4 - spot-checks
+
+**Five new canonical rows against their library source:** all **EXACT**, and each
+carried the library's own attributes (`skill_code` ACC-TAX-3002-1.1, sector
+"Human Resource"), which is the evidence they were copied from the library rather
+than fabricated from the orphan string.
+
+**Five newly resolved links:** all **IDENTICAL text-to-canonical, same tenant on
+both sides** (5/5, 11/11, 2/2, 9/9, 10/10).
+
+**Whole-population integrity, not a sample: cross-tenant foreign keys 0 / 0 / 0.**
+
+### One inefficiency worth recording
+
+The apply ran at ~1.4 rows/sec because it calls `DESCRIBE` **inside the row
+loop**. It completed correctly; it should be hoisted before this script is used at
+larger scale. Same class as the `BINARY`-in-the-ON-clause defect: correct output,
+avoidable cost.
+
+**2 files** (R18d): 1 evidence script + backup, plus this log.

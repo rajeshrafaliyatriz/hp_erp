@@ -78,6 +78,11 @@ done and not be.
 
 ## G-DATA-06 — THE PHASE HEADLINE
 
+> **RESOLVED 2026-08-10 (D-044): link resolution is now 100.0% on all three
+> tenant-scoped mappings.** 14,569 of 14,572 orphans resolved; 3 remain, and all
+> three name nothing (two NULL, one the string "1"). **This is LINK RESOLUTION,
+> not CAPABILITY COVERAGE (2.7%) - different measures, never interchangeable.**
+
 **283,126 relationship rows are joined by string matching, not keys**, across four
 tables verified individually: `s_user_jobrole_task` (85,662),
 `s_user_skill_jobrole` (79,295), `s_jobrole_skills` (62,208), `s_jobrole_task`
@@ -618,8 +623,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **43** ·
-`09-implementation-log.md` entries = **43** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **44** ·
+`09-implementation-log.md` entries = **44** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
