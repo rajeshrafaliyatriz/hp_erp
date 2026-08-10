@@ -18,7 +18,11 @@ use App\Http\Controllers\HRMS\HrmsController;
 use App\Http\Controllers\Api\CompetencyDashboardController;
 use App\Http\Controllers\Api\CompetencyDashboard\CompetencyDashboardController as SubCompetencyDashboardController;
 use App\Http\Controllers\Api\Competency\CommandCenterController as CompetencyCommandCenterController;
-use App\Http\Controllers\Api\Competency\CompetencyController as CompetencyCrudController;
+// NAMED FOR WHAT IT DOES. CompetencyController manages SKILL LIBRARY entries -
+// its store() inserts into s_users_skills, a flat skill row. It does NOT create a
+// competency in Q-A2's sense (a named bundle of KASBA items); that is
+// CompetencyDefinitionController, on /competency/definitions.
+use App\Http\Controllers\Api\Competency\CompetencyController as SkillLibraryCrudController;
 use App\Http\Controllers\Api\Competency\FrameworkController as CompetencyFrameworkController;
 use App\Http\Controllers\Api\Competency\AssessmentController as CompetencyAssessmentController;
 use App\Http\Controllers\Api\Competency\AssessmentCycleController as CompetencyAssessmentCycleController;
@@ -363,9 +367,9 @@ Route::get('/competency/employee-profiles/{id}/career-path', [EmployeeCompetency
 Route::get('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'index']);
 Route::post('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'store'])->middleware('profile:admin,hr');
 
-Route::get('/competency/competencies', [CompetencyCrudController::class, 'index']);
-Route::post('/competency/competencies', [CompetencyCrudController::class, 'store']);
-Route::delete('/competency/competencies/{id}', [CompetencyCrudController::class, 'destroy'])->whereNumber('id');
+Route::get('/competency/competencies', [SkillLibraryCrudController::class, 'index']);
+Route::post('/competency/competencies', [SkillLibraryCrudController::class, 'store']);
+Route::delete('/competency/competencies/{id}', [SkillLibraryCrudController::class, 'destroy'])->whereNumber('id');
 
 Route::get('/competency/frameworks', [CompetencyFrameworkController::class, 'index']);
 Route::post('/competency/frameworks', [CompetencyFrameworkController::class, 'store']);

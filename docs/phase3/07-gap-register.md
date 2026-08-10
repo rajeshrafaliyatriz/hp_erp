@@ -1121,6 +1121,50 @@ mapping — and checking rather than assuming it is the point.**
 
 ---
 
+# G-RBAC-02b — THE SPEC-ASPIRATION PATTERN, IN CODE RATHER THAN IN THE SPEC · **S2**
+
+**An instance of G-RBAC-02, not a new class:** *a name promising a capability that
+was never built.* Previously found in `03-rbac-matrix.md` (Payroll's "own payslip",
+Skill Gap Analysis). **Here it is in the product itself.**
+
+`routes/api.php` served `CompetencyController` under the alias
+`CompetencyCrudController`, and its `store()` **inserts into `s_users_skills`** - a
+flat skill row.
+
+> **What the product calls "creating a competency" has never created a competency
+> in Q-A2's sense** (a named bundle of KASBA items). The endpoint, the controller
+> name and three UI labels all say competency; the row is a skill.
+
+**The UI says it too** — `cm-command-center.tsx:51` *"Create Competency"*,
+`cm-competency-library.tsx:458` *"Edit/Create Competency"*, `:944` again, and the
+form field is labelled **"Competency Name"**. `services/competency/command-center.ts:146`
+maps `competency → /competency/competencies`.
+
+### Fixed, at S, without growing
+
+- **Route alias renamed** to `SkillLibraryCrudController`, so the route file says
+  what it does.
+- **Both controllers now name the other** and state the distinction, so two
+  endpoints differing by name only cannot mislead the next reader.
+- **`CompetencyController` left functionally untouched** — the library screen reads
+  what it writes, and changing the target to save a rename would break a working
+  screen.
+
+### The UI labels are REPORTED, not silently changed
+
+**Four user-facing strings call a skill a competency**, and the screen's own field
+is *"Competency Name"*. **Renaming them is a product-naming decision, not a
+defect fix:** the screen is called the Competency Library, so changing the button
+alone would leave it inconsistent, and changing the whole screen's vocabulary is
+larger than S.
+
+**Recommendation:** rename the screen's vocabulary to *Skill* in one pass, once
+`CompetencyDefinitionController` has its own UI (item 2) — at which point the
+product will have both concepts and the distinction is worth showing the user.
+**Not done inside Slice 1.**
+
+---
+
 # G-FLOW-25 — REOPEN UNDETECTABLE · **CLOSED 2026-08-10**
 
 **Golden thread 2's F2 signal is buildable for the first time.**

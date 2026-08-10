@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\Validator;
 /**
  * SLICE 1, ITEM 1 — a competency is a NAMED BUNDLE OF KASBA ITEMS (Q-A2).
  *
+ * NOT TO BE CONFUSED WITH {@see CompetencyController}, which manages SKILL
+ * LIBRARY entries (`s_users_skills`) and is aliased in routes/api.php as
+ * SkillLibraryCrudController. The two differ by NAME ONLY in the old routing,
+ * which is a trap for whoever reads it next - hence the alias and these notes.
+ *
  * WHY A NEW CONTROLLER RATHER THAN EXTENDING THE OLD ONE.
  * `CompetencyController::store()` - which `routes/api.php:360` serves under the
  * alias `CompetencyCrudController` - inserts into **`s_users_skills`**. It
