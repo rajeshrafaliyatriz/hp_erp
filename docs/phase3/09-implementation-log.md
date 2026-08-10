@@ -1358,3 +1358,27 @@ employee 2, job role 15 = "Finance Manager"
 by review.**
 
 **8 files** (R18d): 1 migration + 3 app + 1 evidence + routes + 2 docs.
+
+
+## D-041 - C-SEP-01: the cross-write removed, and a cross-product READ LEAK closed
+
+**Both directions in one change.** Write: `LmsGovernanceController::audit()` emits
+a `governance.{entity}.{action}` event instead of inserting into
+`hpbrain_audit_logs`; `AuditLogProjector` writes the projection. Read: all four
+sites moved to `g2g_audit_log`.
+
+**The more serious half was the READ.** A G2G tenant-1 admin was shown **141 HP
+Brain rows** (G-XPROD-01) - `scopeAuditToTenant` matched `t{id}`, correct within
+G2G and meaningless across products.
+
+**The cross-write had never fired**: zero overlap between what G2G writes
+(`user`, `role`, `permission_matrix`) and what is stored (`Person`, `Department`,
+`Organization`, `Capability`, `Authorization`).
+
+**Verified:** `hpbrain_audit_logs` **342 before, 342 after**. Audit tab returns 1
+G2G row and **0 HP Brain rows**. Filters derive from G2G events only.
+
+**`hpbrain_*` untouched - not copied, not cleaned, not deleted.** C-SEP-02 stays
+flagged, not scheduled.
+
+**4 files** (R18d): 1 controller + 3 docs.

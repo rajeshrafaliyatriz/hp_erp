@@ -618,8 +618,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **40** ·
-`09-implementation-log.md` entries = **40** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **41** ·
+`09-implementation-log.md` entries = **41** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -681,7 +681,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
 | Item | State |
 |---|---|
-| **C-SEP-01** — remove the `hpbrain_audit_logs` cross-write (**M**) | **UNBLOCKED.** `g2g_audit_log` now exists (D-031), so it is a redirection, not a new build |
+| **C-SEP-01** — remove the cross-write + close the cross-product read leak | ✅ DONE (D-041). Both directions; `hpbrain_*` untouched |
 | **C-SEP-02** — move 105 `hpbrain_*` tables out of `hp_erp` (**L**) | **Infrastructure. Flagged, not scheduled** |
 
 `hpbrain_schema_migrations` (38 rows) still runs inside G2G's schema.

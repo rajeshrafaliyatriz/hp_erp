@@ -1121,6 +1121,71 @@ mapping — and checking rather than assuming it is the point.**
 
 ---
 
+# G-XPROD-01 - CROSS-PRODUCT READ LEAK: HP BRAIN'S HR DATA IN G2G'S ADMIN UI - **S1** - **FIXED**
+
+**A G2G tenant-1 administrator was shown 141 of HP BRAIN's audit rows** - `Person`
+and `Department` entities, actions `manager_change`, `department_assignment`,
+`archive`. **Another product's operational HR data, displayed in our admin UI.**
+
+`LmsGovernanceController::auditLogs` read `hpbrain_audit_logs` and scoped it with
+`scopeAuditToTenant`, which matches `tenant_id` against **both** the numeric
+institute id **and** the string `t{id}`. **That is correct WITHIN G2G and
+meaningless ACROSS PRODUCTS** - HP Brain uses the same column for its own
+tenants, and 141 of its rows carry `t1`.
+
+## Why nothing caught it - the FOURTH instance of one lesson
+
+**Every check so far looked for leaks WITHIN G2G, across tenants.** C23 compares
+tenant A against tenant B. The `{id}` probe varied ids inside one product. This
+leak is **across PRODUCTS**, which no sweep was shaped to see.
+
+> ### A check only sees differences its comparison set can express.
+
+| # | Instance | What the comparison set could not express |
+|---|---|---|
+| 1 | **C28** | every tenant seeded from the same libraries - no unique marker |
+| 2 | **G-SEC-17** | a route pinned to a THIRD tenant, against a set of {A, B} |
+| 3 | **G-RECON-01** | a plan written in capabilities cannot name a missing event |
+| 4 | **G-XPROD-01** | a tenant-vs-tenant check cannot see a PRODUCT-vs-PRODUCT leak |
+
+**Instances 1-3 were about data and vocabulary. This one is about the BOUNDARY
+ITSELF** - the sweeps assumed one product owned the schema.
+
+## Fixed by C-SEP-01, which closes BOTH directions in one change
+
+**This is not cleanup. It is a leak fix.**
+
+| Direction | Before | After |
+|---|---|---|
+| **WRITE** | `LmsGovernanceController` inserted into `hpbrain_audit_logs` | emits a `governance.*` event; `AuditLogProjector` writes `g2g_audit_log` |
+| **READ** | 4 sites read `hpbrain_audit_logs`, showing HP Brain rows | 4 sites read `g2g_audit_log`, scoped on numeric `sub_institute_id` |
+
+### The cross-write had NEVER FIRED
+
+G2G writes entity types `user`, `role`, `permission_matrix`. All 342 stored rows
+are `Person`, `Department`, `Organization`, `Capability`, `Authorization` - HP
+Brain's vocabulary. **Zero overlap.** It was **a latent coupling, not an
+integration anyone depended on**, which is what made removal risk-free.
+
+**Q-C4 settles the remaining question as policy, not code:** if HP Brain were to
+expect G2G to populate a shared table, **that expectation is exactly what the
+decision forbids.** Integration is API-only.
+
+### Verified through the real request path
+
+| Check | Result |
+|---|---|
+| `hpbrain_audit_logs` rows | **342 before, 342 after - UNTOUCHED** |
+| one governance action emitted | `g2g_audit_log` 0 -> 1 |
+| Audit tab | HTTP 200, **1 row**: `entity=role action=create actor=1 source=g2g` |
+| **HP Brain rows visible to a G2G admin** | **0 - LEAK CLOSED** |
+| filter options | derived from G2G's own events only |
+
+**Nothing copied, nothing cleaned, nothing deleted.** The 342 rows remain exactly
+as they were.
+
+---
+
 # Q-C4 — RE-EXAMINED AND **CONFIRMED**, 2026-08-10. Not superseded.
 
 **HP Enterprise Brain and G2G are NOT to be merged. They stay separate products.**
