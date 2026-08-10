@@ -668,6 +668,14 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | Payroll, Directory 22, Skill Gap 26, Talent, Reports, Task 210/212–215 | ❌ denied — see G-RBAC-01/02 |
 | Dept Head + Reporting Manager | ⏸ **parked on reporting-line COVERAGE, not on a fix** (G-ORG-02) |
 
+### SCHEDULED WITH TRIGGERS — not parked, not forgotten
+
+| Item | Trigger |
+|---|---|
+| **Semantic event/plan reconciliation** (G-RECON-01) — read each of the plan's ~45 items and ask what state change it implies | **when Tier 3 connection work starts** |
+| Dept Head + Reporting Manager re-grants | reporting-line **coverage** (G-ORG-02) |
+| `task.assigned`, `task.overdue` events | readiness gate: **task_hygiene** |
+
 ### PARKED — resume after foundations
 
 | Item | Why parked |

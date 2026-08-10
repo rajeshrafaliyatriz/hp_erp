@@ -1121,6 +1121,50 @@ mapping — and checking rather than assuming it is the point.**
 
 ---
 
+# G-RECON-01 — A NAME-BASED CHECK CANNOT FIND WHAT THE OTHER SIDE DOES NOT NAME · **METHOD**
+
+Raised as its own entry, not a footnote, because **it is the more valuable half of
+the reactor reconciliation.**
+
+The catalogue's 9 reactors were checked against `08-connection-plan.md`: 3 carried,
+6 missing, 5 items added. **The reverse check — does the plan imply an EVENT the
+catalogue lacks? — returned nothing.**
+
+**That result is not a clean bill.**
+
+`08-connection-plan.md` **names no events at all.** The only dotted tokens in 852
+lines are column references (`task.skill_id`, `task.status`). **The plan speaks in
+CAPABILITIES; the contracts speak in EVENTS.** A name-based comparison between
+them can only ever fail in one direction.
+
+> ## THIRD INSTANCE — a check can only see what its comparison set can express
+
+| # | Instance | What the comparison set could not express |
+|---|---|---|
+| 1 | **C28** | Every tenant seeded from the same global libraries, so no title was unique — markers had to be hand-picked |
+| 2 | **G-SEC-17** | A route pinned to a THIRD tenant produces no difference for a set of {A, B} |
+| 3 | **G-RECON-01** | A plan written in capabilities cannot name a missing event |
+
+**All three: the limit was in WHAT WAS COMPARED, not in how.** Instances 1 and 2
+were about data; this one is about vocabulary — **two documents can both be
+correct and still be unreconcilable by matching.**
+
+### The real check, SCHEDULED with its trigger
+
+Closing this needs a **semantic pass**: read each of the plan's ~45 items and ask
+*"what state change does this imply, and does the catalogue carry it?"* That is
+real work, not a grep.
+
+**Deliberately NOT run now.** It cannot truly complete until the connections are
+being built, and it belongs after the foundations rather than in front of them.
+
+> **TRIGGER: when Tier 3 connection work starts** — that is when a missing event
+> would actually bite. **Filed with a trigger, per the same rule the event
+> catalogue enforces at build time: a deferred item without a trigger is one
+> nobody will remember to enable.**
+
+---
+
 # G-SEC-23 — CROSS-TENANT READ BY AN ORDINARY EMPLOYEE · **S1** · **JUMPS THE PAUSE**
 
 **Found by the `{id}` read probe. Hand-verified (R6), not inferred from a status code.**
