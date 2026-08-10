@@ -869,16 +869,33 @@ class AJAXController extends Controller
     // deepseek chat API integrtion
     public function DeepSeekChat(Request $request)
     {
-        //rp2164394@gmail.com - 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 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
+        // G-SEC-25. AN OPEN DOOR THAT SPENDS MONEY.
+        //
+        // This proxied to a paid AI API with NO AUTHENTICATION - anyone could
+        // call it and bill the account. Not disclosure: cost and abuse. It also
+        // returned the upstream provider's error body to the caller.
+        //
+        // ⚠ THE API KEYS WERE HARDCODED IN THIS FILE, four of them, and they are
+        // in git history. Removing them from source does NOT un-leak them:
+        // THEY MUST BE ROTATED. Flagged in the register as an action for Triz.
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
 
-        // pasi pasi - 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
-
-        // rp  - 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 openai/gpt-oss-20b:free
+        $apiKey = (string) env('OPENROUTER_API_KEY', '');
+        if ($apiKey === '') {
+            // Refused rather than falling back to a key in source.
+            return response()->json([
+                'status'  => 0,
+                'message' => 'AI chat is not configured.',
+            ], 503);
+        }
 
         $prompt = $request->message;
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer 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',
+            'Authorization' => 'Bearer ' . $apiKey,
             'HTTP-Referer' => env('APP_URL'),
         ])
             ->timeout(90)
