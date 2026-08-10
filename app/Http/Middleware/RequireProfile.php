@@ -23,10 +23,25 @@ use Symfony\Component\HttpFoundation\Response;
  * the same chain TaskPermissionMiddleware and ResolvesLmsIdentity use, so all
  * three agree on what a caller is.
  *
- * Matching is case-insensitive and by substring, because tenants seed profile
- * names with their own wording ("HR Manager", "Super Admin"). A caller whose
- * profile cannot be resolved is refused: this middleware guards writes, and an
- * unknown role is not a licence to perform one.
+ * MATCHING IS EXACT, ON role_key - NOT a substring of the display name.
+ *
+ * Substring matching was the original approach and it silently over-granted:
+ * str_contains('reporting manager', 'manager') is true, so a Reporting Manager
+ * passed a gate written for HR Managers. The same collision is waiting for any
+ * role whose name contains another's - hr_executive/hr_manager,
+ * department_head/head. That is the exact failure role_key was introduced (D-010)
+ * to end: authorization must key on a stable identifier, never on wording a
+ * tenant can edit.
+ *
+ * The route's arguments stay in the old vocabulary ('admin', 'hr', 'manager') so
+ * no route file changes; ALIASES maps each to the role_keys it means.
+ *
+ * LEGACY: 13 profiles predate role_key and 4 of them have users. They are
+ * resolved by an EXACT name match in LEGACY_NAMES, not by substring, so those
+ * accounts keep working without reopening the hole.
+ *
+ * A caller whose profile cannot be resolved is refused: this middleware guards
+ * writes, and an unknown role is not a licence to perform one.
  */
 class RequireProfile
 {
@@ -68,6 +83,44 @@ class RequireProfile
         ], 403);
     }
 
+    /**
+     * Route-argument vocabulary -> the role_keys it authorises.
+     *
+     * Deliberately reproduces what the substring matcher granted, so this change
+     * fixes the CLASS without silently re-drawing anyone's access:
+     * 'manager' matched both "HR Manager" and "Reporting Manager", and still does.
+     */
+    private const ALIASES = [
+        'admin'      => ['administrator'],
+        'hr'         => ['hr_manager', 'hr_executive'],
+        'manager'    => ['hr_manager', 'reporting_manager'],
+        'employee'   => ['employee'],
+        'executive'  => ['executive'],
+        'auditor'    => ['auditor'],
+        'recruiter'  => ['recruiter'],
+    ];
+
+    /**
+     * Profiles that predate role_key, matched EXACTLY on lowercased name.
+     *
+     * Checked against the substring matcher across both arg-sets in routes/
+     * ('admin,hr' and 'admin,hr,manager'): only four profiles decide differently,
+     * and all four have ZERO users.
+     *
+     * Three are named exactly "HR" and are restored here.
+     *
+     * The fourth, id 38 "Deparment Administrator", is DELIBERATELY NOT restored.
+     * It passed only because "deparment administrator" contains "admin" - which
+     * is the collision this change exists to remove, and a department
+     * administrator is not an institute administrator. Zero users, so nothing
+     * breaks; recorded so the denial is a decision rather than an oversight.
+     */
+    private const LEGACY_NAMES = [
+        'admin'                      => 'administrator',
+        'organization administrator' => 'administrator',
+        'hr'                         => 'hr_manager',
+    ];
+
     /** @param array<int, string> $allowed */
     private function profileMatches(object $user, array $allowed): bool
     {
@@ -77,16 +130,30 @@ class RequireProfile
             return false;
         }
 
-        $name = DB::table('tbluserprofilemaster')->where('id', $profileId)->value('name');
-        $name = strtolower(trim((string) $name));
+        $profile = DB::table('tbluserprofilemaster')->where('id', $profileId)
+            ->first(['role_key', 'name']);
 
-        if ($name === '') {
+        if (!$profile) {
+            return false;
+        }
+
+        $roleKey = trim((string) ($profile->role_key ?? ''));
+
+        if ($roleKey === '') {
+            $name    = strtolower(trim((string) $profile->name));
+            $roleKey = self::LEGACY_NAMES[$name] ?? '';
+        }
+
+        if ($roleKey === '') {
             return false;
         }
 
         foreach ($allowed as $permitted) {
             $permitted = strtolower(trim($permitted));
-            if ($permitted !== '' && str_contains($name, $permitted)) {
+
+            // An alias the map does not know grants nothing, rather than
+            // falling through to a looser comparison.
+            if (in_array($roleKey, self::ALIASES[$permitted] ?? [], true)) {
                 return true;
             }
         }

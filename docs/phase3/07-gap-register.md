@@ -565,6 +565,54 @@ independently of the read that found it.
 
 ---
 
+# G-AUTH-01 — AUTHORIZATION MATCHED ON DISPLAY-NAME SUBSTRINGS · **S2** · **FIXED**
+
+`RequireProfile::profileMatches()` compared the caller's **profile display name**
+against the route's argument **by substring**. `str_contains('reporting manager',
+'manager')` is true, so a Reporting Manager passed a gate written for HR Managers.
+
+**Not closed by side effect.** The competency ownership check stops today's
+instance reaching anything, but **the matcher would do it again** for any future
+role whose name contains another's — `hr_executive`/`hr_manager`,
+`department_head`/`head`. **This is precisely the failure `role_key` was
+introduced (D-010) to end: authorization must key on a stable identifier, never
+on wording a tenant can edit.**
+
+### Fixed — exact match on role_key
+
+Route arguments keep their vocabulary (`admin`, `hr`, `manager`) so no route file
+changes; an `ALIASES` map resolves each to the `role_key`s it means, compared with
+`in_array(..., true)`. An alias the map does not know **grants nothing** rather
+than falling through to a looser comparison.
+
+**13 profiles predate `role_key` and 4 of them have users**, so they resolve
+through `LEGACY_NAMES` by **exact** name — not substring.
+
+### Verified by differencing old against new, on the real arg-sets
+
+Both arg-sets actually used in `routes/` (`profile:admin,hr` ×17 and
+`profile:admin,hr,manager` ×6), across all 112 profiles:
+
+**Exactly one profile decides differently, and it has zero users** — id 38
+*"Deparment Administrator"*, which passed only because its name contains
+`admin`. **That is the collision being removed, and a department administrator is
+not an institute administrator.** Denied deliberately, recorded so it is a
+decision and not an oversight.
+
+### The same matcher elsewhere — swept, not assumed
+
+| Site | Status |
+|---|---|
+| `RequireProfile:89` | **FIXED** |
+| `ResolvesLmsIdentity:101` (`guardLmsProfile`) | substring — **open** |
+| `LmsLearningController:1537` | substring — **open** |
+| `lms/assignment/assignmentController:376,441` | substring — **open**, and worse: `$profile !== '' && !str_contains(...)` means **an empty profile is treated as permitted**, the exact bug `ResolvesLmsIdentity`'s header says was closed. Blade surface, so out of the product scope — but it is the same live database |
+
+Queued behind the security items rather than fixed here: each needs its own
+old-vs-new difference check, and batching them would hide which one moved what.
+
+---
+
 # G-COMP-SEC-01 — ANY EMPLOYEE CAN READ ANY COLLEAGUE'S COMPETENCY PROFILE · **S1** · **FIXED**
 
 > ## CORRECTION — THE WRITE CLAIM WAS WRONG

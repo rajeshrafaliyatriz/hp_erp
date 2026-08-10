@@ -290,6 +290,15 @@ the file is non-empty and still contains an expected marker line**.
    measuring the wrong thing, not measuring nothing.** A uniform result across
    independent subjects is the tell.
 
+4. **THE CONTROLLER'S CODE IS NOT THE ENDPOINT'S BEHAVIOUR** (beside R10c).
+   G-COMP-SEC-01 was reported as read *and* write because the controller had no
+   ownership check — but all five write routes carried
+   `middleware('profile:admin,hr,manager')`. **It cuts both ways:** an
+   unguarded-looking controller may be protected at the route, and a
+   guarded-looking route may do nothing useful in the controller. **Neither layer
+   alone is the behaviour.** Read the route file and the controller, or call the
+   endpoint.
+
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else
 would have made a single mangled command unrecoverable.

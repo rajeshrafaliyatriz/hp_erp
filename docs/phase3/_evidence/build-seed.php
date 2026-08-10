@@ -56,6 +56,12 @@ const QUALIFIED = [
     'employee' => [
         /* GRANT - verified token-scoped, file:line in X-01-employee-qualifiers.md */
         'grant' => [
+            /* RE-GRANTED 2026-08-10, once G-COMP-SEC-01 was fixed. The
+             * qualifier "self" is now enforced: competencySubject() resolves the
+             * route's $id against the caller on all 13 methods, so a bare V
+             * delivers the caller's own profile and 403s on anyone else's.
+             * Verified own=200 / colleague=403 / cross-tenant=404. */
+            154, 155, 156, 157, 158,        // Competency - ResolvesCompetencyContext::competencySubject()
             211,                            // My Tasks ONLY - MyTasksController:136,180 index
                                             // and :132-139 show, all filtered on the caller.
                                             // 210/212/213/214/215 moved to DENY - see below.
@@ -67,7 +73,6 @@ const QUALIFIED = [
             105, 106, 107, 108, 109, 110, 140,  // Payroll - no payslip screen exists (G-RBAC-02)
             22,                                  // Employee Directory - field-level, awaits 3.8
             26,                                  // Skill Gap Analysis - no component (G-RBAC-02)
-            154, 155, 156, 157, 158,             // Competency - $id is a route param, unchecked
             100, 101,                            // Attendance - punch takes employee from request
             102, 103, 104,                       // Leave - request-first with caller as fallback
             47, 48, 49, 52, 171,                 // Talent - zero caller-scoped queries

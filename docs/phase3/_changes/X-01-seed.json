@@ -1,5 +1,5 @@
 {
-    "generated": "2026-08-10T08:25:37+00:00",
+    "generated": "2026-08-10T09:03:59+00:00",
     "rows": [
         {
             "profile_id": 1,
@@ -1634,6 +1634,56 @@
         {
             "profile_id": 3,
             "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 1,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 3,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 1,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 3,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 1,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 3,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 1,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 3,
+            "role_key": "employee",
+            "menu_id": 158,
+            "sub_institute_id": 1,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 3,
+            "role_key": "employee",
             "menu_id": 43,
             "sub_institute_id": 1,
             "can_view": 1,
@@ -3424,6 +3474,56 @@
         {
             "profile_id": 6,
             "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 2,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 6,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 2,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 6,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 2,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 6,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 2,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 6,
+            "role_key": "employee",
+            "menu_id": 158,
+            "sub_institute_id": 2,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 6,
+            "role_key": "employee",
             "menu_id": 43,
             "sub_institute_id": 2,
             "can_view": 1,
@@ -5214,6 +5314,56 @@
         {
             "profile_id": 9,
             "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 3,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 9,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 3,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 9,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 3,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 9,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 3,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 9,
+            "role_key": "employee",
+            "menu_id": 158,
+            "sub_institute_id": 3,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 9,
+            "role_key": "employee",
             "menu_id": 43,
             "sub_institute_id": 3,
             "can_view": 1,
@@ -7004,6 +7154,56 @@
         {
             "profile_id": 12,
             "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 4,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 12,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 4,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 12,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 4,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 12,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 4,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 12,
+            "role_key": "employee",
+            "menu_id": 158,
+            "sub_institute_id": 4,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 12,
+            "role_key": "employee",
             "menu_id": 43,
             "sub_institute_id": 4,
             "can_view": 1,
@@ -8785,6 +8985,56 @@
             "profile_id": 15,
             "role_key": "employee",
             "menu_id": 223,
+            "sub_institute_id": 5,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 15,
+            "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 5,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 15,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 5,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 15,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 5,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 15,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 5,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 15,
+            "role_key": "employee",
+            "menu_id": 158,
             "sub_institute_id": 5,
             "can_view": 1,
             "can_add": 0,
@@ -9785,6 +10035,56 @@
             "profile_id": 17,
             "role_key": "employee",
             "menu_id": 223,
+            "sub_institute_id": 6,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 17,
+            "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 6,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 17,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 6,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 17,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 6,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 17,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 6,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 17,
+            "role_key": "employee",
+            "menu_id": 158,
             "sub_institute_id": 6,
             "can_view": 1,
             "can_add": 0,
@@ -11575,6 +11875,56 @@
             "profile_id": 20,
             "role_key": "employee",
             "menu_id": 223,
+            "sub_institute_id": 7,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 20,
+            "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 7,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 20,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 7,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 20,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 7,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 20,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 7,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 20,
+            "role_key": "employee",
+            "menu_id": 158,
             "sub_institute_id": 7,
             "can_view": 1,
             "can_add": 0,
@@ -13365,6 +13715,56 @@
             "profile_id": 23,
             "role_key": "employee",
             "menu_id": 223,
+            "sub_institute_id": 8,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 23,
+            "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 8,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 23,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 8,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 23,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 8,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 23,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 8,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 23,
+            "role_key": "employee",
+            "menu_id": 158,
             "sub_institute_id": 8,
             "can_view": 1,
             "can_add": 0,
@@ -15155,6 +15555,56 @@
             "profile_id": 26,
             "role_key": "employee",
             "menu_id": 223,
+            "sub_institute_id": 9,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 26,
+            "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 9,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 26,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 9,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 26,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 9,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 26,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 9,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 26,
+            "role_key": "employee",
+            "menu_id": 158,
             "sub_institute_id": 9,
             "can_view": 1,
             "can_add": 0,
@@ -17735,6 +18185,56 @@
             "profile_id": 30,
             "role_key": "employee",
             "menu_id": 223,
+            "sub_institute_id": 10,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 30,
+            "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 10,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 30,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 10,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 30,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 10,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 30,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 10,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 30,
+            "role_key": "employee",
+            "menu_id": 158,
             "sub_institute_id": 10,
             "can_view": 1,
             "can_add": 0,
@@ -18735,6 +19235,56 @@
             "profile_id": 32,
             "role_key": "employee",
             "menu_id": 223,
+            "sub_institute_id": 11,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 32,
+            "role_key": "employee",
+            "menu_id": 154,
+            "sub_institute_id": 11,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 32,
+            "role_key": "employee",
+            "menu_id": 155,
+            "sub_institute_id": 11,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 32,
+            "role_key": "employee",
+            "menu_id": 156,
+            "sub_institute_id": 11,
+            "can_view": 1,
+            "can_add": 0,
+            "can_edit": 1,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 32,
+            "role_key": "employee",
+            "menu_id": 157,
+            "sub_institute_id": 11,
+            "can_view": 1,
+            "can_add": 1,
+            "can_edit": 0,
+            "can_delete": 0
+        },
+        {
+            "profile_id": 32,
+            "role_key": "employee",
+            "menu_id": 158,
             "sub_institute_id": 11,
             "can_view": 1,
             "can_add": 0,
