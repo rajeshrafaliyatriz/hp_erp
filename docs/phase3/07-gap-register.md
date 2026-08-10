@@ -1086,6 +1086,83 @@ elevated `role_key`.
 
 ---
 
+# G-CHAIN-01 — THE CHAIN NEITHER HALF SHOWS ALONE · **S1** · **CLOSED AT BOTH ENDS**
+
+> **door → catalogue → raw interpolation**
+
+| Hop | Site | What it contributed |
+|---|---|---|
+| **1. The door** | `CustomModuleController:74` | `table_name` validated as `required|string|unique` — **arbitrary characters accepted** — and the feature **creates tables from it** |
+| **2. The catalogue** | MySQL `information_schema` | A table created from that string puts an **attacker-chosen identifier into MySQL's own catalogue** |
+| **3. The raw statement** | `AJAXController:226` — ``DB::select("SHOW COLUMNS FROM `$tableName`")`` | `$tableName` comes from `SHOW TABLES`. **Safe ONLY because the catalogue cannot hold a backtick-bearing name** — which was true only while nobody could create one |
+
+**Each hop is defensible on its own. The chain is not.** `AJAXController:226` was
+reviewed and passed as *"the value comes from the catalogue, not the request"* —
+**and that was true by accident**, dependent on a validation two files away that
+did not exist.
+
+**Closed at hop 1 (G-SEC-20, whitelist at the door) and hop 3's premise is now
+guaranteed rather than assumed (G-SEC-21, validation at the point of use).**
+
+**Recorded as its own entry because neither finding shows it.** It is visible only
+by reading G-SEC-20 and G-SEC-21 together.
+
+---
+
+# SHAPE-01 — "TRUSTED BECAUSE OF WHERE IT CAME FROM" · **FILED, NOT SWEPT**
+
+**Data treated as safe because of its SOURCE, when that source is itself fed by
+user input.**
+
+Two instances, both from this round, both where the safety argument was about
+provenance rather than content:
+
+| Instance | The argument made | Why it held |
+|---|---|---|
+| `CustomModuleController:225` | *"`table_name` comes from the database, not the request"* | **False** — the database got it from the request, unvalidated |
+| `AJAXController:226` | *"`$tableName` comes from MySQL's catalogue"* | **True only by accident** — see G-CHAIN-01 |
+
+> **"It is from the database" and "it is from the catalogue" have both now been
+> used as safety arguments in this codebase, and one of them was only true by
+> accident.**
+
+**FILED as a known shape with these two instances. NOT swept** — the queue is long
+enough, and the decision on when it gets a sweep is Triz's.
+
+---
+
+# G-SEC-22 — `tableDelete` HAD NO AUTHENTICATION AND NO TENANT SCOPING · **S1** · **FIXED**
+
+Left open deliberately when G-SEC-20 was fixed, so an injection fix did not
+quietly become an authorisation fix. Closed here.
+
+### Reach chain (R20)
+
+| Layer | Finding |
+|---|---|
+| Route | `routes/web.php:190` — `DELETE /custom-module/table-delete/{id}` |
+| Group | `Route::group(['prefix' => 'custom-module'], ...)` — **prefix only** |
+| Middleware | **`web` alone** — session and CSRF, **no `auth`** |
+| Method | Took `$id`, found the row, dropped the table, deleted the row. **No tenant, no user, no auth check** |
+
+### Fixed
+
+`customModuleTenantId()` — token first (for the mobile/API callers `is_mobile()`
+serves), session second (the rest of the controller reads the tenant from the
+session at `:24`, `:69`, `:310`), **null when neither identifies the caller**.
+`tableDelete` refuses on null, and both the lookup **and** the delete are scoped to
+that tenant.
+
+**Verified:**
+
+| Request | Result |
+|---|---|
+| anonymous | **401 Unauthenticated** |
+| authenticated, id not in the caller's tenant | **404 Module not found** |
+| legitimate row | **untouched** — 1 row before and after |
+
+---
+
 # G-SEC-21 — STORED-THEN-EXECUTED: IT IS A DESIGN ISSUE, NOT A LIST OF SITES · **S1** · **FIXED**
 
 **Bounded sweep, one question:** *does any DB-sourced string reach DDL, a raw

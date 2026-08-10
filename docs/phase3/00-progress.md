@@ -382,6 +382,23 @@ read stopped at the file containing the defect:
    on for any validation added to a column that already holds values** - against
    real customer data this is the difference between a fix and an outage.
 
+**R22 — VALIDATE AT THE POINT OF USE, NOT ONLY ON WRITE. GENERALISES.**
+
+When a "validate on write" rule is added to a field that has been stored
+unvalidated, **validation at the door does not fix the data already there.**
+G-SEC-20 proved the door had been open for the feature's entire life, so the
+column already held whatever callers had sent. **The guard therefore belongs where
+the value is USED**, which no path can bypass - `DynamicModel::assertSafeTable()`
+(G-SEC-21) rather than more checks in `tableStore`.
+
+**Applies to every validate-on-write fix in this codebase, not just this one.**
+The door check is still worth adding; it is simply not the fix.
+
+**A GUARD MUST FAIL LOUDLY.** `assertSafeTable()` throws rather than returning an
+empty result. A guard that fails quiet returns *"no records"*, **which reads as an
+empty table rather than a refused identifier - and nobody investigates an empty
+table.** Standard for every guard from here.
+
 **R18 — the real root cause.** The backtick was the mechanism; **the cause was
 that a 40-turn engagement's tracking file was untracked in git.** Nothing else
 would have made a single mangled command unrecoverable.

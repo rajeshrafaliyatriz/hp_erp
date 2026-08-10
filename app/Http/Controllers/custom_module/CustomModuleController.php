@@ -19,6 +19,33 @@ use Illuminate\Support\Facades\Schema;
 
 class CustomModuleController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
+    /**
+     * The caller's own organisation, or null when nobody is identified.
+     *
+     * G-SEC-22. tableDelete() resolved NO tenant and performed NO authentication
+     * check: it took $id, found the row, dropped the table and deleted the row.
+     * The route group carries `web` only (routes/web.php:186-190) - session and
+     * CSRF, no `auth` - so nothing upstream supplied either check.
+     *
+     * The rest of this controller reads the tenant from the session (:24, :69,
+     * :310), so the session is honoured here too; the token is accepted first
+     * for the mobile/API callers that is_mobile() serves. Null when neither
+     * identifies the caller, and every caller must refuse on null.
+     */
+    private function customModuleTenantId(Request $request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return (int) $fromToken;
+        }
+
+        $fromSession = $request->hasSession() ? $request->session()->get('sub_institute_id') : null;
+
+        return $fromSession ? (int) $fromSession : null;
+    }
+
     public function tables(Request $request)
     {
         $subInstituteId = $request->session()->get('sub_institute_id');
@@ -246,10 +273,26 @@ class CustomModuleController extends Controller
     public function tableDelete(Request $request, $id)
     {
         $type = $request->input('type');
+
+        // G-SEC-22: identify the caller, and scope the row to their own
+        // organisation. Without this, any session holding a CSRF token could
+        // delete ANY tenant's module - and drop whatever its stored name
+        // expanded to (G-SEC-20).
+        $subInstituteId = $this->customModuleTenantId($request);
+        if (!$subInstituteId) {
+            return response()->json(['status' => 0, 'message' => 'Unauthenticated.'], 401);
+        }
+
         $i=0;
         if ($id > 0) {
             $i=1;
-            $table = CustomModuleTable::find($id);
+            $table = CustomModuleTable::where('id', $id)
+                ->where('sub_institute_id', $subInstituteId)
+                ->first();
+
+            if (!$table) {
+                return response()->json(['status' => 0, 'message' => 'Module not found.'], 404);
+            }
             // check in menumaster 09-04-2025
             $accessLink = (isset($table->access_link) && $table->access_link!='') ? $table->access_link : str_replace('_',' ',$table->module_name).'.index';
 
@@ -258,7 +301,9 @@ class CustomModuleController extends Controller
             if (!empty($table) && ($safeName = $this->safeTableName($table->table_name))) {
                 DB::statement('DROP TABLE IF EXISTS ' . $safeName);
             }
-            CustomModuleTable::where('id', $id)->delete();
+            CustomModuleTable::where('id', $id)
+                ->where('sub_institute_id', $subInstituteId)
+                ->delete();
         }
         // $res added by uma on 24-03-2025
         if($i>0){
