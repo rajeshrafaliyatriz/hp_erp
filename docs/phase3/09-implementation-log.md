@@ -1134,3 +1134,58 @@ foreign keys 0 / 0 / 0 across the whole population**, not a sample.
 **Nothing created, nothing deleted, no text column dropped.**
 
 **3 files** (R18d): 1 migration + 1 evidence + 1 report addendum, plus this log.
+
+
+## D-037 · Slice 1, items 0 and 1
+
+### Item 0 — the blocker, cleared
+
+`competency_kasba_item.item_id` was **NOT NULL** with **no `item_label`**, against
+D-007's record of "item_label kept + item_id nullable". **Caught by checking the
+CREATED SCHEMA, not the migration source - that rule has now caught three things.**
+
+Without it, **four of the five KASBA dimensions are UNCOMPOSABLE**: knowledge,
+ability, attitude and behaviour have no canonical table, so a competency could
+only ever bundle skills, contradicting Q-A2 outright.
+
+**THE RULE, recorded so `item_label` does not become the free-text problem this
+phase exists to remove:**
+
+| State | Meaning |
+|---|---|
+| `item_id` populated | **THE TARGET STATE** - resolved by key |
+| `item_label` alone | **A HOLDING STATE** - counted as unresolved, feeds capability coverage |
+
+**A label is never treated as a key.** Same shape as F-07b's held orphans: honest
+about what is unresolved rather than guessing an id. A row naming *neither* is
+refused at validation.
+
+Table was empty, so relaxing NOT NULL orphaned nothing. Verified against the
+created schema: `item_id null=YES`, `item_label varchar(191) null=YES`.
+
+### Item 1 — competency definitions, as a bundle
+
+**A finding first:** `routes/api.php:360` serves `CompetencyCrudController`, which
+is an **alias for `CompetencyController`**, whose `store()` inserts into
+**`s_users_skills`** - it creates a FLAT SKILL ROW and calls it a competency.
+That is the skill library, a different concept; it is left alone because the
+library screen reads it.
+
+New `CompetencyDefinitionController` writes `competency` + `competency_kasba_item`
+in one transaction. **Nothing wrote to either table before this.**
+
+A `skill` item whose `item_id` is not in the caller's own tenant is **held by
+label rather than pointed at another tenant's row.**
+
+**Verified through the real request path:**
+
+| Request | Result |
+|---|---|
+| POST as **employee** | **403** - `profile:admin,hr` (exact `role_key`, G-AUTH-02) |
+| POST as **admin** | **201**, competency id 1 |
+| stored composition | skill -> `item_id=1` **TARGET**; knowledge and attitude -> label only, **HOLDING** |
+| coverage metric | **2 of 3 unresolved**, surfaced by the API |
+
+Test rows removed afterwards - shared database.
+
+**5 files** (R18d): 2 migrations/controllers + routes + 2 docs.
