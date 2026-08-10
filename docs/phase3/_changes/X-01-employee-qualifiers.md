@@ -115,7 +115,39 @@ as a settled number** (R19).
 
 ---
 
+## CORRECTION — THE TASK FAMILY GRANT WAS TOO BROAD
+
+**Caught by Gate C's by-name listing**, which is exactly what that gate was added
+for. Grouping by controller family saved a third of the reads, and **this is its
+one real cost**: the Task "family" spans 23 controllers, not one.
+
+I granted 210–215 on `MyTasksController` evidence. Only **211 My Tasks** is
+actually served by it.
+
+| Menu | Controller | Finding | Verdict |
+|---|---|---|---|
+| **211 My Tasks** | `MyTasksController` | `:136,180` index and `:132-139` show both filter on the caller (own · allocated · subordinates) | **GRANT** — stands |
+| 212 Projects | `ProjectController::index` | Lists **every project in the tenant** | **DENY** |
+| 213 Dependencies | `DependencyController::index` | Tenant-wide, and takes `assignee_id` **from the request** | **DENY** |
+| 214 Task Calendar | `TaskScheduleController` | No caller-filtered read | **DENY** |
+| 215 Reports & Analysis | `ReportController::productivity:31-36` | Groups by `task_allocated_to` **across the whole tenant** — a per-colleague productivity leaderboard | **DENY** |
+| 210 Dashboard | — | No controller establishes caller scope | **DENY** |
+
+### The bad proxy that produced it, named
+
+I counted references to `$context['user_id']` per controller and read a high count
+as caller-scoping. **ProjectController has 13 and none of them scope a read** —
+they are `created_by`, `updated_by`, `archived_by`. **The proxy counts the
+provenance writes G-SEC-12 just added everywhere**, so the very fix that closed
+one class of bug made the detector for another class read backwards.
+
+**Only a `where()` on the caller's id in the read path counts.** That is how 211
+was confirmed and how the other five were rejected.
+
+---
+
 ## Status
 
-**All families read. 10 screens GRANT, 20+ DENY.**
-**Next: regenerate the seed, re-run the three gates.**
+**All families read. 5 screens GRANT (211 + LMS 80/81/83/209), the rest DENY.**
+**Seed regenerated. All three gates pass.** Employee: **12 leaf screens**.
+

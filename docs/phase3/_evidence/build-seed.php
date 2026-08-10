@@ -38,6 +38,58 @@ const DECLARED = [
     'agentic ai'                          => [188, 189, 190, 191, 192, 193, 194],  // 7 live; 187 Pal status=0 and removed per Q-A5
 ];
 
+/* ---------- QUALIFIED GRANTS, RESOLVED BY READING THE CONTROLLER ----------
+ *
+ * 03-rbac-matrix.md carries 121 grants whose parenthetical qualifier does the
+ * real work - "own payslip", "self", "team", "own dept". tblgroupwise_rights_g2g
+ * holds one boolean per menu and cannot express any of it (G-RBAC-01), so each
+ * one was resolved by reading the controller behind the screen:
+ *
+ *   scoped to the CALLER (token-derived)  -> a bare V is safe   -> GRANT
+ *   subject from the REQUEST or a route param -> nothing enforced -> DENY
+ *   capability does not exist at all (G-RBAC-02)                 -> DENY
+ *
+ * Employee's set is resolved. The other three roles are not, so their
+ * qualifiers still fall through to the §3.x mark.
+ */
+const QUALIFIED = [
+    'employee' => [
+        /* GRANT - verified token-scoped, file:line in X-01-employee-qualifiers.md */
+        'grant' => [
+            211,                            // My Tasks ONLY - MyTasksController:136,180 index
+                                            // and :132-139 show, all filtered on the caller.
+                                            // 210/212/213/214/215 moved to DENY - see below.
+            80, 81, 83, 209,                // LMS - LmsLearningController lists filter on
+                                            // $userId, itself token-derived (ResolvesLmsIdentity:138)
+        ],
+        /* DENY - controller does not scope to the caller, or nothing is built */
+        'deny' => [
+            105, 106, 107, 108, 109, 110, 140,  // Payroll - no payslip screen exists (G-RBAC-02)
+            22,                                  // Employee Directory - field-level, awaits 3.8
+            26,                                  // Skill Gap Analysis - no component (G-RBAC-02)
+            154, 155, 156, 157, 158,             // Competency - $id is a route param, unchecked
+            100, 101,                            // Attendance - punch takes employee from request
+            102, 103, 104,                       // Leave - request-first with caller as fallback
+            47, 48, 49, 52, 171,                 // Talent - zero caller-scoped queries
+            122,                                 // Consolidated Reports - org-wide by definition
+            /* Task, CORRECTED. The family grant was too broad: only MyTasksController
+             * filters reads by the caller. The others scope by TENANT only. */
+            210,                                 // Dashboard - no controller establishes caller scope
+            212,                                 // Projects - ProjectController::index lists every
+                                                 //   project in the tenant; its 13 caller refs are
+                                                 //   created_by/updated_by/archived_by, attribution
+                                                 //   not read-scoping
+            213,                                 // Dependencies - DependencyController::index is
+                                                 //   tenant-wide and takes assignee_id from request
+            214,                                 // Task Calendar - TaskScheduleController's only two
+                                                 //   caller refs are updated_by, attribution
+            215,                                 // Reports & Analysis - ReportController::productivity
+                                                 //   groups by task_allocated_to across the whole
+                                                 //   tenant: a per-colleague productivity leaderboard
+        ],
+    ],
+];
+
 /* Screens with no menu - DENIED BECAUSE NOT BUILT, not denied by decision. */
 const NOT_BUILT = ['group wise rights', 'individual rights', 'task approvals',
                    'competency gap report', 'development plan report', 'certification expiry report'];
@@ -102,6 +154,25 @@ foreach ($mm as [, $sec, $title, $body]) {
     }
 }
 
+/* ---------- APPLY THE RESOLVED QUALIFIERS ----------
+ * Runs BEFORE container derivation, so a container whose last leaf is denied
+ * here is never granted in the first place.
+ */
+$qualifierLog = [];
+foreach (QUALIFIED as $role => $sets) {
+    foreach ($sets['deny'] as $menuId) {
+        if (isset($grants[$role][$menuId])) {
+            unset($grants[$role][$menuId]);
+            $qualifierLog[] = "$role DENY $menuId";
+        }
+    }
+    foreach ($sets['grant'] as $menuId) {
+        if (!isset($grants[$role][$menuId])) {
+            $qualifierLog[] = "$role GRANT $menuId (not in 3.x - NOT added)";
+        }
+    }
+}
+
 /* ---------- DERIVE CONTAINER can_view — every run, never authored ----------
  *
  * displaySidebarMenu filters a module with canView() BEFORE descending into its
@@ -147,6 +218,8 @@ file_put_contents('C:/Users/MILAN/Downloads/hp_erp/docs/phase3/_changes/X-01-see
 printf("screens mapped   : %d\n", count($mapped));
 printf("screens unmapped : %d  (denied - listed in the seed file)\n", count($unmapped));
 printf("seed rows        : %d across %d profiles\n\n", count($rows), $profiles->count());
-echo "menus granted per role (one tenant's worth):\n";
+printf("qualifiers applied: %d\n", count($qualifierLog));
+foreach ($qualifierLog as $l) echo "  $l\n";
+echo "\nmenus granted per role (one tenant's worth):\n";
 foreach (COLS as $r) printf("  %-20s %d\n", $r, count($grants[$r] ?? []));
 printf("  %-20s %d\n", 'recruiter', count($grants['recruiter'] ?? []));
