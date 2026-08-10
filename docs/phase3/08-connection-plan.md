@@ -488,7 +488,7 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 | S-02 | G-SEC-12 actor identity | G-SEC-12 | 2, 9 | **M** — **76 sites / 16 files** (est. was 33; low by 2.3×) | ~~event store~~ **UNBLOCKED** | — | AT-S02 | API | ✅ **API-verified** (`d70a204c`) |
 | S-03 | Remaining leaks, data-class order | G-SEC-11 | all | **ESTIMATE PENDING** | customer readiness | — | AT-S03 | API | Not started |
 | S-04 | 37 guard candidates hand-verified | G-SEC-11 | — | **S** · from `c23-result-FULL-912.json`, **no re-run** | S-03 scope | — | — | DB | Not started |
-| S-05 | C37 ten checks (1 done) | — | — | **S** | C34 calibration | — | — | API | 1 of 10 |
+| S-05 | C37 ten hand-checks of C34's 114 (1 done) | **RESTATED, not retired.** C37 is definable: hand-verify TEN of C34's 114 structural no-scoping candidates BY DATA SENSITIVITY, then calibrate or close as a proven negative. 1 done (`IndustryController`, false positive); NINE remain| — | **S** | C34 calibration | — | — | API | 1 of 10 |
 | S-06 | C23 write-half phase | — | — | **ESTIMATE PENDING** | C24 gate | tenant + row register | — | API | Not started |
 | S-07 | C23 regression guard in CI | G-QUAL-02 | — | **S** · guard exists; needs a CI hook | prevents regrowth | — | — | API | Not started |
 | S-08 | G-SEC-01 authorization coverage | G-SEC-01 | all | **ESTIMATE PENDING** — superseded counts | — | rights matrix | — | API | Not started |
@@ -507,7 +507,7 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 | F-06 | Tri-state rights columns | G-SEC-06 | 9 | **S** · both rights tables | rights population | — | AT-F06 | DB | Not started |
 | F-07a | Text→FK **columns added**, nullable, unread | G-DATA-06 | all | **M** | F-07b | F-01 | AT-F07 | DB | ✅ **APPLIED** (`7df8c1c7`) |
 | F-07b | Text→FK **backfill + unmatched report + drops** | G-DATA-06 | all | **L** · R8 on the drops | joins by key | F-07a | AT-F07b | DB | Not started |
-| F-08 | `portal_identity` | Q-D4 | 7 | **M** · §7.3 DDL | candidate conversion | — | AT-F08 | DB | Not started |
+| F-08 | `portal_identity` | **DROPPED 2026-08-10** - no consumer, and Q-D4 deferred the candidate portal deliberately. An identity model for a portal nobody is building fails the named-consumer test| 7 | **M** · §7.3 DDL | candidate conversion | — | AT-F08 | DB | Not started |
 | F-09 | `library_map_skill` join table | G-DATA-07 | 1 | **S** · 3,270 rows to split | — | F-01 | AT-F09 | DB | ✅ **APPLIED** (`7df8c1c7`) |
 
 ## Tier 2 — Mechanisms
@@ -558,12 +558,12 @@ being read as organisational fact.**
 | L-03R | Delete the dead panel | G-LIB-06 | — | **XS** | — | — | AT-L03R | SCREEN | ✅ **BUILT** (D-001) |
 | L-04 | Job Level → `s_level_responsibility` | G-LIB-07 | 1 | **XS** *(after X-03)* | — | X-03 | AT-L04 | SCREEN | Not started |
 | L-05 | Honour Status at assignment time | G-LIB-05 | 3 | **S** · `RoleMappingController`, `StudioController` | — | F-01 | AT-L05 | API | Not started |
-| L-06 | Delete impact count / block | G-LIB-02 | — | **S** · `library-tab.tsx` | — | — | AT-L06 | SCREEN | Not started |
+| L-06 | **Show what depends on this** *(was: delete impact count / block)* | **REFRAMED 2026-08-10.** Under the no-deletion rule an impact count is MORE valuable, not less: it shows what a deletion would break WITHOUT deleting. Block-don't-cascade stays| — | **S** · `library-tab.tsx` | — | — | AT-L06 | SCREEN | Not started |
 | L-07 | Job Titles → `s_user_skill_jobrole` | G-LIB-02 | 1 | **M** | — | F-07 | AT-L07 | DB | Not started |
 | L-08 | Learning Resources → course refs | G-FLOW-26 | 3, 4 | **M** | thread 4 | F-01 | AT-L08 | SCREEN | Not started |
 | L-09 | Certifications → `certification_type` | G-CERT-01 | 3, 8 | **M** | thread 8 | F-02 | AT-L09 | SCREEN | Not started |
 | L-10 | Import on every library tab | G-LIB-04 | 1 | **M** | — | X-08 | AT-L10 | SCREEN | Not started |
-| L-11 | Join on ids, not titles | G-DATA-06 | all | **L** | — | *(= F-07)* | AT-F07 | DB | Not started |
+| L-11 | Join on ids, not titles | **NEXT, and re-costed. NOT what the one-line description implied.** The backfill made a rename SURVIVABLE, not SAFE: 12 name-to-name join sites across 6 files still resolve by text. **M**| all | **L** | — | *(= F-07)* | AT-F07 | DB | Not started |
 | L-12 | One shared category table + applicability | G-LIB-02 | 1 | **L** | L-13, L-20 | F-01 | AT-L12 | DB | Not started |
 | L-13 | Propagate taxonomy renames | G-LIB-02 | 1 | **M** | — | L-12 | AT-L13 | DB | Not started |
 | L-14 | Task catalogue → competency | G-LIB-03 | 2 | **L** | thread 2 | *(= F-01)* | AT-F01 | DB | Not started |

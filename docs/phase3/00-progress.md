@@ -78,6 +78,17 @@ done and not be.
 
 ## G-DATA-06 — THE PHASE HEADLINE
 
+> ## ⚠ 100% LINK RESOLUTION IS NOT THE PROBLEM CLOSED
+>
+> **The backfill made a rename SURVIVABLE, not SAFE.** The DATA resolves by key;
+> **12 join sites across 6 files still resolve by TEXT** - including
+> `CompetencyDashboardController:871`, `jr.jobrole = sj.jobrole`.
+>
+> **Slice 1's rename proof was real but tested the path Slice 1 built.** The
+> legacy sites were never in it, so a rename still detaches those dashboards.
+> **L-11 converts them, and its acceptance test is Slice 1's extended: rename a
+> job role and confirm the DASHBOARDS still resolve.**
+>
 > **RESOLVED 2026-08-10 (D-044): link resolution is now 100.0% on all three
 > tenant-scoped mappings.** 14,569 of 14,572 orphans resolved; 3 remain, and all
 > three name nothing (two NULL, one the string "1"). **This is LINK RESOLUTION,
@@ -305,6 +316,12 @@ agree with `09-implementation-log.md`'s entry count. They disagreed by **13** wh
 this rule was introduced: twelve security fixes were in the register and in git but
 had never been written to the log. **Report the reconciliation in the status line
 each time.**
+
+**R18c(iii) - THE PLAN FILE JOINS THE RECONCILIATION.** `08-connection-plan.md`'s
+status column is the THIRD instance of one pattern: "2 of 32", the stale queue,
+and now six rows reading "Not started" for work that had shipped. **A status
+column nobody reconciles goes stale exactly as silently as a queue section does.**
+Report it as a third number in the status line.
 
 **R18d — GIT DISCIPLINE IS A GUARD, NOT VIGILANCE.** Third repeat of the same
 pattern, and the one with real blast radius: **~75 pre-existing modified files sit
@@ -623,8 +640,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **44** ·
-`09-implementation-log.md` entries = **44** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **45** ·
+`09-implementation-log.md` entries = **45** · **AGREE.** · plan file **16 of 59 done** (R18c(iii))
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 

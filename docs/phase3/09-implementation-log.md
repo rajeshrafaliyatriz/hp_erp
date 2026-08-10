@@ -1522,3 +1522,58 @@ larger scale. Same class as the `BINARY`-in-the-ON-clause defect: correct output
 avoidable cost.
 
 **2 files** (R18d): 1 evidence script + backup, plus this log.
+
+
+## D-045 - the shape of what is left, and two corrections of my own numbers
+
+**Nothing built. Analysis and housekeeping only.**
+
+### CORRECTION 1: the plan has 59 rows, not ~45
+
+My "~40 -> ~45" applied +5 to a figure I had never verified. **59 rows, 16 done,
+43 remaining.** (R19, mine.)
+
+### CORRECTION 2: L-11 is 12 join sites, not 45
+
+I reported "45 code sites still join by text". **That counted REFERENCES to the
+tables, not JOINS.** Validated against a known positive
+(`CompetencyDashboardController:871`) before recounting, per R16's extension.
+
+**The real set - 12 name-to-name joins across 6 files:**
+
+| File | Sites |
+|---|---|
+| `Api/CompetencyDashboard/CompetencyDashboardController` | 218, 397, 857, 871 |
+| `AJAXController` | 834, 1095, 1099 |
+| `Api/jobrolecontroller` | 56, 91 |
+| `Api/signup_api/SchoolSetupController` | 316, 373 |
+| `Services/Competency/CommandCenterService` | 72 (`whereColumn`) |
+
+**12 is a materially different item from 45** - M rather than L - and the
+correction is in the plan.
+
+### THE FINDING THAT REORDERS THE QUEUE
+
+**100% link resolution is NOT G-DATA-06 closed.** The backfill made a rename
+**survivable, not safe**: the data resolves by key, the queries do not. Slice 1's
+rename proof was real but **tested the path Slice 1 built** - the legacy sites
+were never in it.
+
+**L-11 goes before any new connection item**, because a connection built on a
+text-joined query is a connection that breaks on rename.
+
+### Six stale plan rows fixed, and R18c extended
+
+F-06, F-07b, X-01, X-04, X-05, M-03 all read "Not started" for shipped work.
+**Third instance of one pattern**, so `08-connection-plan.md` now joins the
+queue-log reconciliation as a third number.
+
+### Section 5 decisions
+
+| Item | Decision |
+|---|---|
+| **F-08 `portal_identity`** | **DROPPED** - no consumer; Q-D4 deferred the candidate portal deliberately. Fails the named-consumer test |
+| **L-06** | **REFRAMED to "show what depends on this"** - under the no-deletion rule an impact count is MORE valuable: it shows what a deletion would break WITHOUT deleting. Block-don't-cascade stays |
+| **S-05** | **RESTATED, not retired.** C37 is definable from three places in the record: hand-verify TEN of C34's 114 candidates by data sensitivity, then calibrate or close as a proven negative. NINE remain |
+
+**3 files** (R18d).
