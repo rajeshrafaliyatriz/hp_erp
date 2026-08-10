@@ -283,7 +283,7 @@ frontend consumers after a server change · **R10** name the proxy · **R11**
 verify scope-shrinking assumptions **before** using them · **R12** land a queued
 item every turn *(a turn spent entirely on an incident counts as landed work,
 provided the incident is reported and closed)* · **R13** standing authority · **R14** turns end at boundaries ·
-**R15** assert the column exists · **R16** every sweep names a known-positive ·
+**R15** assert the column exists · **R16** every sweep names a known-positive — **the rule with the best strike rate: it caught S-2's 111 phantom endpoints AND G-SEC-23's under-count, two of the three most consequential measurement errors of the phase** ·
 **R17** check your own artefacts before writing a new script · **R18** commit
 `docs/phase3/` after every write to this file, **and assert after every write that
 the file is non-empty and still contains an expected marker line**.
@@ -300,6 +300,14 @@ agree with `09-implementation-log.md`'s entry count. They disagreed by **13** wh
 this rule was introduced: twelve security fixes were in the register and in git but
 had never been written to the log. **Report the reconciliation in the status line
 each time.**
+
+**R18c(ii) — A CHANGE IS DONE ONLY WHEN IT IS IN THE LOG WITH A COMMIT.** A
+sentence in a reply is an **intention**, not an outcome. **Menu 100's re-grant was
+described as done and was never applied** - it sat unlisted for five turns because
+*something SAID became something BELIEVED and nobody checked whether it happened*.
+**I reported an intention as if it were an outcome.** It cost one screen here; the
+same failure hides larger things. **The queue-log reconciliation is what enforces
+this** - a fix with no D-entry and no commit is not done.
 
 **R10 — two worked examples, both from the Employee qualifier batch.**
 
@@ -600,8 +608,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **25** ·
-`09-implementation-log.md` entries = **25** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **28** ·
+`09-implementation-log.md` entries = **28** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -618,7 +626,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | **6** | **Event store + projector/reactor split + `task_status_history`** | **NOT STARTED — NEXT AFTER THE SECURITY PAUSE** |
 | **F-07b** | Backfill + unmatched report + drops (R8) | **NOT STARTED — after item 6** |
 
-### SECURITY STREAM — **12 fixes shipped**, then it PAUSES
+### SECURITY STREAM — **15 fixes shipped**, then it PAUSES
 
 | Finding | Fix | Commit |
 |---|---|---|
@@ -634,6 +642,9 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | G-SEC-20 | Second-order injection — arbitrary table drop | `17fa3b2f` |
 | G-SEC-21 | Dynamic table names validated at the point of use | `80ea67a7` |
 | G-SEC-22 | `tableDelete` auth + tenant scoping | `c3dd4b71` |
+| **G-SEC-23a** | `api/feedback/{id}` — auth + tenant clause (chain A) | see D-027 |
+| **G-SEC-23b** | `api/competency/audit/user-actions/{userId}` — name lookup scoped (chain A) | see D-027 |
+| **G-SEC-23c** | `api/user-signup/{id}` — **authenticated then unscoped** (chain B) | see D-027 |
 
 ### RE-GRANTS — as each fix lands
 
@@ -655,7 +666,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | G-NAV-02 + nine-token harness | One-line fix; harness must change in the same commit or verification breaks silently |
 | `ResolvesLmsIdentity:101`, `LmsLearningController:1537` | Substring matchers, same class as G-AUTH-01 |
 | SHAPE-01 sweep | *"Trusted because of where it came from"* — filed with 2 instances, sweep on Triz's call |
-| G-SEC-16 | **Capacity workstream, not security** — ~100 unbounded queries; heaviest six first |
+| G-SEC-16 | **Capacity workstream, not security** — ~100 unbounded queries; heaviest six first, **plus `api/templates/{id}/versions` which returned 3.4 MB in ONE response** |
 | F-05a / F-05b | `canAssign()` unused (G-ORG-01); no manager-assignment mechanism (G-ORG-02) |
 | C24's write half | **772 write routes, NOT TESTED AT ALL.** Precondition: confirm it does not inherit C23's two-tenant blind spot |
 

@@ -830,3 +830,34 @@ one banner — **S**.
 ## D-025 · G-SEC-22 — tableDelete auth and tenant scoping
 
 `c3dd4b71` — No auth, no tenant, no user check. Anonymous 401 / foreign id 404 / legitimate row untouched.
+
+
+## D-026 · The {id} read probe
+
+Employee token (user 198, tenant 7), GET only, real ids from tenants 7 and 3,
+chunked. **1,819 requests over 113 of 113 `api/*` routes with one `{param}`.**
+**REACHABLE 23 routes** (200, body > 60 bytes, other-tenant id). 192 HTTP 500s
+left deliberately unclassified. `_evidence/id-probe.php`.
+
+## D-027 · G-SEC-23 — cross-tenant read, verified and FIXED by chain
+
+**Verification:** 114 route+id pairs, each asserting the tenant-3 row's own
+identifying field appears in the body. **3 DISCLOSING, 20 NOT, 0 INDETERMINATE.**
+
+**Fixes, keyed on the reach chain rather than per route:**
+chain A (`api` group, no auth) - `api/feedback/{id}` gained auth **and** the
+tenant clause its own resolved `$subInstituteId` was never used for;
+`api/competency/audit/user-actions/{userId}` gained a tenant clause on the NAME
+lookup at `:556` (its activity queries were already scoped).
+Chain B (authenticated, unscoped) - `api/user-signup/{id}` gained the tenant
+clause; **the fix was not "add auth"**, it is G-SEC-09's missing layer in a route
+that looks guarded.
+
+**Re-verified after the fix: DISCLOSING 3 -> 0, the other 20 unchanged.**
+
+## D-028 · Harness correction inside the verification
+
+The first verifier kept only the largest response per route and tested that id
+against markers from whichever table it was pooled from. **It would have published
+"1 of 23" - an under-count presented as complete.** Caught only because a
+known-positive disagreed (R16). `_evidence/id-verify.php`.

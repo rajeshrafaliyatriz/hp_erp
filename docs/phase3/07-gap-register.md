@@ -1140,7 +1140,44 @@ own identifying field from the database, assert it appears in the response body.
 > it is **the same missing layer as G-SEC-09, in a route that LOOKS protected.**
 > A reviewer skimming the route file would call it guarded.
 
-### A harness correction inside the verification (R4, ~15th)
+### FIXED — by CHAIN, and re-verified
+
+| Chain | Route | Fix |
+|---|---|---|
+| **A** — `api` group, no auth | `api/feedback/{id}` | Auth **and** tenant clause. `$subInstituteId` was already being *resolved and then never used*; auth was gated on `$type == "API"` (G-SEC-18 form 1) |
+| **A** | `api/competency/audit/user-actions/{userId}` | Both activity queries were already scoped - **the NAME lookup at `:556` was not**, so a foreign user's activity was empty but their name was still returned. Narrow, and real: it confirms an id exists in another tenant and attaches a person to it |
+| **B** — authenticated, unscoped | `api/user-signup/{id}` | Tenant clause only. **The fix is not "add auth"** |
+
+**Re-verified with the corrected verifier, all 23 routes, 114 route+id pairs:**
+
+| Verdict | before | after |
+|---|---:|---:|
+| **DISCLOSING** | **3** | **0** |
+| NOT DISCLOSING | 20 | 23 |
+| INDETERMINATE | 0 | 0 |
+
+**All three moved to NOT DISCLOSING. The other 20 are unchanged** - checked
+explicitly, not assumed.
+
+### THE HARNESS CORRECTION — the strongest argument for the whole discipline
+
+**The first verifier would have published "1 of 23": an UNDER-COUNT presented as
+complete.**
+
+That is **harder to catch later than an over-count**, because **nobody re-examines
+a small number that looks thorough.** An inflated figure invites challenge; a
+modest one invites trust.
+
+It was caught only because a **known-positive disagreed** (R16) - a route already
+confirmed DISCLOSING came back NOT DISCLOSING, and that contradiction was the only
+signal. Without the earlier hand-verification of those two routes there would have
+been nothing to disagree with.
+
+**Two of the three most consequential measurement errors of this phase were caught
+by R16** - S-2's 111 phantom endpoints, and this. **It is the rule with the best
+strike rate.**
+
+### The mechanism (R4, ~15th)
 
 The first verifier kept only the **largest** response per route and tested that one
 id against markers from whichever table it was pooled from. For
