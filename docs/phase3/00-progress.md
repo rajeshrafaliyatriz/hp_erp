@@ -458,8 +458,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 | 4b-prep(a) | Recruiter column check | ✅ done — **no Recruiter column in §3.x; Q-D1 has it module-level.** A format gap, not a decision gap. **Expansion awaits approval** |
 | 4b-prep(b) | Nine roles + `role_key` + `data_scope` | ✅ done (`dd25e450`) — 9 × 11 tenants |
 | 4b-prep(c) | **Screen→menu mapping CSV** against `tblmenumaster_g2g`, for review | **NEXT** |
-| **X-01c** | **Rights-table reconciliation** (G-DUP-01) — a **decision list**, not a switchover | after 4b |
-| **G-SCOPE-01** | **Is the Blade UI in Phase 3, deferred, or retiring?** Recommendation: **deferred, declared and dated** | **awaiting Triz** |
+| ~~X-01c~~ | ~~rights-table reconciliation~~ | ❌ **CANCELLED** — nothing to consolidate |
+| **G-SCOPE-01** | Blade UI | ✅ **CLOSED — OUT OF SCOPE.** Not the product. Leave it entirely alone. Its routes stay in C23's security scope |
 | **F-05a** | **Call `canAssign()` from every write path** | **NOT STARTED — G-ORG-01.** The no-cycle guarantee is theoretical until this lands |
 | **F-05b** | Manager assignment mechanism (bulk + individual) | **NOT STARTED — G-ORG-02.** Slice 2's demo needs it |
 | 5 | `reporting_manager_id` + `head_user_id` + cycle validation | after 4 |

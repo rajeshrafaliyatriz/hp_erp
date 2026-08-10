@@ -389,83 +389,54 @@ that are not mine, and pushing is outward-facing.
 
 ---
 
-# ⭐ G-SEC-07 — **SUBSTANTIALLY CORRECTED 2026-08-07** · ~~S1~~ → **S3**
+# ⭐ G-SEC-07 — THE PRODUCT HAS NO WORKING PERMISSIONS · **S1** · THIRD AND FINAL STATE
 
-> ## ⛔ THE ORIGINAL CLAIM IS WITHDRAWN
+> ## THE FINDING, worded so it can be repeated verbatim
 >
-> ~~"The rights matrix carries no information. `can_view`=1 on all 4,879 rows,
-> every other action 0, and Employee sees more menus than Admin. Enforcing it as
-> it stands would grant everyone everything."~~
+> **The Next.js product's sidebar reads `tblgroupwise_rights_g2g` via
+> `tblmenumasterG2gController::displaySidebarMenu`, filtered by `profile_id`, with
+> absence denying (`?? 0`). `can_view = 1` on all 4,879 rows and
+> `can_add` / `can_edit` / `can_delete` = 0 on all of them. Every profile sees the
+> same 157 menus and no profile holds any action right.**
 >
-> **That was measured on `tblgroupwise_rights_g2g` — a table the live sidebar does
-> not read, holding a DELIBERATE PLACEHOLDER.** It was quoted as *"our user roles
-> do not actually mean anything."* **That is not true. Do not repeat it.**
+> **THE PRODUCT BEING SOLD HAS NO WORKING PERMISSIONS; roles differ in name only.**
+>
+> The seeder's placeholder intent is real, but **it was never replaced and the
+> product ships on it.**
 
-## What is actually the case
+## The evidence chain, one link per step
 
-**There are two rights systems, one per front-end.**
+| Step | Artefact |
+|---|---|
+| Next.js calls | `/user/ajax_sidebar_menu_g2g` — `services/navigation/sidebar.ts:41` |
+| Route | `routes/user.php:44` |
+| Controller | `tblmenumasterG2gController::displaySidebarMenu` |
+| Menus from | `tblmenumaster_g2gModel` |
+| **Rights from** | **`tblgroupwise_rights_g2gModel`, `where('profile_id', …)`** |
+| Applied as | `if (! $this->canView(...)) { continue; }` — **a hard filter, not decoration** |
+| Absence means | `return ($rights->can_view ?? 0) == 1;` — **deny** |
 
-| | `tblgroupwise_rights` | `tblgroupwise_rights_g2g` |
+## Version history — both prior states, struck through
+
+| Date | State | Why it was wrong |
 |---|---|---|
-| Serves | **Blade UI**, via `MenuMiddleware` | **Next.js sidebar**, via `displaySidebarMenu` |
-| Rows | **1,254** | 4,879 |
-| `can_view=1` | 1,253 | all 4,879 |
-| `can_add/edit/delete=1` | **784 rows** | **0** |
-| Menu tree | `tblmenumaster` (200) | `tblmenumaster_g2g` (188) |
+| ~~2026-08-05~~ | ~~**S1** — "the rights matrix carries no information; enforcing it would grant everyone everything"~~ | **Right conclusion, incomplete evidence.** It never established which interface read the table |
+| ~~2026-08-07 (morning)~~ | ~~**S3** — "the live table is differentiated; the uniform `can_view=1` is a deliberate placeholder; 4b is invisible to users"~~ | **WRONG.** It found differentiated data in `tblgroupwise_rights` and assumed that was the live table. It is the **Blade** product's. And it let the seeder's stated *intent* stand for the product's *behaviour* (**R10c**) |
+| **2026-08-07 (final)** | **S1 — as stated above** | Traced from the frontend call to the controller query. One endpoint, one controller, one table |
 
-### 1. The live table HAS differentiated rights
+**Three states of one finding is untidy. Hiding two of them would be worse.**
 
-| Role | `can_view` per profile | `can_edit` per profile |
-|---|---:|---:|
-| **Admin** | **95** | 63 |
-| HR | 71 | 0 |
-| **Employee** | **58** | 38 |
+## What follows
 
-**Admin correctly sees more than Employee.** Roles mean something today.
+**4b is not curation. It is the fix**, and it is **the most visible change in the
+plan** — the first thing in this phase a person will see.
 
-### 2. The uniform `can_view=1` is DELIBERATE, and says so
+### Two asymmetries the diff must separate
 
-`app/Console/Commands/SeedG2gDefaultViewRights.php`, its own `$description`:
-
-> *"Grants `can_view=1` in `tblgroupwise_rights_g2g` for every active profile ×
-> menu row that has no rights row yet, **so the new sidebar is not empty until an
-> admin curates real rights**."*
-
-**A placeholder awaiting exactly the curation item 4b performs** — not a defect.
-
-### 3. The inversion exists only in the placeholder
-
-**151 / 150 / 136** (Employee / HR / Admin) is the **_g2g** table. In the live
-table the ordering is correct. The inversion was an artefact of the placeholder
-seeding every profile × menu row uniformly.
-
-### 4. My R9 claim was wrong
-
-I said populating would be visible on the next page load. **`MenuMiddleware` does
-not read `_g2g`, so populating it changes nothing on screen.** 4b is **invisible**
-to current users.
-
-## What survives
-
-**The action flags are genuinely empty in the new table** — `can_add`, `can_edit`,
-`can_delete` are 0 on all 4,879 rows. The new sidebar has **view-only placeholder
-rights and no action rights at all.** That is real, and it is what 4b fixes.
-**Severity S3.**
-
-> **THE SURVIVING FINDING, to be stated exactly this way wherever it appears:**
-> **the new sidebar has view-only placeholder rights and NO action rights at all.
-> That blocks curation of the new UI, not the running product.**
-
-## How this happened, and the lesson
-
-The measurement was correct; **the table was wrong**. Nothing in the number
-revealed that — 4,879 uniform rows look exactly like a broken matrix and exactly
-like a fresh placeholder.
-
-> **R17 applied twice this turn, and both times the answer was already written
-> down** — Recruiter's permissions in Q-D1, and the placeholder's purpose in the
-> seeder's own description. **Check what is already written before concluding a
-> defect.**
+| Direction | Risk |
+|---|---|
+| **Action rights** (`add`/`edit`/`delete`) | **PURELY ADDITIVE.** Nothing holds them today, so populating can only **grant**. **Low risk** |
+| **`can_view`** | **SUBTRACTIVE.** Every profile currently sees all 157 menus, so real rights **REMOVE** menus from every profile **including Administrator**. **This is where the risk sits, and what the review gate is for** |
 
 ---
 
@@ -496,21 +467,11 @@ Reconciliation by profile — distinct menus with `can_view=1`:
 **Admin loses 43 menus and HR gains 79 if the _g2g seed were taken as-is.** That
 diff is the deliverable for the consolidation item, not a side effect of 4b.
 
-**Tracked as plan item X-01c.**
+**❌ X-01c IS CANCELLED.** *(2026-08-07)* **There is nothing to consolidate: two
+products, two tables, each keeps its own.** The Blade UI is out of scope
+(G-SCOPE-01), so its rights table is not ours to reconcile, migrate or retire.
 
-> ## ⛔ X-01c IS A DECISION LIST, NOT A SWITCHOVER
->
-> **Admin −43 menus and HR +79 is a redesign delivered as a data change.**
-> **Neither direction may be applied by taking the `_g2g` seed as-is.**
->
-> | Direction | Why it gets its own scrutiny |
-> |---|---|
-> | **LOSSES** (Admin −43) | **a support incident if wrong.** Each must be confirmed as intended |
-> | **GAINS** (HR +79) | **a PERMISSION INCREASE nobody approved.** This is the one with security consequences and it gets the closer look |
->
-> **The deliverable is the per-role, per-menu list of what changes and in which
-> direction.** Triz decides each direction; only then does it apply. **Backups of
-> BOTH tables first. R9 applies at that point and not before.**
+
 
 ---
 
@@ -534,7 +495,7 @@ says nothing about the Blade UI**, and no document said so until now.
 
 ---
 
-# G-SCOPE-01 — THE BLADE UI HAS NEVER BEEN AUDITED · **S2** · question for Triz
+# G-SCOPE-01 — THE BLADE UI IS OUT OF SCOPE · ✅ **CLOSED 2026-08-07 by decision**
 
 **Not a documentation gap — an unexamined surface.** Every nav, menu, triage and
 route-to-menu figure in this phase describes the **Next.js** sidebar. The Blade UI
@@ -588,8 +549,25 @@ Reasoning:
 ⚠️ **If Triz says it is staying**, then it needs its own Gate C pass and its rights
 table needs the same curation as `_g2g` — and X-01c cannot retire either table.
 
-**Question, and it decides X-01c's shape: is the Blade UI in Phase 3, deferred, or
-being retired?**
+## ✅ DECIDED 2026-08-07 — OUT OF SCOPE
+
+> **Phase 3 continues with the NEW G2G INTERFACE (Next.js) only. The Blade UI is
+> NOT the product being built.**
+
+**Not "deferred with intent to retire" — simply not the product.** If it later
+needs work, that is its own phase.
+
+| | |
+|---|---|
+| The 30 legacy-only menus and `tblgroupwise_rights` (1,254 rows) | **belong to it** |
+| Audit it? | **No** |
+| Curate its rights? | **No** |
+| Retire or modify its tables? | **No. Leave it entirely alone** |
+| The scope qualifier on every nav/menu/triage/route-to-menu figure | **now correct BY DEFINITION rather than by accident** |
+
+**⚠️ ONE EXCEPTION STANDS: Blade routes remain inside the C23 tenant-isolation
+scope**, because `authMiddleware` accepts a token and they are reachable.
+**Security coverage does not narrow with product scope.**
 
 ---
 
@@ -647,6 +625,7 @@ evidence.
 | **R19** | **A NUMBER ASSEMBLED FROM OTHER NUMBERS IS A NEW CLAIM.** Re-derive it end to end, with one filter, before publishing. **Verifying each input separately does not verify their combination** | **V6.** Three of four headline errors came from combining figures derived at different moments with different filters — and all three **overstated**, flipping R11's direction. Under-reporting hid risk; over-reporting costs credibility |
 | **R19b** | **AN AGGREGATE IS NOT AN EXPERIENCE.** A total summed across tenants, users or profiles must never be quoted as if it described one of them. State the per-unit figure, or say explicitly that the number is an aggregate | **G-SEC-07.** *"Employee sees 1,657 menus vs Admin 1,500"* was summed across **11 tenants**. What **one user** sees is **151 vs 136**. Same family as R19: a figure assembled from parts and then read as something it never measured. **The inversion survives and remains the finding** |
 | **R17** | **(a) Before writing any new measurement script, check whether an existing artefact already answers the question — reuse it. (b) When a new measurement disagrees with an old one, resolve the discrepancy BEFORE either is used** — R4b applied to my own artefacts, not just to the codebase | **C38.** The tooling was right and the correct number was already in `c21-result.json`. I wrote a fresh, narrower grep, got 17 against its 30, and acted on mine without comparing |
+| **R10c** | **INTENT IS NOT BEHAVIOUR.** A comment, a `$description`, a commit message or a design note explains what someone MEANT. Only the running code says what HAPPENS. Never let the first stand for the second | **G-SEC-07, second correction.** `SeedG2gDefaultViewRights`' description says the uniform `can_view=1` is a placeholder *"until an admin curates real rights"* — **true about intent, and it was never replaced.** The product ships on the placeholder. **The same proxy error this project has now caught six times**, one level up: not a checker measuring a proxy, but a *document* standing in for a behaviour |
 | **R10b** | **A PROXY THAT NAMES ONE COLUMN MEASURES ONE COLUMN, NOT THE CLASS.** Before writing down any scope figure, ask: **"what else does this pattern look like under a different name?"** Where the answer is unknown, mark it **ESTIMATE PENDING** rather than guess | **G-SEC-12.** S-3 counted `created_by` and reported **33**. The real class spans `created_by`, `updated_by`, `verified_by` and `reviewer_id` — **one pattern under four names — and the true figure was 76. Low by 2.3×.** ESTIMATE PENDING was correct and should be used the same way again |
 | **R11** | **A SCOPE-SHRINKING ASSUMPTION IS VERIFIED BEFORE IT IS USED TO SHRINK ANYTHING.** State it, test it, then apply it — never the reverse | **Four consecutive errors all ran in the reassuring direction.** Random tooling error would split evenly between overstating and understating; these did not. The cause is structural: **an assumption that shrinks the work is adopted more readily than one that expands it, and the result looks tidier, so nobody questions it.** This is the only rule that would have caught all four in advance |
 | **R10** | **EVERY CHECKER TESTS A PROXY — NAME IT.** Any document quoting a script's number must state (a) the property we care about, (b) the proxy actually measured, (c) how something passes the proxy and fails the property **and vice versa** | **C22** — Phase 1's sweep used *"calls `findToken()`"* as a proxy for *"resolves identity correctly"*. A controller that validates a token and discards its owner satisfies that proxy **perfectly**. That is how G-SEC-09 survived a phase dedicated to finding it |

@@ -106,7 +106,7 @@ regression guard in CI.
 | ~~Event store~~ | ~~G-SEC-12~~ — **UNBLOCKED 2026-08-07** |
 | Threads 2 and 9 | the event store |
 | L-01, L-02, L-04 and every later entity binding | **C19** picker mechanism |
-| Rights matrix population (4b) — **targets `_g2g`, INVISIBLE to users** | ~~tri-state columns~~ ✅ · ~~role model~~ ✅ · ~~nine roles~~ ✅ **(dd25e450)** — **now blocked only on the screen→menu mapping (4b-prep c) and approval of the Recruiter expansion** |
+| Rights matrix population (4b) — **targets `_g2g`, which IS what the Next.js sidebar reads** | ~~tri-state columns~~ ✅ · ~~role model~~ ✅ · ~~nine roles~~ ✅ **(dd25e450)** — **now blocked only on the screen→menu mapping (4b-prep c) and approval of the Recruiter expansion** |
 | Everything in Tier 3 | the join tables |
 | The three mandatory reports | the joins — building them first yields three empty reports |
 | Write-route audit coverage figure | re-derivation from the router |
