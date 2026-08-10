@@ -1073,3 +1073,37 @@ Test data removed - shared database. Events 0, history 0, audit 0, delivery 0.
 authoritative. **Not edited** - `05` is the contract for six other items.
 
 **8 files** (R18d): 1 migration + 5 app + 2 docs... plus the runbook and evidence = 10.
+
+
+## D-035 · F-07b — the unmatched report (READ-ONLY; nothing backfilled or dropped)
+
+**The deliverable, in front of Triz before any write.** Report at
+`_changes/F-07b-UNMATCHED-REPORT.md`; generator at
+`_evidence/f07b-unmatched-report.php`.
+
+**Number defined before quoting (R10):** 424,630 is **resolutions**, not rows -
+6 column mappings across 4 tables (283,127 rows). Quoting it as rows would
+overstate by 50%.
+
+| Reason | Distinct | Resolutions | Share |
+|---|---:|---:|---:|
+| EXACT | 19,531 | 394,288 | 92.9% |
+| CASE | 6 | 392 | 0.1% |
+| WHITESPACE | 0 | 0 | 0.0% |
+| NEAR-MISS | 1 | 25 | 0.0% |
+| **NO COUNTERPART** | **5,088** | **29,925** | **7.0%** |
+
+**The prediction did not hold, and is reported rather than reconciled.** The
+unmatched set IS large, but **only 417 resolutions are recoverable** - the failure
+is not messy spelling, it is **references to things that do not exist**.
+`s_skill_matrix`, which set the expectation, has **169 rows with `skill_id` 100%
+populated** and is not part of this backfill.
+
+**SECOND FINDING: three of six mappings have NO `sub_institute_id` on the source.**
+`s_jobrole_skills` and `s_jobrole_task` carry no tenant column, so "match within
+tenant" is impossible for them. They were matched across ALL tenants, so **their
+match rates are UPPER BOUNDS, not measurements** - affecting **125,314 rows, 44%
+of the four tables**. Those two tables are **BLOCKED**: establishing tenant is
+prior work, not backfill.
+
+**2 files** (R18d) + this log entry.
