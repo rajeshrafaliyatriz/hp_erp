@@ -618,8 +618,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **41** ·
-`09-implementation-log.md` entries = **41** · **AGREE.**
+**RECONCILIATION (R18, every write):** queue "done" rows = **42** ·
+`09-implementation-log.md` entries = **42** · **AGREE.**
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
@@ -672,7 +672,7 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
 | Item | Trigger |
 |---|---|
-| **Rename the Competency Library screen's vocabulary to Skill** — one pass (S) | **NEXT IN THE QUEUE** — item 9 is done, so this is no longer 'eligible', it is scheduled |
+
 | **Semantic event/plan reconciliation** (G-RECON-01) — read each of the plan's ~45 items and ask what state change it implies | **when Tier 3 connection work starts** |
 | Dept Head + Reporting Manager re-grants | reporting-line **coverage** (G-ORG-02) |
 | `task.assigned`, `task.overdue` events | readiness gate: **task_hygiene** |
@@ -685,6 +685,24 @@ that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 | **C-SEP-02** — move 105 `hpbrain_*` tables out of `hp_erp` (**L**) | **Infrastructure. Flagged, not scheduled** |
 
 `hpbrain_schema_migrations` (38 rows) still runs inside G2G's schema.
+
+### FILED SHAPES — not swept. Triz decides when each gets one
+
+| # | Shape | Instances | Expected size |
+|---|---|---|---|
+| **SHAPE-01** | *Trusted because of where it came from* - data treated as safe by SOURCE when that source is itself fed by user input | 2 | unknown |
+| **SHAPE-02** | *A sentinel value is a schema saying something it was not designed to say* (`task_id = 0` meaning "configuration") | 1 | probably several |
+| **SHAPE-03** | **G2G code reading `hpbrain_*` data, or `hpbrain_*` values reaching a G2G screen** | 1 (G-XPROD-01) | **SMALL - only one file was ever known to touch those tables** |
+
+**SHAPE-03's reason for existing:** one cross-product read leak survived every
+sweep **because the sweeps were shaped inside G2G's boundary**. 105 co-located
+tables is a large surface for one instance to be the only one - but the known
+code surface is one file, so the expected answer is small.
+
+> **A CHECK WRITTEN INSIDE AN ASSUMPTION CANNOT TEST THE ASSUMPTION.**
+
+**It strengthens C-SEP-02 whenever that is taken up:** the coupling was not only
+the write, and **the leak nobody could see was the read**.
 
 ### PARKED — resume after foundations
 

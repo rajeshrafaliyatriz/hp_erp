@@ -1382,3 +1382,27 @@ G2G row and **0 HP Brain rows**. Filters derive from G2G events only.
 flagged, not scheduled.
 
 **4 files** (R18d): 1 controller + 3 docs.
+
+
+## D-042 - the skill library says Skill (labels only)
+
+**13 user-facing strings** across `cm-competency-library.tsx` and
+`cm-command-center.tsx`. The screen has always created a flat skill row in
+`s_users_skills`; the labels said "Competency" (G-RBAC-02b). Now the product has
+both concepts, so the distinction is worth showing a user.
+
+**LABELS AND VOCABULARY ONLY.** No identifier, storage key, endpoint, type name or
+behaviour moved - **renaming `SAVED_VIEWS_KEY` would silently discard every saved
+view a user already has.** An explanatory note was added at the top of the library
+screen so the next reader knows why the vocabulary and the identifiers differ.
+
+**Deliberately NOT renamed:** "Competency Command Center" (`:385`) - that heading
+names the MODULE, which really is competency management.
+
+**A miss worth recording:** my extraction pattern matched quoted strings and
+`>text<`, and **missed a JSX label at `:960`** that had neither. Caught by a
+broader grep afterwards, then a third pass found two more in the command centre.
+**Three passes on a change I had called one-pass** - the proxy was narrower than
+the property.
+
+**2 files** (R18d).
