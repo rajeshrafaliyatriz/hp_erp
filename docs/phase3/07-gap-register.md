@@ -3,7 +3,11 @@
 Every gap found in Phase 3, with a stable ID, severity, owning module and the work
 it implies. Started early (normally a Gate C artefact) at Triz's request.
 
-**Read `G-DATA-06` first.** It is the finding that explains the others: the
+**Read the METHODOLOGICAL RESULT first, then `G-DATA-06`.** The first says what
+counts as evidence in this register; the second is the finding that explains the
+others.
+
+**`G-DATA-06`** It is the finding that explains the others: the
 product's load-bearing relationships are joined by name, not by key. The security
 findings that follow are breaches to be closed; **G-DATA-06 is why the modules do
 not connect in the first place.**
@@ -16,6 +20,87 @@ workflow · **S3** degrades the product · **S4** cosmetic.
 | `OPEN` | Confirmed, not addressed |
 | `PARTIAL` | Partly addressed in an earlier phase |
 | `DESIGNED` | Fix specified in a Gate B/D document, not built |
+
+---
+
+---
+
+# ⭐⭐ THE METHODOLOGICAL RESULT OF THE PHASE — **A PATTERN PRODUCES CANDIDATES; ONLY A MEASUREMENT PRODUCES A FINDING**
+
+> **This supersedes the softer version of R6** ("candidates are not findings").
+> R6 said candidates must be verified. **It did not say what counts as
+> verification** — and that gap is where every over-report of this phase lived.
+
+## The number that looked verified and was not
+
+```
+29  ->  27  ->  19  ->  13  ->  4  ->  0
+raw    minus   minus   minus  minus  minus false
+       comments global  key    files positives
+                side   joins        FOUND BY READING
+```
+
+**THE BOTH-SIDES CHECK TURNED 29 INTO 13 AND FELT LIKE VERIFICATION. IT WAS STILL
+PATTERN WORK.** It ran against the schema, it removed a real class of false
+positive, it was predicted in advance and it was correct as far as it went — and
+it left a count that was still wrong by all of it.
+
+### Three independent flaws, none visible to the others, **all over-reporting in the same direction**
+
+| # | Flaw | Why it was invisible |
+|---|---|---|
+| 1 | **single-line matching** | a tenant condition on the NEXT line of a multi-line `ON` clause is simply not in the string being matched |
+| 2 | **a file-wide alias map when aliases are QUERY-scoped** | `s` bound twice in one file; the map kept the last, so a join against the **global** `s_jobrole` scored as tenant-scoped |
+| 3 | **`whereColumn` judged without its sibling `where`** | the tenant filter sits two lines down inside the same `EXISTS`, outside the matched expression |
+
+**That they all erred the same way is the point.** Independent flaws should
+scatter. These did not, because each one shares the same root: **a pattern sees
+only the text it was pointed at, and every one of them was pointed at too little.**
+
+## Only the finding that was MEASURED survived
+
+**`CompetencyDashboardController` holds** — and it holds on numbers, not on a match:
+
+| Evidence | Value |
+|---|---|
+| roles resolved by **text** | **4,716** |
+| roles resolved by **key** | **4,393** |
+| joined rows that were **cross-tenant** | **161,695 of 253,479** |
+
+**That is DATA.** It does not depend on how a line was written, whether a clause
+wrapped, or which table an alias meant. **Every pattern-produced candidate died
+under reading. The one structural count did not.**
+
+## Third confirmation of the same thing
+
+**Two sweeps produced real findings all phase, and BOTH were structural counts,
+not pattern matches:**
+
+| Sweep | Kind | Outcome |
+|---|---|---|
+| **F-07b link resolution** — % of rows whose text value resolves to a key | measurement | real, and drove a backfill from 0% to 100% |
+| **G-DASH-01 / G-DATA-06** — row counts by text vs by key | measurement | real, and is the headline finding |
+| L-11's wider class — regex over join clauses | pattern | **29 candidates, 0 findings** |
+| G-SEC-12's static check — regex over method bodies | pattern | first version: **9 offenders, 0 real** (8 legitimate subjects, 1 a comment) |
+| L-11's count itself | pattern | **7 successive corrections** |
+
+## The standing conclusion
+
+> ### A PATTERN PRODUCES CANDIDATES. ONLY A MEASUREMENT PRODUCES A FINDING.
+>
+> A pattern match may **open** an investigation. It may never **close** one.
+> Promotion from candidate to finding requires one of:
+>
+> 1. **a count that differs** — the same question asked two ways, disagreeing (F-07b, G-DASH-01), or
+> 2. **an executed observation** — a request sent, a response seen (G-SEC-24's HTTP 200 with no token), or
+> 3. **a human read of the site itself**, with enough surrounding lines to see what the pattern could not.
+>
+> **A refined pattern is still a pattern.** Narrowing 29 to 13 changes the count,
+> not the class of evidence. **The refinement is not the verification.**
+
+**Applied cost of ignoring this:** four join clauses that were already correct were
+one command away from being rewritten, in a file carrying no tests, on a shared
+remote database.
 
 ---
 

@@ -293,7 +293,7 @@ each sub-module is audited in Gate C.
 Full text in `07-gap-register.md`. **R1** second method · **R2** provenance asked ·
 **R3** five rows by eye (+ *"test data" is not a statement about a table's value*) ·
 **R4** the checker is the primary suspect · **R4b** resolve disagreeing counts
-first · **R5** status summary every turn · **R6** a sweep produces candidates ·
+first · **R5** status summary every turn · **R6 (SUPERSEDED, STRENGTHENED)** **A PATTERN PRODUCES CANDIDATES; ONLY A MEASUREMENT PRODUCES A FINDING** - a pattern match may OPEN an investigation, never CLOSE one; promotion needs a count that differs, an executed observation, or a human read of the site. **A REFINED PATTERN IS STILL A PATTERN** - L-11 went 29->27->19->13->4->**0**, and the both-sides refinement that felt like verification left the count wrong by all of it. Full text at the TOP of `07-gap-register.md` ·
 **R7** an estimate names its files · **R8** pre-deletion checklist · **R9** re-read
 frontend consumers after a server change · **R10** name the proxy · **R11**
 verify scope-shrinking assumptions **before** using them · **R12** land a queued
