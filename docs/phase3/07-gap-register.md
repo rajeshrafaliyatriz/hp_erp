@@ -440,6 +440,76 @@ plan** — the first thing in this phase a person will see.
 
 ---
 
+# G-SEED-01 — THE MARK PARSER READ QUALIFIER TEXT AS PERMISSIONS · **S1, CAUGHT PRE-APPLY**
+
+**Found by inspecting Employee's AFTER list by name** — Learning Dashboard showed
+`V E` where §3.x says `V (self)`. The gate that exists for exactly this caught it.
+
+The parser stripped punctuation but kept the qualifier's **letters**:
+
+| §3.x cell | Parsed as | Granted |
+|---|---|---|
+| `V (self)` | `VSELF` | **V + EDIT** |
+| `V (member)` | `VMEMBER` | **V + EDIT** |
+| `V (own punch)` | `VOWNPUNCH` | **V + CREATE** |
+| `V (org — basic fields)` | `VORGBASICFIELDS` | **V + CREATE + EDIT + DELETE** |
+
+**The employee directory — the screen denied precisely because it exposes too
+much — was being seeded with full create, edit and delete.** Across all four
+qualified roles, not just Employee.
+
+### Root cause, and it is the same one as G-RBAC-01
+
+**The qualifier and the mark live in one cell.** Every qualifier is data the table
+cannot express, sitting in the same string as data it can. The parser had no way
+to tell them apart because the format does not distinguish them.
+
+### Fix, in three parts
+
+1. **Strip the qualifier before reading marks**, in both forms it takes —
+   parenthesised `V (self)` and comma-separated `V, self-register`.
+2. **Whitelist the result to `VCEDAX`.** An unrecognised letter means a format
+   this parser has not seen, and silently granting on it is the bug itself.
+3. **Report anomalies and grant nothing** for them.
+
+### What the whitelist then caught, which nothing else would have
+
+```
+3.1 | Employee Directory | reporting_manager => "V (org basic) + V full (team)"
+3.1 | Employee Directory | department_head   => "V (org basic) + V full (dept)"
+```
+
+**A compound mark**: org-wide basic fields *plus* full records for the caller's
+team. **Two different scopes in one cell.** It cannot be expressed by a menu
+boolean at all, so it grants nothing — the same verdict Employee Directory already
+has for Employee, now reached mechanically for the other two roles.
+
+**Consequence, stated plainly: Reporting Manager and Department Head lose the
+Employee Directory too** (47 and 48 menus, down from 49 and 50). Same reasoning as
+the Employee decision, and it lands in the same place — **§3.8**.
+
+---
+
+# G-SEED-02 — DISABLED MENUS WERE BEING GRANTED · **S2, CAUGHT PRE-APPLY**
+
+Name matching was blind to `status`. `Certifications` matched **menu 25**
+(`status=0`, under User Management) as well as **menu 158** (`status=1`, the
+Competency screen actually meant) — and menu 158 was denied by the qualifier read
+while **menu 25 was granted**.
+
+A disabled menu does not render, so the grant was **invisible today** and would
+**light up silently the day the menu was enabled**. `Holiday Master` (167) the
+same.
+
+Fixed by excluding `status != 1` from matching. **Gate A totals did not move**,
+which confirms the defect was latent rather than live.
+
+Three screens moved to `unmapped = DENIED` as a result, including **Skill Gap
+Analysis** — so the generator now reaches G-RBAC-02's verdict **on its own**,
+independently of the read that found it.
+
+---
+
 # G-COMP-SEC-01 — ANY EMPLOYEE CAN READ *AND WRITE* ANY COLLEAGUE'S COMPETENCY PROFILE · **S1**
 
 **The most serious finding of the build phase, and worse than payroll.**

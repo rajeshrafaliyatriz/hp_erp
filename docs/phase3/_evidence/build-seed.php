@@ -105,6 +105,7 @@ $childCount = [];
 foreach ($menus as $x) { $childCount[$x->parent_id] = ($childCount[$x->parent_id] ?? 0) + 1; }
 
 $grants = [];      // role_key => menu_id => ['V'=>1,'C'=>1,...]
+$markAnomalies = [];
 $unmapped = [];
 $mapped = [];
 
@@ -124,6 +125,13 @@ foreach ($mm as [, $sec, $title, $body]) {
             foreach ($menus as $mn) {
                 if ($norm($mn->menu_name) !== $key) continue;
                 if ($mn->parent_id == 0 || ($childCount[$mn->id] ?? 0) > 0) continue;  // never a container
+                // Never a DISABLED menu. Name matching is blind to status, so
+                // "Certifications" matched menu 25 (status=0, under User
+                // Management) as well as menu 158 (status=1, the Competency
+                // screen actually meant). The disabled row does not render, so
+                // the grant is invisible today and would light up silently the
+                // day the menu is enabled.
+                if ((int) $mn->status !== 1) continue;
                 $ids[] = $mn->id;
             }
         }
@@ -132,8 +140,28 @@ foreach ($mm as [, $sec, $title, $body]) {
 
         /* the eight §3.x columns */
         foreach (COLS as $i => $role) {
-            $mark = $cells[$i + 1] ?? '';
-            $mark = strtoupper(preg_replace('/[^A-Za-z]/', '', $mark));
+            $raw = $cells[$i + 1] ?? '';
+            // Strip the QUALIFIER before reading marks, in BOTH forms it takes:
+            //   parenthesised   "V (self)"        -> V
+            //   comma-separated "V, self-register"-> V
+            // Stripping only punctuation left the qualifier's own letters in
+            // the mark string: "V (self)" became VSELF and granted EDIT,
+            // "V (own punch)" granted CREATE, and "V (org - basic fields)"
+            // granted CREATE, EDIT and DELETE on the employee directory.
+            // The qualifier is resolved by reading the controller (QUALIFIED,
+            // above). It must never be read as a permission mark.
+            $clean = preg_replace('/\([^)]*\)/', '', $raw);
+            $clean = preg_split('/,/', $clean)[0];
+            $mark  = strtoupper(preg_replace('/[^A-Za-z]/', '', $clean));
+
+            // Whitelist. An unrecognised letter means a mark format this parser
+            // has not seen, and silently granting on it is exactly the bug
+            // above. Record it and grant nothing.
+            if ($mark !== '' && preg_match('/[^VCEDAX]/', $mark)) {
+                $markAnomalies[] = sprintf('%s | %s | %s => "%s"', $sec, $screen, $role, trim($raw));
+                continue;
+            }
+
             if ($mark === '' || !str_contains($mark, 'V')) continue;   // no V => no row => denied
             foreach ($ids as $id) {
                 $grants[$role][$id]['V'] = 1;
@@ -218,6 +246,11 @@ file_put_contents('C:/Users/MILAN/Downloads/hp_erp/docs/phase3/_changes/X-01-see
 printf("screens mapped   : %d\n", count($mapped));
 printf("screens unmapped : %d  (denied - listed in the seed file)\n", count($unmapped));
 printf("seed rows        : %d across %d profiles\n\n", count($rows), $profiles->count());
+if ($markAnomalies) {
+    printf("*** UNRECOGNISED MARK FORMAT - GRANTED NOTHING (%d) ***\n", count($markAnomalies));
+    foreach ($markAnomalies as $x) echo "  $x\n";
+    echo "\n";
+}
 printf("qualifiers applied: %d\n", count($qualifierLog));
 foreach ($qualifierLog as $l) echo "  $l\n";
 echo "\nmenus granted per role (one tenant's worth):\n";
