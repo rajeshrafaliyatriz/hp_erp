@@ -816,7 +816,22 @@ Q-C2, Q-C3. Golden threads 2 and 3 cannot be built before they exist.
 
 ---
 
-## G-STR-02 — Three tables have migrations recorded as run but do not exist · **S1** · `OPEN`
+## G-STR-02 — ~~Three~~ **TWO** tables had migrations recorded as run but did not exist · **S1** · ✅ **CLOSED 2026-08-07** (`7df8c1c7`)
+
+> ### ⚠️ ONE OF THE THREE WAS NEVER MISSING — the record dropped a prefix
+>
+> `s_competency_certification_requirements` **exists and holds 15 rows**, and
+> `CertificationRequirementController` references it correctly. **This register
+> recorded it as `competency_certification_requirements` — without the `s_`
+> prefix — and it has read as missing since Gate A on that basis.**
+>
+> **Nothing ever broke.** The gap was recorded from a NAME, not from a QUERY.
+>
+> **A gap recorded from a name rather than from a query can be wrong for months** —
+> this one was. The other two (`competency_evidence`, `s_skill_jobrole`) were
+> genuinely absent and are now created.
+
+### Original entry, retained
 
 `competency_evidence`, ~~`competency_certification_requirements`~~, `s_skill_jobrole`.
 
