@@ -372,6 +372,120 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+# ⛔⛔ G-BLOCK-01 IS STRUCTURAL, NOT A QUEUE PROBLEM - **2026-08-12**
+
+## A BUILT AND PROVEN GUARD THAT CANNOT BE REGISTERED, BECAUSE ITS ONE LINE LIVES IN SOMEONE ELSE'S UNCOMMITTED FILE
+
+That is the whole statement. Everything below is the evidence for it.
+
+Until today this block DELAYED items. It now COSTS A SHIPPED CAPABILITY:
+matrix-enforced authorization is written, tested, and cannot be switched on.
+
+### WHAT IS COMMITTED AND WORKING
+
+| commit | contents |
+|---|---|
+| **`610d06c9`** | `app/Http/Middleware/RequireMenuRight.php` - the guard, 139 lines, full precedence - and `routes/api.php`, both readiness routes carrying `menuright:225,view` and `menuright:225,edit` |
+| **`21de09d2`** | `matrix-guard-probe.php` - the acceptance test - plus `G-NAV-02` menu creation + backup and `G-NAV-02b` rights seeding |
+
+### WHAT IS NOT COMMITTED - **ONE LINE**
+
+    bootstrap/app.php    M  (one of the 51)
+    +            'menuright' => \App\Http\Middleware\RequireMenuRight::class,
+
+**Without that line the middleware alias does not resolve and neither route can
+name the guard.** The guard exists, is correct, is proven, and does nothing.
+
+`bootstrap/app.php` is one of the 51 files under the owner's control. Committing
+it would commit 36 lines of their in-progress work - which was attempted by
+accident this turn, caught, and reversed: the commit was rebuilt without it and
+the baseline re-verified at 51.
+
+### THE PROOF THAT IT WORKS, so the block is not hiding an unfinished thing
+
+Run against menu 225 with `hr_manager` holding `can_view=1, can_edit=0`:
+
+    administrator                       -> 409  past the guard
+    hr_manager                          -> 403  "Your role does not have edit
+                                                 rights on this screen (menu 225)."
+    FLIP THE ROW (grant can_edit)       -> 409  ALLOWED
+    FLIP BACK    (revoke can_edit)      -> 403  refused again
+    INDIVIDUAL DENY over GROUP ALLOW    -> 403  individual DENY wins
+
+**The refusal demonstrably comes from the matrix, not from a name in a route
+file.** A refusal that survived the row changing would have proved nothing; this
+one follows the row in both directions.
+
+### WHAT IT COSTS, PRECISELY
+
+- An **HR Manager can still acknowledge a readiness gate**, commit a framework
+  import, and rewrite the reporting line - three configuration acts
+  `03-rbac-matrix.md` 3.1 denies them. The fix for that is written and unusable.
+- The **admin screen for controlling HR and employee rights** (menus 15/16) is
+  blocked behind it, because a screen editing rules nothing enforces is worse
+  than no screen.
+- The **readiness screen remains unreachable** in the product; its menu row was
+  created and rolled back rather than left half-applied.
+
+### THE DATABASE IS WHERE IT STARTED
+
+Menus 225/226 and their 44 rights rows were created, used to prove the guard, and
+**rolled back**. Re-running is one command each. Held deliberately rather than
+re-applied into a block.
+
+---
+
+# THE PRECEDENCE CAN ONLY REVOKE - **an admin screen that can only take rights away**
+
+**Raise this before menu 16 is designed, not after.** Whoever builds "Individual
+right management" must meet this fact before the layout.
+
+### THE MEASUREMENT
+
+    can_view / can_add / can_edit / can_delete    tinyint(1) NOT NULL DEFAULT 0
+    right_view / right_add / right_edit / ...     enum('allow','deny') NULL
+
+`can_*` **cannot distinguish "explicitly denied by the group" from "not
+granted".** Both are `0`. There is no third state.
+
+### WHAT THAT DOES TO THE DECIDED ORDER
+
+    individual DENY > group DENY > individual ALLOW > group ALLOW > role default > deny
+
+Reading group DENY as `can_x = 0` - the only reading the column supports:
+
+| state | outcome | what individual ALLOW does |
+|---|---|---|
+| `can_x = 1` | group already allows | **nothing** - it was already permitted |
+| `can_x = 0` | group DENY, which outranks | **nothing** - it is outranked |
+
+**INDIVIDUAL ALLOW IS DEAD IN BOTH BRANCHES.** An individual grant can never
+widen access beyond the group.
+
+### WHY IT IS A PRODUCT DECISION AND NOT A BUG
+
+The behaviour is defensible: the group matrix becomes a hard upper bound, and no
+per-person exception can quietly exceed it. That is the safer direction.
+
+**But it is a different product from the one asked for.** "An admin screen where
+the administrator controls what HR can do and what an employee can do" implies
+granting as well as revoking. **As built, menu 16 can only ever REMOVE rights.**
+
+### THE TWO WAYS OUT, NEITHER TAKEN
+
+1. **Accept it.** Menu 16 becomes an exceptions screen: revoke-only, and its
+   labels must say so. Cheapest, and honest, provided the screen does not offer a
+   grant control that cannot work.
+2. **Make group DENY expressible.** `can_*` would need to become nullable, so
+   `NULL` = not granted and `0` = explicit deny. **NOT DONE:** altering the shape
+   of a column 89 live rows depend on is not a side effect of adding a guard.
+
+**Implemented as stated and documented rather than quietly re-ordered.** Silently
+promoting individual ALLOW above group DENY would have made the screen work as
+expected and made the precedence a fiction.
+
+---
+
 # ⛔ G-BLOCK-01 - **AN S1 CROSS-TENANT LEAK IS WAITING BEHIND UNCOMMITTED WORK** - blocking since 2026-08-11
 
 **Nobody decided this on purpose.** It has been reported every turn as *"the 51
