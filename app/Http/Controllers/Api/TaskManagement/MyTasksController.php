@@ -262,7 +262,18 @@ class MyTasksController extends Controller
         }
 
         $user = $accessToken->tokenable;
-        $subInstituteId = (int) ($user->sub_institute_id ?: $request->input('sub_institute_id'));
+        // G-SEC-28. The request fallback is GONE. It existed for accounts whose
+        // own sub_institute_id is NULL or 0 - measured: 0 of 401. It compensated
+        // for a condition that does not occur.
+        //
+        // If identity supplies no tenant this now yields 0 and the guard below
+        // REFUSES the request. Failing closed is correct and is the intended
+        // failure mode: a refusal, not a read of whatever the caller asked for.
+        //
+        // The smoke suite asserts no account has a NULL or zero tenant. If that
+        // ever fails, this removal was premature - a decision to re-take, not a
+        // bug to patch.
+        $subInstituteId = (int) $user->sub_institute_id;
         $syear = trim((string) $request->input('syear'));
 
         if (!$subInstituteId || $syear === '') {
