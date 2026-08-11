@@ -42,3 +42,45 @@ cover all three. **What is missing is only what a browser can see**: that the
 element is visible rather than present, that the component does not throw on
 render, and that the data arrives. Those are exactly the three residue items X-21
 exists for - and exactly the class G-UI-02 belongs to.
+
+---
+
+## 1 of 1 — **X-07d readiness screen** — built, NOT browser-verified (2026-08-11)
+
+`g2gv0/app/organization/readiness/page.tsx`. It type-checks and its API half is
+proven by request. **It has never been rendered in a browser**, so it counts here.
+
+**THE BLOCKER IS A CREDENTIAL, NOT THE CODE.** The X-21 harness
+(`_evidence/x21-browser/readiness.js`) runs end to end - it starts, takes its
+fixture, and restores it - but every login attempt is refused:
+
+    GET /login?type=API   healthcare@gmail.com          -> Invalid User Id And Password
+    GET /login?type=API   vikram.sethi@healthcare.g2g   -> Invalid User Id And Password
+
+The tenant-3 seed's 9/9 role logins were verified when it was built, but **the
+password was never written down** - not in the seed register, not in the
+implementation log. Two attempts, then stopped (R26). One credential unblocks the
+whole verification.
+
+### ⚠ WHAT THE NEXT SCREEN ITEM MUST KNOW — **A LARAVEL-CALLING SCREEN IS FIRST OF ITS KIND**
+
+**No page under `app/organization/` calls the Laravel API directly.** There is no
+fetch pattern to copy. Discovering that mid-build costs more than finding it up
+front, so:
+
+- The per-user bundle comes from **`readLaravelSession()`** (`lib/laravel-session.ts`),
+  written at login by `AuthProvider`. It carries `token`, `sub_institute_id`,
+  `user_profile_name`, `syear`, `user_id`.
+- The base URL comes from **`resolveApiBaseUrl()`** (`lib/api-config.ts`).
+- The login route is **`GET /login?type=API`**, not `POST /api/auth/login`.
+- **DO NOT REINTRODUCE `NEXT_PUBLIC_HP_*`.** Those fallbacks were removed because
+  they pinned every browser to `sub_institute_id=1` behind one shared bearer
+  token. If the session is absent, refuse - never fall back to a tenant.
+
+### What IS verified
+
+- The endpoint, by request: administrator 200, hr_manager 200, employee 403.
+- The fixture discipline: the harness manufactures one `at_risk` gate and
+  restores it in a `finally`. Confirmed after both runs - tenant 3
+  `reporting_coverage` back to `blocked|null`, **0 gates left `at_risk` anywhere**.
+
