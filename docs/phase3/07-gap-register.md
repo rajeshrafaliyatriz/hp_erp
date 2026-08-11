@@ -524,6 +524,51 @@ basis rather than implying it.
 
 ---
 
+## ONE UNREACHABLE GUARD REMOVED, ONE REACHABLE GUARD KEPT - **same method, same turn**
+
+`ReadinessGateAcknowledger::acknowledge()` was written with two null checks. One
+was deleted minutes later; the other stayed. **The pairing is the record**, because
+"remove unreachable branches" and "keep defensive guards" read as contradictory
+advice until you see them applied to the same method.
+
+| guard | verdict | why |
+|---|---|---|
+| `warning_days === null` | **REMOVED** | the column is `NOT NULL DEFAULT 14`. **The data cannot reach it.** G-SEC-28's shape, in code I had written minutes earlier |
+| `at_risk_since === null` | **KEPT** | the column IS nullable. A row can reach `at_risk` without the clock ever starting - hand-edited, or a future path that sets state without the timestamp |
+
+**The discriminator is the schema, not intuition.** Both guards looked equally
+prudent while writing them; one of them was guarding a state the database
+forbids. The check that settles it takes one query, and reading the column
+definition is what separates a guard from a comment that happens to compile.
+
+**And the removal did not weaken anything.** The default of 14 lives in the
+SCHEMA on purpose - visible in the table, alterable per row by an admin. Moving
+it into the class would have been the opposite of a guard: a constant quietly
+overriding a value someone configured.
+
+---
+
+## DEMONSTRATING THAT CONFIG DECIDES REQUIRES TWO CONFIGS, NOT ONE PASSING CASE
+
+From X-07c, and reusable wherever a value claims to be configurable.
+
+To show `warning_days` is genuinely read from the row rather than hardcoded, one
+successful acknowledgement proves nothing - a constant of 14 would produce it
+too. **Hold the input fixed and vary only the configuration:**
+
+    20 days elapsed, warning_days=30  ->  REFUSED
+    20 days elapsed, warning_days=7   ->  ACKNOWLEDGED
+
+**A constant in the code could not produce two different answers from the same
+elapsed time.** The same shape proved X-07d's role guard - `administrator` 200,
+`hr_manager` 200, `employee` 403 - because a route that returned 200 for one role
+tested nothing about whether the guard was consulted.
+
+**The general form: a control is only shown to be live when two settings of it
+produce two outcomes.** One green is compatible with the control being ignored.
+
+---
+
 ## A GUARD YOU ROUTE AROUND IS DECORATION
 
 I wrote `col()` in the X-07b harness specifically so that a guessed column would

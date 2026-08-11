@@ -1510,3 +1510,9 @@ Route::get('/competency/seed-library/preview', [\App\Http\Controllers\Api\Compet
 // rows; this one is KASBA-aware across all five dimensions.
 Route::post('/competency/framework-import/dry-run', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'dryRun'])->middleware('profile:admin,hr');
 Route::post('/competency/framework-import/commit', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'commitImport'])->middleware('profile:admin,hr');
+
+// X-07d - readiness gates, admin surface. The guard is the EXISTING
+// profile:admin,hr middleware (exact role_key match, alias map for legacy
+// profiles); the controller deliberately does not re-implement it.
+Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware('profile:admin,hr');
+Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware('profile:admin,hr');
