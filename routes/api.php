@@ -1514,5 +1514,10 @@ Route::post('/competency/framework-import/commit', [\App\Http\Controllers\Api\Co
 // X-07d - readiness gates, admin surface. The guard is the EXISTING
 // profile:admin,hr middleware (exact role_key match, alias map for legacy
 // profiles); the controller deliberately does not re-implement it.
-Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware('profile:admin,hr');
-Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware('profile:admin,hr');
+Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware(['profile:admin,hr', 'menu:225,view']);
+// MATRIX-ENFORCED. `menu:225,edit` consults tblgroupwise_rights_g2g: menu 225 is
+// Readiness Gates, and acknowledging is an EDIT. hr_manager holds can_view=1 and
+// can_edit=0 there, so HR is refused BY THE ROW - flip the row and the answer
+// flips. profile:admin,hr STAYS as the outer coarse guard; the menu right is the
+// finer one inside it.
+Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware(['profile:admin,hr', 'menu:225,edit']);
