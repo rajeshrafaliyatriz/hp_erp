@@ -396,6 +396,39 @@ check('org', 'task.status has exactly ONE guarded write path', function () {
                 array_map(fn ($k, $v) => "$k($v)", array_keys($others), $others))];
 });
 
+check('org', 'working tree matches its baseline (51 foreign files)', function () {
+    // PROMOTED FROM A STATUS-LINE NUMBER TO AN ASSERTION.
+    //
+    // It caught what the staged-count guard STRUCTURALLY CANNOT: staging verifies
+    // what you stage, never what you leave behind. Three T-01 conversions sat
+    // uncommitted for two turns while this suite ran GREEN against the working
+    // tree - so the committed state had five direct writers and a passing
+    // single-writer assertion. That is the false-negative class being closed
+    // everywhere else, in the one place nothing was watching.
+    //
+    // 51 is Milan's uncommitted work, untouched by instruction. ANY deviation is
+    // either foreign work appearing or MY OWN work uncommitted, and both are
+    // worth failing on.
+    $out = [];
+    exec('git -C ' . escapeshellarg(base_path()) . ' status --porcelain 2>&1', $out);
+    if (!$out) return ['SKIPPED', 'git status returned nothing - not a repo?'];
+
+    $modified = array_values(array_filter($out, fn ($l) => preg_match('/^( M|MM| D| R)/', $l)));
+    $n = count($modified);
+
+    // KNOWN-POSITIVE AND KNOWN-NEGATIVE (R29): the matcher must see a modified
+    // line and must NOT see an untracked one.
+    if (!preg_match('/^( M|MM| D| R)/', ' M app/Foo.php') || preg_match('/^( M|MM| D| R)/', '?? app/Foo.php')) {
+        return ['SKIPPED', 'pattern fails its known-positive or matches its known-negative'];
+    }
+
+    if ($n === 51) return ['PASS', '51 modified, as baselined - nothing of mine left uncommitted'];
+
+    $sample = array_slice(array_map(fn ($l) => trim(substr($l, 2)), $modified), 0, 3);
+    return ['FAIL', $n . ' modified, expected 51. Either foreign work appeared or something '
+        . 'of mine is uncommitted: ' . implode(', ', $sample)];
+});
+
 /* ══════════════════════════ DATA ══════════════════════════ */
 echo "\nDATA\n";
 
