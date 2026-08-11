@@ -84,3 +84,53 @@ front, so:
   restores it in a `finally`. Confirmed after both runs - tenant 3
   `reporting_coverage` back to `blocked|null`, **0 gates left `at_risk` anywhere**.
 
+
+
+---
+
+## ✅ CLEARED 2026-08-11 — **X-07d readiness screen is browser-verified. Tracker back to 0.**
+
+    PASS 9   FAIL 0   UNSTABLE 0
+    admin runs:    rendered:5 | rendered:5 | rendered:5
+    employee runs: refused | refused | refused
+
+Both roles, three identical runs each. The dialog states the loss, the reason and
+the warning period, and is not a generic are-you-sure. Cancel writes nothing.
+
+**The screen was broken and the old harness could not say so.** A doubled `api/`
+prefix produced `api/api/readiness/gates` -> 404. The previous version counted
+error blocks, so a 404 and a 403 were the same observation.
+
+**IT REPORTED THAT 404 AS "employee is refused" - a PASS.** The role guard would
+have been certified on the strength of a typo. That is why the tracker's previous
+entry said the employee refusal was verified: it was not.
+
+## ⚠ PLATFORM BOUNDARY — **EVERY SCREEN ITEM INHERITS THIS**
+
+**X-21 cannot reliably verify a screen on Windows.** `php artisan serve` is
+single-threaded; `PHP_CLI_SERVER_WORKERS` is the documented fix and is a POSIX
+fork feature that **measured 4.5 vs 4.4 on this machine - it does nothing here.**
+A page firing several requests on mount starves itself and the browser sees a
+screen that never finished loading.
+
+**This is G-UI-02's cause**, and it cost X-07d a turn because the harness comment
+said *"not optional"* and the measurement said *"does nothing here"* **and the two
+notes lived apart.** They are together now, in `x21-browser/readiness.js`'s
+header and here.
+
+A properly threaded server (WSL, Docker, a real dev environment) is the durable
+fix and belongs to the owner. Until then X-21 verifies what it can.
+
+### WHAT THE HARNESS NOW GUARANTEES
+
+- **Three states, never collapsed:** `rendered` / `refused` / `loading` / `blank`,
+  plus `broken` for an error that is not the refusal. "Still loading when we
+  looked" is its own answer - collapsing it into FAIL is what would have reported
+  a starved server as a product defect.
+- **It repeats and compares.** Every observation runs `X21_REPEATS` times (3 by
+  default). Disagreement is reported as **UNSTABLE - not PASS, not FAIL.** Three
+  identical runs producing three different results is a verdict about the
+  harness, and it now says so itself.
+- **It prints the error TEXT and the stored session**, never a count.
+- **The refusal is a specific sentence**, matched on `Admin and HR only`. Anything
+  else is `broken`, and `broken` never passes for anyone.
