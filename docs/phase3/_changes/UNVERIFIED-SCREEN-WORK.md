@@ -27,7 +27,7 @@ network boundary - that layer produced five eliminations and no answer.
 
 | 4 | **X-03** (partial) | `library-config.ts` | `proficiency_level` offers suggestions from `meta.proficiency_levels` and still accepts a new value |
 
-**4 of 5.**
+**4 of 5.** T-02 was expected to add a fifth and does not: it is re-scoped to a finding (G-TASK-03), not a screen change.
 
 ## Why the cap is 5 and not a time limit
 

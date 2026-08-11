@@ -31,6 +31,68 @@ workflow · **S3** degrades the product · **S4** cosmetic.
 
 ---
 
+---
+
+# G-TASK-03 - **`delay_category` IS EMPTY BECAUSE THE STATE IS UNREACHED** - **S3** - T-02 re-scoped
+
+**T-02 was "surface `delay_category`". It should not be surfaced.**
+
+| | |
+|---|---:|
+| tasks | **2,271** |
+| with `delay_category` | **0 (0.0%)** |
+| with `delay_reason` | 1 |
+
+**Status across the whole system:**
+
+```
+PENDING 2,087 | NULL 157 | COMPLETED 22 | IN-PROGRESS 4 | ON HOLD 1
+```
+
+**ONE task has ever been ON HOLD.** `delay_category` is written only when a task
+goes on hold, so **an empty column is the correct consequence of a workflow nobody
+uses** - not a defect in the field.
+
+> **Surfacing it would add a column rendering NULL on 2,271 rows and make the
+> screen worse.** The finding is the deliverable: **4 in-progress and 1 on-hold
+> across 2,271 tasks means the workflow is not being used.**
+
+**That is a product-adoption fact, not a wiring gap**, and it belongs beside the
+task-hygiene readiness gate rather than in a UI item. **T-02 removed from the
+screen-work tracker.**
+
+---
+
+# G-TASK-04 - **AN OVERRIDE CANNOT BE DEFINED AGAINST AN EMPTY AUTHORITY** - the pattern for every later override
+
+Q-E1 decided: **the catalogue wins; the instance is a confidence-tagged override.**
+L-14 is the first item to implement it, and it cannot be implemented as written.
+
+| Side | State |
+|---|---:|
+| **INSTANCE** `task.skill_id` | **1,514 of 2,271 (66.7%)**, of which **1,512 resolve by key in-tenant** |
+| **CATALOGUE** `s_user_jobrole_task` | 85,663 rows |
+| **CATALOGUE competency link** `jobrole_task_competency_map` | **0 rows** |
+
+**The catalogue has nothing to win with.** "Catalogue wins" against an empty
+catalogue would silently discard 1,514 observations a human made at task creation.
+
+> ### AN OVERRIDE CANNOT BE DEFINED AGAINST AN EMPTY AUTHORITY.
+> ### The confidence tag has to distinguish TWO POPULATED CLAIMS, not one claim
+> ### and a blank.
+>
+> **This is the pattern for every later override in this product**, and it is
+> **G-DATA-10's shape a third time**: the bridge exists, the rule is decided, the
+> table is empty.
+
+**RESOLUTION (Triz, 2026-08-11):** derive the catalogue's first content FROM the
+instances - each of the 1,512 resolving values is a `(job role task, competency)`
+observation made by a person. Marked **derived-from-instances**, not authored.
+**Then both sides are populated and the override rule means something.**
+Conflicting pairs are **HELD**, not picked between. Bulk write: counts first.
+
+---
+
 # G-LIB-09 - **AN IMPACT COUNT BY TITLE OVER-REPORTS BY 6x** - **S2** - measured before L-06 was written
 
 L-06 shows the user what a deletion would break. **The count is not a display
