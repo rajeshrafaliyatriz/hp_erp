@@ -437,6 +437,82 @@ run, so it is written down here.**
 
 ---
 
+## X-07 DECISIONS - **two gates changed, one dropped, one reconciled**
+
+### `jobrole_definition` - **PERCENTAGE DROPPED, COUNT ADOPTED. SEC 4 SUPERSEDED.**
+
+Sec 4 gave it **70% enable / 55% disable**. Those thresholds are **SUPERSEDED, not
+silently replaced**, and the reason is recorded so nobody restores them:
+
+**There is no denominator.** `s_user_jobrole` is the tenant's job-role LIBRARY,
+not an assignment table - it has no `user_id` at all. No "expected number of job
+roles" exists for an organisation, so 70% OF WHAT has no answer. **Inventing a
+population would be this product deciding a customer's standard for them.**
+
+    SUPERSEDED   enable >= 70%   disable < 55%
+    IN FORCE     enable >= 10 roles defined   disable < 5   unit = count
+                 tenant-configurable: a 12-person company and a hospital group
+                 are not the same organisation
+
+Measured today: tenant 3 has 347 roles, tenant 2 has 214, tenant 7 has 120.
+
+### `task_competency_link` - **DROPPED. It gets no row, ever.**
+
+`jobrole_task_competency_map` keys on `jobrole_task_id` into `s_jobrole_task`,
+which has **no `sub_institute_id`** - a GLOBAL seed library under Q-C1. It cannot
+be joined to `task`, the tenant's own work items, at all. The 67% measured this
+phase was about LIBRARY tasks.
+
+**Gating a tenant's features on a global table's contents is meaningless. This is
+the wrong-population error appearing in a GATE rather than in a measurement** -
+the same shape as the two zeros, one layer up, where it would have silently
+governed several other items.
+
+Golden thread 2 does not need it: the instance link (`task.skill_id`, 67%) is the
+real signal, and **L-14 established that the catalogue link must be AUTHORED, not
+derived**. If a gate is ever wanted there, it gates on the authored catalogue once
+one exists - X-08's territory.
+
+### `task_hygiene` - **RECONCILED IN ONE PASS. Ships enabled.**
+
+3.9% (tenant 3) against a known 8.1% looked like drift. It was not:
+
+    platform-wide tasks              2271     <- the known figure's denominator
+    overdue AND status not terminal  2088 = 91.9%  ->  hygiene 8.1%   EXACT MATCH
+
+**Same definition, different population.** The 8.1% is the PLATFORM aggregate;
+3.9% is tenant 3's own. Nothing drifted and no definition differs. The comparison
+was cross-population - **my own instance of the error, in the reconciliation
+rather than in the system.**
+
+Also measured, not assumed: **the `task` table has no `due_date` or `end_date`
+column at all.** Only `task_date` can carry a deadline. The harness names that
+basis rather than implying it.
+
+---
+
+## A GUARD YOU ROUTE AROUND IS DECORATION
+
+I wrote `col()` in the X-07b harness specifically so that a guessed column would
+yield **HELD** instead of a crash. Then I did not call it on three of the six
+metrics, and the run died on `s_user_jobrole.user_id`.
+
+**The rule was not wrong and the design was not wrong. It failed AT THE POINT OF
+USE.** Every earlier lesson in this register is about a check that could not see
+far enough; this one is about a check that could see perfectly and was not asked.
+
+The distinction matters for how it gets fixed: a check with a blind spot is
+improved by widening it, but a guard that is skipped is only fixed by making the
+skip impossible or by noticing it. **Writing the guard was the easy half. Routing
+every access through it was the half that mattered, and I did the easy half and
+believed I had done both.**
+
+Same family as R28 - when a control appears to work, ask why. Here the control did
+not appear to work; it simply was not consulted, and nothing distinguishes an
+unconsulted guard from an absent one except reading the call sites.
+
+---
+
 ## THREE LAYERS OF ONE LESSON - **shape declared / name resolves / behaviour performed**
 
 Each check reaches exactly one layer, and a green at one says nothing about the
