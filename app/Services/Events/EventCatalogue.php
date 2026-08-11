@@ -47,11 +47,15 @@ class EventCatalogue
     /** @var array<string, array<string, string>> event => consumer => kind */
     public const SHIPPED = [
         'task.rejected' => [
+            'CapabilityEvidenceProjector' => self::PROJECTOR,
             'TaskStatusProjector'         => self::PROJECTOR,
             'NotificationDispatcher'      => self::REACTOR,
         ],
         'task.status_changed' => [
             'TaskStatusProjector'         => self::PROJECTOR,
+        ],
+        'task.reopened' => [
+            'CapabilityEvidenceProjector' => self::PROJECTOR,
         ],
         // X-06: NotificationDispatcher REMOVED from this event. RemediationRecommender
         // still consumes it, so the event survives the named-consumer test.
@@ -59,6 +63,7 @@ class EventCatalogue
             'RemediationRecommender'      => self::REACTOR,
         ],
         'capability.flag_resolved' => [
+            'CapabilityEvidenceProjector' => self::PROJECTOR,
             'ProficiencyService'          => self::PROJECTOR,
         ],
         'assessment.completed' => [
@@ -72,6 +77,7 @@ class EventCatalogue
         // X-06 deferred this; X-11 UN-DEFERS it. CertificateIssuer now emits it,
         // and the certificate row it announces exists before the emit happens.
         'certification.issued' => [
+            'CapabilityEvidenceProjector' => self::PROJECTOR,
             'NotificationDispatcher'      => self::REACTOR,
         ],
         'certification.expiring' => [
@@ -131,6 +137,30 @@ class EventCatalogue
             'trigger' => null,
             'reason'  => 'No consumer DOES anything. Completion without approval is not a capability signal, and approval already emits its own event.',
         ],
+        // ─── MOVED HERE BY G-EVT-01, NOT DROPPED ON MERIT ───────────────────
+        // Each had exactly one consumer and that consumer did not exist.
+        // Removing the paper reactor left the event with nobody, which is the
+        // named-consumer test. The trigger says what brings each back.
+        //
+        // FILED WRONG ONCE: these first went into NOT_NOTIFIED, which records
+        // dropped NOTIFICATIONS. An event with no consumer is not a notification
+        // decision, and putting it there would have said something untrue about
+        // a decision nobody took. NOT_SHIPPED is the list for events.
+        //
+        // 'task.reopened' WAS HERE and is now back in SHIPPED: its trigger said
+        // "CapabilityEvidenceProjector is built", and it now is. Left as a
+        // comment rather than deleted so the deferral and its resolution stay
+        // visible together - same treatment as certification.issued.
+        'employee.hired' => [
+            'verdict' => 'DEFERRED',
+            'trigger' => 'OnboardingLauncher is built (X-14).',
+            'reason'  => 'Its only declared consumer, OnboardingLauncher, was never written. G-EVT-01.',
+        ],
+        'readiness_gate.changed' => [
+            'verdict' => 'DEFERRED',
+            'trigger' => 'X-07 builds the readiness_gate STATE, then X-15 builds FeatureGateApplier. THAT ORDER: a reactor needs something to gate.',
+            'reason'  => 'Its only declared consumer, FeatureGateApplier, was never written. G-EVT-01. Its NOTIFICATION is separately DROPPED - see NOT_NOTIFIED, re-taken on the surviving clause.',
+        ],
         'competency.gap_detected' => [
             'verdict' => 'DROPPED',
             'trigger' => null,
@@ -160,23 +190,6 @@ class EventCatalogue
         // 'certification.issued' WAS HERE. X-11 shipped, so its trigger fired and
         // it moved back into NOTIFIES. Left as a comment rather than deleted so
         // the deferral and its resolution stay visible together.
-        // ─── MOVED HERE BY G-EVT-01, NOT DROPPED ON MERIT ───────────────────
-        // Each of these had exactly one consumer and that consumer did not
-        // exist. Removing the paper reactor left the event with nobody, which
-        // is the named-consumer test. They come back when the class is built -
-        // the trigger says which.
-        'task.reopened' => [
-            'verdict'   => 'DEFERRED',
-            'recipient' => null,
-            'trigger'   => 'CapabilityEvidenceProjector is built. This event is golden thread 2 evidence and is expected back.',
-            'reason'    => 'Its only declared consumer, CapabilityEvidenceProjector, was never written. G-EVT-01.',
-        ],
-        'employee.hired' => [
-            'verdict'   => 'DEFERRED',
-            'recipient' => null,
-            'trigger'   => 'OnboardingLauncher is built (X-14).',
-            'reason'    => 'Its only declared consumer, OnboardingLauncher, was never written. G-EVT-01.',
-        ],
         // THE EVENT ITSELF is also unshipped now: FeatureGateApplier was its only
         // consumer. X-07 must build the readiness_gate STATE before a reactor has
         // anything to gate; X-15 follows X-07, not the reverse. The plan had that
