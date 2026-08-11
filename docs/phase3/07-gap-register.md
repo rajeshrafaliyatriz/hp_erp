@@ -251,6 +251,29 @@ not pattern matches:**
 | G-SEC-12's static check — regex over method bodies | pattern | first version: **9 offenders, 0 real** (8 legitimate subjects, 1 a comment) |
 | L-11's count itself | pattern | **7 successive corrections** |
 
+## WHERE TO LOOK, NOT ONLY WHAT TO TRUST
+
+> ### A SWEEP CAN ONLY FIND WHAT ITS PATTERN CAN EXPRESS; A FEATURE THAT NEEDS A
+> ### CORRECT NUMBER FINDS WHATEVER IS MAKING THE NUMBER WRONG.
+
+**The evidence, side by side:**
+
+| Approach | Result |
+|---|---|
+| **L-11's sweep** - regex over join clauses, looking for the SHAPE of the defect | **29 candidates, ZERO verified findings** |
+| **G-DASH-01** - a dashboard needing a correct row count | **161,695 of 253,479 joined rows cross-tenant** |
+| **G-LIB-09** - a delete dialog needing a correct impact count | **479,623 vs 79,294 - six times reality** |
+
+**The same class, found twice by building and never once by sweeping.**
+
+A sweep hunts the defect's shape **in the code**. A feature hits its consequence
+**in the data** - and it cannot be fooled, because a wrong number is wrong
+regardless of how the wrongness is written.
+
+**This is the practical half of the conclusion below.** R6 says only a measurement
+produces a finding; this says **where the measurements come from**: build the thing
+that needs the number right.
+
 ## The standing conclusion
 
 > ### A PATTERN PRODUCES CANDIDATES. ONLY A MEASUREMENT PRODUCES A FINDING.
