@@ -49,6 +49,49 @@ class FrameworkImportController extends Controller
 
     public function dryRun(Request $request)
     {
+        return $this->run($request, false);
+    }
+
+    /**
+     * WRITE. One transaction.
+     *
+     * ─────────────────────────────────────────────────────────────────────────
+     * A HALF-IMPORTED FRAMEWORK IS NOT A SMALLER FRAMEWORK.
+     *
+     *   It is a competency model with holes the customer cannot see, and every
+     *   gap view computed against it would be quietly wrong - the same family as
+     *   every silent-wrongness this project has closed. WORSE THAN AN OUTRIGHT
+     *   FAILURE.
+     *
+     * NOT RESUMABLE, AND THAT IS THE DECISION RATHER THAN THE DEFAULT.
+     *   THE DRY RUN ALREADY BUYS WHAT RESUMABILITY WOULD. A customer sees the
+     *   whole outcome before committing, so a mid-write failure is a SYSTEM
+     *   FAULT, not a content surprise - and "nothing happened, here is why" is
+     *   the correct response to a system fault.
+     *
+     *   Resumability would need a durable record of what landed, written INSIDE
+     *   the operation that might fail: a second thing to get wrong, for a case a
+     *   transaction removes.
+     *
+     * WHAT WOULD MAKE THIS WRONG, named so resumability arrives as a decision:
+     *   a framework exceeding what one transaction can hold, or an import that
+     *   must span a session. Neither is true at the validated 5,000-row ceiling.
+     * ─────────────────────────────────────────────────────────────────────────
+     */
+    public function commitImport(Request $request)
+    {
+        return $this->run($request, true);
+    }
+
+    /**
+     * THE ONE PATH. Both actions call this; `$write` is the only difference.
+     *
+     * TWO PATHS THAT CAN DISAGREE IS THE DEFECT THIS FEATURE EXISTS TO AVOID -
+     * a preview that does not predict the write is worse than no preview, because
+     * the customer acts on it.
+     */
+    private function run(Request $request, bool $write)
+    {
         $identity = $this->resolveApiIdentity($request);
         if (!is_array($identity)) {
             return $identity;
@@ -114,27 +157,120 @@ class FrameworkImportController extends Controller
             ];
 
             $itemId = $lookup[mb_strtolower($itemName)] ?? null;
-            $itemId === null ? $held++ : $resolved++;
-            $byDimension[$dimension]['items']++;
-            if ($itemId !== null) {
-                $byDimension[$dimension]['resolved']++;
+
+            // ALREADY PRESENT ON AN EXISTING COMPETENCY?
+            //
+            // The first version checked this ONLY in the write, so the dry run
+            // predicted 4 items and the write created 3 - the preview and the
+            // write disagreed, which is the one defect this feature exists to
+            // avoid. The check belongs HERE, in the shared path, so the count a
+            // customer sees is produced by the same code that does the work.
+            $alreadyPresent = false;
+            $existingCid = $existingLower[$key] ?? null;
+            if ($existingCid !== null) {
+                $alreadyPresent = DB::table('competency_kasba_item')
+                    ->where('competency_id', $existingCid)
+                    ->where('kasba_type', $dimension)
+                    ->where(function ($q) use ($itemId, $itemName) {
+                        $itemId !== null
+                            ? $q->where('item_id', $itemId)
+                            : $q->whereRaw('LOWER(item_label) = ?', [mb_strtolower($itemName)]);
+                    })->exists();
             }
 
             $competencies[$key]['items'][] = [
                 'item'      => $itemName,
                 'dimension' => $dimension,
                 'weight'    => $row['weight'] ?? 1.0,
+                'already_present' => $alreadyPresent,
                 // TARGET if the tenant already has this skill; HOLDING otherwise,
                 // with the text kept exactly as the customer wrote it.
                 'resolves_to' => $itemId,
-                'state'     => $itemId === null ? 'HELD_AS_LABEL' : 'TARGET',
+                'state'     => $alreadyPresent ? 'ALREADY_PRESENT'
+                                : ($itemId === null ? 'HELD_AS_LABEL' : 'TARGET'),
             ];
+
+            // Counted only if it would actually be created.
+            if (!$alreadyPresent) {
+                $itemId === null ? $held++ : $resolved++;
+                $byDimension[$dimension]['items']++;
+                if ($itemId !== null) {
+                    $byDimension[$dimension]['resolved']++;
+                }
+            }
         }
 
         $totalItems = $resolved + $held;
         $newCompetencies = count(array_filter($competencies, fn ($c) => !$c['already_exists']));
 
+        // ── THE WRITE, IF THIS IS THE WRITE ─────────────────────────────────
+        $created = ['competencies' => 0, 'items' => 0];
+        if ($write) {
+            if ($badShape !== []) {
+                // A malformed file is refused ENTIRELY. Importing the good rows
+                // of a broken file is the half-import this design rejects.
+                return response()->json([
+                    'status'  => 0,
+                    'message' => count($badShape) . ' row(s) are malformed. Nothing was imported.',
+                    'rejected_rows' => $badShape,
+                ], 422);
+            }
+
+            DB::transaction(function () use ($competencies, $tenant, $identity, &$created) {
+                foreach ($competencies as $key => $comp) {
+                    // ALREADY EXISTING IS REUSED, NEVER DUPLICATED - a second copy
+                    // would manufacture the ambiguity G-DATA-11 closed.
+                    $cid = DB::table('competency')
+                        ->where('sub_institute_id', $tenant)
+                        ->whereRaw('LOWER(name) = ?', [mb_strtolower($comp['name'])])
+                        ->value('id');
+
+                    if (!$cid) {
+                        $cid = DB::table('competency')->insertGetId([
+                            'sub_institute_id'    => $tenant,
+                            'code'                => 'IMP-' . substr(md5($key), 0, 10),
+                            'name'                => $comp['name'],
+                            'description'         => 'Imported from a customer framework.',
+                            'competency_type'     => 'imported',
+                            'criticality'         => 'medium',
+                            'requires_assessment' => 1,
+                            'status'              => 'active',
+                            'version'             => 1,
+                            'created_by'          => $identity['user_id'],
+                            'created_at'          => now(),
+                            'updated_at'          => now(),
+                        ]);
+                        $created['competencies']++;
+                    }
+
+                    foreach ($comp['items'] as $item) {
+                        // The SAME flag the dry run reported. Not re-derived -
+                        // a second derivation is a second chance to disagree.
+                        if ($item['already_present']) {
+                            continue;
+                        }
+
+                        DB::table('competency_kasba_item')->insert([
+                            'sub_institute_id' => $tenant,
+                            'competency_id'    => $cid,
+                            'kasba_type'       => $item['dimension'],
+                            // TARGET where the name resolved; otherwise HELD with
+                            // the customer's wording EXACTLY as they wrote it.
+                            'item_id'          => $item['resolves_to'],
+                            'item_label'       => $item['resolves_to'] === null ? $item['item'] : null,
+                            'weight'           => $item['weight'],
+                            'created_at'       => now(),
+                            'updated_at'       => now(),
+                        ]);
+                        $created['items']++;
+                    }
+                }
+            });
+        }
+
         return response()->json(['status' => 1, 'data' => [
+            'written'      => $write,
+            'created'      => $write ? $created : null,
             'would_create' => [
                 'competencies'       => $newCompetencies,
                 'competencies_seen'  => count($competencies),
@@ -150,7 +286,10 @@ class FrameworkImportController extends Controller
             // A file whose ROWS are malformed. Never a list of words we did not like.
             'rejected_rows' => $badShape,
             'competencies'  => array_values($competencies),
-            'note' => 'NOTHING HAS BEEN WRITTEN. Items that do not match your skill library are '
+            'note' => $write
+                ? 'Imported in one transaction. Items that did not match your skill library are '
+                  . 'HELD as labels with your wording kept.'
+                : 'NOTHING HAS BEEN WRITTEN. Items that do not match your skill library are '
                     . 'HELD as labels with your wording kept - they are not dropped and not '
                     . 'renamed. Most items in a real framework arrive this way, which is the '
                     . 'normal first state.',

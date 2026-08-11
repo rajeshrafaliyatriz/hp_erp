@@ -1509,3 +1509,4 @@ Route::get('/competency/seed-library/preview', [\App\Http\Controllers\Api\Compet
 // Not skillLibraryController::competencyLibraryImport, which writes flat skill
 // rows; this one is KASBA-aware across all five dimensions.
 Route::post('/competency/framework-import/dry-run', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'dryRun'])->middleware('profile:admin,hr');
+Route::post('/competency/framework-import/commit', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'commitImport'])->middleware('profile:admin,hr');
