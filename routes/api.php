@@ -1496,3 +1496,7 @@ Route::post('/reporting-line/department-head', [App\Http\Controllers\Api\Org\Rep
 // L-06 — what depends on a library row, counted BY KEY (G-LIB-09). Read-only and
 // authenticated; the controller scopes the subject to the caller's organisation.
 Route::get('/competency/library/dependants', [\App\Http\Controllers\Api\Competency\LibraryDependantsController::class, 'index']);
+
+// The 9-box's second axis (G-FLOW-26). Read-only; the controller scopes to the
+// caller's organisation. Elevated roles only - it shows every employee's rating.
+Route::get('/competency/nine-box', [\App\Http\Controllers\Api\Competency\NineBoxController::class, 'index'])->middleware('profile:admin,hr');
