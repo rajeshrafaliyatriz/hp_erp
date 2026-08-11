@@ -205,20 +205,27 @@ who the product currently serves. **Neither is derivable from the plan rows** �
 rows are all individually reasonable, and the shape only appears when the roles are
 laid beside each other.
 
-### ADDENDUM — **`hr_manager` and `administrator` are the same role**
+### ADDENDUM — **THE API GUARD IS COARSER THAN THE PERMISSION MODEL BEHIND IT**
 
-Measured 2026-08-11 while sizing the HR flow:
+*(Corrected 2026-08-11. The first version of this addendum said the two roles were
+"the same role, differing by one menu". That was measured on `can_view` alone and
+was wrong — see `04-user-flows/short-roles.md`.)*
 
-    route guards        16 of 16 identical (profile:admin,hr)
-    menu rights         admin 81, hr 80, shared 80
-    admin-only menus    1  ("Integration")
-    hr-only menus       0
+    administrator  view=81  write=49        hr_manager  view=80  write=35
+    WRITE menus separating them: 14, all configuration
+      Role & Permissions · Permision · Integration · agentic · task config
 
-**They differ by one menu.** Two of the nine canonical roles are, in practice, one
-role. That is either an unfinished separation or a separation nobody needed, and
-**the question is worth asking before a customer asks it** — an HR manager who can
-do everything an administrator can is a permissions story that will not survive
-review.
+**The roles ARE distinguished** — in the spec, in `03-rbac-matrix.md` §3.1, and in
+the seeded rights. `hr_executive` is distinguished too (13 view / 12 write).
+
+**But all 16 API endpoints are guarded `profile:admin,hr`, and the rights matrix
+is never consulted by a route.** An HR Manager can therefore acknowledge a
+readiness gate into `blocked`, commit a framework import, and rewrite the
+reporting line — three configuration acts the matrix denies them.
+
+**Two authorization systems disagree and the API uses the coarser one.** This is
+an enforcement gap, not a role-design question: the design was decided before any
+of this was built.
 
 ---
 

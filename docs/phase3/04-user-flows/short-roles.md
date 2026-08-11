@@ -12,62 +12,80 @@ another role's routes with a narrower scope column.
 
 ---
 
-## `hr_manager` — **the same journey, and not even fewer rights**
+## `hr_manager` — **⚠ RETRACTED AND REWRITTEN 2026-08-11**
 
-**Sized as a short section BEFORE writing, on a measurement.** The expectation was
-"same journey, narrower scope". The measurement said something stronger.
+### THE FIRST VERSION OF THIS SECTION WAS WRONG
 
-    route guards        16 of 16 IDENTICAL (profile:admin,hr)
-    menu rights         admin 81, hr 80, shared 80
-    admin-only menus    1  ("Integration")
-    hr-only menus       0
+It said the two roles *"differ by one menu"* and were *"in practice one role"*.
+**That came from comparing `can_view` only.** The roles are distinguished, and the
+distinction lives in the WRITE columns I did not read:
 
-### THE ENTIRE DIFFERENCE IS ONE MENU
+    administrator      view=81   write=49
+    hr_manager         view=80   write=35
+    view-only-to-admin  1        WRITE-only-to-admin  14
 
-There is **no endpoint** an Administrator can reach that an HR Manager cannot, and
-none the other way. Every route in `administrator.md` §0 — competency definitions,
-role mapping, the 9-box, seed-library preview, framework dry-run and commit,
-readiness gates, gate acknowledgement, reporting lines, performance cycles, talent
-mobility, succession, terminology — is `profile:admin,hr`.
+**Same wrong-population family as the two zeros** — I measured a real column,
+correctly, and drew a conclusion about a different one. A role's power is what it
+can WRITE.
 
-**So `administrator.md` IS the HR Manager's flow.** Read it as written, minus
-"Integration".
+### THE BOUNDARY IS SEEDED, AND IT MATCHES THE SPEC
 
-### ⚠ THAT IS A FINDING, NOT A CONVENIENCE
+The 14 menus an Administrator can write and an HR Manager cannot:
 
-**Two of the nine canonical roles are, in practice, one role.** An HR Manager can
-acknowledge a readiness gate into `blocked`, commit a framework import, and rewrite
-the reporting line — every irreversible or wide-reaching action the product has.
+    Role & Permissions · Permision · Integration
+    Projects & Workstreams · Dependencies & Workstreams
+    Status Management · Priority Management
+    Agent Dashboard · Create Agent · Run Log · Analytics
+    Multi-Agent · Reflection · Agentic Library
 
-Whether that is intended is a **product decision, not a bug to fix quietly**:
+**Configuration, every one.** That is exactly the spec's line — *"Admin should own
+configuration, not daily HR operations"* — and `03-rbac-matrix.md` §3.1 carries it
+too: Role & Permissions and Group-wise rights are `V` for HR Mgr and `V C E D` for
+Admin.
 
-- If the separation was meant to exist, the rights matrix never received it, and
-  "HR Manager" is currently a second administrator with a different label.
-- If it was never meant to exist, one of the two names should go, because a role
-  list that implies a distinction it does not enforce misleads whoever reads it.
+`hr_executive` is also distinguished: 13 view / 12 write menus separate it from
+`hr_manager`. **The seed lost nothing.**
 
-**It will not survive a customer's permissions review either way**, and it is
-better raised now than answered under one. Promoted to `08-connection-plan.md` §1
-as an addendum to the completeness diagnosis.
+### ⛔ THE REAL DEFECT — **THE API DOES NOT CONSULT THE RIGHTS MATRIX**
 
-### What an HR Manager must never see
+All 16 endpoints are guarded `profile:admin,hr`. **The route layer knows only
+"admin or HR", and the rights matrix that distinguishes them is never asked.**
 
-Identical to the Administrator's list, and enforced by the same code:
+So an HR Manager can today call:
 
-- another tenant's anything (tenant from identity on all 16 endpoints);
-- a gate reaching `blocked` without an acknowledgement naming who and when;
-- a `0` where nothing was measured;
-- an import that resolved an ambiguity for them;
-- `hpbrain_*` data.
+    POST /readiness/gates/acknowledge     switch a capability off, tenant-wide
+    POST /competency/framework-import/commit   commit a customer's framework
+    POST /reporting-line/bulk             rewrite the reporting line
+
+**Every one is a configuration act, and the rights matrix says HR cannot do
+configuration.** Two authorization systems disagree, and the API uses the one that
+cannot tell the roles apart.
+
+**THIS IS NOT A ROLE-DESIGN QUESTION.** The design is decided, written in the spec,
+present in the matrix and seeded into the data. **It is an enforcement gap:** the
+guard is coarser than the permission model behind it, and the finer model has no
+effect on any API call.
+
+An HR Manager who can switch a capability off for the whole tenant is a
+configuration act wearing a people-ops name — and it will not survive a customer's
+permissions review.
+
+### The fix, filed not built
+
+`profile:admin,hr` on the configuration endpoints should become `profile:admin`,
+or better, the guard should consult `tblgroupwise_rights_g2g` so the matrix is the
+single source. Which of those is a design decision. **The wide-reaching acts —
+gate acknowledgement, framework commit, reporting-line rewrite, Integration,
+terminology — belong to the Administrator alone.**
 
 ### Where this role stands
 
-**Works today:** everything in `administrator.md` §7's "works today" list.
+**Works today:** everything in `administrator.md` §7 — which is itself the
+problem, not the reassurance.
 
-**Dead-ended on:** the same five items, unchanged — no dead end is specific to HR.
+**Dead-ended on:** the same five items as the Administrator.
 
-**Depends on:** the same list, plus **the role-separation decision above**, which is
-the only item unique to this role and is a decision rather than a build.
+**Depends on:** the guard-narrowing item above, the only one unique to this role.
 
 ---
 
