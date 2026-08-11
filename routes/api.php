@@ -1500,3 +1500,7 @@ Route::get('/competency/library/dependants', [\App\Http\Controllers\Api\Competen
 // The 9-box's second axis (G-FLOW-26). Read-only; the controller scopes to the
 // caller's organisation. Elevated roles only - it shows every employee's rating.
 Route::get('/competency/nine-box', [\App\Http\Controllers\Api\Competency\NineBoxController::class, 'index'])->middleware('profile:admin,hr');
+
+// X-08(a) — what a seed-library import would give you, before you run it.
+// Reports only; imports nothing (G-SEED-01 R5).
+Route::get('/competency/seed-library/preview', [\App\Http\Controllers\Api\Competency\SeedLibraryPreviewController::class, 'index'])->middleware('profile:admin,hr');
