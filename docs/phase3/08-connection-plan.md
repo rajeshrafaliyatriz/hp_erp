@@ -86,6 +86,34 @@ matching**. Nothing errors. Nothing warns. The data is simply orphaned.
 | *"Recruit against your competency framework"* | **nothing.** Recruitment has never referenced the framework |
 | *"Close skill gaps with targeted learning"* | a **free-text notes field** called *Learning Resources* |
 
+### ⚠ CORRECTION 2026-08-11 - THIS ILLUSTRATION IS NO LONGER TRUE
+
+**It was true when written. The capability chain landing fixed it, and nobody
+updated this document.**
+
+| Axis | State today |
+|---|---:|
+| performance | **8** reviews carrying a manager rating |
+| capability | **34** KASBA ratings |
+| the join between them | **23** `jobrole_competency_map` rows |
+| the roll-up | `ProficiencyService` exists and resolves, asserted by the smoke suite on every run |
+
+**Both axes have data. The compute path exists. Only the RENDER is missing** -
+nothing joins the two axes into a grid.
+
+That is a far smaller item than "nothing to put on the other axis", and it is the
+sentence a customer would be shown, so it must not be one that would have to be
+withdrawn.
+
+> ### A DIAGNOSIS WRITTEN BEFORE THE WORK IS A CLAIM ABOUT A MOMENT.
+>
+> This one **aged into being wrong**. Nothing was mis-measured; the world moved and
+> the document did not. **Every claim in §1 needs the same check** - which of them
+> have been quietly fixed by the foundations landing?
+
+**The original text is kept below, because the diagnosis is a historical record of
+what was true at Gate C and re-writing it would erase the finding.**
+
 ### The single illustration: the 9-box grid
 
 The 9-box grid is a standard HR tool: **performance on one axis, potential or

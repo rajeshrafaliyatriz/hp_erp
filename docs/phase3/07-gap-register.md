@@ -33,6 +33,63 @@ workflow · **S3** degrades the product · **S4** cosmetic.
 
 ---
 
+---
+
+# G-PLAN-01 - **SEVEN OF THE REMAINING ITEMS ARE CATALOGUES NOBODY HAS WRITTEN** - **S2**
+
+Counted, not estimated. **These are not connections to build. They are relationships
+that must be AUTHORED, and no amount of code produces them:**
+
+| Item | Target | State |
+|---|---|---:|
+| **L-14** | `jobrole_task_competency_map` | **0 rows** |
+| **TL-03** | `talent_requisitions` | **TABLE DOES NOT EXIST** |
+| **TL-02(b)** | a competency on a performance goal | **no such column** |
+| **L-09** | `certification_type` | **0 rows** |
+| **TL-04** | `talent_onboarding_tasks` | **1 row** |
+| **X-14** | `talent_onboarding_journeys` | **1 row** |
+| **X-08** | the seed-library import | **IS the authoring mechanism** |
+
+**7 of the remaining 33.**
+
+> ### THE PLAN'S REMAINING SIZE IS SMALLER THAN IT LOOKS IN BUILD TERMS AND
+> ### LARGER IN ONBOARDING TERMS.
+>
+> Seven items cannot be finished by writing code. They are finished when a customer
+> - or a seed library - **authors the relationship**. Counting them as build work
+> has been overstating what is left to build and understating what is left to
+> populate.
+
+**X-08 is the lever.** It is the only one of the seven that is itself a mechanism:
+the seed-library import is how the other six get their content. **Its five
+requirements are already recorded under G-SEED-01.**
+
+**Not in this count** because they are populated: `course_competency_map` (56),
+`course_jobrole_map` (71), `jobrole_competency_map` (23) - all authored by this
+phase's own work, which is the caveat that travels with Q-E1-Q1.
+
+---
+
+# G-PLAN-02 - **L-01 AND L-02's TRIGGER FIRED AND NOBODY NOTICED** - unblocked
+
+Both were scheduled on *"`department_id` populated"*. **It is populated:**
+
+| | |
+|---|---:|
+| `s_user_jobrole.department_id` | **4,513 of 4,736 (95.3%)** |
+| `s_users_skills.department_id` | **3,924 of 5,171 (75.9%)** |
+
+**They are unblocked and have been for some time.**
+
+**This is the 9-box correction's shape a second time in one turn:** a condition was
+recorded, the condition was met, and **nothing re-read the schedule.** A trigger
+nobody re-checks is a park with extra steps.
+
+**Practice:** every scheduled item's trigger is re-measured when its area is next
+opened - not when someone remembers.
+
+---
+
 # G-TASK-03 - **`delay_category` IS EMPTY BECAUSE THE STATE IS UNREACHED** - **S3** - T-02 re-scoped
 
 **T-02 was "surface `delay_category`". It should not be surfaced.**
