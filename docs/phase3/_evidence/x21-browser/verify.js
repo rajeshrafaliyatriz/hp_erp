@@ -332,7 +332,10 @@ function stopAll() {
       let found = false, visited = 0;
       const wanted = /not yet assessed/i;
 
-      await empPage.goto(APP + '/module/competency-management',
+      // THE ACCESS_LINK, which is the app's OWN answer for where this screen is
+      // (tblmenumaster_g2g row 224). Going to the MODULE link lands on a page with
+      // no content route, which falls back to the dashboard.
+      await empPage.goto(APP + '/module/competency-management/competency-library/my-capability',
         { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
       await empPage.waitForTimeout(3000);
       visited++;
