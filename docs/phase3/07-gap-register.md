@@ -437,6 +437,62 @@ run, so it is written down here.**
 
 ---
 
+## G-EVT-03 - **A CLASS THAT RESOLVES IS NOT THEREBY A CONSUMER** - and GapRecalculator DROPPED
+
+`ProficiencyService` was declared **PROJECTOR on four events**. It has one public
+method, `rollUp()`, a query. No `handles()`, no `project()`, no `CONSUMER`, no
+ledger entry, no mention of any event type. Its only callers are
+`CompetencyGapController` and `NineBoxController` - both READ paths. **Nothing in
+the event path has ever invoked it.**
+
+G-EVT-01's check asks whether a declared name RESOLVES. This one resolved.
+**RESOLVING IS NOT DOING THE WORK**, and the gap between those two is exactly the
+size of a class that exists and is the wrong kind of thing.
+
+Four declarations removed. **No event died** - each keeps a real consumer, so the
+named-consumer test still passes.
+
+### THE NEW INVARIANT, AND R26 ON THE WAY TO IT
+
+My first shape test asked for `project()` or `handle()` and returned **12
+violations naming reactors verified working in earlier turns**. The real shape is
+`handles()` plus `project()` for a projector and `dispatch()` for a reactor - and
+**my own known-negative had printed `NotificationDispatcher project()=no
+handle()=no` right beside the reds.** I wrote the test before reading what a
+reactor exposes. The corrected test is kind-AWARE, which is stronger than the one
+I meant to write: a P must project, an R must dispatch.
+
+    violations: 0
+    CapabilityEvidenceProjector / TaskStatusProjector  as P  pass
+    NotificationDispatcher / CertificateIssuer         as R  pass
+    ProficiencyService                                 as P  FAILS  <- the target
+
+### GapRecalculator - **DROPPED, not deferred**
+
+A deferral implies a trigger and there is nothing to wait for. No `%gap%` table
+exists; gaps are computed as queries in three places; and `NOT_SHIPPED` already
+records *"gaps are DERIVED, not a state change."* Building it would reverse a
+decision, not fill a gap.
+
+**A CORRECTION TO MY OWN ARGUMENT.** I first justified the drop by saying
+*"ProficiencyService already projects the proficiency a gap is derived from."*
+**That premise was false** - it projects nothing. The drop survives on the other
+leg, which is stronger: `rollUp()` derives proficiency **on read** from
+`competency_kasba_rating`. Nothing is stored anywhere, so nothing needs
+recalculating. The right conclusion for very nearly the wrong reason.
+
+### THE TWO-SIDED LESSON, SAME SIZE CHECK
+
+| | what was found | what it meant |
+|---|---|---|
+| `CapabilityEvidenceProjector` | a table, empty, fully designed | **an empty table is not evidence of an unbuilt design** - build it |
+| `GapRecalculator` | no table, beside a recorded decision not to have one | **no table plus a recorded decision is evidence of a design already taken** - do not build it |
+
+Read the columns before believing the row. The same instrument produced opposite
+verdicts on the same day, and neither was guessable from the plan text.
+
+---
+
 ## A TABLE THAT WAS AHEAD OF THE WORK - **`competency_evidence` was already designed for Q-B3**
 
 First time this phase a table has been ahead of the work rather than behind it.

@@ -44,6 +44,27 @@ class EventCatalogue
     public const PROJECTOR = 'P';   // pure, replayable, ledger cleared on rebuild
     public const REACTOR   = 'R';   // touches the world, live only, ledger PERMANENT
 
+    /**
+     * G-EVT-03: `ProficiencyService` REMOVED from capability.flag_resolved,
+     * assessment.completed, course.completed and employee.role_assigned.
+     *
+     * IT RESOLVES AND IT IS NOT A CONSUMER. One public method, `rollUp()`, a
+     * query. No handles(), no project(), no CONSUMER, no catchUp, no delivery
+     * ledger entry, and no mention of any event type. Its only callers are
+     * CompetencyGapController and NineBoxController - both READ paths.
+     *
+     * G-EVT-01's check asks whether a name RESOLVES. This one resolved. THAT IS
+     * NOT THE SAME AS DOING THE WORK, and the difference is now its own
+     * invariant below.
+     *
+     * NO EVENT DIED: each of the four keeps a real consumer
+     * (CapabilityEvidenceProjector, NotificationDispatcher, CertificateIssuer,
+     * LearningAssigner respectively), so the named-consumer test still passes.
+     * PROFICIENCY IS NOT PROJECTED AT ALL - rollUp() derives it ON READ from
+     * competency_kasba_rating. That is a design, not an omission, and it is why
+     * GapRecalculator is DROPPED rather than deferred: nothing is stored, so
+     * nothing needs recalculating.
+     */
     /** @var array<string, array<string, string>> event => consumer => kind */
     public const SHIPPED = [
         'task.rejected' => [
@@ -64,15 +85,12 @@ class EventCatalogue
         ],
         'capability.flag_resolved' => [
             'CapabilityEvidenceProjector' => self::PROJECTOR,
-            'ProficiencyService'          => self::PROJECTOR,
         ],
         'assessment.completed' => [
-            'ProficiencyService'          => self::PROJECTOR,
             'NotificationDispatcher'      => self::REACTOR,
         ],
         'course.completed' => [
             'CertificateIssuer'           => self::REACTOR,
-            'ProficiencyService'          => self::PROJECTOR,
         ],
         // X-06 deferred this; X-11 UN-DEFERS it. CertificateIssuer now emits it,
         // and the certificate row it announces exists before the emit happens.
@@ -85,7 +103,6 @@ class EventCatalogue
             'RemediationRecommender'      => self::REACTOR,
         ],
         'employee.role_assigned' => [
-            'ProficiencyService'          => self::PROJECTOR,
             // X-12: MandatoryLearningAssigner ABSORBED into LearningAssigner.
             // They differed only in where the course list came from, and two
             // classes meant two places to get idempotency wrong.
@@ -277,9 +294,25 @@ class EventCatalogue
                 // ProficiencyService is in App\Services\Competency - so resolution
                 // tries the siblings first and then the known homes. A name that
                 // resolves nowhere is the error.
-                if (!self::resolveConsumer($name)) {
+                $fqcn = self::resolveConsumer($name);
+                if (!$fqcn) {
                     $errors[] = "ABSENT CONSUMER: '$event' -> '$name' resolves to no class. "
                         . "Declare it only when it exists; until then it belongs in NOT_SHIPPED.";
+                } elseif (!method_exists($fqcn, 'handles')
+                          || !method_exists($fqcn, $kind === self::PROJECTOR ? 'project' : 'dispatch')) {
+                    // G-EVT-03. RESOLVING IS NOT THE SAME AS BEING A CONSUMER.
+                    //
+                    // ProficiencyService was declared PROJECTOR on four events and
+                    // is a query service with one method, rollUp(). The class
+                    // existed, so the resolution check passed, and nothing in the
+                    // event path had ever called it.
+                    //
+                    // A consumer must expose project() (projector) or handle()
+                    // (reactor). This is a SHAPE test, not a behaviour test - it
+                    // cannot tell whether the method does the right thing, only
+                    // that the class is the kind of thing that could.
+                    $errors[] = "NOT A CONSUMER: '$event' -> '$name' resolves to $fqcn, which has "
+                        . "neither project() nor handle(). A class that resolves is not thereby a consumer.";
                 }
                 if (!in_array($kind, [self::PROJECTOR, self::REACTOR], true)) {
                     $errors[] = "KIND: '$event' -> '$name' has kind '" . var_export($kind, true) . "'; must be P or R.";
