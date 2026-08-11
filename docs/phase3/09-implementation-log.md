@@ -2119,3 +2119,68 @@ it: the library must carry all five KASBA dimensions; mostly-HOLDING is the norm
 first state and not an error; promotion HOLDING -> TARGET happens in place; a
 one-item bundle must be expressible and distinguishable from "not enriched yet";
 and **vocabulary distance is a number the customer should see before importing.**
+
+## D-055 - the walkthrough, automated. Smoke 32 -> 44.
+
+Triz was going to open nine screens by hand after every item. **That is now 12
+assertions that run on every invocation**, as values from the API and as
+statements about the component source.
+
+### TIER 1 - API, seven checks, all GREEN
+
+| Check | Asserted |
+|---|---|
+| nine logins | 200, non-empty, **module breadth per role** (admin 7, hr_manager 7, hr_executive 6, department_head 6, reporting_manager 6, employee 5, recruiter 3, executive 7, auditor 7) |
+| employee exclusions | **no Payroll, Employee Directory or Talent** in any label |
+| vikram | **4 required, 1 met, 2 gap, 1 unmeasured** |
+| **divya** | **2 rows, state=unmeasured, level NULL, gap NULL - NOT 0** |
+| coverage | **9 measured levels, every one with coverage** |
+| isolation | vikram reading divya's gap -> **403** |
+| role map | save 3 -> **3**, remove 1 -> **2**, seeded rows restored |
+
+### TIER 2 - COMPONENT SOURCE, five checks, all GREEN
+
+**They cannot prove a screen LOOKS right. They prove the source has NO PATH to the
+wrong render** - which is a real claim, because every frontend defect this phase
+(the dead bell, the mis-wired G-MAP-01 button, the vocabulary rename) was visible
+in source.
+
+### ⚠ TIER 2 FOUND A REAL DEFECT ON ITS FIRST RUN
+
+**Six user-visible "Competency" strings survived the Skill Library rename:**
+
+- *"Approved Competencies"*, *"Archived Competencies"*
+- *"Create, manage and maintain organizational competencies."*
+- *"Move this competency into the approval queue"*
+- *"No roles require this competency."*
+- *"Search by competency name, category, type..."*
+
+The rename changed 13 labels and **missed these six.** Fixed, and the check now
+guards them. **This is exactly what the manual walkthrough was supposed to catch,
+found on the first automated pass.**
+
+The check distinguishes user-visible text from **type names** (`CompetencyLibraryItem`)
+and **CSV import header aliases** (`'competency name' => 'name'`), which were
+deliberately left - renaming an import alias breaks real spreadsheets, the same
+reasoning that kept `SAVED_VIEWS_KEY`.
+
+### THREE OF MY OWN CHECKS WERE WRONG BEFORE THEY WERE RIGHT
+
+| # | Bug | Why it matters |
+|---|---|---|
+| 1 | `($r['measured_level'] ?? 'missing') !== null` | **`??` returns the fallback WHEN THE VALUE IS NULL, so it can never observe the null it tests for.** The detail printed `level=NULL` beside a FAIL verdict - R23 again, and the detail was right |
+| 2 | posted `competencies`, the endpoint validates `items` | 422, read as a product failure |
+| 3 | demanded HTTP 200 where the endpoint returns **201** | a correct product failed my assertion |
+| 4 | `RESOLVABLE_KASBA_TYPES` regex stopped at the bracket in `KasbaType[]` | captured nothing and **reported "resolvable = []" as the finding** - a pattern that mis-parses reports its own failure as the product's |
+
+**Four assertion bugs, four false alarms, zero product defects among them** - and
+one genuine defect (the six strings) that no assertion bug hid. The lesson is not
+"be careful": it is that **a new check's first red is more likely to be the check
+than the code**, which is R4 pointed at myself.
+
+**Every Tier 2 pattern validates against a known positive first (R16).**
+
+### RUNTIME
+
+Smoke **32 -> 44 checks**, 91s, GREEN. Frontend `tsc`: **9 errors, unchanged and
+all pre-existing** (`admin-center`, `gtg-nav-visibility`, `offboarding-service`).

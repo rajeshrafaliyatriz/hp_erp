@@ -439,6 +439,384 @@ check('slice1', 'rename: DASHBOARD counts still resolve', function () {
         "$before rows before rename, $after after"];
 });
 
+/* ══════════════════════════ WALKTHROUGH — TIER 1 (API) ══════════════════════════ */
+echo "\nWALKTHROUGH (API)\n";
+
+/**
+ * THE NINE LOGINS, ASSERTED INSTEAD OF EYEBALLED.
+ *
+ * Triz was going to open nine screens by hand every time something shipped. These
+ * checks do it on every run, as VALUES from the API rather than as a screenshot.
+ * The seeded tenant-3 users are the fixtures (SEED-REGISTER-2026-08-11.md).
+ */
+function seededUsers(): array
+{
+    return DB::table('tbluser as u')
+        ->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
+        ->where('u.sub_institute_id', 3)
+        ->where('u.email', 'like', '%@healthcare.g2g')
+        ->get(['u.id', 'u.email', 'u.user_profile_id', 'p.role_key'])
+        ->keyBy('email')->all();
+}
+
+function navLabels(array $nodes, array &$out): void
+{
+    foreach ($nodes as $n) {
+        $out[] = (string) ($n['name'] ?? $n['menu_name'] ?? $n['label'] ?? '');
+        $kids = $n['children'] ?? $n['submenu'] ?? [];
+        if ($kids) navLabels($kids, $out);
+    }
+}
+
+check('walkthrough', 'nine logins: sidebar 200, non-empty, expected breadth', function () use ($kernel) {
+    $users = seededUsers();
+    if (count($users) < 9) return ['SKIPPED', 'seeded users absent (' . count($users) . ') - seed removed?'];
+
+    // MEASURED on 2026-08-11, then asserted. A change here is either a rights
+    // change somebody made, or a regression - both worth stopping for.
+    $expected = [
+        'administrator' => 7, 'hr_manager' => 7, 'hr_executive' => 6,
+        'department_head' => 6, 'reporting_manager' => 6, 'employee' => 5,
+        'recruiter' => 3, 'executive' => 7, 'auditor' => 7,
+    ];
+    $bad = [];
+    $seen = [];
+    foreach ($users as $email => $u) {
+        if (isset($seen[$u->role_key])) continue;      // one per role
+        $seen[$u->role_key] = true;
+        $tk = tok($u->id, 'smoke_nav9');
+        [$code, $b] = call($kernel, '/user/ajax_sidebar_menu_g2g', 'GET',
+            ['profile_id' => $u->user_profile_id, 'sub_institute_id' => 3, 'token' => $tk]);
+        $n = count($b['data'] ?? []);
+        if ($code !== 200)                      $bad[] = "{$u->role_key}:HTTP$code";
+        elseif ($n === 0)                       $bad[] = "{$u->role_key}:EMPTY";
+        elseif ($n !== ($expected[$u->role_key] ?? -1)) $bad[] = "{$u->role_key}:$n!=" . ($expected[$u->role_key] ?? '?');
+    }
+    DB::table('personal_access_tokens')->where('name', 'smoke_nav9')->delete();
+    return [$bad ? 'FAIL' : 'PASS', $bad ? implode(' ', $bad) : count($seen) . ' roles, all 200, breadth as expected'];
+});
+
+check('walkthrough', 'employee sees NO Payroll / Employee Directory / Talent', function () use ($kernel) {
+    $users = seededUsers();
+    $emp = null;
+    foreach ($users as $u) if ($u->role_key === 'employee') { $emp = $u; break; }
+    if (!$emp) return ['SKIPPED', 'no seeded employee'];
+
+    $tk = tok($emp->id, 'smoke_ban');
+    [$code, $b] = call($kernel, '/user/ajax_sidebar_menu_g2g', 'GET',
+        ['profile_id' => $emp->user_profile_id, 'sub_institute_id' => 3, 'token' => $tk]);
+    DB::table('personal_access_tokens')->where('name', 'smoke_ban')->delete();
+    if ($code !== 200) return ['SKIPPED', "sidebar returned $code"];
+
+    $labels = [];
+    navLabels($b['data'] ?? [], $labels);
+    // KNOWN-POSITIVE (R16): the matcher must be able to SEE a banned label, or a
+    // clean result means only that the matcher is broken.
+    $probe = ['Payroll Management'];
+    $canSee = false;
+    foreach ($probe as $p) if (stripos($p, 'Payroll') !== false) $canSee = true;
+    if (!$canSee) return ['SKIPPED', 'matcher failed its own known-positive'];
+
+    $found = [];
+    foreach (['Payroll', 'Employee Directory', 'Talent'] as $banned) {
+        foreach ($labels as $l) if ($l !== '' && stripos($l, $banned) !== false) { $found[] = $banned; break; }
+    }
+    return [$found ? 'FAIL' : 'PASS',
+        $found ? 'EMPLOYEE SEES: ' . implode(', ', $found) : count(array_filter($labels)) . ' labels, none banned'];
+});
+
+check('walkthrough', 'vikram gap = 4 required / 1 met / 2 gap / 1 unmeasured', function () use ($kernel) {
+    $users = seededUsers();
+    $v = $users['vikram.sethi@healthcare.g2g'] ?? null;
+    if (!$v) return ['SKIPPED', 'vikram absent'];
+    $tk = tok($v->id, 'smoke_gapv');
+    [$code, $b] = call($kernel, '/api/competency/gap', 'GET',
+        ['token' => $tk, 'sub_institute_id' => 3, 'user_id' => $v->id, 'type' => 'API']);
+    DB::table('personal_access_tokens')->where('name', 'smoke_gapv')->delete();
+    if ($code !== 200) return ['FAIL', "HTTP $code"];
+
+    $rows = $b['data']['competencies'] ?? [];
+    $c = ['met' => 0, 'gap' => 0, 'unmeasured' => 0];
+    foreach ($rows as $r) { $s = $r['state'] ?? '?'; if (isset($c[$s])) $c[$s]++; }
+    $ok = count($rows) === 4 && $c['met'] === 1 && $c['gap'] === 2 && $c['unmeasured'] === 1;
+    return [$ok ? 'PASS' : 'FAIL',
+        sprintf('%d required, %d met, %d gap, %d unmeasured', count($rows), $c['met'], $c['gap'], $c['unmeasured'])];
+});
+
+check('walkthrough', 'divya: level NULL and gap NULL — NOT 0', function () use ($kernel) {
+    // THE SINGLE MOST IMPORTANT ASSERTION IN THE SET. "Nothing measured" and
+    // "measured as zero" are different facts about a person, and only one of them
+    // is a shortfall. A 0 here would be a false accusation rendered as a number.
+    $users = seededUsers();
+    $d = $users['divya.nair@healthcare.g2g'] ?? null;
+    if (!$d) return ['SKIPPED', 'divya absent'];
+    $tk = tok($d->id, 'smoke_gapd');
+    [$code, $b] = call($kernel, '/api/competency/gap', 'GET',
+        ['token' => $tk, 'sub_institute_id' => 3, 'user_id' => $d->id, 'type' => 'API']);
+    DB::table('personal_access_tokens')->where('name', 'smoke_gapd')->delete();
+    if ($code !== 200) return ['FAIL', "HTTP $code"];
+
+    $rows = $b['data']['competencies'] ?? [];
+    if (count($rows) !== 2) return ['FAIL', count($rows) . ' requirements (expected 2)'];
+
+    $wrong = [];
+    foreach ($rows as $r) {
+        if (($r['state'] ?? '') !== 'unmeasured') $wrong[] = 'state=' . ($r['state'] ?? '?');
+        // MY FIRST VERSION USED ?? 'missing' AND FAILED ON CORRECT DATA: the
+        // null-coalescing operator returns the fallback WHEN THE VALUE IS NULL,
+        // so it can never observe the null it is testing for. The detail line
+        // printed "level=NULL" beside a FAIL verdict - R23: the detail was right
+        // and the verdict was wrong.
+        // array_key_exists distinguishes "absent" from "present and null".
+        if (!array_key_exists('measured_level', $r) || $r['measured_level'] !== null) {
+            $wrong[] = 'level=' . var_export($r['measured_level'] ?? 'ABSENT', true);
+        }
+        if (!array_key_exists('gap', $r) || $r['gap'] !== null) {
+            $wrong[] = 'gap=' . var_export($r['gap'] ?? 'ABSENT', true);
+        }
+    }
+    return [$wrong ? 'FAIL' : 'PASS',
+        $wrong ? 'NOT NULL: ' . implode(' ', array_unique($wrong)) : '2 rows, state=unmeasured, level NULL, gap NULL'];
+});
+
+check('walkthrough', 'every level travels with its coverage', function () use ($kernel) {
+    $users = seededUsers();
+    $bad = []; $levels = 0;
+    foreach (['vikram.sethi@healthcare.g2g', 'meera.pillai@healthcare.g2g', 'joseph.mathew@healthcare.g2g'] as $e) {
+        $u = $users[$e] ?? null;
+        if (!$u) continue;
+        $tk = tok($u->id, 'smoke_cov');
+        [$code, $b] = call($kernel, '/api/competency/gap', 'GET',
+            ['token' => $tk, 'sub_institute_id' => 3, 'user_id' => $u->id, 'type' => 'API']);
+        DB::table('personal_access_tokens')->where('name', 'smoke_cov')->delete();
+        if ($code !== 200) continue;
+        foreach ($b['data']['competencies'] ?? [] as $r) {
+            if (($r['measured_level'] ?? null) === null) continue;
+            $levels++;
+            if (!array_key_exists('coverage', $r) || $r['coverage'] === null) {
+                $bad[] = ($r['competency_code'] ?? '?');
+            }
+        }
+    }
+    if ($levels === 0) return ['SKIPPED', 'no measured levels to check'];
+    return [$bad ? 'FAIL' : 'PASS',
+        $bad ? 'LEVEL WITHOUT COVERAGE: ' . implode(',', $bad) : "$levels levels, every one with coverage"];
+});
+
+check('walkthrough', 'vikram reading divya gap: 403', function () use ($kernel) {
+    $users = seededUsers();
+    $v = $users['vikram.sethi@healthcare.g2g'] ?? null;
+    $d = $users['divya.nair@healthcare.g2g'] ?? null;
+    if (!$v || !$d) return ['SKIPPED', 'fixtures absent'];
+    $tk = tok($v->id, 'smoke_403');
+    [$code] = call($kernel, '/api/competency/gap', 'GET',
+        ['token' => $tk, 'sub_institute_id' => 3, 'user_id' => $d->id, 'type' => 'API']);
+    DB::table('personal_access_tokens')->where('name', 'smoke_403')->delete();
+    return [$code === 403 ? 'PASS' : 'FAIL', "HTTP $code (expected 403)"];
+});
+
+check('walkthrough', 'role map: save 3, re-read 3, remove 1, re-read 2', function () use ($kernel) {
+    // SYNC SEMANTICS. The endpoint replaces the set; a removal must actually
+    // remove, not be ignored because the payload was treated as additive.
+    $admin = DB::table('tbluser as u')->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
+        ->where('u.sub_institute_id', 3)->where('p.role_key', 'administrator')
+        ->where('u.email', 'like', '%@healthcare.g2g')->value('u.id');
+    $role = DB::table('s_user_jobrole')->where('sub_institute_id', 3)
+        ->where('jobrole', 'Ward Administration Officer')->value('id');
+    $comps = DB::table('competency')->where('sub_institute_id', 3)
+        ->where('code', 'like', 'HC-%')->orderBy('id')->limit(3)->pluck('id')->all();
+    if (!$admin || !$role || count($comps) < 3) return ['SKIPPED', 'fixtures absent'];
+
+    $before = DB::table('jobrole_competency_map')->where('jobrole_id', $role)->get()->toArray();
+    $tk = tok($admin, 'smoke_map');
+    $mk = fn ($ids) => array_map(fn ($c) => ['competency_id' => $c, 'required_proficiency' => 3, 'is_mandatory' => 1], $ids);
+
+    [$c1] = call($kernel, '/api/competency/role-map', 'POST',
+        ['token' => $tk, 'sub_institute_id' => 3, 'type' => 'API', 'jobrole_id' => $role, 'items' => $mk($comps)]);
+    $n1 = DB::table('jobrole_competency_map')->where('jobrole_id', $role)->count();
+
+    [$c2] = call($kernel, '/api/competency/role-map', 'POST',
+        ['token' => $tk, 'sub_institute_id' => 3, 'type' => 'API', 'jobrole_id' => $role,
+         'items' => $mk(array_slice($comps, 0, 2))]);
+    $n2 = DB::table('jobrole_competency_map')->where('jobrole_id', $role)->count();
+
+    // RESTORE the seeded requirements exactly.
+    DB::table('jobrole_competency_map')->where('jobrole_id', $role)->delete();
+    foreach ($before as $row) DB::table('jobrole_competency_map')->insert((array) $row);
+    DB::table('personal_access_tokens')->where('name', 'smoke_map')->delete();
+
+    // 201, not 200 - the endpoint CREATES. My first version demanded 200 and
+    // failed a correct product: the assertion was wrong, not the behaviour.
+    $ok = in_array($c1, [200, 201], true) && $n1 === 3
+       && in_array($c2, [200, 201], true) && $n2 === 2;
+    return [$ok ? 'PASS' : 'FAIL',
+        "save3->$n1, remove1->$n2 (HTTP $c1/$c2); restored " . count($before) . ' seeded rows'];
+});
+
+/* ══════════════════════════ WALKTHROUGH — TIER 2 (COMPONENT SOURCE) ══════════════════════════ */
+echo "\nWALKTHROUGH (COMPONENT)\n";
+
+/**
+ * WHAT THE SCREENS RENDER, ASSERTED FROM SOURCE.
+ *
+ * These cannot prove a screen LOOKS right - only Tier 3 could. They prove the
+ * source has no PATH to the wrong render, which is the strongest claim available
+ * without a browser, and it is a real claim: every frontend defect this phase
+ * (the dead bell, the mis-wired G-MAP-01 button, the vocabulary rename) was
+ * visible in source.
+ *
+ * EVERY PATTERN VALIDATES AGAINST A KNOWN POSITIVE FIRST (R16). A regex that
+ * cannot see the shape it hunts returns a clean result that means nothing - the
+ * failure mode this suite exists to prevent.
+ */
+const G2GV0 = 'C:/Users/MILAN/Downloads/g2gv0';
+
+function fe(string $rel): ?string
+{
+    $p = G2GV0 . '/' . $rel;
+    return is_file($p) ? file_get_contents($p) : null;
+}
+
+/** Comments are prose, not behaviour. Strip before matching. */
+function stripComments(string $s): string
+{
+    $s = preg_replace('#/\*.*?\*/#s', '', $s);
+    return preg_replace('#^\s*//.*$#m', '', $s);
+}
+
+check('component', 'gap view: unmeasured renders words, never a number or bar', function () {
+    $src = fe('components/domain/competency/cm-my-capability.tsx');
+    if ($src === null) return ['SKIPPED', 'cm-my-capability.tsx not found'];
+    $code = stripComments($src);
+
+    // KNOWN POSITIVE: the matcher must find the branch it is about to judge.
+    if (!preg_match("/state\s*===\s*'unmeasured'/", $code)) {
+        return ['SKIPPED', 'no unmeasured branch found - pattern would judge nothing'];
+    }
+
+    $problems = [];
+    if (!str_contains($code, 'Not yet assessed')) $problems[] = 'string absent';
+
+    // The unmeasured branch must not reach CoverageBar or a numeric level.
+    if (preg_match("/state\s*===\s*'unmeasured'\s*\)\s*\{(.*?)\n  \}/s", $code, $m)) {
+        $branch = $m[1];
+        if (str_contains($branch, 'CoverageBar')) $problems[] = 'bar inside unmeasured branch';
+        if (preg_match('/measured_level|\{0\}|toFixed/', $branch)) $problems[] = 'number inside unmeasured branch';
+        if (!str_contains($branch, 'Not yet assessed')) $problems[] = 'branch does not render the string';
+    }
+    // And the table cell must choose the dash, not the bar, when unmeasured.
+    if (!preg_match("/state\s*===\s*'unmeasured'\s*\n?\s*\?/", $code)) {
+        $problems[] = 'table cell has no unmeasured ternary';
+    }
+    return [$problems ? 'FAIL' : 'PASS',
+        $problems ? implode(' | ', $problems) : 'unmeasured -> "Not yet assessed", no bar, no number'];
+});
+
+check('component', 'gap view: a level cannot render without its coverage', function () {
+    $src = fe('components/domain/competency/cm-my-capability.tsx');
+    if ($src === null) return ['SKIPPED', 'file not found'];
+    $code = stripComments($src);
+    if (!str_contains($code, 'CoverageBar')) return ['SKIPPED', 'no CoverageBar - nothing to bind'];
+
+    // CoverageBar must be fed row.coverage, and it must sit in the SAME ternary
+    // whose other arm is the unmeasured dash - so there is no arm that shows a
+    // level with no coverage beside it.
+    $bound = (bool) preg_match('/<CoverageBar\s+coverage=\{row\.coverage\}/', $code);
+    $sameBranch = (bool) preg_match("/state\s*===\s*'unmeasured'\s*\n?\s*\?[^:]*:\s*<CoverageBar/s", $code);
+    return [$bound && $sameBranch ? 'PASS' : 'FAIL',
+        $bound && $sameBranch
+            ? 'CoverageBar is the else-arm of the unmeasured ternary, fed row.coverage'
+            : ($bound ? 'bound but not in the same branch as the level' : 'CoverageBar not bound to row.coverage')];
+});
+
+check('component', 'composer: a picker ONLY for skill, free text for the other four', function () {
+    $defs = fe('services/competency/definitions.ts');
+    $comp = fe('components/domain/competency/cm-competency-composer.tsx');
+    if ($defs === null || $comp === null) return ['SKIPPED', 'composer or definitions not found'];
+
+    $d = stripComments($defs);
+    // KNOWN POSITIVE: find the resolvable list at all.
+    // The declaration reads: RESOLVABLE_KASBA_TYPES: readonly KasbaType[] = ['skill']
+    // My first pattern stopped at the opening bracket of KasbaType[] and captured
+    // NOTHING, then reported "resolvable = []" as though that were the finding.
+    // A pattern that mis-parses reports its own failure as the product's. Anchor
+    // on the assignment, not on the first bracket.
+    if (!preg_match('/RESOLVABLE_KASBA_TYPES[^=]*=\s*\[([^\]]*)\]/s', $d, $m)) {
+        return ['SKIPPED', 'RESOLVABLE_KASBA_TYPES not found'];
+    }
+    preg_match_all("/'([a-z]+)'/", $m[1], $kinds);
+    $resolvable = $kinds[1];
+
+    $problems = [];
+    if ($resolvable !== ['skill']) {
+        $problems[] = 'resolvable = [' . implode(',', $resolvable) . '], expected [skill]';
+    }
+    $c = stripComments($comp);
+    // The picker must be gated on isResolvable, not rendered unconditionally.
+    if (!preg_match('/isResolvable\(/', $c)) $problems[] = 'composer never calls isResolvable';
+    if (!preg_match('/resolvable\s*(&&|\?)/', $c)) $problems[] = 'picker not gated on resolvable';
+    // A free-text input must exist for the non-resolvable arm.
+    if (!preg_match('/<Input\b|<input\b/', $c)) $problems[] = 'no free-text input for held labels';
+
+    return [$problems ? 'FAIL' : 'PASS',
+        $problems ? implode(' | ', $problems) : 'skill only is resolvable; picker gated; free text present'];
+});
+
+check('component', 'Skill Library: no user-visible "Competency" string', function () {
+    $src = fe('components/domain/competency/cm-competency-library.tsx');
+    if ($src === null) return ['SKIPPED', 'cm-competency-library.tsx not found'];
+    $code = stripComments($src);
+
+    // USER-VISIBLE ONLY. Type names (CompetencyLibraryItem), imports, and the CSV
+    // import header aliases ('competency name' => 'name') are NOT user-visible and
+    // were deliberately left - renaming an import alias would break real
+    // spreadsheets. Same reasoning as SAVED_VIEWS_KEY.
+    $visible = [];
+
+    // 1. JSX text nodes.
+    if (preg_match_all('/>\s*([^<>{}\n]*Competenc[^<>{}\n]*)</i', $code, $m)) {
+        foreach ($m[1] as $s) if (trim($s) !== '') $visible[] = trim($s);
+    }
+    // 2. Display-ish attributes.
+    if (preg_match_all('/(?:label|placeholder|title|aria-label)\s*=\s*["\']([^"\']*Competenc[^"\']*)["\']/i', $code, $m2)) {
+        foreach ($m2[1] as $s) $visible[] = trim($s);
+    }
+
+    // KNOWN POSITIVE (R16): prove the matcher can see such a string at all.
+    $probe = '<span>Competency Library</span>';
+    if (!preg_match('/>\s*([^<>{}\n]*Competenc[^<>{}\n]*)</i', $probe)) {
+        return ['SKIPPED', 'matcher failed its own known-positive - a clean result would be meaningless'];
+    }
+
+    return [$visible ? 'FAIL' : 'PASS',
+        $visible ? count($visible) . ' visible: ' . implode(' | ', array_slice(array_unique($visible), 0, 3))
+                 : 'no user-visible "Competency" (type names and CSV aliases excluded by design)'];
+});
+
+check('component', 'notification bell: fetched data, no hardcoded badge or empty state', function () {
+    $src = fe('components/shell/notifications-menu.tsx');
+    if ($src === null) return ['SKIPPED', 'notifications-menu.tsx not found'];
+    $code = stripComments($src);
+
+    $problems = [];
+    // It must actually ask the server.
+    if (!str_contains($code, 'notificationService')) $problems[] = 'no service call - the bell asks nobody';
+    if (!preg_match('/unreadCount\(|\.list\(/', $code)) $problems[] = 'no unreadCount/list call';
+    // The badge must be conditional on state, never constant.
+    if (!preg_match('/unread\s*>\s*0\s*&&/', $code)) $problems[] = 'badge not gated on unread count';
+    if (preg_match('/>\s*New\s*</', $code)) $problems[] = 'HARDCODED "New" badge still present';
+    // A failure must be distinguishable from an empty inbox.
+    if (!preg_match("/'error'/", $code)) $problems[] = 'no distinct error state';
+    if (!preg_match("/state\s*===\s*'error'/", $code)) $problems[] = 'error state never rendered';
+    // "All caught up" must be gated on a successful, empty response.
+    if (!preg_match("/state\s*===\s*'idle'\s*&&\s*items\.length\s*===\s*0/", $code)) {
+        $problems[] = '"caught up" not gated on idle AND empty';
+    }
+    return [$problems ? 'FAIL' : 'PASS',
+        $problems ? implode(' | ', $problems)
+                  : 'fetches, badge gated on unread, error state distinct from empty inbox'];
+});
+
 /* ══════════════════════════ STATIC ══════════════════════════ */
 echo "\nSTATIC\n";
 
