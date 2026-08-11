@@ -798,6 +798,59 @@ matched and did not.
 
 **CONSEQUENCE - A SIXTH REQUIREMENT, AND IT IS LARGER THAN THE OTHER FIVE:**
 
+## X-08(b) — THE PARTIAL-FAILURE DECISION, AND THE RULE THE FIRST RUN EARNED
+
+**ONE TRANSACTION. NOT RESUMABLE.** Decided before the code, because it changes
+the shape.
+
+> ### A HALF-IMPORTED FRAMEWORK IS NOT A SMALLER FRAMEWORK.
+>
+> It is a competency model **with holes the customer cannot see**, and every gap
+> view computed against it would be quietly wrong. **Worse than an outright
+> failure** - the same family as every silent-wrongness this project has closed.
+
+**THE DRY RUN ALREADY BUYS WHAT RESUMABILITY WOULD.** The customer sees the whole
+outcome before committing, so a mid-write failure is a **system fault**, not a
+content surprise - and *"nothing happened, here is why"* is the correct response
+to a system fault. Resumability would need a durable record of what landed,
+written **inside** the operation that might fail: a second thing to get wrong, for
+a case a transaction removes.
+
+**WHAT WOULD MAKE THIS WRONG, named so resumability arrives as a decision:** a
+framework exceeding what one transaction can hold, or an import that must span a
+session. Neither is true at the validated 5,000-row ceiling.
+
+### THE RULE THE FIRST RUN EARNED
+
+The dry run predicted **4 items**; the write created **3**. **The write was
+right** - one item already existed on an existing competency, and the dry run
+checked for existing COMPETENCIES but not existing ITEMS.
+
+**Two paths that could disagree, on the first run of the write half.** Uncaught,
+it would have shipped a preview overstating by 25% on any file touching an
+existing competency - **and a customer's trust in the preview is the entire basis
+for the one-transaction decision.**
+
+> ### THE WRITE REUSES THE FLAG RATHER THAN RE-DERIVING IT.
+> ### A SECOND DERIVATION IS A SECOND CHANCE TO DISAGREE.
+>
+> **Applies anywhere a preview and an action share a decision.** The check moved
+> into the shared path; the write now reads the flag the preview reported.
+
+---
+
+## R18f(v)'s STRONGER FORM — **CHECK `git status` BEFORE EDITING ANYTHING OUTSIDE PATHS YOU CREATED**
+
+R18f(v) says check before a revert. **That is too narrow.** 51 files in this repo
+are Milan's uncommitted work and are not to be touched; I ran an edit against a
+file in `libraries/` **without checking whether it was one of them.** The
+arithmetic afterwards showed it was clean - **but I did not know that when I ran
+it, and "it turned out fine" is not the standard.**
+
+**The working-tree assertion tells you AFTERWARDS. It cannot stop the edit.**
+
+---
+
 ## ⚠ ONE-LINER: A MODULE-LEVEL NAMING FAILURE, NOT TWO INCIDENTS
 
 `competencyLibraryImport` writes `s_users_skills`. **`CompetencyController::store()`

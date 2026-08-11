@@ -406,6 +406,12 @@ check('org', 'working tree matches its baseline (51 foreign files)', function ()
     // single-writer assertion. That is the false-negative class being closed
     // everywhere else, in the one place nothing was watching.
     //
+    // DO NOT REMOVE THIS FOR BEING ANNOYING. It has caught something TWICE in
+    // three turns: three T-01 conversions uncommitted for two turns, and X-08(b)
+    // run before its commit. The friction IS the feature - it forces the commit
+    // before the green, and a green suite against an uncommitted tree is the
+    // false-negative class closed everywhere else in this project.
+    //
     // 51 is Milan's uncommitted work, untouched by instruction. ANY deviation is
     // either foreign work appearing or MY OWN work uncommitted, and both are
     // worth failing on.
