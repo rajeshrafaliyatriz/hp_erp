@@ -346,8 +346,31 @@ class ExcelAutomationAgentController extends Controller
             ], 401);
         }
 
+        // O-03. THE TENANT GUARD GETS ITS OWN TRY, AHEAD OF THE WORK.
+        //
+        // It used to be the first statement inside the main try, whose single
+        // catch rewrote every failure as a 500 with one generic message. A tenant
+        // REFUSAL and a Google OUTAGE came back byte-identical, so:
+        //   - the caller was told "server error" when it was actually "forbidden";
+        //   - and the route could not be MEASURED. Probing it cross-tenant
+        //     returned the same 500 the own-tenant call returned, which is no
+        //     evidence in either direction.
+        //
+        // The refusal was real - proven by reachability, not by the message: with
+        // no google_sheet_id an own-tenant call reaches the 422 below, a
+        // cross-tenant call never does. This does not add a guard. It stops a
+        // catch from disguising the one that was already there, and matches
+        // credentialStatus and downloadTemplate, which already answer 403.
         try {
             $subInstituteId = $this->resolveSubInstituteId($request, $tokenUser);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 403);
+        }
+
+        try {
             $sheetId = $this->extractSheetId($request->input('google_sheet_id') ?: $request->input('google_sheet_url'));
 
             if (!$sheetId) {
@@ -597,8 +620,31 @@ class ExcelAutomationAgentController extends Controller
             ], 401);
         }
 
+        // O-03. THE TENANT GUARD GETS ITS OWN TRY, AHEAD OF THE WORK.
+        //
+        // It used to be the first statement inside the main try, whose single
+        // catch rewrote every failure as a 500 with one generic message. A tenant
+        // REFUSAL and a Google OUTAGE came back byte-identical, so:
+        //   - the caller was told "server error" when it was actually "forbidden";
+        //   - and the route could not be MEASURED. Probing it cross-tenant
+        //     returned the same 500 the own-tenant call returned, which is no
+        //     evidence in either direction.
+        //
+        // The refusal was real - proven by reachability, not by the message: with
+        // no google_sheet_id an own-tenant call reaches the 422 below, a
+        // cross-tenant call never does. This does not add a guard. It stops a
+        // catch from disguising the one that was already there, and matches
+        // credentialStatus and downloadTemplate, which already answer 403.
         try {
             $subInstituteId = $this->resolveSubInstituteId($request, $tokenUser);
+        } catch (Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 403);
+        }
+
+        try {
             $credential = $this->activeGoogleCredential($subInstituteId);
             $serviceAccount = $this->serviceAccountFromCredential($credential->service_account_key);
             $accessToken = $this->googleAccessToken($serviceAccount, 'https://www.googleapis.com/auth/spreadsheets');
