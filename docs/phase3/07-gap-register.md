@@ -220,6 +220,50 @@ measured it.
 
 ---
 
+## ⭐ REQUIREMENTS FOR Q-C1's SEED-LIBRARY IMPORT — **derived from this measurement, not a note beside it**
+
+> **This is what a real customer's first import will look like.** The tenant-3
+> slice is the only evidence anyone has about that, so it sets the requirements.
+
+### R1. THE LIBRARY MUST CARRY ALL FIVE KASBA DIMENSIONS, NOT JUST SKILLS
+
+**The measured cause:** `s_users_skills` and `master_skills` hold **skills**. Four
+of the five KASBA dimensions are not skills, so **they could never match** —
+*"Hand hygiene compliance"* (behaviour), *"Double-check discipline"* (behaviour),
+*"Empathy in distressing situations"* (attitude), *"Prioritise under time
+pressure"* (ability) have no canonical row and never will while the library is
+skills-only.
+
+**Requirement:** the import supplies knowledge, attitude, behaviour and ability
+items as first-class library entries. **Without this, 4 of 5 dimensions are
+permanently HOLDING for every customer.**
+
+### R2. MOSTLY-HOLDING IS THE NORMAL FIRST STATE, NOT AN ERROR
+
+**26 of 27 items landed as labels.** The product must be **good** at that state:
+screens readable, gaps computable, `item_label` never rendered as a failure.
+**An import that reports "26 unmatched" as errors will read as a broken import.**
+
+### R3. THE IMPORT PROMOTES HOLDING → TARGET IN PLACE, WITHOUT REWRITING BUNDLES
+
+A tenant defines bundles first and acquires canonical items later. Promotion sets
+`item_id` and clears `item_label` **on the existing row** — it must not require
+rebuilding the competency, or every enrichment becomes a migration.
+
+### R4. IT MUST BE ABLE TO PRODUCE A ONE-ITEM BUNDLE, AND SAY SO
+
+X-20 created **199 one-item bundles** from migrated skills. **A one-item bundle is
+valid, and it is also visibly incomplete.** The import is what enriches them, so it
+must be able to distinguish "deliberately one item" from "not enriched yet".
+
+### R5. VOCABULARY DISTANCE IS A NUMBER THE PRODUCT SHOULD REPORT
+
+**1 of 27** is the coverage figure for a clinical tenant against the shipped
+library. **A customer should see that number before importing**, not discover it
+afterwards — it is the honest answer to "how much of this is ready?".
+
+---
+
 # G-ORG-02b - **`head_user_id` AND `reporting_manager_id` HOLD REAL DATA FOR THE FIRST TIME** - progress note
 
 | | before | after |

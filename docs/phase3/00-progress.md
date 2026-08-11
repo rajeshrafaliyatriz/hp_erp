@@ -504,6 +504,33 @@ hand that typed the input is a check that can agree with its own mistake. This i
 R23's sibling — R23 says a detail must be observed; this says an expectation must be
 derived.
 
+**R24 — A JOIN THAT SUCCEEDS IS NOT A REFERENT. A MATCH IS NOT A RELATIONSHIP.**
+
+**Coverage is not reference.** That an id exists in a table, or a name matches a
+row, says only that the two value sets overlap. Establishing a relationship needs a
+SECOND, INDEPENDENT property — tenant agreement, semantic agreement, or a
+structural one the coincidence cannot fake.
+
+**THIRD INSTANCE THIS PHASE. All three looked like relationships and were not:**
+
+| # | The apparent relationship | What it actually was | What settled it |
+|---|---|---|---|
+| 1 | **L-11 / G-DASH-01** — text joins resolving | **161,695 of 253,479 joined rows were CROSS-TENANT.** Names match across organisations | counting by text vs by key |
+| 2 | **X-18's fan-out** — one course "serving two roles" | **two job-role rows sharing a NAME.** One text column holds one name, so it could never have been two roles | distinct-name count within the fan-out |
+| 3 | **G-DATA-11** — `competency_id` resolving in two tables | **id ranges overlap** (1..5448 vs 1..5640) and **46% of shared ids have different titles.** The join proved nothing | **tenant agreement: 805 of 805 across four independent tables** |
+
+**The tell is always the same:** the check that "succeeded" could not have failed
+for the wrong reason. An id-join against a table with a dense id range succeeds
+almost regardless of meaning.
+
+**Practice:** before treating a join as evidence of a relationship, name the
+property that would be FALSE if the match were coincidental — and measure that.
+If no such property exists, the join is a hypothesis.
+
+**Companion to R6:** R6 says only a measurement produces a finding. R24 says **not
+every measurement measures what you think.** A 100% join rate is a measurement, and
+in case 3 it was a measurement of id-range overlap.
+
 **R23 — A DETAIL STRING THAT CANNOT BE WRONG IS NOT EVIDENCE.**
 
 Every check reports a verdict and a detail. **The detail must be derived from what
@@ -732,8 +759,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **53** ·
-`09-implementation-log.md` entries = **53** · **AGREE.** · plan file **21 of 59 done** (R18c(iii))
+**RECONCILIATION (R18, every write):** queue "done" rows = **54** ·
+`09-implementation-log.md` entries = **54** · **AGREE.** · plan file **23 of 59 done** (X-16 closes F-05a and F-05b) (R18c(iii))
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 

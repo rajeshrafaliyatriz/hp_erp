@@ -1475,3 +1475,20 @@ Route::patch('/notifications/{id}/read', [App\Http\Controllers\Api\Notifications
 
 Route::get('/terminology', [App\Http\Controllers\Api\Notifications\TerminologyController::class, 'index']);
 Route::put('/terminology', [App\Http\Controllers\Api\Notifications\TerminologyController::class, 'update'])->middleware('profile:admin,hr');
+
+/*
+|--------------------------------------------------------------------------
+| X-16 — reporting-line assignment
+|--------------------------------------------------------------------------
+| THE WRITE PATH ReportingLineValidator NEVER HAD. F-05a asked for the
+| validator to be called from every write path that sets reporting_manager_id;
+| there were none, which is why it sat NOT STARTED from Gate B (G-ORG-01/02).
+|
+| Coverage is readable by anyone authenticated - it is a health figure, not a
+| secret. Writes need admin/hr: a reporting line decides whose data a manager
+| can see, so assigning one is a permission change in effect.
+*/
+Route::get('/reporting-line/coverage', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'coverage']);
+Route::post('/reporting-line/assign', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'assign'])->middleware('profile:admin,hr');
+Route::post('/reporting-line/bulk', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'bulkAssign'])->middleware('profile:admin,hr');
+Route::post('/reporting-line/department-head', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'setDepartmentHead'])->middleware('profile:admin,hr');

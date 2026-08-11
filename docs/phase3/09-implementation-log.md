@@ -2046,3 +2046,76 @@ write.
   import and predicts what a real customer's first import looks like.
 - **G-ORG-02b** - `head_user_id` 0 → 3 and reporting coverage 0 → 8. First data
   those columns have ever held, and the cycle validator **refused** a real cycle.
+
+## D-054 - the referent sweep, and X-16
+
+### THE SWEEP - run while it was cheap
+
+Method deliberately NOT an id-join, because G-DATA-11 had just proved one proves
+nothing. A candidate survives only with **full coverage AND 100% tenant agreement**.
+
+> ### ⚠ IT FOUND THE NEXT `competency_id` BEFORE IT HAPPENED
+>
+> **`competency_kasba_item.item_id` - 200 distinct values, and BOTH
+> `s_users_skills` and `master_skills` survive both tests.**
+>
+> It is the **TARGET half of the TARGET/HOLDING pair**, so the KASBA target model
+> itself had no declared referent. Declared as `s_users_skills` - what X-20 and the
+> tenant-3 seed both wrote.
+
+**23 id columns now carry a declared referent; none are left undeclared.**
+
+Two were unambiguous in the data and declared anyway, **because the data is not
+what the next person reads - the NAME is, and both names actively mislead:**
+
+- **`course_id` -> `sub_std_map`.** There is no `courses` or `lms_courses` table.
+  I guessed both while building X-11 and got *"table missing"* twice.
+- **`user_id` -> `tbluser`, NOT `users`** - which exists, holds ~14 rows, and cost
+  this phase a token probe that measured 14 instead of 4,511.
+
+**The 12 EMPTY columns were declared too, and that is the point.** An empty column
+has no wrong answer yet - exactly the state `competency_id` was in before anyone
+noticed. **The cheapest possible moment to declare it.**
+
+### X-16 - THE REPORTING-LINE ASSIGNMENT
+
+**`ReportingLineValidator` has had ZERO callers since Foundation 5, and
+`reporting_manager_id` was 0 of 387.** Those are the same fact from two sides:
+**there was no write path for the validator to be called from.** F-05a could never
+precede F-05b, and the plan had them in that order.
+
+| Endpoint | Guard |
+|---|---|
+| `GET /api/reporting-line/coverage` | authenticated - a health figure, not a secret |
+| `POST /api/reporting-line/assign` | `profile:admin,hr` |
+| `POST /api/reporting-line/bulk` | `profile:admin,hr`, up to 1,000 rows |
+| `POST /api/reporting-line/department-head` | `profile:admin,hr` |
+
+**Writes need admin/hr because a reporting line decides whose data a manager can
+see - assigning one is a permission change in effect.**
+
+**Decisions worth stating:**
+
+- **ONE write site, and it is guarded.** Asserted by the smoke suite, which also
+  checks that **nothing else in `app/` writes the column**.
+- **The tenant check runs BEFORE `canAssign()`.** The validator answers *"would
+  this make a cycle?"*, not *"are these your people?"* - a stranger's id passes the
+  cycle check, so a tenant test afterwards would already have written a
+  cross-tenant reporting line.
+- **One bad row must not abort a bulk file.** Real HR data always has a few wrong
+  rows; every row is attempted and each gets its own verdict and reason.
+- **Dangling manager ids are counted separately in coverage.** An id that does not
+  resolve in-tenant is worse than a blank one **because it looks populated**.
+- **A department head is NOT a reporting line**, so `canAssign()` does not apply
+  and is not pretended to.
+
+**Proof: 8/8 GREEN**, operating only on the registered seed users and restoring
+their lines afterwards - tenant-3 coverage back to 8, unchanged. Smoke **31 -> 32**.
+
+### G-SEED-01 CARRIED INTO Q-C1 AS REQUIREMENTS
+
+Five requirements, derived from the 1-of-27 measurement rather than noted beside
+it: the library must carry all five KASBA dimensions; mostly-HOLDING is the normal
+first state and not an error; promotion HOLDING -> TARGET happens in place; a
+one-item bundle must be expressible and distinguishable from "not enriched yet";
+and **vocabulary distance is a number the customer should see before importing.**

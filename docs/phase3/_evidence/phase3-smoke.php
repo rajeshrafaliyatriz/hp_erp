@@ -302,6 +302,30 @@ check('notify', 'X-12 can still read the role -> course link', function () {
             $c['jobrole_map'], $c['jobrole_text_resolves'], $c['courses_with_jobrole_text'])];
 });
 
+check('org', 'reporting_manager_id has exactly ONE guarded write path', function () {
+    // G-ORG-01 for real. The validator existed with zero callers for the whole
+    // phase; this asserts it now has exactly one door and that the door is shut.
+    $ctrl = base_path('app/Http/Controllers/Api/Org/ReportingLineController.php');
+    if (!file_exists($ctrl)) return ['FAIL', 'X-16 controller missing'];
+    $src = file_get_contents($ctrl);
+    $writes = preg_match_all("/reporting_manager_id'\s*=>/", $src);
+    $calls  = preg_match_all('/canAssign\(/', $src);
+
+    // And nothing ELSE in app/ may write the column.
+    $others = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app')));
+    foreach ($it as $f) {
+        if ($f->getExtension() !== 'php') continue;
+        if (str_contains($f->getPathname(), 'ReportingLineController')) continue;
+        $s = file_get_contents($f->getPathname());
+        if (preg_match("/reporting_manager_id'\s*=>/", $s)) $others[] = basename($f->getPathname());
+    }
+    $ok = $writes === 1 && $calls >= 1 && $others === [];
+    return [$ok ? 'PASS' : 'FAIL', $ok
+        ? "one write site, $calls canAssign() calls, no other writer in app/"
+        : ($others ? 'OTHER WRITERS: ' . implode(', ', $others) : "writes=$writes calls=$calls")];
+});
+
 /* ══════════════════════════ DATA ══════════════════════════ */
 echo "\nDATA\n";
 
