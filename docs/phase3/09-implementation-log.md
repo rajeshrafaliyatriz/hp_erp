@@ -1967,3 +1967,82 @@ from competency vocabulary.
 
 **Reporting-line coverage: 0 of 387 -> 8 of 401 platform-wide, 8 of 122 in tenant 3.**
 First data ever in that column.
+
+## D-053 - X-20: the competency space migration, and the premise check that changed it
+
+**The decision was option A. The premise check changed what option A MEANT**, which
+is the whole value of taking it.
+
+### THE PREMISE HELD - checked before a row was written
+
+`competency_id` points at a **SKILL**, not a bundle:
+
+| Discriminator | Finding |
+|---|---|
+| **MEANING** | `competency_id=1` → *"Auditing and Assurance Standards"*, `=4` → *"Engagement Execution"*. The referring plan actions are development **actions for that skill** |
+| **STRUCTURE** | **neither `s_users_skills` nor `master_skills` has a single KASBA dimension column.** They cannot be bundles |
+| **WHICH skills table** | **805 of 805** references have the skill row's tenant equal to the referring row's tenant in `s_users_skills` - four independent tables, 100% |
+
+**An id resolving in both candidate tables proved nothing** - the ranges overlap
+(1..5448 and 1..5640) and 46% of shared ids have different titles. The tenant-
+agreement test is what settled it. **That is the id-join trap from L-11 in a new
+place: a join that succeeds is not a referent.**
+
+### SO A WHOLESALE MIGRATION WAS THE WRONG SHAPE
+
+Calling those 199 skills "competencies" would make competency mean skill again, one
+table further on - **undoing Q-A2 while appearing to implement it.**
+
+**Built instead: one competency per distinct referenced skill, each holding that
+skill as its single KASBA item of type `skill`.**
+
+| | |
+|---|---:|
+| distinct skills referenced | **199** (all tenant 1) |
+| competencies created | **199** |
+| KASBA items created | **199** (`kasba_type='skill'`, TARGET) |
+| references re-pointed | **805 of 805** |
+| HELD | **0** |
+| cross-tenant references created | **0** |
+| references resolving in `competency` | **0% → 100%** |
+| `s_users_skills` / `master_skills` | untouched (5,171 / 5,640) |
+| provenance | **805 rows carry `legacy_skill_id`** |
+
+**"Re-point" never meant "overwrite and lose":** the original value is preserved in
+a new nullable column on each of the four tables, so the migration is reversible
+without a backup.
+
+### X-19 UNBLOCKED AND APPLIED
+
+`course_competency_map` now has one declared referent, so the 48 pairs recovered
+from assignment history could be written coherently. **48 written, 0 held.**
+`course_competency_map`: **8 → 56 rows.**
+
+### THE DECLARATION IS THE DURABLE PART
+
+G-DATA-11 existed because `competency_id` had **no declared referent**, so two
+meanings grew for months and neither was wrong on its face. Fixing the data does
+not stop that recurring. **A declaration does**, and it is now in three places:
+
+1. `02-domain-model.md`, at the top.
+2. **The column comment on all 8 tables carrying `competency_id`** - verified 8 of
+   8. `SHOW FULL COLUMNS` shows it, every GUI shows it, and it travels with a
+   schema dump, unlike a document nobody opens while writing a query.
+3. G-DATA-11 itself.
+
+### THE APPROVED-SET GUARD, KEPT
+
+Like X-18, this script **refuses to run** if the set has moved from the 805/199 that
+was approved. Verified at run time: `references found: 805 (predicted 805)`,
+`distinct: 199 (predicted 199)`. **Writing a different set than was approved is
+writing something nobody agreed to**, and that is now the pattern for every bulk
+write.
+
+### TWO FINDINGS FROM THE SEED, FILED SEPARATELY
+
+- **G-SEED-01** - 26 of 27 KASBA items landed as HOLDING labels. Filed about the
+  **seed library**, not the seed: four of the five KASBA dimensions are not skills,
+  so a **skill** library was never going to match them. It sizes the seed-library
+  import and predicts what a real customer's first import looks like.
+- **G-ORG-02b** - `head_user_id` 0 → 3 and reporting coverage 0 → 8. First data
+  those columns have ever held, and the cycle validator **refused** a real cycle.

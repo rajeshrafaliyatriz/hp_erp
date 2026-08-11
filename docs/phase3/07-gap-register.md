@@ -110,7 +110,24 @@ remote database.
 
 ---
 
-# G-DATA-11 - **THERE ARE TWO COMPETENCY ID SPACES AND THEY DO NOT MEET** - **S1**
+# G-DATA-11 - **TWO COMPETENCY ID SPACES** - **S1** - ✅ **CLOSED 2026-08-11 (X-20)**
+
+> **RESOLVED: option A, and the premise check changed what option A MEANT.**
+>
+> "Migrate 805 rows" would have imported the conflation into the new model. The
+> referenced things are SKILLS - verified by meaning and by structure before a row
+> was written - so the migration is **one competency per distinct referenced skill,
+> each holding that skill as its single KASBA item.**
+>
+> **199 competencies, 199 KASBA items, 805 of 805 references re-pointed, 0 held,
+> 0 cross-tenant, both skills tables untouched, provenance preserved in
+> `legacy_skill_id`.** X-19 then wrote its 48 pairs, 0 held.
+>
+> **The referent is now DECLARED** - in `02-domain-model.md`, and in the column
+> comment of all eight tables carrying `competency_id`. The absence of that
+> declaration is what let two meanings grow side by side.
+
+
 
 > Found while preparing X-19. **It stops X-19 and it is bigger than X-19.**
 
@@ -171,6 +188,52 @@ held.
 **The seed took option 1 for tenant 3 only**, because the chain had to work for the
 walkthrough: its `course_competency_map` rows are space A. **That is 8 rows in one
 tenant and it is not a decision** - it is a demonstration, recorded and removable.
+
+---
+
+---
+
+# G-SEED-01 - **26 OF 27 KASBA ITEMS LANDED AS HOLDING LABELS** - **S3** - a finding about the SEED LIBRARY
+
+The tenant-3 slice defined 10 clinical competencies with 27 KASBA items. **Exactly
+1 matched a canonical `s_users_skills` title. 26 did not**, and stayed as HOLDING
+labels.
+
+**This is the holding state working exactly as designed** - and it is also a
+measurement nobody had:
+
+> **THE CANONICAL SKILL LIBRARY AND REAL COMPETENCY VOCABULARY ARE ALMOST
+> DISJOINT.** Items like *"Hand hygiene compliance"*, *"Double-check discipline"*,
+> *"Structured handover (SBAR)"* and *"Empathy in distressing situations"* have no
+> canonical row, because the library holds **skills** - and four of the five KASBA
+> dimensions are **not skills**. Knowledge, attitude, behaviour and ability were
+> never going to match a skill library.
+
+**Why it matters commercially:** this is what a real customer's first import will
+look like. **A new tenant should expect most of its KASBA items to arrive as
+labels**, and the product must be good at that state rather than treating it as an
+error. It also sizes the seed-library import feature: its job is supplying the four
+non-skill dimensions, which nothing currently does.
+
+**Filed about the LIBRARY, not about the seed.** The seed is the instrument that
+measured it.
+
+---
+
+# G-ORG-02b - **`head_user_id` AND `reporting_manager_id` HOLD REAL DATA FOR THE FIRST TIME** - progress note
+
+| | before | after |
+|---|---:|---:|
+| `hrms_departments.head_user_id` populated | **0** | **3** |
+| `reporting_manager_id` populated (platform) | **0 of 387** | **8 of 401** |
+
+Small, and it is the **first data those columns have ever held**. Every write went
+through `ReportingLineValidator::canAssign()`, and a deliberate cycle
+(Rajesh Iyer → Vikram Sethi) was **REFUSED** - so the validator is now exercised,
+not merely present (**G-ORG-01**).
+
+**X-16 is what makes this general.** One seeded department tree is a demonstration;
+a reporting line for 387 people needs the assignment mechanism.
 
 ---
 

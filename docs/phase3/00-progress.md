@@ -732,8 +732,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **52** ·
-`09-implementation-log.md` entries = **52** · **AGREE.** · plan file **20 of 59 done** (R18c(iii))
+**RECONCILIATION (R18, every write):** queue "done" rows = **53** ·
+`09-implementation-log.md` entries = **53** · **AGREE.** · plan file **21 of 59 done** (R18c(iii))
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 

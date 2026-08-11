@@ -1,5 +1,68 @@
 # 02 — Domain model
 
+---
+
+# ⭐ THE DECLARED REFERENT OF `competency_id` — **read this before writing any query that touches it**
+
+> ### `competency_id` ALWAYS means `competency`.id — a **KASBA BUNDLE**.
+> ### It is NEVER a skill id.
+>
+> A **skill** is **one of five KASBA dimensions inside a bundle** (Q-A2), not a
+> synonym for the bundle. Knowledge, Attitude, Skill, Behaviour, Ability.
+
+**This is written here, in the column comments of all eight tables that carry the
+column, and in `G-DATA-11` — three places, because the absence of a declaration is
+what allowed two meanings to grow side by side for months.**
+
+## What was true before 2026-08-11
+
+**805 references across four tables pointed at `s_users_skills` rows** — flat skill
+records with no KASBA dimension column anywhere in them — while the capability
+chain (`jobrole_competency_map` → `competency` → `competency_kasba_item`) resolved
+against a table holding **0 rows**. Both spaces were internally consistent. Nothing
+crossed. **Neither was wrong on its face, which is exactly why it survived.**
+
+## What X-20 did, and what it deliberately did NOT do
+
+**It did NOT migrate 805 rows wholesale.** That would have imported the conflation
+into the new model and undone Q-A2 — the referenced things are skills, so calling
+them competencies would make "competency" mean "skill" again, one table further on.
+
+**It created ONE COMPETENCY PER DISTINCT REFERENCED SKILL — 199 of them — each
+containing that skill as its SINGLE KASBA item of type `skill`.**
+
+**A one-item bundle is a valid bundle.** Nothing is lost, every reference re-points,
+and the other four dimensions are added later by the **seed-library import**, which
+is that feature's job and not a migration's.
+
+| | |
+|---|---|
+| distinct skills referenced | **199** (all tenant 1) |
+| competencies created | **199** |
+| KASBA items created | **199**, `kasba_type='skill'`, **TARGET** (`item_id` set) |
+| references re-pointed | **805 of 805** |
+| failed to resolve — HELD | **0** |
+| cross-tenant references created | **0** |
+| `s_users_skills` / `master_skills` | **untouched** — 5,171 and 5,640 rows |
+| provenance | **805 rows carry `legacy_skill_id`** — "re-point" never meant "lose" |
+
+## How the premise was checked BEFORE anything was written
+
+An id resolving in both candidate tables proves nothing — the id ranges overlap.
+Two discriminators settled it:
+
+1. **MEANING.** `competency_id=1` → *"Auditing and Assurance Standards"*, `=4` →
+   *"Engagement Execution"*, and the referring plan actions are development
+   **actions for that skill** (*"Complete the required certification course"*).
+2. **STRUCTURE.** Neither `s_users_skills` nor `master_skills` has a single KASBA
+   dimension column. **They cannot be bundles.**
+3. **WHICH skills table.** 805 of 805 references have the skill row's tenant equal
+   to the referring row's tenant in `s_users_skills` — four independent tables,
+   100%. An id-join could not have told these apart; a tenant-agreement test could.
+
+---
+
+
 **Gate B deliverable.** Read-only analysis; no application code changed.
 Date: 2026-08-05
 
