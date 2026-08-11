@@ -591,6 +591,65 @@ unconsulted guard from an absent one except reading the call sites.
 
 ---
 
+## ENFORCING `capability_coverage` TURNS OFF THE THING PHASE 3 EXISTS TO DEMONSTRATE
+
+**A finding, not a test problem.** The first time a gate has told us something
+true about THIS PRODUCT'S OWN STATE rather than a customer's.
+
+    capability_coverage, at the moment enforcement landed:
+      11 of 11 tenants BLOCKED
+      tenant 3 = 4.10%   every other tenant = 0.00%   threshold 50%
+
+Gap reporting returned 409 platform-wide, and four suite checks failed - including
+**Slice 1's capability chain**, which is the thing this phase was built to show
+working end to end.
+
+**THE GATE IS BEHAVING EXACTLY AS DESIGNED.** A gap computed from 4% coverage is a
+confident-looking number about nothing. Nothing here is a bug. The gate measured
+the demo and the demo did not pass.
+
+### WHY THAT IS WORTH SAYING IN THOSE WORDS
+
+Every gate until now was a gauge pointed at a hypothetical customer's data. This
+one was pointed at ours, and **a demo tenant that cannot pass its own readiness
+gate means anyone opening the nine logins sees a product refusing itself** - with
+a correct, well-worded refusal explaining that the product is not ready to be
+used. That is worse than a missing feature, because it is the product telling the
+truth about itself at the worst possible moment.
+
+### TWO FIXES, NOT ALTERNATIVES
+
+| | what it makes honest | what it is |
+|---|---|---|
+| **Walkthrough precondition** | the TESTS | the gate declared as a fixture, like seeded users and roles. **NOT an exemption and NOT a lowered threshold** - both were refused unasked, either would be inventing a customer's standard to get a green |
+| **Seed tenant 3 past 50%** | the DEMO | 63 users measured, 126 rows, `source='seed_x07_coverage'`, removable in one statement |
+
+**The seed cleared the gate BY MEASUREMENT, not by setting it.** Three recomputes,
+`sustained_periods=3` satisfied honestly: `blocked 4.10% -> ready 55.74%`. A
+hand-set gate would have been the claim nobody computed - the thing this phase has
+refused nine times.
+
+Ratings are seeded at 2-3 on the scale, deliberately. **A seed that rated everyone
+5 would clear the gate and lie about the workforce**; "measured" is the claim, not
+"good". And the kasba items are the 21 already in use - inventing items to satisfy
+a gate would be manufacturing the measurement the gate exists to detect.
+
+### THE RED THAT REMAINS, AND WHY IT IS NOT TUNED AWAY
+
+Slice 1's chain check runs against **tenant 1**, which is still at 0.00% and still
+blocked. Its 409 read as a broken capability chain, which it is not. The
+precondition check now reports **every tenant the suite exercises**, so the red
+says what it is:
+
+    t1=blocked(0.00) t3=ready(55.74) - GAP CHECKS FOR TENANT 1 WILL 409.
+    THAT IS THE GATE WORKING, NOT A BROKEN CHAIN.
+
+**Missing that tenant 1 was in scope is what made a working gate look like a
+broken chain for one turn.** The lesson is small and repeatable: a precondition
+must cover every population the tests touch, not the one you were thinking about.
+
+---
+
 ## A PAPER REACTOR WITH A BODY - **the shape that would pass every check while doing nothing**
 
 X-15's size check, and it is worth more than the item it stopped.

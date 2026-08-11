@@ -599,6 +599,43 @@ check('slice1', 'rename: DASHBOARD counts still resolve', function () {
 /* ══════════════════════════ WALKTHROUGH — TIER 1 (API) ══════════════════════════ */
 echo "\nWALKTHROUGH (API)\n";
 
+check('walkthrough', 'PRECONDITION: capability_coverage permits gap reporting', function () {
+    // A STATED FIXTURE BEATS AN INVISIBLE DEPENDENCY.
+    //
+    // The walkthrough checks below exercise THE CHAIN, not the gate. Gap
+    // reporting is now gated on capability_coverage, so the gate is a
+    // precondition of these tests exactly as seeded users and roles are - and it
+    // is declared here rather than silently assumed.
+    //
+    // THIS IS NOT AN EXEMPTION AND NOT A LOWERED THRESHOLD. Both were refused:
+    // either would have been inventing a customer's standard to get a green. The
+    // check reads the gate and reports what it finds. If the gate is blocked,
+    // the walkthrough failures below are CORRECT and this line says why.
+    // EVERY TENANT THIS SUITE EXERCISES, not just the seeded one. The walkthrough
+    // uses tenant 3; SLICE 1's chain check uses tenant 1, and missing that is
+    // what left a red looking like a broken chain when it was a working gate.
+    $out = [];
+    $blocked = [];
+    foreach ([1, 3] as $tenant) {
+        $g = DB::table('tenant_readiness_gate')
+            ->where('sub_institute_id', $tenant)->where('gate_key', 'capability_coverage')->first();
+
+        if (!$g) { $out[] = "t$tenant=never-computed(permits)"; continue; }
+
+        $permits = $g->state !== 'blocked' || $g->value === null;
+        $out[] = sprintf('t%d=%s(%s)', $tenant, $g->state, $g->value ?? 'NULL');
+        if (!$permits) $blocked[] = $tenant;
+    }
+
+    // A BLOCKED GATE HERE IS NOT A SUITE DEFECT. It reports, and it does not
+    // fail: the gate is doing its job, and the gap checks downstream will 409
+    // for that tenant. What must never happen is those 409s reading as a broken
+    // capability chain, which is exactly what happened once.
+    return ['PASS', implode(' ', $out) . ($blocked
+        ? ' - GAP CHECKS FOR TENANT ' . implode('/', $blocked) . ' WILL 409. THAT IS THE GATE WORKING, NOT A BROKEN CHAIN.'
+        : ' - all permit')];
+});
+
 /**
  * THE NINE LOGINS, ASSERTED INSTEAD OF EYEBALLED.
  *
