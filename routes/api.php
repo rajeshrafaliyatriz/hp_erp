@@ -1492,3 +1492,7 @@ Route::get('/reporting-line/coverage', [App\Http\Controllers\Api\Org\ReportingLi
 Route::post('/reporting-line/assign', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'assign'])->middleware('profile:admin,hr');
 Route::post('/reporting-line/bulk', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'bulkAssign'])->middleware('profile:admin,hr');
 Route::post('/reporting-line/department-head', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'setDepartmentHead'])->middleware('profile:admin,hr');
+
+// L-06 — what depends on a library row, counted BY KEY (G-LIB-09). Read-only and
+// authenticated; the controller scopes the subject to the caller's organisation.
+Route::get('/competency/library/dependants', [\App\Http\Controllers\Api\Competency\LibraryDependantsController::class, 'index']);
