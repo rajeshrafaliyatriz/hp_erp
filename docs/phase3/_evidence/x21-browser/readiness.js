@@ -114,7 +114,25 @@ async function waitFor(url, ms) {
     await page.waitForTimeout(2500);
 
     // 1. the page rendered from real data, not an error state
+    // CAPTURE THE ERROR TEXT. Counting error blocks says a failure happened and
+    // not which one - the same undifferentiated-signal mistake this phase keeps
+    // meeting. Print it, and print what the browser actually holds in the
+    // session, so the next run does not have to guess between them.
     const err = await page.locator('[data-testid="readiness-error"]').count();
+    if (err > 0) {
+      const txt = await page.locator('[data-testid="readiness-error"]').innerText().catch(() => '');
+      console.log('    ERROR TEXT: ' + txt.trim().slice(0, 100));
+      const sess = await page.evaluate(() => {
+        const raw = window.localStorage.getItem('userData') || window.sessionStorage.getItem('userData');
+        if (!raw) return 'NO userData IN STORAGE';
+        try {
+          const p = JSON.parse(raw);
+          return `token=${p.token ? String(p.token).slice(0, 12) + '...' : 'ABSENT'} `
+               + `tenant=${p.sub_institute_id} profile=${p.user_profile_name}`;
+        } catch { return 'userData PRESENT BUT UNPARSEABLE'; }
+      });
+      console.log('    SESSION   : ' + sess);
+    }
     const gates = await page.locator('[data-testid^="gate-"][data-testid$="-state"]').count();
     report(err === 0 && gates >= 5 ? 'PASS' : 'FAIL', 'screen renders gates for the admin',
       `${gates} gate(s), ${err} error block(s)`);

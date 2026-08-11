@@ -820,6 +820,35 @@ has quoted it repeatedly.
 
 ---
 
+## AN UNDIFFERENTIATED ERROR MESSAGE CANNOT DISTINGUISH ITS OWN CAUSES
+
+**Two investigations sent the wrong way this phase, same family, different layer.**
+
+**O-03, at the CATCH.** `saveCredentials` returned *"Failed to save Google Sheet
+credentials."* for a tenant refusal AND for a Google outage. One string, two
+causes, and the route could not be measured at all until the guard was lifted out
+of the swallowing catch.
+
+**X-07d, at the LOGIN.** `GET /login?type=API` returned *"Invalid User Id And
+Password"* for a real tenant-1 administrator AND for a seeded tenant-3 account.
+Two populations failing identically read as one systemic cause - the request
+shape - and it was two different wrong passwords. **The reasoning that two
+populations failing alike points at something structural is normally right; it
+fails exactly when the error string is too coarse to separate them.**
+
+**THE TEST IS NOT "IS THE MESSAGE ACCURATE" BUT "CAN TWO DIFFERENT CAUSES PRODUCE
+IT".** Both messages above were accurate. Both were useless. An accurate message
+that covers two causes is indistinguishable from a wrong one when you are trying
+to tell those causes apart.
+
+**What to do instead, both times:** stop reading the message and find a signal
+that differs. O-03 used REACHABILITY (an own-tenant call reaches a 422 that a
+cross-tenant call never does) and STATE (a catch can rewrite a message, it cannot
+un-write a row). X-07d used a direct call with a known-good credential. **Neither
+answer came from the string.**
+
+---
+
 ## A GUARD INSIDE A TRY WHOSE CATCH REWRITES EVERYTHING RETURNS THE SAME BYTES FOR A REFUSAL AND AN OUTAGE
 
 Found in O-03, filed on its own because the shape is general and the item is not.
