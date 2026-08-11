@@ -571,6 +571,14 @@ in case 3 it was a measurement of id-range overlap.
 
 **R26 — A NEW CHECK'S FIRST RED IS MORE LIKELY TO BE THE CHECK THAN THE CODE.**
 
+**QUALIFIER — A PRIOR, NOT A VERDICT. AFTER TWO ATTEMPTS, CHECK THE CODE.**
+
+On G-UI-01 I assumed my navigation walker was broken **twice** before looking at
+the application, and the third look found `CmMyCapability` mounted nowhere. The
+prior was right both times and wrong the third; **without a bound it becomes a
+way of not looking at the code at all.** Two attempts, then suspect the product.
+
+
 R4 pointed at my own new work. **Not "be careful" — a default: investigate the
 assertion before reporting the product.**
 

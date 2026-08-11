@@ -158,12 +158,12 @@ check('permissions', 'Administrator reaches 1 -> 8 -> 23', function () {
     return [$have === 3 ? 'PASS' : 'FAIL', "$have of 3 present"];
 });
 
-check('permissions', 'Employee holds 18 leaf screens', function () {
+check('permissions', 'Employee holds 19 leaf screens', function () {
     $pid = DB::table('tbluserprofilemaster')->where('role_key', 'employee')->value('id');
     $ids = DB::table('tblgroupwise_rights_g2g')->where('profile_id', $pid)->where('can_view', 1)->pluck('menu_id');
     $kids = DB::table('tblmenumaster_g2g')->whereIn('parent_id', $ids)->pluck('parent_id')->unique();
     $leaves = $ids->reject(fn ($i) => $kids->contains($i))->count();
-    return [$leaves === 18 ? 'PASS' : 'FAIL', "$leaves leaves (expected 18)"];
+    return [$leaves === 19 ? 'PASS' : 'FAIL', "$leaves leaves (expected 19)"];
 });
 
 /* ══════════════════════════ EVENT STORE ══════════════════════════ */
