@@ -88,6 +88,24 @@ nobody re-checks is a park with extra steps.
 **Practice:** every scheduled item's trigger is re-measured when its area is next
 opened - not when someone remembers.
 
+### APPLIED IMMEDIATELY - EVERY SCHEDULED TRIGGER, RE-MEASURED
+
+| Trigger | Measured | Fired? |
+|---|---:|---|
+| `department_id` populated | jobrole **95.3%**, skill **75.9%** | **FIRED** - L-01, L-02 |
+| `course_competency_map` populated | **56 rows** | **FIRED - X-13 unblocked, and nobody noticed** |
+| X-11 ships | `certification.issued` wired | **FIRED** - already actioned |
+| reporting-line coverage | **8 of 401 (2.0%)** | partial - not enough for `capability.flag_raised` |
+| capability coverage | **5 users** with any rating | partial |
+| `task_hygiene` | **2,088 of 2,271 overdue (91.9%)** | **NOT FIRED** - and nowhere near |
+| `certification_type` populated | **0 rows** | **NOT FIRED** |
+
+**Three of seven have fired. Two were known; `course_competency_map` was not.**
+
+> **The sweep cost one query and unblocked a third item.** G-PLAN-02 predicted the
+> answer would not be zero - it was three. **A scheduled item is only scheduled if
+> something re-reads the condition.**
+
 ---
 
 # G-TASK-03 - **`delay_category` IS EMPTY BECAUSE THE STATE IS UNREACHED** - **S3** - T-02 re-scoped
@@ -209,8 +227,20 @@ against an empty authority. The answer here may be that **for tasks there is no
 authority at all** - which changes what the tag means *everywhere it is used*, not
 just here.
 
-**Filed as a question. It needs Triz's answer before any later override is built
-on the tag's current meaning.**
+**ANSWERED 2026-08-11: tasks are the exception; the tag keeps its original
+meaning.** competency<->course has **56 catalogue / 48 instance**;
+competency<->jobrole has **23 / 295**. Two of three overrides have both sides
+populated, so the smaller "human-picked rather than derived" reading applies only
+where no authority exists.
+
+> ### ⚠ RE-OPEN THIS THE FIRST TIME A REAL CUSTOMER AUTHORS A CATALOGUE.
+>
+> **Every row on both populated sides was created by this phase's own work** -
+> X-19, X-20 and the tenant-3 seed. **No customer has authored a catalogue.** The
+> tag's meaning is therefore settled **BY CONSTRUCTION RATHER THAN BY USE**, and a
+> real customer's library could contradict it.
+>
+> The caveat travels WITH the answer, not behind it.
 
 ---
 
@@ -547,6 +577,32 @@ not pattern matches:**
 | **G-LIB-09** - a delete dialog needing a correct impact count | **479,623 vs 79,294 - six times reality** |
 
 **The same class, found twice by building and never once by sweeping.**
+
+### AND THE THIRD INSTRUMENT: AN ENUMERATION - WITH ITS OWN LIMIT
+
+T-01's smoke assertion **named five write sites** where my greps had returned JSON
+keys and validation rules. **A pattern finds what it can express; an enumeration
+finds what is there.**
+
+**And it over-reported by 67%.** Two of the five - `ProjectController` and
+`DeadlineExtensionController` - write `task_management_projects` and
+`task_deadline_extensions`. The check tested for `table('task')` **anywhere in the
+file**, then matched any status update in it.
+
+> ### AN ENUMERATION FINDS WHAT IS THERE - AT THE SCOPE YOU GIVE IT.
+>
+> Both halves travel together. Without the second, the first becomes an argument
+> for trusting enumerations, which is the same error one level on.
+
+**The fix that generalises:**
+
+> ### A KNOWN-POSITIVE PROVES A PATTERN CAN SEE; ONLY A KNOWN-NEGATIVE PROVES IT
+> ### CAN DISCRIMINATE.
+>
+> **R16's sharper form.** The old assertion HAD a known-positive and passed it - it
+> could see `->update([... 'status' ...])`. Nothing tested whether it could tell
+> `task` from `task_management_projects`. **Third instance of file scope where
+> statement scope was needed.**
 
 A sweep hunts the defect's shape **in the code**. A feature hits its consequence
 **in the data** - and it cannot be fooled, because a wrong number is wrong
