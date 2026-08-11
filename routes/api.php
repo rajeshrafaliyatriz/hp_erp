@@ -1514,10 +1514,24 @@ Route::post('/competency/framework-import/commit', [\App\Http\Controllers\Api\Co
 // X-07d - readiness gates, admin surface. The guard is the EXISTING
 // profile:admin,hr middleware (exact role_key match, alias map for legacy
 // profiles); the controller deliberately does not re-implement it.
-Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware(['profile:admin,hr', 'menuright:225,view']);
+Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware('profile:admin,hr');   // menuright:225,view RE-ADD WITH THE MENU
+// ⚠ THE MATRIX GUARD IS TEMPORARILY UNWIRED FROM THESE TWO ROUTES.
+//
+// They carried menuright:225,view / :225,edit. Menu 225 was created to prove the
+// guard and then ROLLED BACK - so no rights row exists, and the precedence tail
+// is DENY. The result: /api/readiness/gates returned 403 TO EVERYONE, the
+// administrator included.
+//
+// A GUARD THAT NAMES A MENU IS A DEPENDENCY ON A ROW. Committing the guard while
+// rolling back the row left a correct guard pointing at nothing, and "deny when
+// undeclared" - which is the right default - turned that into a dead endpoint.
+//
+// RE-ADD BOTH when G-NAV-02 is re-run. The guard itself is unchanged and proven;
+// only its wiring is deferred, and it is deferred because the data it depends on
+// is deliberately absent.
 // MATRIX-ENFORCED. `menuright:225,edit` consults tblgroupwise_rights_g2g: menu 225 is
 // Readiness Gates, and acknowledging is an EDIT. hr_manager holds can_view=1 and
 // can_edit=0 there, so HR is refused BY THE ROW - flip the row and the answer
 // flips. profile:admin,hr STAYS as the outer coarse guard; the menu right is the
 // finer one inside it.
-Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware(['profile:admin,hr', 'menuright:225,edit']);
+Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware('profile:admin,hr');   // menuright:225,edit RE-ADD WITH THE MENU
