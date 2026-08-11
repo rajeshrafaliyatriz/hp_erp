@@ -204,7 +204,90 @@ as `TaskStatusWriter` and the reporting-line assertion.
 
 ---
 
-# ⚠ G-SEC-27 - **`SaveJDController` PUTS IDENTITY LAST** - **S1 CANDIDATE, cross-tenant WRITE**
+# ⚠ G-SEC-27 - **CROSS-TENANT WRITE** - **S1** - ✅ **CONFIRMED AND FIXED 2026-08-11**
+
+> ## A READ EXPOSES. THIS PLANTED DATA THAT LOOKED NATIVE.
+>
+> **Nothing in the victim organisation would ever show that the row came from
+> outside.** Worse than every read leak in G-SEC-11, because a read is discovered
+> when someone notices data they should not see - and this leaves a job role
+> sitting in a customer's library, indistinguishable from their own, forever.
+
+**PROVEN END TO END**, `docs/phase3/_evidence/g-sec-27-probe.php`:
+
+```
+attacker: user 6, tenant 3        victim: tenant 1
+HTTP 201  "JD data saved successfully."
+s_user_jobrole: +1 row IN TENANT 1, plus a library_map row
+```
+
+### THE FIX, AND WHY IT IS NOT VALIDATION
+
+```php
+// BEFORE - request body first, identity last
+$payload['sub_institute_id'] = $payload['sub_institute_id']
+    ?? $request->header('sub_institute_id')
+    ?? $request->session()->get('sub_institute_id');
+
+// AFTER
+$payload['sub_institute_id'] = $this->tenantFromIdentity($request);
+```
+
+> ### A VALUE THAT MUST EQUAL THE IDENTITY'S IS A VALUE WITH NO REASON TO BE SENT.
+> ### NOT VALIDATED - NOT READ.
+
+`tenantFromIdentity()` reads the token, then the session, and returns **NULL**
+otherwise; the existing `required|integer` rule then refuses. **Failing closed is
+the point: a JD written into an unknown organisation is the defect being
+replaced**, and no fallback improves on a refusal.
+
+**VERIFIED BY THE PROBE THAT FOUND IT** - same attacker, same victim: HTTP 201, a
+row created **in tenant 3, the caller's own**, and **zero** in the victim tenant.
+The request still reaches the write, so the negative result means something.
+
+**SPREAD CLOSED:** `AnalyzeJDController` and `GenerateQuestionsController` both
+clean. The inverted convention was confined to one file.
+
+---
+
+# ⭐ PROBE DISCIPLINE - **TWO PROPERTIES, TWO WAYS TO BE SILENTLY WRONG**
+
+**One probe carried both defects, and both were found by RUNNING it, neither by
+reading it.**
+
+### 1. IT MUST BE ABLE TO REACH THE CODE UNDER TEST
+
+The first run returned **HTTP 422** on `department` and `industry` - fields with
+nothing to do with tenancy - and printed **"NOT confirmed as a write leak."**
+**A probe rejected before the code under test, with a verdict written as though it
+had arrived.** One more field inverted the answer.
+
+> **A 4xx before the code under test is NOT A RESULT. It is a broken probe, and no
+> verdict line may be printed on it.**
+
+**Fourth instance this phase** of a negative from an instrument that never reached
+its target. **R16 applies to probes exactly as to sweeps.**
+
+### 2. ITS CHECK MUST DISTINGUISH THE TWO OUTCOMES IT IS TESTING
+
+**Worse than the first.** The marker search was not tenant-scoped, so after the fix
+it still reported a hit - the row in tenant 3, **where it now correctly lands**.
+
+> **A check that cannot tell "written to the victim" from "written to yourself" is
+> unable to answer the only question the probe exists to ask.** It would have
+> reported a leak forever against a working fix.
+
+**These are SEPARATE properties.** Reaching the code says nothing about whether the
+check can read the answer. **Both must be demonstrated before a probe's verdict is
+evidence.**
+
+**OPEN:** does any other negative result in this register come from a probe that
+never reached its target, or whose check could not discriminate? **One pass when
+the queue has room.**
+
+---
+
+
 
 **The seventh of the seven, and the only one that is real.**
 
