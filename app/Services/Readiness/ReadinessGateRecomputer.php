@@ -43,6 +43,16 @@ use Illuminate\Support\Facades\DB;
 class ReadinessGateRecomputer
 {
     /**
+     * Printed by every caller that reports gate state. AN OUTPUT THAT INVITES A
+     * WRONG READING IS A DEFECT A TURN FROM NOW: on a first computation every
+     * gate reads `blocked` even where the value passes its threshold, and that
+     * looks exactly like a failing measurement to anyone glancing at it.
+     */
+    public const FIRST_RUN_NOTE =
+        'first computation always blocked; sustained_periods=3 means no gate can be '
+        . 'ready before its third consecutive pass. A passing value on run 1 is not a failure.';
+
+    /**
      * `unit` distinguishes the two kinds of gauge. `jobrole_definition` is a
      * COUNT: §4's 70%/55% were written for a population that does not exist -
      * there is no "expected number of job roles" for an organisation - and
