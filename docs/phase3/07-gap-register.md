@@ -29,6 +29,38 @@ workflow · **S3** degrades the product · **S4** cosmetic.
 
 ---
 
+---
+
+# G-LIB-09 - **AN IMPACT COUNT BY TITLE OVER-REPORTS BY 6x** - **S2** - measured before L-06 was written
+
+L-06 shows the user what a deletion would break. **The count is not a display
+detail; computing it the obvious way would lie to them.**
+
+| How the dependants of a skill are counted | Rows |
+|---|---:|
+| `s_user_skill_jobrole` actual rows | **79,295** |
+| joined by **KEY** + tenant | **79,294** |
+| joined by **TITLE** + tenant | **80,531** (**+1,237, +1.6%**) |
+| joined by **TITLE**, no tenant condition | **479,623** (**+399,092 - SIX TIMES**) |
+
+**The +1.6% is duplicate skill titles inside one tenant fanning out.** The 6x is
+what happens if the tenant condition is omitted - the same omission L-11 chased
+through join clauses, here reached through a feature rather than a sweep.
+
+> **A user told "deleting this affects 479,623 records" would never delete
+> anything.** A user told "1,237 more than are really there" would not notice.
+> **One is obviously wrong and the other is quietly wrong, and the quiet one is
+> worse.**
+
+**This is G-DASH-01's shape a second time**, and it arrived the same way: two ways
+of asking the same question disagreeing. **L-06's count is computed BY KEY**, and
+the difference is why the item is worth building rather than a nicety.
+
+**`competency_kasba_item` holds 200 key-based references** and needs no such care -
+it was built with the key from the start.
+
+---
+
 # ⭐ G-UI-02 - **THE EMPLOYEE SIDEBAR RENDERS ZERO OF FIVE MODULES** - **S2**
 
 The nav API returns **five modules** for a seeded employee - correct labels,
