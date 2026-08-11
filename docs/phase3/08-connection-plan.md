@@ -98,8 +98,37 @@ updated this document.**
 | the join between them | **23** `jobrole_competency_map` rows |
 | the roll-up | `ProficiencyService` exists and resolves, asserted by the smoke suite on every run |
 
-**Both axes have data. The compute path exists. Only the RENDER is missing** -
-nothing joins the two axes into a grid.
+**UPDATE 2026-08-11 (same day): THE GRID NOW DRAWS.** The join was built, and the
+performance axis was seeded into the tenant that already held the capability axis.
+
+```
+GRID: high:high 2 | high:low 1 | low:medium 1 | medium:low 1
+placed 5, unplaced 1
+```
+
+### The sentence for a demo
+
+> **Anjali: performance 3.8, capability 2.00 - a strong performer with capability
+> gaps.** That is exactly what a 9-box exists to surface, and **this product could
+> not see it before today.**
+
+### And the row that proves the design
+
+> **Divya: performance 3.6, NO capability measurement, NO box - and COUNTED as
+> unplaced.**
+
+**WHY, because the reasoning is harder to reconstruct than the rule:** a grid that
+placed her would assert a **low capability nobody assessed**. Her performance
+rating is perfectly good; the absence is on the other axis. Putting her at the
+bottom would turn "we have not measured this person" into "this person is weak" -
+a claim about an employee that no one made and no one can defend.
+
+**Every customer wanting a full grid will push against this.** The answer is that
+`unplaced` is reported alongside `placed`, so the grid states its own coverage
+rather than implying it describes everyone. **A grid that silently placed the
+unmeasured would look complete and be wrong.**
+
+**Three turns from "nothing to put on the other axis" to demonstrable.**
 
 That is a far smaller item than "nothing to put on the other axis", and it is the
 sentence a customer would be shown, so it must not be one that would have to be
