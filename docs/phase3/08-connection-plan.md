@@ -181,6 +181,47 @@ it is the entire argument for finishing the foundations before the first client.
 
 ---
 
+## THE PRODUCT IS COMPLETE FOR THE PERSON WHO CONFIGURES IT AND INCOMPLETE FOR THE PEOPLE WHO USE IT
+
+**Promoted from the role flows on 2026-08-11.** A diagnosis of the product's
+shape, not a list of items — and it only became visible when the three flows were
+written side by side.
+
+| role | what its dependencies do to it |
+|---|---|
+| **Administrator** | **None of them block a current flow.** Every dependency EXTENDS something already working — gates measure and enforce, the framework imports, the chain maps, the 9-box draws |
+| **Employee** | The capability profile was *"the chain that does not exist"* until Slice 1 landed. In tenant 1 today an Employee gets **a correct 409 refusal with a remedy** — the intended day-one experience, and still a refusal |
+| **Manager** | **The role does not exist.** No user holds it, there is no reporting line to hold, and `department_head` / `reporting_manager` are deliberately absent from every elevated list. 8 of 401 reporting lines platform-wide |
+
+**WHY THIS MATTERS BEFORE A CUSTOMER DEMO.** An administrator walkthrough looks
+finished. An employee walkthrough in tenant 1 shows a refusal. A manager
+walkthrough has no manager. **The same product, demonstrated by three different
+people, produces three different verdicts** — and the flattering one is the one a
+seller would naturally run.
+
+It is the same kind of statement as the **G-DATA-06 / G-FLOW-26** pair above:
+those name a structural absence in the data; this names a structural asymmetry in
+who the product currently serves. **Neither is derivable from the plan rows** — the
+rows are all individually reasonable, and the shape only appears when the roles are
+laid beside each other.
+
+### ADDENDUM — **`hr_manager` and `administrator` are the same role**
+
+Measured 2026-08-11 while sizing the HR flow:
+
+    route guards        16 of 16 identical (profile:admin,hr)
+    menu rights         admin 81, hr 80, shared 80
+    admin-only menus    1  ("Integration")
+    hr-only menus       0
+
+**They differ by one menu.** Two of the nine canonical roles are, in practice, one
+role. That is either an unfinished separation or a separation nobody needed, and
+**the question is worth asking before a customer asks it** — an HR manager who can
+do everything an administrator can is a permissions story that will not survive
+review.
+
+---
+
 # §2. THE GOLDEN THREADS, TRACED
 
 *This is the most important section. Each thread reads as "here is how it becomes
