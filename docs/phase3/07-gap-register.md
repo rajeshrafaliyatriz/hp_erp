@@ -97,8 +97,8 @@ opened - not when someone remembers.
 | X-11 ships | `certification.issued` wired | **FIRED** - already actioned |
 | reporting-line coverage | **8 of 401 (2.0%)** | partial - not enough for `capability.flag_raised` |
 | capability coverage | **5 users** with any rating | partial |
-| `task_hygiene` | **2,088 of 2,271 overdue (91.9%)** | **NOT FIRED** - and nowhere near |
-| `certification_type` populated | **0 rows** | **NOT FIRED** |
+| `task_hygiene` | **2,088 of 2,271 overdue (91.9%)** | **PROBABLY NEVER.** Not drifting toward firing; reclassified DEFERRED_INDEFINITELY in EventCatalogue |
+| `certification_type` populated | **0 rows** | **NOT A TRIGGER - AN AUTHORING DEPENDENCY.** It fires only when someone authors certification types. Moved to G-PLAN-01 |
 
 **Three of seven have fired. Two were known; `course_competency_map` was not.**
 

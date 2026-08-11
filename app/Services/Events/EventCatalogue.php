@@ -125,15 +125,25 @@ class EventCatalogue
      * not deferred: there is nothing to wait for.
      */
     public const NOT_SHIPPED = [
+        // RECLASSIFIED 2026-08-11: DEFERRED -> DEFERRED_INDEFINITELY.
+        //
+        // `task_hygiene` was written as a condition that would plausibly be met.
+        // Re-measured: 2,088 of 2,271 tasks overdue - 91.9%. IT IS NOT DRIFTING
+        // TOWARD FIRING. A gate at 91.9% is not "not yet"; it is "probably never"
+        // unless the way this product is used changes.
+        //
+        // The distinction matters because a trigger that plausibly fires belongs
+        // in a schedule somebody re-reads, and one that does not belongs in a
+        // record of decisions. Mixing them makes the schedule untrustworthy.
         'task.assigned' => [
-            'verdict' => 'DEFERRED',
-            'trigger' => 'readiness gate: task_hygiene',
+            'verdict' => 'DEFERRED_INDEFINITELY',
+            'trigger' => 'readiness gate: task_hygiene - measured 91.9% overdue, NOT drifting toward firing',
             'reason'  => 'The only plausible consumer is a notification, and 2,271 tasks at 99% overdue would make it noise before it was useful.',
         ],
         'task.overdue' => [
-            'verdict' => 'DEFERRED',
-            'trigger' => 'readiness gate: task_hygiene',
-            'reason'  => 'Would fire 2,245 times today. Same gate as F4 (M1).',
+            'verdict' => 'DEFERRED_INDEFINITELY',
+            'trigger' => 'readiness gate: task_hygiene - measured 91.9% overdue, NOT drifting toward firing',
+            'reason'  => 'Would fire 2,245 times today. Same gate as F4 (M1). G-TASK-03 measured the same condition from the STATE side: 4 in-progress and 1 on-hold across 2,271 tasks. Two independent measurements, one conclusion - the workflow is not being used.',
         ],
         'task.completed' => [
             'verdict' => 'DROPPED',
@@ -236,13 +246,13 @@ class EventCatalogue
         }
 
         foreach (self::NOT_SHIPPED as $event => $row) {
-            if ($row['verdict'] === 'DEFERRED' && empty($row['trigger'])) {
+            if (in_array($row['verdict'], ['DEFERRED', 'DEFERRED_INDEFINITELY'], true) && empty($row['trigger'])) {
                 $errors[] = "DEFERRED WITHOUT A TRIGGER: '$event' - nobody will remember to enable it.";
             }
         }
 
         foreach (self::NOT_NOTIFIED as $event => $row) {
-            if ($row['verdict'] === 'DEFERRED' && empty($row['trigger'])) {
+            if (in_array($row['verdict'], ['DEFERRED', 'DEFERRED_INDEFINITELY'], true) && empty($row['trigger'])) {
                 $errors[] = "NOT_NOTIFIED WITHOUT A TRIGGER: '$event' - nobody will remember to enable it.";
             }
             // A deferred notification must not still be wired up. This is the
