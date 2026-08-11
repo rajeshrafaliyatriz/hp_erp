@@ -31,10 +31,23 @@ use Symfony\Component\HttpFoundation\Response;
  * "no override", not "deny". `can_*` are the GROUP grant. A row that is absent
  * entirely falls to the tail and is denied.
  *
+ * ── THE ALIAS IS `menuright`, NOT `menu`. ─────────────────────────────────
+ *
+ * `menu` WAS ALREADY TAKEN by `MenuMiddleware`, and registering mine under that
+ * name silently overwrote it - later keys win in a PHP array. Every route group
+ * in `hrms.php`, `lms.php` and `user.php` runs `['auth','session','menu']`, so
+ * all of them began invoking THIS class with no parameters and fataled. The
+ * sidebar returned 500 for all nine roles.
+ *
+ * NOTHING WARNED. The array accepted the duplicate, the app booted, and the only
+ * symptom was a 500 with no message on unrelated routes - the undifferentiated
+ * signal a fourth time. **An alias name is a namespace, and adding to it without
+ * checking what is already there is an overwrite, not an addition.**
+ *
  * ── USAGE ───────────────────────────────────────────────────────────────────
  *
- *   ->middleware('menu:225,view')     must be able to VIEW menu 225
- *   ->middleware('menu:225,edit')     must be able to EDIT menu 225
+ *   ->middleware('menuright:225,view')     must be able to VIEW menu 225
+ *   ->middleware('menuright:225,edit')     must be able to EDIT menu 225
  *
  * A ROUTE WITH NO DECLARATION IS NOT SILENTLY ALLOWED — it simply does not carry
  * this middleware yet, and keeps whatever guard it has. Enforcement lands
