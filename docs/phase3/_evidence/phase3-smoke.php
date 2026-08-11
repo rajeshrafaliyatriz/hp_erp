@@ -1066,6 +1066,55 @@ check('data', 'no account has a NULL or zero tenant', function () {
             : "$bad of $total have a NULL or zero tenant. THE FALLBACKS ARE LOAD-BEARING AGAIN."];
 });
 
+check('static', 'every content-map accessLink resolves to a live menu row', function () {
+    // G-UI-01's SHAPE, A SECOND TIME. The readiness screen (X-07d) was built,
+    // browser-verified, and has NO MENU ROW and NO CONTENT-MAP ENTRY. Nobody can
+    // navigate to it. It was verified by a harness that went straight to a URL -
+    // which proves the SCREEN works and says nothing about whether the PRODUCT
+    // can reach it.
+    //
+    // KEYED ON accessLink, NOT MENU ID. The first version of this check looked
+    // for numeric menu ids and SKIPPED, because the content maps key on
+    // accessLink constants - "the stable tblmenumaster_g2g column", as
+    // content-map-m1.ts says in its own comment. The check was written against a
+    // shape I assumed rather than the one in the file.
+    //
+    // WHAT IT CANNOT SEE: a screen with NO entry at all - which is exactly the
+    // readiness case. A check over a map only sees what the map mentions, so the
+    // ABSENCE of an entry is invisible to it. That is why the finding is recorded
+    // in the register and not left to this assertion.
+    $nav = 'C:/Users/MILAN/Downloads/g2gv0/lib/gtg-navigation.ts';
+    $dir = 'C:/Users/MILAN/Downloads/g2gv0/hooks';
+    if (!is_file($nav) || !is_dir($dir)) return ['SKIPPED', 'g2gv0 not present at the expected path'];
+
+    // constant name -> access_link string
+    preg_match_all('/(\w*ACCESS_LINK)\s*=\s*[\'"]([^\'"]+)[\'"]/', file_get_contents($nav), $m, PREG_SET_ORDER);
+    $const = [];
+    foreach ($m as $row) $const[$row[1]] = $row[2];
+    if (!$const) return ['SKIPPED', 'no *_ACCESS_LINK constants found in gtg-navigation.ts'];
+
+    // which constants the content maps actually use
+    $used = [];
+    foreach (glob($dir . '/content-map-m*.ts') as $f) {
+        if (preg_match_all('/accessLink:\s*(\w+)/', file_get_contents($f), $u)) {
+            foreach ($u[1] as $name) if (isset($const[$name])) $used[$const[$name]] = basename($f);
+        }
+    }
+    if (!$used) return ['SKIPPED', 'no accessLink references found in the content maps'];
+
+    $live = DB::table('tblmenumaster_g2g')->whereNotNull('access_link')
+        ->pluck('access_link')->map(fn ($v) => rtrim((string) $v, '/'))->all();
+
+    $dead = [];
+    foreach ($used as $link => $file) {
+        if (!in_array(rtrim($link, '/'), $live, true)) $dead[] = $link . ' (' . $file . ')';
+    }
+
+    return [$dead ? 'FAIL' : 'PASS',
+        $dead ? count($dead) . ' of ' . count($used) . ' wired to a menu that does not exist: ' . implode(', ', array_slice($dead, 0, 3))
+              : count($used) . ' content-map entries, every accessLink live'];
+});
+
 check('static', 'route-to-menu map coverage', function () {
     // A MAP BUILT ONCE AGAINST A MOVING SURFACE DECAYS SILENTLY.
     //

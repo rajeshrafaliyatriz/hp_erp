@@ -5229,6 +5229,56 @@ metrics will read as complete.
 
 ---
 
+## ⚠ THE READINESS SCREEN IS UNREACHABLE - **G-UI-01's SHAPE, A SECOND TIME**
+
+    menu rows matching 'readiness'      0
+    content-map entries for readiness   0
+    the screen                          BUILT, TYPE-CHECKED, BROWSER-VERIFIED
+
+**Nobody can navigate to it.** X-07d was verified four turns ago by a harness that
+went **straight to `/organization/readiness`** - which proves the screen works and
+says nothing whatever about whether the product can reach it.
+
+**A URL is not a route into a product.** The harness answered "does this page
+render and behave" and was read as "is this feature available". Those are
+different questions and only the first was ever asked.
+
+Same for `PUT /terminology`: 0 menu rows.
+
+### R26 EARNED ITS KEEP - **it was ONE screen, not five**
+
+My first check compared built page routes against menu `access_link`s and reported
+**five** unreachable screens: readiness, hierarchy, employees, departments,
+portal-review.
+
+**Four of those were false.** Menus link to `/module/<module>/<menu>`, and a
+dynamic route resolves the menu through `hooks/content-map-m*.ts` to a component
+under `@/domain/organization/*`. Those screens are reachable by a path my check did
+not model. **The check tested the wrong thing and would have raised four
+non-defects against working screens.**
+
+Only `readiness` appears in **neither** the menus **nor** any content map.
+
+### THE CHECK ADDED, AND WHAT IT CANNOT SEE
+
+`every content-map menu id resolves to a live menu row` - it catches a content map
+naming a menu that no longer exists, which is a screen wired to nothing.
+
+**It cannot see a screen with NO entry at all**, and that is exactly the readiness
+case. A check over a map only sees what the map mentions. **The absence of an entry
+is invisible to any check that starts from the entries** - which is why this is
+recorded as a finding rather than handed to an assertion and forgotten.
+
+### THE GENERAL FORM
+
+**Verified and reachable are different claims, and X-21 only ever measured the
+first.** Every screen item in this phase inherits that: the harness navigates by
+URL, so a screen with no menu row passes every check it has and is invisible in
+the product. The tracker counts unverified screens; **nothing counted unreachable
+ones.**
+
+---
+
 ## A MAP BUILT ONCE AGAINST A MOVING SURFACE DECAYS SILENTLY
 
     live API routes                838
