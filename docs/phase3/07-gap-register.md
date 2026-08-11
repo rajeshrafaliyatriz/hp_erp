@@ -154,6 +154,47 @@ screen-work tracker.**
 
 ---
 
+---
+
+# ⭐ THE SYSTEM DOES NOT MANUFACTURE A CLAIM NOBODY MADE - one principle, four instances
+
+Each was reasoned separately and they are the same rule. **Any item that would
+fill a gap by inference is checked against this.**
+
+| # | Instance | The claim that would have been manufactured |
+|---|---|---|
+| 1 | **Unmeasured is not a box** (9-box) | placing Divya would turn *"we have not measured this person"* into *"this person is weak"* |
+| 2 | **Nullable on purpose** (TL-02a) | forcing an author to pick a competency for *"deliver the Q3 migration"* invents a development intent |
+| 3 | **Recommends, does not assign** (X-13) | writing a suggestion into `lms_assignments` turns *"you might want this"* into *"you must do this"* |
+| 4 | **Previews, does not import** (X-08a) | *"these 3,347 roles are yours now"* is a claim, and the customer makes it |
+
+**Instances 1 and 2 are the same principle at opposite ends** - one refuses to
+invent an output, the other refuses to force an input. **3 and 4 both refuse to
+convert a suggestion into a decision.**
+
+> **The tell: any time the system would be more useful if it just picked
+> something, ask who is making the claim. If the answer is "the code", it is
+> manufacturing one.**
+
+---
+
+# SHAPE-02 - **A SCHEMA ENCODING AN ASSUMPTION ABOUT PROVENANCE** - two instances
+
+| Instance | The assumption | How it surfaced |
+|---|---|---|
+| `task_id = 0` sentinel | every row came from a task, so 0 could mean "none" | a second source arrived |
+| **`suggested_course.task_id` NOT NULL** | **every suggestion came from a task** | **X-13 recommended from an expiring certification, which has none** |
+
+**Both are a schema saying something it was not designed to say, and both surfaced
+only when a SECOND SOURCE ARRIVED.** A column that is NOT NULL because there has
+only ever been one source is a claim about provenance disguised as a constraint.
+
+**Two instances make it worth checking for elsewhere** - specifically, NOT NULL
+foreign keys on tables that acquired a second writer this phase. **Not swept; when
+the queue has room.**
+
+---
+
 # G-TASK-04 - **AN OVERRIDE CANNOT BE DEFINED AGAINST AN EMPTY AUTHORITY** - the pattern for every later override
 
 Q-E1 decided: **the catalogue wins; the instance is a confidence-tagged override.**
@@ -729,6 +770,40 @@ labels.
 
 **This is the holding state working exactly as designed** - and it is also a
 measurement nobody had:
+
+### ⚠ CORRECTED 2026-08-11 - THE DISTANCE IS **VOCABULARY**, NOT **DIMENSION**
+
+**X-08(a)'s by-dimension breakdown corrects this finding three turns after I filed
+it.** The original said most items fail because four of the five KASBA dimensions
+are not skills. **True, and incomplete:**
+
+| Dimension | Items | Resolved |
+|---|---:|---:|
+| **skill** | **8** | **0** |
+| knowledge | 7 | 0 |
+| behaviour | 5 | 1 |
+| ability | 4 | 0 |
+| attitude | 3 | 0 |
+
+> ### THE SKILL DIMENSION RESOLVED 0 OF 8 - AND SKILL IS THE DIMENSION THE
+> ### LIBRARY EXISTS FOR.
+>
+> *"Patient triage"* and *"Medication administration"* **are** skills. A 551-skill
+> library does not hold them. **The gap is domain vocabulary, not dimensional
+> mismatch.**
+
+**G-SEED-01 was right about WHY most items fail and incomplete about WHICH.** The
+dimensional argument explains 19 of 27; it does not explain the 8 that should have
+matched and did not.
+
+**CONSEQUENCE - A SIXTH REQUIREMENT, AND IT IS LARGER THAN THE OTHER FIVE:**
+
+### R6. THE LIBRARY MUST SUPPLY DOMAIN-SPECIFIC SKILL VOCABULARY, NOT ONLY ALL FIVE DIMENSIONS
+
+**A library covering all five dimensions in generic terms would still resolve
+nothing for a hospital.** R1 (all five dimensions) is necessary and not sufficient.
+This changes X-08(b)'s cost: it is not one library, it is a library **per domain**,
+or a mechanism for a customer to bring their own.
 
 > **THE CANONICAL SKILL LIBRARY AND REAL COMPETENCY VOCABULARY ARE ALMOST
 > DISJOINT.** Items like *"Hand hygiene compliance"*, *"Double-check discipline"*,
