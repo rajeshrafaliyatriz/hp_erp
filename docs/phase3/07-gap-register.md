@@ -439,6 +439,19 @@ run, so it is written down here.**
 
 ## X-07 DECISIONS - **two gates changed, one dropped, one reconciled**
 
+> ### READ THIS FIRST: **DROPPING A GATE DOES NOT DROP A FEATURE.**
+>
+> A gate is a READINESS GAUGE. It reports whether a tenant's data is complete
+> enough for a capability to be worth switching on. **The capability underneath is
+> untouched by anything on this page.** Removing a broken thermometer does not
+> turn off the heating.
+>
+> Nothing below removes, disables, or defers a feature. One gauge was rescaled
+> (`jobrole_definition`), one was removed because it could not measure anything
+> (`task_competency_link`), and one was confirmed accurate (`task_hygiene`).
+> **A reader a year from now will not know this unless it is written here.**
+
+
 ### `jobrole_definition` - **PERCENTAGE DROPPED, COUNT ADOPTED. SEC 4 SUPERSEDED.**
 
 Sec 4 gave it **70% enable / 55% disable**. Those thresholds are **SUPERSEDED, not
@@ -454,7 +467,14 @@ population would be this product deciding a customer's standard for them.**
                  tenant-configurable: a 12-person company and a hospital group
                  are not the same organisation
 
-Measured today: tenant 3 has 347 roles, tenant 2 has 214, tenant 7 has 120.
+**THE GATE WORKS AND ALWAYS DID. ONLY ITS MEASUREMENT CHANGED** - from a
+percentage with no denominator to a count. Measured today, and every tenant is
+already past the threshold:
+
+    tenant 3   347 roles      tenant 2   214 roles      tenant 7   120 roles
+    enable >= 10                                        all READY
+
+Nothing was blocked by this and nothing becomes blocked by the change.
 
 ### `task_competency_link` - **DROPPED. It gets no row, ever.**
 
@@ -463,15 +483,28 @@ which has **no `sub_institute_id`** - a GLOBAL seed library under Q-C1. It canno
 be joined to `task`, the tenant's own work items, at all. The 67% measured this
 phase was about LIBRARY tasks.
 
-**Gating a tenant's features on a global table's contents is meaningless. This is
-the wrong-population error appearing in a GATE rather than in a measurement** -
-the same shape as the two zeros, one layer up, where it would have silently
-governed several other items.
+**THE GATE WAS DROPPED. THE LINKING IS NOT DROPPED.** Both halves, so neither is
+mistaken for abandoned work:
 
-Golden thread 2 does not need it: the instance link (`task.skill_id`, 67%) is the
-real signal, and **L-14 established that the catalogue link must be AUTHORED, not
-derived**. If a gate is ever wanted there, it gates on the authored catalogue once
-one exists - X-08's territory.
+| half | table | measured | status |
+|---|---|---|---|
+| **INSTANCE link — WORKS** | `task.skill_id` | **1,514 of 2,271 = 66.7%** | golden thread 2's actual signal, live today |
+| **CATALOGUE link — MISSING** | `jobrole_task_competency_map` | **0 rows** | filled by a CUSTOMER through X-08's importer — an AUTHORING item, not broken code |
+
+**Why the gauge went and the work stayed.** The gate read
+`jobrole_task_competency_map` -> `s_jobrole_task`, a GLOBAL seed library with no
+`sub_institute_id`. **It would report the SAME NUMBER FOR EVERY TENANT. A gauge
+that reads identically for everyone measures nothing** - it cannot distinguish a
+ready tenant from an empty one, which is the only thing a gate exists to do.
+
+This is the wrong-population error appearing in a GATE rather than in a
+measurement - the same shape as the two zeros, one layer up, where it would have
+silently governed several other items.
+
+**L-14 established that the catalogue link must be AUTHORED, not derived**, which
+is precisely why 0 rows is the expected state before a customer imports one. If a
+gate is ever wanted here it gates on the authored catalogue once one exists -
+X-08's territory.
 
 ### `task_hygiene` - **RECONCILED IN ONE PASS. Ships enabled.**
 
