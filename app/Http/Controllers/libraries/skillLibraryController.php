@@ -2030,6 +2030,29 @@ class skillLibraryController extends Controller
      * competency. Per-row problems are reported back with their row number
      * instead of failing the whole batch.
      */
+    /**
+     * ⚠ THIS IMPORTS SKILLS, NOT COMPETENCIES. THE NAME IS WRONG AND KEPT.
+     *
+     * It writes FLAT ROWS to `s_users_skills`. It does not touch `competency` or
+     * `competency_kasba_item`, so nothing it imports is a KASBA bundle and none of
+     * it carries knowledge, attitude, behaviour or ability items.
+     *
+     * IF YOU ARE LOOKING FOR THE FRAMEWORK IMPORTER, IT IS:
+     *     App\Http\Controllers\Api\Competency\FrameworkImportController
+     *     POST /api/competency/framework-import/dry-run
+     * That one is KASBA-aware across all five dimensions, resolves item names to
+     * ids at import time and HOLDS the rest as labels with the customer's wording.
+     *
+     * BOTH STAY. This one works for what it actually does and roughly 5,171 skill
+     * rows arrived through it; replacing it would be a deletion in effect. The
+     * NAME is the defect, and renaming a live endpoint would break callers.
+     *
+     * The plan described the framework importer as absent because this existed and
+     * looked like it - a mechanism solving a different problem than its name
+     * claims. It is the same shape as `CompetencyController::store()` writing a
+     * skill row (G-RBAC-02b): a module-level naming failure, recorded in the gap
+     * register, not a bug to fix here.
+     */
     public function competencyLibraryImport(Request $request)
     {
         $context = $this->competencyLibraryContext($request);

@@ -1504,3 +1504,8 @@ Route::get('/competency/nine-box', [\App\Http\Controllers\Api\Competency\NineBox
 // X-08(a) — what a seed-library import would give you, before you run it.
 // Reports only; imports nothing (G-SEED-01 R5).
 Route::get('/competency/seed-library/preview', [\App\Http\Controllers\Api\Competency\SeedLibraryPreviewController::class, 'index'])->middleware('profile:admin,hr');
+
+// X-08(b) part 1 — bring-your-own framework, DRY RUN ONLY. Writes nothing.
+// Not skillLibraryController::competencyLibraryImport, which writes flat skill
+// rows; this one is KASBA-aware across all five dimensions.
+Route::post('/competency/framework-import/dry-run', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'dryRun'])->middleware('profile:admin,hr');
