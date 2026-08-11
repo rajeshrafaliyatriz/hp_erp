@@ -66,8 +66,9 @@ function waitFor(url, timeoutMs) {
 }
 
 const spawned = [];
-function start(cmd, args, cwd) {
-  const p = spawn(cmd, args, { cwd, shell: true, stdio: 'ignore', detached: false });
+function start(cmd, args, cwd, extraEnv) {
+  const p = spawn(cmd, args, { cwd, shell: true, stdio: 'ignore', detached: false,
+    env: Object.assign({}, process.env, extraEnv || {}) });
   spawned.push(p);
   return p;
 }
@@ -83,9 +84,33 @@ function stopAll() {
   const attach = process.argv.includes('--attach');
   console.log('\n================ X-21 — REAL BROWSER VERIFICATION ================\n');
 
+  // A LEFTOVER SERVER SILENTLY WINS THE PORT. verify.js starts its own servers;
+  // if one is already listening, the new one cannot bind and the browser talks to
+  // whatever was there - with whatever worker config THAT had. conc.js worked and
+  // verify.js did not for exactly this reason: same env change, different server.
+  if (!attach) {
+    const squatter = await new Promise((res) => {
+      const req = http.get(API + '/api/terminology', (r) => { r.resume(); res(true); });
+      req.on('error', () => res(false));
+      req.setTimeout(2500, () => { req.destroy(); res(false); });
+    });
+    if (squatter) {
+      console.log('REFUSING: something is already serving ' + API + '.');
+      console.log('This harness cannot know its worker configuration, and a');
+      console.log('single-threaded one produces FALSE PRODUCT DEFECTS (G-UI-02).');
+      console.log('Stop it, or re-run with --attach if you started it deliberately.');
+      process.exit(1);
+    }
+  }
+
   if (!attach) {
     console.log('starting laravel :8000 and next :3000 ...');
-    start('php', ['artisan', 'serve', '--port=8000'], HP_ERP);
+    // PHP_CLI_SERVER_WORKERS IS NOT OPTIONAL. `php artisan serve` is
+    // SINGLE-THREADED: the app fires several requests on load and one in-flight
+    // request starves the rest. That produced a FALSE PRODUCT DEFECT (G-UI-02) -
+    // six turns, five eliminations - because the sidebar's request was issued
+    // into a server that never answered it.
+    start('php', ['artisan', 'serve', '--port=8000'], HP_ERP, { PHP_CLI_SERVER_WORKERS: '8' });
     start('npm', ['run', 'dev'], G2GV0);
   }
 
@@ -97,6 +122,43 @@ function stopAll() {
     console.log('CANNOT PROCEED: the Next dev server did not come up.');
     stopAll();
     process.exit(1);
+  }
+
+  // ══ THE HARNESS MUST NOT BE ABLE TO ENTER ITS FALSE-NEGATIVE MODE SILENTLY ══
+  // A harness that fails silently in one mode is worse than no harness, because
+  // everything it PASSES becomes uncertain too. This runs before any assertion.
+  {
+    // REACHABILITY IS NOT CONCURRENCY. The first version of this guard fired four
+    // requests and passed if all four ANSWERED - which a serialised server also
+    // does, just one after another. It passed while the sidebar was empty, inside
+    // the very condition it existed for.
+    //
+    // The test is TIME: one request, then N at once. If N concurrent take about
+    // N times as long as one, they were queued, not served.
+    const solo0 = Date.now();
+    await fetch(API + '/api/terminology').then((r) => r.status).catch(() => 'ERR');
+    const solo = Math.max(Date.now() - solo0, 1);
+
+    const N = 8;
+    const t0 = Date.now();
+    const codes = await Promise.all(Array.from({ length: N }, () =>
+      fetch(API + '/api/terminology').then((r) => r.status).catch(() => 'ERR')));
+    const ms = Date.now() - t0;
+    const answered = codes.every((c) => c !== 'ERR');
+    // Serialised => ms ~ N * solo. Concurrent => ms ~ solo. Half-way is the line.
+    const ratio = ms / solo;
+    const concurrent = answered && ratio < (N / 2);
+    report(concurrent ? 'PASS' : 'FAIL', 'API serves requests CONCURRENTLY, not in turn',
+      concurrent
+        ? N + ' concurrent in ' + ms + 'ms vs ' + solo + 'ms solo (ratio ' + ratio.toFixed(1) + ', serialised would be ~' + N + ')'
+        : 'SERIALISED: ' + N + ' concurrent took ' + ms + 'ms vs ' + solo + 'ms solo (ratio '
+          + ratio.toFixed(1) + '). Every result below is unreliable - this is what '
+          + 'produced G-UI-02. Set PHP_CLI_SERVER_WORKERS.');
+    if (!concurrent) {
+      console.log(String.fromCharCode(10) + 'ABORTING: a single-threaded API produces false product defects.');
+      stopAll();
+      process.exit(1);
+    }
   }
 
   const browser = await chromium.launch({ headless: true });
