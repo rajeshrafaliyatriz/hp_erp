@@ -591,6 +591,86 @@ unconsulted guard from an absent one except reading the call sites.
 
 ---
 
+## `reporting_coverage` HAS **ZERO** ENFORCEMENT POINTS - **and the reason is the finding**
+
+Measured before building, as the second gate was meant to test whether the
+enforcement pattern generalises. It does not - **and what stops it is more
+interesting than a missing hook.**
+
+    reporting_manager_id populated : 8 of 401 platform-wide
+    gate t1 : blocked 0.00%      gate t3 : blocked 6.56%
+    roles that would consume it  : department_head, reporting_manager (both defined)
+
+### THERE IS NOTHING TO GATE, BECAUSE THE FEATURES WERE NEVER TURNED ON
+
+All three would-be consumers already handle the missing reporting line - by **not
+offering the capability at all**:
+
+| consumer | how it handles no reporting line |
+|---|---|
+| `ResolvesCompetencyContext` | `department_head` and `reporting_manager` **DELIBERATELY ABSENT** from the elevated list. *"They return here as team scope, the day reporting-line coverage exists."* |
+| `ResolvesLeaveContext` | same, same reason, same words |
+| `RecipientResolver` | documents that **there is no employee -> manager edge in this product** |
+
+**So a `reporting_coverage` gate would refuse features that do not exist yet.**
+`capability_coverage` was enforceable because gap reporting IS built and DOES
+work; this one is not, because everything downstream of it was withheld pending
+the very coverage the gate measures.
+
+### THE TWO MECHANISMS DO DISAGREE - **just not in the shape expected**
+
+The worry was a gate refusing where a NULL manager already fails. It is worse and
+quieter than that: **the role lists and the gate are TWO EXPRESSIONS OF ONE
+DECISION, in two different forms.**
+
+    the gate       measures coverage and reports blocked/at_risk/ready
+    the role lists HARDCODE the absence, in a const array, with a comment
+
+One is a gauge that moves with the data. The other is a decision frozen in code
+that **nothing will ever re-evaluate** - no measurement makes those roles come
+back; a person has to remember the comment and edit the array. **A hardcoded
+absence cannot be told from an oversight by anything except a comment, and that
+is precisely what the gate was built to replace.**
+
+### WHAT SHOULD HAPPEN, AND WHY NOT NOW
+
+**The convergence point:** when reporting coverage is real, `COMPETENCY_ELEVATED`
+and `LEAVE_ELEVATED` should ask the gate rather than hardcode the answer - the
+role lists defer to the measurement instead of duplicating its conclusion. That
+is one enforcement point serving several features, which is the shared-guard shape
+rather than the per-feature check.
+
+**It is not built now** because building it would re-enable two roles' scope on
+the strength of a gate reading 6.56%, which is the opposite of what the gate says.
+The item is: *when coverage clears, the roles return BY MEASUREMENT.* Filed, not
+done.
+
+### WHAT THIS SAYS ABOUT X-15
+
+**The pattern does not generalise on one example.** `capability_coverage` is so
+far the only gate with a live consumer, and its enforcement point was easy
+precisely because the feature already worked. X-15's trigger says *"more features
+enforce gates"* - **it still reads one.**
+
+---
+
+## A HARDCODED PROFILE ID IS A HARDCODED TENANT WEARING A DISGUISE
+
+`user_profile_id` is **per tenant**. Tenant 3's administrator is profile **7**;
+tenant 1's is **1**. So `where('user_profile_id', 1)` does not mean "an admin" -
+it means "tenant 1's admin", and it reads like the former.
+
+That is what pinned Slice 1's chain check to tenant 1 for the whole phase, and
+nobody chose it. Selecting by `role_key` is the discipline the middleware already
+uses, and this is **the third time `role_key` has resolved something that looked
+like a different problem** - after the rights matrix and `RequireProfile`'s alias
+map.
+
+**Queued, not now:** one grep for anything else selecting by a hardcoded profile
+id.
+
+---
+
 ## ⛔ TENANT 1 STAYS AT 0.00% COVERAGE - **DELIBERATELY. DO NOT "FIX" IT.**
 
 Decided 2026-08-11. Written here because the next person will see a tenant failing
