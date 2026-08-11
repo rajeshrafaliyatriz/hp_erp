@@ -198,14 +198,28 @@ class MyTasksController extends Controller
         }
 
         $before = (array) $task;
+        // T-01. The status, its label and the delay fields belong to
+        // TaskStatusWriter - it owns the invariant that they move together, and
+        // it is the only place that knows both sides of the transition well
+        // enough to emit task.status_changed honestly.
+        $move = app(\App\Services\TaskManagement\TaskStatusWriter::class)->moveTo(
+            (int) $id,
+            $resolved['status'],
+            (int) $context['sub_institute_id'],
+            (int) $context['user_id'],
+            [
+                'delay_category' => $request->input('delay_category'),
+                'delay_reason'   => $request->input('delay_reason'),
+                'remarks'        => $request->input('remarks'),
+            ]
+        );
+        if (!$move['ok']) {
+            return response()->json(['status' => 0, 'message' => $move['reason']], 422);
+        }
+
+        // `reply` is not a status field and stays here.
         DB::table('task')->where('id', $id)->update([
-            'status' => $resolved['status'],
-            'status_label' => $resolved['label'],
             'reply' => $request->input('remarks'),
-            'delay_category' => $resolved['status'] === 'ON HOLD' ? $request->input('delay_category') : ($before['delay_category'] ?? null),
-            'delay_reason' => $resolved['status'] === 'ON HOLD' ? ($request->input('delay_reason') ?: $request->input('remarks')) : ($before['delay_reason'] ?? null),
-            'updated_by' => $context['user_id'],
-            'updated_at' => now(),
         ]);
         $this->taskAudit->taskChanged($id, 'status_changed', $before, $context['user_id']);
         if ($resolved['status'] === 'COMPLETED') $this->dependencyResolution->resolveAfterCompletion($id, $context['user_id']);
