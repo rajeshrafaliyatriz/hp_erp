@@ -204,7 +204,66 @@ as `TaskStatusWriter` and the reporting-line assertion.
 
 ---
 
-# TRIAGE OF THE SEVEN - 4 CLEARED ON THE CHAIN, 3 UNREAD
+# ⚠ G-SEC-27 - **`SaveJDController` PUTS IDENTITY LAST** - **S1 CANDIDATE, cross-tenant WRITE**
+
+**The seventh of the seven, and the only one that is real.**
+
+```php
+$payload['sub_institute_id'] = $payload['sub_institute_id']        // REQUEST BODY FIRST
+    ?? $request->header('sub_institute_id')
+    ?? $request->session()->get('sub_institute_id');               // identity LAST
+```
+
+**Every other helper in this codebase puts identity first. This one puts it last.**
+
+| | |
+|---|---|
+| route | `POST /api/gemini/save-jd`, middleware `api.token` - **authenticated** |
+| validation | `'sub_institute_id' => 'required|integer'` - **an integer, never the caller's own** |
+| use | line 61 casts it; lines 75, 120, 153 **write it into three tables** |
+
+**This is C27's class with the precedence inverted.**
+
+> ### A READ EXPOSES. A WRITE CORRUPTS ANOTHER TENANT'S DATA WITH SOMETHING THAT
+> ### LOOKS NATIVE TO IT.
+>
+> Worse than the read leaks G-SEC-11 catalogues, and it jumps the queue by the
+> standing rule **if the probe confirms it**.
+
+**NOT CONFIRMED FROM A READ.** A live probe is needed - a token from one tenant
+writing to another, verified end to end, rows cleaned up. **Asserting a leak from
+source has bitten three times this phase.**
+
+---
+
+# G-SEC-28 - **FIVE REQUEST-TENANT FALLBACKS COMPENSATE FOR A CONDITION THAT DOES NOT OCCUR** - **S3, cleanup item**
+
+**Measured: `tbluser` holds 401 rows. NOT ONE has a NULL or zero
+`sub_institute_id`. 0 of 401.**
+
+Every cleared helper reaches the request only when identity supplies nothing - and
+identity always supplies something. **They are dead code by measurement.**
+
+> ### THE SHAPE THE ASSERTION FLAGS IS LEGITIMATE ONLY IN A WORLD THAT NO LONGER
+> ### EXISTS.
+>
+> That is the justification for keeping the check **unnarrowed**. Narrowing it to
+> fit five legitimate cases would tune it to a world that has already gone.
+
+**THE CLEANUP, AS ITS OWN ITEM - NOT NOW:**
+
+Remove the five fallbacks, and `ExcelAutomationAgentController`'s super-admin
+branch, which is the same shape (**0 of 2 admin accounts qualify**). The assertion
+then becomes a real guard instead of 5-for-5 wrong.
+
+> **PRECONDITION, AND IT MUST LAND WITH THE CLEANUP:** this is true only while the
+> column stays clean. **The cleanup ships with an assertion that no account has a
+> null or zero tenant** - otherwise we delete a compensation and reintroduce the
+> condition later, with nothing to catch it.
+
+---
+
+# TRIAGE OF THE SEVEN - **COMPLETE: 6 CLEARED, 1 CANDIDATE**
 
 **Cleared by reading the chain (R20), never by shape:**
 
@@ -215,8 +274,10 @@ as `TaskStatusWriter` and the reporting-line assertion.
 | `ProjectController::context` | same |
 | `ExcelAutomationAgentController::resolveSubInstituteId` | **stricter than the trait** - throws on mismatch; super-admin branch unreachable (0 of 2) |
 
-**UNREAD:** `AJAXController::tableDataRequestedTenant` ·
-`SaveJDController::normalizePayload` · `jobroletaskcontroller::g2gActorId`.
+| `AJAXController::tableDataRequestedTenant` | **fallback, not a source.** The call site reads `tableDataTenant() ?? tableDataRequestedTenant()` - proven identity wins outright, documented in a comment, missing tenant fails closed with a 400, anonymous reads logged to a migration worklist (G-SEC-19's work) |
+| `jobroletaskcontroller::g2gActorId` | token first, session fallback, **no request value** - and it resolves an ACTOR, not a tenant |
+
+**NOT CLEARED: `SaveJDController::normalizePayload` - see G-SEC-27.**
 
 > ### THE HELPER IS CLEARED. THE ROUTES ARE NOT.
 >
