@@ -81,7 +81,58 @@ it was built with the key from the start.
 
 ---
 
-# ⭐ G-UI-02 - **THE EMPLOYEE SIDEBAR RENDERS ZERO OF FIVE MODULES** - **S2**
+# G-UI-02 - **HARNESS DEFECT, NOT A PRODUCT DEFECT** - RE-FILED 2026-08-11
+
+> ## The employee sidebar was never broken. My test server was.
+
+`php artisan serve` is **single-threaded**. The app fires several requests during
+load; one in-flight request starves the rest, and the sidebar's was the one left
+hanging - **issued into a server that never answered it.**
+
+**PROVEN.** With `PHP_CLI_SERVER_WORKERS=8`:
+
+```
+sidebar response status: 200
+sidebar items: Main Dashboard, Organizational Management,
+               Competency Management, LMS, HRIT Management, Task Management
+```
+
+All five modules. The product was correct throughout.
+
+### THE ELIMINATION HISTORY STAYS, BECAUSE IT WAS REAL WORK
+
+Five eliminations, **every one correct**, and every one against the wrong layer:
+the render condition (`filteredNav = modules`, no filter) · the request shape ·
+the tree builder · the context guard (`ready=true`, token/tenant/user all present)
+· the double-mount (one hook instance, not two).
+
+> ### I WAS ANSWERING "WHICH LINE" WHEN THE QUESTION WAS "WHICH SERVER".
+>
+> Six turns. The instrument was wrong, not the reasoning - which is why five
+> correct eliminations never converged. **Eliminations that are individually sound
+> and collectively fruitless are evidence about the QUESTION.**
+
+### WHAT IT COST, AND THE RULE IT EARNS
+
+**X-21 had a false-negative mode and had been in it.** Everything it reported about
+navigation described my server, not the product.
+
+> ## A HARNESS MUST NOT BE ABLE TO ENTER ITS FALSE-NEGATIVE MODE SILENTLY.
+>
+> **R25's shape one level in:** an untested assumption about my own TOOLING rather
+> than my own capability. I built X-21 to remove a manual step and never asked what
+> it would do if its own dependencies misbehaved. **A harness that fails silently
+> in one mode is worse than no harness, because everything it PASSES becomes
+> uncertain too.**
+
+**Severity withdrawn.** It was never S2 against the product. It was an S1 against
+the harness, and it is being fixed as one.
+
+---
+
+# (superseded heading kept below for the original filing)
+
+## G-UI-02, AS ORIGINALLY FILED - **S2**
 
 The nav API returns **five modules** for a seeded employee - correct labels,
 correct `access_link`s, rights present. **The sidebar renders none of them.**
@@ -134,7 +185,22 @@ inert and starts working the moment this does.
 
 ---
 
-# ⭐ G-UI-01 - **THE CAPABILITY SCREEN HAS NO ROUTE. NOBODY CAN OPEN IT.** - **S1**
+# G-UI-01 - **PROBABLY CORRECT ALL ALONG** - RE-FILED 2026-08-11, pending harness confirmation
+
+> **The evidence now points to the mount having been right from the moment it
+> landed.** G-UI-02 - the reason the screen could not be reached - was my
+> single-threaded test server, not the product.
+
+Menu row 224, its 89 view-only rights rows, the container and the content-map
+entry were all verified individually: byte-identical `access_link`, `submenuId`
+present, alias resolving, `tsc` clean. **Every part checked out and the whole
+appeared broken**, which is exactly what a starved navigation request produces.
+
+**NOT YET CONFIRMED**, and stated as such rather than claimed: the harness fix has
+not completed, so the screen has not been opened in a browser. **The evidence points
+one way and the confirmation is outstanding.**
+
+## G-UI-01, AS ORIGINALLY FILED - **S1**
 
 > **Slice 1's entire deliverable - the gap view, the "Not yet assessed" screen,
 > the thing this phase is sold on - is unreachable in the running application.**

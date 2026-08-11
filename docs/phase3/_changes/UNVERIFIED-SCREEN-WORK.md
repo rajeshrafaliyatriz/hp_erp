@@ -1,5 +1,15 @@
 # Screen work shipped while G-UI-02 is open
 
+> ## ⚠ 2026-08-11: G-UI-02 IS A HARNESS DEFECT, NOT A PRODUCT DEFECT.
+>
+> The employee sidebar renders all five modules against a concurrent server.
+> **These five items may never have been unverified.** The list stands until the
+> harness fix completes and X-21 runs over it - then it closes or it does not, on
+> evidence rather than on assumption.
+>
+> **Item 8's SKIPPED - "Not yet assessed not reached" - is almost certainly the
+> same cause.** The screen was reachable; the harness could not navigate to it.
+
 **X-21 cannot reach screens while G-UI-02 is live** - the employee sidebar renders
 nothing, so the harness cannot navigate to new UI. Every screen change shipped
 after 2026-08-11 lands **unverified by browser**, and this is the defined set to
