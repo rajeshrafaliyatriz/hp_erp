@@ -437,6 +437,53 @@ run, so it is written down here.**
 
 ---
 
+## THREE LAYERS OF ONE LESSON - **shape declared / name resolves / behaviour performed**
+
+Each check reaches exactly one layer, and a green at one says nothing about the
+next. Written out because the three were found in that order, days apart, each
+one passing every check that existed before it.
+
+| layer | the check | what it caught | what it could NOT see |
+|---|---|---|---|
+| **SHAPE DECLARED** | `assertInvariants()` kinds, named-consumer test | a malformed declaration | a consumer that does not exist |
+| **NAME RESOLVES** | G-EVT-01's `resolveConsumer()` | **11 declarations naming 6 classes never written** | a class that exists and is the wrong kind of thing |
+| **BEHAVIOUR PERFORMED** | G-EVT-03's kind-aware shape test | **`ProficiencyService`: PROJECTOR on 4 events, never invoked by the event path** | whether the method, when called, does the right thing |
+
+**PROFICIENCYSERVICE WAS DECLARED A PROJECTOR ON FOUR EVENTS AND HAS NEVER BEEN
+INVOKED BY THE EVENT PATH.** It resolved, so G-EVT-01's check passed it. That
+check asks whether a NAME resolves, never whether the thing behind it does the
+work.
+
+**AND THE THIRD LAYER IS NOT THE LAST ONE.** The kind-aware test is still a SHAPE
+test: it proves a class is the kind of thing that could do the work, not that it
+does. **A CONSUMER CAN BE THE RIGHT KIND OF THING AND STILL NOT DO THE WORK.**
+Only a write proves the fourth layer, and no invariant in this file reaches it.
+
+## THE ARGUMENT FOR VERIFYING BEFORE A DECISION THAT LOOKS OBVIOUS
+
+**Quote this the next time skipping a probe looks safe.**
+
+The drop of `GapRecalculator` was correct. The reason given for it was not:
+
+> *"ProficiencyService already projects the proficiency a gap is derived from."*
+
+**FALSE.** It projects nothing. The drop survives on a different and stronger
+leg - `rollUp()` derives proficiency **on read** from `competency_kasba_rating`,
+so nothing is stored anywhere and nothing needs recalculating.
+
+**Right conclusion, very nearly the wrong reason, and the difference surfaced only
+because the probe ran before the decision.** Had the drop been recorded first, the
+register would now carry a false premise attached to a true verdict - the worst
+kind to find later, because the verdict looks like it validates the reasoning.
+
+**R26, sharpest instance.** The kind-aware invariant's first version returned 12
+violations naming reactors verified working in earlier turns - and my own
+known-negative had printed `NotificationDispatcher project()=no handle()=no`
+directly beside those reds. **The counter-evidence was on screen before the test
+was written.**
+
+---
+
 ## G-EVT-03 - **A CLASS THAT RESOLVES IS NOT THEREBY A CONSUMER** - and GapRecalculator DROPPED
 
 `ProficiencyService` was declared **PROJECTOR on four events**. It has one public
