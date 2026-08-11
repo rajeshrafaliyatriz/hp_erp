@@ -592,6 +592,18 @@ If no such property exists, the join is a hypothesis.
 every measurement measures what you think.** A 100% join rate is a measurement, and
 in case 3 it was a measurement of id-range overlap.
 
+**R27(ii) — A TRIAGE ITEM IS SIZED IN CONTROLLERS READ, NOT IN ITEMS RESOLVED.**
+
+**Triage-by-reading costs more per item than building**, and sizing them the same
+produced **four consecutive turns of work read but not committed**. Reading a chain
+- method, callers, controller, route, middleware - is the expensive part, and it
+does not shrink because the verdict turns out to be "cleared".
+
+**Two controllers per turn is the working assumption until measured otherwise, and
+the turn ends with them COMMITTED even if the batch does not finish.** A cleared
+verdict recorded is done work; leaving it uncommitted is the exposure the
+working-tree assertion exists to flag.
+
 **R27 — MEASURE TURNS AND BUILD TURNS ARE SEPARATE TURNS.**
 
 At this depth the two do not fit together. **Four consecutive turns ended with a

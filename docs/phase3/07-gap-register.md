@@ -158,6 +158,76 @@ screen-work tracker.**
 
 ---
 
+---
+
+# G-SEC-26 - **FOUR INDEPENDENT IMPLEMENTATIONS OF IDENTITY RESOLUTION** - **S2**
+
+Found by widening the identity assertion after a near-miss it would not have
+caught. **Not the defect I was hunting, and structurally more important.**
+
+| Implementation | Behaviour on a mismatched tenant |
+|---|---|
+| `ResolvesApiIdentity::resolveApiIdentity` (the shared trait) | **silently ignores** the request value |
+| `DependencyController::context` | falls back to request only when the user has none |
+| `MyTasksController::context` | same |
+| `ProjectController::context` | same |
+| `ExcelAutomationAgentController::resolveSubInstituteId` | **THROWS** on a mismatch |
+
+**Four places to fix the next identity defect, and G-SEC-12's sweep touched one.**
+
+> ### THIS EXPLAINS WHY "SCOPED BY SHAPE, NOT BY DEFECT" KEEPS RECURRING.
+> **A sweep that fixes one implementation leaves the others to drift
+> independently.** The recurrence is not carelessness; it is what happens when a
+> property has four homes.
+
+### ⚠ THE TWIST, AND IT MUST BE READ BEFORE ANYONE TIDIES THIS
+
+**The copies are not uniformly worse. One is BETTER than the thing it duplicates.**
+`ExcelAutomationAgentController` **refuses** a mismatched tenant with an exception;
+the shared trait **ignores** it. Its super-admin branch is gated on `is_admin === 1`
+**and** a null/zero own tenant - **measured: 0 of 2 admin accounts qualify**, so
+the branch is unreachable with current data.
+
+**So consolidation is a REAL DECISION - which behaviour wins? - not obvious
+cleanup.** Collapsing four resolvers into the weakest one would be a regression
+performed as tidying.
+
+**NOT CONSOLIDATED. That is its own item**, and it needs the behaviour decision
+first.
+
+### THE ASSERTION GAP THIS EXPOSES
+
+The suite tests a property of code **shape**. **There is no assertion that identity
+resolution happens in ONE PLACE** - which is the property that would actually
+prevent recurrence. **Add it when the seven are closed**, same single-writer shape
+as `TaskStatusWriter` and the reporting-line assertion.
+
+---
+
+# TRIAGE OF THE SEVEN - 4 CLEARED ON THE CHAIN, 3 UNREAD
+
+**Cleared by reading the chain (R20), never by shape:**
+
+| Helper | Verdict |
+|---|---|
+| `DependencyController::context` | local copy of the resolver; token owner wins, request is the no-tenant fallback |
+| `MyTasksController::context` | same |
+| `ProjectController::context` | same |
+| `ExcelAutomationAgentController::resolveSubInstituteId` | **stricter than the trait** - throws on mismatch; super-admin branch unreachable (0 of 2) |
+
+**UNREAD:** `AJAXController::tableDataRequestedTenant` ·
+`SaveJDController::normalizePayload` · `jobroletaskcontroller::g2gActorId`.
+
+> ### THE HELPER IS CLEARED. THE ROUTES ARE NOT.
+>
+> G-SEC-11 recorded `ExcelAutomationAgentController` with **2 differing routes**.
+> This method cannot produce that. **Clearing the routes from a clean helper would
+> be clearing a route by reading a helper** - the two differing routes stay
+> unexplained and belong to **S-04's 37 unverified candidates** until the rest of
+> that controller is read.
+
+---
+
 # ⛔ G-BLOCK-01 - **AN S1 CROSS-TENANT LEAK IS WAITING BEHIND UNCOMMITTED WORK** - blocking since 2026-08-11
 
 **Nobody decided this on purpose.** It has been reported every turn as *"the 51

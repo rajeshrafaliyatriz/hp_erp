@@ -929,6 +929,64 @@ check('component', 'notification bell: fetched data, no hardcoded badge or empty
 /* ══════════════════════════ STATIC ══════════════════════════ */
 echo "\nSTATIC\n";
 
+check('static', 'no PRIVATE helper reads a request tenant at all', function () {
+    // WIDENED after a near-miss that this suite would NOT have caught.
+    //
+    // L-01's first version read the tenant from the request inside
+    // LibraryController::payload() - G-SEC-12's exact defect, in NEW code written
+    // AFTER G-SEC-12 was fixed. The only thing that stopped it was an undefined
+    // variable. THAT IS NOT A GUARD.
+    //
+    // The sibling assertion requires a resolver AND a request read in the same
+    // method. A helper that reads a request tenant and NEVER resolves identity
+    // falls outside it - AND THAT IS THE WORSE CASE, because there is no resolved
+    // identity to contradict. This check covers it: a private/protected helper
+    // has no business reading a tenant from a request at all. The tenant is
+    // threaded in from the caller's resolved context or it is not known.
+    $tenantRead = '/\$request->(sub_institute_id|user_profile_name)\b'
+        . '|input\(\s*[\'"](sub_institute_id|user_profile_name)[\'"]\s*\)'
+        . '|header\(\s*[\'"]sub_institute_id[\'"]\s*\)/';
+
+    // KNOWN-POSITIVE AND KNOWN-NEGATIVE (R29).
+    $yes = 'private function payload($r, Request $request) { $s = $request->input(\'sub_institute_id\'); }';
+    $no  = 'public function index(Request $request) { $s = $request->input(\'sub_institute_id\'); }';
+    $isHelper = '/^\s*(private|protected)\s+function\s+(\w+)/m';
+    if (!preg_match($isHelper, $yes) || preg_match($isHelper, $no)) {
+        return ['SKIPPED', 'helper matcher fails its known-positive or matches its known-negative'];
+    }
+
+    $offenders = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app/Http/Controllers')));
+    foreach ($it as $f) {
+        if ($f->getExtension() !== 'php') continue;
+        $src = file_get_contents($f->getPathname());
+        $src = preg_replace('#/\*.*?\*/#s', '', $src);
+        $src = preg_replace('#^\s*//.*$#m', '', $src);
+
+        // split on any function; keep only private/protected bodies
+        $parts = preg_split('/(?=\n\s{4}(?:public|private|protected)\s+function\s)/', $src);
+        foreach ($parts as $body) {
+            if (!preg_match('/\n?\s*(private|protected)\s+function\s+(\w+)/', $body, $fn)) continue;
+            if (!preg_match($tenantRead, $body, $m)) continue;
+
+            // THE RESOLVER ITSELF IS THE ONE LEGITIMATE READER. Exempted BY NAME,
+            // not by a blanket rule: resolveApiIdentity() reads a request tenant
+            // only in its documented fallback, for accounts whose own
+            // sub_institute_id is NULL. Everything else must be handed a tenant.
+            if (str_contains($f->getPathname(), 'ResolvesApiIdentity')
+                && in_array($fn[2], ['resolveApiIdentity', 'apiTenantId'], true)) {
+                continue;
+            }
+
+            $offenders[] = basename($f->getPathname()) . '::' . $fn[2];
+        }
+    }
+
+    return [$offenders ? 'FAIL' : 'PASS',
+        $offenders ? count($offenders) . ': ' . implode(' | ', $offenders)
+                   : 'no private/protected helper reads a tenant from a request'];
+});
+
 check('static', 'no method resolves identity then reads request tenant', function () {
     // G-SEC-24b. I WROTE THIS DEFECT AT ITEM 46, with every rule in place: the
     // fix resolved the identity and then five lines later read the tenant from
