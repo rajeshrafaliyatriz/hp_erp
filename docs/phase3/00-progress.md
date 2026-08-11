@@ -504,6 +504,29 @@ hand that typed the input is a check that can agree with its own mistake. This i
 R23's sibling — R23 says a detail must be observed; this says an expectation must be
 derived.
 
+**R28 (R25's family) — THE RIGHT INSTRUMENT WAS ONE LEVEL DOWN AND I DID NOT REACH FOR IT.**
+
+**Three times in one stretch, at increasing levels:**
+
+| # | What I did | The instrument I had and skipped |
+|---|---|---|
+| 1 | Five eliminations inside the resolver | **Answering "which line" when the question was "which server."** The layer below the code |
+| 2 | Set `PHP_CLI_SERVER_WORKERS` and declared it fixed | **Never tested whether the env var did anything.** It is a POSIX fork feature and does nothing on Windows - measured after the fact: ratio 4.5 with it, 4.4 without |
+| 3 | Called one run **PROVEN** | **Never asked why it worked.** I had a working control and treated it as confirmation instead of as evidence to explain |
+
+**Each time the reasoning was sound and the layer was wrong.** Eliminations that are
+individually correct and collectively fruitless are evidence about the QUESTION,
+not the answers - and the tell is available early: **five clean eliminations that
+do not converge.**
+
+> ### THE HABIT: WHEN A CONTROL WORKS, ASK WHY IT WORKED BEFORE USING IT AS PROOF.
+> A working control explains nothing until its mechanism is named. Otherwise it is
+> a coincidence you have promoted to evidence.
+
+**This generalises past this project.** R25 was an untested assumption about my own
+capability; R28 is the same shape about the LAYER I am working at - and it is the
+most transferable thing this stretch produced.
+
 **R25 (R4's family) — AN ASSUMPTION ABOUT CAPABILITY, NEVER VALIDATED.**
 
 > ### I SAID I COULD NOT DRIVE A BROWSER. I NEVER TESTED THAT.
