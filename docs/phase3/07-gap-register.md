@@ -378,6 +378,77 @@ then becomes a real guard instead of 5-for-5 wrong.
 files: untouched"*, which reads as tidiness. **It is a blocker on the
 highest-priority remaining item in the queue.**
 
+## A GUARD INSIDE A TRY WHOSE CATCH REWRITES EVERYTHING RETURNS THE SAME BYTES FOR A REFUSAL AND AN OUTAGE
+
+Found in O-03, filed on its own because the shape is general and the item is not.
+
+`saveCredentials` and `testConnection` had the tenant guard as the FIRST statement
+inside a try whose single catch turned every failure into one message:
+
+    caller 3 asks tenant 6  ->  500  "Failed to save Google Sheet credentials."
+    caller 3 asks tenant 3  ->  500  "Failed to save Google Sheet credentials."
+
+**The guard was working.** It threw on the mismatch exactly as designed. The catch
+then rewrote the throw into the same 500 a Google outage produces.
+
+### TWO CONSEQUENCES, AND THE SECOND IS THE ONE NOBODY LOOKS FOR
+
+1. **The caller is told the wrong thing.** "Server error" for what is a refusal.
+   A client retries a 500. It does not retry a 403.
+2. **THE ROUTE CANNOT BE MEASURED.** A cross-tenant probe returned byte-identical
+   output to the own-tenant probe. Not a wrong answer - NO answer. Any sweep over
+   this route reports whatever its author expected, in either direction, and the
+   green and the red are equally unearned.
+
+The second is why this is a defect and not a cosmetic issue. **A guard you cannot
+observe is indistinguishable from an absent one, and it fails in the safe
+direction only for as long as nobody edits it.**
+
+### THE FIX ADDS NO GUARD
+
+The guard moved into its own try ahead of the work, matching `credentialStatus`
+and `downloadTemplate`, which already answered 403. Nothing was added. **A catch
+was stopped from hiding what was already there.**
+
+    BEFORE  caller 3 asks 6 -> 500 Failed to save Google Sheet credentials.
+    AFTER   caller 3 asks 6 -> 403 Invalid sub institute access.
+    own-tenant path unchanged: 422 Google Sheet ID or URL is required.
+
+### HOW IT WAS PROVEN WHILE THE MESSAGE STILL LIED
+
+The message was useless, so neither instrument used it.
+
+- **REACHABILITY.** With no `google_sheet_id`, an own-tenant call reaches the 422
+  further down; a cross-tenant call never does. The guard's position is proven by
+  what the caller can and cannot get to, not by what it is told.
+- **STATE.** A full row snapshot of `institute_google_credentials`, identical
+  before and after. **A CATCH CAN REWRITE A MESSAGE; IT CANNOT UN-WRITE A ROW.**
+
+Both carry their known-negative (R29): the reachability check shows the 422 IS
+reachable on the own-tenant path, so its absence cross-tenant means something; the
+snapshot is compared against a mutated copy of itself to show it can see a change
+at all. The mutation is done on the STRING, not the table - writing to the shared
+database to test the test is how the next finding gets made.
+
+### THE SWEEP - **CANDIDATES, NOT FINDINGS**
+
+How many other guards sit inside a try with a catch-all that discards the
+exception message?
+
+    candidates across app/Http/Controllers : 1
+    AnalyzeJDController.php  (47 statements in the try, catch discards the message)
+
+**One, and it is one of the 51.** It cannot be read or fixed under G-BLOCK-01, so
+it is recorded and waits. Its known-negative is the same file O-03 fixed: the
+sweep no longer names `saveCredentials` or `testConnection`, so it discriminates
+on the thing that actually changed.
+
+**This was invisible until measured.** It is not visible in review - the code
+reads as correct, because it IS correct. Only the response tells you, and the
+response is what the catch overwrote.
+
+---
+
 ## TWO ZEROS, ONE OF THEM EVIDENCE - a worked pair
 
 Filed as a method result, not under any item. Both numbers came up in the same
