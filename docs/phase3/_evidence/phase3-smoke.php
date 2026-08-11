@@ -308,6 +308,16 @@ check('org', 'reporting_manager_id has exactly ONE guarded write path', function
     $ctrl = base_path('app/Http/Controllers/Api/Org/ReportingLineController.php');
     if (!file_exists($ctrl)) return ['FAIL', 'X-16 controller missing'];
     $src = file_get_contents($ctrl);
+    // KNOWN-POSITIVE **AND KNOWN-NEGATIVE** (R16's sharper form). A pattern that
+    // only proves it can SEE the shape does not prove it can tell the shape apart
+    // from a lookalike - which is how T-01's check named two innocent files.
+    $rx  = "/->update\(\s*\[[^\]]*reporting_manager_id'\s*=>/s";
+    $yes = "DB::table('tbluser')->where('id',1)->update(['reporting_manager_id' => 2]);";
+    $no  = "\$rules = ['reporting_manager_id' => 'nullable|integer'];";
+    if (!preg_match($rx, $yes) || preg_match($rx, $no)) {
+        return ['SKIPPED', 'pattern fails its known-positive or matches its known-negative'];
+    }
+
     $writes = preg_match_all("/reporting_manager_id'\s*=>/", $src);
     $calls  = preg_match_all('/canAssign\(/', $src);
 
@@ -318,7 +328,14 @@ check('org', 'reporting_manager_id has exactly ONE guarded write path', function
         if ($f->getExtension() !== 'php') continue;
         if (str_contains($f->getPathname(), 'ReportingLineController')) continue;
         $s = file_get_contents($f->getPathname());
-        if (preg_match("/reporting_manager_id'\s*=>/", $s)) $others[] = basename($f->getPathname());
+        // Comments are prose, not behaviour - and a validation rule or a payload
+        // key is not a write either. Require the string to sit inside an
+        // ->update([...]) so a mention cannot be read as a mutation.
+        $s = preg_replace('#/\*.*?\*/#s', '', $s);
+        $s = preg_replace('#^\s*//.*$#m', '', $s);
+        if (preg_match("/->update\(\s*\[[^\]]*reporting_manager_id'\s*=>/s", $s)) {
+            $others[] = basename($f->getPathname());
+        }
     }
     $ok = $writes === 1 && $calls >= 1 && $others === [];
     return [$ok ? 'PASS' : 'FAIL', $ok
@@ -344,16 +361,31 @@ check('org', 'task.status has exactly ONE guarded write path', function () {
         // strip comments - a pattern that reads prose is not reading code
         $src = preg_replace('#/\*.*?\*/#s', '', $src);
         $src = preg_replace('#^\s*//.*$#m', '', $src);
-        if (!preg_match("/table\(\s*'task'\s*\)/", $src)) continue;
-        // an update() whose payload carries a status key
-        if (preg_match_all("/->update\(\s*\[[^\]]*'status'\s*=>/s", $src, $m)) {
-            $others[basename($path)] = count($m[0]);
+        // STATEMENT SCOPE, NOT FILE SCOPE. The first version asked whether the
+        // FILE mentioned table('task') and then matched any status update in it -
+        // so ProjectController (task_management_projects) and
+        // DeadlineExtensionController (task_deadline_extensions) were reported as
+        // writers of task.status. THEY ARE NOT. Same defect as L-11's checker:
+        // a scope wider than the thing being judged.
+        //
+        // The chain must start at table('task') and reach ->update([... 'status'
+        // ...]) without another ->table( in between.
+        $n = preg_match_all(
+            "/table\(\s*'task'\s*\)(?:(?!->table\(|DB::table\().)*?->update\(\s*\[[^\]]*'status'\s*=>/s",
+            $src, $m);
+        if ($n > 0) {
+            $others[basename($path)] = $n;
         }
     }
     // KNOWN-POSITIVE (R16): the pattern must be able to see the shape it hunts.
-    $probe = "DB::table('task')->where('id',1)->update(['status' => 'X']);";
-    if (!preg_match("/->update\(\s*\[[^\]]*'status'\s*=>/s", $probe)) {
-        return ['SKIPPED', 'pattern failed its own known-positive'];
+    // KNOWN-POSITIVE **AND KNOWN-NEGATIVE**. A pattern that only proves it can
+    // SEE the shape does not prove it can tell the shape apart from a lookalike -
+    // which is exactly how two innocent files were named.
+    $rx = "/table\(\s*'task'\s*\)(?:(?!->table\(|DB::table\().)*?->update\(\s*\[[^\]]*'status'\s*=>/s";
+    $yes = "DB::table('task')->where('id',1)->update(['status' => 'X']);";
+    $no  = "DB::table('task_management_projects')->where('id',1)->update(['status' => 'X']);";
+    if (!preg_match($rx, $yes) || preg_match($rx, $no)) {
+        return ['SKIPPED', 'pattern fails its known-positive or matches its known-negative'];
     }
 
     $n = array_sum($others);

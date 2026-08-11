@@ -618,6 +618,31 @@ L-06's row said "show what depends on this" and the count turned out to be a 6x
 over-report (**G-LIB-09**). **Both wrong, in opposite directions, from rows nobody
 had opened.** Any item sized from a plan row rather than from a read is a guess.
 
+**R29 — A GREEN CHECK WITH NO KNOWN-NEGATIVE IS AN UNTESTED CLAIM, NOT A VERIFIED ONE.**
+
+**The suite has 10 pattern-based assertions. 5 carry a known-positive. 2 carry a
+known-negative. The other 8 are UNVERIFIED, not passing** - and are to be treated
+that way until the scheduled pass adds their lookalikes.
+
+**The case that earned it:** `reporting_manager_id has exactly ONE guarded write
+path` matched the column name **anywhere in any file**, did not strip comments, and
+had neither probe. **It was passing because nothing had happened to trip it, not
+because it could tell a write from a mention.**
+
+> ### THE WEAKEST ASSERTION IN THE SUITE WAS THE ONE USED AS A TEMPLATE.
+>
+> T-01's check was copied from it and inherited its file-level scope - **a pattern
+> copied forward carries its gaps forward too.** The copy was then found wrong
+> (two innocent files named), which is the only reason the original was ever
+> re-read.
+
+**Second time in three turns that a check was passing for the wrong reason.**
+
+**And the remedy has its own failure mode:** adding eight lookalikes in a hurry
+produces eight strawmen that prove nothing **while looking like coverage** - the
+exact condition the rule exists to prevent, reproduced by the rule's own cure. A
+known-negative must be a genuine near-miss or it is decoration.
+
 **R26 — A NEW CHECK'S FIRST RED IS MORE LIKELY TO BE THE CHECK THAN THE CODE.**
 
 **QUALIFIER — A PRIOR, NOT A VERDICT. AFTER TWO ATTEMPTS, CHECK THE CODE.**
