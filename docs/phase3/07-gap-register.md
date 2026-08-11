@@ -84,6 +84,31 @@ it was built with the key from the start.
 # G-UI-02 - **HARNESS DEFECT, NOT A PRODUCT DEFECT** - RE-FILED 2026-08-11
 
 > ## The employee sidebar was never broken. My test server was.
+>
+> ### ⚠ MECHANISM UNEXPLAINED - AND THE SYMPTOM IS NON-DETERMINISTIC.
+>
+> **Three runs, three different sidebar item counts on the same build and the same
+> data: 1, then 6, then 2.** That is a RACE, not a configuration.
+>
+> **Both candidate mechanisms are eliminated by observation:**
+>
+> | Candidate | Test | Result |
+> |---|---|---|
+> | a leftover server winning the port | `tasklist` before start | **0 php processes** - no squatter |
+> | request starvation under load | sidebar after **1** login vs after **10** | **2 and 2** - load makes no difference |
+>
+> `PHP_CLI_SERVER_WORKERS` is a POSIX fork feature and **does nothing on Windows**
+> (measured: ratio 4.5 with it set, 4.4 without). So the run where all five modules
+> rendered was not explained by anything I set.
+>
+> **WHAT IS SETTLED:** the sidebar HAS rendered all five modules on this build, so
+> no product defect prevents it. **WHAT IS NOT:** why it usually does not.
+>
+> **The guard now reports the concurrency ratio on every X-21 run**, so the next
+> occurrence carries its own diagnostic rather than needing another investigation.
+> **That is worth more than a fourth pass now** - a race diagnosed from three
+> conflicting observations would be a guess dressed as a finding.
+
 
 `php artisan serve` is **single-threaded**. The app fires several requests during
 load; one in-flight request starves the rest, and the sidebar's was the one left
