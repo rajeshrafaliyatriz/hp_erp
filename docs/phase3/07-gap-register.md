@@ -27,6 +27,61 @@ workflow · **S3** degrades the product · **S4** cosmetic.
 
 ---
 
+---
+
+# ⭐ G-UI-02 - **THE EMPLOYEE SIDEBAR RENDERS ZERO OF FIVE MODULES** - **S2**
+
+The nav API returns **five modules** for a seeded employee - correct labels,
+correct `access_link`s, rights present. **The sidebar renders none of them.**
+
+```
+module button matching /competency/i : 0
+"My Capability" item                 : 0
+sidebar text nodes: G2G | GapstoGrowth | HRMS Platform | Main Dashboard
+```
+
+**An employee cannot navigate anywhere but the dashboard, on ANY module.**
+G-UI-01 was one symptom of this, not a separate defect.
+
+### THE CONSEQUENCE, PLAINLY
+
+**The nine seeded logins would show an employee who appears to have no product at
+all.** Six of the fourteen seeded people are employees. Anyone opening those
+credentials sees a dashboard and nothing else, and would reasonably conclude the
+capability work was never built.
+
+**That is what a manual walkthrough would have found. X-21 found it instead** - and
+found it by failing to arrive, which no source assertion or API check can do.
+
+### ROLE-DEPENDENT
+
+The administrator's client-side navigation works (`/dashboard` ->
+`/module/organizational-management/organization-setup/organization-profile`,
+verified). The employee's does not.
+
+### WHAT IS RULED OUT
+
+| Ruled out | How |
+|---|---|
+| rights | `can_view=1`, row present, menu returned by the API for this profile |
+| menu row shape | derived field-by-field from working sibling 156 |
+| content-map entry | `submenuId` present; `accessLink` **byte-identical** to the stored value (len 62, hex tails match) |
+| the `@/domain/*` alias, the container file | both resolve; `tsc` unchanged |
+| **the nav-query race** | **REFUTED.** `GtgAppShell`'s effect returns early on `modules.length <= 1` AND lists `modules` as a dependency, so it neither runs early nor fails to re-run. The race was anticipated and guarded, with a comment saying so |
+
+### ONE OBSERVATION, NOT A HYPOTHESIS
+
+When `parseRoutePath` returns null there is **no else branch** - `active` stays at
+`DEFAULT_ACTIVE` permanently. That is consistent with the dashboard fallback but
+does not explain why `keyByPath` lacks the path, nor why the sidebar renders no
+modules. **Recorded as an observation because it has not been tested.**
+
+**Not a cross-tenant leak and not an unauthenticated write, so it does not jump
+the queue.** The fix belongs here, not to G-UI-01 - whose mount is committed and
+inert and starts working the moment this does.
+
+---
+
 # ⭐ G-UI-01 - **THE CAPABILITY SCREEN HAS NO ROUTE. NOBODY CAN OPEN IT.** - **S1**
 
 > **Slice 1's entire deliverable - the gap view, the "Not yet assessed" screen,
