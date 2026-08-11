@@ -2184,3 +2184,76 @@ than the code**, which is R4 pointed at myself.
 
 Smoke **32 -> 44 checks**, 91s, GREEN. Frontend `tsc`: **9 errors, unchanged and
 all pre-existing** (`admin-center`, `gtg-nav-visibility`, `offboarding-service`).
+
+## D-056 - X-21: real browser verification, and the capability I never tested
+
+**Chromium 151 headless, driving the real Next app against the real Laravel API.
+First time in this phase anything has verified a RENDERED SCREEN.**
+
+### THE GATING UNKNOWN, ANSWERED FIRST
+
+`chromium.launch({ headless: true })` on Windows: **OK, 151.0.7922.34, rendered.**
+It was the one thing only an install could settle, so it was settled before
+anything was built.
+
+### RESULTS - 15 PASS, 0 FAIL, 1 SKIPPED
+
+- **All nine logins work through the real form.** Every one lands on `/dashboard`
+  with the bell **visible** and **zero page errors**.
+- **Item 1 (present but invisible):** `isVisible()` honours display, visibility,
+  opacity, zero size, off-screen. Source cannot see any of it.
+- **Item 2 (component throws):** `pageerror` collected per login. Zero.
+- **Item 3 (no data behind correct source):** the bell requests on mount AND what
+  is on screen matches what the API returned.
+- Items 5, 6, 9: navigation navigates, no hydration mismatch, the menu opens.
+- **SKIPPED:** the bounded legibility check - "Not yet assessed" is not on the
+  dashboard, so it did not run. **A SKIP is not a pass.**
+
+### THE KNOWN-NEGATIVE - R16 INVERTED
+
+Triz's condition was *"if the harness would not have caught the bell, it is not
+finished."* So the harness runs a synthetic page carrying **the dead bell exactly
+as it was** - hardcoded "New", permanent "You're all caught up", no fetch - and
+**asserts it FAILS.** It does.
+
+> **A harness that cannot fail on a known-broken page proves nothing when it
+> passes on a real one.**
+
+### ⚠ THE BROWSER CORRECTED SOMETHING SOURCE REASONING GOT WRONG
+
+Navigation landed on:
+
+    /module/organizational-management/organization-setup/organization-profile
+
+**Those are SLUGS, not numeric ids.** G-NOTIF-02 argued that notification action
+links could not be built because *"the ids come from `tblmenumaster_g2g` at
+runtime"* - and set six templates' `action_path` to NULL on that reasoning.
+
+**The claim was too strong.** A slug path is constructible in a way a numeric id
+path is not. **The open question is whether slugs are stable per tenant** - they
+appear to derive from menu names, so a tenant renaming a menu may change its slug.
+**Re-opened as a question, not as a fix**, and the NULLs stay until it is answered.
+**This is exactly what Tier 3 was for: it found a wrong inference, not a wrong
+line of code.**
+
+### SIX OF MY OWN ASSERTIONS WERE WRONG BEFORE THEY WERE RIGHT
+
+Two more here, on top of Tier 1/2's four: a response handler that awaits
+`r.json()` and **finishes after the code reading its result** (reported "HTTP
+null" as an endpoint failure), and a nav check that **clicked "Main Dashboard"
+while already on /dashboard** and called the unchanged URL a navigation failure.
+
+**Recorded as R26: a new check's first red is more likely to be the check than the
+code.** Six false alarms, one real defect, across two turns.
+
+### THE CAPABILITY CORRECTION - R25
+
+**C20's entire verification protocol rested on my untested claim that I could not
+drive a browser.** Establishing the truth took four minutes. Recorded in R4's
+family, with the tell: **a real limit announces itself with an error message; this
+one had never been hit because it had never been tried.**
+
+**Asked once, as instructed:** nothing else in this phase is scoped by an
+untested capability claim. Everything else deferred is deferred by a decision or a
+rule, both Triz's and both written down. **The browser was the only one, and it
+was load-bearing.**

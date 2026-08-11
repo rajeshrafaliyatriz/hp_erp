@@ -504,6 +504,44 @@ hand that typed the input is a check that can agree with its own mistake. This i
 R23's sibling — R23 says a detail must be observed; this says an expectation must be
 derived.
 
+**R25 (R4's family) — AN ASSUMPTION ABOUT CAPABILITY, NEVER VALIDATED.**
+
+> ### I SAID I COULD NOT DRIVE A BROWSER. I NEVER TESTED THAT.
+
+**C20's entire verification protocol rested on it** — the manual walkthrough, the
+"UI-only residue", the "you must run these yourself", the nine screens Triz was
+going to open by hand after every item. All of it followed from one unexamined
+sentence about my own capability.
+
+**Establishing the truth took four minutes:**
+
+| | |
+|---|---|
+| `node --version` | **v22.14.0** |
+| `npm run dev` | **Ready in 6.2s** |
+| `curl localhost:3000/login` | **HTTP 200** |
+| Chromium headless | **launches, renders, 151.0.7922.34** |
+
+**THIS IS THE SAME CLASS AS EVERY CHECKER FAILURE THIS PHASE, ONE LEVEL UP.** R4
+says the checker is the primary suspect when it disagrees with the artefact. R25
+says **the TOOLING ASSUMPTION is a suspect before either** — a limit asserted
+about the environment is a claim, and an untested claim is not evidence.
+
+**The tell:** a constraint that has never produced an error message. A real limit
+announces itself when you hit it. **This one had never been hit, because it had
+never been tried.**
+
+**Practice:** before scoping work around "I cannot X", spend the two minutes
+proving you cannot. If the proof is an error message, quote it. If there is no
+error message, there is no limit yet.
+
+**The general question, asked once:** *what else has been ruled out on an untested
+capability assumption rather than a tested one?* — Honest answer: **nothing else
+in this phase's record is scoped by a capability claim I have not exercised.**
+Everything else deferred (email sending, bulk writes, the 51 files, C-SEP-02) is
+deferred by a DECISION or a RULE, both of which are Triz's and both of which are
+written down. **The browser was the only one, and it was load-bearing.**
+
 **R24 — A JOIN THAT SUCCEEDS IS NOT A REFERENT. A MATCH IS NOT A RELATIONSHIP.**
 
 **Coverage is not reference.** That an id exists in a table, or a name matches a
@@ -530,6 +568,29 @@ If no such property exists, the join is a hypothesis.
 **Companion to R6:** R6 says only a measurement produces a finding. R24 says **not
 every measurement measures what you think.** A 100% join rate is a measurement, and
 in case 3 it was a measurement of id-range overlap.
+
+**R26 — A NEW CHECK'S FIRST RED IS MORE LIKELY TO BE THE CHECK THAN THE CODE.**
+
+R4 pointed at my own new work. **Not "be careful" — a default: investigate the
+assertion before reporting the product.**
+
+**The tally that earned it, all in two turns and all false alarms:**
+
+| # | The check said | It was actually |
+|---|---|---|
+| 1 | `divya level=NULL` **FAIL** | `?? 'missing'` **returns the fallback WHEN THE VALUE IS NULL**, so it can never observe the null it tests for |
+| 2 | role-map **HTTP 422** | I posted `competencies`; the endpoint validates `items` |
+| 3 | role-map **HTTP 201 != 200** | the endpoint CREATES; 201 is correct |
+| 4 | `resolvable = []` | the regex stopped at the bracket in `KasbaType[]` and **reported its own empty capture as the finding** |
+| 5 | bell **"list returned HTTP null"** | an async response handler that finishes AFTER the code reading its result |
+| 6 | navigation **"URL did not change"** | it clicked "Main Dashboard" **while already on /dashboard** |
+
+**Six false alarms, one real defect** (the six missed "Competency" strings) — and
+the real one was found by a check that passed its own known-positive first.
+
+**Numbers 1 and 4 are the sharpest:** a check that *cannot* observe what it tests
+for, and a pattern that reports its own mis-parse as a product finding. Both look
+exactly like a defect from the outside.
 
 **R23 — A DETAIL STRING THAT CANNOT BE WRONG IS NOT EVIDENCE.**
 
@@ -759,8 +820,8 @@ appear in the recovered Decisions table above. **Nothing is awaiting Triz.**
 > register being right while the queue is wrong is the dangerous combination,
 > because the queue is the recovery path.**
 
-**RECONCILIATION (R18, every write):** queue "done" rows = **55** ·
-`09-implementation-log.md` entries = **55** · **AGREE.** · plan file **23 of 59 done** (X-16 closes F-05a and F-05b) (R18c(iii))
+**RECONCILIATION (R18, every write):** queue "done" rows = **56** ·
+`09-implementation-log.md` entries = **56** · **AGREE.** · plan file **23 of 59 done** (X-16 closes F-05a and F-05b) (R18c(iii))
 *(They disagreed by 13 before this rewrite: the security stream shipped 12 fixes
 that were recorded in `07-gap-register.md` and in git, but never as D-entries.)*
 
