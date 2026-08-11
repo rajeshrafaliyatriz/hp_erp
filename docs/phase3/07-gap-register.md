@@ -52,6 +52,26 @@ through join clauses, here reached through a feature rather than a sweep.
 > **One is obviously wrong and the other is quietly wrong, and the quiet one is
 > worse.**
 
+> ### A user told *"deleting this affects 479,623 records"* would never delete
+> ### anything. A user told *"1,237 more than are really there"* would not notice.
+> ### **ONE IS OBVIOUSLY WRONG, THE OTHER IS QUIETLY WRONG, AND THE QUIET ONE IS
+> ### WORSE.**
+
+### HOW IT ARRIVED, AND WHY THAT MATTERS MORE THAN THE NUMBER
+
+**A FEATURE FOUND IT. THE SWEEPS DID NOT.**
+
+L-11's sweep found this class **once** - and then produced **29 candidates and
+zero verified findings**. Building against real data has now found it **twice**:
+G-DASH-01, and this. Both times the mechanism was identical: **two ways of asking
+one question, disagreeing.**
+
+> **The sweeps looked for the SHAPE of the defect in the code. The features hit
+> the CONSEQUENCE of it in the data.** A sweep can only find what its pattern can
+> express; a feature that needs a correct number finds whatever is making the
+> number wrong. **That is the practical form of "only a measurement produces a
+> finding" (R6) - and it says where to look, not just what to trust.**
+
 **This is G-DASH-01's shape a second time**, and it arrived the same way: two ways
 of asking the same question disagreeing. **L-06's count is computed BY KEY**, and
 the difference is why the item is worth building rather than a nicety.
