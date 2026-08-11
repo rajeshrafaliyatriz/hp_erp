@@ -15,7 +15,9 @@ network boundary - that layer produced five eliminations and no answer.
 | 2 | **L-06** | `library-tab.tsx` | the delete dialog shows the count, its basis line "Counted by key", the breakdown, and the **failure state** when the request fails - not a zero |
 | 3 | **G-UI-01** | `cm-my-capability-screen.tsx`, `content-map-m2.ts`, `index.ts` | the capability screen renders at menu 224 for all 8 granted roles; unmeasured shows "Not yet assessed" and no zero |
 
-**3 of 5.**
+| 4 | **X-03** (partial) | `library-config.ts` | `proficiency_level` offers suggestions from `meta.proficiency_levels` and still accepts a new value |
+
+**4 of 5.**
 
 ## Why the cap is 5 and not a time limit
 
