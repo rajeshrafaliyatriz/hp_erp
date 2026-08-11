@@ -177,6 +177,64 @@ function stopAll() {
     if (!ok) await ctx.close();
   }
 
+  // ══ WHAT THE SIDEBAR ACTUALLY RECEIVES ═══════════════════════════════════
+  // G-UI-02. The third instance of one class: G-UI-01 (component, no route), the
+  // bell (control, no data), this (modules returned, none rendered). All three
+  // are "correct source, nothing arrives", and NONE is reachable from source or
+  // from an API check made outside the browser.
+  //
+  // THE FULL RESOLVED URL IS RECORDED, not just the params: webClient and
+  // apiClient use DIFFERENT BASE URLS, so "is profile_id present" is the second
+  // question. The first is whether the browser reaches the same endpoint at all.
+  console.log(String.fromCharCode(10) + 'WHAT THE SIDEBAR RECEIVES (G-UI-02)' + String.fromCharCode(10));
+  {
+    const who = loggedIn['employee'] || loggedIn['administrator'];
+    if (!who) {
+      report('SKIPPED', 'sidebar request: full URL, status, module count', 'no session');
+    } else {
+      const { page } = who;
+      const seen = [];
+      const onResp = async (r) => {
+        if (!/ajax_sidebar_menu_g2g/.test(r.url())) return;
+        let body = null, len = 0;
+        try { const txt = await r.text(); len = txt.length; body = JSON.parse(txt); } catch (e) {}
+        seen.push({ url: r.url(), status: r.status(), len,
+                    modules: Array.isArray(body && body.data) ? body.data.length : null,
+                    firstKeys: body && body.data && body.data[0] ? Object.keys(body.data[0]).join(',') : null });
+      };
+      page.on('response', onResp);
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await page.waitForTimeout(4000);
+      page.off('response', onResp);
+
+      if (!seen.length) {
+        report('FAIL', 'sidebar request: full URL, status, module count',
+          'THE BROWSER NEVER REQUESTED THE MENU ENDPOINT AT ALL');
+      } else {
+        const s = seen[0];
+        console.log('    URL     : ' + s.url);
+        console.log('    status  : ' + s.status + '   bytes: ' + s.len);
+        console.log('    modules : ' + s.modules);
+        console.log('    row keys: ' + (s.firstKeys || '-'));
+        const ok = s.status === 200 && s.modules !== null && s.modules > 0;
+        report(ok ? 'PASS' : 'FAIL', 'sidebar receives its modules',
+          ok ? s.modules + ' modules over HTTP ' + s.status
+             : 'HTTP ' + s.status + ', modules=' + s.modules + ' - the sidebar is handed nothing');
+      }
+
+      // And what the DOM did with them.
+      const rendered = await page.evaluate(() => {
+        const els = Array.from(document.querySelectorAll('aside button, aside a, nav button'));
+        return els.map((e) => (e.textContent || '').trim()).filter(Boolean).slice(0, 12);
+      });
+      console.log('    rendered: ' + JSON.stringify(rendered));
+      const n = seen.length ? seen[0].modules : null;
+      report(n !== null && rendered.length >= n ? 'PASS' : 'FAIL',
+        'modules received are modules rendered',
+        'received ' + n + ', sidebar shows ' + rendered.length + ' clickable item(s)');
+    }
+  }
+
   // ══ ITEM 3 — THE BELL, FOR REAL ══════════════════════════════════════════
   console.log('\nITEM 3 — API SHAPE MISMATCH / NO DATA BEHIND THE SOURCE\n');
 
