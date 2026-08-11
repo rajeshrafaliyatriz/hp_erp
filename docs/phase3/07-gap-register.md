@@ -798,6 +798,54 @@ matched and did not.
 
 **CONSEQUENCE - A SIXTH REQUIREMENT, AND IT IS LARGER THAN THE OTHER FIVE:**
 
+## ⚠ ONE-LINER: A MODULE-LEVEL NAMING FAILURE, NOT TWO INCIDENTS
+
+`competencyLibraryImport` writes `s_users_skills`. **`CompetencyController::store()`
+did the same thing** (G-RBAC-02b). **Twice in one module makes it a pattern**, and
+it is the same root that produced the Skill Library rename: **things named
+"competency" that operate on skills.**
+
+**Worth one sweep when the queue has room:** what else in the competency module is
+named for competency and operates on skills? **Not now.**
+
+---
+
+## X-08(b) DECISION - **BRING-YOUR-OWN IMPORTER FIRST** (Triz, 2026-08-11)
+
+Three shapes were on the table. **(2) bring-your-own, then (3) the enrichment
+loop. NOT (1) domain libraries.**
+
+| # | Why |
+|---|---|
+| **(2) BYO importer** | **The only shape needing NO authoring from anyone.** With seven authoring items already blocking the plan (G-PLAN-01), that outweighs its individual value |
+| | **It matches how enterprise buyers arrive.** A hospital group with 400 nurses already HAS a framework - in a spreadsheet, from a consultancy, or in the system they are replacing. **Making them retype it is the worst possible first impression, and it is the current behaviour** |
+| **(3) enrichment loop** | Follows naturally and is **half-built**: the HOLDING state exists and already reports coverage. Import what they have; labels become canonical through use |
+| **(1) domain libraries** | **DEFERRED. A content business, not a software one** - an authoring commitment that never ends, for verticals we do not work in |
+
+> ### THE IMPORTS ARE THE EVIDENCE FOR WHICH DOMAINS ARE WORTH AUTHORING.
+>
+> A healthcare library built **before** any healthcare customer imports theirs
+> would be authored from **guesses about what a hospital's framework contains**.
+> **Build the second from what the first three customers bring** - (2) feeding
+> (1), not the reverse.
+
+**That inversion is the correction:** the instinct is that domain libraries make
+the importer more valuable. It is the other way round.
+
+### X-08(b) SCOPE, AND ONE THING IT MUST NOT DO
+
+CSV/spreadsheet into the tenant's **own** rows. Names resolved to ids **at import
+time** - Q-C1's original position, and the one place where *"whose copy does this
+name mean"* has exactly one answer. **All five KASBA dimensions**, because
+G-SEED-01's correction means a customer's framework carries knowledge, ability,
+attitude and behaviour items too.
+
+> **DO NOT BUILD A VALIDATOR THAT REJECTS VOCABULARY IT DOES NOT RECOGNISE.**
+> That is the generic-library failure in a new place: the customer's words are the
+> content, and the importer's job is to accept them, not to grade them.
+
+---
+
 ### R6. THE LIBRARY MUST SUPPLY DOMAIN-SPECIFIC SKILL VOCABULARY, NOT ONLY ALL FIVE DIMENSIONS
 
 **A library covering all five dimensions in generic terms would still resolve

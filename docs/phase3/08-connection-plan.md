@@ -14,6 +14,13 @@ BUILD sections of the six module write-ups. Nothing is re-derived here.
 > | **L-06** | "show what depends on this" | the count over-reports **6x** by title (**G-LIB-09**) |
 > | **X-03** | "Not started", sized **M-L** | **the mechanism already existed**; the work was config lines |
 >
+> | **X-08(b)** | "seed-library import flow" | **a CSV importer EXISTS** - and writes `s_users_skills`, not KASBA bundles |
+>
+> **Four kinds of wrong, not one:** wrong SIZE (C-10, 5 vs 2), wrong KIND (G-UI-01,
+> a different problem entirely), TWO QUESTIONS IN ONE ROW (T-01, "is this a legal
+> status" vs "what happens when a task moves"), and now **DESCRIBED AS ABSENT A
+> MECHANISM THAT EXISTS AND SOLVES A DIFFERENT PROBLEM THAN ITS NAME CLAIMS**.
+>
 > **Wrong in both directions and wrong about kind, not just size.** These rows were
 > written before anyone opened the files.
 >
