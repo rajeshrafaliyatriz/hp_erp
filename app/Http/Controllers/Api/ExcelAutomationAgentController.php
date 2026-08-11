@@ -650,11 +650,19 @@ class ExcelAutomationAgentController extends Controller
         $tokenSubInstituteId = isset($tokenUser->sub_institute_id)
             ? (int) $tokenUser->sub_institute_id
             : null;
-        $isSuperAdmin = (int) ($tokenUser->is_admin ?? 0) === 1 && in_array($tokenSubInstituteId, [0, null], true);
 
-        if ($isSuperAdmin && $requestedSubInstituteId) {
-            return $requestedSubInstituteId;
-        }
+        // G-SEC-28. THE SUPER-ADMIN BRANCH IS GONE.
+        //
+        // It returned the REQUESTED tenant when the caller was is_admin=1 AND
+        // their own sub_institute_id was 0 or NULL. Measured: 0 of 2 admin
+        // accounts qualify, and 0 of 401 accounts have a null or zero tenant -
+        // the branch was unreachable.
+        //
+        // WHAT MUST NOT GO WITH IT: everything below. This helper is STRICTER
+        // than the shared trait - resolveApiIdentity silently IGNORES a
+        // mismatched tenant, this one THROWS. That strictness is the reason this
+        // controller was cleared during the G-SEC-26 triage, and removing an
+        // unreachable branch must not soften it.
 
         if (!$tokenSubInstituteId) {
             throw new RuntimeException('Unable to resolve organization from token.');

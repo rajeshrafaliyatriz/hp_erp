@@ -378,6 +378,95 @@ then becomes a real guard instead of 5-for-5 wrong.
 files: untouched"*, which reads as tidiness. **It is a blocker on the
 highest-priority remaining item in the queue.**
 
+## TWO ZEROS, ONE OF THEM EVIDENCE - a worked pair
+
+Filed as a method result, not under any item. Both numbers came up in the same
+turn, both were zero, both looked like clearance. One was. Recorded here because
+the next person will meet this shape again and the two are not distinguishable
+by the number.
+
+### ZERO #1 - a census. **REAL EVIDENCE.**
+
+    accounts with a NULL or zero sub_institute_id : 0 of 401
+
+Every row of a populated table was examined. The zero is the ANSWER to the
+question. There is no account the count could have missed, because the count
+covered the population. This is what justified deleting five request-tenant
+fallbacks: they compensated for a condition that provably does not occur.
+
+### ZERO #2 - an absence in a log. **NOT EVIDENCE.**
+
+    "table_data" mentions in the log   : 0
+    "anonymous read" entries           : 0
+    log range                          : 2026-01-28 -> now (~6.5 months)
+
+This looked identical and is not. The population here is not "the callers of
+table_data" - it is "the callers who happened to exercise the path during a
+window in which the product has no customers". A zero over a period nobody used
+the system measures the period, not the code. **An absence of use is not an
+absence of callers.**
+
+### THE THIRD THING, WITHOUT WHICH ZERO #2 IS MEANINGLESS IN A FURTHER WAY
+
+    local.INFO entries in the same log : 97
+
+That is the logger's KNOWN-POSITIVE. Without it there are two live explanations
+for the zero and no way to choose: nobody called the path, OR logging never
+reaches this file at all. The 97 eliminates the second. So the zero is a REAL
+ABSENCE - it is just an absence of the wrong thing.
+
+Three states, not two, and only the third is worth arguing about:
+
+| | what the zero means |
+|---|---|
+| broken instrument | nothing - the instrument cannot see |
+| real absence, wrong population | the window was quiet |
+| census of the population | the condition does not exist |
+
+### WHY THIS IS R6, NOT A NEW RULE
+
+R6 says a pattern produces candidates and only a measurement produces a finding.
+Zero #2 IS a measurement - it just measures a different population than the one
+the claim is about. **R6's sharper form: a measurement of the WRONG POPULATION
+is a pattern wearing a number.** The number does not upgrade it. What would
+upgrade it is measuring the right population: the routes, not the logs.
+
+### WHAT IT COST TO GET THIS RIGHT
+
+Nothing, and that is the point. Zero #2 would have cleared
+`AJAXController::tableDataRequestedTenant` for deletion, the suite would have
+gone green, and an endpoint with anonymous callers would have lost the only
+tenant source it has. **The green would have been bought with a regression.**
+
+---
+
+## G-MIG-01 - RETIRE THE ANONYMOUS `table_data` CALLERS - **OPEN, NOT BLOCKING**
+
+`AJAXController::tableDataRequestedTenant` reads the tenant from the request.
+It is the last offender the private-helper assertion names, and it **STAYS**.
+
+**Why it stays.** `/api/table_data` has anonymous callers. With no authenticated
+identity there is no resolved tenant to thread in, so the request read is the
+only source of a tenant the endpoint has. Deleting it does not fix a leak; it
+breaks a working path. Its removal belongs to the migration that retires the
+anonymous callers, not to G-SEC-28, which removed fallbacks that compensated for
+a measured-impossible condition.
+
+**Evidence that WOULD justify removal - and the evidence that would not.**
+
+- ✅ **A ROUTE-LEVEL AUDIT OF WHO ACTUALLY CALLS `table_data`.** Enumerate the
+  callers from the routes and the frontend, not from behaviour. Every caller
+  either authenticates or is migrated to an endpoint that does. When the last
+  anonymous caller is gone, the read has no reason to exist and goes with it.
+- ❌ **NOT A LOG COUNT.** 0 mentions in 6.5 months was already measured and
+  already rejected - see the two-zeros pair above. Recorded here so the next
+  person does not repeat the reasoning and reach the opposite conclusion.
+
+**The suite stays red until this lands**, and the check carries a note saying so.
+It goes green by the endpoint changing, never by the check changing.
+
+---
+
 ## O-04 - BLOCKED
 
 Three report-route leaks, subset of **G-SEC-11 (S1)**. **All seven `Reports/`

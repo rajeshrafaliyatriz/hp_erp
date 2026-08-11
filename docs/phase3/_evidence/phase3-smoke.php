@@ -1042,8 +1042,49 @@ check('static', 'no PRIVATE helper reads a request tenant at all', function () {
         }
     }
 
+    // ── THIS CHECK IS NOT SUPPOSED TO BE GREEN YET. DO NOT TUNE IT. ──────────
+    // One offender is HELD ON PURPOSE, with evidence, and the red is the correct
+    // state of the system - not a defect in the check.
+    //
+    // AJAXController::tableDataRequestedTenant serves /api/table_data, which has
+    // ANONYMOUS callers: with no authenticated identity there is no tenant to
+    // thread in, so the request read is the only source there is. Deleting it
+    // would turn a working endpoint into a broken one and buy a green with a
+    // regression. THAT WOULD BE WORSE THAN THE RED.
+    //
+    // What it is NOT cleared by: a log count. 0 mentions of table_data in 6.5
+    // months of logs is an absence in a system with no customers, not evidence
+    // that nobody calls it. See G-MIG-01 for the evidence that WOULD retire it -
+    // a route-level audit of the actual callers - and the two-zeros worked pair
+    // in the register for why the distinction matters.
+    //
+    // When G-MIG-01 lands, this check goes green by the endpoint changing, never
+    // by the check changing.
+    // The SECOND remaining offender is also held, for a DIFFERENT reason.
+    // ExcelAutomationAgentController::resolveSubInstituteId reads the requested
+    // tenant only to REFUSE it: if it differs from the token's tenant the helper
+    // THROWS. It never trusts the value. That is stricter than the shared trait,
+    // which silently ignores a mismatch, and it is why the controller was cleared
+    // in the G-SEC-26 triage. G-SEC-28 removed its unreachable super-admin branch
+    // and left the refusal intact - verified behaviourally, not by reading.
+    //
+    // This check cannot tell "reads to trust" from "reads to refuse" - it matches
+    // the read, not the use. That is a real limit of the pattern, named here
+    // rather than papered over with an exemption.
+    $held = [
+        'AJAXController.php::tableDataRequestedTenant'            => 'anonymous callers, see G-MIG-01',
+        'ExcelAutomationAgentController.php::resolveSubInstituteId' => 'reads to REFUSE, never to trust',
+    ];
+    $notes = [];
+    foreach ($offenders as $o) {
+        if (isset($held[$o])) $notes[] = $o . ' (' . $held[$o] . ')';
+    }
+    $note = $notes
+        ? ' | HELD BY DECISION, do not tune this check to clear them: ' . implode('; ', $notes)
+        : '';
+
     return [$offenders ? 'FAIL' : 'PASS',
-        $offenders ? count($offenders) . ': ' . implode(' | ', $offenders)
+        $offenders ? count($offenders) . ': ' . implode(' | ', $offenders) . $note
                    : 'no private/protected helper reads a tenant from a request'];
 });
 
