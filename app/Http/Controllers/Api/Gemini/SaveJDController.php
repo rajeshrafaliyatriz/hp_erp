@@ -233,14 +233,50 @@ class SaveJDController extends Controller
         }
     }
 
+    /**
+     * G-SEC-27. The caller's OWN organisation, from their token or session.
+     *
+     * Returns NULL when identity cannot supply one, and the caller's own
+     * `required|integer` validation then refuses the request. FAILING CLOSED is
+     * the point: a JD written into an unknown organisation is the defect this
+     * replaces, and there is no fallback that could improve on a refusal.
+     */
+    private function tenantFromIdentity(Request $request): ?int
+    {
+        $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
+        if ($token !== '') {
+            $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            $user = $accessToken?->tokenable;
+            if ($user && !empty($user->sub_institute_id)) {
+                return (int) $user->sub_institute_id;
+            }
+        }
+
+        $session = $request->session()->get('sub_institute_id');
+
+        return is_numeric($session) && (int) $session > 0 ? (int) $session : null;
+    }
+
     private function normalizePayload(Request $request): array
     {
         $payload = $request->all();
         $payload['job_role_name'] = $payload['job_role_name'] ?? $payload['jobrole'] ?? null;
         $payload['industry'] = $payload['industry'] ?? $payload['industries'] ?? null;
-        $payload['sub_institute_id'] = $payload['sub_institute_id']
-            ?? $request->header('sub_institute_id')
-            ?? $request->session()->get('sub_institute_id');
+        // ── G-SEC-27 ────────────────────────────────────────────────────────
+        // CONFIRMED CROSS-TENANT WRITE. This read the REQUEST BODY FIRST and
+        // identity LAST, so an authenticated user in tenant 3 created a job role
+        // inside tenant 1's library - HTTP 201, verified end to end by
+        // docs/phase3/_evidence/g-sec-27-probe.php.
+        //
+        // A read exposes. THIS PLANTED DATA THAT LOOKED NATIVE: nothing in the
+        // victim organisation would ever show the row came from outside.
+        //
+        // THE REQUEST IS NOT CONSULTED AT ALL. Not "validated against the
+        // caller's tenant" - a value that must equal the identity's is a value
+        // with no reason to be sent. Every other resolver in this codebase puts
+        // identity first; this file was written to a different convention.
+        $payload['sub_institute_id'] = $this->tenantFromIdentity($request);
+        // ────────────────────────────────────────────────────────────────────
         $payload['user_id'] = $payload['user_id'] ?? auth()->id() ?? $request->session()->get('user_id');
         $payload['sub_department'] = $payload['sub_department'] ?? $payload['department'] ?? null;
         $payload['behavior'] = $payload['behavior'] ?? $payload['behaviour'] ?? [];

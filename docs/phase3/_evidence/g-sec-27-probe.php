@@ -79,8 +79,13 @@ $markerHits = [];
 foreach ($candidates as $t) {
     foreach (['jobrole', 'job_role_name', 'name', 'title'] as $col) {
         if (!Schema::hasColumn($t, $col)) continue;
-        $n = DB::table($t)->where($col, 'like', "%$marker%")->count();
-        if ($n > 0) $markerHits[] = "$t.$col ($n)";
+        // TENANT-SCOPED. The first version searched EVERY tenant, so after the
+        // fix it still found the marker - in the ATTACKER'S OWN tenant, where the
+        // row now correctly lands. An unscoped search cannot tell "written to the
+        // victim" from "written to yourself", which is the entire question.
+        $n = DB::table($t)->where($col, 'like', "%$marker%")
+            ->where('sub_institute_id', $victimTenant)->count();
+        if ($n > 0) $markerHits[] = "$t.$col ($n) IN TENANT $victimTenant";
     }
 }
 
