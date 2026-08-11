@@ -427,6 +427,36 @@ one follows the row in both directions.
 - The **readiness screen remains unreachable** in the product; its menu row was
   created and rolled back rather than left half-applied.
 
+### ⛔ IT NOW BLOCKS A SECOND CAPABILITY, NOT A SECOND ITEM
+
+**2026-08-12.** Both are decided, both are correct, both wait on the same files.
+
+| capability | state | what it waits on |
+|---|---|---|
+| **Matrix-enforced authorization** | built, proven, **cannot be registered** | one line in `bootstrap/app.php` |
+| **Identity-resolver consolidation** | decided (THROW), **cannot be landed** | 21 of 54 exposed callers are in the 51 |
+
+**The consolidation was stopped before any edit.** Adding the throw to
+`ResolvesApiIdentity` changes behaviour for all 76 consumers; 54 of those
+reference a request tenant, so a mismatch is possible there; **21 of those 54 are
+files that cannot be committed.** Four of the 21 are CONTEXT WRAPPER TRAITS -
+`ResolvesAgenticContext`, `ResolvesMobilityContext`, `ResolvesOffboardingContext`,
+`ResolvesOnboardingContext`, `ResolvesPerformanceContext` - so **the blast radius
+is wider than the file count**, because each fans out to every controller in its
+domain.
+
+**THE 54 IS AN UPPER BOUND, NOT A RUNTIME COUNT.** It counts where a tenant CAN be
+supplied. "Currently passing a MISMATCHED tenant" is a property of live requests
+and the true number is somewhere between 0 and 54. **Consolidating on the
+assumption it is 0 would be the wrong-population error again** - the same shape as
+the two zeros, and it is why this stopped rather than proceeded.
+
+**This is the difference between a blocked queue and a blocked product.** One item
+waiting is a schedule problem. Two finished capabilities that cannot be switched
+on is the block deciding what the product does.
+
+---
+
 ### THE MATRIX AND THE ROUTES DISAGREE IN FOUR DIRECTIONS
 
 **One table, and it completes the case.** Measured 2026-08-12 across all nine

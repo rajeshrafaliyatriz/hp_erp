@@ -647,6 +647,28 @@ had opened.** Any item sized from a plan row rather than from a read is a guess.
 
 **R29 — A GREEN CHECK WITH NO KNOWN-NEGATIVE IS AN UNTESTED CLAIM, NOT A VERIFIED ONE.**
 
+**AMENDED 2026-08-12 — A KNOWN-NEGATIVE HAS TWO FAILURE MODES AND THIS RULE NAMED
+ONLY ONE.**
+
+R29 was written against a known-negative that is **TOO PERMISSIVE**: a fixture so
+unlike a real defect that passing it proves nothing. That is the common case, and
+it is what "eight lookalikes added in a hurry" means.
+
+**The second mode is a known-negative that is TOO STRICT**, and it fails
+differently. The check fires on a shape that is legitimate, goes red forever, and
+**gets switched off by whoever is tired of it.** A check nobody runs is worse than
+a check that cannot discriminate - at least the second one is still watching.
+
+**THE INSTANCE:** `Skill Library: no user-visible "Competency" string`. Import
+paths and class names carry that word all over the file. Its known-negative is
+therefore the **SAFE** shape - an import path and a className that must NOT fire.
+For a check whose risk is over-eagerness, **the near-miss is the thing that should
+pass.**
+
+**THE TEST:** ask which direction this check is likely to be wrong in, and build
+the near-miss on that side. A check that under-reports needs a fixture that MUST
+BE CAUGHT; a check that over-reports needs one that MUST BE LET THROUGH.
+
 **The suite has 10 pattern-based assertions. 5 carry a known-positive. 2 carry a
 known-negative. The other 8 are UNVERIFIED, not passing** - and are to be treated
 that way until the scheduled pass adds their lookalikes.
