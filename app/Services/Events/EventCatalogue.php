@@ -47,15 +47,11 @@ class EventCatalogue
     /** @var array<string, array<string, string>> event => consumer => kind */
     public const SHIPPED = [
         'task.rejected' => [
-            'CapabilityEvidenceProjector' => self::PROJECTOR,
             'TaskStatusProjector'         => self::PROJECTOR,
             'NotificationDispatcher'      => self::REACTOR,
         ],
         'task.status_changed' => [
             'TaskStatusProjector'         => self::PROJECTOR,
-        ],
-        'task.reopened' => [
-            'CapabilityEvidenceProjector' => self::PROJECTOR,
         ],
         // X-06: NotificationDispatcher REMOVED from this event. RemediationRecommender
         // still consumes it, so the event survives the named-consumer test.
@@ -64,22 +60,18 @@ class EventCatalogue
         ],
         'capability.flag_resolved' => [
             'ProficiencyService'          => self::PROJECTOR,
-            'CapabilityEvidenceProjector' => self::PROJECTOR,
         ],
         'assessment.completed' => [
             'ProficiencyService'          => self::PROJECTOR,
-            'GapRecalculator'             => self::PROJECTOR,
             'NotificationDispatcher'      => self::REACTOR,
         ],
         'course.completed' => [
             'CertificateIssuer'           => self::REACTOR,
             'ProficiencyService'          => self::PROJECTOR,
-            'GapRecalculator'             => self::PROJECTOR,
         ],
         // X-06 deferred this; X-11 UN-DEFERS it. CertificateIssuer now emits it,
         // and the certificate row it announces exists before the emit happens.
         'certification.issued' => [
-            'CapabilityEvidenceProjector' => self::PROJECTOR,
             'NotificationDispatcher'      => self::REACTOR,
         ],
         'certification.expiring' => [
@@ -87,29 +79,18 @@ class EventCatalogue
             'RemediationRecommender'      => self::REACTOR,
         ],
         'employee.role_assigned' => [
-            'GapRecalculator'             => self::PROJECTOR,
             'ProficiencyService'          => self::PROJECTOR,
             // X-12: MandatoryLearningAssigner ABSORBED into LearningAssigner.
             // They differed only in where the course list came from, and two
             // classes meant two places to get idempotency wrong.
             'LearningAssigner'            => self::REACTOR,
         ],
-        'employee.hired' => [
-            'OnboardingLauncher'          => self::REACTOR,
-        ],
         'employee.offboarded' => [
-            'AccessRevoker'               => self::REACTOR,
-            'TaskReassigner'              => self::REACTOR,
             'NotificationDispatcher'      => self::REACTOR,
         ],
         'development_plan.approved' => [
             'LearningAssigner'            => self::REACTOR,
             'NotificationDispatcher'      => self::REACTOR,
-        ],
-        // X-06: NotificationDispatcher REMOVED - FeatureGateApplier already does
-        // the only thing anyone wanted done. Nobody acts on being told.
-        'readiness_gate.changed' => [
-            'FeatureGateApplier'          => self::REACTOR,
         ],
         'rights.changed' => [
             'AuditLogProjector'           => self::PROJECTOR,
@@ -179,11 +160,33 @@ class EventCatalogue
         // 'certification.issued' WAS HERE. X-11 shipped, so its trigger fired and
         // it moved back into NOTIFIES. Left as a comment rather than deleted so
         // the deferral and its resolution stay visible together.
+        // ─── MOVED HERE BY G-EVT-01, NOT DROPPED ON MERIT ───────────────────
+        // Each of these had exactly one consumer and that consumer did not
+        // exist. Removing the paper reactor left the event with nobody, which
+        // is the named-consumer test. They come back when the class is built -
+        // the trigger says which.
+        'task.reopened' => [
+            'verdict'   => 'DEFERRED',
+            'recipient' => null,
+            'trigger'   => 'CapabilityEvidenceProjector is built. This event is golden thread 2 evidence and is expected back.',
+            'reason'    => 'Its only declared consumer, CapabilityEvidenceProjector, was never written. G-EVT-01.',
+        ],
+        'employee.hired' => [
+            'verdict'   => 'DEFERRED',
+            'recipient' => null,
+            'trigger'   => 'OnboardingLauncher is built (X-14).',
+            'reason'    => 'Its only declared consumer, OnboardingLauncher, was never written. G-EVT-01.',
+        ],
+        // THE EVENT ITSELF is also unshipped now: FeatureGateApplier was its only
+        // consumer. X-07 must build the readiness_gate STATE before a reactor has
+        // anything to gate; X-15 follows X-07, not the reverse. The plan had that
+        // ordering backwards.
         'readiness_gate.changed' => [
             'verdict'   => 'DROPPED',
             'recipient' => null,
             'trigger'   => null,
-            'reason'    => 'FeatureGateApplier already applies the change. No human does anything on being told, which makes the notification an announcement rather than a message. Dropped, not deferred: there is nothing to wait for.',
+            'reason'    => 'RE-TAKEN 2026-08-11 (G-EVT-01). The original drop rested on TWO clauses and the first was false: "FeatureGateApplier already applies the change" - there is no such class, so nothing applied anything. Decided again on the SURVIVING clause alone: no human does anything on being told a gate moved, which makes the notification an announcement rather than a message. THE VERDICT IS UNCHANGED AND THE REASON IS NOT. It now rests on one clause that is true instead of two, one of which was invented.',
+            'verdict_history' => 'DROPPED (X-06, on a false premise) -> DROPPED (G-EVT-01, on the surviving clause)',
         ],
     ];
 
@@ -217,6 +220,23 @@ class EventCatalogue
     /**
      * @return array<int,string> violations; empty means the catalogue is coherent
      */
+    /**
+     * Resolve a declared consumer name to its fully-qualified class, or null.
+     *
+     * NOT a bare class_exists() on this namespace. The first version of this
+     * check hardcoded App\Services\Events\ and reported four false absences -
+     * ProficiencyService is real and lives in App\Services\Competency. A consumer
+     * is not obliged to live beside the catalogue that names it (R26: the first
+     * red was partly the check).
+     */
+    public static function resolveConsumer(string $name): ?string
+    {
+        foreach (['App\\Services\\Events\\', 'App\\Services\\Competency\\', 'App\\Services\\'] as $ns) {
+            if (class_exists($ns . $name)) return $ns . $name;
+        }
+        return null;
+    }
+
     public static function assertInvariants(): array
     {
         $errors = [];
@@ -227,6 +247,27 @@ class EventCatalogue
                 continue;
             }
             foreach ($consumers as $name => $kind) {
+                // G-EVT-01. A DECLARED CONSUMER MUST RESOLVE TO A CLASS.
+                //
+                // This is the gap that let ELEVEN declarations through, naming six
+                // classes that were never written. Every other invariant here
+                // checks the SHAPE of a declaration - kinds, notification rules -
+                // and none of them ever asked whether the name refers to anything.
+                // A PAPER REACTOR PASSED EVERY CHECK IN THIS METHOD.
+                //
+                // It is not cosmetic: X-06 removed a notification because
+                // "FeatureGateApplier already does it", and that class did not
+                // exist. This list is the authority on what shipped, and the rest
+                // of the phase quotes it.
+                //
+                // Consumers are NOT required to live in this namespace -
+                // ProficiencyService is in App\Services\Competency - so resolution
+                // tries the siblings first and then the known homes. A name that
+                // resolves nowhere is the error.
+                if (!self::resolveConsumer($name)) {
+                    $errors[] = "ABSENT CONSUMER: '$event' -> '$name' resolves to no class. "
+                        . "Declare it only when it exists; until then it belongs in NOT_SHIPPED.";
+                }
                 if (!in_array($kind, [self::PROJECTOR, self::REACTOR], true)) {
                     $errors[] = "KIND: '$event' -> '$name' has kind '" . var_export($kind, true) . "'; must be P or R.";
                 }
