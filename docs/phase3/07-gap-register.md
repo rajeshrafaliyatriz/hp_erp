@@ -156,6 +156,64 @@ screen-work tracker.**
 
 ---
 
+---
+
+# ⛔ G-BLOCK-01 - **AN S1 CROSS-TENANT LEAK IS WAITING BEHIND UNCOMMITTED WORK** - blocking since 2026-08-11
+
+**Nobody decided this on purpose.** It has been reported every turn as *"the 51
+files: untouched"*, which reads as tidiness. **It is a blocker on the
+highest-priority remaining item in the queue.**
+
+## O-04 - BLOCKED
+
+Three report-route leaks, subset of **G-SEC-11 (S1)**. **All seven `Reports/`
+controllers carry foreign uncommitted work:**
+
+```
+DepartmentDistributionController      HiringAnalyticsController
+DepartmentSizeController              KpiController
+EmployeeDirectoryAnalytics/           OrganizationGrowthController
+  EmployeeDirectoryAnalyticsController   <- NAMED IN THE C23 WORKLIST AS LEAKING
+EmployeeLifecycleController
+```
+
+**G-SEC-11's headline, for scale:** a tenant-7 employee calling `GET /api/skills`
+with `sub_institute_id=3` receives **297,582 bytes of another organisation's skill
+library** against **84,363 bytes** of their own. 48 routes across 30 controllers
+differ by tenant, and **48 is a floor** - 454 GET routes were untestable and 864
+write routes are untested.
+
+## THE FULL COST OF THE BLOCK - every queue item touching the 51
+
+| Item | Blocked by | Severity |
+|---|---|---|
+| **O-04** three report-route leaks | all 7 `Reports/` controllers | **S1 (G-SEC-11)** |
+| **O-05** read `HrmsController` (31 routes) | `HRMS/` × 3 | S2 |
+| **L-11's last 4 sites** | `CompetencyDashboardController` | S2 (G-DATA-06) |
+| **TL-04** the two OnboardingTaskControllers | `Api/Onboarding/` | S3 |
+| **S-04** 37 guard candidates hand-verified | spans `Api/` × 23, `talent/` × 5 | **S1 candidates** |
+| **S-03** remaining leaks in data-class order | same span | **S1** |
+
+**Two S1 items and one S1 candidate set.** The block is not one item wide.
+
+**The 51 span:** `Api/` 23 · `Reports/` 7 · `talent/` 5 · `routes/` 5 · `HRMS/` 3
+· `user/` 2 · six singletons · `bootstrap/app.php`.
+
+## HOW IT SURFACED
+
+**R18f(v)'s stronger form, one turn after being recorded.** I went to take O-04,
+checked `git status` on the target files first because the rule now says to, and
+found all seven held. **Without that check I would have edited foreign work and
+found out afterwards.**
+
+## REPORTING CHANGE
+
+**No longer reported as "the 51 files: untouched".** From here it is **BLOCKED
+WORK WITH ITS COST** - the second reads as what it is. Triz is resolving the 51;
+nothing changes until he says so.
+
+---
+
 # ⭐ THE SYSTEM DOES NOT MANUFACTURE A CLAIM NOBODY MADE - one principle, four instances
 
 Each was reasoned separately and they are the same rule. **Any item that would
