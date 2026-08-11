@@ -820,6 +820,47 @@ has quoted it repeatedly.
 
 ---
 
+## ⚠ RETRACTION - **"EMPLOYEE REFUSAL VERIFIED IN A REAL BROWSER" WAS WRONG**
+
+Reported as verified on 2026-08-11. It was not. Filed on its own rather than as a
+correction inside X-07d, because the failure is about the instrument and outlives
+the item.
+
+**What happened.** The screen had a doubled `api/` prefix -
+`api/api/readiness/gates` - which 404s. The harness counted **error blocks**, so a
+404 and a 403 were the same observation. It saw an error block on the employee's
+screen and reported **"employee is refused" - a PASS.**
+
+**THE ROLE GUARD WOULD HAVE BEEN CERTIFIED ON THE STRENGTH OF A TYPO.** The page
+was broken for everyone; the employee's refusal was indistinguishable from the
+admin's breakage, and only the admin's was reported as a failure.
+
+**Third instance of the undifferentiated-signal mistake**, after O-03's catch and
+X-07d's login - **and this one was in the instrument written to fix the first
+two.** The rule caught its own author.
+
+**The fix.** The refusal is now matched as a SPECIFIC SENTENCE (`Admin and HR
+only`). Anything else is `broken`, and **broken never passes for anyone**. After
+the fix: admin `rendered:5` three times, employee `refused` three times, PASS 9
+FAIL 0 UNSTABLE 0.
+
+### KEEP THE CAUSES STRAIGHT - **the platform boundary had NO PART in this**
+
+Two true facts that would be easy to merge into one false one:
+
+| | |
+|---|---|
+| **The boundary is real and is now written down** | `artisan serve` is single-threaded; `PHP_CLI_SERVER_WORKERS` is a POSIX fork feature measured at **4.5 vs 4.4 here - it does nothing**. Every screen item inherits it. It is G-UI-02's cause |
+| **It did not cause this screen's trouble** | With the URL corrected, three runs agreed perfectly. **UNSTABLE never fired.** The instability was a 404 racing the loading state |
+
+**Nobody should later read the boundary as the explanation for X-07d.** The
+boundary cost a turn because it was unwritten - the harness comment said
+*"PHP_CLI_SERVER_WORKERS is not optional"* and the measurement said *"it does
+nothing here"*, and the two notes lived apart. That is what it cost. It did not
+break the screen; a typo did, and a blunt instrument hid it.
+
+---
+
 ## AN UNDIFFERENTIATED ERROR MESSAGE CANNOT DISTINGUISH ITS OWN CAUSES
 
 **Two investigations sent the wrong way this phase, same family, different layer.**
