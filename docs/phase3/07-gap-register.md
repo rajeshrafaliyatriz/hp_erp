@@ -591,6 +591,75 @@ unconsulted guard from an absent one except reading the call sites.
 
 ---
 
+## A PAPER REACTOR WITH A BODY - **the shape that would pass every check while doing nothing**
+
+X-15's size check, and it is worth more than the item it stopped.
+
+A `FeatureGateApplier` built today would have `handles()` and `dispatch()`, would
+resolve to a real class, and would **satisfy G-EVT-03's kind-aware invariant.**
+It would pass every check in the catalogue. And it would do nothing, because
+**nothing reads a gate**: no feature/flag/toggle table exists, and the only
+readers of `tenant_readiness_gate` were the three files that write it.
+
+**THE THIRD LAYER'S BLIND SPOT ARRIVED IN THE VERY ITEM THAT WOULD HAVE PROVED
+THE CHECK INSUFFICIENT.** G-EVT-03 added a shape test and recorded that a shape
+test cannot see behaviour. One item later, the shape test would have certified a
+class with a body and no effect. **The check is not wrong; it is exactly as
+strong as it was said to be, and this is what that costs.**
+
+### CONTRAST WITH GapRecalculator - **the same size check, a different verdict**
+
+| | GapRecalculator | FeatureGateApplier |
+|---|---|---|
+| what the check found | no gap table, gaps computed as queries | no flag table, no feature reads a gate |
+| **why** | **contradicted by a RECORDED DECISION** - `NOT_SHIPPED` already says gaps are DERIVED, not a state change | **designed deliberately** in §4, with the asymmetry specified |
+| what is missing | **nothing.** The work was already done, elsewhere, on purpose | **the CONSUMPTION SIDE.** The producer exists; nobody reads it |
+| verdict | **DROPPED** - nothing to wait for | **DEFERRED** - trigger: a feature enforces a gate |
+
+**An absent thing is not one finding.** One absence meant a decision already taken;
+the other means half a design built. Only reading why it is absent tells them
+apart, and the same instrument produced both.
+
+---
+
+## THE FIRST ENFORCEMENT POINT - **`capability_coverage` -> gap reporting**
+
+A gate has been a gauge nobody read. `CompetencyGapController::show()` now asks
+`ReadinessGateEnforcer` and refuses when the answer is no. One enforcer class, so
+the next gate does not grow its own.
+
+    state=blocked  value=4.1   -> HTTP 409   refuses
+        why    : This needs capability coverage at 50% or above. It is currently 4.1%.
+        remedy : Measure capability - 5 of 122 employees have a measurement
+    state=at_risk  value=4.1   -> HTTP 200   ALLOWS  (the asymmetry)
+    state=ready    value=60    -> HTTP 200   allows
+    state=blocked  value=NULL  -> HTTP 200   ALLOWS  (never computed)
+
+**NEVER-COMPUTED DOES NOT BLOCK.** A gate nobody has run has made no claim, and a
+feature must not be switched off by the ABSENCE of a measurement - the
+unmeasured-as-zero error would otherwise arrive as a disabled product. `NULL` and
+`0` stay different all the way down: `0` is a measurement that came out zero.
+
+**at_risk ALLOWS.** Falling below the threshold starts a warning period; only a
+human acknowledgement blocks. The enforcer is the third place that rule is now
+enforced rather than described.
+
+**THE REFUSAL SAYS WHY AND WHAT WOULD FIX IT.** A silent empty list would leave a
+customer unable to tell "no gaps" from "gap reporting is off" - the same error in
+a new place.
+
+### ⚠ BLAST RADIUS, MEASURED BEFORE BUILDING
+
+    capability_coverage: 11 of 11 tenants BLOCKED
+    tenant 3 = 4.10%, every other tenant = 0.00%, threshold 50%
+
+**Gap reporting now returns 409 for every tenant.** That is the gate working as
+designed - a gap computed from 4% coverage is a confident-looking number about
+nothing - but it is a live product change across the whole platform, not a
+quiet one, and it is recorded here as such rather than discovered later.
+
+---
+
 ## THREE LAYERS OF ONE LESSON - **shape declared / name resolves / behaviour performed**
 
 Each check reaches exactly one layer, and a green at one says nothing about the

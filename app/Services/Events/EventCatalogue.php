@@ -175,7 +175,7 @@ class EventCatalogue
         ],
         'readiness_gate.changed' => [
             'verdict' => 'DEFERRED',
-            'trigger' => 'X-07 builds the readiness_gate STATE, then X-15 builds FeatureGateApplier. THAT ORDER: a reactor needs something to gate.',
+            'trigger' => 'CORRECTED 2026-08-11. X-07 is DONE - the gates compute, the acknowledgement path works, and CompetencyGapController now ENFORCES capability_coverage. The remaining condition is not the state, it is the READER: a reactor needs someone to react FOR. Trigger is now "more features enforce gates, then X-15" - building the applier before that is building the consumer of an event before anything consumes the applier own output, which is how FeatureGateApplier became a paper reactor to begin with.',
             'reason'  => 'Its only declared consumer, FeatureGateApplier, was never written. G-EVT-01. Its NOTIFICATION is separately DROPPED - see NOT_NOTIFIED, re-taken on the surviving clause.',
         ],
         'competency.gap_detected' => [

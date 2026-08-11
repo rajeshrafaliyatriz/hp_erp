@@ -69,6 +69,32 @@ class CompetencyGapController extends Controller
 
         $sid = $context['sub_institute_id'];
 
+        // ── READINESS GATE: capability_coverage. THE FIRST ENFORCEMENT POINT. ──
+        //
+        // Gap reporting reads capability measurements. Below the threshold there
+        // are not enough of them for a gap to mean anything, and a gap computed
+        // from 4% coverage is a confident-looking number about nothing.
+        //
+        // THE REFUSAL SAYS WHY AND WHAT WOULD FIX IT. A feature that silently
+        // returned an empty list here would leave the customer unable to tell
+        // "no gaps" from "gap reporting is switched off" - the unmeasured-as-zero
+        // error in a new place.
+        //
+        // A NEVER-COMPUTED GATE DOES NOT BLOCK. See ReadinessGateEnforcer: a gate
+        // nobody has run has made no claim, and a feature must not be switched
+        // off by the absence of a measurement.
+        //
+        // at_risk ALLOWS. Falling below the threshold starts a warning period; it
+        // does not switch anything off. Only a human acknowledgement blocks.
+        $gate = app(\App\Services\Readiness\ReadinessGateEnforcer::class)
+            ->check((int) $sid, 'capability_coverage');
+        if (!$gate['allowed']) {
+            return response()->json(
+                app(\App\Services\Readiness\ReadinessGateEnforcer::class)->refusalPayload($gate),
+                409
+            );
+        }
+
         // The employee's job role comes from `tbluser.allocated_standards`, which
         // holds an s_user_jobrole id (287 of 387 users populated). I first wrote
         // this against `s_user_jobrole_map` - A TABLE THAT DOES NOT EXIST. Caught
