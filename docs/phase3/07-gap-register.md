@@ -427,6 +427,43 @@ one follows the row in both directions.
 - The **readiness screen remains unreachable** in the product; its menu row was
   created and rolled back rather than left half-applied.
 
+### THE MATRIX AND THE ROUTES DISAGREE IN FOUR DIRECTIONS
+
+**One table, and it completes the case.** Measured 2026-08-12 across all nine
+roles, on route guards and WRITE rights:
+
+| role | the matrix says | the routes say | direction |
+|---|---|---|---|
+| `hr_manager` | view-only on configuration (35 write menus, none of them config) | **full write** - all 32 `admin,hr` routes | **MORE than allowed** |
+| `department_head` | write on 7 screens | **nothing elevated** - in no alias | **LESS than granted** |
+| `executive` / `auditor` | read 72 / 81 menus, write 0 | **nothing at all** - in no alias | **LESS, and it costs the role's whole purpose** |
+| `hr_executive` | 23 write menus vs `hr_manager`'s 35 - a deliberate 12-menu narrowing | **identical to `hr_manager`** - one alias covers both | **THE DISTINCTION IS INVISIBLE** |
+
+### THE SYMMETRY IS THE ARGUMENT
+
+**`hr_manager` gets MORE than the matrix allows. `department_head` gets LESS.**
+Same enforcement gap, opposite directions - and **an administrator can correct
+neither**, because both live in a `const` array.
+
+**A hardcoded alias list can be wrong in both directions at once, and the only
+mechanism an admin can actually edit is the one nothing reads.** That is the case
+for matrix enforcement, and it is stronger than "HR can do too much": the failure
+is not a bad grant, it is that **the grant and the enforcement are different
+artefacts and only one of them is editable.**
+
+### AND THE FOURTH ROW IS THE WORST
+
+`hr_executive` is not over- or under-granted. **The matrix draws a real, deliberate
+distinction - department scope versus organization scope, twelve write menus - and
+no route can see it**, because `'hr' => ['hr_manager', 'hr_executive']` collapses
+them.
+
+**That is the alias approach failing at the precise thing it was chosen for.** It
+exists to express which roles may reach a route. Here it cannot express a
+distinction the spec, the matrix and the seed all agree on.
+
+---
+
 ### THE DATABASE IS WHERE IT STARTED
 
 Menus 225/226 and their 44 rights rows were created, used to prove the guard, and
@@ -5340,6 +5377,41 @@ metrics will read as complete.
 **Fix:** declare the mapping explicitly in `routes/api.php`
 (`->defaults('menu', '…')`) rather than inferring it. Detail in
 `03-rbac-matrix.md` §5A/A3.
+
+---
+
+## THE THING THAT RENDERS IS NOT THE THING THAT WORKS - **one family, three instances**
+
+Named once here rather than three times, because it is a single confusion wearing
+three costumes. **Every instance was a green check measuring the near thing while
+the far thing was assumed.**
+
+| instance | the check measured | what was assumed | how it broke |
+|---|---|---|---|
+| **VERIFIED vs REACHABLE** | the readiness screen renders and behaves, driven by a real browser | that a customer could get to it | no menu row, no content-map entry. X-21 navigated by URL |
+| **RENDERS vs WORKS** | the content map resolves to a live menu row | that the screen behind it functions | a check over a map sees only what the map mentions |
+| **NAVIGATION vs CAPABILITY** | the nine-login walkthrough: sidebar 200, non-empty, expected breadth | that the role can use what it lists | `department_head` PASSES this check and every elevated endpoint refuses it |
+
+### THE SHAPE
+
+**A check that stops at the boundary of one layer certifies that layer and is read
+as certifying the stack.** The browser proved the page; the menu proved the link;
+the sidebar proved the list. None of them proved a user could do the thing, and
+each was quoted as if it had.
+
+### WHY IT KEEPS HAPPENING
+
+The near thing is cheap to measure and the far thing is not. A sidebar returns 200
+in milliseconds; establishing that a Department Head can actually run a
+department-scoped report requires knowing what that means and having the data to
+try it. **The cheap measurement is not wrong - it is just answering a different
+question, and its greenness is indistinguishable from the answer you wanted.**
+
+### THE TEST
+
+**Name the layer the check ends at, in the check's own output.** The suite's
+walkthrough now would read *"sidebar renders"* rather than *"the role works" -*
+and `department_head` passing it would stop looking like good news.
 
 ---
 

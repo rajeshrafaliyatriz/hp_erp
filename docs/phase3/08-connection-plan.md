@@ -205,6 +205,28 @@ who the product currently serves. **Neither is derivable from the plan rows** �
 rows are all individually reasonable, and the shape only appears when the roles are
 laid beside each other.
 
+### A CUSTOMER DEMO OPENING THE DEPARTMENT HEAD LOGIN SEES A WORKING NAVIGATION OVER AN INACCESSIBLE PRODUCT
+
+**Worse than a missing menu, because it looks finished until something is
+clicked.** Added 2026-08-12 from `04-user-flows/department-head.md`.
+
+The role authenticates, holds a session, and renders a sidebar over 51 menus -
+because its menu rights are real. **Every elevated endpoint behind those menus
+refuses it**, probed: 403 on nine-box, competency definitions, readiness gates and
+reporting-line assign. What survives is employee-level self-service.
+
+**AND THE SUITE PASSES IT.** The nine-login walkthrough asserts this role's sidebar
+is 200, non-empty, with expected breadth - and it is all three. **That check
+measures NAVIGATION, not CAPABILITY**, which is one of three instances of a single
+family recorded in the register: *the thing that renders is not the thing that
+works* (verified vs reachable · renders vs works · navigation vs capability).
+
+**A green check exists for this role and it certifies the wrong layer.** Anyone
+preparing a demo from the suite's output would have no signal that this login is
+hollow.
+
+---
+
 ### ADDENDUM — **THE API GUARD IS COARSER THAN THE PERMISSION MODEL BEHIND IT**
 
 *(Corrected 2026-08-11. The first version of this addendum said the two roles were

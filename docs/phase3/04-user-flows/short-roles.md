@@ -89,19 +89,106 @@ problem, not the reassurance.
 
 ---
 
-## `hr_executive`, `recruiter`, `executive`, `auditor`
+## THE FOUR SHORT ROLES
 
-**Not yet written.** They were scoped as short sections and remain open:
+**Written 2026-08-12.** Each opened with the route-guard and **WRITE**-rights
+measurement, because that measurement has now changed the answer twice - once for
+`hr_manager` (retracted) and once for `department_head` (draft corrected by probe).
 
-| role | scope agreed |
-|---|---|
-| `hr_executive` | say only where it differs from `hr_manager` |
-| `recruiter` | four screens plus its own capability view |
-| `executive` | read-only: what they see and why they cannot act |
-| `auditor` | read-only: what they see and why they cannot act |
+    role            profile  view  write  nine-box (probed)
+    hr_executive    53        67    23     200   <- full admin,hr route access
+    recruiter       56         8     1     403
+    executive       54        72     0     403
+    auditor         55        81     0     403
 
-**A measurement is needed first for each**, the same one that settled
-`hr_manager`: route guards and menu rights against the role they are nearest to.
-Writing them from the plan rather than from that measurement is what X-17 exists
-to avoid — and in `hr_manager`'s case the measurement changed the answer from
-"narrower scope" to "one menu".
+---
+
+## `hr_executive` - **the most damning of the four**
+
+**Where it differs from `hr_manager`: in the matrix, by 12 write menus. In the
+API, not at all.**
+
+    hr_manager    view 80  write 35
+    hr_executive  view 67  write 23
+    difference    13 view, 12 write - a real, deliberate narrowing
+
+`03-rbac-matrix.md` §3.1 draws it explicitly: HR Exec gets `V C E (dept)` where HR
+Mgr gets `V C E D` org-wide. **Department scope versus organization scope.**
+
+**EVERY ROUTE IS BLIND TO IT.** The alias map reads:
+
+    'hr' => ['hr_manager', 'hr_executive']
+
+One alias, both roles, all 32 `profile:admin,hr` routes. Probed: `hr_executive`
+reaches `/api/competency/nine-box` with 200, exactly as `hr_manager` does.
+
+**This is the alias approach failing at the precise thing it was chosen for.** It
+exists to express which roles may reach a route, and here it collapses two roles
+the matrix separates by twelve write permissions. **The matrix draws a real
+distinction and the routes cannot see it.**
+
+Nothing in the product reads the difference. An HR Executive is an HR Manager to
+every endpoint in the system.
+
+---
+
+## `recruiter` - **one paragraph**
+
+View 8 menus, write 1 (`Recruitment`), and **no route guard names it** - probed
+403 on nine-box. It is the narrowest role in the product and its situation is
+`department_head`'s in miniature: a matrix grant with no route that honours it.
+The four screens and the capability view it was scoped for are unbuilt, and
+nothing about them is blocked by anything except themselves. That is the whole
+section.
+
+---
+
+## `executive` and `auditor` - **read-only in the matrix, no-access in the API**
+
+    executive  view 72  write 0
+    auditor    view 81  write 0
+
+**Genuinely read-only** - zero write rights anywhere, which is what the spec
+intends and what `03-rbac-matrix.md` shows (`V` and `V X` across every row).
+`auditor` sees more menus than the administrator does (81 vs 81 view, 0 vs 49
+write): total visibility, zero authority. That is exactly right for an auditor.
+
+**And neither appears in any route guard.** Aliases exist for both -
+`'executive' => ['executive']`, `'auditor' => ['auditor']` - and **no route uses
+them.** Probed: 403 on nine-box for both.
+
+### THIS IS THE THIRD DIRECTION OF THE SAME GAP
+
+The matrix says *read everything*. The routes say *nothing at all*. For a
+write-capable role that mismatch costs authority; **for a read-only role it costs
+the entire purpose of the role.** An auditor who cannot read has no function.
+
+Their capability today is what `department_head` has: authentication, a session, a
+rendering sidebar over 72 and 81 menus, and employee-level self-service behind it.
+
+### What they must never see
+
+Unchanged, and one addition specific to a read-only pair: **a control that
+appears actionable.** A screen rendering an edit button for a role with `write=0`
+is offering something the matrix denies - and since the routes deny everything
+anyway, the button would fail for a reason the user cannot connect to their role.
+
+---
+
+## Where these four stand
+
+**Works today:** `hr_executive` - everything `administrator.md` §7 lists, because
+the routes cannot distinguish it from `hr_manager`. The other three -
+authentication, session, sidebar, employee-level self-service.
+
+**Dead-ended on:** `G-BLOCK-01` for all four. The matrix grants each of them
+something no route honours, and the guard that would honour it is built, proven,
+and cannot be registered.
+
+**Depends on:** `G-BLOCK-01` · the alias-map decision (whether `executive`,
+`auditor`, `recruiter` and `department_head` get argument-sets, or whether routes
+stop using aliases once the matrix is enforced - **the second makes the first
+unnecessary**).
+
+---
+
