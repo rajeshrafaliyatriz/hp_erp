@@ -522,10 +522,32 @@ check('slice1', 'employee cannot read a colleague gap', function () use ($kernel
 });
 
 check('slice1', 'chain: required 3, measured 1, gap 2, survives rename', function () use ($kernel) {
-    $admin = DB::table('tbluser')->where('user_profile_id', 1)->value('id');
-    $empRow = DB::table('tbluser')->where('user_profile_id', 3)->orderBy('id')->first();
-    if (!$admin || !$empRow) return ['SKIPPED', 'need an admin and an employee'];
-    $sid = 1;
+    // MOVED TO TENANT 3 (2026-08-11). Slice 1 ran in tenant 1 because that is
+    // where it was first built, not because anyone chose it. Tenant 3 is the
+    // demo tenant - nine logins, the 9-box, the framework, and capability
+    // coverage now past its gate - so the chain belongs there.
+    //
+    // TENANT 1 IS DELIBERATELY LEFT AT 0.00% COVERAGE. It is the only place we
+    // can see what a NEW CUSTOMER SEES ON DAY ONE: a correct refusal explaining
+    // the product is not ready yet. Seeding ratings there would also mean
+    // inventing measurements about people whose data we did not create. DO NOT
+    // "FIX" TENANT 1.
+    //
+    // Selected by role_key, not user_profile_id: profile ids are PER TENANT, so
+    // tenant 3's admin is profile 7, not 1. Hardcoding the id is what tied this
+    // check to tenant 1 in the first place.
+    $sid = 3;
+    $adminProfile = DB::table('tbluserprofilemaster')->where('sub_institute_id', $sid)
+        ->where('role_key', 'administrator')->value('id');
+    $empProfile = DB::table('tbluserprofilemaster')->where('sub_institute_id', $sid)
+        ->where('role_key', 'employee')->value('id');
+    $admin = DB::table('tbluser')->where('sub_institute_id', $sid)
+        ->where('user_profile_id', $adminProfile)->value('id');
+    $empRow = DB::table('tbluser')->where('sub_institute_id', $sid)
+        ->where('user_profile_id', $empProfile)
+        ->whereNotNull('allocated_standards')->where('allocated_standards', '!=', '')
+        ->orderBy('id')->first();
+    if (!$admin || !$empRow) return ['SKIPPED', 'need an admin and an employee with a job role in tenant ' . $sid];
     $jobrole = (int) $empRow->allocated_standards;
     if (!$jobrole) return ['SKIPPED', 'employee has no job role'];
 

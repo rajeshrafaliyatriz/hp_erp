@@ -591,6 +591,52 @@ unconsulted guard from an absent one except reading the call sites.
 
 ---
 
+## ⛔ TENANT 1 STAYS AT 0.00% COVERAGE - **DELIBERATELY. DO NOT "FIX" IT.**
+
+Decided 2026-08-11. Written here because the next person will see a tenant failing
+its own readiness gate and reach for the seed script.
+
+**IT IS THE ONLY PLACE WE CAN SEE WHAT A NEW CUSTOMER SEES ON DAY ONE:** a correct
+refusal explaining the product is not ready yet, with the reason and the remedy.
+Every other tenant is either seeded or empty. Losing this one loses the only view
+of the product's first-run experience that is not a guess.
+
+**AND SEEDING IT WOULD BE A DIFFERENT ACT.** Tenant 1 holds original, real-looking
+data about people whose records we did not create. Writing invented capability
+ratings there is not the same as seeding a tenant built to demonstrate - it would
+be manufacturing measurements about real-looking individuals.
+
+**SLICE 1'S DEMO MOVED TO TENANT 3 INSTEAD.** It ran in tenant 1 because that is
+where it was first built, not because anyone chose it. Tenant 3 is the demo
+tenant - nine logins, the 9-box, the framework, coverage past its gate - so the
+chain belongs there. Confirmed green after the move:
+`chain: required 3, measured 1, gap 2, survives rename`.
+
+The suite's precondition line still reports `t1=blocked(0.00)` and still says
+**THAT IS THE GATE WORKING, NOT A BROKEN CHAIN.** That line is the guard against
+someone later reading tenant 1's state as a defect.
+
+**One incidental cause worth keeping:** the check was pinned to tenant 1 by
+`user_profile_id = 1`. **Profile ids are PER TENANT** - tenant 3's admin is
+profile 7 - so a hardcoded profile id is a hardcoded tenant wearing a disguise.
+Selection is now by `role_key`.
+
+### THE SEED'S TWO CHOICES, KEPT
+
+**Ratings at 2-3, not 5.** A seed that rated everyone 5 would clear the gate and
+lie about the workforce. **MEASURED IS THE CLAIM, NOT GOOD.**
+
+**The 21 kasba items already in use, not new ones.** Inventing items to satisfy a
+gate manufactures the very measurement the gate exists to detect.
+
+**And the gate was cleared by three honest recomputes rather than by setting the
+state** - `sustained_periods=3` satisfied for real, `blocked 4.10% -> ready
+55.74%`. Tenth instance of the principle, and the cleanest: the system did not
+manufacture a claim nobody made, even when the claim would have been convenient
+and one UPDATE away.
+
+---
+
 ## ENFORCING `capability_coverage` TURNS OFF THE THING PHASE 3 EXISTS TO DEMONSTRATE
 
 **A finding, not a test problem.** The first time a gate has told us something
