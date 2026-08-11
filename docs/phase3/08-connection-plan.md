@@ -3,6 +3,25 @@
 **The deliverable the Phase 3 brief asked for.** Assembled from the CONNECTIONS TO
 BUILD sections of the six module write-ups. Nothing is re-derived here.
 
+> # ⚠ EVERY REMAINING ROW IN THIS PLAN IS A HYPOTHESIS ABOUT SCOPE, NOT A DESCRIPTION OF ONE.
+>
+> **Four items opened, four rows wrong:**
+>
+> | Item | The row said | It was |
+> |---|---|---|
+> | **G-UI-01** | a one-line mount | a menu row, 89 rights rows, a container, a route-map entry - **and an S2 underneath it** |
+> | **C-10** | 5 unrendered fields | **2** - three were already fixed |
+> | **L-06** | "show what depends on this" | the count over-reports **6x** by title (**G-LIB-09**) |
+> | **X-03** | "Not started", sized **M-L** | **the mechanism already existed**; the work was config lines |
+>
+> **Wrong in both directions and wrong about kind, not just size.** These rows were
+> written before anyone opened the files.
+>
+> **THE OPENER FOR EVERY BUILD TURN: size the item against its actual files in the
+> first minutes, and re-split it then** - not at the end of the turn. It paid for
+> itself on first use: X-03's size check took one command and saved a turn
+> building a mechanism that was already there.
+
 **Status:** `COMPLETE — §1–§11. Awaiting approval. Nothing is built from this until approved.`
 
 ⚠️ **Headline numbers corrected by `12-gate-c-verification.md` V6** — **283,126** (rows with a populated key; 283,127 rows exist), 2.7% (not 3.0%), 29 controllers (not 30). The write-route coverage claim is **withdrawn** pending re-derivation.

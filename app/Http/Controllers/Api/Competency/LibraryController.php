@@ -1787,7 +1787,36 @@ class LibraryController extends Controller
             }
         }
 
+        // X-03. Three fields named an entity and stored free text (G-LIB-02).
+        // The picker mechanism already existed; these are the lists it lacked.
+        //
+        // SUGGESTED, NOT CLOSED. Each is offered as an open list: a tenant whose
+        // library is incomplete must still be able to type a value the library
+        // does not hold yet, or the picker blocks the work it was meant to help.
+        //
+        // certification_qualifications is DELIBERATELY ABSENT: certification_type
+        // holds 0 rows, and a picker over an empty table looks like a closed list
+        // and offers nothing - worse than the free text it would replace.
+        // Scheduled on 'certification_type populated', not parked.
+        $relatedSkills = DB::table('s_users_skills')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->whereNotNull('title')->where('title', '!=', '')
+            ->distinct()->orderBy('title')->limit(2000)->pluck('title')->all();
+
+        $jobTitles = DB::table('s_user_jobrole')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->whereNotNull('jobrole')->where('jobrole', '!=', '')
+            ->distinct()->orderBy('jobrole')->limit(2000)->pluck('jobrole')->all();
+
+        $learningResources = DB::table('sub_std_map')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->whereNotNull('display_name')->where('display_name', '!=', '')
+            ->distinct()->orderBy('display_name')->limit(2000)->pluck('display_name')->all();
+
         return $this->ok('Library metadata fetched successfully', [
+            'related_skills'         => $relatedSkills,
+            'job_titles'             => $jobTitles,
+            'learning_resources'     => $learningResources,
             'departments'            => $buckets['department'],
             'sub_departments'        => array_values(array_unique($buckets['sub_department'])),
             'micro_categories'       => $buckets['micro_category'],
