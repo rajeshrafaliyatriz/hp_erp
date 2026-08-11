@@ -15,6 +15,7 @@ use App\Models\talent_management\talentmanagement_jobposting;
 class talentmanagement_jobpostingController extends Controller
 {
     use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
 
     /**
      * The ACTING user, resolved from the token and never from the request.
@@ -29,16 +30,6 @@ class talentmanagement_jobpostingController extends Controller
      *
      * Same shape as payrollActorId (D-004): token first, session fallback.
      */
-    private function g2gActorId(\Illuminate\Http\Request $request): ?int
-    {
-        $fromToken = $this->apiUserId($request);
-        if ($fromToken) {
-            return $fromToken;
-        }
-        $fromSession = $request->session()->get('user_id');
-
-        return is_numeric($fromSession) ? (int) $fromSession : null;
-    }
 
 
     /**

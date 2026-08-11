@@ -1236,6 +1236,36 @@ check('static', 'every content-map accessLink resolves to a live menu row', func
               : count($used) . ' content-map entries, every accessLink live'];
 });
 
+check('static', 'g2gActorId has exactly ONE implementation', function () {
+    // FOUR-IMPLEMENTATIONS DRIFT, ONE LAYER DOWN. This helper existed FIFTEEN
+    // times, byte-identical, as a private method copied into fifteen
+    // controllers. It is now a single trait.
+    //
+    // The assertion the identity RESOLVERS will need when G-BLOCK-01 unblocks:
+    // a helper with one meaning should have one definition, and the way this
+    // regresses is somebody adding a sixteenth copy rather than importing the
+    // trait - which no test would otherwise notice.
+    $root = base_path('app');
+    $defs = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root));
+    foreach ($it as $f) {
+        if ($f->getExtension() !== 'php') continue;
+        $src = file_get_contents($f->getPathname());
+        if (preg_match('/function\s+g2gActorId\s*\(/', $src)) $defs[] = $f->getBasename();
+    }
+
+    // KNOWN-NEGATIVE (R29): the matcher must SEE a definition, or "exactly one"
+    // could be satisfied by a pattern that sees none.
+    if (!preg_match('/function\s+g2gActorId\s*\(/', 'private function g2gActorId(Request $r): ?int {}')) {
+        return ['SKIPPED', 'matcher cannot see a definition - the count would be meaningless'];
+    }
+
+    return [count($defs) === 1 ? 'PASS' : 'FAIL',
+        count($defs) === 1
+            ? 'one definition: ' . $defs[0]
+            : count($defs) . ' definitions: ' . implode(', ', array_slice($defs, 0, 4))];
+});
+
 check('static', 'route-to-menu map coverage', function () {
     // A MAP BUILT ONCE AGAINST A MOVING SURFACE DECAYS SILENTLY.
     //
