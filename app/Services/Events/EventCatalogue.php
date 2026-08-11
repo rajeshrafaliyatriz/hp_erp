@@ -19,6 +19,23 @@ namespace App\Services\Events;
  *      projection should cause a reaction, the projector emits a NEW event and
  *      the reactor subscribes to that.
  *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * A GUESSED `from` IN AN EVENT STORE IS WORSE THAN NO EVENT, BECAUSE IT LOOKS
+ * LIKE HISTORY.
+ *
+ *   An event is a claim about what happened. `task.status_changed` claims a
+ *   transition FROM one state TO another - and only the code holding both sides
+ *   can make that claim honestly. A caller that emits it after writing knows the
+ *   NEW value and is guessing the old one.
+ *
+ *   A wrong `from` does not read as an error. It reads as a fact, and it is
+ *   replayed as one by every projector downstream. **An absent event leaves a
+ *   gap somebody notices; a fabricated one silently corrupts the record.**
+ *
+ *   This is why `TaskStatusWriter` emits `task.status_changed` itself (T-01)
+ *   rather than letting its five callers do it.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
  * Deferred events carry a TRIGGER. An event deferred without one is an event
  * nobody will remember to enable.
  */

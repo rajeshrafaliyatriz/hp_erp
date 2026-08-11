@@ -326,6 +326,44 @@ check('org', 'reporting_manager_id has exactly ONE guarded write path', function
         : ($others ? 'OTHER WRITERS: ' . implode(', ', $others) : "writes=$writes calls=$calls")];
 });
 
+check('org', 'task.status has exactly ONE guarded write path', function () {
+    // T-01, same shape as the reporting-line assertion. Five files wrote the
+    // column directly, each with its own idea of what else changes when a status
+    // changes. TaskStatusWriter owns the invariant; this asserts nothing else
+    // reaches around it.
+    $writer = base_path('app/Services/TaskManagement/TaskStatusWriter.php');
+    if (!file_exists($writer)) return ['FAIL', 'TaskStatusWriter missing'];
+
+    $others = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app')));
+    foreach ($it as $f) {
+        if ($f->getExtension() !== 'php') continue;
+        $path = $f->getPathname();
+        if (str_contains($path, 'TaskStatusWriter')) continue;
+        $src = file_get_contents($path);
+        // strip comments - a pattern that reads prose is not reading code
+        $src = preg_replace('#/\*.*?\*/#s', '', $src);
+        $src = preg_replace('#^\s*//.*$#m', '', $src);
+        if (!preg_match("/table\(\s*'task'\s*\)/", $src)) continue;
+        // an update() whose payload carries a status key
+        if (preg_match_all("/->update\(\s*\[[^\]]*'status'\s*=>/s", $src, $m)) {
+            $others[basename($path)] = count($m[0]);
+        }
+    }
+    // KNOWN-POSITIVE (R16): the pattern must be able to see the shape it hunts.
+    $probe = "DB::table('task')->where('id',1)->update(['status' => 'X']);";
+    if (!preg_match("/->update\(\s*\[[^\]]*'status'\s*=>/s", $probe)) {
+        return ['SKIPPED', 'pattern failed its own known-positive'];
+    }
+
+    $n = array_sum($others);
+    return [$others === [] ? 'PASS' : 'FAIL',
+        $others === []
+            ? 'TaskStatusWriter is the only writer of task.status'
+            : "$n direct write(s) outside the writer: " . implode(', ',
+                array_map(fn ($k, $v) => "$k($v)", array_keys($others), $others))];
+});
+
 /* ══════════════════════════ DATA ══════════════════════════ */
 echo "\nDATA\n";
 

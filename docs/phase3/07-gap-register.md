@@ -57,6 +57,22 @@ uses** - not a defect in the field.
 > screen worse.** The finding is the deliverable: **4 in-progress and 1 on-hold
 > across 2,271 tasks means the workflow is not being used.**
 
+### TWO INDEPENDENT MEASUREMENTS OF ONE CONDITION
+
+**The `task_hygiene` readiness gate already defers `task.overdue`** on the grounds
+that it would fire 2,245 times and be noise before it was useful. That was measured
+from the OVERDUE side.
+
+**This is the same truth measured from the STATE side:** almost nothing ever leaves
+PENDING, so almost nothing is ever on hold, so `delay_category` is never written.
+
+> **Two independent measurements of one condition is stronger than either alone** -
+> they were taken months apart, from different tables, for different items, and
+> they agree. **The workflow is not being used**, and both the overdue flood and
+> the empty delay field are consequences of that single fact.
+
+**This finding belongs beside the `task_hygiene` gate**, not in a UI item.
+
 **That is a product-adoption fact, not a wiring gap**, and it belongs beside the
 task-hygiene readiness gate rather than in a UI item. **T-02 removed from the
 screen-work tracker.**
