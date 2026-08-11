@@ -378,6 +378,71 @@ then becomes a real guard instead of 5-for-5 wrong.
 files: untouched"*, which reads as tidiness. **It is a blocker on the
 highest-priority remaining item in the queue.**
 
+## A TABLE THAT WAS AHEAD OF THE WORK - **`competency_evidence` was already designed for Q-B3**
+
+First time this phase a table has been ahead of the work rather than behind it.
+Recorded because it **changes the sizing of anything that assumed the
+confirmation path needed designing.**
+
+    direction         enum('positive','negative','neutral')   NOT NULL
+    dismissed_reason, dismissed_by, dismissed_at
+    kasba_type        enum(skill, knowledge, ability, attitude, behaviour)
+    source_type, source_id   + idx_ce_source
+    rows: 0
+
+`direction` NOT NULL plus the `dismissed_*` triple **is Q-B3's confirmation path,
+in the schema.** Evidence carries a sign; a human dismisses it with a reason,
+recorded and timestamped. Nothing about the confirmation half needed designing -
+it needs a UI surface and a writer. The table was empty because nobody wrote the
+writer, not because the design was missing.
+
+**The general lesson:** an empty table is not evidence of an unbuilt design.
+G-DATA-10 was re-filed as *empty table, not a schema gap*, and this is the same
+distinction from the other side - **empty AND fully designed.** Read the columns
+before sizing the work.
+
+### AND THE OTHER HALF - **DECLARED REFERENTS, per R24**
+
+    competency_evidence     system-OBSERVED, projected from events    0 rows
+    s_competency_evidence   user-UPLOADED artefacts                  13 rows
+                            title, link, file_path, evidence_type
+
+**Two tables one prefix apart, holding different concepts.** Neither is a
+migration or duplicate of the other. Worse, `s_` elsewhere in this schema means
+*tenant-owned canonical* (Q-C1) - and here it does not. **This is the G-DATA-11
+shape before it happens: a join between them would succeed and mean nothing.**
+
+Each now carries a comment naming the other, in the code that writes it. The
+comment says DO NOT MERGE and do not write to one expecting the other's content,
+because the next person meets these two names in an autocomplete list.
+
+---
+
+## G-EVT-02 - **THE CONFIRMATION HALF OF Q-B3** - filed, not started
+
+`CapabilityEvidenceProjector` writes evidence and stops. This is the rest, and it
+is deliberately NOT in that class: a projector that changed proficiency would be
+taking a decision a human should take. **The sixth instance of the principle -
+the system does not manufacture a claim nobody made.**
+
+**Q-B3's rules, attached so the next person does not re-derive them:**
+
+1. **Evidence written IMMEDIATELY on every failure.** Done - the projector does
+   this, unconditionally, with no threshold applied at write time.
+2. **Manager flagged AT A THRESHOLD.** Not at every event. The flag is a separate
+   signal from the evidence.
+3. **PROFICIENCY CHANGED ONLY ON EXPLICIT CONFIRMATION.** Never automatically,
+   never at the threshold - the threshold raises a flag, a human resolves it.
+   `dismissed_reason` / `dismissed_by` / `dismissed_at` are where the resolution
+   lands and they already exist.
+4. **THRESHOLDS ARE TENANT-CONFIGURABLE.** Four rejections may mean something
+   different at one customer than another. A hardcoded number would be this
+   product deciding a customer's standard for them.
+
+Needs a UI surface. Sized when its screen is read, not before.
+
+---
+
 ## G-EVT-01 - **THE CATALOGUE DECLARES 11 CONSUMERS THAT DO NOT EXIST** - S1 for authority, not for security
 
 Found by X-15's size check, which asked one question - *where is

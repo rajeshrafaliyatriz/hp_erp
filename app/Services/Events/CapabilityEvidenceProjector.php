@@ -29,6 +29,20 @@ use Illuminate\Support\Facades\DB;
  * are the confirmation path. The table was designed for Q-B3 and left empty
  * because nobody wrote the writer. Nothing here needed designing.
  *
+ * ── TWO TABLES, ONE PREFIX APART, HOLDING DIFFERENT CONCEPTS ────────────────
+ *
+ * `competency_evidence`   THIS ONE. System-OBSERVED evidence, projected from the
+ *                         event stream. kasba_type, item_id, source_type,
+ *                         source_id, outcome, direction, dismissed_*.
+ * `s_competency_evidence` NOT THIS ONE. User-UPLOADED artefacts: title, link,
+ *                         file_path, evidence_type. 13 real uploads in it.
+ *
+ * They are not a duplicate pair and neither is a migration of the other. The
+ * names differ by a prefix that elsewhere in this schema means "tenant-owned
+ * canonical" (Q-C1), which it does NOT mean here. This is the G-DATA-11 shape
+ * before it happens: a join between them would succeed and mean nothing.
+ * DO NOT MERGE THEM, and do not write here expecting uploads.
+ *
  * ── IDEMPOTENCY ─────────────────────────────────────────────────────────────
  *
  * `competency_evidence` has NO event_id column and no unique key, so re-projection
