@@ -520,7 +520,7 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 | X-03 | **C19 picker mechanism** | G-LIB-08 | 1 | **M-L** · `LibraryController` meta, `library-form.tsx`, `library-config.ts`, `services/competency/libraries.ts` | L-01/02/04 | §10.0 *(decided)* | AT-X03 | SCREEN | Not started |
 | X-04 | **Event store + projector/reactor split** | G-STR-04 | 2, 9 | **L** · `05-data-flow-contracts.md` §1 DDL | X-05, threads 2/9 | ~~S-02~~ **now unblocked** | AT-X04 | DB | ✅ **DONE** (D-030…D-034) |
 | X-05 | `task_status_history` | G-STR-04 | 2 | **M** | thread 2 | X-04 | AT-X05 | DB | ✅ **DONE** (D-034) — F2 reopen detectable |
-| X-06 | Notification service + terminology | Q-F1 | 4, 9 | **M** · §8 DDL | readiness gates | — | AT-X06 | API | Not started |
+| X-06 | Notification service + terminology | Q-F1 | 4, 9 | **M** · §8 DDL | readiness gates | — | AT-X06 | API | ✅ **DONE 2026-08-11 (D-048). 6 events notify, 3 fail the named-consumer test; email built and gated OFF** |
 | X-07 | Readiness gates + asymmetric switching | M1 | 6, 8 | **M** · §8 | honest surfaces | X-04 | AT-X07 | DB | Not started |
 | X-08 | **Seed-library import flow** | G-FLOW-03, Q-C1 | 1, 6 | **L** · §9 | coverage | F-01 | AT-X08 | SCREEN | Not started |
 
@@ -893,8 +893,8 @@ to the tidier number.
 
 | # | Item | Thread | Tier | Cost (R7) | Files |
 |---|---|---|:-:|:-:|---|
-| X-11 | **`CertificateIssuer`** — auto-issue on `course.completed`. Closes **G-FLOW-05's manual-claim gap**; the plan carried certificate *upload/resolve* only | 3 | T2 | **M** | `app/Services/Events/CertificateIssuer.php`, certification tables |
-| X-12 | **`LearningAssigner`** (absorbing `MandatoryLearningAssigner`) — two entry points | 2, 3 | T2 | **M** | `app/Services/Events/LearningAssigner.php`, `lms_assignments` |
+| X-11 | **`CertificateIssuer`** — auto-issue on `course.completed`. Closes **G-FLOW-05's manual-claim gap**; the plan carried certificate *upload/resolve* only | 3 | T2 | **M** | ✅ **DONE 2026-08-11 (D-050). course.completed -> certificate -> certification.issued -> holder notified** |
+| X-12 | **`LearningAssigner`** (absorbing `MandatoryLearningAssigner`) — two entry points | 2, 3 | T2 | **M** | ✅ **DONE 2026-08-11 (D-049). Role path works via text link; plan path blocked on G-DATA-10** |
 | X-13 | **`RemediationRecommender`** — competency-derived course lookup (S4), shown immediately per Q-B3 | 3, 8 | T3 | **M** | `app/Services/Events/RemediationRecommender.php` |
 | X-14 | **`OnboardingLauncher`** — creates the journey on `employee.hired` | 1 | T2 | **M** | `app/Services/Events/OnboardingLauncher.php`, `talent_onboarding_journeys` |
 | X-15 | **`FeatureGateApplier`** — applies a gate on `readiness_gate.changed`; **ON automatic, OFF never** (§4) | M1 | T3 | **S** | `app/Services/Events/FeatureGateApplier.php` |
