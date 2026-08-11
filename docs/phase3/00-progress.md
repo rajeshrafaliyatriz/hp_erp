@@ -592,6 +592,21 @@ If no such property exists, the join is a hypothesis.
 every measurement measures what you think.** A 100% join rate is a measurement, and
 in case 3 it was a measurement of id-range overlap.
 
+**R30 — ANY SCRIPT CONTAINING A REGEX IS WRITTEN TO A FILE, NEVER PASSED THROUGH A BASH HEREDOC.**
+
+**A default, not a fallback.** Three attempts were burned on one regex this turn,
+after two earlier instances in the same session: bash mangles backslashes on the
+way in, so `
+\s` arrives as a newline and `\s`, and the failure looks like a
+wrong pattern rather than a wrong transport.
+
+**The file approach worked first time, every time.** The cost of writing a script
+to a file is one tool call; the cost of not doing it has been six.
+
+**Also covers:** backticks (command-substituted, twice - identifiers silently
+vanished from a document), and $-prefixed PHP variables inside double-quoted
+heredocs.
+
 **R27(ii) — A TRIAGE ITEM IS SIZED IN CONTROLLERS READ, NOT IN ITEMS RESOLVED.**
 
 **Triage-by-reading costs more per item than building**, and sizing them the same

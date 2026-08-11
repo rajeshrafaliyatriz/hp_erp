@@ -929,6 +929,36 @@ check('component', 'notification bell: fetched data, no hardcoded badge or empty
 /* ══════════════════════════ STATIC ══════════════════════════ */
 echo "\nSTATIC\n";
 
+check('data', 'no account has a NULL or zero tenant', function () {
+    // G-SEC-28's REAL DELIVERABLE, and it lands BEFORE the deletions.
+    //
+    // Six helpers read a request tenant as a fallback for accounts whose own
+    // sub_institute_id is NULL or 0. Measured: 0 of 401. Every one of them
+    // compensates for a condition that does not occur.
+    //
+    // REMOVING A COMPENSATION WITHOUT ASSERTING THE CONDITION CANNOT RETURN IS
+    // HOW IT REAPPEARS WITH NOTHING LEFT TO CATCH IT. This is that assertion.
+    // If it ever fails, the fallbacks are needed again and their removal was
+    // premature - which is a decision to re-take, not a bug to patch.
+    $total = DB::table('tbluser')->count();
+    $bad = DB::table('tbluser')
+        ->where(function ($q) {
+            $q->whereNull('sub_institute_id')->orWhere('sub_institute_id', 0);
+        })->count();
+
+    // KNOWN-POSITIVE AND KNOWN-NEGATIVE (R29): the query must be able to SEE such
+    // a row. Asserted against a synthetic value rather than by writing one.
+    $canSee = DB::table('tbluser')->whereNull('sub_institute_id')->orWhere('sub_institute_id', 0)->toSql();
+    if (!str_contains($canSee, 'is null') || !str_contains($canSee, '=')) {
+        return ['SKIPPED', 'the query cannot express the condition it tests for'];
+    }
+
+    return [$bad === 0 ? 'PASS' : 'FAIL',
+        $bad === 0
+            ? "0 of $total - the request-tenant fallbacks have nothing to compensate for"
+            : "$bad of $total have a NULL or zero tenant. THE FALLBACKS ARE LOAD-BEARING AGAIN."];
+});
+
 check('static', 'no PRIVATE helper reads a request tenant at all', function () {
     // WIDENED after a near-miss that this suite would NOT have caught.
     //
@@ -955,6 +985,27 @@ check('static', 'no PRIVATE helper reads a request tenant at all', function () {
         return ['SKIPPED', 'helper matcher fails its known-positive or matches its known-negative'];
     }
 
+    // ── KNOWN-NEGATIVE FOR THE ATTRIBUTION ITSELF (R29) ──────────────────────
+    // The check was empirically right at 6 -> 5 and UNGUARDED, which by R29 is an
+    // untested claim - and five deletions are verified against it.
+    //
+    // The fixture is the defect that was found: a CLEAN private helper followed
+    // by a method that DOES read a request tenant, AT FIVE-SPACE INDENTATION,
+    // which is what folded the second into the first. The split must name
+    // `dirtyOne`, never `cleanHelper`.
+    $mixed = "\n    private function cleanHelper(\$r)\n    {\n        return 1;\n    }\n"
+           . "\n     public function dirtyOne(Request \$request)\n    {\n"
+           . "        \$s = \$request->input('sub_institute_id');\n    }\n";
+
+    $named = [];
+    foreach (preg_split('/(?=\n\s*(?:public|private|protected)\s+function\s)/', $mixed) as $seg) {
+        if (!preg_match('/\n?\s*(private|protected)\s+function\s+(\w+)/', $seg, $g)) continue;
+        if (preg_match($tenantRead, $seg)) $named[] = $g[2];
+    }
+    if (in_array('cleanHelper', $named, true)) {
+        return ['SKIPPED', 'ATTRIBUTION BROKEN: a clean helper is named for the next method\'s read'];
+    }
+
     $offenders = [];
     $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app/Http/Controllers')));
     foreach ($it as $f) {
@@ -964,7 +1015,16 @@ check('static', 'no PRIVATE helper reads a request tenant at all', function () {
         $src = preg_replace('#^\s*//.*$#m', '', $src);
 
         // split on any function; keep only private/protected bodies
-        $parts = preg_split('/(?=\n\s{4}(?:public|private|protected)\s+function\s)/', $src);
+        // METHOD-BOUNDARY SCOPE. This split on EXACTLY four spaces of indentation.
+        // jobroletaskcontroller.php indents one method with FIVE, so the split
+        // missed it and that method's body was folded into the PRIVATE helper
+        // above - which was then named as the offender.
+        // THE MATCH WAS REAL; THE ATTRIBUTION WAS NOT.
+        //
+        // Third form of one root: T-01's checker used FILE scope where STATEMENT
+        // scope was needed; this used a brittle boundary where any would do.
+        // A scope wider than the thing being judged names innocent code.
+        $parts = preg_split('/(?=\n\s*(?:public|private|protected)\s+function\s)/', $src);
         foreach ($parts as $body) {
             if (!preg_match('/\n?\s*(private|protected)\s+function\s+(\w+)/', $body, $fn)) continue;
             if (!preg_match($tenantRead, $body, $m)) continue;
