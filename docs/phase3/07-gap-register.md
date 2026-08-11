@@ -378,6 +378,67 @@ then becomes a real guard instead of 5-for-5 wrong.
 files: untouched"*, which reads as tidiness. **It is a blocker on the
 highest-priority remaining item in the queue.**
 
+## G-EVT-01 - **THE CATALOGUE DECLARES 11 CONSUMERS THAT DO NOT EXIST** - S1 for authority, not for security
+
+Found by X-15's size check, which asked one question - *where is
+`FeatureGateApplier`?* - and got the answer *nowhere*.
+
+    declarations in SHIPPED naming an absent class : 11
+    distinct absent classes                        : 6
+
+    CapabilityEvidenceProjector   task.rejected, task.reopened,
+                                  capability.flag_resolved, certification.issued
+    GapRecalculator               assessment.completed, course.completed,
+                                  employee.role_assigned
+    OnboardingLauncher            employee.hired
+    AccessRevoker                 employee.offboarded
+    TaskReassigner                employee.offboarded
+    FeatureGateApplier            readiness_gate.changed
+
+### WHY THIS IS WORSE THAN SIX MISSING FILES
+
+`EventCatalogue::SHIPPED` is **the authority on what exists**. Every other
+statement in this phase about what the event store does is read off it. It has
+been asserting the existence of six classes that were never written, and
+`assertInvariants()` never noticed because it validates the SHAPE of the
+declarations - projector/reactor kinds, notification rules - and never once asked
+whether the names resolve. **A PAPER REACTOR PASSES EVERY EXISTING CHECK.**
+
+### IT DID NOT JUST SIT THERE. IT DECIDED SOMETHING.
+
+X-06 removed `NotificationDispatcher` from `readiness_gate.changed` with this
+reason, still in the file:
+
+> *"FeatureGateApplier already does the only thing anyone wanted done. Nobody acts
+> on being told."*
+
+And `NOT_SHIPPED` records the notification as **DROPPED, not deferred**, because
+*"there is nothing to wait for."* **Both rest on a class that does not exist.**
+The second clause - nobody acts on being told - may well still hold, but it was
+not the argument made. The argument made was that something else already handles
+it. **THE DECISION IS NOT WRONG YET; IT IS UNSUPPORTED, WHICH IS A DIFFERENT
+THING AND HAS TO BE RE-TAKEN RATHER THAN RE-ASSERTED.**
+
+### R26 EARNED ITS KEEP ON THE WAY
+
+The check's first red said **15**. Four were `ProficiencyService`, which is real
+and lives in `App\Services\Competency\`, not beside the catalogue. The check had
+hardcoded one namespace. **The first red was partly the check** - so the resolver
+now finds a class anywhere under `app/`, and carries a known-negative in both
+directions INCLUDING a real class that is NOT beside the catalogue, which is the
+exact case the first version got wrong.
+
+11 survived that correction, against a scan of the whole tree.
+
+### WHAT THIS DOES NOT SAY
+
+It does not say the event store is broken. Events still record, project, and
+replay; the shipped reactors that DO exist were each verified when they landed.
+It says the catalogue's SHIPPED list cannot currently be quoted, and this phase
+has quoted it repeatedly.
+
+---
+
 ## A GUARD INSIDE A TRY WHOSE CATCH REWRITES EVERYTHING RETURNS THE SAME BYTES FOR A REFUSAL AND AN OUTAGE
 
 Found in O-03, filed on its own because the shape is general and the item is not.

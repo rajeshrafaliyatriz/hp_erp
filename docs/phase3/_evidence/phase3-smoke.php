@@ -202,6 +202,54 @@ check('events', 'catalogue invariants', function () {
     return [$err === [] ? 'PASS' : 'FAIL', $err === [] ? 'all pass' : count($err) . ' violation(s)'];
 });
 
+check('events', 'every SHIPPED consumer names a class that exists', function () {
+    // X-15's size check found FeatureGateApplier declared SHIPPED against
+    // readiness_gate.changed with NO CLASS ANYWHERE. It exists only as a string
+    // in the catalogue.
+    //
+    // THE CATALOGUE IS THE AUTHORITY ON WHAT SHIPPED, and it was asserting the
+    // existence of something that does not exist. assertInvariants() checks the
+    // SHAPE of the declarations - projector/reactor kinds, notification rules -
+    // and never once asked whether the names resolve. A paper reactor passes
+    // every existing check.
+    //
+    // IT ALSO DECIDED SOMETHING. X-06 removed NotificationDispatcher from
+    // readiness_gate.changed because "FeatureGateApplier already does the only
+    // thing anyone wanted done". A real decision, resting on a class that was
+    // never written.
+    // R26 EARNED ITS KEEP HERE. The first version hardcoded App\Services\Events\
+    // and reported 15 absent. Four of those were ProficiencyService, which is
+    // real and lives in App\Services\Competency\. THE FIRST RED WAS PARTLY THE
+    // CHECK. Consumers are not required to live beside the catalogue, so the
+    // resolver must not assume they do: find the file anywhere under app/.
+    $byName = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(base_path('app')));
+    foreach ($it as $f) {
+        if ($f->getExtension() === 'php') $byName[$f->getBasename('.php')] = $f->getPathname();
+    }
+
+    $missing = [];
+    foreach (App\Services\Events\EventCatalogue::SHIPPED as $event => $consumers) {
+        foreach (array_keys($consumers) as $name) {
+            if (!isset($byName[$name])) $missing[] = $event . ' -> ' . $name;
+        }
+    }
+
+    // KNOWN-NEGATIVE (R29), BOTH DIRECTIONS, against this same resolver:
+    // it must miss a name that is not there, and find one that is - including
+    // NOT beside the catalogue, which is the case the first version got wrong.
+    $seesFake   = !isset($byName['NoSuchApplierXyz']);
+    $keepsLocal = isset($byName['NotificationDispatcher']);      // App\Services\Events
+    $keepsOther = isset($byName['ProficiencyService']);          // App\Services\Competency
+    if (!$seesFake || !$keepsLocal || !$keepsOther) {
+        return ['SKIPPED', 'the class resolver cannot discriminate here'];
+    }
+
+    return [$missing ? 'FAIL' : 'PASS',
+        $missing ? count($missing) . ' declared but absent: ' . implode(', ', $missing)
+                 : count(App\Services\Events\EventCatalogue::SHIPPED) . ' events, every consumer resolves'];
+});
+
 /* ══════════════════════════ NOTIFICATIONS (X-06) ══════════════════════════ */
 echo "\nNOTIFICATIONS\n";
 
