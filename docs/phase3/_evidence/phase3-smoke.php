@@ -958,6 +958,45 @@ check('component', 'gap view: unmeasured renders words, never a number or bar', 
         return ['SKIPPED', 'no unmeasured branch found - pattern would judge nothing'];
     }
 
+    // ── KNOWN-NEGATIVES (R29). THE DEFECTS THIS CHECK CLAIMS TO CATCH. ─────
+    //
+    // Two fixtures, both genuine near-misses - each is a component that would
+    // look correct to a reader and is exactly what the check exists to stop.
+    //
+    // (1) THE BRANCH RENDERS THE WORDS **AND** A BAR. The words are present, so
+    //     any check that only asked "is the string there?" passes it. This is
+    //     the likeliest real regression: someone adds a bar for visual
+    //     consistency without noticing the branch means "no measurement".
+    $bad1 = "if (state === 'unmeasured') {
+"
+          . "    return <span>Not yet assessed</span> && <CoverageBar v={0} />;
+  }
+";
+    //
+    // (2) THE WORDS EXIST BUT NOT IN THIS BRANCH. Present in the file, absent
+    //     where it matters - the file-scope-versus-branch-scope error that has
+    //     bitten this suite three times in other checks.
+    $bad2 = "if (state === 'unmeasured') {
+    return <span>{level}</span>;
+  }
+"
+          . "const label = 'Not yet assessed';
+";
+
+    foreach ([[1, $bad1], [2, $bad2]] as [$n, $fx]) {
+        $caught = false;
+        if (preg_match("/state\s*===\s*'unmeasured'\s*\)\s*\{(.*?)
+  \}/s", $fx, $bm)) {
+            $b = $bm[1];
+            $caught = str_contains($b, 'CoverageBar')
+                   || preg_match('/measured_level|\{0\}|toFixed/', $b)
+                   || !str_contains($b, 'Not yet assessed');
+        }
+        if (!$caught) {
+            return ['SKIPPED', "known-negative $n NOT CAUGHT - this check cannot tell a correct branch from a broken one"];
+        }
+    }
+
     $problems = [];
     if (!str_contains($code, 'Not yet assessed')) $problems[] = 'string absent';
 
@@ -1029,6 +1068,20 @@ check('component', 'composer: a picker ONLY for skill, free text for the other f
 check('component', 'Skill Library: no user-visible "Competency" string', function () {
     $src = fe('components/domain/competency/cm-competency-library.tsx');
     if ($src === null) return ['SKIPPED', 'cm-competency-library.tsx not found'];
+
+    // KNOWN-NEGATIVE (R29): "Competency" WHERE A USER CANNOT SEE IT.
+    // Import paths and class names carry the word all over this file. A matcher
+    // that flagged those would fail forever and be switched off - so the near-miss
+    // is the SAFE shape, and it must NOT fire. This is the inverse direction from
+    // the other known-negatives here: the risk is a check that is too eager, not
+    // one that is too blind.
+    $invisible = "import { X } from '@/domain/competency/cm-lib';"
+               . "<div className=\"competency-grid\">Skills</div>";
+    if (preg_match('/>\s*([^<>{}
+]*Competenc[^<>{}
+]*)</i', $invisible)) {
+        return ['SKIPPED', 'known-negative FIRED: an import path or className reads as user-visible text'];
+    }
     $code = stripComments($src);
 
     // USER-VISIBLE ONLY. Type names (CompetencyLibraryItem), imports, and the CSV
@@ -1060,6 +1113,16 @@ check('component', 'Skill Library: no user-visible "Competency" string', functio
 check('component', 'notification bell: fetched data, no hardcoded badge or empty state', function () {
     $src = fe('components/shell/notifications-menu.tsx');
     if ($src === null) return ['SKIPPED', 'notifications-menu.tsx not found'];
+
+    // KNOWN-NEGATIVE (R29): A BADGE GATED ON SOMETHING ALWAYS TRUE.
+    // The near-miss is not a MISSING gate - it is a PRESENT one that does not
+    // depend on the data. That is what a placeholder looks like during
+    // development, and what ships when nobody removes it.
+    foreach (['{true && <Badge/>}', '{show && <Badge/>}'] as $fake) {
+        if (preg_match('/unread\s*>\s*0\s*&&/', $fake)) {
+            return ['SKIPPED', 'known-negative FIRED: a constant-gated badge reads as data-gated'];
+        }
+    }
     $code = stripComments($src);
 
     $problems = [];
@@ -1149,6 +1212,16 @@ check('static', 'every content-map accessLink resolves to a live menu row', func
         }
     }
     if (!$used) return ['SKIPPED', 'no accessLink references found in the content maps'];
+
+    // KNOWN-NEGATIVE (R29): A FABRICATED accessLink MUST BE CAUGHT.
+    // The near-miss is a link that LOOKS right - correct module, correct
+    // prefix, plausible slug - because a real regression is a renamed menu,
+    // not an obviously invented string.
+    $fake = '/module/organizational-management/organization-setup/no-such-screen';
+    $liveProbe = DB::table('tblmenumaster_g2g')->where('access_link', $fake)->exists();
+    if ($liveProbe) {
+        return ['SKIPPED', 'known-negative is not negative - the fabricated link exists'];
+    }
 
     $live = DB::table('tblmenumaster_g2g')->whereNotNull('access_link')
         ->pluck('access_link')->map(fn ($v) => rtrim((string) $v, '/'))->all();
