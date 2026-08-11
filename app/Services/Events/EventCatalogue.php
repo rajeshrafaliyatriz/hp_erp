@@ -299,6 +299,42 @@ class EventCatalogue
             }
         }
 
+        // ── LIST MEMBERSHIP. G-EVT-01's SECOND LESSON. ──────────────────────
+        //
+        // The resolution check above asks whether a declared consumer RESOLVES.
+        // It does not ask whether an entry is in the RIGHT LIST, and those are
+        // different questions: `employee.hired` was filed in NOT_NOTIFIED, which
+        // records dropped NOTIFICATIONS, when what had happened was that the
+        // EVENT lost its only consumer. Every invariant here passed, because the
+        // entry was well-formed - it was just filed against a decision nobody
+        // took.
+        //
+        // SO A GREEN assertInvariants() DOES NOT MEAN "THE CATALOGUE IS
+        // CORRECTLY FILED". It means every declaration is well-formed and every
+        // name resolves. The two cheap membership rules are enforced below; the
+        // judgement of whether a NOT_NOTIFIED entry describes a notification
+        // decision or an event decision is NOT mechanised and cannot be read off
+        // a green run.
+        foreach (array_keys(self::NOT_SHIPPED) as $event) {
+            if (isset(self::SHIPPED[$event])) {
+                $errors[] = "DOUBLE-FILED: '$event' is in BOTH SHIPPED and NOT_SHIPPED. "
+                    . "An event ships or it does not.";
+            }
+        }
+        foreach (array_keys(self::NOT_NOTIFIED) as $event) {
+            if (isset(self::NOT_SHIPPED[$event]) && !isset(self::SHIPPED[$event])) {
+                // Legal but worth stating: readiness_gate.changed is deferred as
+                // an EVENT and separately dropped as a NOTIFICATION, and its
+                // entries cross-reference each other. Silence here would let an
+                // accidental version of the same pair look identical.
+                if (!str_contains((string) (self::NOT_SHIPPED[$event]['reason'] ?? ''), 'NOT_NOTIFIED')) {
+                    $errors[] = "UNLINKED PAIR: '$event' is deferred as an event AND recorded as a "
+                        . "dropped notification, but its NOT_SHIPPED reason does not reference the other. "
+                        . "Two verdicts on one event must each say the other exists.";
+                }
+            }
+        }
+
         foreach (self::NOT_SHIPPED as $event => $row) {
             if (in_array($row['verdict'], ['DEFERRED', 'DEFERRED_INDEFINITELY'], true) && empty($row['trigger'])) {
                 $errors[] = "DEFERRED WITHOUT A TRIGGER: '$event' - nobody will remember to enable it.";

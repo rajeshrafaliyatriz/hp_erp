@@ -378,6 +378,65 @@ then becomes a real guard instead of 5-for-5 wrong.
 files: untouched"*, which reads as tidiness. **It is a blocker on the
 highest-priority remaining item in the queue.**
 
+## PROJECTING INTO A TABLE WITH NO `event_id` - **the answer, so the next one does not re-derive it**
+
+`competency_evidence` has no `event_id` column and no unique key, so
+`updateOrInsert` had nothing obvious to key on. The options looked like: add a
+column (schema change, approval, migration), or accept duplicate rows on replay.
+
+**Neither was needed.** The table already had `idx_ce_source` on
+`(source_type, source_id)`. The projector writes `source_type` = THE EVENT TYPE
+and `source_id` = THE EVENT ID, and replays overwrite instead of appending.
+
+### WHY THIS IS NOT A WORKAROUND
+
+**THE SOURCE OF A PROJECTED ROW GENUINELY IS THE EVENT THAT PRODUCED IT.** The
+columns are being used for exactly what they are named for. A row is traceable
+back to the stream through an index that already exists, and idempotency falls
+out of that rather than being bolted on.
+
+A schema change avoided **by using the schema correctly** - which is the same
+lesson as the table-ahead-of-the-work entry above, one level down: read what is
+there before adding to it.
+
+**For the next projector against a table with no `event_id`:** look for a
+`source`-shaped pair first. If one exists, it is almost certainly meant for this.
+
+---
+
+## THE RESOLUTION CHECK'S LIMIT - **a green `assertInvariants()` does not mean the catalogue is correctly filed**
+
+Recorded beside the check because a green run reads stronger than it is.
+
+I filed `employee.hired` in `NOT_NOTIFIED`, which records dropped
+**notifications**, when what had happened was that the **event** lost its only
+consumer. **Every invariant passed.** The entry was well-formed, its consumer
+names resolved, its shape was right - it was simply filed against a decision
+nobody took.
+
+**The check asks whether a declared consumer RESOLVES. It does not ask whether an
+entry is in the RIGHT LIST.** Those are different questions and the first one
+being green says nothing about the second.
+
+### TWO CHEAP RULES ADDED, ONE JUDGEMENT LEFT UNMECHANISED
+
+    DOUBLE-FILED   an event in BOTH SHIPPED and NOT_SHIPPED
+    UNLINKED PAIR  an event deferred as an EVENT and separately dropped as a
+                   NOTIFICATION, where the two entries do not reference each
+                   other. Legal - readiness_gate.changed is exactly this - but
+                   silence would let an accidental version look identical to the
+                   deliberate one.
+
+Both carry a known-negative: the overlap detector sees 0 real overlaps and 1 on a
+synthetic one, so it can discriminate.
+
+**NOT mechanised, and stated instead:** whether a `NOT_NOTIFIED` entry describes a
+notification decision or an event decision. That is a judgement about what a
+sentence means, and no cheap invariant reaches it. **It cannot be read off a green
+run, so it is written down here.**
+
+---
+
 ## A TABLE THAT WAS AHEAD OF THE WORK - **`competency_evidence` was already designed for Q-B3**
 
 First time this phase a table has been ahead of the work rather than behind it.
