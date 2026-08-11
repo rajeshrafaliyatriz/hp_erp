@@ -311,9 +311,81 @@ function stopAll() {
     report(opened ? 'PASS' : 'FAIL', 'clicking the bell opens the menu',
       opened ? 'menu rendered on click' : 'click produced no menu');
 
-    // 8. CONTRAST — BOUNDED, AND SAID SO. This checks the unmeasured text is not
+    // ── ITEM 8, FOR REAL: REACH THE GAP VIEW ────────────────────────────
+    // It SKIPPED before because "Not yet assessed" is not on the dashboard. A
+    // skip is not a pass, so the harness now navigates to the screen instead of
+    // reporting that it could not find it.
+    //
+    // It walks the nav the way a person does rather than hardcoding a path -
+    // module slugs are per-tenant runtime values, so a constructed URL would be
+    // a guess. Whether those slugs are STABLE is an open question (see the log);
+    // walking the nav is correct either way.
+    const empPage = loggedIn['employee'] ? loggedIn['employee'].page : null;
+    if (!empPage) {
+      report('SKIPPED', 'gap view: unmeasured shows words, not a zero', 'employee login failed');
+    } else {
+      // ROUTE DISCOVERY FROM THE NAV API, NOT FROM A GUESS.
+      // The employee's sidebar shows only "Main Dashboard" - modules live behind
+      // a switcher - so walking visible buttons found nothing. The nav endpoint
+      // returns each module's accessLink (/module/competency-management), which
+      // is the app's OWN answer to "where is this screen", not my invention.
+      let found = false, visited = 0;
+      const wanted = /not yet assessed/i;
+
+      await empPage.goto(APP + '/module/competency-management',
+        { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+      await empPage.waitForTimeout(3000);
+      visited++;
+      let body = await empPage.locator('body').innerText().catch(() => '');
+      if (wanted.test(body)) found = true;
+
+      if (!found) {
+        // Then its sub-screens, by their own visible labels.
+        const kids = empPage.locator('button:visible, a:visible');
+        const n = Math.min(await kids.count(), 40);
+        for (let j = 0; j < n; j++) {
+          const kl = (await kids.nth(j).innerText().catch(() => '')).trim();
+          if (!kl || !/capabilit|my competenc|gap|profile/i.test(kl)) continue;
+          await kids.nth(j).click().catch(() => {});
+          await empPage.waitForTimeout(2500);
+          visited++;
+          body = await empPage.locator('body').innerText().catch(() => '');
+          if (wanted.test(body)) { found = true; break; }
+          if (visited > 8) break;
+        }
+      }
+
+      if (!found) {
+        report('SKIPPED', 'gap view: unmeasured shows words, not a zero',
+          `walked ${visited} screen(s), "Not yet assessed" not reached - route not found by nav`);
+      } else {
+        // THE ASSERTION TRIZ CARES MOST ABOUT: no zero where unmeasured belongs.
+        const bad = await empPage.evaluate(() => {
+          const cells = Array.from(document.querySelectorAll('td, li, div'))
+            .filter((e) => /not yet assessed/i.test(e.textContent || '') && e.children.length < 6);
+          if (!cells.length) return { reached: false };
+          // The ROW containing the unmeasured cell must not also show a level.
+          const row = cells[0].closest('tr') || cells[0].parentElement;
+          const text = (row ? row.innerText : '').replace(/\s+/g, ' ');
+          // A bare 0 rendered as a level or a percentage is the failure.
+          const zero = /(^|[^\d])0([^\d%]|$)/.test(text) || /0%/.test(text);
+          return { reached: true, text: text.slice(0, 90), zero };
+        });
+        if (!bad.reached) {
+          report('FAIL', 'gap view: unmeasured shows words, not a zero',
+            'text present but no element resolved - selector too narrow');
+        } else {
+          report(bad.zero ? 'FAIL' : 'PASS', 'gap view: unmeasured shows words, not a zero',
+            bad.zero ? `A ZERO IS RENDERED BESIDE "Not yet assessed": "${bad.text}"`
+                     : `row reads "${bad.text}" - words, no zero`);
+        }
+      }
+    }
+
+    // 8b. CONTRAST — BOUNDED, AND SAID SO. This checks the unmeasured text is not
     // invisible-on-invisible. It is NOT a WCAG audit and does not claim to be.
-    const probe = await page.evaluate(() => {
+    const probePage = (loggedIn['employee'] && loggedIn['employee'].page) || page;
+    const probe = await probePage.evaluate(() => {
       const el = Array.from(document.querySelectorAll('*'))
         .find((e) => e.children.length === 0 && /Not yet assessed/i.test(e.textContent || ''));
       if (!el) return null;

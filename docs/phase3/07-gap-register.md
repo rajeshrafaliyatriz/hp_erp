@@ -25,6 +25,66 @@ workflow · **S3** degrades the product · **S4** cosmetic.
 
 ---
 
+---
+
+# ⭐ G-UI-01 - **THE CAPABILITY SCREEN HAS NO ROUTE. NOBODY CAN OPEN IT.** - **S1**
+
+> **Slice 1's entire deliverable - the gap view, the "Not yet assessed" screen,
+> the thing this phase is sold on - is unreachable in the running application.**
+
+| Evidence | |
+|---|---|
+| `CmMyCapability` exported from `cm-my-capability.tsx` | **yes** |
+| listed in `components/domain/competency/index.ts` (the barrel) | **NO** |
+| listed in `hooks/content-map-m2.ts` (the accessLink -> component route map) | **NO** |
+| imported anywhere in the codebase | **NO** |
+
+Its siblings are both mounted, so the mechanism is not in doubt:
+
+```
+{ accessLink: '/module/competency-management/competency-library/command-center', component: CmCommandCenter }
+{ accessLink: '/module/competency-management/competency-library', submenuId: '34',  component: CmCompetencyLibrary }
+```
+
+**There is no such line for CmMyCapability.**
+
+### HOW IT SURVIVED EVERY CHECK UNTIL NOW
+
+**Every source assertion about this component PASSES**, because the component is
+correct:
+
+- Tier 2: unmeasured renders "Not yet assessed", no bar, no number - **PASS**
+- Tier 2: a level cannot render without its coverage - **PASS**
+- Tier 1: the API returns 4 required / 1 met / 2 gap / 1 unmeasured - **PASS**
+- `tsc`: clean
+
+**The code is right. The wiring does not exist.** Nothing that reads a file can
+see a missing entry in a different file, and no API check can see that the screen
+consuming it is unrouted.
+
+### THIS IS WHAT X-21 WAS BUILT FOR, AND IT FOUND IT ON ITS SECOND RUN
+
+The browser could not reach the screen. **That failure to arrive IS the finding** -
+the same shape as the dead bell, inverted: the bell was a control with no data
+behind it; this is a component with no route in front of it.
+
+> **A source assertion cannot prove a screen is REACHABLE. Only a browser can, and
+> only by trying to reach it.**
+
+### RELATED, AND NOW OBVIOUS IN HINDSIGHT
+
+The X-21 item-8 check reported *"walked 1 screen, Not yet assessed not reached"*
+and I twice assumed my navigation was wrong. **R26 says a new check's first red is
+more likely to be the check than the code - and twice it was. The third time it
+was the code.** The rule is a prior, not a verdict.
+
+**FIX: one export in the barrel and one row in `content-map-m2.ts`, against a menu
+row whose `accessLink` exists for the tenant.** NOT DONE THIS TURN: it needs the
+right `accessLink`/`submenuId`, and guessing one produces a screen that renders
+for nobody - which is the bug being fixed.
+
+---
+
 # ⭐⭐ THE METHODOLOGICAL RESULT OF THE PHASE — **A PATTERN PRODUCES CANDIDATES; ONLY A MEASUREMENT PRODUCES A FINDING**
 
 > **This supersedes the softer version of R6** ("candidates are not findings").
