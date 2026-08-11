@@ -346,6 +346,78 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+# PROBE AUDIT OF THE CLEARANCES - **2026-08-12**
+
+**Scope:** a probe that FOUND a defect proved it could reach and discriminate. A
+probe that CLEARED something may never have arrived. So only clearances were
+re-read - and the first thing the audit found was that **none of the six were
+cleared by a probe at all. They were cleared by READING the chain.** A read has no
+reach-or-discriminate property; it has R20's boundary.
+
+| clearance | reach | discriminate | verdict |
+|---|---|---|---|
+| `DependencyController::context` | n/a | n/a | **SUPERSEDED** - G-SEC-28 deleted the fallback and probed before/after |
+| `MyTasksController::context` | n/a | n/a | **SUPERSEDED** - same |
+| `ProjectController::context` | n/a | n/a | **SUPERSEDED** - same |
+| `ExcelAutomationAgentController::resolveSubInstituteId` | yes | yes | **STANDS** - later probed behaviourally, 4 cases, both throws verified |
+| `AJAXController::tableDataRequestedTenant` | **yes, on the second attempt** | yes | **STANDS** - measured below |
+| `g2gActorId` | yes | yes | **STANDS on its merits, and the entry was wrong about its scope** |
+
+## THE AUDIT'S OWN FIRST PROBE HAD THE DEFECT IT WAS AUDITING FOR
+
+Attempt 1 on `tableDataRequestedTenant` built a request with **no identity at
+all** and reported:
+
+    tableDataTenant()          : NULL
+    tableDataRequestedTenant() : '999'
+    the ?? pair yields         : '999'      -> "CLEARANCE DOES NOT STAND"
+
+**That was the documented fallback working as designed.** The claim under test is
+*"proven identity wins outright"*, and a request with no identity cannot test it.
+**The probe never reached the condition** - property (1), failing silently, inside
+the file written to catch exactly that.
+
+Attempt 2, with a real token for tenant 3 and a foreign tenant in the request:
+
+    tableDataTenant()          : '3'
+    tableDataRequestedTenant() : '999'
+    the ?? pair yields         : '3'        -> CLEARANCE STANDS
+
+**Identity wins with a foreign tenant present.** That is the claim, and it is now
+measured rather than read.
+
+## `g2gActorId` - THE CLAIM STANDS; THE CLEARANCE'S SCOPE WAS ACCIDENTAL
+
+The register cleared **`jobroletaskcontroller::g2gActorId`**, as one helper in one
+class. Measured:
+
+    definitions of g2gActorId : 15
+    byte-identical bodies     : 15 of 15 (same md5 across every file)
+    the named class           : not among them - the real path is
+                                app/Http/Controllers/libraries/jobroletaskcontroller.php,
+                                not Api/
+
+The body is what the entry said: `apiUserId()` first, `$request->session()`
+fallback, **no request-supplied value** - a session is server-side, not caller
+input. **The claim is correct.**
+
+**But it was made about one copy of a helper that exists fifteen times.** It
+generalises only because all fifteen are byte-identical - **and nobody had
+measured that.** The clearance was right for a reason that was never checked. **A
+clearance of one instance is not a clearance of a pattern, even when it turns out
+to be.**
+
+## WHAT THE AUDIT CHANGES
+
+**Nothing goes back to CANDIDATE.** All six stand: three superseded by code that
+was later deleted and probed, three now backed by measurement rather than reading.
+
+**What changed is the basis, not the verdict** - and that was the point. Five of
+the six had been resting on a read since the triage, and one of those reads was
+about the wrong class and one-fifteenth of the surface.
+
+---
+
 # TRIAGE OF THE SEVEN - **COMPLETE: 6 CLEARED, 1 CANDIDATE**
 
 **Cleared by reading the chain (R20), never by shape:**
