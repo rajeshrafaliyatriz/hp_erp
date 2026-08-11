@@ -5229,6 +5229,86 @@ metrics will read as complete.
 
 ---
 
+## MATRIX-ENFORCED AUTHORIZATION - **SIZED 2026-08-11, NOT STARTED**
+
+Decision taken: **the guard CONSULTS `tblgroupwise_rights_g2g`.** Not narrowed to
+`profile:admin` - narrowing hardcodes the boundary in code where an administrator
+can never change it, and the point is an admin screen that controls what HR and
+employees can do.
+
+Build order is fixed and not negotiable: **enforcement first, screen second.** A
+screen editing rules nothing enforces is worse than no screen, because it looks
+like it worked.
+
+### PART 1 — ENFORCEMENT. **The map is the cost, and it is large.**
+
+    live API routes                 838
+    present in the route->menu map  528
+    ENFORCEABLE TODAY (conf >= 2)   185
+    NEED A DECLARATION              653
+
+Confidence 0 and 1 count as UNMAPPED, as agreed. The existing map holds 739 rows:
+208 at confidence 0, 330 at 1, 157 at 2, 43 at 3, 1 at 4.
+
+**AND THE THREE ACTS THAT PROMPTED THE DECISION ARE ALL UNMAPPED.**
+
+    /readiness/gates/acknowledge          NOT IN THE MAP
+    /competency/framework-import/commit   NOT IN THE MAP
+    /reporting-line/bulk                  NOT IN THE MAP
+    also absent: /competency/definitions, /competency/nine-box, /terminology
+
+**The map was built against the pre-Phase-3 route tree.** Every route this phase
+added is missing from it, and those are precisely the routes worth enforcing -
+the configuration acts an HR Manager can currently perform. The 185 enforceable
+routes are all legacy.
+
+**So Part 1 is not "wire up the guard".** It is:
+
+1. **Declare menus for Phase 3's routes** - the ~20 that carry the configuration
+   acts, first. This is authoring, and a route whose menu is guessed would be a
+   permission decided by a guess.
+2. Build the guard with the tri-state precedence already decided:
+   **individual DENY > group DENY > individual ALLOW > group ALLOW > role default
+   > deny.**
+3. Prove it with **two roles, opposite outcomes, on the same route** - and the
+   refusal must come from THE MATRIX, not a hardcoded list. The known-negative:
+   flip the matrix row and the answer must flip with it. A guard that refuses HR
+   because someone wrote `admin` in a route file has not been tested at all.
+
+**A route with no menu declaration must DENY**, per the precedence's own tail.
+That means turning enforcement on before declaring the 653 would break the
+product - so it lands per-route or per-group, never globally.
+
+### PART 2 — THE ADMIN SCREEN. **Smaller, and blocked on Part 1.**
+
+    menu 15  Group wise right management
+             /module/organizational-management/organization-setup/group-wise-right-management
+    menu 16  Individual right management
+             /module/organizational-management/organization-setup/individual-right-management
+
+Both menus exist with `access_link`s; the individual-rights table exists. **No API
+endpoint reads or writes rights** - one Blade-era controller
+(`tblmenumasterG2gController`) touches the table. So Part 2 is: rights read/write
+endpoints, two screens, X-21 browser verification.
+
+The screen pattern is no longer first-of-its-kind - the readiness screen
+established it (`readLaravelSession()`, `resolveApiBaseUrl()`).
+
+### THE HONEST TOTAL
+
+**Part 1 is the large one, and the authoring is most of it.** The guard itself is
+small; declaring menus for 653 routes is not, and cannot be done by pattern - a
+guessed menu is a guessed permission.
+
+**Recommendation: scope Part 1 to the configuration acts only** - the ~20 routes
+that prompted this - prove the guard there with two roles and opposite outcomes,
+and leave the other 633 on their current guards until each is declared. That
+closes the actual defect (an HR Manager committing a framework import) without a
+653-row authoring project standing between the decision and any enforcement at
+all.
+
+---
+
 ## G-SEC-04 — The route-to-menu map is not reliable enough to enforce against · **S1** · `OPEN`
 
 > ⚠️ **SCOPE QUALIFIER (2026-08-07):** this figure describes the **Next.js sidebar**
