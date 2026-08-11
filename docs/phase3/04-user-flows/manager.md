@@ -1,5 +1,36 @@
 # User flow — Reporting Manager
 
+## ⚠ CORRECTIONS — 2026-08-11
+
+### ✔ THE CENTRAL CLAIM STANDS — **the manager role still does not exist**
+
+*"No user can hold it, and there is no reporting line to hold."* Re-measured
+2026-08-11:
+
+    reporting_manager_id populated   8 of 401 platform-wide
+    department_head / reporting_manager  DEFINED as profiles, but DELIBERATELY
+      ABSENT from COMPETENCY_ELEVATED and LEAVE_ELEVATED
+
+### 🆕 IT IS NOW MEASURED RATHER THAN ASSERTED
+
+The `reporting_coverage` readiness gate measures exactly this claim:
+
+    tenant 1  blocked 0.00%      tenant 3  blocked 6.56%      threshold 50%
+
+**But the gate enforces nothing**, and the reason belongs in this document
+because it is this role's whole situation: **a gate cannot enforce against
+features that were deferred waiting for it.** The manager-dependent flows were
+never switched on — precisely pending the coverage this gate measures — so there
+is nothing for it to refuse.
+
+That leaves two expressions of one decision: the gate, which moves with the data,
+and the const arrays, which hardcode the absence. **A hardcoded absence cannot be
+told from an oversight by anything except a comment** — which is what the gate was
+built to replace. When coverage is real, those lists should ASK the gate rather
+than repeat its conclusion.
+
+---
+
 **Gate B deliverable.** Read-only analysis; no application code changed.
 Date: 2026-08-05
 

@@ -12,6 +12,45 @@ Each journey states **today** (verified against source), **target**, and the
 
 ---
 
+## ⚠ CORRECTIONS — 2026-08-11
+
+Dated rather than rewritten in place, so what was true when this was written and
+what is true now are both visible. **Everything below this block is the original
+text and may still contain the corrected statements.**
+
+### ✅ CORRECTED — **"the chain that does not exist" now exists**
+
+§2's heading and `G-DATA-02`'s line say the capability chain does not exist. **It
+does, and it is demonstrated in the regression suite.**
+
+    competency                209 rows
+    competency_kasba_item     226 rows
+    jobrole_competency_map     23 rows
+    suite: "chain: required 3, measured 1, gap 2, survives rename"  PASS
+
+The chain runs in **tenant 3**, the demo tenant. It was built in tenant 1 and
+moved on 2026-08-11 — tenant 1 is deliberately left at 0% coverage as the only
+view of what a new customer sees on day one.
+
+### 🆕 NEW SINCE THIS WAS WRITTEN — **gap reporting is gated**
+
+An Employee's gap view now depends on a readiness gate. If
+`capability_coverage` is `blocked`, `/api/competency/gap` returns **409 with the
+reason and the remedy** — not an empty list. Tenant 3 reads `ready 55.74%`;
+tenant 1 reads `blocked 0.00%` and **an Employee there sees a correct refusal
+explaining the product is not ready yet.** That is the intended day-one
+experience, not a defect.
+
+A gate that has **never been computed does not block** — a gate nobody has run has
+made no claim.
+
+### ✔ STILL TRUE — `competency_certification_requirements` is still absent
+
+§ on certification requirements → `G-STR-02` stands. Verified absent on
+2026-08-11.
+
+---
+
 ## 0. What an Employee can reach today
 
 The sidebar **is** filtered server-side by `can_view`
