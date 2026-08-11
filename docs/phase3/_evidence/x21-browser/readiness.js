@@ -19,7 +19,7 @@ const path = require('path');
 const HP_ERP = path.resolve(__dirname, '../../../..');
 const API = 'http://localhost:8000';
 const APP = 'http://localhost:3000';
-const PASSWORD = 'password';
+const PASSWORD = process.env.G2G_SEED_PASSWORD || 'G2GDemo@2026';
 const attach = process.argv.includes('--attach');
 
 let pass = 0, fail = 0;
@@ -72,8 +72,12 @@ async function waitFor(url, ms) {
   const TENANT = 3;
   const who = JSON.parse(php(BOOT
     + `$p=DB::table('tbluserprofilemaster')->where('sub_institute_id',${TENANT})->where('role_key','administrator')->first();`
-    + `$u=DB::table('tbluser')->where('sub_institute_id',${TENANT})->where('user_profile_id',$p->id)->first(['id','email']);`
-    + `if(!$u) $u=DB::table('tbluser')->where('sub_institute_id',${TENANT})->first(['id','email']);`
+    // THE SEEDED ACCOUNT SPECIFICALLY. Tenant 3 also holds a non-seeded admin
+    // (healthcare@gmail.com) with a real password, and taking "the first admin"
+    // picked it twice. The seed's accounts are the @healthcare.g2g domain and
+    // they are the only ones whose credential is known.
+    + `$u=DB::table('tbluser')->where('sub_institute_id',${TENANT})->where('user_profile_id',$p->id)`
+    + `->where('email','like','%@healthcare.g2g')->first(['id','email']);`
     + "echo json_encode(['tenant'=>" + TENANT + ",'email'=>$u->email]);"));
   console.log(`  admin ${who.email} in tenant ${who.tenant}\n`);
 
@@ -150,7 +154,8 @@ async function waitFor(url, ms) {
     // 4. THE ROLE GUARD, IN THE BROWSER. Employee must be refused, not shown gates.
     const who2 = JSON.parse(php(BOOT
       + `$p=DB::table('tbluserprofilemaster')->where('sub_institute_id',${who.tenant})->where('role_key','employee')->first();`
-      + `$u=DB::table('tbluser')->where('sub_institute_id',${who.tenant})->where('user_profile_id',$p->id)->first(['email']);`
+      + `$u=DB::table('tbluser')->where('sub_institute_id',${who.tenant})->where('user_profile_id',$p->id)`
+      + `->where('email','like','%@healthcare.g2g')->first(['email']);`
       + "echo json_encode(['email'=>$u->email ?? null]);"));
 
     if (who2.email) {

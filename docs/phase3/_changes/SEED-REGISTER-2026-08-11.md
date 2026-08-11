@@ -66,3 +66,36 @@ Delete in this order (children first):
 
 Added so the 9-box has both axes in ONE tenant. Removing them removes the
 demonstration, not the capability.
+
+
+---
+
+## HOW TO LOG IN — **the thing this register omitted**
+
+    domain    @healthcare.g2g   (tenant 3 only; other tenant-3 accounts are real
+                                 and their passwords are NOT this)
+    password  G2GDemo@2026      applied to all nine role logins when the seed landed
+    route     GET /login?type=API&email=...&password=...
+    admin     aarti.deshmukh@healthcare.g2g
+
+Harnesses read it from `G2G_SEED_PASSWORD` if set, falling back to the above.
+
+### THE FINDING, WHICH IS BIGGER THAN THE OMISSION
+
+**This register captured 126 rows and every id, and left out the one thing needed
+to USE them.** The nine role logins were verified when the seed landed and the
+credential was stated in that turn's report - **it never made it into an
+artefact.** Two turns of X-21 verification were then spent failing to log in, and
+the second one stopped only because two attempts is the rule.
+
+**Same class as the twelve security fixes that lived only in replies:** work
+genuinely done, recorded in conversation, absent from anything a later reader
+opens. A conversation is not an artefact. The register is what survives; the
+report is not.
+
+### ⭐ STANDING RULE — **IF A SEED CREATES A LOGIN, THE REGISTER RECORDS HOW TO USE IT**
+
+Accounts, the credential (or a pointer to where it is held), and the route that
+accepts it. **A SEED NOBODY CAN LOG INTO IS NOT A SEED** - it is a table of rows
+that looks like a working tenant and cannot be exercised by anyone who was not in
+the room when it was made.
