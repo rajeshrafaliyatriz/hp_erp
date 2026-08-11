@@ -260,6 +260,35 @@ check('notify', 'every notified event has a resolver AND a template', function (
         ->where('is_active', true)->pluck('event_type')->all();
 
     $broken = [];
+    // ── KNOWN-NEGATIVE (R29). A GENUINE NEAR-MISS. ─────────────────────────
+    //
+    // The resolver half is a SUBSTRING MATCH on source. The near-miss that
+    // matters is an event name appearing in a COMMENT rather than in a match
+    // arm - and it is not hypothetical: the identity check in this same file had
+    // exactly that bug, matching a comment describing a defect already fixed and
+    // reporting it as live.
+    //
+    // A comment mentioning an event MUST NOT count as a resolver for it. If this
+    // fixture passes the raw check, then every "has a resolver" verdict this
+    // check has ever given is a claim about TEXT, not about routing.
+    // STRIP COMMENTS BEFORE MATCHING. Without this the check reads PROSE: an
+    // event named in a TODO would count as having a resolver.
+    $strip = fn ($t) => preg_replace('#(?<!:)//[^
+]*#', '', preg_replace('#/\*.*?\*/#s', '', $t));
+    $src = $strip($src);
+
+    // The near-miss: the event named ONLY in a trailing comment. It must NOT
+    // count as a resolver. This fixture already earned its keep - it exposed
+    // that the suite's line-comment regex (#^\s*//.*$#m) only stripped comments
+    // that BEGIN a line, so every trailing comment in every checked file
+    // survived. Both this check and the identity check depended on it.
+    $commentOnly = $strip("<?php class R { // TODO: handle 'task.rejected' here one day
+"
+                        . "public function resolve(\$e) { return []; } }");
+    if (str_contains($commentOnly, "'task.rejected'")) {
+        return ['SKIPPED', 'known-negative FIRED: a commented event still counts as a resolver'];
+    }
+
     foreach ($events as $e) {
         if (!str_contains($src, "'$e'")) $broken[] = "$e (no resolver)";
         if (!in_array($e, $tpl, true))   $broken[] = "$e (no template)";
@@ -408,7 +437,8 @@ check('org', 'task.status has exactly ONE guarded write path', function () {
         $src = file_get_contents($path);
         // strip comments - a pattern that reads prose is not reading code
         $src = preg_replace('#/\*.*?\*/#s', '', $src);
-        $src = preg_replace('#^\s*//.*$#m', '', $src);
+        $src = preg_replace('#(?<!:)//[^
+]*#', '', $src);
         // STATEMENT SCOPE, NOT FILE SCOPE. The first version asked whether the
         // FILE mentioned table('task') and then matched any status update in it -
         // so ProjectController (task_management_projects) and
@@ -1226,7 +1256,8 @@ check('static', 'no PRIVATE helper reads a request tenant at all', function () {
         if ($f->getExtension() !== 'php') continue;
         $src = file_get_contents($f->getPathname());
         $src = preg_replace('#/\*.*?\*/#s', '', $src);
-        $src = preg_replace('#^\s*//.*$#m', '', $src);
+        $src = preg_replace('#(?<!:)//[^
+]*#', '', $src);
 
         // split on any function; keep only private/protected bodies
         // METHOD-BOUNDARY SCOPE. This split on EXACTLY four spaces of indentation.
@@ -1329,7 +1360,8 @@ check('static', 'no method resolves identity then reads request tenant', functio
         // defect already fixed (LmsLearningController::isInstructor) and reported
         // it as live. A pattern that reads prose is not reading code.
         $src = preg_replace('#/\*.*?\*/#s', '', $src);
-        $src = preg_replace('#^\s*//.*$#m', '', $src);
+        $src = preg_replace('#(?<!:)//[^
+]*#', '', $src);
         if (!preg_match($resolvers, $src)) continue;
 
         // split into method bodies - crude but sufficient: a method starts at
@@ -1348,6 +1380,33 @@ check('static', 'no method resolves identity then reads request tenant', functio
     $probe = '<?php function x($request){ $i = $this->resolveApiIdentity($request); $t = $request->sub_institute_id; }';
     $sees = preg_match($resolvers, $probe) && preg_match($fromRequest, $probe);
     if (!$sees) return ['SKIPPED', 'pattern failed its own known-positive - a zero result would be meaningless'];
+
+    // ── KNOWN-NEGATIVES (R29). TWO GENUINE NEAR-MISSES, NOT STRAWMEN. ───────
+    //
+    // A known-positive proves the pattern can SEE. Only a known-negative proves
+    // it can DISCRIMINATE - and a lookalike that differs obviously proves
+    // nothing. Both fixtures below are shapes that occur in this codebase and
+    // MUST NOT be flagged.
+    //
+    // (1) RESOLVES IDENTITY AND READS A NON-TENANT REQUEST FIELD. This is the
+    //     normal, correct shape - almost every controller does it. A pattern
+    //     matching "resolver present AND any request read" would flag the whole
+    //     application.
+    $near1 = '<?php function x($request){ $i = $this->resolveApiIdentity($request); '
+           . '$page = $request->input("page"); $q = $request->input("search"); }';
+    //
+    // (2) READS A REQUEST TENANT WITHOUT RESOLVING IDENTITY. Also must not fire
+    //     HERE - it is the SIBLING check's offence ("no PRIVATE helper reads a
+    //     request tenant at all"). If this check claimed it too, the two would
+    //     double-count and neither count would mean anything.
+    $near2 = '<?php function y($request){ $t = $request->input("sub_institute_id"); return $t; }';
+
+    foreach ([[1, $near1], [2, $near2]] as [$n, $fixture]) {
+        $hit = preg_match($resolvers, $fixture) && preg_match($fromRequest, $fixture);
+        if ($hit) {
+            return ['SKIPPED', "known-negative $n FIRED: the pattern cannot discriminate, so its zero is meaningless"];
+        }
+    }
 
     return [$offenders ? 'FAIL' : 'PASS',
         $offenders ? count($offenders) . ': ' . implode(' | ', array_slice($offenders, 0, 3))
