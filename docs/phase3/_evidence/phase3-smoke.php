@@ -136,7 +136,7 @@ check('security', 'G-XPROD-01: no HP Brain rows in G2G audit', function () use (
 /* ══════════════════════════ PERMISSIONS ══════════════════════════ */
 echo "\nPERMISSIONS\n";
 
-check('permissions', 'nine roles render, none empty', function () use ($kernel) {
+check('permissions', 'nine roles RENDER A MENU, none empty (menus, not capability)', function () use ($kernel) {
     $profiles = DB::table('tbluserprofilemaster')->whereNotNull('role_key')->get()->groupBy('role_key');
     if ($profiles->count() !== 9) return ['SKIPPED', 'expected 9 role_keys, found ' . $profiles->count()];
     $actor = DB::table('tbluser')->whereNotNull('user_profile_id')->value('id');
@@ -151,14 +151,14 @@ check('permissions', 'nine roles render, none empty', function () use ($kernel) 
     return [$empty ? 'FAIL' : 'PASS', $empty ? 'EMPTY: ' . implode(',', $empty) : 'all nine non-empty'];
 });
 
-check('permissions', 'Administrator reaches 1 -> 8 -> 23', function () {
+check('permissions', 'Administrator MENU TREE resolves 1 -> 8 -> 23 (rights rows, not access)', function () {
     $pid = DB::table('tbluserprofilemaster')->where('role_key', 'administrator')->value('id');
     $have = DB::table('tblgroupwise_rights_g2g')->where('profile_id', $pid)
         ->whereIn('menu_id', [1, 8, 23])->where('can_view', 1)->count();
     return [$have === 3 ? 'PASS' : 'FAIL', "$have of 3 present"];
 });
 
-check('permissions', 'Employee holds 19 leaf screens', function () {
+check('permissions', 'Employee has RIGHTS ROWS for 19 leaf screens (not proven reachable)', function () {
     $pid = DB::table('tbluserprofilemaster')->where('role_key', 'employee')->value('id');
     $ids = DB::table('tblgroupwise_rights_g2g')->where('profile_id', $pid)->where('can_view', 1)->pluck('menu_id');
     $kids = DB::table('tblmenumaster_g2g')->whereIn('parent_id', $ids)->pluck('parent_id')->unique();
@@ -684,7 +684,25 @@ function navLabels(array $nodes, array &$out): void
     }
 }
 
-check('walkthrough', 'nine logins: sidebar 200, non-empty, expected breadth', function () use ($kernel) {
+/**
+ * ⚠ NAME THE LAYER THE CHECK ENDS AT.
+ *
+ * THE THING THAT RENDERS IS NOT THE THING THAT WORKS. Three checks in this file
+ * were named for a capability and only ever measured a rendering:
+ *
+ *   "nine logins ... expected breadth"   measured a SIDEBAR, read as "the role works"
+ *   "Administrator reaches 1 -> 8 -> 23" measured RIGHTS ROWS, read as "can navigate"
+ *   "Employee holds 19 leaf screens"     measured RIGHTS ROWS, read as "can open them"
+ *
+ * `department_head` PASSES the sidebar check and every elevated endpoint refuses
+ * it - 403 on nine-box, competency definitions, readiness gates and
+ * reporting-line assign. THE GREEN IS CORRECT AND THE READING WAS NOT.
+ *
+ * A check that stops at the boundary of one layer certifies THAT LAYER and gets
+ * quoted as certifying the stack. The names now say which layer, so a pass reads
+ * as what it is.
+ */
+check('walkthrough', 'nine logins: SIDEBAR RENDERS (navigation, not capability)', function () use ($kernel) {
     $users = seededUsers();
     if (count($users) < 9) return ['SKIPPED', 'seeded users absent (' . count($users) . ') - seed removed?'];
 
