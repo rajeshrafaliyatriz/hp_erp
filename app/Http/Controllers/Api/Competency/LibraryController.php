@@ -382,7 +382,7 @@ class LibraryController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function payload(array $resource, Request $request): array
+    private function payload(array $resource, Request $request, int $subInstituteId): array
     {
         $data = [];
         // column => request key it is read from (identity unless aliased).
@@ -411,6 +411,33 @@ class LibraryController extends Controller
             }
 
             $data[$field] = ($value === '' || $value === null) ? null : $value;
+        }
+
+        // ── L-01 / L-02 ─────────────────────────────────────────────────────
+        // G-LIB-01: the backend has ACCEPTED `department_id` all along - it is in
+        // the fields whitelist above - and the form has never sent it. Measured:
+        // 0 occurrences in library-config.ts. So the column exists, the form
+        // offers a department by NAME, and the two never meet.
+        //
+        // RESOLVED HERE, NOT IN THE FORM. The picker is suggested-not-closed
+        // (X-03), so a genuinely new department must still be typeable - a form
+        // that could only send an id would refuse the one case the picker exists
+        // to allow. Resolving at write time is Q-C1's position and the same rule
+        // the framework importer uses: names become ids at the moment of writing,
+        // where "whose copy does this name mean" has exactly one answer.
+        //
+        // UNMATCHED IS HELD, NOT GUESSED (F-07b): the name stays in `department`
+        // and `department_id` stays NULL. A department nobody has created yet is
+        // a legitimate thing to type, and inventing an id for it would be the
+        // system manufacturing a claim nobody made.
+        if (array_key_exists('department_id', $data) === false
+            && in_array('department_id', $resource['fields'], true)
+            && !empty($data['department'])) {
+
+            $data['department_id'] = DB::table('hrms_departments')
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereRaw('LOWER(TRIM(department)) = ?', [mb_strtolower(trim($data['department']))])
+                ->value('id');
         }
 
         return $data;
@@ -592,7 +619,7 @@ class LibraryController extends Controller
             return $this->badRequest('Unknown library type.', 404);
         }
 
-        $data = $this->payload($resource, $request);
+        $data = $this->payload($resource, $request, (int) $context['sub_institute_id']);
 
         if ($message = $this->validatePayload($resource, $data, true)) {
             return $this->badRequest($message, 422);
@@ -670,7 +697,7 @@ class LibraryController extends Controller
             return $this->readOnlyOrMissing($resource, $context['sub_institute_id'], $id, 'edited');
         }
 
-        $data = $this->payload($resource, $request);
+        $data = $this->payload($resource, $request, (int) $context['sub_institute_id']);
 
         if ($message = $this->validatePayload($resource, $data, false)) {
             return $this->badRequest($message, 422);
