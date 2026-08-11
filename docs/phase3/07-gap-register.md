@@ -101,7 +101,63 @@ catalogue would silently discard 1,514 observations a human made at task creatio
 > **G-DATA-10's shape a third time**: the bridge exists, the rule is decided, the
 > table is empty.
 
-**RESOLUTION (Triz, 2026-08-11):** derive the catalogue's first content FROM the
+### ⚠ THE DERIVATION WAS TRIED AND IT CANNOT RUN. L-14 IS PARKED.
+
+**The framing was wrong, not the derivation.** Measured before writing anything:
+
+| Hop | State |
+|---|---|
+| instance -> catalogue | **NO KEY EXISTS.** `s_user_jobrole_task` shares only `id`, `task_type`, tenant and audit stamps with `task`. The only join is `task.task_title = catalogue.task` |
+| ...and that text join | **10,570 join rows; 1,989 distinct task instances match - against 1,514 that have a `skill_id` at all** |
+| skill -> competency | **0.** X-20's competencies cover skills referenced in **tenant 1**; the tasks carrying `skill_id` are in **tenant 7 (1,000)** and **tenant 3 (514)** |
+
+**1,989 > 1,514 means the text join matches tasks that have no `skill_id`**, and each
+matching instance fans out to ~7 catalogue rows.
+
+> ### A TASK TITLE MAPPING TO MANY (jobrole, task) ENTRIES IS CORRECT FOR A
+> ### CATALOGUE AND USELESS AS A KEY.
+>
+> **That is not a gap to populate around. It is the absence of a relationship.**
+
+**THE CATALOGUE LINK MUST BE AUTHORED, NOT DERIVED** - which makes it Q-C1's
+seed-library import's work, not L-14's.
+
+**L-14 RE-FILED:** not "wire the override rule", not "derive the catalogue" -
+**blocked on a catalogue nobody has authored.**
+
+**REFUSED, and recorded so it is not proposed again:** extending X-20's rule to
+tenants 3 and 7 to make the second hop work. That is **X-20 applied to a different
+population for the convenience of this item** - the same trap in a new tenant, and
+X-20's whole point was that a wholesale migration imports the conflation.
+
+**SCHEDULED, NOT PARKED:** a real key from `task` to `s_user_jobrole_task` would
+make the first hop sound. **Trigger: a catalogue exists to key into.** It helps
+only once one does.
+
+---
+
+# ❓ Q-E1-Q1 - **DOES A TASK CATALOGUE EVER EXIST?** - a question against Q-E1, not a decision
+
+**Q-E1 decided catalogue-wins and assumed the catalogue would eventually exist. For
+tasks it may never.**
+
+If a hand-picked instance value is **the only claim there ever is**, then the
+confidence tag is not distinguishing *catalogue* from *override*. It is marking a
+single claim as **HUMAN-PICKED RATHER THAN DERIVED**.
+
+**That is a smaller rule and possibly the correct one.**
+
+**Why it matters beyond tasks:** **G-TASK-04** says an override cannot be defined
+against an empty authority. The answer here may be that **for tasks there is no
+authority at all** - which changes what the tag means *everywhere it is used*, not
+just here.
+
+**Filed as a question. It needs Triz's answer before any later override is built
+on the tag's current meaning.**
+
+---
+
+**SUPERSEDED RESOLUTION (2026-08-11, tried and refuted):** derive the catalogue's first content FROM the
 instances - each of the 1,512 resolving values is a `(job role task, competency)`
 observation made by a person. Marked **derived-from-instances**, not authored.
 **Then both sides are populated and the override rule means something.**
