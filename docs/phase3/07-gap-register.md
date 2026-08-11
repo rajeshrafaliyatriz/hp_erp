@@ -5229,6 +5229,34 @@ metrics will read as complete.
 
 ---
 
+## A MAP BUILT ONCE AGAINST A MOVING SURFACE DECAYS SILENTLY
+
+    live API routes                838
+    enforceable today (conf >= 2)  185       -> 22%
+    of those, added by Phase 3       0       -> 0%
+
+**The headline understates it.** Not *"27% enforceable"* but **0% of what we want
+enforced.** The route-to-menu map was built against the pre-Phase-3 tree, so the
+185 enforceable routes are ALL LEGACY, and every route this phase added -
+`readiness/gates/acknowledge`, `framework-import/commit`, `reporting-line/bulk`,
+`competency/definitions`, `nine-box`, `terminology` - is absent.
+
+**Nothing measured the map's coverage, so the decay was invisible.** It was built
+correctly, it was never wrong, and it became useless for the thing it was built
+for without a single failing check.
+
+**The general form:** a map, a matrix, a fixture list or a threshold table built
+once against a surface that keeps moving **will decay silently unless something
+counts it.** The artefact does not rot - the world moves out from under it, and
+nothing about the artefact itself looks different afterwards.
+
+**Now measured:** the suite reports the coverage number every run
+(`route-to-menu map coverage`). It **reports rather than fails** - a falling
+number is information, and a threshold would be invented. What matters is that
+the next drift is caught by a number instead of by someone happening to look.
+
+---
+
 ## MATRIX-ENFORCED AUTHORIZATION - **SIZED 2026-08-11, NOT STARTED**
 
 Decision taken: **the guard CONSULTS `tblgroupwise_rights_g2g`.** Not narrowed to

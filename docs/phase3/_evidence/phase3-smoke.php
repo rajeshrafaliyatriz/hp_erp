@@ -1066,6 +1066,46 @@ check('data', 'no account has a NULL or zero tenant', function () {
             : "$bad of $total have a NULL or zero tenant. THE FALLBACKS ARE LOAD-BEARING AGAIN."];
 });
 
+check('static', 'route-to-menu map coverage', function () {
+    // A MAP BUILT ONCE AGAINST A MOVING SURFACE DECAYS SILENTLY.
+    //
+    // The route->menu map was built against the PRE-PHASE-3 route tree. Every
+    // route this phase added is absent from it, so the 185 "enforceable" routes
+    // are ALL LEGACY - and the headline understates the problem. It is not "27%
+    // enforceable"; it is 0% of what we actually want enforced.
+    //
+    // Nothing measured that, which is why it decayed unnoticed. This check makes
+    // the coverage visible so the next drift is caught by a number rather than by
+    // someone happening to look. It REPORTS rather than fails - a falling number
+    // is information, and a threshold here would be invented.
+    $csv = base_path('docs/phase3/_evidence/route-to-menu-map.csv');
+    if (!file_exists($csv)) return ['SKIPPED', 'route-to-menu-map.csv not found'];
+
+    $mapped = [];
+    $fh = fopen($csv, 'r');
+    $head = fgetcsv($fh);
+    $iUri = array_search('uri', $head, true);
+    $iConf = array_search('confidence', $head, true);
+    while (($row = fgetcsv($fh)) !== false) {
+        // CONFIDENCE 0 AND 1 COUNT AS UNMAPPED, by decision. A low-confidence
+        // menu is a guessed permission once the guard consults this.
+        if ((int) ($row[$iConf] ?? 0) >= 2) $mapped[ltrim($row[$iUri], '/')] = true;
+    }
+    fclose($fh);
+
+    $live = 0; $enforceable = 0;
+    foreach (app('router')->getRoutes() as $r) {
+        if (!str_starts_with($r->uri(), 'api/')) continue;
+        $live++;
+        if (isset($mapped[substr($r->uri(), 4)])) $enforceable++;
+    }
+
+    return ['PASS', sprintf(
+        '%d of %d live api routes enforceable (conf>=2); %d need a declaration',
+        $enforceable, $live, $live - $enforceable
+    )];
+});
+
 check('static', 'no PRIVATE helper reads a request tenant at all', function () {
     // WIDENED after a near-miss that this suite would NOT have caught.
     //
