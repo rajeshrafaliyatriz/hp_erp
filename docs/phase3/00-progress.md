@@ -963,6 +963,31 @@ the write, and **the leak nobody could see was the read**.
 **EXCEPTION:** only a **G-SEC-09-severity** finding jumps the queue.
 
 
+### BATCH 1 — BOTH OUTCOMES, AND THE SECOND DOES NOT ERASE THE FIRST
+
+**IT FAILED AT ITS STATED PURPOSE.** Four items, six turns, **one closed** (C-10).
+G-UI-01 was sized as a one-line mount from a plan row nobody had opened; it was a
+menu row, 89 rights rows, a container and a route-map entry, and it is **still not
+resolved**. L-06 and X-03 were never started.
+
+**IT SUCCEEDED AT SOMETHING ELSE, AND THAT IS NOT AN EXCUSE FOR THE ABOVE:**
+
+| Bought | |
+|---|---|
+| **G-UI-02** | **S2** — the employee sidebar renders zero of five modules. Six of fourteen seeded people are employees; each would open the product and reasonably conclude the capability work was never built |
+| **G-LIB-09** | **S2** — an impact count by title over-reports by **6x** |
+| **X-21** | real browser verification exists at all |
+| **R25, R26 + its bound, R27** | three standing rules |
+
+**X-21 now catches a class this project has hit repeatedly and that no source
+assertion or API check reaches:** a component with no route, a control with no
+data, an employee who can see nothing. **All three were found by the browser
+failing to arrive somewhere.**
+
+**Both records stand.** A batch that overruns by 5 turns and produces two S2s is
+still a batch that overran by 5 turns - and the finding that R27 exists because of
+it is worth more than the items it did not close.
+
 ### Landed this turn
 
 > **THE FIRST DEFERRAL TRIGGER IN THE PHASE FIRED ON ITS OWN.**
