@@ -569,6 +569,32 @@ If no such property exists, the join is a hypothesis.
 every measurement measures what you think.** A 100% join rate is a measurement, and
 in case 3 it was a measurement of id-range overlap.
 
+**R27 — MEASURE TURNS AND BUILD TURNS ARE SEPARATE TURNS.**
+
+At this depth the two do not fit together. **Four consecutive turns ended with a
+measurement done and a build unstarted** - each stop correct, each measurement
+worth having, and the pattern structural rather than four misjudgements.
+
+| Turn type | Ends with |
+|---|---|
+| **MEASURE** | the numbers, the re-size, and the design decisions NAMED. **No code. Reported as COMPLETE, not as stopped short.** |
+| **BUILD** | the item closed, from that report, with a full context |
+
+**THE EXEMPTION, AND ITS TEST.** An item whose size is already known from a read is
+built directly - no measure turn for its own sake. **That exemption is the abusable
+part:** unbounded, it becomes a way of starting builds that cannot be finished,
+dressed as efficiency.
+
+> ### THE TEST: CAN I NAME THE FILES AND THE ROW COUNTS?
+> ### IF NOT, IT NEEDS MEASURING.
+
+Checkable rather than a judgement, which is what makes it hold under pressure.
+
+**Evidence it was needed:** C-10 was sized at 5 fields by its plan row and was 2.
+L-06's row said "show what depends on this" and the count turned out to be a 6x
+over-report (**G-LIB-09**). **Both wrong, in opposite directions, from rows nobody
+had opened.** Any item sized from a plan row rather than from a read is a guess.
+
 **R26 — A NEW CHECK'S FIRST RED IS MORE LIKELY TO BE THE CHECK THAN THE CODE.**
 
 **QUALIFIER — A PRIOR, NOT A VERDICT. AFTER TWO ATTEMPTS, CHECK THE CODE.**
