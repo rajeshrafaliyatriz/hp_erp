@@ -304,6 +304,51 @@ of this was built.
 
 ---
 
+# §1b. ROW CLASSIFICATION - **BATCH 1 of 3 (rows 1-17)**
+
+**Not fast, and one line of EVIDENCE per row rather than a judgement.** Each row
+gets a verified status and a class. **Eight of the first seventeen were marked
+"Not started" and are not.**
+
+| row | verified status | class | evidence |
+|---|---|---|---|
+| **S-03** Remaining leaks, data-class order | open | **BUILD** | G-SEC-11's candidates; one attributed this phase (`credentialStatus` differs correctly), the rest unread |
+| **S-04** 37 guard candidates hand-verified | open | **BUILD** | 37 named in the register, none re-read since; the probe-audit pass covered clearances, not candidates |
+| **S-06** C23 write-half phase | open | **BUILD** | the read half covered 912 routes; the write half has no artefact |
+| **S-07** C23 regression guard in CI | open | **BUILD** | no CI pipeline exists in either repo - the suite is run by hand |
+| **S-08** G-SEC-01 authorization coverage | **BLOCKED** | **BUILD** | this IS matrix enforcement; guard built and proven, cannot be registered (G-BLOCK-01) |
+| **X-02** Route permission declarations | open | **AUTHORING** | 653 of 838 routes need a menu declaration; 27 signed off, and each is a permission decision, not code |
+| **X-03** C19 picker mechanism | ✅ **DONE** | BUILD | 11-member `source` union, 11 fields carrying one, `/competency/library/meta` returns all 11 populated |
+| **X-07** Readiness gates + asymmetric switching | ✅ **DONE** | BUILD | 5 gates computing, 55 rows; acknowledge path proven; screen browser-verified (X-21 PASS 9) |
+| **X-08** Seed-library import flow | ✅ built | **BUILD-WITH-AUTHORING-CONTENT** | preview→dry-run→commit all work; **imports nothing until a customer brings a framework** |
+| **L-01** `department_id` from the Job Role form | ✅ **DONE** | BUILD | `department -> departments` source resolves, 18 values |
+| **L-02** `department_id` from the Skill form | ✅ **DONE** | BUILD | second `department -> departments` field, same source |
+| **L-04** Job Level → `s_level_responsibility` | **DECIDED: free text** | **AUTHORING** | catalogue 1-7, data ENTRY/MID/SENIOR/…; **0 of 70 selectable.** Trigger: a customer maps their levels to a scale |
+| **L-05** Honour Status at assignment time | open, **question first** | **BUILD** | `s_users_skills.status` has **ONE distinct value, "Active"** - honouring it would filter nothing. Measure before building (X-08b/L-04 shape) |
+| **L-07** Job Titles → `s_user_skill_jobrole` | ✅ **DONE** | BUILD | `job_titles` source resolves, 346 values; the table holds 79,295 rows |
+| **L-08** Learning Resources → course refs | ✅ **DONE** | BUILD | `learning_resources` source resolves, 67 values against `sub_std_map` (96 rows) |
+| **L-09** Certifications → `certification_type` | **DECIDED: free text** | **AUTHORING** | `certification_type` holds **0 rows**; X-03 ruled a picker over an empty table offers nothing. Trigger: the table is populated |
+| **L-10** Import on every library tab | open | **BUILD-WITH-AUTHORING-CONTENT** | extends X-08's importer to 8 tabs; ships empty on every one |
+
+### BATCH 1 TOTALS
+
+    DONE, wrongly marked "Not started"     6   (X-03, X-07, L-01, L-02, L-07, L-08)
+    DECIDED, not a build at all            2   (L-04, L-09 - both free text with triggers)
+    BUILD, genuinely open                  6   (S-03, S-04, S-06, S-07, L-05, and S-08 BLOCKED)
+    AUTHORING                              1   (X-02 - 653 permission decisions)
+    BUILD-WITH-AUTHORING-CONTENT           2   (X-08, L-10)
+
+**Eight of seventeen are not open work.** Six are finished and two are settled
+decisions. **The plan overstates its own remainder by roughly half in this batch**,
+and every one of the six was closed by this engagement without the row being
+touched.
+
+**L-05 is the batch's finding:** `status` has one distinct value across the whole
+table, so "honour Status at assignment time" would filter nothing. **Same shape as
+X-08(b) and L-04 - measure the population before building the mechanism.**
+
+---
+
 # §2. THE GOLDEN THREADS, TRACED
 
 *This is the most important section. Each thread reads as "here is how it becomes
