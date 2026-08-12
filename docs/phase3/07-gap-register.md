@@ -6569,6 +6569,101 @@ ones.**
 
 ---
 
+# THE CHAIN - **every link exists as a table, almost none can be filled through the product**
+
+**This is the four-tables finding said as a chain, and it is the clearest
+statement of what is wrong.**
+
+    KASBA items -> competency -> job role -> job role tasks -> employee ratings -> gap
+
+## WHO CAN FILL EACH LINK TODAY
+
+| # | Link | Table | Rows | **Who can fill it** |
+|---|---|---|---:|---|
+| 1 | KASBA item → competency | `competency_kasba_item` | 226 | **SCREEN, from today** — composer hosted, **menu row created, rights row NOT** → still dark. **Skills only** |
+| 2 | competency → job role | `jobrole_competency_map` | 23 | **SCREEN, from today** — Role Requirements panel, proved 13/13. All 23 existing rows are the seed's |
+| 3 | job role task → competency | `jobrole_task_competency_map` | **0** | **NOBODY.** No writer in any layer. Not a screen, not a script, not provisioning |
+| 4 | course → competency | `course_competency_map` | 56 | **NOBODY.** Two readers, zero writers. The 56 rows are seed |
+| 5 | employee → rating | `s_skill_matrix` | 169 | **SCREEN** — works |
+| — | gap | computed | — | **Works, over empty tables** |
+
+**Two links have no writer at all, in any layer.** Three are reachable only
+because of work done in the last two turns, and one of those three is still
+behind a rights row.
+
+## CORRECTION TO LINK 5 - **it rates SKILLS, not KASBA items**
+
+`s_skill_matrix` is keyed `user_id` + **`skill_id`** — it points at
+`s_users_skills`, the 5,171-row flat library. **It does not rate a competency and
+it does not rate a KASBA item.**
+
+**So the chain's last link before the gap is on the pre-Q-A2 model too** —
+**fourth known instance of G-RBAC-02b's family**, after `/competency/competencies`,
+the Command Center quick-create and the role-mapping matrix. The gap is computed
+from ratings of one population against requirements expressed in another.
+
+---
+
+# THE TAB MEASUREMENT - **STRUCTURALLY YES, FUNCTIONALLY NO, AND ONE BRANCH AWAY**
+
+*Can `competency_kasba_item` point at what the four label-only tabs write?*
+
+    competency_kasba_item.kasba_type   enum('skill','knowledge','ability','attitude','behaviour')
+    competency_kasba_item.item_id      bigint, NULLABLE
+    FOREIGN KEYS ON item_id            NONE - it references nothing
+
+    the 226 rows          n     resolved   label-only
+      skill              207        199          8
+      knowledge            7          0          7
+      ability              4          0          4
+      attitude             3          0          3
+      behaviour            5          1          4
+
+**The single "resolved" non-skill row is DANGLING.** `item_id = 2645`, and
+`s_user_behaviour #2645 does not exist`.
+
+## WHY IT DANGLES - **the writer validates one type of five**
+
+`CompetencyDefinitionController@store`:
+
+    'items.*.item_id' => 'nullable|integer',        <- accepts an id for ANY type
+
+    if ($itemId && $item['kasba_type'] === 'skill') {   <- validates ONLY skill
+        ... exists in this tenant? no -> $itemId = null
+    }
+    DB::table('competency_kasba_item')->insert([... 'item_id' => $itemId ...]);
+
+**For knowledge, ability, attitude and behaviour, whatever integer arrives is
+stored unchecked.** That is not a missing feature — **it is an unvalidated write
+that has already produced a dangling pointer**, and it would silently produce
+more the moment a picker offered those types.
+
+## THE ANSWER, AND WHAT IT DECIDES
+
+**IT CAN.** The tables exist (`s_user_knowledge` 6,950 · `s_user_ability` 6,175 ·
+`s_user_attitude` 655 · `s_user_behaviour` 694), the column holds any id, and the
+enum already names all five types. **What is missing is a type→table map in ONE
+branch, plus offering the four pickers in the composer** — the frontend caps
+itself at `RESOLVABLE_KASBA_TYPES = ['skill']`.
+
+**So: the composer bundles real things, the rights write is worth taking, and the
+chain becomes fillable from link one.** The alternative case — *those tabs create
+rows nothing can reference* — **is not what the evidence says.** The 14,474 rows
+in the four tabs are referenceable; nothing has ever been pointed at them.
+
+**But the one-branch fix is a WRITE-PATH fix, not a wiring fix**, and until it
+lands the honest position is: **link 1 is fillable for skills only, and the other
+four dimensions would store unvalidated ids.** Widening the composer's pickers
+BEFORE that branch exists would manufacture dangling rows at scale.
+
+### ORDER THIS IMPLIES
+
+    1. the validation branch (type -> table map)   before any picker is widened
+    2. the rights row for menu 227                 or link 1 stays dark
+    3. links 3 and 4 have no writer at all         and neither is a wiring job
+
+---
+
 # THE TABLES THE CAPABILITY CHAIN RESOLVES AGAINST ARE FED BY PROVISIONING AND PARSERS, AND THE PRODUCT HAS NO USER-FACING WAY TO FILL ANY OF THEM
 
 **ONE FINDING, NOT FOUR INCIDENTS.** It outranks every individual wiring item and
