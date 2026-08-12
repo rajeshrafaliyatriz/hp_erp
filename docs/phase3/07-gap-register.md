@@ -6569,6 +6569,111 @@ ones.**
 
 ---
 
+# S-06 MEASURED - **786 write routes, and `api` DOES NOT AUTHENTICATE**
+
+Measured before costed, as ordered. **NOT ONE DATABASE WRITE WAS MADE.** The
+census is a static read of the route table and of controller source, because a
+census that writes in order to find out what writes is the thing it is measuring,
+and the database is shared and live.
+
+## THE CENSUS
+
+    WRITE ROUTES (POST/PUT/PATCH/DELETE)   786      <- the plan says 772
+      of those, METHOD DOES NOT EXIST       51      cannot be tested; they fatal
+
+    POST 394    PUT 198    DELETE 183    PATCH 11
+
+    WHAT THE BODY DOES (static, a CANDIDATE split - R6)
+      MUTATES              375
+      DESTRUCTIVE          105    across 97 distinct methods
+      NO MUTATION FOUND    255
+      NO METHOD             51
+
+**The plan's 772 is stale by 14, and 51 of the 786 cannot be called at all** -
+they are part of the 197 missing-method finding from the same turn. **The real
+testable write surface is 735, not 772.**
+
+## THE FINDING - **`api` IS NOT AN AUTHENTICATION BOUNDARY**
+
+    write routes with NO auth middleware   458
+      of which URI prefix `api/`           438
+
+    BY MIDDLEWARE STACK
+      338  api                                    <- nothing else at all
+       29  api,profile:admin,hr
+       20  web
+       15  api,api.token
+
+**338 write routes carry the `api` group and nothing else.** Confirmed by running,
+not by reading - the `jobrole-tasks` lesson, where a route that looked open turned
+out to 401 and have zero callers. **Two POST routes chosen because their bodies
+contain NO mutation verb**, so the question could be answered without a write:
+
+    NO TOKEN  POST api/talent-acquisition/funnel   -> 200  180 bytes  {"success":true,...}
+    NO TOKEN  POST api/talent-acquisition/dropoff  -> 200  281 bytes  {"status":true,...}
+
+**Two hundred, no token, no session, no header.** The `api` middleware group does
+not authenticate anything.
+
+### WHAT THIS DOES AND DOES NOT ESTABLISH
+
+**IT DOES**: route-level authentication is absent on 338 write routes. Nothing in
+the routing layer stops an anonymous caller reaching them.
+
+**IT DOES NOT**: prove those 338 accept anonymous *writes*. Many of those
+controllers resolve identity themselves - `ResolvesApiIdentity` returns null
+without a token, and the write may fail downstream. **Whether each refuses
+depends entirely on each controller's own code, and finding out requires
+writing**, which is the condition on this row.
+
+**So it is filed as a CONFIRMED absent boundary and a CANDIDATE set of 338**, not
+338 findings. **The stop-line's "unauthenticated write" is not yet proven for any
+single route** - and it is now the first thing S-06's design must answer.
+
+## THE TWO-TENANT QUESTION, ANSWERED BEFORE THE DESIGN
+
+**C23's read half worked because a GET is repeatable and comparable.** Ask as
+tenant A for tenant B's data, compare two responses, and a difference IS the leak.
+**None of that survives contact with a write:**
+
+    not repeatable    a second call is a second row, not a second reading
+    not comparable    there is no "response" to diff - the evidence is in a table
+    not reversible    the database is shared, live, and at 202.47.117.220
+    not observable    a write that succeeds WRONGLY looks identical to one that
+                      succeeds correctly, until you read the row back and check
+                      WHICH TENANT OWNS IT
+
+**So the write half cannot be C23 with different verbs.** It needs a different
+instrument, and the shape follows from the four lines above:
+
+1. **A write test must own its subject.** Tenant A creates a row; only then can
+   tenant B be told to modify it. **That means the suite writes before it tests**,
+   and every row it creates must be registered and removed - the tenant + row
+   register already named as S-06's blocked-by.
+2. **The assertion is on the STORED ROW, not the response.** A 200 proves nothing;
+   the question is which `sub_institute_id` the row landed under.
+3. **Refusal and silence must be told apart.** A write that 500s, a write that
+   403s, and a write that succeeds against nothing are three different verdicts,
+   and C23's read half needed exactly this split retrofitted - *a property with
+   fewer verdicts than the world has outcomes*, learned twice already this phase.
+4. **DESTRUCTIVE ROUTES ARE NOT IN THE FIRST PASS.** 105 routes across 97 methods
+   delete. **No test calls them blind against a shared database**, and no design
+   that includes them ships without Triz's explicit decision.
+
+**C23's blind spots are inherited by default unless the instrument is built not
+to** - and the specific inheritance is #3: the read half shipped with one verdict
+where the world had five, and every one of those five was found by a route
+behaving in a way the property could not express.
+
+## STATUS
+
+**S-06 is MEASURED, NOT COSTED.** The census, the auth finding and the two-tenant
+answer are the inputs a cost needs; the cost itself depends on decisions that are
+Triz's - destructive routes in or out, and whether a test tenant exists to write
+into.
+
+---
+
 # THE BASELINE MOVED 51 -> 50 AND NOTHING CAN SAY WHICH FILE LEFT
 
 Noticed at the end of this turn, not looked for.
