@@ -6569,6 +6569,70 @@ ones.**
 
 ---
 
+## HrmsController DONE - **38 sites, and getHolidays is a THIRD false positive**
+
+    generalSettingIndex   LEAK 343b/857b  ->  PASS 343b/343b
+    getHolidays           LEAK 114b/114b  ->  LEAK 114b/114b   <- still differs
+
+**38 sites replaced, and `departmentAttendanceReport` asserted byte-identical
+BEFORE the write** - the script refuses to save if that method changed. Untouched
+by construction, because the substitution matches request-TENANT reads and its
+only request read is `$request->type`, and asserted anyway.
+
+### getHolidays ECHOES THE REQUEST BACK
+
+Its API branch ends:
+
+    return  $request;
+
+**It returns the Request object.** Not holidays - the caller's own parameters:
+
+    asked 7 -> {"token":"4554|...","type":"API","syear":"2025","sub_institute_id":"7"...
+    asked 3 -> {"token":"4554|...","type":"API","syear":"2025","sub_institute_id":"3"...
+
+**The responses differ because the INPUTS differed.** No data was scoped wrongly;
+nothing was leaked. **It is not a leak - it is an unimplemented API branch**,
+debug code that ships, returning no holiday data to anyone.
+
+**A third false-positive shape, and a different one again:**
+
+    AuditController       self-mutating       writes what it reads
+    departmentAttendance  non-deterministic   embeds now()
+    getHolidays           ECHOES THE INPUT    the response IS the request
+
+**A differential property compares outputs while varying an input. An endpoint
+that returns its input differs by construction** - the property is measuring the
+thing it changed.
+
+**Three correct-or-irrelevant routes were scored LEAK by one property**, each for a
+distinct reason, and **each would have been "fixed" by someone working the list.**
+
+### G-SEC-29 FINAL COUNT
+
+    20 scored LEAK
+    -1 AuditController@export                    self-mutating, correct
+    -1 HrmsController@departmentAttendanceReport non-deterministic, correct
+    -1 HrmsController@getHolidays                echoes the request; NOT a leak,
+                                                 but an unimplemented API branch
+    --
+    17 confirmed cross-tenant reads
+    -12 FIXED  (3 request-only, 8 session-fallback, 1 generalSettingIndex)
+    --
+     5 open - and they are exactly the five C27 trait-present cases
+
+**Every leak reachable by substitution is closed.** What remains is the class where
+the trait is already present and something else defeats it - **reads before edits,
+as C27 requires.**
+
+### FILED SEPARATELY - `getHolidays` returns no data
+
+Not a security item. `return $request;` in a shipped API branch means **the
+holidays endpoint has never returned holidays to an API caller.** Nobody noticed,
+which says the endpoint has no API consumer - the same evidence shape as the dead
+`jobrole-tasks` route.
+
+---
+
 ## HrmsController@departmentAttendanceReport READ FIRST - **correct code, and a clock**
 
 Read before touching any of the 38 sites in that file, because **an unjudgeable
