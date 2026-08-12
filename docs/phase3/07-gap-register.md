@@ -7363,6 +7363,113 @@ scripts), not every possible corruption.
 
 ---
 
+# THE 338 COUNTED SOMETHING OTHER THAN WHAT ITS NAME SAYS
+
+**~~338 write routes are unauthenticated~~** - struck through, with its reason.
+
+**What that number actually measured: routes whose MIDDLEWARE does not
+authenticate.** Not routes that are unauthenticated. It was carried for several
+turns and every S-06 decision rested on it.
+
+**How it broke**: `jobroleskillcontroller` refused the anonymous call with
+`401 Token not provided`, via a `PersonalAccessToken` lookup **my detector never
+named**. It was in the filter's "unguarded in both layers" set, and that was never
+true of it. **The import had been visible for three turns.**
+
+## THE LESSON, AND WHY THIS WAS NOT A ONE-WORD FIX
+
+**THE DETECTOR'S VOCABULARY WAS THE POPULATION.** A filter that recognises five
+guard names reports every other mechanism as absence, in the same voice it uses
+for real absence.
+
+So the re-count did not simply add `PersonalAccessToken`. **It asked what else
+authenticates that the detector cannot name**, scanning every `[api]`-only write
+route for anything that could plausibly reject a caller - and scanning **the whole
+file**, not the method body, because a guard can live in a helper or a
+constructor.
+
+    MECHANISMS ACTUALLY PRESENT, BY FREQUENCY
+
+      json(...,401|403)        76      Sanctum                71
+      competencyContext        69      unauthorised text      58
+      PersonalAccessToken      57      findToken              57
+      guardApiToken            47      apiTenantId            39
+      guardAdmin               25      resolveApiIdentity     23
+      auth()->                  3      Auth::                  1
+
+**Six of the twelve mechanisms in real use were invisible to the old detector**,
+and the two largest of those - `Sanctum` (71) and `PersonalAccessToken`/
+`findToken` (57) - are the token machinery itself.
+
+## THE NEW NUMBER, WITH ITS DEFINITION ATTACHED
+
+    [api]-only write routes                                    336
+      unguarded BY THE OLD FIVE-NAME VOCABULARY                 167
+      NO RECOGNISED AUTHENTICATION MECHANISM ANYWHERE IN THE FILE   144
+
+**144, defined as: a write route whose middleware does not authenticate AND whose
+controller file contains none of twelve recognised authentication mechanisms.**
+
+**It is a CANDIDATE set, not a finding (R6).** A file may authenticate by a
+thirteenth means still outside the vocabulary - which is precisely the failure
+being corrected, so the same caveat has to travel with the new number. **What can
+be said is that 144 is a better-defined 336, not that 144 are unauthenticated.**
+
+## WHAT THIS DOES TO S-06's SHAPE
+
+**The write half is a different item than the one specified.**
+
+S-06 was scoped as *"772 write routes have never been tested"* - a sweep. But:
+
+    786 write routes exist (not 772 - the plan is stale by 14)
+     51 name a method that does not exist and fatal on every call
+    336 carry only [api]
+    144 have no recognised guard anywhere
+
+**The population that needs an authentication test is at most 144, not 772**, and
+those 144 are concentrated - `api/leave/requests`, `api/leave/leave-types`,
+`api/leave/holidays`, `api/send-otp` and their siblings, which is a handful of
+controllers rather than a spread.
+
+**So the write half stops being a sweep and becomes a READ of a dozen controllers,
+with a probe against the few that survive reading.** That is a smaller, more
+honest item - and it is only visible because the number was re-derived rather than
+re-used.
+
+**The stop line still governs**: if any of the 144 accepts an anonymous write,
+that outranks S-06 itself.
+
+---
+
+# TWO CHECKS SHARING A SOURCE SHARE ITS BLINDNESS
+
+**A design rule for harnesses, not a habit.**
+
+The inverted probe's counter scraped `DB::table('...')` literals; four of five
+candidates write through Eloquent models, so every delta read `+0` **while a row
+was landing**. The script printed *NO CANDIDATE WROTE*.
+
+**What caught it was the cleanup, which swept a table list of its own** - written
+table-wide and by tenant, from a different source than the counter's. **Had
+cleanup reused the counter's list, the row would still be there and the run would
+have read as clean.**
+
+    the counter    derived its tables from the METHOD BODY
+    the cleanup    derived its tables from a HAND-WRITTEN SWEEP LIST
+    they disagreed, and the disagreement was the finding
+
+**Redundancy over efficiency.** The obvious refactor - one table list, used by
+both - would have destroyed the only thing that worked.
+
+**FIRST TIME THE DISCRIMINATE PROPERTY FAILED RATHER THAN SAVED**, after five
+turns of it catching things. *A probe that cannot see the write reports "nothing
+happened" in exactly the voice it would use for a real negative.*
+
+**Owed**: one pass over the suite asking **which checks derive their expected
+value from the same place they derive their observed one.**
+
+---
+
 # S-06 MEASURED - **786 write routes, and `api` DOES NOT AUTHENTICATE**
 
 Measured before costed, as ordered. **NOT ONE DATABASE WRITE WAS MADE.** The
