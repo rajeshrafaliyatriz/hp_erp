@@ -391,6 +391,11 @@ Route::delete('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\
 // down. jobrole_task_id points at s_jobrole_task, a GLOBAL seed library with no
 // tenant column, so the task is checked for EXISTENCE and the competency for
 // OWNERSHIP - see the controller header.
+// Per-role browse for the task->competency panel. `index()` answers what is
+// MAPPED; these answer what EXISTS, including the unmapped tasks that by
+// definition have no row in the map.
+Route::get('/competency/task-map/roles', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'roles']);
+Route::get('/competency/task-map/tasks', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'tasks']);
 Route::get('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'index']);
 Route::post('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/task-map/{id}', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'destroy'])->middleware('profile:admin,hr');

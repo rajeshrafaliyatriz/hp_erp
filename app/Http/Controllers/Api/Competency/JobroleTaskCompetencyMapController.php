@@ -185,4 +185,124 @@ class JobroleTaskCompetencyMapController extends Controller
 
         return response()->json(['status' => 1, 'message' => 'Removed.']);
     }
+
+    /**
+     * GET /competency/task-map/roles          - the catalogue's job roles
+     * GET /competency/task-map/tasks?jobrole= - one role's tasks + what each maps to
+     *
+     * WHY A LIST ENDPOINT AND NOT A FILTER ON index()
+     *
+     * `index()` answers "what is mapped", filtered by one task id. A panel needs
+     * the other question: "what tasks does this role have, and which of them are
+     * mapped yet" - including the UNMAPPED ones, which by definition have no row
+     * in the map and therefore cannot appear in a query over it.
+     *
+     * SCOPED PER JOB ROLE because the map keys on jobrole_task_id and THE JOB ROLE
+     * IS ALREADY IN THE KEY. A flat picker would ask the user to search 55,961
+     * rows the data model has already partitioned.
+     *
+     * NO PAGINATION, DELIBERATELY. Measured on the DECLARED REFERENT
+     * (`s_jobrole_task`, not the tenant table): 2,761 roles, median 19 tasks,
+     * p90 31, max 209, and only SEVEN roles above 100. A scrollable list with a
+     * count is the honest form; a pager for seven roles is furniture. The count
+     * is returned so the screen can say how many rather than implying it showed
+     * everything.
+     *
+     * `s_jobrole_task` IS GLOBAL - no `sub_institute_id`. The ROLE LIST is
+     * therefore the same for every tenant, and only the MAP rows are
+     * tenant-scoped. That asymmetry is Q-C1's pattern and is stated here because
+     * a reader who assumes both are scoped will not understand the join.
+     */
+    public function roles(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $rows = DB::table('s_jobrole_task')
+            ->select('jobrole')
+            ->selectRaw('COUNT(*) as task_count')
+            ->whereNotNull('jobrole')->where('jobrole', '!=', '')
+            ->groupBy('jobrole')
+            ->orderBy('jobrole')
+            ->get();
+
+        return response()->json([
+            'status' => 1,
+            'data'   => $rows->map(fn ($r) => [
+                'jobrole'    => $r->jobrole,
+                'task_count' => (int) $r->task_count,
+            ])->values(),
+        ]);
+    }
+
+    public function tasks(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $validator = Validator::make($request->all(), ['jobrole' => 'required|string|max:191']);
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $sid     = (int) $context['sub_institute_id'];
+        $jobrole = (string) $request->input('jobrole');
+
+        // The catalogue side is GLOBAL; the map side is the caller's tenant only.
+        // A LEFT JOIN, because an unmapped task is the normal case and must still
+        // appear - it is the whole point of the screen.
+        $rows = DB::table('s_jobrole_task as t')
+            ->leftJoin('jobrole_task_competency_map as m', function ($j) use ($sid) {
+                $j->on('m.jobrole_task_id', '=', 't.id')
+                  ->where('m.sub_institute_id', '=', $sid);
+            })
+            ->leftJoin('competency as c', function ($j) {
+                $j->on('c.id', '=', 'm.competency_id')->whereNull('c.deleted_at');
+            })
+            ->where('t.jobrole', $jobrole)
+            ->orderBy('t.task')
+            ->get(['t.id as jobrole_task_id', 't.task', 't.critical_work_function',
+                   'm.id as map_id', 'm.competency_id', 'c.name as competency_name']);
+
+        // Fold to one entry per task, each carrying its competencies.
+        $byTask = [];
+        foreach ($rows as $r) {
+            $k = (int) $r->jobrole_task_id;
+            if (!isset($byTask[$k])) {
+                $byTask[$k] = [
+                    'jobrole_task_id'        => $k,
+                    'task'                   => $r->task,
+                    'critical_work_function' => $r->critical_work_function,
+                    'competencies'           => [],
+                ];
+            }
+            if ($r->map_id !== null) {
+                $byTask[$k]['competencies'][] = [
+                    'map_id'          => (int) $r->map_id,
+                    'competency_id'   => (int) $r->competency_id,
+                    'competency_name' => $r->competency_name,
+                ];
+            }
+        }
+        $data = array_values($byTask);
+        $mapped = count(array_filter($data, fn ($t) => $t['competencies'] !== []));
+
+        return response()->json([
+            'status' => 1,
+            'data'   => $data,
+            'counts' => [
+                'tasks'    => count($data),
+                'mapped'   => $mapped,
+                'unmapped' => count($data) - $mapped,
+            ],
+            // L-14's note, kept: nothing mapped is the EXPECTED state for a
+            // catalogue a customer has not authored against yet, and the payload
+            // says so rather than leaving a screen to infer it from zeroes.
+            'empty_is_expected' => $mapped === 0,
+        ]);
+    }
 }
