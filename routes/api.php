@@ -374,6 +374,13 @@ Route::get('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCom
 Route::post('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/role-map/{id}', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 
+// KASBA RATINGS - the write half of the last link before the gap.
+// competency_kasba_rating had 160 seeded rows and NO writer anywhere: both
+// existing rating routes are GET and ProficiencyService only LEFT JOINs it.
+// These are NEW routes; the assessment-cycle GETs are untouched.
+Route::post('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'destroy'])->middleware('profile:admin,hr');
+
 // L-14: the TASK CATALOGUE -> COMPETENCY write path. Mirrors role-map one level
 // down. jobrole_task_id points at s_jobrole_task, a GLOBAL seed library with no
 // tenant column, so the task is checked for EXISTENCE and the competency for
