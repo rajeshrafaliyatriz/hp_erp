@@ -6569,6 +6569,47 @@ ones.**
 
 ---
 
+# THE BASELINE MOVED 51 -> 50 AND NOTHING CAN SAY WHICH FILE LEFT
+
+Noticed at the end of this turn, not looked for.
+
+    git status --porcelain filtered   50
+    git diff --name-only              50      (both measures agree - it is real)
+
+**NOT MINE, and that is checkable rather than asserted.** Every file in every
+commit of this session was listed and read: the twenty G-SEC-29 controllers, the
+phase3 docs, `routes/api.php`, `routes/hrms.php`. **No foreign file appears in
+any of them.** `routes/hrms.php` was last touched at `17035b8e`, long before this
+session, so it was never in the set.
+
+**The likely cause is Triz resolving the 51, which they said they are doing.** A
+file leaving the set is expected. **The problem is that I cannot NAME it.**
+
+## THE BASELINE WAS A COUNT, NOT A LIST
+
+The suite asserts `count === 51`. **A count can tell you that something moved and
+never what.** So the one guard specifically built to notice foreign work changing
+can report the change and cannot identify it.
+
+**Same failure as everything else this turn, in the guard itself:**
+
+    a fail list is a photograph, not a fact       - a snapshot outliving its moment
+    the unit you count in decides what you find   - a method with no sites
+    the plan and the register do not join         - a question needing two sources
+    A COUNT CANNOT NAME WHAT IT COUNTED           - this
+
+**FIXED HERE**: `_evidence/baseline-foreign-files.txt` now holds the list, 50
+lines, path and status. **The next move is a diff, not a mystery.**
+
+**THE SUITE'S NUMBER IS NOT CHANGED.** Editing `51` to `50` would be tuning a
+check to clear its own red - the exact move the register forbids two sections
+below, and the check's own comment says *"DO NOT REMOVE THIS FOR BEING
+ANNOYING."* **It stays red until Triz confirms the new baseline**, because the
+one thing worse than a red I cannot explain is a green I bought by editing the
+expectation.
+
+---
+
 # THE PLAN TRACKS INTENT, THE REGISTER TRACKS WORK, AND THEY HAVE DRIFTED APART
 
 **This outranks the overlap question it was found by.**
