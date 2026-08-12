@@ -6569,6 +6569,61 @@ ones.**
 
 ---
 
+## G-SEC-29 SCOPED BEFORE TOUCHING A ROUTE - **the pattern applies to 13 of 18**
+
+**The property is now split IN THE HARNESS**, not in whoever reads it:
+
+    LEAK     20   both 200, different data          <- the real remainder
+    REFUSED   1   one 200, one 4xx - CORRECT        <- credentialStatus
+    ERROR     1   5xx for both - broken for everyone
+    PASS     15   fixed since the 2026-08-06 sweep
+
+**Three outcomes, three verdicts.** The old property answered one question and
+scored a leak and a refusal identically.
+
+### THE TWENTY ARE 18 CONTROLLERS, AND THEY SPLIT IN TWO
+
+**BESPOKE RESOLVER - the proven `skillLibraryController` pattern applies (13):**
+
+    ApplyLeaveController        AuditController          DepartmentManagementController
+    HrmsController              LeaveSummaryReportController  LeaveTypeController
+    courseController            organizationDetailsController questionmasterController
+    skillcontroller             sub_std_mapController    taskController
+    tblmenumasterG2gController
+
+**TRAIT PRESENT AND STILL LEAKING - the pattern does NOT apply (5):**
+
+    CustomModuleController      HolidayController        discliplinaryManagementController
+    jobroletaskcontroller       jobroletexonomycontroller
+
+### THE FIVE ARE C27's CLASS, AND C27 ALREADY SAYS WHY IT IS WORSE
+
+> *"A controller with no trait is VISIBLY UNFINISHED. One with the trait LOOKS
+> COMPLETE to every future reader and to every future checker."*
+
+**Replacing a resolver that is already correct fixes nothing.** In these five the
+trait is present and something else - a query reading the request directly, a call
+site ignoring the resolved value - defeats it. **Forcing the pattern here would
+produce a controller that passes every structural check and still leaks**, which is
+precisely C27's illusion.
+
+**Stopped on all five, as instructed. They need reading, not adoption.**
+
+### AND THE ERROR ROUTE IS THE TURN'S THIRD BLIND-SPOT INSTANCE
+
+`PayrollController@monthlyPayrollCreate` returns **500 for both tenants**. Filed
+separately: it is not a leak, it is **broken for everyone**.
+
+**A differential property cannot see past it** - identical failure is identical, so
+a route that 5xx-es for both callers reads as PASS. It only surfaced here because
+it was already on a FAIL list from when it behaved differently.
+
+**Third instance in one turn of a property that cannot distinguish its own
+outcomes:** the leak/refusal conflation, the zero-matches search, and now identical
+failure reading as identical success.
+
+---
+
 # ⛔⛔ G-SEC-29 - **20 CONFIRMED CROSS-TENANT READS** - S1, 2026-08-12
 
 **Confirmed by execution, not inferred.** These jump the queue under the standing

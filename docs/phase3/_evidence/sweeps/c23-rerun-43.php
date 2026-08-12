@@ -78,7 +78,8 @@ foreach (RouteFacade::getRoutes() as $r) {
     if (in_array('GET', $r->methods(), true)) $live[$r->uri()] = true;
 }
 
-$now = ['FAIL' => [], 'PASS' => [], 'UNTESTABLE' => [], 'GONE' => [], 'VACUOUS' => []];
+$now = ['LEAK' => [], 'REFUSED' => [], 'ERROR' => [], 'OTHER' => [],
+        'PASS' => [], 'UNTESTABLE' => [], 'GONE' => [], 'VACUOUS' => []];
 
 foreach ($targets as $action => $uri) {
     if (!isset($live[$uri])) { $now['GONE'][] = $action; continue; }
@@ -89,21 +90,50 @@ foreach ($targets as $action => $uri) {
     if ($s1 === 401 || $s1 === 403)      { $now['UNTESTABLE'][] = $action; continue; }
     if (strlen($b1) < 3)                 { $now['VACUOUS'][] = $action; continue; }
 
-    // Identical response = the tenant came from the token, not the request.
-    if ($s1 === $s2 && $b1 === $b2)      { $now['PASS'][] = $action; }
-    else                                 { $now['FAIL'][] = $action; }
+    // ── THREE OUTCOMES, THREE VERDICTS ─────────────────────────────────────
+    //
+    // The original property asked one question - "did the response differ?" -
+    // and scored a LEAK and a REFUSAL identically. credentialStatus answers 200
+    // for its own tenant and 403 for another; that is CORRECT and it scored
+    // FAIL. Working the list unsplit would have "fixed" a route that was right.
+    //
+    // This is G-SEC-11's inverted signal one layer down, and it is the second
+    // time that exact confusion cost a verdict, so the split lives in the
+    // harness rather than in whoever reads its output.
+    if ($s1 === $s2 && $b1 === $b2)                  { $now['PASS'][] = $action; }
+    elseif ($s2 === 403 || $s2 === 401)              { $now['REFUSED'][] = $action; }
+    elseif ($s1 >= 500 || $s2 >= 500)                { $now['ERROR'][] = $action; }
+    elseif ($s1 === 200 && $s2 === 200)              { $now['LEAK'][] = $action; }
+    else                                             { $now['OTHER'][] = $action; }
 }
 
 echo "RESULT vs the 2026-08-06 sweep\n";
-foreach (['FAIL', 'PASS', 'UNTESTABLE', 'VACUOUS', 'GONE'] as $k) {
+foreach (['LEAK', 'REFUSED', 'ERROR', 'OTHER', 'PASS', 'UNTESTABLE', 'VACUOUS', 'GONE'] as $k) {
     printf("  %-11s %d\n", $k, count($now[$k]));
 }
 
 printf("\n  WAS FAIL, NOW PASSES (fixed since the sweep): %d\n", count($now['PASS']));
 foreach (array_slice($now['PASS'], 0, 12) as $a) echo "    $a\n";
 
-printf("\n  STILL FAILING - the real remainder: %d\n", count($now['FAIL']));
-foreach ($now['FAIL'] as $a) echo "    $a\n";
+printf("
+  LEAK - both 200, DIFFERENT DATA. The real remainder: %d
+", count($now['LEAK']));
+foreach ($now['LEAK'] as $a) echo "    $a
+";
+
+printf("
+  REFUSED - one 200, one 4xx. CORRECT, not a defect: %d
+", count($now['REFUSED']));
+foreach ($now['REFUSED'] as $a) echo "    $a
+";
+
+// A route that 5xx-es for BOTH callers reads as PASS to a differential property:
+// identical failure is identical. Reported separately so it cannot hide.
+printf("
+  ERROR - 5xx for both callers, broken for everyone: %d
+", count($now['ERROR']));
+foreach ($now['ERROR'] as $a) echo "    $a
+";
 
 file_put_contents(__DIR__ . '/c23-rerun-43-result.json', json_encode($now, JSON_PRETTY_PRINT));
 echo "\nwritten: c23-rerun-43-result.json\n";

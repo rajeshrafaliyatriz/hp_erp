@@ -1,11 +1,10 @@
 {
-    "FAIL": [
+    "LEAK": [
         "jobroletaskcontroller@index",
         "jobroletexonomycontroller@index",
         "skillcontroller@index",
         "AuditController@export",
         "DepartmentManagementController@index",
-        "ExcelAutomationAgentController@credentialStatus",
         "LeaveTypeController@index",
         "HolidayController@index",
         "ApplyLeaveController@index",
@@ -20,9 +19,15 @@
         "discliplinaryManagementController@index",
         "HrmsController@generalSettingIndex",
         "HrmsController@departmentAttendanceReport",
-        "HrmsController@getHolidays",
+        "HrmsController@getHolidays"
+    ],
+    "REFUSED": [
+        "ExcelAutomationAgentController@credentialStatus"
+    ],
+    "ERROR": [
         "PayrollController@monthlyPayrollCreate"
     ],
+    "OTHER": [],
     "PASS": [
         "assignmentController@stats",
         "assignmentController@learners",
