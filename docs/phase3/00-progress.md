@@ -1,5 +1,40 @@
 # Phase 3 Progress
 
+> # THE REAL SHAPE OF THE REMAINDER - **classified 2026-08-12**
+>
+> **"51 remaining" was never true.** All 51 rows marked "Not started" were
+> verified and classified, one line of evidence each - status first, then class.
+>
+> | class | count |
+> |---|---:|
+> | 🔨 **BUILD, open** | **24** |
+> | ⛔ **BUILD, BLOCKED on the 51** | **2** |
+> | ✍ **AUTHORING** | **1** |
+> | 📦 **BUILD-WITH-AUTHORING-CONTENT** | **3** |
+> | ✅ **DONE** (row never closed) | **14** |
+> | ⚖ **DECIDED** (a ruling, not a build) | **4** |
+> | ❓ **QUESTION-FIRST** | **0** *(all three measured and closed)* |
+>
+> **SIX ARE NOT THIS ENGAGEMENT'S TO FINISH** - 1 authoring, 3 that ship empty and
+> only a customer can complete, 2 blocked behind uncommitted files.
+>
+> **14 were already done** - 27% of the stated remainder was finished work whose
+> row nobody closed.
+>
+> **4 are decided and will never be built** - L-04 and L-09 (free text with
+> triggers), plus T-02 and L-05, closed by measuring their populations.
+>
+> ### THE REASON THE COUNT WAS WRONG
+>
+> **A row's size tells you what it costs to build. Only its population tells you
+> whether building it does anything.** Four consecutive rows had a working
+> mechanism and no data to run it on:
+>
+>     X-08(b)  0 of 26 resolvable      L-04  0 of 70 selectable
+>     T-02     0 of 2,271 populated    L-05  0 inactive rows
+>
+> **Three closed without being built; the fourth changed direction.**
+
 > ## ⚠️ THIS FILE WAS RECONSTRUCTED 2026-08-06 AFTER I DESTROYED IT
 >
 > A backtick inside a `python -c "..."` shell string opened a subshell, the command

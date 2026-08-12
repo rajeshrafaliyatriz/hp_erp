@@ -346,6 +346,98 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## THE THREE QUESTION-FIRST ROWS, MEASURED - **two close, and one closes with a finding**
+
+### T-02 Surface `delay_category` - **CLOSES. Nothing to surface.**
+
+    task.delay_category non-empty : 0 of 2,271
+    task.delay_reason  non-empty  : 1 of 2,271
+    tables with a delay* column   : task (only)
+
+**Surfacing a column nobody fills shows an empty column.** The mechanism is
+trivial and the population is zero. **Closed as DECIDED, with the trigger: when
+tasks start carrying a delay category, surface it.**
+
+Consistent with `task_hygiene`'s own reading - 2,088 of 2,271 overdue and 4
+in-progress across the whole table. **The task workflow is not being used, so its
+workflow-only fields are empty by consequence, not by oversight.**
+
+### L-05 Honour Status at assignment time - **CLOSES, AND THE REASON IS A DEFECT AVOIDED**
+
+Every status column in the chain carries exactly ONE non-null value:
+
+    s_jobrole         Active x 3,347
+    s_user_jobrole    Active x 4,729,  NULL x 7
+    s_users_skills    Active x 3,974,  NULL x 1,197
+    competency        active x 209
+    sub_std_map       1 x 96
+
+**There is no inactive, archived or draft row anywhere in the chain.** So
+"honour Status at assignment time" would exclude **nothing** - which is the
+population-zero result the other three rows had.
+
+**EXCEPT IT WOULD NOT BE HARMLESS.**
+
+`s_users_skills` holds **1,197 rows with a NULL status - 23% of the library.** A
+filter written as `where status = 'Active'` excludes every one of them.
+
+**So the mechanism has a population after all, and it is the wrong one.** It would
+not remove skills someone deactivated - **there are none.** It would remove skills
+**nobody ever marked**, which is `NULL` read as "not active."
+
+**That is unmeasured-as-zero, in a filter, and it would have deleted a quarter of
+the skill library from every assignment screen.** Nothing about the code would
+have looked wrong: `where status = 'Active'` is exactly what the row asked for.
+
+**Closed as DECIDED. If status is ever honoured, the rule is `status != 'Inactive'`,
+never `status = 'Active'`** - absence of a mark is not a mark of absence, and the
+column has no inactive value to test against anyway.
+
+### WHAT THE FOUR TOGETHER SAY
+
+    X-08(b)   0 of 26 resolvable
+    L-04      0 of 70 selectable
+    T-02      0 of 2,271 populated
+    L-05      0 inactive rows - and 1,197 NULLs a naive filter would have eaten
+
+**Four consecutive rows where the mechanism was fine and the data was not.** This
+is not a pattern in the plan; **it is the plan's normal case**, and it is why the
+question-first rows were measured before anything else in the queue.
+
+**Three of the four closed without being built. The fourth changed direction.**
+
+---
+
+## A CHECK THAT RETURNS ZERO MATCHES IS INDISTINGUISHABLE FROM A CLEAN RESULT
+
+**Fifth instance of a hand-rolled check losing to the artefact it was checking**,
+and this one is the undifferentiated-signal family arriving **inside the
+classification itself.**
+
+Verifying whether O-04's report-route leaks were blocked, I ran a pattern keyed on
+class names:
+
+    grep -rl "class .*Report" app/Http/Controllers/Reports/   ->  no output
+
+**I read "no output" as "none of them are in the 51".** The truth is the pattern
+matched nothing at all - those controllers do not have `Report` in their class
+names. Checking the file list directly:
+
+    Reports/ controllers among the 51 : 7
+
+**I would have reported O-04 as OPEN on a check that had not examined anything.**
+
+**A zero from a search and a zero from a population are different claims**, and
+nothing in the output distinguishes them. The same shape as the two zeros, as the
+`services/` grep, as the wrong-column read - **but this one would have entered a
+count the owner is taking to an escalation.**
+
+**The guard is the one already written down: a check whose result is zero must
+name its known-positive.** A pattern that cannot demonstrate it matches something
+has not been shown to be looking.
+
+---
+
 ## L-04 DECISION - **OPTION 3: FREE TEXT, WITH A TRIGGER** (Triz, 2026-08-12)
 
 Same ruling X-03 made for `certification_qualifications`, **for a stronger
