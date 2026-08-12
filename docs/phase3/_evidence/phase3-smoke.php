@@ -542,6 +542,53 @@ check('org', 'working tree matches its baseline (50 foreign files, LISTED)', fun
         . 'of mine is uncommitted: ' . implode(', ', $sample)];
 });
 
+check('org', 'R30 - every evidence script still parses (backslash-mangling guard)', function () {
+    // R30 SAID: write scripts to a FILE, never a heredoc, because the shell eats
+    // backslashes and silently corrupts every regex in them.
+    //
+    // R30 HAS NOW FIRED THREE TIMES - twice before it was written down as a rule
+    // costing a turn, and once MINUTES AFTER Triz said "either make it
+    // unskippable or accept a third". It is not a knowledge gap. A rule that must
+    // be remembered at the point of use fails exactly like a requirement carried
+    // in a document rather than a payload.
+    //
+    // SO IT STOPS BEING A RULE ABOUT THE METHOD AND BECOMES AN ASSERTION ABOUT
+    // THE ARTIFACT. This cannot stop me reaching for a heredoc. It guarantees the
+    // damage is caught by the next suite run rather than by a confusing empty
+    // output three commands later - the same move that worked for `git status`
+    // printed as a step, the known-negative inside the check, and the split
+    // living in the harness instead of the reader.
+    //
+    // Mangling is not subtle in its effect: `'\\'` becomes `'\'` and the file
+    // stops parsing. A parse check over every evidence script catches it
+    // generically, without me having to predict which escape gets eaten.
+    $dirs = [__DIR__, __DIR__ . '/sweeps', dirname(__DIR__) . '/_changes'];
+    $bad = [];
+    $n = 0;
+    foreach ($dirs as $d) {
+        foreach (glob($d . '/*.php') ?: [] as $f) {
+            if (realpath($f) === realpath(__FILE__)) continue;   // not itself
+            $n++;
+            $out = [];
+            $rc = 0;
+            exec('php -l ' . escapeshellarg($f) . ' 2>&1', $out, $rc);
+            if ($rc !== 0) $bad[] = basename($f) . ': ' . trim(implode(' ', array_slice($out, 0, 1)));
+        }
+    }
+
+    // R29: a known-negative. A file that IS mangled must be caught, or this check
+    // is decorative. Written to a temp file, linted, and removed.
+    $probe = sys_get_temp_dir() . '/r30-known-negative.php';
+    file_put_contents($probe, "<?php \$x = preg_replace('#a'b#', '', 'c');\n");
+    $o = []; $rc = 0;
+    exec('php -l ' . escapeshellarg($probe) . ' 2>&1', $o, $rc);
+    @unlink($probe);
+    if ($rc === 0) return ['SKIPPED', 'known-negative PARSED - the guard cannot detect mangling, do not trust it'];
+
+    if ($bad) return ['FAIL', count($bad) . ' of ' . $n . ' scripts do not parse: ' . implode(' | ', array_slice($bad, 0, 2))];
+    return ['PASS', "all $n evidence scripts parse; known-negative correctly rejected"];
+});
+
 /* ══════════════════════════ DATA ══════════════════════════ */
 echo "\nDATA\n";
 
