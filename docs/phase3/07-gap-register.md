@@ -6713,6 +6713,61 @@ did not need to be read at all.**
 
 ---
 
+## ⭐ A PROPERTY WITH FEWER VERDICTS THAN THE WORLD HAS OUTCOMES
+
+**Three instances in one turn.** Named as one set, because they are one root and
+the count is the evidence: **this is the dominant failure mode of every instrument
+in this project.**
+
+| the property | verdicts it had | outcomes the world had | what collapsed |
+|---|---|---|---|
+| C23 tenant guard | PASS / FAIL | leaked · **refused** · errored | a correct 403 scored FAIL - and 1 of 22 would have been "fixed" while already right |
+| a grep over `Reports/` | matched / didn't | matched · didn't · **examined nothing** | zero matches read as a clean result; O-04 would have entered the escalation as OPEN |
+| any differential check | same / different | same-and-working · different · **same-and-broken** | 500/500 reads as PASS |
+
+**The instrument is not wrong. It is answering a question with fewer answers than
+the situation has**, and every collapsed pair becomes a wrong verdict silently -
+there is no error, no exception, no red. **The output looks exactly like a correct
+result, because it is a correct answer to a smaller question.**
+
+### THE TEST
+
+**Before trusting a verdict, count the outcomes the world can produce and count
+the verdicts the property can return.** If the second number is smaller, some pair
+of real situations is being scored identically, and **you cannot tell from the
+output which pair.**
+
+### THE SHARPEST CASE - **the 500/500**
+
+`PayrollController@monthlyPayrollCreate` errors for both tenants. **A differential
+property can NEVER find it**: identical failure is identical, so it scores PASS
+forever.
+
+**It surfaced only because a STALE LIST preserved a moment when it behaved
+differently.**
+
+---
+
+## AND THAT CUTS AGAINST THE PHOTOGRAPH RULE
+
+The photograph rule says: **re-run the property, do not read the old list.**
+
+**The 500/500 is the counter-example.** The live property scores it PASS. The
+six-day-old list scored it FAIL, from a moment when it still differed. **The stale
+artefact found something the live instrument cannot see.**
+
+**So the rule is not "the list is worthless".** It is:
+
+> **A re-run tells you what is true NOW. The old list tells you what was ONCE
+> true - and a thing that changed from failing to erroring has not been fixed, it
+> has moved somewhere the property cannot look.**
+
+**Diff them rather than replacing one with the other.** 15 entries expired and one
+entry was the only record of a route that has since broken differently - and both
+facts came from comparing the photograph to the live shot, not from either alone.
+
+---
+
 ## A FAIL LIST IS A PHOTOGRAPH, NOT A FACT
 
 **Same shape as the map decay below, and the pair is the point.**
