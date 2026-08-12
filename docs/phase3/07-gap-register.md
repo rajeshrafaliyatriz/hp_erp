@@ -7617,6 +7617,60 @@ two orders of magnitude.
 
 ---
 
+# THE READING TURN - **the known-positives exist, and one of them is self-declared**
+
+Read first, pattern after. The reverse produced two bad instruments last time.
+
+## THE BELL IS ALREADY FIXED, SO IT CANNOT BE THE KNOWN-POSITIVE
+
+ fetches  and sets
+its badge from the response. **X-06 fixed it earlier in this engagement**, and its
+docblock records exactly what it used to be:
+
+    IT USED TO BE A PICTURE OF A BELL. It rendered You are all caught up and a
+    hardcoded New badge at the same time, unconditionally, with no request behind
+    either. Both statements were untrue at once and neither could ever change.
+
+**And the line that matters for the survey**: the same placeholder existed in
+ AND  - *which is how a control could be dead
+in two places at once and look maintained in both.*
+
+**So Q4 lost its intended known-positive by being repaired.** That is worth stating
+plainly: the instance the whole question was modelled on no longer exists.
+
+## THE REPLACEMENT, AND IT ANSWERS Q1 AND Q4 AT ONCE
+
+
+
+    {/* Business Unit (static mockup placeholder) */}
+    <Select value=All onChange={() => {}}
+            options={[{ label: Business Unit: All, value: All }]} />
+
+**A control whose handler does nothing (Q1) over a list of one hardcoded option
+where a fetch belongs (Q4)** - and the developer labelled it a static mockup
+placeholder in the code.
+
+**A named known-positive for both questions, found by reading rather than by
+pattern.**
+
+## THE SHAPE, COUNTED
+
+    self-declared placeholder comments      1
+    onChange={() => {}}                     3
+
+    talent/dashboard/talent-dashboard.tsx:351
+    talent/mobility-succession/mobility-center.tsx:821
+    talent/offboarding/offboarding-center.tsx:631
+
+**All three are in TALENT, and only one admits it.** The other two have the same
+shape and no comment - which is why the label cannot be the pattern.
+
+**CANDIDATES, NOT FINDINGS**: three is what the literal shape finds. A handler that
+calls a named function which does nothing would not appear here, and that is the
+form the bell took before it was fixed.
+
+---
+
 # THE 40 DEAD CALLS - **ZERO ARE REACHABLE BY A USER**
 
 Rebuilt with import resolution after the first split was wrong.
