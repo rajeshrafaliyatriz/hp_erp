@@ -17,7 +17,29 @@ use App\Models\libraries\userKnowledgeAbility;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
-class jobroleLibrary2Controller extends Controller
+/**
+ * PSR-4 NAME MATCHED TO THE FILE, 2026-08-12.
+ *
+ * This file declared `class jobroleLibrary2Controller`. Composer's PSR-4
+ * autoloader maps a class to a file OF THE SAME NAME, so the class could not be
+ * loaded at all: `class_exists()` returned false and nothing could reference it.
+ *
+ * IT WAS INVISIBLE RATHER THAN BROKEN. Nothing referenced either name - no route,
+ * no other controller - so nothing failed. A class that cannot be loaded and is
+ * never named produces no error; it just is not there. **The linter, the test
+ * suite and the router all agreed with its absence.**
+ *
+ * Found while consolidating `g2gActorId`: this was the one file of fifteen whose
+ * class the behaviour probe could not reflect on, and the reflection failure was
+ * the only signal that it existed in this state.
+ *
+ * RENAMED, NOT DELETED. It is a near-duplicate of `jobroleLibraryController`
+ * (same six methods, 820 lines against 681) and only that one is routed. Whether
+ * this variant should exist at all is a separate decision, filed rather than
+ * taken - the fix here is the name, so the file is at least loadable and its
+ * contents can be compared.
+ */
+class jobroleLibrary1Controller extends Controller
 {
     use ResolvesApiIdentity;
     use \App\Http\Controllers\Concerns\ResolvesG2gActor;

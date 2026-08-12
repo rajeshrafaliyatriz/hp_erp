@@ -346,6 +346,51 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## A CLASS THAT CANNOT BE LOADED AND IS NEVER NAMED PRODUCES NO ERROR
+
+`app/Http/Controllers/libraries/jobroleLibrary1Controller.php` declared
+**`class jobroleLibrary2Controller`**. PSR-4 maps a class to a file of the SAME
+name, so the class could not be autoloaded: `class_exists()` returned false.
+
+**And nothing referenced either name** - no route, no controller, nothing in
+either repository. `routes/web.php` routes `jobroleLibraryController`, a
+different and correctly-named file.
+
+### WHY NOTHING CAUGHT IT
+
+**It was invisible rather than broken.** A class that cannot load and is never
+named throws nothing. `php -l` passes - the syntax is fine. The router never asks
+for it. No test references it. **The linter, the suite and the router all agreed
+with its absence**, because absence is exactly what they observe.
+
+**It surfaced only as a reflection failure** during the `g2gActorId`
+consolidation: the behaviour probe reached 14 of 15 classes, and the fifteenth
+could not be reflected on. **The gap in a count was the only signal that the file
+existed in this state.**
+
+### RENAMED, NOT DELETED
+
+The class now matches its file. It is loadable, and the consolidation assertion
+reaches **15 of 15, 30 assertions, no behaviour change** - where before it could
+only reach 14.
+
+**Deleting was not taken.** It is a near-duplicate of `jobroleLibraryController` -
+the same six methods, 820 lines against 681 - and only that one is routed.
+**Whether this variant should exist at all is a separate decision**, and the fix
+here is the name, so the file is at least loadable and its contents can be
+compared before anyone decides.
+
+### ⚠ FILED, NOT TAKEN - **two near-duplicate job-role library controllers**
+
+    jobroleLibraryController    681 lines   ROUTED (jobrole_library resource)
+    jobroleLibrary1Controller   820 lines   loadable now, referenced by nothing
+
+Same six methods. One is live, one has never been reachable. **The larger file is
+the unrouted one**, which is the wrong way round for a superseded copy and worth a
+read before either is removed.
+
+---
+
 ## SETTLED PATTERN - **A CLAIM DERIVED FROM CODE IS A CLAIM ABOUT WHAT THE CODE SAYS, NOT WHAT IT DOES**
 
 Three instances this phase, all mine, all corrected by RUNNING the thing. Recorded
