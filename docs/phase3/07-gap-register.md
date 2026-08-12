@@ -7363,6 +7363,105 @@ scripts), not every possible corruption.
 
 ---
 
+# 336 -> 144 -> 4, AND THE THIRTEENTH MEANS WAS EXACTLY WHERE THE CAVEAT SAID
+
+**The caveat travelled with the number and then collected on it, in one turn.**
+
+## THE LEAVE CONTROLLERS: NOTHING, AND FULLY GUARDED
+
+Read first, not probed. `LeaveRequestApiController`, `LeaveTypeApiController`,
+`HolidayApiController` - **1,220 lines between them, and ZERO matches** against
+twelve mechanisms. Not a `PersonalAccessToken`, not a `Sanctum`, not even a `401`
+string.
+
+**All three authenticate.** `ResolvesLeaveContext::leaveContext()` calls
+`resolveApiIdentity($request)` - a name that WAS in the vocabulary.
+
+    THE GUARD WAS ONE FILE AWAY.
+
+**Reading the controller file only is the same scope error as reading the method
+body only, one level up.** The previous fix widened from method to file; this one
+widens from file to **file + traits + parent class**. Same mistake, same shape,
+one turn apart.
+
+## THE NUMBER, THIRD DEFINITION
+
+    336   [api]-only write routes
+    167   unguarded by the OLD five-name vocabulary
+    144   no recognised mechanism in the CONTROLLER FILE
+      4   no recognised mechanism in the file, ITS TRAITS, OR ITS PARENT
+
+    resolveApiIdentity  319 routes   <- was 23 before traits were followed
+    Sanctum             264          <- was 71
+
+**`resolveApiIdentity` went from 23 to 319 the moment traits were followed.** The
+mechanism this engagement installed everywhere was invisible to a scan that read
+one file.
+
+## THE FOUR, AND NONE IS THE STOP-LINE CASE
+
+    api/send-otp                        signupOtpController@sendOtp
+    api/verify-otp                      signupOtpController@verifyOtp
+    api/nango/google/check-connection   NangoController@checkConnection
+    api/nango/google/oauth-url          NangoController@getOauthUrl
+
+**All four are PRE-AUTHENTICATION BY DESIGN** - you cannot hold a token before
+signing up, and an OAuth URL is fetched before the connection exists. `Nango`
+writes nothing at all.
+
+**SO THERE IS NO UNAUTHENTICATED WRITE TO BUSINESS DATA AMONG THE 336.** The stop
+line was never triggered, and it took three refinements of the population to be
+able to say so honestly.
+
+---
+
+# NEW - **AN UNAUTHENTICATED ENDPOINT THAT SENDS EMAIL, IGNORING THE FLAG**
+
+`signupOtpController@sendOtp`, and it is the one thing in the four that is not
+correct-by-design:
+
+    SignupOtp::updateOrCreate(['email' => $email], [...]);   <- writes a row
+    Mail::raw("Your OTP is: $otp", ...->to($email));          <- sends, always
+    consultations of the notify flag in the file: 0
+
+**Anonymous. Any address. No rate limit visible. And it does not consult
+`G2G_NOTIFY_EMAIL` at all**, so the standing "email stays OFF" constraint does not
+cover it - the flag guards the notification path, and this route does not use that
+path.
+
+**Not taken. Filed.** It is not a cross-tenant leak and not a write to business
+data, so it does not meet the stop line - but it is the only route in the four
+that does something a stranger should not be able to make the system do.
+
+### AND MY GREP MISSED THE WRITE - THIRD TIME
+
+I reported *"writes NOTHING to the DB"* from a `DB::table\('...'\)` scrape.
+**`SignupOtp::updateOrCreate` is Eloquent.** Third time in three turns that a
+literal-table scrape has been blind to a model write - the counter that read `+0`,
+the candidate filter that printed `(via model)`, and now this.
+
+**A `DB::table` grep is not a write detector. It is a `DB::table` detector**, and
+this codebase writes through models more often than not.
+
+---
+
+# S-06 RE-SCOPED - **and only because the number was RE-DERIVED, not RE-USED**
+
+    WAS   "772 write routes have never been tested" - a sweep
+    IS    786 exist - 51 fatal on call - 336 carry only [api] - 4 unguarded,
+          all four pre-authentication by design
+
+**The authentication question for the write half is CLOSED.** What remains of S-06
+is the *other* half of a write test - that a write lands in the right tenant, and
+that a caller cannot write into somebody else's - which is C23's property applied
+to writes, not an auth sweep.
+
+**This was invisible until the number was re-derived.** 338 was carried for
+several turns; every re-use compounded it, and one re-derivation collapsed it by
+two orders of magnitude.
+
+---
+
 # THE 338 COUNTED SOMETHING OTHER THAN WHAT ITS NAME SAYS
 
 **~~338 write routes are unauthenticated~~** - struck through, with its reason.

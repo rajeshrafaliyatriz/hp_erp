@@ -55,6 +55,23 @@ foreach (app('router')->getRoutes() as $r) {
     // the WHOLE FILE is the honest scope for "does this controller authenticate".
     $whole = implode('', $lines);
 
+    // FOLLOW THE TRAITS. The three leave controllers matched NOTHING - not one of
+    // twelve mechanisms, not even a 401 string - and all three authenticate, via
+    // ResolvesLeaveContext::leaveContext() -> resolveApiIdentity(). THE GUARD WAS
+    // ONE FILE AWAY. Reading the controller file only is the same scope error as
+    // reading the method body only, one level up.
+    try {
+        foreach ((new ReflectionClass($c))->getTraits() as $tr) {
+            $tf = $tr->getFileName();
+            if ($tf && is_file($tf)) $whole .= file_get_contents($tf);
+        }
+        $parent = get_parent_class($c);
+        if ($parent) {
+            $pf = (new ReflectionClass($parent))->getFileName();
+            if ($pf && is_file($pf)) $whole .= file_get_contents($pf);
+        }
+    } catch (Throwable $e) {}
+
     $found = [];
     foreach ($MECHANISMS as $name => $re) {
         if (preg_match($re, $whole)) $found[] = $name;
