@@ -7363,6 +7363,94 @@ scripts), not every possible corruption.
 
 ---
 
+# "EMAIL IS OFF" IS A PROPERTY OF ONE CODE PATH, NOT A GUARANTEE
+
+**MEASURED, NOT FIXED.** The flag's scope is Triz's constraint and its correction
+is Triz's to take.
+
+    send sites in app/            9
+    files containing a send       7
+      CONSULT the flag            1     <- NotificationSender.php
+      DO NOT consult it           6
+    reachable WITHOUT auth AND not flag-guarded   2
+
+**One file consults `G2G_NOTIFY_EMAIL`: `Services/Notifications/NotificationSender.php`
+- the notification path this engagement built.** Every other send site is outside
+the guarantee.
+
+**The suspicion was exactly right: it is a property of one code path, which
+happens to be the one we built.**
+
+## THE TWO ANONYMOUS ONES
+
+    POST api/newsletter/send    NewsletterController@sendNewsletter
+    POST api/send-otp           signupOtpController@sendOtp
+
+## `api/newsletter/send` IS MATERIALLY WORSE THAN `sendOtp`
+
+    $data = $request->all();
+    $recipients = $data['test_mode'] ? $data['test_emails'] : $data['emails'];
+    ...
+    Mail::to($recipients)->send(new NewsletterMail(
+        $data['body'], $data['cta_link'], $data['cta_text'], $subject));
+
+**EVERY input comes from the request body**: the recipient LIST, the message body,
+the subject, and the call-to-action LINK. No authentication, no flag, no visible
+validation, no rate limit.
+
+**An anonymous caller can make this system send arbitrary content, carrying an
+arbitrary link, to an arbitrary list of addresses, from the company's mail
+server.** `sendOtp` at least sends a fixed four-digit format to one address.
+
+**This does not meet the stop line** - it is not a cross-tenant leak and not an
+unauthenticated write to business data. **In real-world terms it is worse than
+most things that do**, and it is filed rather than taken because the ruling is
+Triz's.
+
+### WHAT MAKES THE FLAG'S SCOPE THE FINDING RATHER THAN THIS ROUTE
+
+**The route is one defect. The scope is the reason nobody knew.**
+`G2G_NOTIFY_EMAIL=false` has been treated all engagement as *email is off*. It is
+**one file's behaviour**, and six other files send without consulting it. A
+constraint that reads as global and holds locally is worse than no constraint,
+because it stops people looking.
+
+---
+
+# EACH FIX WIDENS BY EXACTLY ONE LAYER, AND THE NEXT LAYER IS NEVER CHECKED
+
+**Recorded together, because the pattern is the finding and not either instance.**
+
+    turn N-1   the scan read the METHOD BODY          -> widened to the FILE
+    turn N     the scan read the FILE                 -> widened to FILE + TRAITS + PARENT
+               `resolveApiIdentity`: 23 routes -> 319 the moment traits were followed
+
+**Both fixes were correct. Neither asked what the NEXT enclosing scope was.** A
+method sits in a file, a file in a class, a class in its traits and parents, and a
+parent in ITS traits - and each widening stopped exactly one step past the failure
+that prompted it.
+
+**The general form**: *a scope fix prompted by a specific miss will widen to cover
+that miss and stop.* Nothing in the process asks whether the new boundary is the
+last one.
+
+---
+
+# A `DB::table` GREP IS NOT A WRITE DETECTOR - **third instance, fixed as a rule**
+
+    the inverted probe's counter    printed +0 while a row was landing
+    the candidate filter            printed "(via model)" for 4 of 5 candidates
+    the send-otp read               reported "writes NOTHING to the DB"
+
+**All three scraped `DB::table('...')` literals. This codebase writes through
+Eloquent models more often than not.**
+
+**RULE, not a per-instance fix: ANY WRITE DETECTION RESOLVES MODELS, NEVER SCRAPES
+LITERALS.** Resolve `use App\Models\...` imports and read each model's
+`getTable()`, as the fixed counter now does.
+
+---
+
 # 336 -> 144 -> 4, AND THE THIRTEENTH MEANS WAS EXACTLY WHERE THE CAVEAT SAID
 
 **The caveat travelled with the number and then collected on it, in one turn.**
