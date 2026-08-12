@@ -346,6 +346,83 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## ⚠ RETRACTION - **"THE ANONYMOUS CALLER IS REAL" WAS WRONG. IT IS DEAD CODE.**
+
+Reported 2026-08-12 and corrected the same day, on the way to migrating it.
+
+`app/api/jobrole-tasks/route.ts` calls `readLaravelSession()`, which begins:
+
+    if (typeof window === 'undefined') return null
+
+**It is a Next.js SERVER-SIDE API route**, so `window` is always undefined, so the
+session is always null, so it returns 401 before reaching `table_data`. Measured,
+not read:
+
+    GET /api/jobrole-tasks?jobRoleId=1  ->  401  {"message":"Unauthorized"}
+
+**And nothing calls it.** Callers of `/api/jobrole-tasks` across the frontend: **0.**
+
+So the chain is dead at both ends: no caller, and it could not succeed if it had
+one.
+
+### THE CORRECTED POPULATION
+
+    table_data callers, measured    2
+      job-posting-form.tsx          'use client', sends Authorization: Bearer   AUTHENTICATED
+      app/api/jobrole-tasks         server-side, always 401, zero callers        DEAD
+
+**Anonymous callers: ZERO.** Not "none observed" - none that can execute.
+
+### WHY I GOT IT WRONG, AND IT IS THE SAME ERROR TWICE
+
+I read the file, saw `api_key` and `filters[sub_institute_id]` and no bearer
+token, and concluded it was an anonymous caller. **That is a claim about what the
+code SENDS. Whether it RUNS is a different question and I did not ask it.**
+
+Same shape as `department_head` ("nothing through the API" - the probe found
+self-service intact) and `hr_manager` ("one menu apart" - I read the wrong
+column). **Three times now: a claim derived correctly from code and wrong about
+behaviour.** The correction each time came from running it.
+
+### WHAT IT MEANS FOR `tableDataRequestedTenant` - **AND WHY IT IS NOT A CENSUS**
+
+Within the two repositories, no anonymous caller exists, so the helper compensates
+for nothing measurable here.
+
+**BUT THE OTHER THREE FALLBACKS WERE DELETED ON A CENSUS** - 0 of 401 accounts,
+a complete population with no outside. **This is not that.** `GET table_data`
+carries **no middleware at all**, so it is reachable by anything that knows the
+URL: a mobile client, an integration, a script. **Two repositories are not the
+population; they are the part of it I can see.**
+
+**So the deletion is a DECISION, not a consequence** - and calling it "the same
+footing as the other three" would be the wrong-population error one more time, in
+the very item whose evidence rule was written to prevent it.
+
+---
+
+## `api_key` IS INBOUND-CHECKED NOWHERE - **a control that looks like authentication in the caller and is inert at the receiver**
+
+Same family as a check whose name overstates its layer - **except the misleading
+artefact is PRODUCTION CODE, and the reader it misleads is a developer deciding
+whether a route needs a guard.**
+
+All four backend mentions are **outbound third-party keys**, not inbound credentials:
+
+    SessionController      gemini.api_key        -> reports whether Gemini is configured
+    contentController      GOOGLE_API_KEY        -> outbound to googleapis.com/youtube
+    DeepSeekService        deepseek.api_key      -> Http::withToken(), outbound
+    GammaService           gamma.api_key         -> outbound fallback
+
+**The backend has no inbound `api_key` mechanism at all.** The frontend's
+`resolveHpApiKey()` and `params.set('api_key', ...)` send a credential to an API
+that has no concept of one.
+
+**A credential nobody checks is worse than none, because it reads as protection.**
+Anyone auditing that call sees a key on the wire and moves on.
+
+---
+
 ## G-MIG-01 ANSWERED BY A ROUTE-LEVEL AUDIT - **the anonymous caller is real, and there is exactly one**
 
 The evidence a log count was explicitly rejected for. **Who actually calls
