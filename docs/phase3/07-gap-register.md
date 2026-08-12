@@ -7671,6 +7671,67 @@ form the bell took before it was fixed.
 
 ---
 
+# F-10 - **THE LAST NAME-JOIN INSIDE THE CAPABILITY CHAIN**
+
+**Filed as a numbered item, not a recommendation in a paragraph** - because every
+other name-join found this phase was recorded and left, and this one is different:
+**it is inside the chain the product is sold on.**
+
+    ITEM       F-10
+    TABLE      s_user_jobrole_task  (85,663 rows, tenant-scoped)
+    ADD        catalogue_task_id -> s_jobrole_task.id
+    BACKFILL   by exact title, WHILE IT STILL RESOLVES AT 100%
+    STATUS     OPEN, NOT STARTED. A migration. AFTER writer 2.
+
+## THE EVIDENCE
+
+    22,629 tenant rows sampled across 6 tenants -> 22,629 matched by title (100%)
+    columns that could hold a catalogue key                            NONE
+    known-positive: a catalogue row matches itself                      yes
+
+## THE BLAST RADIUS
+
+**The failure is silent BY CONSTRUCTION.** A tenant renames a task - which the
+task library lets them do - and:
+
+    the title stops matching the catalogue row
+    the competency mapping authored against that row stops reaching the employee
+    NO COLUMN EXISTS THAT WOULD NOTICE
+
+**100% TODAY IS 100% UNTIL THE FIRST EDIT.** There is no degradation, no warning
+and no partial state: the link is whole until the moment it is gone.
+
+## WHY THE FIX MUST HAPPEN WHILE THE ANSWER IS KNOWN
+
+**The backfill is only possible while the titles still resolve.** Every tenant
+edit between now and the migration is a row whose origin can no longer be
+recovered - the correspondence is the only record that the copy came from the
+catalogue at all.
+
+**A migration that gets cheaper the sooner it runs and impossible if left long
+enough.**
+
+---
+
+# A WRONG MEASUREMENT THAT ACQUIRED AUTHORITY BY BEING ASKED FOR
+
+**The 338's class with one extra step.**
+
+    I measured the wrong table                      -> a precise number
+    I reported it precisely                         -> it looked reliable
+    IT WAS TURNED INTO A REQUIREMENT                -> "carry it into that build"
+    nobody checked which population it described    -> until the build began
+
+**A measurement becomes an instruction the moment somebody acts on it, and at that
+point its provenance stops travelling with it.** The 338 was re-used for several
+turns; this one acquired authority in a single exchange because it was asked for
+by name.
+
+**What caught it was the size check opening the build turn** - the same check that
+found the controller already existed.
+
+---
+
 # THE TASK PATH IS NAME-JOINED AT ITS LAST LINK - **100%, and that is the diagnosis**
 
     BY KEY?    NO. s_user_jobrole_task has no column that could hold a catalogue
