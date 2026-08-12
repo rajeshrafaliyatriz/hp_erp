@@ -1,0 +1,51 @@
+{
+    "FAIL": [
+        "jobroletaskcontroller@index",
+        "jobroletexonomycontroller@index",
+        "skillcontroller@index",
+        "AuditController@export",
+        "DepartmentManagementController@index",
+        "ExcelAutomationAgentController@credentialStatus",
+        "LeaveTypeController@index",
+        "HolidayController@index",
+        "ApplyLeaveController@index",
+        "LeaveSummaryReportController@leaveSummaryReportShow",
+        "sub_std_mapController@index",
+        "CustomModuleController@menuLevel2",
+        "courseController@index",
+        "questionmasterController@indexChapter",
+        "taskController@taskAnalysisReport",
+        "tblmenumasterG2gController@displayUserProfilesG2g",
+        "organizationDetailsController@index",
+        "discliplinaryManagementController@index",
+        "HrmsController@generalSettingIndex",
+        "HrmsController@departmentAttendanceReport",
+        "HrmsController@getHolidays",
+        "PayrollController@monthlyPayrollCreate"
+    ],
+    "PASS": [
+        "assignmentController@stats",
+        "assignmentController@learners",
+        "assignmentController@enrollments",
+        "assignmentController@index",
+        "talent_interviewpanelController@getInterviewPanel",
+        "masterSetupController@index",
+        "AJAXController@getSkillCompetency",
+        "PayrollController@payrollType",
+        "PayrollController@payrollTypeReport",
+        "PayrollController@employeeSalaryStructure",
+        "PayrollController@form16",
+        "PayrollController@payrollDeduction",
+        "PayrollController@monthlyPayrollReport",
+        "PayrollController@employeePayrollHistory",
+        "PayrollController@hrmsSalaryCertificateIndex"
+    ],
+    "UNTESTABLE": [
+        "courseRecommandation@index"
+    ],
+    "GONE": [],
+    "VACUOUS": [
+        "ExcelAutomationAgentController@downloadTemplate",
+        "TemplateController@index"
+    ]
+}

@@ -6569,6 +6569,132 @@ ones.**
 
 ---
 
+# ⛔⛔ G-SEC-29 - **20 CONFIRMED CROSS-TENANT READS** - S1, 2026-08-12
+
+**Confirmed by execution, not inferred.** These jump the queue under the standing
+stop line: *no new security sub-item is taken unless it is a confirmed
+cross-tenant leak.* **These are that.**
+
+### THE MEASUREMENT
+
+The C23 property re-run against the 40 actionable FAIL routes, then each survivor
+split by WHY it differs:
+
+    still failing                    22
+      REFUSED a foreign tenant        1   <- correct behaviour, scored FAIL
+      BOTH 200, DIFFERENT BODIES     20   <- CONFIRMED CROSS-TENANT READ
+      500/500                         1   <- separate defect
+
+### THE PROOF, on one of the twenty
+
+`GET api/departments-management`, caller **user 198, tenant 7, holding their own
+token**:
+
+    asks sub_institute_id=7  ->  200, 2 items, all sub_institute_id: 7
+    asks sub_institute_id=3  ->  200, 2 items, all sub_institute_id: 3
+
+    "Admin & Maintenance Department"   sub_institute_id: 3
+    "product supervisor"               sub_institute_id: 3
+
+**The caller received rows they cannot get with their own tenant.** The route
+honoured the request parameter over the token. Not a candidate - a read.
+
+### THE TWENTY
+
+    jobroletaskcontroller@index          jobroletexonomycontroller@index
+    skillcontroller@index                AuditController@export
+    DepartmentManagementController@index LeaveTypeController@index
+    HolidayController@index              ApplyLeaveController@index
+    LeaveSummaryReportController@...     sub_std_mapController@index
+    CustomModuleController@menuLevel2    courseController@index
+    questionmasterController@indexChapter taskController@taskAnalysisReport
+    tblmenumasterG2gController@...       organizationDetailsController@index
+    discliplinaryManagementController@index
+    HrmsController@generalSettingIndex   HrmsController@departmentAttendanceReport
+    HrmsController@getHolidays
+
+**None is behind the 51.** All twenty are actionable now.
+
+---
+
+## ⚠ AND THE C23 PROPERTY HAS A FALSE-POSITIVE MODE
+
+**"The response differed" flags a LEAK and a REFUSAL identically.**
+
+`ExcelAutomationAgentController@credentialStatus` scores **FAIL** on this property
+and is **correct**: it answers 200 for the caller's own tenant and **403 for
+another's**. Different responses - because it refused.
+
+**This is G-SEC-11's inverted signal again**, one layer down. There, "differs
+across tenants" was read as suspicious when it was correct scoping. Here, the
+property cannot separate:
+
+    both 200, different bodies   ->  LEAKED
+    200 then 403                 ->  REFUSED, and correct
+    500 then 500                 ->  broken, unrelated
+
+**A property that produces one verdict for three outcomes cannot be worked from
+directly** - every FAIL needs the split before it means anything. **1 of 22 was a
+correct refusal, and reading the list without splitting would have "fixed" a route
+that was already right.**
+
+**The split is now part of the re-run.**
+
+---
+
+## THE PHOTOGRAPH RULE, PROVEN WITH A NUMBER
+
+    the sweep said        46 FAIL
+    re-run, actionable    40 targets
+      already fixed       15   (37.5%)
+      still failing       22
+      untestable/vacuous   3
+
+**37.5% of the list had expired in six days.** Not a suspicion - a count.
+
+**And re-running cost less than reading one controller.** The harness existed, the
+property was executable, and 40 routes took under a minute. **Fifteen controllers
+did not need to be read at all.**
+
+---
+
+## A FAIL LIST IS A PHOTOGRAPH, NOT A FACT
+
+**Same shape as the map decay below, and the pair is the point.**
+
+| | what decayed | how |
+|---|---|---|
+| **route-to-menu map** | coverage | **BY OMISSION** - the surface grew, the map did not |
+| **C23 FAIL list** | accuracy | **BY RESOLUTION** - the surface was fixed, the list was not |
+
+**An artefact built correctly against a moving surface, wrong later, with nothing
+about it looking different.** Neither rotted. Neither was ever wrong when written.
+**Both became untrue while sitting still.**
+
+### THE EVIDENCE
+
+    sweep executed        2026-08-06
+    checked               2026-08-12, six days later
+    already resolved      3 of 3 spot-checked
+
+    ExcelAutomationAgentController@credentialStatus   O-03: probed, refuses
+    ExcelAutomationAgentController@downloadTemplate   O-03: same
+    AJAXController@getSkillCompetency                 audited, held, load-bearing
+
+**Three of three checked had expired.** That does not suggest staleness, **it
+demonstrates it** - and nothing in the list marks which entries have gone.
+
+### THE RULE
+
+**BEFORE WORKING ANY RECORDED FAIL LIST, RE-RUN THE PROPERTY THAT PRODUCED IT.**
+
+**Reading a stale list is reading a photograph.** The routes it names may be fixed,
+the ones it omits may have broken, and the document cannot tell you which. Where
+the property is executable - and C23's is, it drove 912 routes in-process and
+wrote nothing - **re-running is cheaper than reading a single controller.**
+
+---
+
 ## A MAP BUILT ONCE AGAINST A MOVING SURFACE DECAYS SILENTLY
 
     live API routes                838
