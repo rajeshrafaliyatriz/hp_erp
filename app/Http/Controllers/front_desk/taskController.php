@@ -12,6 +12,7 @@ use App\Services\TaskManagement\TaskStatusTransitionService;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -27,6 +28,24 @@ use Kreait\Firebase\Messaging\CloudMessage;
 
 class taskController extends Controller
 {
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
+    use ResolvesApiIdentity;
+
     public function __construct(
         private readonly TaskAuditService $taskAudit,
         private readonly TaskStatusTransitionService $statusTransitions,
@@ -178,7 +197,7 @@ class taskController extends Controller
                 }
             }
             
-            $sub_institute_id = $request->get("sub_institute_id");
+            $sub_institute_id = $this->apiTenantId($request);
             $syear = $request->get("syear");
             $user_profile_name = $request->get("user_profile_name");
             $user_id = $request->get("user_id");
@@ -309,7 +328,7 @@ class taskController extends Controller
     //     // echo "<pre>";print_r($request->all());exit;
     //     $type = $request->input("type");
     //     if($type=="API"){
-    //         $sub_institute_id = $request->sub_institute_id;
+    //         $sub_institute_id = $this->apiTenantId($request);
     //         $syear = $request->syear;
     //         $term_id = 0;
     //         $user_id = $request->user_id;
@@ -398,7 +417,7 @@ class taskController extends Controller
             $type = $request->type;
 
             // if ($type == "API") {
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
             $syear = $request->syear;
             $term_id = 0;
             $user_id = $request->user_id;
@@ -781,7 +800,7 @@ class taskController extends Controller
         // return $request;
         $type = $request->input("type");
         if ($type == "API") {
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
             $syear = $request->syear;
             $term_id = 0;
             $user_id = $request->user_id;
@@ -1056,7 +1075,7 @@ class taskController extends Controller
         if ($validator->fails()) {
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
         $syear = $request->input('syear');
 
         $taskData = DB::table("task as t")

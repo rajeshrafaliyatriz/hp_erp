@@ -6905,6 +6905,22 @@ did not need to be read at all.**
 
 ## ⭐ A PROPERTY WITH FEWER VERDICTS THAN THE WORLD HAS OUTCOMES
 
+> ## COUNTING THE WORLD'S OUTCOMES IS NOT A THING YOU DO ONCE.
+>
+> **The fix for this lesson came up short of this lesson.**
+>
+> The property had two verdicts and the world had five, so a fifth was added:
+> SELF-MUTATING. **The world had six.** `PayrollController`'s varying stack trace
+> is not a state change - it is non-deterministic output from a broken route, with
+> nothing moving at all - and lumping it with `AuditController@export` would send
+> someone hunting a mutation that is not there.
+>
+> **That does not undermine the rule. It says the rule has no terminal state.**
+> Each new verdict makes the instrument sharper and reveals the next pair it was
+> collapsing. **The question is not "have I counted the outcomes" but "what have I
+> collapsed this time".**
+
+
 **Three instances in one turn.** Named as one set, because they are one root and
 the count is the evidence: **this is the dominant failure mode of every instrument
 in this project.**

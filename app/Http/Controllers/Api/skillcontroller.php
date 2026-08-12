@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -13,11 +14,29 @@ use function App\Helpers\is_mobile;
 
 class skillcontroller extends Controller
 {
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
+    use ResolvesApiIdentity;
+
     public function index(Request $request)
     {
     try {
         $type = $request->type; // "API" or "web"
-        $sub_institute_id = session()->get('sub_institute_id') ?? $request->get('sub_institute_id');
+        $sub_institute_id = session()->get('sub_institute_id') ?? $this->apiTenantId($request);
         $data = userskill::where('sub_institute_id', $sub_institute_id)->latest()->get();
 
         // If it's an AJAX request (like DataTables)
@@ -64,7 +83,7 @@ class skillcontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $validator = Validator::make($request->all(), [
             'title' => 'required|string|max:255',
@@ -162,7 +181,7 @@ public function destroy(Request $request,$id)
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
 
             // $validator = Validator::make($request->all(), [
             //     'sub_institute_id' => 'required|numeric',
