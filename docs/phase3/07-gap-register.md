@@ -7363,6 +7363,73 @@ scripts), not every possible corruption.
 
 ---
 
+# RETRACTION - **`api/newsletter/send` IS AUTHENTICATED. I ESCALATED A ROUTE THAT IS GUARDED.**
+
+    routes/api.php:177
+    Route::post('/newsletter/send', [...])->middleware('api.token');
+
+    'api.token' => App\Http\Middleware\RequireApiToken::class
+    "Requires a valid, unexpired Sanctum token on the route."
+
+**PROVEN BY RUNNING, not by reading the alias:**
+
+    NO TOKEN  POST api/newsletter/send -> 401 {"status":0,"message":"Token not provided"}
+
+**A stranger cannot call it. The blast radius I described does not exist.**
+
+## HOW THE SCAN GOT IT WRONG - **the SAME failure, in the layer I did not widen**
+
+My mail scan asked whether a route's middleware authenticates by testing:
+
+    array_intersect($mw, ['auth', 'auth:sanctum'])
+
+**`api.token` is neither.** So a route carrying the project's own token middleware
+was scored as unauthenticated.
+
+**THIS IS THE PATTERN I HAD JUST RECORDED, COMMITTED, AND THEN WALKED STRAIGHT
+INTO.** Two turns ago I widened the CODE scope from method to file. One turn ago I
+widened it from file to file + traits + parent. **In the same script I left the
+MIDDLEWARE vocabulary at two hard-coded names** - and that is where the miss was.
+
+    the code scope      widened three times
+    the middleware scope   never widened at all
+
+**"Each fix widens by exactly one layer and the next layer is never checked" was
+about scopes. The answer to "what encloses file + traits + parent" turned out not
+to be another code layer at all - it is THE ROUTE'S MIDDLEWARE STACK**, which I
+had already been reading badly for the whole of S-06, and which is the same error
+that produced the 338.
+
+**Fourth vocabulary failure in this area, and the first that made me escalate a
+non-finding.** The previous three made me under-count guards; this one made me
+report an open mail relay that is not open.
+
+## WHAT SURVIVES
+
+**The flag finding stands and is unaffected**: `NewsletterController` still does
+not consult `G2G_NOTIFY_EMAIL`. An AUTHENTICATED caller can still send arbitrary
+content to an arbitrary list while "email is off". That is a real gap in the
+guarantee - it is just not an anonymous one.
+
+    reachable without authentication AND not flag-guarded
+      claimed   2   newsletter/send, send-otp
+      ACTUAL    1   api/send-otp  (middleware: api - genuinely unguarded)
+
+**`send-otp` is the only anonymous sender**, and it is the pre-authentication
+signup path, which cannot hold a token by nature. **It sends a fixed four-digit
+OTP to one address.** Worth rate-limiting; not an outside-world blast radius.
+
+## THE STOP-LINE AMENDMENT
+
+**Triz amended the stop line on the strength of a finding that was wrong.** The
+amendment itself is sound - *anything that lets an unauthenticated caller use our
+infrastructure to act on the outside world* is a class worth naming, and this
+codebase will have others. **But no route currently meets it**, and it was adopted
+believing one did. **That distinction is Triz's to keep or drop; it is recorded so
+the decision is not resting on my error.**
+
+---
+
 # "EMAIL IS OFF" IS A PROPERTY OF ONE CODE PATH, NOT A GUARANTEE
 
 **MEASURED, NOT FIXED.** The flag's scope is Triz's constraint and its correction
