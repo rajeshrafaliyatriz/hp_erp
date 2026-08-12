@@ -7617,6 +7617,62 @@ two orders of magnitude.
 
 ---
 
+# THE 40 DEAD CALLS - **ZERO ARE REACHABLE BY A USER**
+
+Rebuilt with import resolution after the first split was wrong.
+
+    BEHIND A LIVE CALLER    0
+    NOTHING CALLS IT       40
+
+**Not 10 and 30.** The earlier number was entirely name collision.
+
+## THE KNOWN-POSITIVE, NAMED BEFORE THE RUN
+
+** must NOT count as a caller of 's
+getCourses** - it imports , a different object with a different
+signature. **Result: it calls  0 times.** The defect is gone.
+
+## THE FOUR OBJECTS THAT OWN EVERY DEAD PATH
+
+    lmsService      qualified call sites outside services/ :  0
+    talentService                                          :  0
+    taskService                                            : 62
+    hrmsService                                            : 10
+
+** and  ARE used** - which is why matching bare method
+names looked convincing. But per DEAD METHOD, every one is **0**:
+
+    taskService.getTasks / createTask / updateTask / deleteTask      0 each
+    hrmsService.checkIn / checkOut / getAttendanceRecords /
+                         getComplianceItems                          0 each
+
+** is half-real, and the half nobody calls is exactly the half that
+is dead.** The working methods carry comments proving somebody checked them.
+
+## WHAT IT CHANGES
+
+**None of the 40 is visible to a user today.** Dead code pointing at absent routes
+- a maintenance and honesty problem, not a broken screen. **Nothing here belongs
+at the front of a fix queue**, which is the opposite of what the first split
+implied.
+
+**THE 40 BY CAUSE**: never existed 17, typo/rename 16, moved 7.
+
+## SECOND INSTANCE OF THE NAME-COLLISION CLASS
+
+After the enum survey compared one table's  against every other table's.
+**Third time the answer has been RESOLVE, DO NOT MATCH:**
+
+    resolve the model getTable()      not: scrape DB::table literals
+    resolve the columns real table    not: match the field name
+    RESOLVE THE IMPORTED OBJECT       not: match the member name
+
+**And the reason the first number was withheld: A SPLIT THAT INFLATES THE
+USER-REACHABLE HALF IS THE NUMBER MOST LIKELY TO BE ACTED ON.** Publishing 10
+would have sent the fixing effort at ten methods nobody calls.
+
+---
+
 # THE 338 COUNTED SOMETHING OTHER THAN WHAT ITS NAME SAYS
 
 **~~338 write routes are unauthenticated~~** - struck through, with its reason.
