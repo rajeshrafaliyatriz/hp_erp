@@ -49,7 +49,22 @@ foreach (app('router')->getRoutes() as $r) {
     $inserts = preg_match_all($MUT, $body);
     $takesTenant = (bool) preg_match('/sub_institute_id/', $body);
 
-    if (count($tables) !== 1 || $inserts !== 1 || !$takesTenant) continue;
+    // RELAXED 2026-08-12, AND RECORDED BECAUSE A RELAXED SAFETY CONDITION THAT
+    // IS NOT WRITTEN DOWN BECOMES AN UNRECORDED ASSUMPTION FOR THE NEXT READER.
+    //
+    // WAS: count($tables) === 1 && $inserts === 1.
+    // The six conditions together returned ZERO subjects, and the reason was
+    // over-specification, not an empty population: 6 containable routes exist and
+    // this clause eliminated all of them.
+    //
+    // MULTIPLICITY AFFECTS CLEANUP EFFORT, NOT CONTAINMENT. A route writing two
+    // rows is still fully removable by sub_institute_id = 999999, so the clause
+    // was doing work it was not there to do.
+    //
+    // 'NO SIDE EFFECTS' IS NOT RELAXED AND WILL NOT BE. A route that sends mail or
+    // calls out cannot be cleaned up at all, and email is OFF for reasons that
+    // outrank this probe.
+    if (!$takesTenant) continue;
 
     // 7. DOES THE CONTROLLER GUARD ITSELF?
     //
@@ -83,7 +98,9 @@ foreach (app('router')->getRoutes() as $r) {
     $rows[] = [
         'uri'    => $r->uri(),
         'action' => class_basename($c) . '@' . $m,
-        'table'  => $tables[0],
+        // Now that multiplicity is allowed, a route may name several tables - or
+        // none, if it writes through a model rather than DB::table.
+        'table'  => $tables ? implode('+', $tables) : '(via model)',
         'lines'  => $rm->getEndLine() - $rm->getStartLine(),
         'guarded' => $guarded,
         'contained' => $requestScoped,
