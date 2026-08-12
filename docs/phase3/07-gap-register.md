@@ -346,6 +346,65 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## L-04 SIZED - **nineteenth row, and the SAME defect as X-08(b) one row later**
+
+Rated **XS after X-03**. It is not a wiring job; **it would orphan every row it
+touches.**
+
+### THREE VOCABULARIES FOR ONE FIELD
+
+    s_level_responsibility        levels 1-7, SFIA (112 rows = 7 levels x 16 attributes)
+                                  Follow, Assist, Apply, Enable, Ensure/advise,
+                                  Initiate/influence, Set strategy
+    s_user_jobrole.job_level      ENTRY, MID, SENIOR, ADVANCED, EXECUTIVE
+    library-config.ts             placeholder: 'e.g. L3'
+
+**Three, in one field, none agreeing.**
+
+### WHAT A PICKER WOULD DO
+
+    rows with a job_level         70
+    selectable from a 1-7 picker   0   (0.0%)
+
+    SENIOR 21 - ADVANCED 18 - MID 16 - ENTRY 11 - EXECUTIVE 4
+    every one NOT IN CATALOGUE
+
+**Wiring the picker as the row describes would make all 70 existing values
+unselectable.** A customer editing any job role would find the field blank and
+their value gone from the list - **the control would not just be useless, it would
+orphan real data.**
+
+### THE SAME DEFECT, ONE ROW APART
+
+**X-08(b):** a picker whose catalogue does not contain any of the 26 labels.
+**L-04:** a picker whose catalogue does not contain any of the 70 values.
+
+Both are **G-SEED-01's correction**: *the distance is vocabulary, not dimension.*
+Both were rated small because the mechanism is small. **Neither row's size was the
+problem; both rows' POPULATION was.**
+
+**And L-04 is worse**, because X-08(b)'s holdings had no prior state to lose,
+whereas here 70 rows already hold values a picker would refuse.
+
+### WHAT THE ROW ACTUALLY NEEDS - a decision, not a build
+
+Three options, none takeable without the owner:
+
+1. **Map the vocabularies.** ENTRY->1, MID->3, SENIOR->5, ADVANCED->6,
+   EXECUTIVE->7 or similar. **That mapping is a claim about the customer's grading
+   scheme and nobody here can make it** - the numbers are SFIA's, the words are
+   theirs.
+2. **Source the picker from the DATA, not the catalogue** - offer the five values
+   that exist, exactly as `sourceValues()` already does for departments. Loses the
+   SFIA link the row was written for.
+3. **Leave it free text**, as X-03 left `certification_qualifications`, with the
+   same reasoning and a trigger.
+
+**Filed, not built.** Option 2 is the only one that changes nothing a customer can
+see; option 1 is the only one that delivers what the row intended.
+
+---
+
 ## X-08(b) DECISION - **PROMOTE, NOT MATCH** (Triz, 2026-08-12)
 
 The population settles it: **matching has 0, promoting has 26.** And the deeper
