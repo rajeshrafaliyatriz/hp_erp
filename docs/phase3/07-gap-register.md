@@ -346,6 +346,70 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## THE THREE MEASURE-FIRST ROWS - **all three survive. The run of closures ends.**
+
+Four consecutive rows had just closed on an empty population, so these three were
+measured before building. **None of them closes.**
+
+| row | population | verdict |
+|---|---|---|
+| **L-18** Importance -> `weight` | `s_users_skills.importance` **exists**; 27 of 226 kasba items already carry a non-default weight (3.00 x15, 4.00 x10, 2.00 x1, 5.00 x1) | **BUILD, open** - both sides real |
+| **L-20** three `*_tags` -> shared categories | `custom_tags` **943 rows / 706 distinct**; `category` 3,976/16; `sub_category` 3,971/470; `micro_category` 3,969/352 | **BUILD, open** - and 706 distinct free-text tags collapsing into 16 categories is the largest real consolidation left |
+| **TL-03** requisitions read `jobrole_competency_map` | `talent_job_postings` **126 rows**; the map holds 23 | **BUILD, open** - both sides real |
+
+**This is the useful negative result.** Measuring first is not a way of closing
+rows - it is a way of knowing which ones are worth building. **Four closed, three
+did not, and the three that survived are now known to be worth the effort rather
+than assumed to be.**
+
+### ⚠ A NEAR-MISS ON TL-03, AND IT IS THE SIXTH
+
+My first query asked for tables matching `%requisition%` and returned **NONE**. I
+was one sentence from recording TL-03 as a fifth population-zero row.
+
+**The requisitions are called `talent_job_postings`.** 126 rows.
+
+**Sixth instance of the search scope being the population** - after `services/`,
+the wrong `can_view` column, the `jobroles` meta key, the class-name pattern on
+`Reports/`, and the `s_users_skills.skill` column that does not exist. **The guard
+worked this time only because a zero from a search now prompts the question rather
+than the conclusion.**
+
+---
+
+## L-05's RULE IS NOW AT THE COLUMN
+
+    s_users_skills.status  COMMENT:
+      "L-05: filter with status != 'Inactive', NEVER status = 'Active'.
+       NULL means nobody marked this row, not that it is inactive - 1,197 of
+       5,171 are NULL and 0 are Inactive. status = 'Active' would silently drop
+       23% of the library."
+
+**A rule in a document is remembered; a rule at the column is met.** 103 columns
+in this schema already carry comments, so this is how the schema says things.
+
+The definition was **restated verbatim from `information_schema`** rather than
+from memory - a `MODIFY` that retypes a column from a developer's recollection is
+how a comment change silently becomes a schema change. Verified after: type,
+nullability, 5,171 rows and 1,197 NULLs all unchanged.
+
+### ⚠ AND THE DRY RUN CAUGHT A DEFECT I DID NOT READ
+
+The dry run printed:
+
+    default='NULL'
+
+**A quoted string, not SQL NULL** - `information_schema` returns the *string*
+`'NULL'` on this MySQL version. My statement wrapped it in quotes again, producing
+`DEFAULT 'NULL'`, an invalid enum value. **MySQL refused it and nothing changed.**
+
+**The dry run printed the defect and I ran the apply anyway.** A dry run whose
+output nobody reads is not a safeguard - it is a delay. **The schema refused a
+wrong assumption for the second time this phase**, after the `right_*` enum
+truncation.
+
+---
+
 ## THE THREE QUESTION-FIRST ROWS, MEASURED - **two close, and one closes with a finding**
 
 ### T-02 Surface `delay_category` - **CLOSES. Nothing to surface.**
