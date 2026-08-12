@@ -346,6 +346,99 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## G-MIG-01 ANSWERED BY A ROUTE-LEVEL AUDIT - **the anonymous caller is real, and there is exactly one**
+
+The evidence a log count was explicitly rejected for. **Who actually calls
+`table_data` - by route, by caller shape, and whether any path reaches it without
+an identity.**
+
+### THE ROUTE
+
+    GET table_data  ->  AJAXController@GetTableData   middleware: NONE
+
+**No `auth`, no `session`, no `profile`.** Unauthenticated at the route layer by
+construction, which is why the helper needs a request fallback at all.
+
+### THE CALLERS - **two, both in the frontend, and they differ**
+
+    hp_erp resources/ and public/      0 files   <- no Blade or server-side caller
+    g2gv0                              2 files
+
+| caller | identity it sends | anonymous? |
+|---|---|---|
+| `components/domain/talent/recruitment/job-posting-form.tsx` (2 fetches) | `Authorization: Bearer ${session.token}` | **no** |
+| `app/api/jobrole-tasks/route.ts` | `api_key` + `filters[sub_institute_id]`, **no bearer token** | **YES** |
+
+### THE ANONYMOUS ONE IS ANONYMOUS IN THE BACKEND'S TERMS
+
+`tableDataAuthenticated()` accepts a session `user_id` or a resolvable personal
+access token. The proxy route sends neither: it runs server-side, holds the
+session in Next, and forwards **the tenant as a filter** rather than the identity
+that proves it.
+
+**So `tableDataRequestedTenant` is load-bearing today.** Deleting it breaks
+`app/api/jobrole-tasks/route.ts`. The hold was correct, and it is now correct for
+a measured reason rather than a refused one.
+
+### ⚠ AND THE `api_key` IT SENDS IS NEVER CHECKED
+
+    api_key referenced in app/ : 4 files
+    any of them on the table_data path : NONE
+
+`SessionController`, `contentController`, `DeepSeekService`, `GammaService` -
+none is reachable from `GetTableData`. **The proxy attaches a credential the
+backend does not read.** It looks like authentication in the caller and is inert
+at the receiver: a control that appears present and is not, which is why the
+route reads as protected to anyone reading the frontend.
+
+### WHAT G-MIG-01 BECOMES
+
+**A migration item with a named population of ONE.** Make
+`app/api/jobrole-tasks/route.ts` forward the session's bearer token the way
+`job-posting-form.tsx` already does. When it does:
+
+- `tableDataAuthenticated()` returns true for every caller;
+- `tableDataRequestedTenant` deletes on the same footing as the three G-SEC-28
+  fallbacks - a compensator for a condition that no longer occurs;
+- the suite's private-helper check reaches a true green **by the callers changing,
+  never by the check changing.**
+
+**The suite stays red until then, and that is the correct state.**
+
+---
+
+## G-SEC-11's TWO DIFFERING ROUTES - **MEASURED AS ONE. The candidate does not hold.**
+
+With all five ExcelAutomationAgent routes decided, the differing responses should
+have been explicable as differing refusals. Measured across tenants 3 and 6:
+
+    credentialStatus   DIFFER   (200 vs 200, different bodies)
+    downloadTemplate   same
+    testConnection     same
+    saveCredentials    same
+    upload             same
+
+**One, not two.** The candidate explanation is not confirmed and is not promoted.
+
+**AND THE ONE THAT DIFFERS IS CORRECT.** `credentialStatus` returns tenant 3's
+credential row to tenant 3 and tenant 6's to tenant 6, because each tenant has its
+own. **THAT IS WHAT CORRECT TENANT SCOPING LOOKS LIKE.** A sweep that flags
+"responses differ by tenant" flags correct isolation - **a LEAK would show
+IDENTICAL responses**, both tenants seeing the same rows.
+
+**The signal was inverted.** Whatever G-SEC-11's sweep measured, "differing" was
+being read as suspicious when it is the healthy outcome.
+
+**The count is not reconciled and is not being explained away.** Two candidates
+for the missing second route: the sweep passed inputs this measurement did not, or
+O-03's own fix changed `saveCredentials` and `testConnection` from differing
+error payloads to uniform ones. **Neither is established, so neither is recorded
+as the reason.** The routes are decided on their own evidence - all five refuse a
+foreign tenant - and G-SEC-11's count stays an unexplained discrepancy rather than
+a loose end pretending to be closed.
+
+---
+
 ## O-03 IS 5 OF 5 - **the held route is decided**
 
 `POST /api/excel-agent/upload` was HELD, not cleared, because the first probe hit
