@@ -6569,6 +6569,82 @@ ones.**
 
 ---
 
+## HrmsController@departmentAttendanceReport READ FIRST - **correct code, and a clock**
+
+Read before touching any of the 38 sites in that file, because **an unjudgeable
+route inside a controller you are about to edit 38 times is the worst place to
+discover something the instrument cannot see.**
+
+    the only request read in the method : $request->type
+    the tenant                          : session()->get('sub_institute_id')
+    why it varies                       : $res['end_date'] = now();
+
+**It reads NO caller-controlled tenant at all.** The session is server-side. And
+its response varies because it embeds the current time.
+
+**NON-DETERMINISTIC, not self-mutating, and not a leak.** Nothing changes in the
+data between calls; a clock does.
+
+**This is why the fifth verdict had to become two.** Filed as SELF-MUTATING it
+would have sent someone hunting a write that does not exist, in a 2,000-line
+controller, in the file about to be edited 38 times. **The sub-split earned itself
+on its first real use** - as the STABLE pre-clearing did for the eight.
+
+**It is removed from G-SEC-29 entirely.** Not fixed, not deferred - **it was never
+a defect.**
+
+    G-SEC-29: 18 confirmed -> 17
+      11 fixed, 6 open (5 trait-present C27 cases, 1 Hrms route)
+
+---
+
+## A FIX NAMED FOR WHAT IT REPLACES IS NOT A FIX MEASURED FOR WHAT IT DOES
+
+**The session decision is the one that would have caused real damage.**
+
+Eight controllers read `session() ?? $request`. The obvious substitution -
+"replace the tenant resolution with the trait" - would have replaced the WHOLE
+expression. **`resolveApiIdentity()` is TOKEN-ONLY. It does not consult the
+session.** Every Blade caller has a session and no token, so the obvious fix would
+have returned NULL for all of them.
+
+**What caught it was checking what `apiTenantId()` RESOLVES FROM, rather than what
+it is called.** The name says "tenant id". The body says "token, and nothing else".
+
+**Same root as the resolver-versus-trait misclassification two turns earlier**,
+where "lacks the trait" was read as "has a bespoke resolver". **A component's name
+describes its role; only its body describes its behaviour, and a substitution is a
+behaviour claim.**
+
+Removing only the request half leaves G-SEC-27's precedence exactly as ruled:
+**session, then token, and the request never.**
+
+---
+
+## TWO RULES EXISTED AND WERE NOT REACHED FOR
+
+    R30                     write scripts to a file, never a heredoc
+    R18f(v) stronger form   git status before editing a foreign file
+
+**Both were written after they cost a turn. Both cost another turn afterwards.**
+
+- **R30**, this turn: the first fix script went through a heredoc, which mangled
+  the namespace backslashes into a bad regex escape. It crashed before writing
+  anything.
+- **R18f(v)**, earlier: `bootstrap/app.php` was edited and committed without the
+  check, taking 36 lines of somebody else's work with it.
+
+**Neither is a knowledge gap. Both are habits** - the rule was known, written down,
+and not consulted at the moment it applied. **A rule that must be remembered at the
+point of use has the same failure mode as a requirement carried in a document
+rather than a payload:** it works exactly as long as somebody remembers it.
+
+**What has actually worked is making the rule impossible to skip** - `git status`
+printed as a step rather than recalled, the known-negative inside the check rather
+than beside it, the split in the harness rather than in the reader.
+
+---
+
 ## THE FIFTH VERDICT APPLIED TO THE WHOLE CONFIRMED SET - **and the three fixes were real**
 
 **22 routes, same tenant, twice each.** The question the cross-tenant comparison
