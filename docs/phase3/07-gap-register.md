@@ -6569,6 +6569,77 @@ ones.**
 
 ---
 
+## AuditController IS NOT A LEAK - **it mutates what it reads. G-SEC-29 is 19, not 20.**
+
+Taken as a READ, not an edit, because it leaked with **zero tenant reads found** -
+and an edit there would have been a guess.
+
+`export()` resolves the tenant correctly: `competencyContext($request)`, then
+`$sid = $context['sub_institute_id']`. **Identity, not the request.** So the
+property's verdict had to come from somewhere else.
+
+### THE DECISIVE TEST - **call it twice with the SAME tenant**
+
+    tenant 7, call 1 : 33 rows, 17,072 bytes
+    tenant 7, call 2 : 34 rows, 17,573 bytes    <- SAME tenant, one more row
+    tenant 3 asked   : 35 rows, 18,074 bytes    <- one more again
+
+    growth per call : exactly 1 row
+
+**`export()` calls `logCompetencyActivity(...)`, which writes an audit entry into
+the table it just exported.** Every call adds its own record of itself.
+
+**So two calls can NEVER return the same response**, whatever tenant is asked for.
+The differential property scores it LEAK forever, and it is correct code.
+
+### THE FOURTH FAILURE MODE OF THE PROPERTY
+
+Now four, all found in two turns:
+
+    leaked / refused        collapsed - a correct 403 read as FAIL
+    matched / examined nothing   collapsed - a zero-match grep read as clean
+    same-and-working / same-and-broken  collapsed - 500/500 reads as PASS
+    **stable / SELF-MUTATING**   collapsed - an endpoint that changes what it
+                                 reads can never repeat itself
+
+**A differential property assumes the world holds still between the two calls.**
+Where the endpoint is the thing that moves it, the property measures its own
+footprint.
+
+**This one would have been "fixed".** Someone would have edited a controller that
+resolves tenant from identity correctly, to satisfy a check that cannot be
+satisfied.
+
+### G-SEC-29 IS 19 CONFIRMED LEAKS
+
+    20 scored LEAK
+    -1 AuditController@export - self-mutating read, correct code
+    ---
+    19 confirmed, of which 3 are now fixed
+
+**The harness needs a fifth verdict: SELF-MUTATING** - detectable by calling twice
+with the SAME tenant before comparing across tenants. **That check costs one extra
+request and would have saved this investigation.**
+
+---
+
+## AND THE WRAPPER CONDITION WAS WITHDRAWN - **recorded as the owner's**
+
+The instruction was one private resolver per controller. **Withdrawn on the
+counting**: thirteen identical private methods is how four identity resolvers and
+fifteen copies of `g2gActorId` happened, and both cost turns to find and
+consolidate. `$this->apiTenantId($request)` **is** the single point.
+
+**The owner's words:** *"I generalised from `skillLibraryController`'s shape
+without checking the shape held - the same error as quoting its 'eleven call
+sites, zero edits' number."*
+
+**Same root as four of my own errors this phase**: a property of one instance taken
+as a property of the class. **It is not a reviewer's error or an implementer's - it
+is what happens to anyone reasoning from a good example without re-measuring.**
+
+---
+
 ## ⚠ G-SEC-29's FIX PATTERN DOES NOT TRANSFER - **78 sites, not 13 replacements**
 
 **My own split was wrong and the correction is the same error a fourth time.** I
