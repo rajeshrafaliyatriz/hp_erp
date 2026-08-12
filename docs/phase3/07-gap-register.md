@@ -346,6 +346,77 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## SETTLED PATTERN - **A CLAIM DERIVED FROM CODE IS A CLAIM ABOUT WHAT THE CODE SAYS, NOT WHAT IT DOES**
+
+Three instances this phase, all mine, all corrected by RUNNING the thing. Recorded
+as a pattern rather than a fourth incident.
+
+| claim | derived from | measurement | what the reading missed |
+|---|---|---|---|
+| `hr_manager` "differs by one menu" | `can_view` counts | write counts: 14 menus apart | **the wrong column** - a role's power is what it can WRITE |
+| `department_head` "nothing through the API" | the alias map | probe: 403 x4, **200 on `competency/gap`** | **a route that is not `profile:`-guarded** |
+| `jobrole-tasks` "an anonymous caller" | the fetch it builds | `curl` -> **401, and 0 callers** | **whether the code RUNS at all** |
+
+**Every one was correct about the source and wrong about the system.** Reading
+tells you what a line says; only running tells you whether that line is reached,
+by whom, with what result.
+
+**The tell is a claim about BEHAVIOUR justified by a citation of SOURCE.** "This
+sends no token", "this role is in no alias", "these differ by one menu" - each is
+true of the text and none is a statement about what happens.
+
+**And the correction is always cheap:** a curl, a probe, a reflection call. In all
+three cases the measurement took less time than the reading that produced the
+error.
+
+### A FOURTH SHAPE, SAME TURN - **the search scope IS the population**
+
+Removing the inert `api_key`, I grepped `app/ components/ lib/ hooks/` and wrote
+*"its only consumer"*. There were **two** - `services/` was not in my search.
+`tsc` found it.
+
+**A claim about a population made from part of it**, which is the two-zeros error
+in a grep. The finding was right; **the scope was the error.**
+
+---
+
+## ⛔ G-BLOCK-01 BLOCKS A THIRD THING - **the path to the suite's true green**
+
+`table_data` is declared in **`routes/web.php`** - one of the 51, carrying 9
+insertions and 4 deletions of in-progress work.
+
+    Route::get('table_data',[AJAXController::class, 'GetTableData'])->name('table_data');
+
+**Putting middleware on it is the agreed path to a true green** - it turns an
+unmeasurable population into a bounded one, after which
+`tableDataRequestedTenant` deletes on a **census** rather than on a sample of two
+repositories. **It cannot be done.** Editing that file would either commit
+somebody else's work or leave mine uncommitted - the trap already fallen into once
+with `bootstrap/app.php`.
+
+The route's own line is untouched by the foreign edit, which changes nothing: the
+file is the unit git commits.
+
+**Three capabilities now blocked on the same 51:** the matrix guard cannot be
+registered, the resolver consolidation cannot be landed, and the suite cannot
+reach a true green.
+
+### AN ERROR IN THE CONDITION I WAS GIVEN, RECORDED AS SUCH
+
+The instruction was: *"if no anonymous caller exists, `tableDataRequestedTenant`
+deletes on the same footing as the other three."*
+
+**The footing is not the same, and accepting the framing would have been the
+wrong-population error inside the item whose evidence rule exists to prevent it.**
+The other three were deleted on a CENSUS - 0 of 401 accounts, a complete
+population with no outside. `table_data` has **no middleware**, so two
+repositories are not the population; they are the visible part of it.
+
+Recorded because a condition can be wrong the same way a measurement can, and the
+owner asked for their error to be written down rather than only the correction.
+
+---
+
 ## ⚠ RETRACTION - **"THE ANONYMOUS CALLER IS REAL" WAS WRONG. IT IS DEAD CODE.**
 
 Reported 2026-08-12 and corrected the same day, on the way to migrating it.
