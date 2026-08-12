@@ -406,6 +406,83 @@ engagement never reached - the work it did reach is concentrated in batch 1.
 
 ---
 
+# §1d. ROW CLASSIFICATION - **BATCH 3 of 3 (rows 35-51)**
+
+| row | verified status | class | evidence |
+|---|---|---|---|
+| **O-02** Directory ratings via one service | open | **BUILD** | ratings resolved per-caller; `ProficiencyService::rollUp()` exists and the directory does not use it |
+| **O-03** `ExcelAutomationAgentController@credentialStatus` | ✅ **DONE** | BUILD | all five routes probed; foreign tenant refused on every one |
+| **O-04** Three report-route leaks | **BLOCKED** | **BUILD** | **7 `Reports/` controllers are among the 51** - cannot be read or fixed |
+| **O-05** Read `HrmsController` (31 routes) | open | **BUILD** | 32 references in `routes/hrms.php`; never read |
+| **LM-01** Retire `contentLibraryControllerOld` | ✅ **DONE** | BUILD | file is gone |
+| **LM-02** Course Builder prompt enrichment | open | **BUILD** | prompt is fixed text; library fields unread |
+| **LM-03** Surface the LMS funnel | open | **BUILD** | no funnel endpoint |
+| **T-01** One write path for `task.status` | ✅ **DONE** | BUILD | `TaskStatusWriter` exists and the suite asserts exactly one guarded write path |
+| **T-02** Surface `delay_category` | **question first** | **BUILD** | **0 of 2,271 tasks carry one.** Surfacing it would surface nothing |
+| **TL-02** Performance goal → `competency_id` | ✅ **DONE** | BUILD | column present on `s_performance_goals` |
+| **TL-03** Requisitions read `jobrole_competency_map` | open | **BUILD** | map holds 23 rows; requisitions do not read it |
+| **TL-04** Resolve the two `OnboardingTaskController`s | open | **BUILD** | **doubled: two controllers AND two models** (`Api/Onboarding` + `Api/Talent`, `Models/Onboarding` + `Models/talent`) |
+| **R-01** Consolidated reporting home | open | **BUILD** | no reporting home route |
+| **R-02** Competency gap report | open | **BUILD** | gap endpoint exists per employee; no report view |
+| **R-03** Development plan report | open | **BUILD** | same |
+| **R-04** Certification expiry report | open | **BUILD** | `certification.expiring` event ships; no report reads it |
+| **R-05** 9-box second axis | ✅ **DONE** | BUILD | `NineBoxController` carries the performance axis; 234 review rows feed it |
+
+### T-02 IS THE FOURTH POPULATION-ZERO ROW
+
+    task.delay_category non-empty : 0 of 2,271
+
+**Surfacing a column nobody fills shows an empty column.** Fourth in the set:
+X-08(b) 0 of 26, L-04 0 of 70, L-05 one distinct value, T-02 0 of 2,271. **Marked
+question-first, not open** - the mechanism is trivial and the population is the
+decision.
+
+### BATCH 3 TOTALS
+
+    DONE, wrongly marked "Not started"     6   (O-03, LM-01, T-01, TL-02, R-05, and O-04 is blocked not open)
+    BUILD, genuinely open                 10
+    BUILD, BLOCKED                         1   (O-04)
+    question-first                         1   (T-02)
+
+---
+
+# §1e. THE FINAL SPLIT - **all 51 rows, one place**
+
+| class | count | what it means |
+|---|---|---|
+| ✅ **DONE** (wrongly marked "Not started") | **14** | finished, mostly by this engagement, row never touched |
+| ⚖ **DECIDED** (a ruling, not a build) | **2** | L-04, L-09 - free text with triggers |
+| ❓ **QUESTION-FIRST** (population may be zero) | **3** | L-05, T-02, and X-08(b)'s direction |
+| 🔨 **BUILD, open** | **26** | genuinely mine to do |
+| ⛔ **BUILD, BLOCKED on the 51** | **2** | S-08, O-04 |
+| ✍ **AUTHORING** | **1** | X-02 - 653 permission declarations |
+| 📦 **BUILD-WITH-AUTHORING-CONTENT** | **3** | X-08, L-10, L-14 - ship empty, stay empty |
+
+    total 51
+
+### WHAT THE NUMBER ACTUALLY SAYS
+
+**"51 remaining" was never true.**
+
+- **14 are done** - 27% of the plan's stated remainder is finished work whose row
+  nobody closed.
+- **2 are decided** and will never be built, by ruling.
+- **3 should not be built until a population question is answered** - and on this
+  phase's record, at least two of those three will turn out to have none.
+- **2 cannot be built at all** while the 51 files are uncommitted.
+- **1 is 653 permission decisions**, which is authoring, not engineering.
+- **3 can be finished as code and never as a deliverable** - they ship working and
+  empty, and only a customer can complete them.
+
+**26 of 51 are genuinely open build work.** Half of what the plan called remaining
+was either already done, not a build, or not mine.
+
+**And 6 of the 51 are not this engagement's to finish at all** (1 authoring + 3
+build-with-authoring-content + 2 blocked), which is the number that answers the
+question asked at the start: **how much of "remaining" is mine.**
+
+---
+
 # §2. THE GOLDEN THREADS, TRACED
 
 *This is the most important section. Each thread reads as "here is how it becomes
