@@ -346,6 +346,88 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## X-08(b) SIZED - **the resolvable population is ZERO, and it points the loop the other way**
+
+Eighteenth row. Not wrong about size - **wrong about direction.**
+
+### HELD ROWS WERE NEVER LOST
+
+The importer commits an unmatched item as `HELD_AS_LABEL`: `item_label` set,
+`item_id` null. So "held-row resolution" is not recovery. **It is upgrading a
+HOLDING to a TARGET**, and the holdings are already in the database.
+
+    competency_kasba_item    226 rows
+      TARGET  (item_id)      200
+      HOLDING (item_label)    26
+
+### BUT ONLY ONE DIMENSION HAS SOMEWHERE TO RESOLVE TO
+
+    skill        8   resolvable against s_users_skills
+    knowledge    7   NO CANONICAL TABLE
+    behaviour    4   NO CANONICAL TABLE
+    ability      4   NO CANONICAL TABLE
+    attitude     3   NO CANONICAL TABLE
+
+**18 of 26 cannot be resolved by anything**, because four of the five KASBA
+dimensions have no catalogue table at all. That is not a gap in this item - it is
+the state `CompetencyDefinitionController` already documents.
+
+### AND THE EIGHT THAT COULD BE RESOLVED, CANNOT BE
+
+    skill holdings with an exact catalogue match: 0 of 8
+
+    Patient triage - Medication administration - Patient communication
+    Clinical documentation - Exercise prescription - Manual therapy
+    Care planning - Structured handover (SBAR)
+
+`s_users_skills` holds 5,171 rows and none of them is any of these. **The
+catalogue is finance and compliance flavoured; the holdings are clinical.** The
+tenant-3 seed authored healthcare competencies against a library that has never
+contained healthcare skills.
+
+**RESOLVABLE POPULATION TODAY: ZERO.**
+
+### SO THE LOOP RUNS THE OTHER WAY
+
+An enrichment screen offering *"pick the catalogue item this label means"* would
+present, for all 26 holdings, **an empty picker** - the same defect X-03 already
+ruled on: *a picker over an empty table looks like a closed list and offers
+nothing.*
+
+**The useful direction is the opposite one: PROMOTE THE LABEL INTO THE
+CATALOGUE.** The customer's words are already the content (F-07b); what is missing
+is not a match but an entry. That is *"add 'Patient triage' to your skill
+library"*, not *"which existing skill is this?"*
+
+**This is a design correction, not a build estimate**, and building the matching
+direction first would have produced a screen that is correct, complete, and
+useless for every row it would ever be shown.
+
+**Filed, not built.** The direction is a product decision.
+
+---
+
+## A REQUIREMENT CARRIED IN THE PAYLOAD IS ENFORCED; ONE CARRIED IN A DOCUMENT IS REMEMBERED
+
+Third instance, so it is named once here rather than a third time in a commit.
+
+| where | field | what it stops |
+|---|---|---|
+| readiness gates | `losing` | a screen rendering the acknowledge button without saying what is lost |
+| gap view | coverage travels with the level | a level shown as if fully measured |
+| task-competency map | the empty-read `note` | 0 rows rendering as "no data" instead of "none authored yet" |
+
+**In each case the API cannot return the value without also returning the thing
+that makes it honest.** A screen can ignore a design document; it cannot ignore a
+field that is not there, and it cannot render the control without the caveat if
+the caveat arrives in the same object.
+
+**The test:** if the requirement is "the UI must also show X", ask whether X can
+travel with the data. If it can, the requirement is enforced. If it cannot, it is
+a note somebody has to remember.
+
+---
+
 ## L-14 SIZED - **the seventeenth row, wrong in a fifth way: rated L, it is an analogue of something already built**
 
 Opened from what was already evidenced, so the measurement adds rather than
