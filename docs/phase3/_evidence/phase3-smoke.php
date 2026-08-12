@@ -1,4 +1,22 @@
 <?php
+
+// stripComments() NOW LIVES IN _lib.php AND IS IMPORTED, NOT REDEFINED.
+//
+// It was defined here with '#^\s*//.*$#m', which only strips a comment that
+// STARTS a line - so `$x = 1;  // Mail::send(` survived it. That is exactly what
+// made the mail-gate check skip, and a weaker sibling of what made Q3 report 47
+// echo-the-request endpoints when the real number is 2.
+//
+// Fifth instance this session of a current rule not reached for at the point of
+// use. The remedy that works is making it unskippable, so it is an import.
+require_once __DIR__ . '/_lib.php';
+
+if ($__stripFault = stripCommentsSelfTest()) {
+    fwrite(STDERR, "FATAL: the shared comment stripper failed its own self-test: $__stripFault
+");
+    exit(1);
+}
+
 /**
  * PHASE 3 SMOKE SUITE — one command, PASS/FAIL per check, one overall verdict.
  *
@@ -1073,11 +1091,7 @@ function fe(string $rel): ?string
 }
 
 /** Comments are prose, not behaviour. Strip before matching. */
-function stripComments(string $s): string
-{
-    $s = preg_replace('#/\*.*?\*/#s', '', $s);
-    return preg_replace('#^\s*//.*$#m', '', $s);
-}
+
 
 check('component', 'gap view: unmeasured renders words, never a number or bar', function () {
     $src = fe('components/domain/competency/cm-my-capability.tsx');

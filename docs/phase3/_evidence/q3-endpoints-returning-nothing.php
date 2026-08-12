@@ -23,6 +23,12 @@ require __DIR__ . '/../../../vendor/autoload.php';
 $app = require __DIR__ . '/../../../bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+require_once __DIR__ . '/_lib.php';
+if ($fault = stripCommentsSelfTest()) {
+    fwrite(STDERR, "REFUSING: the shared comment stripper is unsound - $fault\n");
+    exit(1);
+}
+
 /** Shapes that return the caller's own input, or nothing at all. */
 $SHAPES = [
     'returns $request'        => '/return\s+\$request\s*;/',
@@ -44,14 +50,14 @@ foreach (app('router')->getRoutes() as $r) {
     $body = implode('', array_slice(file($f), $rm->getStartLine() - 1,
         $rm->getEndLine() - $rm->getStartLine() + 1));
 
-    // STRIP COMMENTS FIRST. The first run matched `// return $request;exit;` in
-    // skillLibraryController@store - a line somebody had already DISABLED - and
-    // counted it as a live defect. The suite has had a comment stripper for
-    // weeks; this pattern was written without reaching for it. Fourth instance
-    // of a rule current and not reached for at the point of use.
-    $body = preg_replace('#/\*.*?\*/#s', '', $body);
-    $body = preg_replace('#(?<!:)//[^
-]*#', '', $body);
+    // STRIP COMMENTS VIA THE SHARED HELPER. This script is the reason _lib.php
+    // exists: its first run matched a line somebody had already DISABLED and
+    // reported 47 echo-the-request endpoints when the real number is 2.
+    //
+    // The inline copy that replaced it was ALSO mangled - a heredoc turned its
+    // \n into a literal newline mid-pattern. Importing removes both failure
+    // modes at once: nothing to forget, and nothing to re-type.
+    $body = stripComments($body);
 
     foreach ($SHAPES as $name => $re) {
         if (preg_match($re, $body)) {
