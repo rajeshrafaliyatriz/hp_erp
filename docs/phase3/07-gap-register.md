@@ -6569,6 +6569,126 @@ ones.**
 
 ---
 
+# THE TABLES THE CAPABILITY CHAIN RESOLVES AGAINST ARE FED BY PROVISIONING AND PARSERS, AND THE PRODUCT HAS NO USER-FACING WAY TO FILL ANY OF THEM
+
+**ONE FINDING, NOT FOUR INCIDENTS.** It outranks every individual wiring item and
+it is the best available explanation of what the frontend has been showing.
+
+    s_library_map                 3,323 rows   read by the role detail panel
+                                               written ONLY by the Gemini JD parser
+    course_competency_map            56 rows   TWO readers, ZERO writers anywhere
+    jobrole_task_competency_map       0 rows   no writer, not consulted by the task screen
+    competency                      209 rows   two writers, NEITHER reachable from a screen
+    jobrole_competency_map           23 rows   one writer, reachable from ONE quick-create menu
+                                               and all 23 rows are in the demo tenant
+
+**Every table the capability chain resolves against is in the same state.** The
+readers are built, the screens render, the joins work - and **the only things
+that have ever written to them are provisioning scripts, seed data and one AI
+parser.**
+
+## WHY THE SCREENS LOOK FINISHED
+
+Because they are. **Nothing here is a broken screen or a missing join.** Gap
+analysis reads its table correctly and finds nothing, because nothing put
+anything there. **A correct reader over an unfillable table produces a clean,
+confident, empty answer** - which is indistinguishable from "this organisation
+has no gaps" until you ask who could ever have written the rows.
+
+**That is what makes it one finding.** Four separate "wire this up" tickets would
+each look small and each be true, and the shape - *the model's own tables have no
+user-facing writer* - would never appear in any of them.
+
+## AND IT EXPLAINS THE KASBA MEASURE ONE LEVEL UP
+
+The KASBA measure ended at *every creation form writes its own table and only its
+own table*. **This is the same fact from the other side**: the link tables have no
+form at all. Not a form that writes one row instead of two - **no form.**
+
+---
+
+# THE COMPOSER MOUNTED - **and MOUNTED IS NOT REACHABLE**
+
+`CmCompetencyComposer` was built, correct, called the right guarded endpoint, and
+was absent from `hooks/content-map-m2.ts` and the domain barrel. **G-UI-01's
+shape exactly.**
+
+## IT NEEDED A HOST, NOT ONLY A MAP ROW
+
+**The composer is a CONTROLLED SUB-COMPONENT** - `skills`, `onSubmit`,
+`canCreate` - and the content map renders prop-less components. So it could never
+have been mapped directly; `cm-competency-definitions.tsx` hosts it and lists
+what already exists.
+
+**G-UI-01 was "a component nothing mapped to". This is "a component nothing
+COULD map to"** - a strictly harder case that looks identical from the outside,
+and the difference only appears when you read the component's signature.
+
+## THE MENU ROW - **derived from sibling 156, and the id was not guessed either**
+
+    parent_id 2 · level 2 · page_type 'page' · status 1
+    sub_institute_id '1,2,3,4,5,6,7,8,9,10,11'   <- copied exactly
+    sort_order 12                                 <- max+1, deliberately NOT copied
+
+**The content map said `submenuId: '225'` until the insert returned 227.**
+AUTO_INCREMENT is not *highest id you can see plus one*. **The only reason the map
+is right is that the change script prints the id it created and says to correct
+the map if it differs** - a line written before the write, not after the mistake.
+
+## X-21 - **THE ROW EXISTS AND THE SCREEN IS PROBABLY STILL NOT VISIBLE**
+
+    rights row for menu 227 (new)      NO
+    rights row for menu 156 (sibling)  YES
+
+`displaySidebarMenu` builds `rightsByMenuId` from `tblgroupwise_rights_g2g` keyed
+on `menu_id`. **Every sibling has a rights row. The new one does not.**
+
+**So the honest state is: component built, host built, map wired, menu row
+created - AND NOT YET REACHABLE.** Three of four layers done, and the fourth is a
+rights row per profile per tenant.
+
+**THIS IS EXACTLY WHAT X-21 EXISTS TO CATCH**, and it caught it: *a screen that
+renders is not a screen that is reachable.* The temptation to report "composer
+mounted" was real and would have been wrong in the way that matters - **the user
+still cannot open it.**
+
+**NOT TAKEN**: creating rights rows spans 11 tenants x N profiles. **That is a
+bulk write and needs explicit approval**, and it touches the same rights tables
+the held menu restore touches.
+
+### THE PROBE THAT PROVED NOTHING, AND SAID SO
+
+Two attempts to read the sidebar API returned 401 then 500. **In both, the
+KNOWN-POSITIVE (`Employee Profiles`, sibling 156) was ALSO absent** - so the
+probe was invalid, not the row. **The known-positive is the only reason those two
+runs were not read as "the new row is missing".** R29 earning itself again, on a
+run where the wrong reading was the convenient one.
+
+---
+
+# HOW MANY OTHER BUILT-AND-UNMOUNTED SCREENS? **NONE**
+
+One pass against the content maps, as asked - not a sweep.
+
+    components referenced by a content map   53   (across 8 module maps)
+    cm-* screen components on disk           15
+    NOT IN ANY MAP                            2
+
+    cm-competency-composer   <- the one just hosted
+    cm-my-capability         <- a SUB-COMPONENT of the mapped cm-my-capability-screen
+
+**Zero genuinely unreachable screens remain**, and the two that scanned as
+unmapped are both sub-components - **which is the same shape as the defect**: the
+scan cannot tell "unreachable screen" from "sub-component with a host" without
+reading each one's signature.
+
+**So the four unfillable tables are NOT explained by more unmounted screens.**
+They are explained by writers that were never built for a user at all -
+`course_competency_map` and `jobrole_task_competency_map` have no writer in any
+layer, mounted or not.
+
+---
+
 # ALL 23 ROLE-REQUIREMENT ROWS ARE IN THE DEMO TENANT
 
 **NO REAL TENANT HAS EVER HAD A ROLE REQUIREMENT.**
