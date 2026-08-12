@@ -374,6 +374,14 @@ Route::get('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCom
 Route::post('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/role-map/{id}', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 
+// L-14: the TASK CATALOGUE -> COMPETENCY write path. Mirrors role-map one level
+// down. jobrole_task_id points at s_jobrole_task, a GLOBAL seed library with no
+// tenant column, so the task is checked for EXISTENCE and the competency for
+// OWNERSHIP - see the controller header.
+Route::get('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'index']);
+Route::post('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/task-map/{id}', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'destroy'])->middleware('profile:admin,hr');
+
 Route::get('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'index']);
 Route::post('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'store'])->middleware('profile:admin,hr');
 

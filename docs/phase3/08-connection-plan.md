@@ -5,6 +5,33 @@ BUILD sections of the six module write-ups. Nothing is re-derived here.
 
 > # ⚠ EVERY REMAINING ROW IN THIS PLAN IS A HYPOTHESIS ABOUT SCOPE, NOT A DESCRIPTION OF ONE.
 >
+> ## EVERY ROW IS BUILD, AUTHORING, OR BUILD-WITH-AUTHORING-CONTENT.
+>
+> **A one-pass classification, and it changes what "remaining" means.**
+>
+> | class | what it is | what "done" looks like |
+> |---|---|---|
+> | **BUILD** | code that ships and works | it works |
+> | **AUTHORING** | content only a customer can supply | someone supplies it |
+> | **BUILD-WITH-AUTHORING-CONTENT** | a write path that ships EMPTY and stays empty until a customer uses it | **the path works and the table is still empty** |
+>
+> **The third class is the one that gets reopened.** Twice now a shipped write
+> path with an empty table has looked like unfinished work:
+>
+>     X-08   the framework importer      ships working, imports nothing until a
+>                                        customer brings a framework
+>     L-14   the task->competency map     ships working, 0 rows until a customer
+>                                        authors their first mapping
+>
+> **Without the class in the row, 0 rows reads as a gap and the row gets
+> reopened.** With it, an empty table is the product working correctly.
+>
+> **This also re-scores the queue.** A BUILD-WITH-AUTHORING-CONTENT row is small
+> as a build and unfinishable as a deliverable - it cannot be "completed" by this
+> engagement at all, only made ready. Counting those as remaining build work
+> overstates what is left; counting them as done overstates what a customer would
+> find.
+
 > ## AND SOME ROWS CLOSE BY BEING MEASURED.
 >
 > **Sixteen rows opened with a size check, sixteen wrong** - and not in one way.
@@ -745,7 +772,7 @@ being read as organisational fact.**
 | L-11 | Join on ids, not titles — **12 name-to-name join sites, 6 files** | G-DATA-06 | all | **M** *(re-costed from L; it is 12 joins, not 45 references)* | every connection built on these | F-07b | AT-F07 + **extended rename test** | DB | ⏭ **NEXT** — data resolves by key, queries do not |
 | L-12 | One shared category table + applicability | G-LIB-02 | 1 | **L** | L-13, L-20 | F-01 | AT-L12 | DB | Not started |
 | L-13 | Propagate taxonomy renames | G-LIB-02 | 1 | **M** | — | L-12 | AT-L13 | DB | Not started |
-| L-14 | Task catalogue → competency | G-LIB-03 | 2 | **L** | thread 2 | *(= F-01)* | AT-F01 | DB | Not started |
+| L-14 | Task catalogue → competency **[BUILD-WITH-AUTHORING-CONTENT]** | G-LIB-03 | 2 | **L** | thread 2 | *(= F-01)* | AT-F01 | DB | Not started |
 | L-15 | Compliance Relevance → boolean + regulation ref | G-LIB-02 | 8 | **M** · migration + `library-config.ts` | thread 8 | F-01 | AT-L15 | SCREEN | Not started |
 | L-16 | Risk Implications → severity enum → `competency.criticality` | G-LIB-02 | — | **M** | — | F-01 | AT-L16 | DB | Not started |
 | L-17 | `assessment_method` enum, **additive** | G-LIB-02 | 3 | **M** · keeps both element columns | — | F-01 | AT-L17 | DB | Not started |
