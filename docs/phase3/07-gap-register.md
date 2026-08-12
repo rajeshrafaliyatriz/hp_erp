@@ -7671,6 +7671,54 @@ form the bell took before it was fixed.
 
 ---
 
+# WRITER 2 - **ALREADY BUILT, AND MY SIZING MEASURED THE WRONG TABLE**
+
+The size check stopped a duplicate build. Both halves of it changed the plan.
+
+## THE BACKEND EXISTS
+
+`JobroleTaskCompetencyMapController` - 188 lines, index/store/destroy, three
+routes registered, **written during L-14.** I was about to build a second one.
+
+## THE REFERENT IS THE GLOBAL CATALOGUE, AND IT SAYS SO IN ITS OWN DOCBLOCK
+
+    jobrole_task_id -> s_jobrole_task
+    55,961 rows, NO sub_institute_id - a GLOBAL seed library, with a
+    TENANT-OWNED mapping onto it. Q-C1's pattern. "EXISTS, not OWNS."
+
+**I measured `s_user_jobrole_task` instead** - 85,663 rows, tenant-scoped - and
+derived a requirement from it.
+
+    s_user_jobrole_task  (what I measured)  2,845 roles  median 20  max 340  >100: 149
+    s_jobrole_task       (the referent)     2,761 roles  median 19  max 209  >100:   7
+
+**SEVEN ROLES OVER 100, NOT 149. Max 209, not 340.** Pagination inside the role
+drops from a requirement to an option, and the honest form is a scrollable list
+with a count rather than a pager.
+
+**The requirement I carried forward one turn was derived from the wrong table.**
+It was measured carefully, reported precisely, and about something else - which is
+the same shape as the 338 counting middleware rather than authentication.
+
+## WHAT IS ACTUALLY MISSING
+
+`index()` filters by `jobrole_task_id` only. **There is no way to LIST a job
+role's tasks**, which is exactly what a per-role panel needs. **A read to add, not
+a writer to build.**
+
+The empty-read note is already correct and already in the payload, from L-14:
+*"No task-to-competency mappings authored yet. This catalogue is filled by your
+organisation, not derived."*
+
+## A PRIOR DECISION FOUND IN THE CODE, NOT THE DOCUMENTS - **second time**
+
+The declared referent was in a docblock the whole time, exactly as the department
+picker's disabled-and-labelled precedent was. **Twice now the answer was in the
+code and the documents did not carry it** - and both times the code's version was
+the correct one.
+
+---
+
 # DEFERRED-DEAD - **two first-draft service files, kept**
 
     lmsService     services/lms/index.ts      8 methods, 8 dead, 0 importers
