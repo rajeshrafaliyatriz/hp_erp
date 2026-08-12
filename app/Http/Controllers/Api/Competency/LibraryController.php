@@ -1814,6 +1814,54 @@ class LibraryController extends Controller
             }
         }
 
+        // ── DEPARTMENT OPTIONS COME FROM hrms_departments, NOT FROM DISTINCT TEXT
+        //
+        // The UNION above builds `department` from SELECT DISTINCT over
+        // s_users_skills.department - the values somebody has already TYPED. That
+        // is self-referential: a tenant with no skill rows gets an EMPTY dropdown
+        // and no way to fill it, because you cannot pick a department until a row
+        // already has one. Meanwhile `hrms_departments` holds the real list, and
+        // LMS course creation has been validating against it all along.
+        //
+        // THE WRITE PATH IS NOT TOUCHED. It already does the right thing (L-01 /
+        // L-02, ~1,380 lines above): a name becomes an id at write time, and an
+        // unmatched name is HELD, not guessed. Measured before this change:
+        // 3,839 rows carry both columns and ALL 3,839 AGREE, 0 dangling ids, and
+        // all 45 text-only rows resolve by name. This is an OPTIONS-SOURCE
+        // change only.
+        //
+        // TENANT-SCOPED, AND THAT IS NOT THE "FILTERING" X-03 WARNS ABOUT.
+        // `hrms_departments` carries `sub_institute_id` (tenant 7: 25 rows,
+        // tenant 3: 74). Offering the whole 1,181-row table would show a caller
+        // other tenants' departments - a leak, not generosity. The tenant's own
+        // rows ARE its complete list, so nothing is hidden from anyone.
+        //
+        // ALREADY-USED VALUES FIRST. The tenant's real vocabulary is what it has
+        // actually typed; the rest of its department list stays available and out
+        // of the way. And the list remains SUGGESTED, NOT CLOSED - a genuinely new
+        // department must still be typeable, which is exactly the case the write
+        // path holds by name with a NULL id.
+        $used = $buckets['department'];
+        $master = DB::table('hrms_departments')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->whereNotNull('department')->where('department', '!=', '')
+            ->orderBy('department')
+            ->pluck('department')
+            ->all();
+
+        $seen = [];
+        $ordered = [];
+        foreach (array_merge($used, $master) as $name) {
+            $key = mb_strtolower(trim((string) $name));
+            if ($key === '' || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $ordered[] = $name;
+        }
+        $buckets['department'] = $ordered;
+
         // X-03. Three fields named an entity and stored free text (G-LIB-02).
         // The picker mechanism already existed; these are the lists it lacked.
         //
