@@ -28,7 +28,23 @@ use Illuminate\Support\Facades\Log;
  *   PLAN SIDE — CORRECT BY DESIGN, BLOCKED ONLY ON AN EMPTY TABLE
  *     s_competency_plan_actions ... 377 rows, 377 WITH a competency_id,
  *                                   377 of 377 resolving in master_skills
- *     course_competency_map ....... 0 rows          <- the bridge: EMPTY
+ *     course_competency_map ....... 56 rows         <- the bridge: SEED ONLY
+ *
+ *   ⚠ THE BRIDGE HAS NO WRITER. NOT "EMPTY FOR NOW" - UNFILLABLE.
+ *     Measured 2026-08-12: `course_competency_map` has exactly TWO references in
+ *     the whole application, this class and RemediationRecommender, and BOTH ARE
+ *     READS. No controller, no route, no service and no screen writes it. Course
+ *     creation (`POST /lms/courses`) writes `sub_std_map` and nothing else.
+ *     The 56 rows are seed.
+ *
+ *     So this class does not become useful as customers use the product. It
+ *     becomes useful when somebody BUILDS A WRITER for that table - which is a
+ *     design job, not a wiring job, and is not scheduled.
+ *
+ *     Stated here rather than only in the register because the person who needs
+ *     to know is whoever next reads this class wondering why it recommends
+ *     nothing. "The bridge is empty" invites waiting. "The bridge has no writer"
+ *     does not.
  *     => the plan names a COMPETENCY; the bridge finds the courses that build
  *        it. That indirection IS the design (Q-B4, the competency-derived path,
  *        with course_jobrole_map reserved for role-mandatory learning that is

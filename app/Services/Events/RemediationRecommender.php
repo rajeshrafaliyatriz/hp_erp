@@ -12,6 +12,23 @@ use Illuminate\Support\Facades\Log;
  * competency can finally be turned into a list of courses. Before that this class
  * would have recommended nothing, which is why it was scheduled rather than built.
  *
+ * ⚠ CORRECTED 2026-08-12 - "UNBLOCKED" OVERSTATED IT. THE BRIDGE HAS NO WRITER.
+ *
+ *   `course_competency_map` has exactly TWO references in the whole application:
+ *   this class and LearningAssigner. BOTH ARE READS. No controller, route,
+ *   service or screen writes it; course creation writes `sub_std_map` and
+ *   nothing else. The 56 rows are seed and there is no path by which a customer
+ *   adds a 57th.
+ *
+ *   So the sentence above is true of the SEED and false of the product. This
+ *   class recommends courses for the tenants the seed happened to cover, and
+ *   nothing a customer does will ever extend that. It is not blocked on volume;
+ *   it is blocked on a writer that does not exist.
+ *
+ *   Kept rather than rewritten, because the overstatement is the useful part:
+ *   "56 rows arrived" was read as "the mechanism works now", and rows arriving
+ *   by seed look identical to rows arriving by use until you ask who wrote them.
+ *
  * ─────────────────────────────────────────────────────────────────────────────
  * ONE OF ITS TWO ENTRY POINTS CANNOT FIRE, AND IT IS WIRED ANYWAY.
  *

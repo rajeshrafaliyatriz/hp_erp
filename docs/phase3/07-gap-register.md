@@ -6569,6 +6569,131 @@ ones.**
 
 ---
 
+# A CHECK MAY ONLY BE CHANGED WHEN THE CLAIM IT ENCODES HAS BEEN DISPROVED BY MEASUREMENT, NEVER BECAUSE IT WENT RED
+
+**The qualifier is the whole rule.** Without it, *"the check was outdated"* becomes
+the excuse for tuning any red, and every guard in this suite becomes negotiable
+the moment it is inconvenient.
+
+**Second time a green was bought by a document being wrong rather than the code -
+and THE FIRST WHERE THE CHECK ITSELF WAS THE DOCUMENT.** That is the sharper half:
+**a suite is a set of claims, and a claim can go stale exactly like a plan row.**
+The suite has been treated as the thing that judges the code; it is also a thing
+the code can outgrow, and nothing was watching for that.
+
+**The replacement being STRICTER is what makes it credible.** It now requires the
+UI list and the server's `ITEM_TABLES` to agree, and fails if the old
+`=== 'skill'` branch survives. **Widening the UI without the server branch can no
+longer ship.** A change that loosened the check would have been the other thing.
+
+---
+
+# UNMEASURED NEEDED THREE MECHANISMS, NOT ONE
+
+**Eleventh instance of the principle, and the first that could not be held by a
+single mechanism:**
+
+    1. a rating of 0 is REFUSED         so "unrated" and "rated badly" can never
+                                        share a column
+    2. absence IS the row not existing  rollUp reads no row as measured=false and
+                                        excludes it from BOTH the level and the
+                                        coverage numerator
+    3. DELETE exists                    so "we no longer have a view on this" can
+                                        be said without writing something false
+
+**Any two without the third leaks.** Without (1) a zero means both things; without
+(2) absence needs a sentinel value; without (3) the only way to retract a rating
+is to overwrite it with a lie.
+
+**Two fixture items on purpose** - the known-negative discipline applied to a
+FIXTURE rather than to a pattern. **With one item coverage can only be 0 or 1, so
+a partial-coverage bug is invisible.** A fixture that cannot express the failure
+is the same defect as a property with too few verdicts.
+
+---
+
+# ITEM-TO-ITEM - **THE MECHANISM ALREADY EXISTS, TWICE, AND NEITHER IS A NEW ONE**
+
+## THE FOUR TABLES CARRY NO REFERENCES AT ALL
+
+    s_user_knowledge   business_link (804) - knowledge_tags (804) - sub_institute_id
+    s_user_ability     business_link (1,015) - ability_tags (1,015) - sub_institute_id
+    s_user_attitude    business_link (18) - attitude_tags (18) - sub_institute_id
+    s_user_behaviour   business_link (39) - behaviour_tags (39) - behaviour_alternatives (39)
+
+**No `skill_id`, no `jobrole_id`, no `department_id`, no `competency_id`, and no
+pointer to each other.** A URL, free-text tags, and the tenant. **The four
+dimensions are flat lists.**
+
+## DOES `s_users_skills` REFERENCE THEM? **NO**
+
+    related_skills   943   tinytext   skill -> skill, BY TEXT
+    skill_maps        94   tinytext
+    sub_skills       938   varchar
+    department_id  3,924   int        <- a real id column, and it is the DEPARTMENT one
+
+**Nothing in `s_users_skills` points at knowledge, ability, attitude or
+behaviour.** Note `department_id` is populated on 3,924 of 5,171 rows - **relevant
+to the department picker two items later, and measured here by accident.**
+
+## TWO TABLES ALREADY JOIN DIMENSIONS
+
+    s_skill_knowledge_ability   168,538 rows   skill_id -> classification_item (TEXT)
+      knowledge 86,851 - ability 79,598 - behaviour 1,050 - attitude 1,039
+
+    s_library_map                 3,323 rows   jobrole -> comma-lists of ids
+      ALL 3,323 are type=jobrole - 3,270 carry skill_ids - 328 carry knowledge_ids
+
+## AND THE TEXT JOIN RESOLVES AT WILDLY DIFFERENT RATES
+
+    knowledge   200 sampled    13 resolve by exact title    6.5%
+    ability     200 sampled     0 resolve                   0.0%
+    attitude    200 sampled   200 resolve                 100.0%
+    behaviour   200 sampled   200 resolve                 100.0%
+
+**Attitude and behaviour are effectively 1:1 with their libraries** (1,039 and
+1,050 join rows against 655 and 694 library rows). **Knowledge and ability are
+almost entirely unresolvable text** - 166,449 of the 168,538 rows sit in the two
+dimensions that barely match anything.
+
+**A single "168,538 rows" number would have hidden this completely.** The table is
+not one thing: **it is two dimensions that work and two that are free text wearing
+the same schema.**
+
+## MY READ - **ITEM-TO-ITEM IS NOT NEEDED, AND BUILDING IT WOULD BE THE THIRD MECHANISM**
+
+**Competency bundling already carries it, and carries it better.**
+
+    s_skill_knowledge_ability   skill -> dimension       TEXT, unvalidated, 0-100% resolving
+    s_library_map               jobrole -> dimension     COMMA-LISTS, one writer (the JD parser)
+    competency_kasba_item       competency -> dimension  IDS, validated per dimension,
+                                                         tenant-scoped, 12/12 proved
+
+**All three answer the same question - which knowledge / ability / attitude /
+behaviour does this thing require.** They differ only in what sits on the left and
+how honestly the right is keyed. **`competency_kasba_item` is that relationship
+expressed correctly**, and a competency is the level the rest of the chain
+resolves at: job roles map to competencies, ratings hang off KASBA items, the gap
+rolls up per competency.
+
+**A direct skill→knowledge link would be a THIRD mechanism saying what the second
+already says** - the duplication this phase has spent itself removing: 15 copies
+of `g2gActorId`, two identity resolvers, one competency concept wearing two names.
+
+**WHAT I WOULD DO INSTEAD - and it is not a build:**
+
+**`s_skill_knowledge_ability` is a MIGRATION SOURCE, not a mechanism to keep.**
+Its **2,089 attitude + behaviour rows resolve 100%** and could seed real
+`competency_kasba_item` rows the moment competencies exist to hang them on. The
+other **166,449 are text that mostly does not resolve, and converting them would
+manufacture exactly the dangling pointers the validation branch was just built to
+prevent.**
+
+**So: no new mechanism, no deletion, and only the resolvable 2,089 are worth
+touching - after a customer has competencies to attach them to.**
+
+---
+
 # THE RATING WRITE PATH - **link 5 closed, 15/15 through the gap**
 
 `POST` / `DELETE /competency/kasba-rating`, guarded `profile:admin,hr`. **New
