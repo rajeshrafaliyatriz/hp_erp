@@ -6569,6 +6569,140 @@ ones.**
 
 ---
 
+# THE PLAN TRACKS INTENT, THE REGISTER TRACKS WORK, AND THEY HAVE DRIFTED APART
+
+**This outranks the overlap question it was found by.**
+
+    occurrences of "G-SEC-29" in 08-connection-plan.md :  0
+
+**The security work this engagement has been executing for days has no row in the
+planning document.** Twenty confirmed leaks, sixteen fixes, twenty controllers,
+seventy-eight sites - and the plan does not know it happened.
+
+**So no overlap pass over the plan could ever have found the HrmsController
+collision.** O-05 is a plan row; G-SEC-29 is a register finding; **nothing joins
+the two documents.** The collision was not missed through carelessness - it was
+**structurally invisible to any check that reads one document.**
+
+## AND IT EXPLAINS THE MISSING SPANS
+
+    open rows naming no file, table or class :  37 of 51
+
+**That is a symptom, not a separate problem.** The plan records what was INTENDED
+and at what cost. The register records what was DONE and against what evidence. A
+row's span is a property of the work, so it lives in the register - **and rows
+whose work has not started have no span anywhere, by construction.**
+
+**NEITHER DOCUMENT IS WRONG.** Each is correct and complete for its own job. The
+defect is that **there is no join**, and every question that needs both - *what
+does this row touch, has any of it been done, does it collide with anything* -
+falls into the gap between them.
+
+## THE RULE
+
+**THE PLAN TRACKS INTENT. THE REGISTER TRACKS WORK. A QUESTION ABOUT SCOPE NEEDS
+BOTH, AND NOTHING MAKES YOU ASK BOTH.**
+
+**Remedy, extended from the trait-scan remedy below:** *any question about a row's
+scope greps BOTH documents - for the row id AND for its symbols - as a printed
+step.* Not the implementation log alone, not the plan alone. **The step prints
+what it searched and where**, so a zero is visibly a zero-in-both rather than a
+clean answer from one.
+
+---
+
+# THREE INSTANCES OF "A RECORD EXISTED AND WAS NOT CONSULTED" IN ONE TURN
+
+**This is structural, not a habit.**
+
+    1. the ResolvesApiIdentity note   already in this register, ~120 lines below
+                                      the closure note, naming jobroletaskcontroller
+    2. O-05 -> S-03                   declared in the blocked-by column, in the
+                                      words "S-03 scope", before the collision
+    3. the correction itself          Triz found #1 by reading the register I
+                                      had just written into
+
+**Three in one turn, from three different documents, on three different questions.**
+A habit fails occasionally. **Three in one turn is a system with no retrieval
+step** - records are written diligently and read only when something reminds
+somebody they exist.
+
+**Writing is instrumented in this engagement; reading is not.** Every finding gets
+a register entry, a commit message, and often a suite check. **Nothing anywhere
+makes a scan look for prior art before it runs.**
+
+---
+
+# 197 ROUTES POINT AT METHODS THAT DO NOT EXIST
+
+Asked as a cheap follow-on to O-05's residue. It was not cheap.
+
+    routes registered      1709
+    controller@method OK   1508
+    CLASS MISSING             0
+    METHOD MISSING          197
+
+**Reflection, not grep** - `__call`, inheritance and traits all count as existing,
+and a text search would score every one of them a false positive.
+
+## SPLIT BY CAUSE - **197 is a pattern, not 197 defects (R6)**
+
+    RESOURCE VERB   167   Route::resource registers all seven verbs whether or not
+                          the controller implements them. ONE idiom, one fix
+                          (`->only([...])`), 167 rows.
+    BESPOKE NAME     30   somebody wrote a route MEANING a method
+
+**The 30 are the finding.** Each is a deliberate route to a deliberate name that
+was never written - `TalentOfferController@getOfferLetter`, `@getTemplates`,
+`taskController@resyncTaskToGoogleCalendar`, `AJAXController@getDepEmployeeLists`,
+ten on `ONetOnlineDataController` alone, and `HolidayController@getWeekdays`
+routed **twice**, from two different route files.
+
+**Every one fatals on every call, and has since it was written.**
+
+**NOT MINE**: `getWeekdays` was absent at `HEAD~3`, before this session's edits,
+and all four other controllers I touched have identical method counts before and
+after. Checked because I had edited `HolidayController` hours earlier - **the
+first thing to rule out when your name is on a recent commit to the file.**
+
+## DELETED - **one, the one that was ordered**
+
+`routes/hrms.php:105`, `earlyGoingHrmsAttendanceReportCreate`. Intention recorded
+in place, R8, same treatment as the dead `jobrole-tasks` route. Unreferenced in
+both repos - not by name, not by URI. Proven by the instrument that found it:
+
+    1709 -> 1708 routes,  197 -> 196 missing
+
+**The other 196 are filed, not taken.** 167 are one idiom; 29 are bespoke and each
+needs its own intention read before anything is removed.
+
+## THE LESSON IN THE DELETION
+
+**COUNTING SITES MADE THE FILE LOOK 100% HANDLED. COUNTING ROUTES FOUND A METHOD
+THAT DOES NOT EXIST.**
+
+38 sites, 31 of 32 methods carrying a fix - by site count `HrmsController` was
+finished. **A method that does not exist has no sites to count**, so the unit that
+measured the fix was structurally blind to the defect.
+
+**THE UNIT YOU COUNT IN DECIDES WHAT YOU CAN FIND.** Same family as *"a property
+with fewer verdicts than the world has outcomes"* - there the verdicts were too
+few, here the unit was wrong. **Both are the instrument limiting the finding.**
+
+---
+
+# R30, THIRD TIME - **the third was accepted in advance, and arrived immediately**
+
+Last turn: *"for every standing rule that has cost a turn twice, either make it
+unskippable or accept a third."* **The third came in the very next turn** - a
+heredoc appending to `route-method-exists.php` turned `'\\'` into `'\'` and broke
+the print. Same rule, same mechanism, third time, minutes after being named.
+
+**It is no longer evidence that rules decay. It is evidence that this particular
+rule cannot be held by intention at all.** The wrapper is owed.
+
+---
+
 # THE OVERLAP PASS - **a measure turn, no edits**
 
 Ordered before S-03 because **the HrmsController collision had already happened

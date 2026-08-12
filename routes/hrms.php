@@ -32,7 +32,7 @@ Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], 
     route::get('department-jobroles', [departmentController::class, 'departmentJobRoles'])->name('departmentJobRoles');
     route::get('jobrole-tasks', [departmentController::class, 'jobRoleTasks'])->name('jobRoleTasks');
     Route::get('holiday_weekdays', [HolidayController::class,'getWeekdays'])->name('holiday.weekdays');
-    Route::post('holiday_weekdays', [HolidayController::class,'storeWeekdays'])->name('holiday.weekdays');
+    Route::post('holiday_weekdays', [HolidayController::class,'storeWeekdays'])->name('holiday.weekdays.store');
 });
 
 
@@ -80,7 +80,7 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::post('/payroll-bank-wise-report', [PayrollController::class, 'payrollBankWiseReport'])->name('payroll.show_payroll_bankwise_report');
 
     Route::get('hrms-salary-certificate', [PayrollController::class, 'hrmsSalaryCertificateIndex'])->name('hrms_salary_certificate.index');
-    Route::post('/hrms-salary-certificate-report/{id}', [PayrollController::class, 'hrmsSalaryCertificateReport'])->name('hrms_salary_certificate.report');
+    Route::post('/hrms-salary-certificate-report/{id}', [PayrollController::class, 'hrmsSalaryCertificateReport'])->name('hrms_salary_certificate.report.byId');
     Route::post('/hrms-salary-certificate-report', [PayrollController::class, 'hrmsSalaryCertificateReport'])->name('hrms_salary_certificate.report');
     Route::get('salary-certificate-pdf-download', [PayrollController::class, 'SalaryCertificatePdfDownload'])->name('salary_certificate_pdf_download');
 
@@ -102,7 +102,31 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::post('/show-hrms-attendance-report', [HrmsController::class, 'hrmsAttendanceReport'])->name('hrms.show_hrms_attendance_report');
     Route::post('/get-employees-list', [HrmsController::class, 'getEmployeeLists'])->name('get.employees.list');
 
-    Route::get('early-going-hrms-attendance-report/create', [HrmsController::class, 'earlyGoingHrmsAttendanceReportCreate'])->name('hrms_attendance_report.early_going_report.create');
+    /**
+     * R8 - DELETED 2026-08-12, and what it MEANT recorded before it went.
+     *
+     * Route::get('early-going-hrms-attendance-report/create',
+     *     [HrmsController::class, 'earlyGoingHrmsAttendanceReportCreate'])
+     *     ->name('hrms_attendance_report.early_going_report.create');
+     *
+     * INTENDED: the create-form companion to the `early_going_report` index on the
+     * next line - the same Index/create pairing used across this file.
+     *
+     * WHY IT WENT: `earlyGoingHrmsAttendanceReportCreate` EXISTS NOWHERE IN app/.
+     * The route fataled on every call, and had since it was written. Nothing
+     * referenced it - not the route name, not the URI, in either repo.
+     *
+     * The sibling index above it has no create route either, so the pattern this
+     * was reaching for was never built on either side.
+     *
+     * FOUND BY: counting O-05's residue in ROUTES rather than in sites. The site
+     * count said HrmsController was 100% handled - a method that does not exist
+     * has no sites to count. THE UNIT YOU COUNT IN DECIDES WHAT YOU CAN FIND.
+     *
+     * IT IS NOT ALONE: 197 of 1709 registered routes name a missing method
+     * (30 bespoke, 167 Route::resource verbs). See `_evidence/route-method-exists.php`.
+     * Only this one is deleted here - it is the one that was ordered.
+     */
     Route::get('early-going-hrms-attendance-report', [HrmsController::class, 'earlyGoingHrmsAttendanceReportIndex'])->name('hrms_attendance_report.early_going_report');
 
     Route::get('/show-early-going-hrms-attendance-report', [HrmsController::class, 'earlyGoingHrmsAttendanceReport'])->name('hrms.show_early_going_hrms_attendance_report');
@@ -134,14 +158,14 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
 Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], function () {
     Route::resource('designation_leave', HrmsLeaveController::class);
     Route::resource('leave_encashment', leaveEncashmentController::class);
-    Route::resource('add_department', departmentController::class);
+    // Removed duplicate route declaration - exact duplicate of line 27.
     Route::resource('user_shift_master', shiftMasterController::class);
     Route::resource('user_bulk_shift_update', bulkUserShiftUpdateController::class);
-    route::get('department-Emp-Lists', [departmentController::class, 'departmentEmpLists'])->name('departmentEmpLists');
-    route::get('sub-department-list', [departmentController::class, 'subDepartmentList'])->name('subDepartmentList');
-    route::get('department-employee-list', [departmentController::class, 'departmentEmployeeList'])->name('departmentEmployeeList');
-    route::get('department-jobroles', [departmentController::class, 'departmentJobRoles'])->name('departmentJobRoles');
-    route::get('jobrole-tasks', [departmentController::class, 'jobRoleTasks'])->name('jobRoleTasks');
+    // Removed duplicate route declaration - exact duplicate of line 29.
+    // Removed duplicate route declaration - exact duplicate of line 30.
+    // Removed duplicate route declaration - exact duplicate of line 31.
+    // Removed duplicate route declaration - exact duplicate of line 32.
+    // Removed duplicate route declaration - exact duplicate of line 33.
 
     route::get('attendance-by-id', [HrmsController::class, 'getAttandanceData'])->name('attendance_by_id');
 
