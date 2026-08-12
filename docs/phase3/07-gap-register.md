@@ -6569,6 +6569,111 @@ ones.**
 
 ---
 
+# TWO DIMENSIONS WEARING ONE SCHEMA - **beside the two-zeros pair**
+
+    s_skill_knowledge_ability   168,538 rows, and it is NOT one population
+
+      attitude      1,039 rows   100.0% resolve to s_user_attitude
+      behaviour     1,050 rows   100.0% resolve to s_user_behaviour
+      knowledge    86,851 rows     6.5% resolve
+      ability      79,598 rows     0.0% resolve
+
+**166,449 of the 168,538 rows sit in the two dimensions that barely match
+anything.** Two dimensions are a working key-resolved join; two are free text
+wearing the same schema.
+
+**A single "168,538 rows" describes neither.** Same shape as the two-zeros pair -
+**one table, two populations, and the aggregate is true of no part of it.** The
+pair was two counts that were both zero for different reasons; this is one count
+that is large for one reason and large for the opposite reason.
+
+**What made it visible was splitting by the column that names the population**
+(`classification`) rather than counting the table. **The aggregate was never
+wrong - it was never about anything.**
+
+---
+
+# DECIDED - **ITEM-TO-ITEM WILL NOT BE BUILT**
+
+**Filed as DECIDED, not deferred, so nobody re-proposes it.**
+
+All three mechanisms answer the same question - *which knowledge / ability /
+attitude / behaviour does this thing require* - and differ only in what sits on
+the left and how honestly the right is keyed. **`competency_kasba_item` is that
+relationship expressed correctly**, at the level the rest of the chain already
+resolves at.
+
+**A third mechanism saying what the second says is the duplication this phase has
+spent itself removing.**
+
+## SCHEDULED WITH A TRIGGER - `s_skill_knowledge_ability` AS A MIGRATION SOURCE
+
+**Not built, not dropped. Seeded, and only when the trigger fires:**
+
+    TRIGGER   a tenant has competency rows to attach items to
+    SCOPE     the 2,089 attitude + behaviour rows that resolve 100%
+    EXCLUDED  the 166,449 knowledge + ability rows - converting them would
+              manufacture exactly the dangling pointers the validation branch
+              was built to prevent three turns ago
+
+**No new mechanism, no deletion.**
+
+---
+
+# DEPARTMENT - **F-07b's ANSWER IS ALREADY IMPLEMENTED, AND THE DATA IS CLEAN**
+
+Measured before writing the picker, and it changes the job.
+
+## THE DATA
+
+    s_users_skills                     5,171 rows
+      department_id populated          3,924
+      department text populated        3,884
+      BOTH                             3,839
+      neither                          1,202
+
+    WHERE BOTH ARE POPULATED (3,839)
+      AGREE                            3,839
+      DISAGREE                             0
+      id points at a nonexistent row       0
+
+    TEXT BUT NO ID (45 rows)
+      resolve by exact name               45
+      DO NOT RESOLVE                       0
+
+**The unmatched report Triz asked for is EMPTY.** Zero disagreement between the
+two columns, zero dangling ids, and all 45 text-only rows resolve by name.
+**Nobody had asked whether the two columns agree, and they do - completely.**
+
+## WHO POPULATED THEM - **this engagement did, and the finding is narrower than it read**
+
+`LibraryController` already carries L-01/L-02 (G-LIB-01):
+
+    names become ids AT WRITE TIME, and unmatched is HELD, NOT GUESSED -
+    the name stays in `department`, `department_id` stays NULL
+
+**That IS F-07b's ruling, already in the code.** So the earlier finding -
+*"competency uses SELECT DISTINCT over free text while LMS uses
+hrms_departments"* - **is narrower than it read.** The WRITE side already
+resolves correctly. **Only the dropdown's option source still reads DISTINCT
+text.**
+
+**A finding about a module turned out to be a finding about one dropdown.** The
+write path had been fixed earlier in this same engagement and my later measurement
+described the read path as though it were the whole story - **the fourth time a
+measurement of one layer has been reported as a property of the feature.**
+
+## WHAT IS ACTUALLY LEFT
+
+**Not a migration and not a write-path fix.** The picker's options should come
+from `hrms_departments` (1,181 rows) instead of `SELECT DISTINCT department`, so
+a tenant with no skill rows can still choose a department. **X-03's ruling still
+applies: suggested-not-closed, because a genuinely new department must remain
+typeable** - and the write path already handles that case correctly by holding
+the text and leaving the id NULL.
+
+---
+
 # A CHECK MAY ONLY BE CHANGED WHEN THE CLAIM IT ENCODES HAS BEEN DISPROVED BY MEASUREMENT, NEVER BECAUSE IT WENT RED
 
 **The qualifier is the whole rule.** Without it, *"the check was outdated"* becomes
