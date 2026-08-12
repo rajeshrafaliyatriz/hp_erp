@@ -8,12 +8,32 @@ use App\Models\user\tblgroupwise_rights_g2gModel;
 use App\Models\user\tbluserModel;
 use App\Models\user\tbluserprofilemasterModel;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class tblmenumasterG2gController extends Controller
 {
+    /**
+     * G-SEC-29. THE TENANT COMES FROM THE TOKEN.
+     *
+     * Every `$request->...sub_institute_id` in this controller was replaced with
+     * `$this->apiTenantId($request)`. Confirmed by execution before the change: a
+     * tenant-7 caller asking for `sub_institute_id=3` received tenant 3's rows.
+     *
+     * THIS CONTROLLER HAD NO SESSION FALLBACK. Nine of the eighteen leaking
+     * controllers read `session() ?? $request`, which leaks only when the session
+     * is absent. This one read the request and nothing else, so it leaked on
+     * EVERY call - the worst of the three shapes, which is why it went first.
+     *
+     * ONE IMPLEMENTATION, NOT THIRTEEN. `apiTenantId()` lives in
+     * ResolvesApiIdentity and is called directly. A private wrapper per
+     * controller would put the resolution in thirteen places, which is how four
+     * identity resolvers happened.
+     */
+    use ResolvesApiIdentity;
+
     /**
      * Returns the full Modules -> Menus -> Submenus (-> ... unlimited depth)
      * hierarchy from tblmenumaster_g2g as a nested tree, filtered to the
@@ -35,7 +55,7 @@ class tblmenumasterG2gController extends Controller
             return $error;
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $allMenus = tblmenumaster_g2gModel::where('status', 1)
             ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
@@ -90,7 +110,7 @@ class tblmenumasterG2gController extends Controller
             return $error;
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
         $profile_id = $request->get('profile_id');
 
         $allMenus = tblmenumaster_g2gModel::where('status', 1)
@@ -138,7 +158,7 @@ class tblmenumasterG2gController extends Controller
             return $error;
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
         $profile_id = $request->get('profile_id');
         $rights = $request->input('rights', []);
 
@@ -197,7 +217,7 @@ class tblmenumasterG2gController extends Controller
             return $error;
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $profiles = tbluserprofilemasterModel::where([
             'sub_institute_id' => $sub_institute_id,
@@ -239,7 +259,7 @@ class tblmenumasterG2gController extends Controller
             return $error;
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $nextSortOrder = (int) tbluserprofilemasterModel::where('sub_institute_id', $sub_institute_id)->max('sort_order') + 1;
 
