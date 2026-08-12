@@ -6569,6 +6569,115 @@ ones.**
 
 ---
 
+# THE OVERLAP PASS - **a measure turn, no edits**
+
+Ordered before S-03 because **the HrmsController collision had already happened
+once**: 38 sites were G-SEC-29's and the same file was O-05's row, *and neither
+row knew about the other* - found by accident, mid-work, too late to change
+sequencing. Folding the check into S-03 would only have found overlaps WITH S-03.
+
+## RESULT 1 - **THE PLAN CANNOT ANSWER THE QUESTION FOR MOST ROWS**
+
+    item rows parsed in the tier tables      75
+    still open by their status column        51
+    OPEN ROWS NAMING NO SYMBOL AT ALL        37
+
+**37 of 51 open rows record no file, table or class anywhere in their tier row.**
+S-03, S-06, R-01..R-04, all eleven L-1x wiring rows, LM-*, M-*, O-* - none carries
+a span. Widening to every line in the plan that names a row ID recovers spans for
+only 31 rows, and most are a single column name.
+
+**A check over a map only sees what the map mentions** - the readiness finding
+again, now about the plan itself. **The overlap question is not answerable from
+the planning document**; it is answerable only by resolving each row to files, and
+the document does not hold that resolution.
+
+## RESULT 2 - **ONE SHARED SYMBOL, AND IT IS ALREADY KNOWN**
+
+    department_id                            L-01  L-02
+
+That pair is already declared: both rows are "`department_id` written by the
+library forms" and both are blocked by X-03. **No undeclared symbol overlap exists
+among the open rows the plan can describe.**
+
+## RESULT 3 - **THE DECLARED DEPENDENCY GRAPH IS DENSE AND WAS NEVER READ AS A WHOLE**
+
+**41 declared edges** across the open rows, including the two that matter here:
+
+    S-04 -> S-03   "S-03 scope"
+    O-05 -> S-03   "S-03 scope"
+
+**O-05's collision with the security work WAS DECLARED, in the register, in the
+blocked-by column.** Not undetectable - unread. **Second instance of the same
+shape as correction A above, discovered in the same turn.**
+
+Also declared and worth having before sequencing:
+
+    L-12 <-> L-13 <-> L-20     mutually blocking, a 3-cycle in the library block
+    R-02, R-03, R-04 -> R-01   the whole reports block is one row deep
+    R-03 -> M-02               reports reach outside their own block
+
+**The reports block is not four rows. It is one row and three dependents.**
+
+## RESULT 4 - **THE REAL REASON THE COLLISION WAS INVISIBLE**
+
+    occurrences of "G-SEC-29" in 08-connection-plan.md :  0
+
+**The security work being executed has no row in the plan at all.** G-SEC-29 is a
+register finding; O-05 is a plan row. **No scan spans both documents, so no scan
+could have intersected them.**
+
+**This is the finding.** The collision was not a failure to intersect rows within
+the plan - it was work living in one document and its collision partner in
+another. **Two registers, one codebase, and nothing joins them.**
+
+## O-05'S RESIDUE - **a number, not "partly absorbed"**
+
+Routes are not sites, and this is the row that already caused a collision, so it
+is counted in its own unit:
+
+    route refs -> HrmsController          31   (30 distinct methods)
+    methods G-SEC-29 actually changed     28
+    ROUTED METHODS NOT CHANGED             2
+    total methods in the file             32   (31 carry a fixed site)
+
+**O-05's residue is 2 routed methods**, and both are already resolved:
+
+    departmentAttendanceReport             READ and cleared - session-scoped,
+                                           non-deterministic, correct code
+    earlyGoingHrmsAttendanceReportCreate   DOES NOT EXIST
+
+**O-05 is 28/30 absorbed and its remaining 2 are a clearance and a defect.** As a
+reading row it is effectively finished; nothing in it needs S-03 first.
+
+### NEW - **A ROUTE POINTING AT A METHOD THAT DOES NOT EXIST**
+
+    routes/hrms.php:105
+    Route::get('early-going-hrms-attendance-report/create',
+        [HrmsController::class, 'earlyGoingHrmsAttendanceReportCreate'])
+
+**No such method exists anywhere in `app/`.** Every call to that route fatals.
+Found only because O-05's residue was counted in ROUTES - **the site count could
+never have surfaced it, because a method that does not exist has no sites.**
+
+**The unit you count in decides what you can find.** Counting sites made the file
+look 100% handled; counting routes found a dead route reference.
+
+## S-03 IS NOT TAKEABLE
+
+    the 51, unchanged                     51
+    of which app/Http/Controllers/Api/    23
+    of which talent                        6
+
+**S-03's span is `Api/` x23 and `talent/` x5 - it is inside the 51.** Confirmed
+before assuming, as ordered. **S-03 is BLOCKED on the same release the matrix
+guard, the identity consolidation, S-08 and O-04 are waiting for.**
+
+That makes **three blocked rows, not two**: S-08, O-04, **and S-03** - and S-04
+and O-05 both declare S-03 scope behind it.
+
+---
+
 # G-SEC-29 CLOSED - **16 confirmed leaks, all 16 fixed**
 
     CustomModuleController@menuLevel2            LEAK -> echoes the request (NOT a leak)
@@ -6612,8 +6721,42 @@ story; `no output` read as `nothing found`. **Every one is a proxy taken for the
 thing it proxies.**
 
 **And this one had a self-inflicted twist**: the signal was contaminated *by the
-engagement's own prior work*, which nothing in the scan could have known and
-nothing in the codebase records.
+engagement's own prior work*.
+
+**CORRECTED - the contamination WAS recorded, and I did not read the record.**
+That claim is right about the codebase and wrong about this register. **A SYNTAX
+CHECK AGREES WITH A SEMANTIC MISTAKE**, ~120 lines below, already prints the two
+lines side by side and **names `jobroletaskcontroller`** - one of the five:
+
+    use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;   <- an IMPORT
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;         <- WHERE MINE WENT
+
+**Same fifteen files, same symbol, written down before the scan ran.** So the
+finding was **RE-DERIVED, NOT UNDETECTABLE** - I paid a second time for something
+already on the page.
+
+**That makes it two findings, not one:**
+
+1. **the fifth proxy-taken-for-the-thing** - a scan reading a signal it cannot
+   attribute; and
+2. **the second R30 / R18f(v) instance** - *a record that existed, was written
+   down, and was not consulted at the moment it applied.*
+
+**The second is the more expensive shape**, because it does not improve with more
+care. R30 and R18f(v) were both known, both written, and both cost a further turn
+after being written.
+
+### REMEDY - STRUCTURAL, NOT REMEMBERED
+
+**Any scan whose signal is a trait, helper, or import must first grep the
+implementation log's Changed column for that symbol - as a PRINTED STEP INSIDE
+THE SCAN, not a habit beside it.**
+
+Had that step run, it would have printed the `g2gActorId` consolidation against
+`ResolvesApiIdentity` and the five would never have been set aside. **This is the
+same fix that has actually worked three times already**: `git status` printed as
+a step rather than recalled, the known-negative inside the check rather than
+beside it, the split in the harness rather than in the reader.
 
 ## `menuLevel2` ECHOES THE REQUEST - the fourth non-defect
 
