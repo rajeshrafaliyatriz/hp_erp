@@ -6569,6 +6569,65 @@ ones.**
 
 ---
 
+# RETRACTION - **LINK 5 IS NOT A MODEL MISMATCH. IT IS A THIRD MISSING WRITER.**
+
+**I reported last turn that ratings are of skills and requirements are of
+competencies, and that the gap resolves across two models by luck. THAT WAS
+WRONG, and it was wrong in the direction that would have cost the most** - Triz
+was about to size a rebuild of the calculation.
+
+## WHAT THE GAP ACTUALLY READS
+
+`CompetencyGapController` takes every level from `ProficiencyService::rollUp`,
+which reads:
+
+    competency_kasba_item as i
+      LEFT JOIN competency_kasba_rating as r ON r.kasba_item_id = i.id
+
+**Keyed on `kasba_item_id`. That is the CORRECT model** - per KASBA item, exactly
+what Q-A2 specifies. **The gap does not touch `s_skill_matrix`.**
+
+`s_skill_matrix` (169 rows, keyed `user_id` + `skill_id`) is a **separate rating
+surface** read by dashboards and reports - 12 files, 5 of them among the 50. **It
+is not in the capability chain at all.** I found it by searching for "who rates
+an employee" and took the first table that answered, without checking whether the
+gap was the thing reading it.
+
+**Ninth instance of a search whose scope was not the claim's scope** - and the
+first where the wrong answer would have caused a REBUILD rather than a wasted
+look. The correction came from reading `rollUp`'s body, which is the same move
+that has worked every time: **ask what the consumer reads, not what the concept
+is called.**
+
+## THE REAL STATE OF LINK 5 - **worse in a different way**
+
+    competency_kasba_rating    160 rows
+    controllers touching it      0
+    rating ROUTES                2, and BOTH ARE GET
+    writers                      ProficiencyService LEFT JOINS it - it READS it
+
+**No controller, no route and no service writes `competency_kasba_rating`.** The
+160 rows are seed, like every other link.
+
+**So THREE of the five links have no user-facing writer, not two:**
+
+    3  job role task -> competency   jobrole_task_competency_map   0 rows,  no writer
+    4  course        -> competency   course_competency_map        56 rows,  no writer
+    5  employee      -> rating       competency_kasba_rating     160 rows,  NO WRITER
+
+**The gap engine is correct, reads the right table, and nothing can put a rating
+in it.** That is the same finding as the other four tables - **not a model
+mismatch, a missing writer** - and it means the corrected chain statement is:
+
+**EVERY LINK OF THE CAPABILITY CHAIN IS ON THE CORRECT MODEL, AND THREE OF FIVE
+HAVE NO WAY FOR A USER TO FILL THEM.**
+
+**What it does NOT need**: a rebuild of the calculation, per-competency re-keying,
+or anything touching `s_skill_matrix`. **The composer's output is usable.** The
+sizing Triz asked for is: **a rating write path**, not a migration.
+
+---
+
 # THE CHAIN - **every link exists as a table, almost none can be filled through the product**
 
 **This is the four-tables finding said as a chain, and it is the clearest
