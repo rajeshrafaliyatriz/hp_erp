@@ -6569,6 +6569,57 @@ ones.**
 
 ---
 
+# THE RATING WRITE PATH - **link 5 closed, 15/15 through the gap**
+
+`POST` / `DELETE /competency/kasba-rating`, guarded `profile:admin,hr`. **New
+routes, not repurposed** - the two assessment-cycle GETs keep their meaning.
+
+**Proved through `ProficiencyService::rollUp`, never through the table it just
+wrote:**
+
+    BEFORE      level NULL (not 0), coverage 0
+    RATE 201    level 4, coverage 0.5, second item still unmeasured
+    RE-RATE     no duplicate row, level 2
+    rating 0    REFUSED 422
+    other tenant's item   REFUSED 404
+    REMOVE 200  level NULL AGAIN, coverage 0 again
+    fixtures removed; demo tenant ratings 160 -> 160
+
+**UNMEASURED STAYS UNMEASURED, enforced in three places**: a rating of 0 is
+refused so *unrated* and *rated badly* can never share a column; absence is the
+row not existing; and DELETE exists so "we no longer have a view" can be said
+without writing something false.
+
+**Two items in the fixture on purpose** - with one item coverage can only be 0 or
+1, and a partial-coverage bug would be invisible.
+
+## THE SUITE CHECK THAT ASSERTED A FALSE BELIEF
+
+Widening the pickers turned a check red: `RESOLVABLE_KASBA_TYPES === ['skill']`.
+**The check was faithfully asserting G-SEED-01's premise**, which the row counts
+and the 12/12 proof had just disproved.
+
+**A check may only be changed when the claim it encodes has been disproved by
+measurement, never because it went red.** What replaced it is **stricter**: it
+now requires the UI list AND the server's `ITEM_TABLES` to agree, and fails if
+the old `=== 'skill'` branch survives. **The move that would manufacture dangling
+rows - widening the UI without the server - now fails in the suite instead of
+shipping.**
+
+**This is the second time a green was bought by a document being wrong rather
+than the code**, and the first where the check itself was the document.
+
+---
+
+# FILED - **a 500 where a 422 belongs**
+
+`CompetencyDefinitionController@store` does not validate `code`, and
+`competency.code` is `NOT NULL`. **Omitting it returns a 500 with a raw SQL
+message instead of a 422 naming the field.** Found by the resolution proof
+failing on its first run. Not taken; one line.
+
+---
+
 # RETRACTION - **LINK 5 IS NOT A MODEL MISMATCH. IT IS A THIRD MISSING WRITER.**
 
 **I reported last turn that ratings are of skills and requirements are of
