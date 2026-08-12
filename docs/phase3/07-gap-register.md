@@ -346,6 +346,58 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## L-04 DECISION - **OPTION 3: FREE TEXT, WITH A TRIGGER** (Triz, 2026-08-12)
+
+Same ruling X-03 made for `certification_qualifications`, **for a stronger
+reason**: that field's picker would have rendered empty; **this one would orphan
+real data.** 70 rows already hold values a picker would refuse, so a customer
+editing any job role would find **their own value gone from the list.**
+
+**TRIGGER: when a customer's job levels are mapped to a grading scale, this
+becomes a picker.** That mapping is AUTHORING and belongs with the seed-library
+import, not with a form field.
+
+### WHY NOT THE OTHER TWO, RECORDED SO NEITHER IS RE-PROPOSED
+
+- **Option 1, map the vocabularies** - requires asserting that ENTRY means SFIA
+  level 1 or 2. **That is a claim about a customer's grading scheme that neither
+  of us can make**, and it would silently reshape 70 existing rows.
+- **Option 2, source the picker from the data** - a dropdown of the five words
+  someone typed. **Correct, invisible to a customer, and it loses the SFIA link
+  that was the row's whole purpose.**
+
+---
+
+## THE ROW'S SIZE WAS NEVER THE PROBLEM. THE ROW'S POPULATION WAS.
+
+**X-08(b) and L-04 are one shape**, and it is now the standing reason the size
+check measures a row's data before reading its code.
+
+| | the mechanism | the population it would serve |
+|---|---|---|
+| **X-08(b)** | a picker matching held labels to catalogue items | **0 of 26** - four dimensions have no catalogue; the fifth's 8 labels are clinical and the catalogue is finance |
+| **L-04** | a picker sourcing job level from SFIA | **0 of 70** - the catalogue says 1-7, the data says ENTRY/MID/SENIOR/ADVANCED/EXECUTIVE |
+
+**Both are G-SEED-01's correction: THE DISTANCE IS VOCABULARY, NOT DIMENSION.**
+Both were rated small, and both estimates were right about the code and silent
+about the data.
+
+**A row's size tells you what it costs to build. Only its population tells you
+whether building it does anything.**
+
+### THE COUNTERFACTUAL THAT MAKES IT CONCRETE
+
+**The matching screen would have passed review, passed its tests, rendered an
+empty picker 26 times out of 26, and nothing about the code would have looked
+wrong.**
+
+That is what a correct implementation of a wrong row looks like: it does not fail,
+it does not error, and it is not visibly defective. **It is simply useless, and no
+technique applied to the code could have revealed that** - only counting the rows
+it would serve.
+
+---
+
 ## L-04 SIZED - **nineteenth row, and the SAME defect as X-08(b) one row later**
 
 Rated **XS after X-03**. It is not a wiring job; **it would orphan every row it
