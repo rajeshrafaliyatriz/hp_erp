@@ -6569,9 +6569,25 @@ ones.**
 
 ---
 
-# jobrole_competency_map WIRED - **the table everything resolves against**
+# ALL 23 ROLE-REQUIREMENT ROWS ARE IN THE DEMO TENANT
 
-**23 rows platform-wide, and ALL 23 ARE IN TENANT 3 - THE DEMO TENANT.**
+**NO REAL TENANT HAS EVER HAD A ROLE REQUIREMENT.**
+
+    tenant 7 : competency=0   jobrole=120   map=0
+    tenant 3 : competency=10  jobrole=347   map=23   <- every row on the platform
+
+**The gap engine, the 9-box and the recommender have been resolving against a
+table only the seed filled.** Every gap figure, every 9-box position and every
+recommendation any real tenant has ever seen was computed against an empty
+requirement set - which does not mean they were wrong, it means **they were never
+about anything.** A tenant with no requirements has no gaps by construction, and
+the screens said so without ever saying why.
+
+**This is the headline. The wiring below is what makes it fixable.**
+
+---
+
+# jobrole_competency_map WIRED - **the table everything resolves against**
 
     tenant 7 : competency=0   jobrole=120   map=0
     tenant 3 : competency=10  jobrole=347   map=23   <- every row on the platform
@@ -6599,6 +6615,25 @@ keeps writing `s_user_skill_jobrole`; the panel writes the map.**
 **Reported rather than quietly narrowed**: the instruction was to wire the
 Framework screen AND the matrix. Half of it is not buildable without inventing a
 resolution, so half shipped and the other half is stated with its evidence.
+
+### RECLASSIFIED - **this is G-RBAC-02b's family, not a wiring blocker**
+
+**`MatrixCompetency.id` is an `s_users_skills.id` where the table needs a
+`competency.id`.** That is not a missing adapter. **It is COMPETENCY STILL BEING
+TREATED AS SKILL, in a live screen** - the same defect as the Command Center's
+"Create Competency" writing a flat skill row, and the same defect the
+`/competency/competencies` rename papered over.
+
+**The matrix is built on the PRE-Q-A2 model.** It cannot be wired to the new one;
+it has to be REBUILT on it. Filed as a rebuild, not a connection:
+
+    G-RBAC-02b family, known instances
+      /competency/competencies      writes s_users_skills, named competency
+      Command Center quick-create   the screen behind the renamed endpoint
+      THE ROLE MAPPING MATRIX       both axes on the pre-Q-A2 model   <- NEW
+
+**Three instances, one cause**: the product renamed the concept and left the
+screens on the old one. **A rename moves a label; it does not move a model.**
 
 ## PROVED AS L-14 WAS - **13 PASS / 0 FAIL**
 
@@ -6661,6 +6696,87 @@ wired for a script** - and that gap is exactly what X-21 exists to catch.
 not create requirements; it lets someone create them. **A tenant with zero
 competency rows still sees an empty picker**, and the panel says so in words
 rather than rendering an empty dropdown with no explanation.
+
+---
+
+# THE EMPTY STATE - **and there is nowhere to send them**
+
+X-03's ruling applied to work shipped minutes earlier: **a picker over an empty
+table looks like a closed list.** Tenant 7 opens Role Requirements and sees an
+empty dropdown that reads as *this organisation has nothing and cannot have
+anything.*
+
+**The empty state now says what is missing. IT DOES NOT LINK ANYWHERE, and that
+is measured rather than lazy.**
+
+## THERE IS NO REACHABLE UI PATH TO CREATE A COMPETENCY
+
+    writers of the `competency` table            2
+      CompetencyDefinitionController@store        POST /competency/definitions
+      FrameworkImportController                   framework-import/dry-run + commit
+
+    frontend callers of POST /competency/definitions   1  (cm-competency-composer)
+      is the composer in the content map?              NO
+    frontend callers of framework-import               0
+
+**`CmCompetencyComposer` is fully built, calls the right endpoint, and is not in
+`hooks/content-map-m2.ts`.** It is not exported from the domain barrel either.
+**The framework importer has no frontend caller at all.**
+
+**So the 209 competency rows arrived by provisioning, and a customer has no way
+to add a 210th through the product.** The empty state says competencies are
+defined separately and arrive by import or setup - **true, and it does not send
+anyone to a page that does not exist.**
+
+**A link to an unmounted screen would have been worse than no link**: it converts
+"I don't know how" into "the product is broken", and the user's own premise -
+that the create screen exists - is exactly what a plausible-looking link would
+have confirmed.
+
+### THIS IS THE FOURTH TABLE WITH READERS AND NO REACHABLE WRITER
+
+    s_library_map                 read by the role detail panel; written only by the JD parser
+    course_competency_map         two readers, ZERO writers
+    jobrole_task_competency_map   0 rows, no writer
+    competency                    two writers, NEITHER REACHABLE FROM A SCREEN
+
+**The pattern named in the KASBA measure holds one level up**: it is not only
+that forms write one table each - **it is that the model's own tables are fed by
+provisioning and parsers, and the product has no user-facing way to fill them.**
+
+---
+
+# THE NEAR-MISS THAT WAS CAUGHT BEFORE IT WAS CLAIMED
+
+**I nearly reported that the Framework screen is not mounted anywhere.**
+
+Four searches for `CmFrameworkMapping` - in `app/`, in `components/shell/`, in
+`**/*.tsx`, and for imports of the domain barrel - **all returned nothing but its
+own definition.** The conclusion was sitting there and it was wrong.
+
+**It is registered in `hooks/content-map-m2.ts`, lazily, through the `@/domain/...`
+path alias** - not `@/components/domain/...`, which is what every one of my
+searches assumed. Submenu 154, `framework-and-role-mapping`.
+
+**EIGHTH instance of a search scope narrower than the claim it would have
+supported** - and the first one caught BEFORE the claim was made rather than
+after. The check that caught it was asking "how does ANY competency screen get
+rendered", instead of "where is THIS component imported": **a question about the
+mechanism rather than about the symbol.**
+
+---
+
+# THE ALIAS MAP - **asked, and the answer is clean**
+
+Does anything else search by the route argument rather than the `role_key`?
+
+    production code comparing role_key to 'admin' / 'hr'   : NONE outside RequireProfile
+    frontend                                               : NONE
+
+**`RequireProfile::ALIASES` is the only translator, and it is correct.** The four
+turns this has cost were **all my own searches**, never a defect in the product.
+**The map is not the problem; my habit of grepping the vocabulary I just read in a
+route file is.**
 
 ---
 
