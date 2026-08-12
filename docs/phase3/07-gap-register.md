@@ -346,6 +346,61 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## S-04 SCOPED BEFORE READING - **93% is actionable, and the list is stale**
+
+Checked against the 51 **before** reading a single controller, because finding out
+afterwards has cost a turn three times.
+
+    FAIL rows in the C23 sweep        46   across 25 distinct controllers
+    BLOCKED by the 51                  3   routes / 3 controllers
+    ACTIONABLE                        43   routes / 22 controllers
+
+    blocked: CompetencyDashboardController, EmployeeDirectoryAnalyticsController,
+             HrmsLeaveController
+
+### THIS CORRECTS THE REGISTER'S OWN BLOCK TABLE
+
+G-BLOCK-01's cost table records **S-04 as spanning `Api/` x 23 and `talent/` x 5**,
+which reads as most of it being blocked. **It is 3 of 46.** The block table was
+describing the span of the 51 itself, not the overlap with S-04's candidates - and
+those are different numbers.
+
+**Two documents disagreed and the measurement settled it**: batch 1's
+classification of S-04 as *"BUILD, genuinely open"* was right; the block table
+overstated it. **Recorded rather than quietly corrected, because the block table
+is what travels with the escalation.**
+
+### AND THE 37 IS STALE - **at least 3 of 46 are already resolved**
+
+    ExcelAutomationAgentController@credentialStatus    O-03: probed, refuses a foreign tenant
+    ExcelAutomationAgentController@downloadTemplate    O-03: same
+    AJAXController@getSkillCompetency                  audited; the helper is load-bearing and held
+
+**The sweep ran 2026-08-06. It is six days old and already wrong about three
+routes** - all three changed by this engagement, none of them re-measured against
+the sweep that named them.
+
+**A FAIL list is a photograph, not a fact.** It was true when taken; every fix
+since has made it less true, and nothing marks which entries have expired. On this
+phase's record with unre-examined numbers, **the real count of remaining leaks is
+unknown and is certainly below 46.**
+
+### WHAT S-04 ACTUALLY IS
+
+**Not "hand-verify 37 candidates".** It is:
+
+1. **Re-run the C23 property** against the 43 actionable routes - the harness
+   exists, it executed 912 routes once, and re-running it is cheaper than reading
+   twenty-two controllers.
+2. **Read only what still fails.** Every route that now passes was fixed by
+   something and needs no reader at all.
+
+**The row is smaller than it looks and the sweep is the reason.** Re-measuring
+first is the same discipline that closed four rows and saved three - applied to a
+number instead of a population.
+
+---
+
 ## THE THREE MEASURE-FIRST ROWS - **all three survive. The run of closures ends.**
 
 Four consecutive rows had just closed on an empty population, so these three were
