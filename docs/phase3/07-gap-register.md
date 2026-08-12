@@ -346,6 +346,41 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## O-03 IS 5 OF 5 - **the held route is decided**
+
+`POST /api/excel-agent/upload` was HELD, not cleared, because the first probe hit
+the validator and never reached the guard:
+
+    upload  3->6   HTTP 422  The file field is required.
+
+**A 4xx before the code under test is not a result.** Four routes were decided and
+this one was recorded as held, because *"the request was rejected"* and *"the
+guard rejected it"* are different claims.
+
+**Resolved with a real `.xlsx`** - a ZIP carrying the three parts that make PHP's
+`finfo` report the spreadsheet mime, built in the probe rather than committed as a
+binary: **a fixture whose construction is visible can be checked; a blob cannot.**
+
+    caller 3 asks 3   ->  422  Unable to read Excel file.
+    caller 3 asks 6   ->  403  Invalid sub institute access.
+    caller 6 asks 3   ->  403  Invalid sub institute access.
+
+### THE DISCRIMINATOR IS THE ORDER, NOT THE STATUS
+
+Own tenant reaches the PARSER and fails there - the fixture has no sheet data, so
+422 is correct and expected. A foreign tenant is stopped EARLIER, at the guard.
+**The guard fires before the parse**, which is the same reachability argument that
+decided `saveCredentials`: what a caller can and cannot get to, rather than what
+it is told.
+
+**A 422 that differs from a 403 by WHERE it happens is a stronger result than two
+different messages would be** - the message can be rewritten by a catch; the
+ordering cannot.
+
+**O-03: all five routes refuse a foreign tenant.**
+
+---
+
 ## A SYNTAX CHECK AGREES WITH A SEMANTIC MISTAKE
 
 From the `g2gActorId` consolidation, and it is the clearest demonstration this
