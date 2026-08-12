@@ -40,6 +40,12 @@ class SendNewsletterJob implements ShouldQueue
             $subject
         );
 
+        // THE GATE. A queued job is the easiest place for a send to escape a
+        // per-route fix - the route is gated, the job it dispatched is not.
+        if (!\App\Support\MailGate::allowed()) {
+            return;
+        }
+
         Mail::to($this->recipients)->send($mail);
     }
 

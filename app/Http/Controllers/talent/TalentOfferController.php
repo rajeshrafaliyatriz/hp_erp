@@ -194,6 +194,14 @@ class TalentOfferController extends Controller
                         $offer->save();
                     }
 
+                    // THE GATE. Authenticated, but it emails a real candidate at
+                    // a real address, so "email is off" has to cover it too.
+                    if (!\App\Support\MailGate::allowed()) {
+                        return response()->json([
+                            'status' => 0, 'message' => \App\Support\MailGate::reason(),
+                        ], 503);
+                    }
+
                     Mail::to($application->email)->send(new OfferLetterMail($offer, $pdfPath));
 
                     // Update status to 'sent' after successful email send

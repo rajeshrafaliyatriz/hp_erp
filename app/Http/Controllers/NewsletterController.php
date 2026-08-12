@@ -22,6 +22,14 @@ class NewsletterController extends Controller
 
         $subject = $data['subject_override'] ?? $this->extractSubjectFromBody($data['body']) ?? 'Newsletter';
 
+        // THE GATE. "Email is off" was a property of ONE file out of seven until
+        // 2026-08-13; this route sent regardless. Refused OUT LOUD rather than
+        // dropped, because a send that vanishes silently is indistinguishable
+        // from one that was delivered.
+        if (!\App\Support\MailGate::allowed()) {
+            return response()->json(['status' => 0, 'message' => \App\Support\MailGate::reason()], 503);
+        }
+
         if ($data['send_immediately']) {
             // Send immediately
             Mail::to($recipients)->send(new NewsletterMail($data['body'], $data['cta_link'], $data['cta_text'], $subject));

@@ -542,6 +542,61 @@ check('org', 'working tree matches its baseline (50 foreign files, LISTED)', fun
         . 'of mine is uncommitted: ' . implode(', ', $sample)];
 });
 
+check('org', 'NO SEND SITE BYPASSES THE MAIL GATE', function () {
+    // "Email is off" was a property of ONE FILE out of seven for the whole of
+    // this engagement: only NotificationSender consulted G2G_NOTIFY_EMAIL, and
+    // six other files could send while the flag said off. A CONSTRAINT THAT
+    // READS AS GLOBAL AND HOLDS LOCALLY IS WORSE THAN NO CONSTRAINT, BECAUSE IT
+    // STOPS PEOPLE LOOKING.
+    //
+    // A per-file fix would leave the same false guarantee for whatever is added
+    // next, so this asserts the INVARIANT instead: every live send site sits
+    // behind MailGate. That is the only form that survives an eighth file.
+    $SEND = '/(?:Mail::(?:raw|send|to|queue|later)|Notification::(?:send|route)|->notify)\s*\(/';
+    $offenders = [];
+    $checked = 0;
+
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(app_path()));
+    foreach ($it as $f) {
+        if (!$f->isFile() || $f->getExtension() !== 'php') continue;
+        $src = stripComments(file_get_contents($f->getPathname()));
+        if (!preg_match($SEND, $src)) continue;
+        $checked++;
+        $name = basename($f->getPathname());
+        if ($name === 'MailGate.php') continue;
+        // NotificationSender reads the same env var directly and predates the
+        // gate; either form satisfies the invariant.
+        if (!preg_match('/MailGate::allowed|G2G_NOTIFY_EMAIL/', $src)) {
+            $offenders[] = $name;
+        }
+    }
+
+    // R16 AS AMENDED: the known-positive must be an instance the check is MEANT
+    // to find, and it must be a real finding if reported. A file that merely
+    // satisfies the pattern proves nothing - Q4's bell "passed" by being a
+    // notification file with no fetch, which proved it was findable, not that
+    // the pattern found hardcoded data.
+    if (!preg_match($SEND, 'Mail::to($x)->send($y);')) {
+        return ['SKIPPED', 'the send pattern cannot match a real send - it proves nothing'];
+    }
+    // THE KNOWN-NEGATIVE MUST RUN THROUGH THE SAME PATH AS THE SCAN. The first
+    // version tested the raw pattern against '// Mail::send(' and skipped - but
+    // the scan strips comments BEFORE matching, so it was testing a pipeline the
+    // scan does not use. A known-negative applied to half the instrument reports
+    // on an instrument that does not exist.
+    if (preg_match($SEND, stripComments('// Mail::send($x);'))) {
+        return ['SKIPPED', 'a COMMENTED send survives the stripper - the scan would over-report'];
+    }
+    if ($checked === 0) {
+        return ['SKIPPED', 'no send sites found at all - the scan is broken, not the code clean'];
+    }
+
+    if ($offenders) {
+        return ['FAIL', count($offenders) . ' send site(s) bypass the gate: ' . implode(', ', $offenders)];
+    }
+    return ['PASS', "all $checked file(s) with a send sit behind MailGate or read the flag directly"];
+});
+
 check('org', 'R30 - every evidence script still parses (backslash-mangling guard)', function () {
     // R30 SAID: write scripts to a FILE, never a heredoc, because the shell eats
     // backslashes and silently corrupts every regex in them.
