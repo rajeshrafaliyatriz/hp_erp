@@ -864,6 +864,7 @@ one follows the row in both directions.
 |---|---|---|
 | **Matrix-enforced authorization** | built, proven, **cannot be registered** | one line in `bootstrap/app.php` |
 | **Identity-resolver consolidation** | decided (THROW), **cannot be landed** | 21 of 54 exposed callers are in the 51 |
+| **The suite reaching a TRUE GREEN** | the only earned path is blocked | `table_data`'s route is in `routes/web.php`, one of the 51 |
 
 **The consolidation was stopped before any edit.** Adding the throw to
 `ResolvesApiIdentity` changes behaviour for all 76 consumers; 54 of those
@@ -883,6 +884,18 @@ the two zeros, and it is why this stopped rather than proceeded.
 **This is the difference between a blocked queue and a blocked product.** One item
 waiting is a schedule problem. Two finished capabilities that cannot be switched
 on is the block deciding what the product does.
+
+**AND THE THIRD IS THE HARDEST TO ARGUE WITH.** `table_data` carries no
+middleware, so its caller population is unbounded and unmeasurable. Putting
+middleware on it bounds that population, after which `tableDataRequestedTenant` -
+the last offender in the suite - deletes on a **census** instead of a sample of
+two repositories. **That is the only path to a true green that is earned rather
+than tuned.** The route is declared in `routes/web.php`, one of the 51.
+
+So: two built things cannot be switched on, **and the project's own quality signal
+cannot be made honest.** A red that is correct and permanent is not a quality
+signal; it is a standing exception, and standing exceptions are what people stop
+reading.
 
 ---
 
