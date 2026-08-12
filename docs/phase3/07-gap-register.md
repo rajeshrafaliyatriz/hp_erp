@@ -346,6 +346,67 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## X-03 IS DONE - **the size check found the work already built**
+
+Sixteen plan rows in sixteen, and this one is wrong in a **fourth** way. The last
+four were wrong differently each time:
+
+    O-03    named a fix for a leak nobody had located
+    X-15    named a file that did not exist
+    X-07    a finished design with nothing built under it
+    X-03    ALREADY BUILT, still rated M-L and "Not started"
+
+### WHAT EXISTS
+
+    library-config.ts   460 lines   an 11-member `source` union, 11 fields carrying one
+    library-form.tsx    390 lines   sourceValues() resolves each source to real values
+    /api/competency/library/meta    HTTP 200, supplies every source
+
+**Measured end to end, not read** - the API called as a real administrator in
+tenant 3:
+
+    departments         18      related_skills       547
+    sub_departments     40      job_titles           346
+    micro_categories    24      learning_resources    67
+    industries           1      proficiency_levels     6
+    task_types           1      invisible_types        3
+    jobroles           338 distinct, derived from jobroles_by_department (27 depts)
+
+**Eleven of eleven resolve and every one is populated.**
+
+### A CORRECTION ON THE WAY
+
+My first probe reported `jobroles` **ABSENT from meta** - I looked for a key of
+that name. `sourceValues()` derives it from `jobroles_by_department` instead. **I
+checked the wrong key and nearly filed a gap that does not exist**, which is the
+settled pattern's fourth shape again: the scope of what I looked at was the
+population I judged.
+
+### AND THE DECISION IT ALREADY CARRIES
+
+`library-config.ts` line 181 holds an X-03 ruling written when the row was
+supposedly not started:
+
+> *"STAYS FREE TEXT. `certification_type` holds 0 rows, and a picker over an empty
+> table looks like a closed list and offers nothing. Scheduled on
+> `certification_type populated`, not parked."*
+
+**A picker over an empty table looks like a closed list and offers nothing** is the
+sentence to keep - it is the unmeasured-as-zero principle applied to a UI control.
+
+### WHAT THIS LEAVES
+
+`L-01` and `L-02` (department on the Job Role and Skill forms) were rated **XS
+after X-03** and both `department -> departments` fields exist and resolve. **They
+are done too.** `L-04` (Job Level -> `s_level_responsibility`) has no matching
+source in the union and is the one that remains.
+
+**The plan's staleness is now itself measurable:** four consecutive rows, four
+different kinds of wrong, and one of them wrong because the work was finished and
+nobody closed the row.
+
+---
+
 ## A CLASS THAT CANNOT BE LOADED AND IS NEVER NAMED PRODUCES NO ERROR
 
 `app/Http/Controllers/libraries/jobroleLibrary1Controller.php` declared
