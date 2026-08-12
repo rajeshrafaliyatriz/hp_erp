@@ -119,7 +119,7 @@ for obj, rel in SERVICES.items():
     if not dead:
         print('   no dead methods')
         continue
-    print('   %-26s %-9s %-14s %s' % ('METHOD', 'CALLERS', 'CAUSE', 'PATH -> nearest real route'))
+    print('   %-26s %-9s %-14s %s' % ('METHOD', 'CALLERS', 'CAUSE', 'PATH -> SIMILARITY SCORE, NOT A CANDIDATE'))
     for meth, bad, called in dead:
         for p in bad:
             c, near = cause(p)

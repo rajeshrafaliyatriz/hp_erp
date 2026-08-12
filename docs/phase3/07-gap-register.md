@@ -7671,6 +7671,92 @@ form the bell took before it was fixed.
 
 ---
 
+# DEFERRED-DEAD - **two first-draft service files, kept**
+
+    lmsService     services/lms/index.ts      8 methods, 8 dead, 0 importers
+    talentService  services/talent/index.ts  14 methods, 14 dead, 0 importers
+
+**WHAT THEY WERE FOR**: each is a COMPLETE CRUD SURFACE for its module -
+courses/assignments/certifications, and candidates/onboarding/performance/
+mobility. **They are the first-draft API of each module, written before the real
+services existed.** Every module now has working services under different names
+(`lmsCatalogService`, `onboardingService`, and so on). **These two are the drafts
+nobody removed.**
+
+**DELETE NOTHING.** Zero callers, zero risk either way, and **the intention is now
+recorded whether or not the files exist** - which was the only thing deletion
+would have preserved. The no-deletion rule has held all engagement for reasons
+that outrank tidiness.
+
+**The next reader needs to know these are drafts, not that they are gone.**
+
+---
+
+# A STRING-SIMILARITY SCORE IS NOT A REPOINT TARGET
+
+**Resolve-don't-match again - and this time in the PROPOSAL rather than the
+measurement, which is a new place for it.**
+
+The R8 dossier printed a "nearest real route" column from fuzzy matching. Three of
+its suggestions are nonsense:
+
+    getCertifications      certifications  -> api/notifications
+    assignTask             tasks/{}/assign -> api/reporting-line/assign
+    rejectMobilityRequest  .../reject      -> api/talent-offers/{id}/reject
+
+**Wiring a method to an unrelated endpoint is worse than leaving it dead** - the
+dead one fails loudly, the mis-wired one succeeds against the wrong thing.
+
+**A fuzzy-matched suggestion sitting in a work-list will be read as a decision by
+whoever opens it next.** The column is labelled as similarity scores, never
+candidates.
+
+## SIX GROUPS FILED AS CANDIDATES REQUIRING A READ - not scheduled
+
+    lms courses x4  ·  candidates x4  ·  onboarding-tasks x3
+    performance-reviews x2  ·  attendance x2  ·  projects x2
+
+**A read first and a repoint second, if ever.** The likeliest real one is
+`hrmsService.checkIn/checkOut` against `api/attendance/punch-in|punch-out` -
+**the working siblings in that same file prove somebody was wiring it and
+stopped.**
+
+---
+
+# THE TWO WRITERS - **SIZED, NOT STARTED**
+
+Both mirror `jobrole_competency_map` exactly.
+
+    course_competency_map          56 rows   sub_institute_id, course_id,
+                                             competency_id, proficiency_level,
+                                             is_primary
+      subject: sub_std_map                   96 courses
+
+    jobrole_task_competency_map     0 rows   sub_institute_id, jobrole_task_id,
+                                             competency_id
+      subject: s_user_jobrole_task       85,663 tasks
+
+## WHAT THE PRECEDENT COST
+
+    RoleCompetencyMapController.php   226
+    rolemap-wiring-proof.php          157
+    role-requirements.ts              115
+    role-requirements-panel.tsx       322
+                                      ---
+                                      820 lines, FOUR files, ONE writer
+
+**Plus a menu row derived from a sibling, a rights write across admin/HR
+profiles, and an X-21 walkthrough.**
+
+**TWO WRITERS IS ~1,640 LINES, TWO MENU ROWS, TWO RIGHTS WRITES AND TWO X-21
+WALKTHROUGHS.** That is not a tail-of-turn build. **Starting one at the end of a
+turn is exactly what left a row in tenant 1**, and the size check exists to say so
+before rather than after.
+
+**SIZED AND STOPPED. Nothing begun.**
+
+---
+
 # CHOOSING THE WRONG UNIT DOES NOT MAKE A MEASURE WRONG - IT MAKES IT ANSWER A DIFFERENT QUESTION
 
 **Q4 asked: which controls show hardcoded data where a fetch belongs. Q4 measured:
