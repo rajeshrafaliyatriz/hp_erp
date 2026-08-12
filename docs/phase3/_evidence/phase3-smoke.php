@@ -1108,7 +1108,7 @@ check('component', 'gap view: a level cannot render without its coverage', funct
             : ($bound ? 'bound but not in the same branch as the level' : 'CoverageBar not bound to row.coverage')];
 });
 
-check('component', 'composer: a picker ONLY for skill, free text for the other four', function () {
+check('component', 'composer: every dimension resolvable, and the SERVER validates each', function () {
     $defs = fe('services/competency/definitions.ts');
     $comp = fe('components/domain/competency/cm-competency-composer.tsx');
     if ($defs === null || $comp === null) return ['SKIPPED', 'composer or definitions not found'];
@@ -1126,9 +1126,46 @@ check('component', 'composer: a picker ONLY for skill, free text for the other f
     preg_match_all("/'([a-z]+)'/", $m[1], $kinds);
     $resolvable = $kinds[1];
 
+    // CHANGED FROM `=== ['skill']`, AND NOT TO CLEAR A RED.
+    //
+    // The old assertion encoded G-SEED-01's premise - that only `skill` had a
+    // canonical table and the other four were label-only. THAT WAS NEVER TRUE OF
+    // THE DATA: s_user_knowledge 6,950 + s_user_ability 6,175 + s_user_attitude
+    // 655 + s_user_behaviour 694 = 14,474 rows the library tabs had been writing
+    // all along. The check was faithfully asserting a false belief.
+    //
+    // A check may only be changed when the claim it encodes has been DISPROVED BY
+    // MEASUREMENT, never because it went red. What replaces it is stricter, not
+    // looser: the UI list must match the SERVER's table map exactly, so widening
+    // one without the other now fails here.
+    $expected = ['skill', 'knowledge', 'ability', 'attitude', 'behaviour'];
     $problems = [];
-    if ($resolvable !== ['skill']) {
-        $problems[] = 'resolvable = [' . implode(',', $resolvable) . '], expected [skill]';
+    sort($resolvable);
+    $want = $expected; sort($want);
+    if ($resolvable !== $want) {
+        $problems[] = 'resolvable = [' . implode(',', $resolvable) . '], expected all five';
+    }
+
+    // THE HALF THAT MATTERS: the server must validate each dimension against its
+    // own table. Widening the UI without this branch is what would manufacture
+    // dangling rows - item_id has no foreign key, and one dangling row already
+    // exists from when the branch checked `=== 'skill'`.
+    $ctrl = @file_get_contents(base_path('app/Http/Controllers/Api/Competency/CompetencyDefinitionController.php'));
+    if ($ctrl === false) {
+        $problems[] = 'CompetencyDefinitionController not found - cannot verify the server half';
+    } else {
+        if (!preg_match('/ITEM_TABLES\s*=\s*\[(.*?)\]/s', $ctrl, $tm)) {
+            $problems[] = 'server has no ITEM_TABLES map';
+        } else {
+            foreach ($expected as $kind) {
+                if (!str_contains($tm[1], "'" . $kind . "'")) {
+                    $problems[] = "server ITEM_TABLES is missing '$kind'";
+                }
+            }
+        }
+        if (preg_match("/kasba_type'\]\s*===\s*'skill'/", $ctrl)) {
+            $problems[] = 'server still validates item_id for skill ONLY';
+        }
     }
     $c = stripComments($comp);
     // The picker must be gated on isResolvable, not rendered unconditionally.
@@ -1138,7 +1175,7 @@ check('component', 'composer: a picker ONLY for skill, free text for the other f
     if (!preg_match('/<Input\b|<input\b/', $c)) $problems[] = 'no free-text input for held labels';
 
     return [$problems ? 'FAIL' : 'PASS',
-        $problems ? implode(' | ', $problems) : 'skill only is resolvable; picker gated; free text present'];
+        $problems ? implode(' | ', $problems) : 'all five resolvable in UI AND in the server map; picker gated; free text present'];
 });
 
 check('component', 'Skill Library: no user-visible "Competency" string', function () {
