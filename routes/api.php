@@ -374,6 +374,12 @@ Route::get('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCom
 Route::post('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/role-map/{id}', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 
+// COURSE -> COMPETENCY. The table had two shipped consumers (LearningAssigner,
+// RemediationRecommender) and NO writer: 56 seeded rows and no way to add a 57th.
+Route::get('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'index']);
+Route::post('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
 // KASBA RATINGS - the write half of the last link before the gap.
 // competency_kasba_rating had 160 seeded rows and NO writer anywhere: both
 // existing rating routes are GET and ProficiencyService only LEFT JOINs it.
