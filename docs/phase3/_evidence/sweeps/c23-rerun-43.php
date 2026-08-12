@@ -78,13 +78,33 @@ foreach (RouteFacade::getRoutes() as $r) {
     if (in_array('GET', $r->methods(), true)) $live[$r->uri()] = true;
 }
 
-$now = ['LEAK' => [], 'REFUSED' => [], 'ERROR' => [], 'OTHER' => [],
+$now = ['LEAK' => [], 'REFUSED' => [], 'ERROR' => [], 'SELF-MUTATING' => [], 'OTHER' => [],
         'PASS' => [], 'UNTESTABLE' => [], 'GONE' => [], 'VACUOUS' => []];
 
 foreach ($targets as $action => $uri) {
     if (!isset($live[$uri])) { $now['GONE'][] = $action; continue; }
 
     [$s1, $b1] = call_route($kernel, $uri, ['sub_institute_id' => TENANT_A]);
+
+    // ── SELF-MUTATING CHECK, BEFORE ANY CROSS-TENANT COMPARISON ────────────
+    //
+    // A DIFFERENTIAL PROPERTY ASSUMES THE WORLD HOLDS STILL BETWEEN THE TWO
+    // CALLS. Where the endpoint is what moves it, the property measures its own
+    // footprint and returns LEAK forever on correct code.
+    //
+    // AuditController@export proved it: every call writes an audit entry into the
+    // table it exports, so two calls can never match - 33 rows, then 34, then 35,
+    // growing by exactly one, WITH THE TENANT HELD CONSTANT. It resolves the
+    // tenant correctly and would have been "fixed" to satisfy a check that cannot
+    // be satisfied.
+    //
+    // One extra request settles it. Same tenant, twice.
+    [$s1b, $b1b] = call_route($kernel, $uri, ['sub_institute_id' => TENANT_A]);
+    if ($s1 === $s1b && $b1 !== $b1b) {
+        $now['SELF-MUTATING'][] = $action;
+        continue;
+    }
+
     [$s2, $b2] = call_route($kernel, $uri, ['sub_institute_id' => TENANT_B]);
 
     if ($s1 === 401 || $s1 === 403)      { $now['UNTESTABLE'][] = $action; continue; }
@@ -108,7 +128,7 @@ foreach ($targets as $action => $uri) {
 }
 
 echo "RESULT vs the 2026-08-06 sweep\n";
-foreach (['LEAK', 'REFUSED', 'ERROR', 'OTHER', 'PASS', 'UNTESTABLE', 'VACUOUS', 'GONE'] as $k) {
+foreach (['LEAK', 'REFUSED', 'ERROR', 'SELF-MUTATING', 'OTHER', 'PASS', 'UNTESTABLE', 'VACUOUS', 'GONE'] as $k) {
     printf("  %-11s %d\n", $k, count($now[$k]));
 }
 
@@ -133,6 +153,14 @@ printf("
   ERROR - 5xx for both callers, broken for everyone: %d
 ", count($now['ERROR']));
 foreach ($now['ERROR'] as $a) echo "    $a
+";
+
+printf("
+  SELF-MUTATING - differs from ITSELF at the same tenant. The property
+");
+printf("                  cannot judge these at all: %d
+", count($now['SELF-MUTATING']));
+foreach ($now['SELF-MUTATING'] as $a) echo "    $a
 ";
 
 file_put_contents(__DIR__ . '/c23-rerun-43-result.json', json_encode($now, JSON_PRETTY_PRINT));

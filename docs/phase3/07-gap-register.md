@@ -6569,6 +6569,62 @@ ones.**
 
 ---
 
+## THE FIFTH VERDICT APPLIED TO THE WHOLE CONFIRMED SET - **and the three fixes were real**
+
+**22 routes, same tenant, twice each.** The question the cross-tenant comparison
+could not ask.
+
+    STABLE         19   the cross-tenant verdict stands
+    SELF-MUTATING   3   the property could not judge these
+
+### THE THREE FIXES WENT ONTO REAL LEAKS
+
+`DepartmentManagementController`, `organizationDetailsController` and
+`tblmenumasterG2gController` are all in the **STABLE 19**. **They differ across
+tenants and NOT across repeated calls** - which is exactly what a leak looks like
+and exactly what a self-mutating endpoint does not. **Measured, not argued** - the
+byte counts after the fix were the argument, and this is the measurement.
+
+### THE THREE THE PROPERTY CANNOT JUDGE
+
+    AuditController@export                      21,108b -> 21,609b   REAL MUTATION
+    HrmsController@departmentAttendanceReport         84b ->     84b   varies, same length
+    PayrollController@monthlyPayrollCreate       17,927b -> 17,927b   varies, same length
+
+**Only the first is a state change.** `export` writes an audit row per call and
+grows by one.
+
+**The other two differ in CONTENT at the same LENGTH**, and `PayrollController`'s
+is a **500 whose stack trace varies between calls** - `"function": "{closure}"`,
+frame addresses shifting. **It is not mutating state; its error output is
+non-deterministic.**
+
+### SO THE FIFTH VERDICT IS REALLY TWO
+
+    SELF-MUTATING       the endpoint changes the data it reads     (export)
+    NON-DETERMINISTIC   the response varies without the data       (a varying
+                        changing - timestamps, stack frames         500, a clock)
+
+**Both defeat a differential property and for different reasons**, and a harness
+that lumps them together will send someone to look for a state change that is not
+there. **A fifth verdict was not enough; the world had six outcomes.**
+
+**That is the same lesson a fourth time in three turns** - and this time it was the
+*fix* for the lesson that came up short.
+
+### G-SEC-29's CORRECTED COUNT
+
+    20 scored LEAK
+    -1 AuditController@export         self-mutating, correct code
+    -1 HrmsController@departmentAttendanceReport   unjudgeable, needs reading
+    ---
+    18 confirmed leaks
+    -3 fixed and re-verified STABLE
+    ---
+    15 open
+
+---
+
 ## AuditController IS NOT A LEAK - **it mutates what it reads. G-SEC-29 is 19, not 20.**
 
 Taken as a READ, not an edit, because it leaked with **zero tenant reads found** -
