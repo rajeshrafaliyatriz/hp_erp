@@ -349,6 +349,63 @@ X-08(b) and L-04 - measure the population before building the mechanism.**
 
 ---
 
+# §1c. ROW CLASSIFICATION - **BATCH 2 of 3 (rows 18-34)**
+
+| row | verified status | class | evidence |
+|---|---|---|---|
+| **L-12** One shared category table + applicability | open | **BUILD** | no shared category table exists; each library carries its own `category`/`sub_category` |
+| **L-13** Propagate taxonomy renames | open | **BUILD** | X-20 re-pointed 805 references once, by script; nothing propagates a later rename |
+| **L-14** Task catalogue → competency | ✅ **DONE** | **BUILD-WITH-AUTHORING-CONTENT** | write path built and proved (store/re-read/destroy); **0 rows and correctly so** |
+| **L-15** Compliance Relevance → boolean + regulation ref | open | **BUILD** | `legal_compliance_relevance` is free text today; no boolean, no ref column |
+| **L-16** Risk Implications → severity → `competency.critical` | open | **BUILD** | **`competency.critical` does not exist** - this needs a schema change, not a form change |
+| **L-17** `assessment_method` enum, additive | open | **BUILD** | `assesment_method` is free text with a placeholder; no enum table |
+| **L-18** Importance → `competency_kasba_item.weight` | **partly** | **BUILD** | column exists and is populated, but **199 of 225 sit at 1.00** - the default. Nothing authored an importance |
+| **L-19** Experience → numeric min years, text kept | open | **BUILD** | `required_skill_experience` is text only; no numeric column beside it |
+| **L-20** Three `*_tags` → shared categories | open | **BUILD** | real population: **943 of 5,171** skills carry `custom_tags` |
+| **L-21** Performance Metrics on the rating screen | open | **BUILD** | field exists in the library; the rating screen does not read it |
+| **L-22** Measurement Metrics as scale anchor | open | **BUILD** | same - authored in the library, unread by the scale |
+| **L-23** Development Methods at plan creation | open | **BUILD** | same - unread by the development-plan flow |
+| **C-10** Library drawer: 5 unrendered fields | ✅ **DONE** | BUILD | `library-detail-modal.tsx:347` renders `config.fields` **generically**, so all five appear |
+| **M-01** Learning edit controls | open | **BUILD** | endpoint accepts both directions; the screen exposes one |
+| **M-02** Learning assignment records its gap | open | **BUILD** | `suggested_course` has no gap reference column |
+| **M-04** `skill_matrix_item` tenant column | ✅ **DONE** | BUILD | column present; table holds 0 rows, which is a separate matter (`s_skill_matrix` at 169 rows still has **no** tenant column - that is G-DATA-08, still open) |
+| **O-01** Skill Deficit KPI honesty | **open - LIVE DEFECT** | **BUILD** | see below |
+
+### ⚠ O-01 IS THE BATCH'S FINDING - **the KPI reports "not measured" as "deficient"**
+
+`employee-directory.tsx:211`:
+
+    const skillDeficit = employeesData.filter(
+      (employee) => !employee.skills || employee.skills.length === 0 || ...
+    )
+
+**An employee nobody has assessed is counted as having a skill deficit.** That is
+unmeasured-as-zero, in the customer-facing KPI, on the employee directory - the
+first screen an administrator opens.
+
+**It is the same principle this phase has enforced everywhere else** - the 9-box
+refuses to place an unmeasured employee, the gap view renders words rather than a
+zero, `null` is kept distinct from `0` through the API - **and this KPI does the
+opposite in a headline number.**
+
+Given tenant 3 has **68 of 122** employees measured and other tenants have close
+to none, this KPI currently reads as a near-total skill deficit across the
+platform, which is a statement about assessment coverage wearing the label of a
+capability problem.
+
+### BATCH 2 TOTALS
+
+    DONE, wrongly marked "Not started"     3   (L-14, C-10, M-04)
+    BUILD, genuinely open                 13
+    BUILD-WITH-AUTHORING-CONTENT           1   (L-14, also counted as done)
+    LIVE DEFECT found while classifying    1   (O-01)
+
+**Three of seventeen were already finished.** Lower than batch 1's eight, and the
+reason is visible: batch 2 is mostly **library field wiring**, which this
+engagement never reached - the work it did reach is concentrated in batch 1.
+
+---
+
 # §2. THE GOLDEN THREADS, TRACED
 
 *This is the most important section. Each thread reads as "here is how it becomes
