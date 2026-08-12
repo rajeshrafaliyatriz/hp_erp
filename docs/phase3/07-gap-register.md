@@ -6569,6 +6569,69 @@ ones.**
 
 ---
 
+## ⚠ G-SEC-29's FIX PATTERN DOES NOT TRANSFER - **78 sites, not 13 replacements**
+
+**My own split was wrong and the correction is the same error a fourth time.** I
+classified 13 controllers as "bespoke resolver, the pattern applies" **because they
+lacked the trait.** *Lacking a trait* and *having a resolver method* are different
+claims, and I measured the first and asserted the second.
+
+**None of the 13 has a bespoke resolver body.** They read the tenant INLINE, at 78
+separate sites.
+
+    controller                       request sites   shape
+    HrmsController                        38         session ?? request
+    organizationDetailsController          6         REQUEST ONLY
+    tblmenumasterG2gController             5         REQUEST ONLY
+    ApplyLeaveController                   4         session ?? request
+    DepartmentManagementController         4         REQUEST ONLY
+    LeaveSummaryReportController           4         session ?? request
+    questionmasterController               4         session ?? request
+    taskController                         4         session ?? request
+    LeaveTypeController                    3         session ?? request
+    skillcontroller                        3         session ?? request
+    sub_std_mapController                  2         session ?? request
+    courseController                       1         session ?? request
+    AuditController                        0         NEITHER - tenant from elsewhere
+                                        ----
+                                          78
+
+### WHY THE PROVEN PATTERN DOES NOT APPLY
+
+`skillLibraryController`'s fix was **one method body**, and the register records the
+result exactly: *"Eleven call sites, zero edits."* That worked **because the eleven
+call sites all went through one resolver.**
+
+**Here there is no resolver to replace.** Each of the 78 sites is its own
+expression, so it is 78 edits, not 13 - **and the pattern's headline number was the
+thing that made it look cheap.**
+
+### THREE SHAPES, NOT ONE
+
+| shape | controllers | what it means |
+|---|---|---|
+| `session() ?? $request` | 9 | the request is a FALLBACK - a leak only when the session is absent, which is every API call |
+| **REQUEST ONLY** | 3 | `DepartmentManagement`, `organizationDetails`, `tblmenumasterG2g` - **no session, no token, the caller's word is the only source.** The worst of the three |
+| **neither** | 1 | `AuditController` leaks with **zero tenant reads found** - the tenant reaches it another way and that needs reading before anything else |
+
+### AND ONE CONTROLLER IS HALF THE WORK
+
+**`HrmsController` holds 38 of the 78.** It is also `O-05`'s row - *"read
+`HrmsController` (31 routes)"* - which the classification listed as a separate
+open BUILD. **They are the same work**, and neither row knew about the other.
+
+### STOPPED, AND NOT STARTED
+
+Per the standing condition: **if the resolver is not a bespoke body, stop and
+report rather than force the pattern.** That condition now fires for **all 18**, not
+five - the 13 for a different reason than the 5, but the same instruction.
+
+**Nothing was edited.** `git status` was checked on all 13 first: **none is among
+the 51**, so the work is unblocked - it is simply four times larger than the
+pattern implied.
+
+---
+
 ## G-SEC-29 SCOPED BEFORE TOUCHING A ROUTE - **the pattern applies to 13 of 18**
 
 **The property is now split IN THE HARNESS**, not in whoever reads it:
