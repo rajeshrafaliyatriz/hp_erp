@@ -5,6 +5,32 @@ BUILD sections of the six module write-ups. Nothing is re-derived here.
 
 > # ⚠ EVERY REMAINING ROW IN THIS PLAN IS A HYPOTHESIS ABOUT SCOPE, NOT A DESCRIPTION OF ONE.
 >
+> ## AND SOME ROWS CLOSE BY BEING MEASURED.
+>
+> **Sixteen rows opened with a size check, sixteen wrong** - and not in one way.
+> The last four were wrong differently each time:
+>
+>     O-03   named a fix for a leak nobody had located
+>     X-15   named a file that did not exist
+>     X-07   a finished design with nothing built under it
+>     X-03   ALREADY BUILT, still rated M-L and "Not started"
+>
+> **The size check has now found work already done twice** - X-03, and the picker
+> mechanism inside it. `L-01` and `L-02` closed the same way, as consequences.
+>
+> **The most expensive row is not the underestimated one. It is the finished one**,
+> because it is scheduled, costed, and blocks whatever it is listed before.
+>
+> **X-03 is the sharpest case: the row carried its own decision.**
+> `library-config.ts` holds an X-03 ruling - *"certification_qualifications stays
+> free text; a picker over an empty table looks like a closed list and offers
+> nothing"* - written while this document still said the row was not started. **The
+> decision was made, recorded in the code, and invisible to the plan that scheduled
+> it.**
+>
+> So a size check is not only "is this bigger than stated". It is also **"has this
+> already happened", and the answer has been yes twice.**
+>
 > **Four items opened, four rows wrong:**
 >
 > | Item | The row said | It was |
