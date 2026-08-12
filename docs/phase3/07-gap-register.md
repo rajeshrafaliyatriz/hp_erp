@@ -346,6 +346,87 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## A SYNTAX CHECK AGREES WITH A SEMANTIC MISTAKE
+
+From the `g2gActorId` consolidation, and it is the clearest demonstration this
+phase has produced of why **"no behaviour change" is asserted, not assumed.**
+
+The consolidation removed fifteen method bodies and inserted the trait `use`
+**among the FILE-LEVEL IMPORTS instead of inside the class body.**
+
+    use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;   <- an IMPORT
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;         <- WHERE MINE WENT
+
+    class jobroletaskcontroller extends Controller
+    {
+        use ResolvesApiIdentity;                                   <- where a TRAIT is applied
+
+**A file-level `use X;` is an import. A trait is applied by a `use X;` inside the
+class.** So the bodies were gone and the trait was never applied: fifteen
+controllers called a method that did not exist.
+
+**`php -l` WAS CLEAN ON ALL FIFTEEN, THROUGHOUT.** It is syntactically valid to
+import a trait and never use it. The linter agreed with the mistake because the
+mistake is well-formed.
+
+### WHAT CAUGHT IT
+
+The behaviour assertion, reporting **`MISSING METHOD` on four classes and ZERO
+assertions run**. Not a subtle wrong answer - a loud absence, from the check that
+was insisted on precisely because *no behaviour change* is a property to
+demonstrate rather than expect.
+
+**Had it been assumed, this would have shipped looking finished** - consolidated,
+lint-clean, and broken at every call site.
+
+### THE GENERAL FORM
+
+**A syntax check agrees with a semantic mistake.** `php -l`, a type-checker, a
+successful build and a green parse all answer "is this well-formed", and a
+well-formed wrong thing passes every one of them. **The class of defects they
+cannot see is exactly the class where the code means something other than
+intended** - which is most of them.
+
+---
+
+## THE SCOPE RULE'S SHARPER INSTANCE - **`context`, 3 of 7, six distinct bodies**
+
+`g2gActorId` was cleared as one helper and there were fifteen; it generalised
+**by accident**, because all fifteen were byte-identical.
+
+**`context` could not have.**
+
+    files with a `context` helper : 7
+    distinct bodies               : 6
+    cleared by the register       : 3
+
+**Clearing three of seven non-identical helpers generalises to nothing.** The
+three that were cleared say nothing whatever about the other four, and the entry
+did not say how many there were.
+
+The other four - `ResolvesLmsIdentity`, `SkillDevelopmentController`,
+`TaskListController`, `WorkspaceController` - **measure clean**: no request-tenant
+read, consistent with the suite's private-helper check naming only two offenders.
+**But that was established on 2026-08-12, not when they were cleared.** For four
+turns the register implied a coverage it never had.
+
+### THE QUESTION THAT PRODUCED BOTH FINDINGS, NOW ANSWERED
+
+*Does any register clearance name a helper without stating how many copies exist?*
+
+    resolveSubInstituteId       1 file,  1 body    scope was total
+    tableDataRequestedTenant    1 file,  1 body    scope was total
+    tableDataTenant             1 file,  1 body    scope was total
+    g2gActorId                 15 files, 1 body    generalised BY ACCIDENT
+    context                     7 files, 6 bodies  COULD NOT GENERALISE
+
+**Two of five had a scope problem and neither entry mentioned a count.** Every
+clearance now carries one. **A CLEARANCE OF ONE INSTANCE IS NOT A CLEARANCE OF A
+PATTERN, EVEN WHEN IT TURNS OUT TO BE** - and the only way to know which it is, is
+to count before writing the verdict.
+
+---
+
 # PROBE AUDIT OF THE CLEARANCES - **2026-08-12**
 
 **Scope:** a probe that FOUND a defect proved it could reach and discriminate. A
