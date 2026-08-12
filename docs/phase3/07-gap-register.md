@@ -6569,6 +6569,129 @@ ones.**
 
 ---
 
+# jobrole_competency_map WIRED - **the table everything resolves against**
+
+**23 rows platform-wide, and ALL 23 ARE IN TENANT 3 - THE DEMO TENANT.**
+
+    tenant 7 : competency=0   jobrole=120   map=0
+    tenant 3 : competency=10  jobrole=347   map=23   <- every row on the platform
+
+**No real tenant has ever had a role requirement.** The gap engine, the 9-box and
+the recommender have been resolving against a table only the demo tenant fills.
+
+## WHAT WAS BUILT - `services/competency/role-requirements.ts` + `role-requirements-panel.tsx`
+
+**NO NEW WRITER**, as ruled. A typed client for the existing guarded
+`POST /competency/role-map`, and a panel mounted as a Framework tab beside the
+matrix - where a person looks for *what does this role need*.
+
+## THE MATRIX CANNOT BE WIRED - **a measurement, not a decision**
+
+    Matrix.roles              string[]              <- job role NAMES, no ids
+    MatrixCompetency.id       s_users_skills.id     <- the 5,171-row flat library
+    jobrole_competency_map    jobrole_id + competency.id (209 rows, KASBA proper)
+
+**The matrix's two axes are the wrong types on both sides.** Wiring it would mean
+inventing a skill→competency resolution that does not exist anywhere in the
+product, and guessing which of two populations each row belongs to. **The matrix
+keeps writing `s_user_skill_jobrole`; the panel writes the map.**
+
+**Reported rather than quietly narrowed**: the instruction was to wire the
+Framework screen AND the matrix. Half of it is not buildable without inventing a
+resolution, so half shipped and the other half is stated with its evidence.
+
+## PROVED AS L-14 WAS - **13 PASS / 0 FAIL**
+
+    STORE 201 written=1 removed=0
+    RE-READ    rows=1  level=3  mandatory=true
+    RE-STORE   201, rows=1, SAME row id 557 -> 557     (idempotent)
+    DESTROY    200
+    RE-READ    rows=0  (had id 557)
+    tenant 7 returned to its starting state             map 0->0  competency 0->0
+    THE DEMO TENANT WAS NEVER TOUCHED                   tenant 3 map 23->23
+
+**Safety stated before the first write**: tenant 7 not tenant 3; a fixture
+competency created and removed in a `finally`; and the target job role chosen
+**because it had no existing map rows**, so SYNC semantics could not destroy
+anything that was already there.
+
+## THREE THINGS THE RUN CAUGHT THAT READING DID NOT
+
+**1. The first run 403'd, and the guard was right.** The default test identity is
+an `employee`; the route carries `profile:admin,hr`. **My first search for an
+admin was `role_key IN ('admin','hr')` - the ROUTE ARGUMENT, not the role_key it
+aliases to** (`admin`→`administrator`, `hr`→`hr_manager|hr_executive`). It
+returned zero and I nearly read that as "no admin exists". **Seventh instance of
+searching for the wrong token and nearly believing the empty result.** The proof
+now mints its own admin token and deletes it in the `finally`.
+
+**2. TWO VACUOUS PASSES on the failed run.** *"RE-STORE kept the same row id"*
+passed as `null === null`, and *"re-read after destroy is empty"* passed because
+nothing had ever been written. **A comparison whose both sides are absent is not
+agreement, it is silence.** Both checks now require the subject to have existed.
+
+**3. THE SERVICE TYPE WAS WRONG AND ONLY THE RUN SAID SO.** The endpoint answers
+**201**, not 200, and nests the counts under `data`. I had typed `SaveResult`
+with `written`/`removed` top-level, so the panel would have shown
+**"undefined removed from this role"** to a real user. **Corrected from the run.**
+The three failing checks were MY checks; the code was right in all three.
+
+## X-21 - THE HUMAN HALF, WHICH IS TRIZ'S
+
+**A script calling the API is not the claim being made.** The claim is that a
+person using the Framework screen moves the row count. X-21's automated half
+cannot drive a browser - the platform boundary already recorded for C20.
+
+**WALKTHROUGH, to be run by a person:**
+
+    1. before:  SELECT COUNT(*) FROM jobrole_competency_map WHERE sub_institute_id = <t>;
+    2. sign in as an ADMIN or HR user of that tenant (an employee gets 403 by design)
+    3. Competency > Framework & Mapping > "Role Requirements"
+    4. pick a job role; add a competency; set a level; Save
+    5. expect: "1 requirement(s) saved."
+    6. after:   the same COUNT, +1
+    7. remove the row, Save again; expect "... 1 removed from this role."
+
+**If step 6 does not move, the panel is not wired for a person even though it is
+wired for a script** - and that gap is exactly what X-21 exists to catch.
+
+### WHAT A CUSTOMER GETS FROM THIS
+
+**Nothing, until they use it** - and that is the honest statement. The panel does
+not create requirements; it lets someone create them. **A tenant with zero
+competency rows still sees an empty picker**, and the panel says so in words
+rather than rendering an empty dropdown with no explanation.
+
+---
+
+# THE SEARCH THAT CAME BACK CLEAN - **the first one**
+
+Two searches for `/competency/role-map` callers, different scopes - a whole-tree
+grep and a `**/*.{ts,tsx}` glob - **returned the same set.** The narrower scope
+was not hiding anything.
+
+**Recorded as a CLEAN CHECK, not a finding.** Six instances this phase of a
+search scope narrower than the claim it supported; **this is the one where
+checking cost nothing and confirmed nothing was missed.** Worth having on the
+record precisely because the other six are: a habit that only ever produces
+findings starts to look like superstition, and this is the run that shows what it
+costs when it is right.
+
+---
+
+# R30, FOURTH TIME - **and the new guard could not have caught it**
+
+A heredoc turned two `\n` escapes into literal newlines in the proof script.
+**Behaviourally identical output, and `php -l` passes** - so the parse-sweep
+guard committed one turn earlier **would not have flagged it.**
+
+**The guard catches mangling that breaks parsing. It does not catch mangling that
+still parses.** That is a real limit, stated rather than discovered later: the
+assertion covers the failure mode that has cost turns (broken regexes, dead
+scripts), not every possible corruption.
+
+---
+
 # S-06 MEASURED - **786 write routes, and `api` DOES NOT AUTHENTICATE**
 
 Measured before costed, as ordered. **NOT ONE DATABASE WRITE WAS MADE.** The
