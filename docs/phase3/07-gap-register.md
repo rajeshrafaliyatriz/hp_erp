@@ -346,6 +346,57 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## L-14 SIZED - **the seventeenth row, wrong in a fifth way: rated L, it is an analogue of something already built**
+
+Opened from what was already evidenced, so the measurement adds rather than
+repeats.
+
+### WHAT WAS ALREADY KNOWN
+
+- the **catalogue link** `jobrole_task_competency_map` is **0 rows** and must be
+  **AUTHORED, not derived** - deriving it from the instance was tried and refuted;
+- the **instance link** `task.skill_id` works: **1,514 of 2,271**, re-measured;
+- **Q-E1-Q1 is ANSWERED** - tasks are the exception, the confidence tag keeps its
+  original meaning, with the caveat that every populated row on both sides was
+  created by this phase's own work and no customer has authored a catalogue.
+
+**So the row does NOT read "wire the override rule".** That question is closed. The
+row is the write path, and the write path does not exist.
+
+### WHAT THE MEASUREMENT ADDS
+
+    jobrole_task_competency_map    0 rows   NO controller, NO route, NO write path
+    s_jobrole_task            55,961 rows   GLOBAL seed library, no tenant column
+    competency                   209 rows
+    map columns: id, sub_institute_id, jobrole_task_id, competency_id, timestamps
+
+**The table is real, correctly shaped, and unreachable.** Nothing in `app/` or
+`routes/` names it.
+
+### AND THE ANALOGUE IS ALREADY BUILT
+
+    jobrole_competency_map   23 rows   RoleCompetencyMapController: index/store/destroy
+                                       + a matrix UI (role-mapping/roles|matrix|cell)
+    jobrole_task_competency_map  0     nothing
+
+**Same shape, same tenant column, same Q-C1 pattern** - a global seed library with
+a tenant-owned mapping onto it. L-14 is that mechanism one level down: jobrole
+task -> competency instead of jobrole -> competency.
+
+**Rated `L`. It is S-M**, because the pattern it needs is written, routed and
+working twenty lines away.
+
+### THE SPLIT THE ROW HIDES
+
+**L-14 is a BUILD whose CONTENT is an AUTHORING dependency** - the same split as
+X-08. Building the write path is small. **Filling the table is a customer act**,
+and 0 rows will remain 0 rows until one performs it.
+
+**That distinction has to be in the row**, or the next person reads a shipped
+write path with an empty table as an unfinished build.
+
+---
+
 ## X-03 IS DONE - **the size check found the work already built**
 
 Sixteen plan rows in sixteen, and this one is wrong in a **fourth** way. The last
