@@ -7671,6 +7671,76 @@ form the bell took before it was fixed.
 
 ---
 
+# THE TASK PATH IS NAME-JOINED AT ITS LAST LINK - **100%, and that is the diagnosis**
+
+    BY KEY?    NO. s_user_jobrole_task has no column that could hold a catalogue
+               id. There is no reference.
+
+    BY TITLE?  YES, AT 100%.
+               42,209 distinct catalogue titles
+               22,629 tenant rows sampled across 6 tenants, 22,629 matched
+               known-positive: a catalogue row matches itself - yes
+
+**Writer 2 DOES reach golden thread 2.** A mapping authored against the catalogue
+is resolvable to a tenant's task, so the frontend is not blocked.
+
+## 100% IS NOT REASSURANCE - IT IS THE FINDING
+
+A rate that perfect, across six tenants and 22,629 rows, does not mean the join is
+sound. **It means the tenant rows were COPIED from the catalogue and nobody has
+edited one.** It is a copy, not a reference.
+
+**The day a tenant renames a task - which the task library lets them do - that
+task silently stops corresponding, its competency mapping stops reaching the
+employee who holds it, and nothing reports the break.** 100% today is 100% until
+the first edit, and there is no column that would notice.
+
+**Third instance of the same shape**, after the 283,126 string-joined rows and
+`s_skill_knowledge_ability`'s 168,538 text rows: **a relationship that works
+because nothing has moved yet.**
+
+## RECOMMENDED, NOT TAKEN
+
+**A key on `s_user_jobrole_task` pointing at the catalogue row it was copied
+from**, captured at provisioning while the answer is still known. A migration, not
+part of writer 2 - and the difference between a path that works and one that keeps
+working.
+
+---
+
+# WHEN THE PLAN AND A DOCBLOCK DISAGREE, THE DOCBLOCK HAS BEEN RIGHT BOTH TIMES
+
+**A rule for the next reader, and it is now evidenced twice:**
+
+    the declared referent      jobrole_task_id -> s_jobrole_task, stated in
+                               JobroleTaskCompetencyMapController's docblock while
+                               the plan had me sizing s_user_jobrole_task
+    the department precedent   disabled-and-labelled with its reason, in
+                               talent-dashboard.tsx, while no document carried it
+
+**Both times the code's version was correct, and both times the document either
+said nothing or said something else.** The plan records what was intended; a
+docblock written at the moment of the decision records what was decided.
+
+---
+
+# CORRECTION TO A REQUIREMENT I WAS ASKED TO CARRY
+
+**Pagination inside the role was carried forward as a requirement, derived from a
+population that is not the referent.**
+
+    s_user_jobrole_task  (measured)   2,845 roles  max 340  >100 tasks: 149
+    s_jobrole_task       (referent)   2,761 roles  max 209  >100 tasks:   7
+
+**Seven roles, not 149.** Pagination drops from a requirement to an option; a
+scrollable list with a count is the honest form.
+
+**The 338's class exactly: measured carefully, reported precisely, about something
+else.** And it propagated - it was turned into an instruction before anyone
+checked which table it described.
+
+---
+
 # WRITER 2 - **ALREADY BUILT, AND MY SIZING MEASURED THE WRONG TABLE**
 
 The size check stopped a duplicate build. Both halves of it changed the plan.
