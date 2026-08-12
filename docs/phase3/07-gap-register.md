@@ -346,6 +346,77 @@ then becomes a real guard instead of 5-for-5 wrong.
 
 ---
 
+## X-08(b) DECISION - **PROMOTE, NOT MATCH** (Triz, 2026-08-12)
+
+The population settles it: **matching has 0, promoting has 26.** And the deeper
+reason is already on record - `s_users_skills` is finance-and-compliance
+flavoured, the holdings are clinical, and **G-SEED-01's correction says THE
+DISTANCE IS VOCABULARY, NOT DIMENSION.** Four of five dimensions have no catalogue
+at all, so **18 of 26 have nothing to match against by construction.**
+
+### THE COUNTERFACTUAL, KEPT
+
+**Building the matching direction first would have produced a screen that is
+correct, complete, and useless for every row it would ever show.** It would have
+passed review, passed its tests, rendered an empty picker 26 times out of 26, and
+nothing about the code would have looked wrong.
+
+**That is the sharpest argument this phase has produced for measuring a population
+before building a UI over it** - and the cost of the measurement was one query.
+
+### FOUR CONDITIONS, because it writes into a shared library
+
+1. **NOT AUTOMATIC.** The customer confirms each promotion. **An entry created
+   from import data is a claim about their vocabulary, and they should make it
+   rather than inherit it** - the same reasoning that never auto-lowers a rating.
+2. **PROVENANCE TRAVELS WITH THE ENTRY.** Created-from-a-held-import-label, and
+   which competency it came from. **A library entry with no origin is
+   indistinguishable from one someone authored** - and once it is in the library,
+   nobody can tell the difference by looking.
+3. **PROMOTION AND UPGRADE ARE ONE TRANSACTION.** The catalogue entry is created
+   AND the HOLDING becomes a TARGET, or neither happens. **A promoted label that
+   stays HOLDING is the two-paths-disagreeing defect again** - the same row
+   readable as both resolved and unresolved depending on which side you ask.
+4. **THE 18 CANNOT BE PROMOTED ANYWHERE.** knowledge, ability, attitude and
+   behaviour have no canonical table. **Say so on the screen rather than offering
+   an action that cannot complete.** Creating those four tables is a separate
+   product decision, NOT TAKEN.
+
+**Filed with its conditions. Not built.**
+
+---
+
+## ⭐ A SCREEN CAN IGNORE A DESIGN DOCUMENT; IT CANNOT IGNORE A FIELD THAT IS NOT THERE
+
+**The most reusable thing this phase has produced about API design.** Three
+instances, one mechanism.
+
+| where | the field | what its absence would allow |
+|---|---|---|
+| readiness gates | `losing` | the acknowledge button rendered without saying what is lost |
+| gap view | coverage travels with the level | a level shown as if fully measured |
+| task-competency map | the empty-read `note` | 0 rows rendering as "no data" rather than "none authored yet" |
+
+**The mechanism: the API cannot return the value without also returning the thing
+that makes it honest.** Not "the response includes a warning" - **the honest
+qualifier is inseparable from the datum it qualifies.**
+
+### THE TEST
+
+**If a requirement reads "the UI must also show X", ask whether X can travel with
+the data.**
+
+- **It can** -> put it in the payload. The requirement is now enforced by the
+  shape of the response, and a screen that omits it has to actively discard
+  something it was handed.
+- **It cannot** -> it is a note somebody has to remember, and it will be forgotten
+  by whoever builds the second screen against that endpoint.
+
+**A requirement carried in a document is remembered. One carried in the payload is
+enforced.**
+
+---
+
 ## X-08(b) SIZED - **the resolvable population is ZERO, and it points the loop the other way**
 
 Eighteenth row. Not wrong about size - **wrong about direction.**
