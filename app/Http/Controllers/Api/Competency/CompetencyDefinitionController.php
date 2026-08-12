@@ -28,9 +28,20 @@ use Illuminate\Support\Facades\Validator;
  * THE item_label RULE (item 0):
  *   item_id populated = THE TARGET STATE, resolved by key.
  *   item_label alone  = A HOLDING STATE, counted as unresolved in coverage.
- * A label is never treated as a key. `skill` items resolve against
- * `s_users_skills`; knowledge, ability, attitude and behaviour have no canonical
- * table yet, so they are held by label and reported as such.
+ * A label is never treated as a key. EVERY dimension now resolves against its own
+ * canonical table - see self::ITEM_TABLES.
+ *
+ * CORRECTED 2026-08-12, and the correction matters (G-SEED-01):
+ * this comment used to say knowledge, ability, attitude and behaviour "have no
+ * canonical table yet, so they are held by label". THAT WAS NEVER TRUE of the
+ * data. The four tables exist and hold 14,474 rows between them:
+ *
+ *     s_user_knowledge 6,950 · s_user_ability 6,175
+ *     s_user_attitude    655 · s_user_behaviour  694
+ *
+ * The four library tabs have been writing them all along. What was missing was
+ * anything that POINTED at them - so the rows were referenceable and nothing had
+ * ever referenced one.
  *
  * R20 - THE CHAIN THIS RELIES ON:
  *   route      routes/api.php (added with this controller)
@@ -43,6 +54,24 @@ class CompetencyDefinitionController extends Controller
     use ResolvesCompetencyContext;
 
     private const KASBA = ['skill', 'knowledge', 'ability', 'attitude', 'behaviour'];
+
+    /**
+     * The canonical table behind each dimension - what an `item_id` must exist in,
+     * inside the caller's own tenant, before it is stored as a key.
+     *
+     * KEYED BY THE SAME VOCABULARY AS self::KASBA AND AS THE COLUMN'S ENUM, so a
+     * new dimension that is added to one and not the others fails closed: an
+     * unmapped type drops its id to a label instead of storing it unverified.
+     * The alias-map lesson - a vocabulary that must be kept in step by hand is a
+     * defect waiting for the next person who does not know both halves.
+     */
+    private const ITEM_TABLES = [
+        'skill'     => 's_users_skills',
+        'knowledge' => 's_user_knowledge',
+        'ability'   => 's_user_ability',
+        'attitude'  => 's_user_attitude',
+        'behaviour' => 's_user_behaviour',
+    ];
 
     /** Competencies with their KASBA composition and its resolution state. */
     public function index(Request $request)
@@ -187,16 +216,35 @@ class CompetencyDefinitionController extends Controller
             foreach ($request->input('items') as $item) {
                 $itemId = $item['item_id'] ?? null;
 
-                // A skill item MUST resolve inside the caller's own tenant, or it
-                // is held by label rather than pointed at someone else's row.
-                if ($itemId && $item['kasba_type'] === 'skill') {
-                    $ok = DB::table('s_users_skills')
+                // EVERY item must resolve inside the caller's own tenant, or it is
+                // held by label rather than pointed at someone else's row.
+                //
+                // THIS BRANCH USED TO READ `=== 'skill'`, AND THAT WAS A HOLE, not
+                // a limitation. `items.*.item_id` validates as `nullable|integer`
+                // for every type, so an id sent for knowledge/ability/attitude/
+                // behaviour was written STRAIGHT THROUGH, unchecked, into a column
+                // with no foreign key. It had already happened once:
+                //
+                //     competency_kasba_item, kasba_type=behaviour, item_id=2645
+                //     s_user_behaviour #2645 DOES NOT EXIST
+                //
+                // One dangling pointer from the one non-skill id ever written -
+                // a 100% failure rate on the path nothing was guarding.
+                $table = self::ITEM_TABLES[$item['kasba_type']] ?? null;
+                if ($itemId && $table) {
+                    $ok = DB::table($table)
                         ->where('id', $itemId)
                         ->where('sub_institute_id', $sid)
                         ->exists();
                     if (!$ok) {
                         $itemId = null;
                     }
+                } elseif ($itemId && !$table) {
+                    // An id for a type with no canonical table cannot be verified,
+                    // so it is DROPPED to a label rather than stored on trust.
+                    // Unreachable while ITEM_TABLES covers the enum; here because
+                    // the enum is the thing most likely to grow.
+                    $itemId = null;
                 }
 
                 DB::table('competency_kasba_item')->insert([
