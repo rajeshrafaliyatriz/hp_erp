@@ -6569,6 +6569,87 @@ ones.**
 
 ---
 
+# G-SEC-29 CLOSED - **16 confirmed leaks, all 16 fixed**
+
+    CustomModuleController@menuLevel2            LEAK -> echoes the request (NOT a leak)
+    HolidayController@index                      LEAK -> PASS   48b/48b
+    discliplinaryManagementController@index      LEAK -> PASS   46b/46b
+    jobroletaskcontroller@index                  LEAK -> PASS   54b/54b
+    jobroletexonomycontroller@index              LEAK -> PASS  221b/221b
+
+## THE "C27 TRAIT-PRESENT CLASS" WAS MY OWN ARTIFACT
+
+I set these five aside as a distinct, harder class: *the trait is present and
+something else defeats it.* **It was not true.**
+
+    CustomModuleController          ResolvesG2gActor: 0    request-tenant sites: 2
+    HolidayController               ResolvesG2gActor: 1    request-tenant sites: 6
+    discliplinaryManagementController  ResolvesG2gActor: 1  request-tenant sites: 5
+    jobroletaskcontroller           ResolvesG2gActor: 1    request-tenant sites: 6
+    jobroletexonomycontroller       ResolvesG2gActor: 1    request-tenant sites: 7
+
+**Four of the five carry `ResolvesG2gActor`.** They have `ResolvesApiIdentity`
+**because I added it during the `g2gActorId` consolidation earlier in this same
+engagement** - for an actor helper, not for tenant resolution.
+
+**My scan asked "does this file mention `ResolvesApiIdentity`" and read the answer
+as "this controller already resolves its tenant properly".** It did not. The
+import was mine, put there for something else, three hours earlier.
+
+**They were the same substitution as the other eleven all along** - 26 sites, and
+they closed exactly like the rest.
+
+### THE SHAPE OF THE ERROR
+
+**A classifier that reads a signal it cannot attribute.** The trait's presence had
+two possible causes - deliberate tenant resolution, or my own unrelated edit - and
+the scan could not tell them apart, so it assumed the one that made the controllers
+look harder than they were.
+
+**Fifth instance of the same root**: `lacking a trait` read as `having a resolver`;
+`can_view` read as a role's power; the alias map read as the whole authorisation
+story; `no output` read as `nothing found`. **Every one is a proxy taken for the
+thing it proxies.**
+
+**And this one had a self-inflicted twist**: the signal was contaminated *by the
+engagement's own prior work*, which nothing in the scan could have known and
+nothing in the codebase records.
+
+## `menuLevel2` ECHOES THE REQUEST - the fourth non-defect
+
+    asked 7 -> {"token":"4554|...","type":"API","syear":"2025","sub_institute_id":"7"...
+    asked 3 -> {"token":"4554|...","type":"API","syear":"2025","sub_institute_id":"3"...
+
+**Identical to `getHolidays`**: an unimplemented API branch returning the Request
+object. Not a leak; not scoped wrongly; **returns no menu data to any API caller.**
+
+## FINAL
+
+    20 scored LEAK by the property
+    -4 non-defects   AuditController (self-mutating), departmentAttendanceReport
+                     (non-deterministic), getHolidays and menuLevel2 (echo the request)
+    --
+    16 CONFIRMED cross-tenant reads
+    -16 FIXED       3 request-only + 8 session-fallback + 1 generalSettingIndex
+                    + 4 in the supposed C27 class
+    --
+     0 OPEN
+
+**Every confirmed cross-tenant read found by the C23 re-run is closed**, each
+probed before and after with the instrument that found it, none of the twenty
+files among the 51.
+
+**Four of the twenty were never defects** - and all four would have been "fixed" by
+anyone working the list without splitting the property first.
+
+### FILED SEPARATELY - two unimplemented API branches
+
+`getHolidays` and `menuLevel2` both `return $request;`. **Neither has ever returned
+data to an API caller and nobody noticed** - the same evidence shape as the dead
+`jobrole-tasks` route. Not security items.
+
+---
+
 ## HrmsController DONE - **38 sites, and getHolidays is a THIRD false positive**
 
     generalSettingIndex   LEAK 343b/857b  ->  PASS 343b/343b

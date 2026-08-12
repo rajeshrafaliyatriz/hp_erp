@@ -3,6 +3,23 @@
 namespace App\Http\Controllers\libraries;
 
 use App\Http\Controllers\Controller;
+
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,7 +76,7 @@ class jobroletaskcontroller extends Controller
                     ], 400);
                 }
 
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->apiTenantId($request);
 
                 // fetch jobrole data from table
                 $jobroles = DB::table('s_user_jobrole_task as a')
@@ -104,7 +121,7 @@ class jobroletaskcontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
 
           $validator = Validator::make($request->all(), [
@@ -157,10 +174,10 @@ class jobroletaskcontroller extends Controller
      public function update(Request $request,$task_category)
     {
         
-       $getAllCategory = jobroletask::where(['sub_institute_id'=>$request->sub_institute_id,    'task_category'=>$task_category])  ->get();
+       $getAllCategory = jobroletask::where(['sub_institute_id'=>$this->apiTenantId($request),    'task_category'=>$task_category])  ->get();
 
         if($getAllCategory){
-            $update = jobroletask::where(['sub_institute_id'=>$request->sub_institute_id,'task_category'=>$task_category])->update(['updated_by' => $this->g2gActorId($request),
+            $update = jobroletask::where(['sub_institute_id'=>$this->apiTenantId($request),'task_category'=>$task_category])->update(['updated_by' => $this->g2gActorId($request),
                                 'updated_at'=>now(),
                                 'task_category' => $request->task_category]);
 
@@ -184,10 +201,10 @@ class jobroletaskcontroller extends Controller
 
     public function destroy(Request $request, $task_category)
     {
-    $getAllCategory = jobroletask::where(['sub_institute_id'=>$request->sub_institute_id,'task_category'=>$task_category])->get();    
+    $getAllCategory = jobroletask::where(['sub_institute_id'=>$this->apiTenantId($request),'task_category'=>$task_category])->get();    
         
         if($getAllCategory){
-            $update = jobroletask::where(['sub_institute_id'=>$request->sub_institute_id,'task_category'=>$task_category])
+            $update = jobroletask::where(['sub_institute_id'=>$this->apiTenantId($request),'task_category'=>$task_category])
                         ->update(['deleted_by' => $this->g2gActorId($request),
                                 'deleted_at'=>now(),
                                 'task_category' => $request->task_category]);

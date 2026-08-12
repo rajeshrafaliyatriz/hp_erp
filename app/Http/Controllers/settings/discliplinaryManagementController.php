@@ -3,6 +3,23 @@
 namespace App\Http\Controllers\settings;
 
 use App\Http\Controllers\Controller;
+
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
@@ -58,7 +75,7 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
@@ -143,7 +160,7 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
@@ -190,7 +207,7 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
@@ -261,7 +278,7 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
@@ -308,7 +325,7 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
