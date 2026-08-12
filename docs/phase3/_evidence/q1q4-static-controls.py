@@ -17,7 +17,16 @@ fixed copy does not fix the other.
 
 CANDIDATES, NOT FINDINGS. Definitions are attached to every count.
 """
-import io, os, re, collections
+import io, os, re, sys, collections
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _lib import makes_request, makes_request_self_test
+
+# THE HELPER REFUSES TO BE FORGOTTEN. Its own self-test runs first, through the
+# same function this script calls, and nothing proceeds if it fails.
+_fault = makes_request_self_test()
+if _fault:
+    raise SystemExit('REFUSING: the shared request detector is unsound - ' + _fault)
 
 FE = r'C:\Users\MILAN\Downloads\g2gv0'
 
@@ -64,11 +73,15 @@ def q1_scan(src):
 STATUS = re.compile(r'>\s*(?:You(?:\'|&apos;)?re all caught up|All caught up|No new notifications|New)\s*<')
 BADGE  = re.compile(r'>\s*\{?\s*(?:\d{1,3})\s*\}?\s*<\s*/\s*(?:span|Badge|div)')
 SINGLE_OPT = re.compile(r'options\s*=\s*\{\s*\[\s*\{[^\]]*\}\s*\]\s*\}')
-HAS_REQ = re.compile(r'apiClient\.|webClient\.|fetch\(|useQuery|useSWR')
+# HAS_REQ REMOVED. It matched `apiClient.` literally and therefore flagged
+# notifications-menu.tsx - the bell - which fetches through a SERVICE import. The
+# one repaired component in the codebase was scored as hardcoded data.
+# Fifth instance of resolve-do-not-match, and the fourth was written in a script
+# whose header quotes the rule. It is now makes_request() in _lib.py.
 
 def q4_scan(src):
     code = strip_comments(src)
-    if HAS_REQ.search(code):
+    if makes_request(code):
         return 0
     n = 0
     n += len(STATUS.findall(code))

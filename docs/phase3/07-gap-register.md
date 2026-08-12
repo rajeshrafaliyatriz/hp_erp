@@ -7671,6 +7671,76 @@ form the bell took before it was fixed.
 
 ---
 
+# CHOOSING THE WRONG UNIT DOES NOT MAKE A MEASURE WRONG - IT MAKES IT ANSWER A DIFFERENT QUESTION
+
+**Q4 asked: which controls show hardcoded data where a fetch belongs. Q4 measured:
+which FILES make no request at all.** Those are not the same question, and the
+gap between them is invisible until a mixed file appears.
+
+    the fix        makes_request() resolves service imports, so the bell -
+                   which fetches through notificationsService - stops being
+                   flagged. 39 -> 19, and 20 of the 39 were WELL-BUILT FILES
+                   punished for fetching properly.
+
+    the cost       mobility-center.tsx went from 14 to ZERO, because the file
+                   DOES fetch elsewhere - while still containing the one
+                   self-declared static placeholder in the codebase.
+
+**I TRADED A FALSE POSITIVE FOR A FALSE NEGATIVE, AND THE NEGATIVE IS WORSE.**
+The positive flagged a repaired component - visible, checkable, obviously wrong.
+The negative hides a defect I had already confirmed by reading.
+
+**A partially-wired mockup screen is exactly a mixed file**: it fetches for most
+of its data and hardcodes one control. **The unit that cannot see it is the unit
+that matches the whole file.**
+
+**Q4 IS FILED AS REQUIRES PER-CONTROL GRANULARITY** - the fetch test must apply to
+the control's own data source, not to the file it sits in. **A rewrite, not a
+tweak.** Nobody should reopen it expecting a scan to settle it.
+
+---
+
+# Q1's VERDICT - **HANDFUL AND CONCENTRATED, DEAD-CONTROL HALF ONLY**
+
+    4 dead controls    3 in Talent, 1 in HRMS
+
+**Stated as covering the dead-control half of the claim only.** Q4's half is
+unmeasured pending the rewrite, and the two halves cannot be added.
+
+**One of the four was already honest** - `talent-dashboard.tsx` was disabled,
+labelled, and carried its reason. **The fix for the other three was to match a
+precedent the codebase had already set**, not to invent one.
+
+---
+
+# DEAD IN TWO PLACES - **second instance, and duplicates are how a fixed defect survives**
+
+    the bell        lived in gtg-header.tsx AND gtg-header-base.tsx at once
+    offboarding     offboarding-center-v1.tsx sits beside offboarding-center.tsx,
+                    3 hardcoded instances of its own
+
+**A control can be dead in two places and look maintained in both.** Fixing one
+copy leaves the other, and nothing in the repository records that the pair
+existed. **Noted, not swept** - the point is that duplicate files are a survival
+mechanism for defects, not that these two are urgent.
+
+---
+
+# THE QUEUE, AND WHAT IS ACTUALLY AT STAKE IN IT
+
+    1. the Talent placeholders   DONE - honesty
+    2. the 40 dead calls         R8 cleanup, per-item approval - hygiene
+    3. THE LMS AND TASK WRITERS  course_competency_map, jobrole_task_competency_map
+
+**THE WRITERS ARE THE ONLY ITEMS THAT CHANGE WHAT A CUSTOMER CAN DO. THE REST IS
+HONESTY AND HYGIENE.**
+
+Both writers have shipped consumers reading tables nothing can fill:
+`LearningAssigner` and `RemediationRecommender` over `course_competency_map`, and
+the task screen over a `jobrole_task_competency_map` that holds zero rows.
+
+---
+
 # THE 40 DEAD CALLS - **ZERO ARE REACHABLE BY A USER**
 
 Rebuilt with import resolution after the first split was wrong.
