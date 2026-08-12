@@ -474,7 +474,7 @@ check('org', 'task.status has exactly ONE guarded write path', function () {
                 array_map(fn ($k, $v) => "$k($v)", array_keys($others), $others))];
 });
 
-check('org', 'working tree matches its baseline (51 foreign files)', function () {
+check('org', 'working tree matches its baseline (50 foreign files, LISTED)', function () {
     // PROMOTED FROM A STATUS-LINE NUMBER TO AN ASSERTION.
     //
     // It caught what the staged-count guard STRUCTURALLY CANNOT: staging verifies
@@ -506,10 +506,39 @@ check('org', 'working tree matches its baseline (51 foreign files)', function ()
         return ['SKIPPED', 'pattern fails its known-positive or matches its known-negative'];
     }
 
-    if ($n === 51) return ['PASS', '51 modified, as baselined - nothing of mine left uncommitted'];
+    // ---- THE BASELINE IS A LIST NOW, NOT A COUNT ----------------------------
+    // It moved 51 -> 50 and NOTHING COULD SAY WHICH FILE LEFT. A guard that
+    // reports a change without naming it tells you something moved and not what -
+    // the fourth instrument-limiting-its-own-finding in a single turn. Triz
+    // confirmed the move (one of the 51 was committed on their side), so the
+    // number changed BY CONFIRMATION, never to clear a red.
+    //
+    // The list is what makes the next move nameable. Compare against it FIRST;
+    // the count is only the fallback when the list file is missing.
+    $listFile = __DIR__ . '/baseline-foreign-files.txt';
+    $now = array_map(fn ($l) => trim($l), $modified);
+
+    if (is_file($listFile)) {
+        $want = array_values(array_filter(array_map('trim', file($listFile))));
+        // NOT VACUOUS: an empty list must never agree with an empty tree silently.
+        if (!$want) return ['SKIPPED', 'baseline list file is empty - it proves nothing'];
+        $gone = array_diff($want, $now);
+        $new  = array_diff($now, $want);
+        if (!$gone && !$new) {
+            return ['PASS', count($want) . ' modified, and EVERY PATH MATCHES the baselined list'];
+        }
+        $msg = [];
+        if ($new)  $msg[] = 'APPEARED (' . count($new) . '): ' . implode(' | ', array_slice($new, 0, 3));
+        if ($gone) $msg[] = 'LEFT (' . count($gone) . '): ' . implode(' | ', array_slice($gone, 0, 3));
+        return ['FAIL', implode('  ///  ', $msg)
+            . ' --- if this is Triz resolving their own files, re-list with: '
+            . 'git status --porcelain | grep -E "^( M|MM| D| R)" > baseline-foreign-files.txt'];
+    }
+
+    if ($n === 50) return ['PASS', '50 modified, as baselined - but the LIST FILE IS MISSING, so this is a count only'];
 
     $sample = array_slice(array_map(fn ($l) => trim(substr($l, 2)), $modified), 0, 3);
-    return ['FAIL', $n . ' modified, expected 51. Either foreign work appeared or something '
+    return ['FAIL', $n . ' modified, expected 50. Either foreign work appeared or something '
         . 'of mine is uncommitted: ' . implode(', ', $sample)];
 });
 
