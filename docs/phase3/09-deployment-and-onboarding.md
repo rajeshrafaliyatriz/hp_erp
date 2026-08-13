@@ -25,6 +25,18 @@
 > **It is a day of work, not a redesign** — §b.1 says exactly what to write. But it
 > must be written before any fresh database is stood up, or the first thing we will
 > discover is that we cannot log in and see our own product.
+>
+> ## AND THE 226 KASBA ITEMS ARE NOT A STARTING FRAMEWORK
+>
+> **The 226 KASBA items and 56 course-competency rows in the test database are
+> PROVISIONING NOISE. They must not be copied into a real tenant** — not ours, not
+> anyone's. Repeated here at the top because it is the easiest mistake to make:
+> they are already there, they look like a head start, and a seeder that ships them
+> would be a one-line change nobody would question.
+>
+> **OUR FRAMEWORK IS AUTHORED, NOT INHERITED.** A competency framework that arrived
+> by accident is worse than an empty one, because nobody can say which rows were
+> meant. An empty table asks a question; a wrong table answers it.
 
 ---
 
@@ -211,10 +223,49 @@ Found while committing Milan's 50 files, unfixed because they are his:
 session()->get('sub_institute_id') ?? $this->apiTenantId($request) ?? 3
 ```
 
-**Session ahead of token, falling back to a hardcoded 3 — the demo tenant.** On a
-fresh install tenant 3 will be something else entirely, or nothing. **This must be
-fixed before we onboard ourselves**, and it is a two-line fix in a file we now
-control.
+**Session ahead of token, falling back to a hardcoded 3 — the demo tenant.**
+
+✅ **FIXED AND PROVED BY RUNNING** — `_evidence/session-precedence-proof.php`, 16/16.
+
+**The size check found a THIRD site my first report missed.** I had counted two
+from inside a diff; scoped across `app/` there were three lines combining
+`apiTenantId` with `session` in one expression — and one of them,
+`HrmsLeaveController::store()`, was **already correct and is now the reference
+shape**, with a docblock that already explained it. So: two repairs, one exemplar.
+*A scoped search plus a remembered exception, again.*
+
+    was  session() ?? apiTenantId() ?? 3          AnalyzeJDController
+    was  session() ?? apiTenantId()               skillcontroller
+    now  apiTenantId($request) ?: session(...)    both, + 401 when neither
+
+**THE REGRESSION CASE IS THE PROOF THAT MATTERS.** Static text checks show the
+*text* changed. Running the OLD expression on the same inputs shows the *behaviour*
+did:
+
+    token said tenant 1, session said 7  ->  OLD returned 7   (session overrode the token)
+    no token, no session                 ->  OLD returned 3   (failed OPEN onto the demo tenant)
+
+**`??` was itself part of the defect**: it falls through only on `null`, so an
+empty-string session value passed as a valid tenant. `?:` is used now.
+
+`AnalyzeJDController` also declared `sub_institute_id` as an accepted input and
+never read it. Removed — **a parameter that looks honoured is worse than one that
+is refused, because a caller will trust it.** Its tenant also builds a six-hour
+cache key, so a wrong answer there did not read the wrong rows once; it poisoned a
+shared key.
+
+### d.2b THE ONE PLACE THE REQUEST IS STILL A TENANT SOURCE
+
+`resolveApiIdentity()` falls back to `$request->input('sub_institute_id')` **when
+the token owner's own `sub_institute_id` is 0 or NULL** — historical accounts that
+predate tenant assignment. The trait documents this and it is deliberate.
+
+    token owners with no tenant of their own:  0 of 4,691
+
+**So "the request is never a tenant source" holds for every token that exists
+today, and it holds by DATA rather than by CODE.** Not changed, because changing it
+is a decision about those historical accounts, not a bug fix. **Named because a
+property that holds by data can stop holding without anyone editing anything.**
 
 ### d.3 EMAIL IS OFF
 
@@ -288,7 +339,17 @@ because they only exist in the gap between a working system and a *fresh* one �
 
 ## THE FIRST FOUR THINGS TO DO, IN ORDER
 
-1. **Write `Phase3MenuSeeder`** — transcribe the six `_changes/menu-*.php` scripts. *Blocks everything.*
-2. **Write migration 19** — `catalogue_task_id` column + index only, backfill stays a script.
-3. **Fix the two session reads** (§d.2) — two lines, now in files we control.
+1. ✅ **DONE — the session reads** (§d.2). **It moved to first because unlike
+   everything else on this list it is a LIVE DEFECT THE MOMENT WE GO LIVE**, not an
+   install gap. Fixed in `AnalyzeJDController` and `skillcontroller`; proved by
+   `_evidence/session-precedence-proof.php`, 16/16. See §d.2 for what the proof
+   showed.
+2. **Write `Phase3MenuSeeder`** — transcribe the six `_changes/menu-*.php` scripts. *Blocks everything.*
+3. **Write migration 19** — `catalogue_task_id` column + index only, backfill stays a script.
 4. **Stand up a fresh database and run 1–17 of §c end to end**, on a scratch schema, with no production and no customer data. **That run is the first honest test of the install, and it will find more than this document predicts.**
+
+> **ON STEP 4: TREAT EVERY STEP THAT CANNOT BE COMPLETED AS A FINDING, NOT AN
+> OBSTACLE.** A step with no screen is the same class as a table with no writer, and
+> §c step 3 is already flagged that way. **No tenant has ever been created through
+> this product — every one arrived by provisioning — and we are about to be the
+> first to try.**

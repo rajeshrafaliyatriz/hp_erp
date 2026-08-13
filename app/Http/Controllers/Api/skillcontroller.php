@@ -36,7 +36,27 @@ class skillcontroller extends Controller
     {
     try {
         $type = $request->type; // "API" or "web"
-        $sub_institute_id = session()->get('sub_institute_id') ?? $this->apiTenantId($request);
+
+        // THE TOKEN DECIDES WHEN THERE IS ONE, THE SESSION DECIDES OTHERWISE, AND A
+        // CALLER WHO HAS NEITHER IS REFUSED. Reference shape:
+        // HrmsLeaveController::store().
+        //
+        // WAS: session() ?? apiTenantId()
+        //
+        // THE DOCBLOCK ABOVE WAS ACCURATE AND INCOMPLETE. It says the request is
+        // never read, and that is true - the caller-controlled source was removed.
+        // What it does not say is that the SESSION was still ahead of the token, so
+        // a token-authenticated caller carrying a stale session read that session's
+        // organisation instead of their own. Removing the request source and fixing
+        // precedence are two different repairs, and only the first was made.
+        $sub_institute_id = $this->apiTenantId($request) ?: session('sub_institute_id');
+
+        if (!$sub_institute_id) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Unable to identify your organisation.',
+            ], 401);
+        }
         $data = userskill::where('sub_institute_id', $sub_institute_id)->latest()->get();
 
         // If it's an AJAX request (like DataTables)

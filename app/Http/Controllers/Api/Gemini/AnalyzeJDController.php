@@ -19,13 +19,41 @@ class AnalyzeJDController extends Controller
             /* ===============================
              * 1️⃣ Validate Request
              * =============================== */
+            // `sub_institute_id` is no longer accepted as an input. It was declared
+            // here and never read, which advertises a tenant parameter the server
+            // ignores - and a parameter that looks honoured is worse than one that
+            // is refused, because a caller will trust it.
             $request->validate([
                 'jd' => 'required|string',
-                'sub_institute_id' => 'nullable|integer'
             ]);
 
             $jd = $request->jd;
-            $subInstituteId = session()->get('sub_institute_id') ?? $this->apiTenantId($request) ?? 3;
+
+            // THE TOKEN DECIDES WHEN THERE IS ONE, THE SESSION DECIDES OTHERWISE,
+            // AND A CALLER WHO HAS NEITHER IS REFUSED. Same shape as
+            // HrmsLeaveController::store(), which is the reference for any endpoint
+            // reachable both by token and by session.
+            //
+            // WAS: session() ?? apiTenantId() ?? 3
+            //   - the SESSION came first, so a token-authenticated caller with a
+            //     stale session read another organisation's data. That is G-SEC-27's
+            //     precedence inverted.
+            //   - `?? 3` hardcoded the demo tenant as the answer to "who are you?",
+            //     so identity FAILED OPEN onto a real, populated tenant.
+            //   - `??` only falls through on null, so an empty-string session value
+            //     was treated as a valid tenant. `?:` is used below for that reason.
+            //
+            // The cache key below is built from this value. A wrong tenant here did
+            // not just read the wrong rows once - it POISONED A SHARED CACHE KEY for
+            // six hours.
+            $subInstituteId = $this->apiTenantId($request) ?: session('sub_institute_id');
+
+            if (!$subInstituteId) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Unable to identify your organisation.',
+                ], 401);
+            }
 
             /* ===============================
              * 2️⃣ Fetch Gemini API Keys (MULTIPLE – Fallback Support)
