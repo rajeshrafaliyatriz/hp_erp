@@ -7799,7 +7799,7 @@ found the controller already existed.
     Only a tool that must be BYPASSED survives.
 
 **The sixth instance proves the distinction.** The remedy for instances 1-5 was
-*make it unskippable* - and what was built was , which is
+*make it unskippable* - and what was built was `git commit -F <file>`, which is
 **available but optional**. `-m` remained the default path, so using the remedy
 took deliberate action. **A second rule wearing a tool's clothes.**
 
