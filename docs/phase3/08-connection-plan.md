@@ -918,7 +918,8 @@ already belonged to Library & Taxonomy. **LMS items are renumbered `LM-*`.**
 | F-07b | Text→FK **backfill + unmatched report** *(drops NOT done, not scheduled)* | G-DATA-06 | all | **L** · R8 on the drops | joins by key | F-07a | AT-F07b | DB | ✅ **DONE** (D-044) — 100% link resolution; text columns STAY |
 | F-08 | ~~`portal_identity`~~ | Q-D4 | 7 | **M** · §7.3 DDL | candidate conversion | — | AT-F08 | DB | ❌ **DROPPED 2026-08-10** — no consumer; Q-D4 deferred the candidate portal deliberately. Fails the named-consumer test |
 | F-09 | `library_map_skill` join table | G-DATA-07 | 1 | **S** · 3,270 rows to split | — | F-01 | AT-F09 | DB | ✅ **APPLIED** (`7df8c1c7`) |
-| **F-10** | **`s_user_jobrole_task.catalogue_task_id`** — a key onto the catalogue row each tenant task was COPIED from, captured at provisioning | — | **2** | **M** · 85,663 rows, backfill by exact title while it still resolves 100% | the capability chain's last name-join | writer 2 | AT-F10 | DB | 🔴 **OPEN — NOT STARTED** |
+| ~~**F-10**~~ **F-10a** | **`s_user_jobrole_task.catalogue_task_id`** — keyed on **(jobrole, task)**, remainder HELD at NULL | — | **2** | **M** · 85,660 rows, 93.62% keyable | the chain's last name-join | — | AT-F10 | DB | 🔴 **OPEN** — ~~TIME-SENSITIVE~~ **NOT time-sensitive: the decay premise was disproved by measurement.** Nothing here decays; the 126 non-matching rows are one tenant that authored its own tasks and would not have matched on day one |
+| **F-10b** | **3,127 duplicate `(jobrole, task)` pairs IN THE GLOBAL CATALOGUE** — what are they? | — | **2** | **S** · a read, not a migration | caps any key from these columns at ~93.6% | F-10a | — | DB | 🔴 **OPEN** — a data-quality question, deliberately NOT folded into F-10a |
 
 ## Tier 2 — Mechanisms
 
