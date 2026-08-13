@@ -7790,6 +7790,33 @@ found the controller already existed.
 
 ---
 
+# A THRESHOLD PROMPTS A CHECK; IT DOES NOT ANSWER ONE
+
+**Monitoring F-10a, and the distinction is the register's own lesson applied to the
+watching rather than the work.**
+
+    a rising count      says the process WAS alive between two reads
+    SHOW PROCESSLIST    says whether it is alive NOW
+
+**Two consecutive identical counts was proposed as the trigger. It is a good
+prompt and a bad answer** - because a static count has TWO causes:
+
+    static + no thread       PROCESS DEAD          -> resume
+    static + thread present  ALIVE BUT STUCK       -> find out on what;
+                                                      resuming would repeat it
+    rising                   running
+
+**Two verdicts over three outcomes again**, and it would have been resolved by
+waiting for a second read that could not distinguish them either.
+
+**One read of BOTH signals separates dead from stuck immediately.** The threshold
+keeps its job - it decides WHEN to look. It was never able to do the other one.
+
+    F-10a, checked: id=338320  state=Commit  time=0s  UPDATE s_user_jobrole_task
+    A healthy write, not a stall - and known rather than inferred.
+
+---
+
 # THE FAMILY HAS A DIRECTION
 
     exit code                  HID 68,000 unwritten rows
