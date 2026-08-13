@@ -7790,6 +7790,30 @@ found the controller already existed.
 
 ---
 
+# THE INSTRUMENT PENALISED THE SAFER SCRIPT
+
+**Not imprecision - INVERSION.**
+
+    menu-229-rights.php prints  TO REVERSE: DELETE FROM tblgroupwise_rights_g2g
+                                - GOOD PRACTICE, a reversal a reader can run -
+
+and the write-regex matched that STRING LITERAL, making the printf the last
+write and the verifying count appear to run before it. **The script that
+documents its own rollback scored as the one that does not verify.**
+
+**A write verb inside a printed string is not a write, and a regex cannot tell
+code from a string literal.**
+
+**A CHECK THAT SCORES GOOD PRACTICE AS A DEFECT WILL BE TRUSTED RIGHT UP UNTIL IT
+IS FOLLOWED** - and following it would have meant removing the reversal line.
+
+**49 database writers remain UNCLASSIFIED for read-after-write, by decision:** the
+instrument that could classify them needs a parser, and the answer would not change
+the sequencing. **Both scripts hand-read from that set were unverified. Unknown,
+recorded as unknown - not clean.**
+
+---
+
 # THE TASK PATH IS NAME-JOINED AT ITS LAST LINK - **100%, and that is the diagnosis**
 
     BY KEY?    NO. s_user_jobrole_task has no column that could hold a catalogue
