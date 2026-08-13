@@ -7671,6 +7671,64 @@ form the bell took before it was fixed.
 
 ---
 
+# "DOES IT EXIST" IS NOT "DOES IT IDENTIFY ONE" - **the 338's class, third instance**
+
+    the earlier question   does this title EXIST in the catalogue?
+                           yes - 22,629 of 22,629 sampled rows. 100%. TRUE.
+
+    what a KEY needs       does this title identify EXACTLY ONE catalogue row?
+                           no - 6,018 of 42,209 catalogue titles are shared by
+                           two or more rows. 67.17%.
+
+**Both measurements are correct. They are about different properties**, and only
+the second is a key.
+
+**Third instance of the 338's class - measured carefully, reported precisely,
+about something else - and THE FIRST CAUGHT BY RE-MEASURING AT THE POINT OF USE**
+rather than by being corrected. The pattern is becoming a habit.
+
+---
+
+# F-10 SPLITS, AND NEITHER HALF IS URGENT - **the decay premise was mine and it was wrong**
+
+    tenant task rows                        85,660
+      RESOLVE UNIQUELY on (jobrole, task)   80,064   93.47%
+      still ambiguous on the pair            5,470    6.39%
+         settled by critical_work_function      130
+      pair ABSENT from the catalogue           126    0.15%
+      KEYED BY PAIR (or pair+function)      80,194   93.62%
+
+**Title alone 67.17% -> pair 93.47%.** A title repeated across roles is exactly
+what a role-scoped catalogue produces, so the pair is the natural key and the
+measurement agrees.
+
+**A third column does not rescue the rest.** `critical_work_function` settles 130
+of 5,470, because **the catalogue itself holds 3,127 duplicate (jobrole, task)
+pairs.** The ambiguity is IN THE CATALOGUE, not in the tenant copies, and no key
+drawn from these columns can separate two catalogue rows identical on all of them.
+
+## THE 126 ARE NOT EDITED ROWS
+
+Every sample is **tenant 4, Medical/Surgical Gastroenterology** - a tenant that
+**authored its own tasks** rather than taking them from the catalogue. **For those,
+NULL IS THE CORRECT ANSWER**, not a failure: they have no catalogue origin to
+record.
+
+## SO THE DECAY PREMISE WAS WRONG, AND I INTRODUCED IT
+
+I called F-10 time-sensitive on the theory that tenant edits erode the
+correspondence, and that framing was adopted. **The 0.15% that does not match is
+not erosion - it is one tenant's own authoring, and it would not have matched on
+day one either. NOTHING MEASURED HERE IS DECAYING.**
+
+    F-10a   key 80,194 rows on (jobrole, task); remainder HELD at NULL.
+            A clean migration at 93.62%. NOT time-sensitive.
+    F-10b   3,127 duplicate (jobrole, task) pairs IN THE GLOBAL CATALOGUE.
+            A catalogue data-quality item, not a mapping one. It caps any key
+            drawn from these columns at ~93.6%.
+
+---
+
 # F-10 - **THE LAST NAME-JOIN INSIDE THE CAPABILITY CHAIN**
 
 **Filed as a numbered item, not a recommendation in a paragraph** - because every
