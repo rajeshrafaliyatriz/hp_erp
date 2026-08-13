@@ -111,6 +111,30 @@ figure is **30 audited · 1 duplicate · 1 out of scope = 32**.
 
 # §1. DIAGNOSIS
 
+> # THE CHAIN CAN NOW BE FILLED END TO END, AND NOTHING HAS FILLED IT.
+>
+> **That is not a caveat on the achievement. It IS the achievement.**
+>
+> Before this stretch, every table the capability chain resolves against was fed
+> by **provisioning and parsers, with no user-facing writer at all.** Now every
+> link has one:
+>
+> | link | table | rows today | writer |
+> |---|---|---:|---|
+> | KASBA item → competency | `competency_kasba_item` | 226 | Competency Definitions (menu 227) |
+> | competency → job role | `jobrole_competency_map` | 23 | Role Requirements panel |
+> | course → competency | `course_competency_map` | 56 | Course Competencies (menu 228) |
+> | job-role task → competency | `jobrole_task_competency_map` | **0** | Task Competencies (menu 229) |
+> | employee → rating | `competency_kasba_rating` | 160 | `POST /competency/kasba-rating` |
+>
+> **THE MECHANISMS ARE COMPLETE AND PROVED. THE CONTENT IS A CUSTOMER'S TO
+> AUTHOR.** Every row count above is seed data.
+>
+> **This sentence exists to stop someone reading empty tables as unfinished
+> work.** They are not unfinished — they are unauthored, which is a different
+> thing and the normal state of a product before its first customer uses it.
+
+
 *Written for someone who has never opened the code.*
 
 ## The product does two things wrong, and they are opposites
