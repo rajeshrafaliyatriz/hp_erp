@@ -102,7 +102,21 @@ class AssessmentCycleController extends Controller
                 'framework_name' => $c->framework_id ? ($frameworkNames[$c->framework_id] ?? null) : null,
                 // Real column now; falls back to what this used to hardcode so
                 // campaigns created before the column read exactly as before.
-                'type' => $c->type ?: self::DEFAULT_CYCLE_TYPE,
+                // NULL IS SURFACED AS UNSET, NEVER SUBSTITUTED.
+                //
+                // This line used to read `$c->type ?: self::DEFAULT_CYCLE_TYPE`,
+                // and THAT DEFAULT IS WHY THE EMPTINESS WAS INVISIBLE. Every
+                // screen showed a cycle type that no cycle has - measured, 0 of 4
+                // populated - so a column nothing writes was undetectable from the
+                // product. A substituted value does not describe the data; it
+                // describes the substitution.
+                //
+                // Whatever vocabulary is eventually chosen, this line must never
+                // invent one. The rater model decides who is enrolled in a
+                // campaign, and inventing it here would enrol people under a model
+                // nobody chose.
+                'type'        => $c->type,
+                'type_is_set' => $c->type !== null && $c->type !== '',
                 'participants' => $total,
                 'completion' => $completion,
                 'status' => $frontendStatus,
@@ -725,7 +739,13 @@ class AssessmentCycleController extends Controller
             'data'    => [
                 'id'          => (string) $cycle->id,
                 'name'        => $cycle->name,
-                'type'        => $cycle->type ?: self::DEFAULT_CYCLE_TYPE,
+                // Same rule as index(). Found only by grepping for the constant
+                // after fixing the list - THE SCOPE OF A REMEDY IS ITS OWN
+                // QUESTION, and fixing one read path says nothing about the
+                // others. The list would have been honest and the detail screen
+                // would still have invented a type.
+                'type'        => $cycle->type,
+                'type_is_set' => $cycle->type !== null && $cycle->type !== '',
                 'description' => $cycle->description,
                 'status'      => $cycle->status,
                 'start_date'  => $cycle->start_date,
