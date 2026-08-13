@@ -2,16 +2,41 @@
 /**
  * F-10a — `s_user_jobrole_task.catalogue_task_id`, keyed on (jobrole, task).
  *
- * ── THE ~93.6% CEILING IS THE CATALOGUE'S OWN AMBIGUITY ──────────────────
+ * ── THE 93.47% CEILING IS THE CATALOGUE'S OWN AMBIGUITY ──────────────────
  *
  * NOT a shortfall of this backfill. `s_jobrole_task` contains 3,127 DUPLICATE
  * (jobrole, task) pairs — two or more catalogue rows identical on both columns.
  * A tenant row carrying such a pair cannot be attributed to either, and inventing
  * an attribution would be exactly the guess F-07b forbids.
  *
- * A later reader seeing 93.6% must NOT go looking for the missing 6%: it is
+ * A later reader seeing 93.47% must NOT go looking for the missing 6.5%: it is
  * filed as F-10b, a question about what those duplicates ARE, and it caps any key
  * drawn from these columns until it is answered.
+ *
+ * ONE NUMBER, ONE PLACE: 93.47%. An earlier draft said ~93.6%, which was the
+ * rate INCLUDING a critical_work_function tiebreak this migration does not use.
+ * The figure a reader meets must be the one this script achieves.
+ *
+ * ── FOUR REASONS A ROW ENDS NULL, AND ONLY ONE IS F-10b ──────────────────
+ *
+ *     keyed                80,064
+ *     NULL - F-10b          5,470   the catalogue's own duplicate pairs
+ *     NULL - no catalogue     126   tenant-authored tasks; NULL is CORRECT
+ *     NULL - empty task         3   no title to match on at all
+ *                   total  85,663
+ *
+ * An earlier draft of this file said everything NULL-and-not-126 was F-10b.
+ * FOR THREE ROWS THAT IS FALSE - they carry a NULL or empty `task`, so there was
+ * never anything to match. They are not a catalogue problem and not tenant
+ * authoring; they are rows with no title.
+ *
+ * ── `IS NULL` MARKS *NOT KEYED*, NOT *NOT PROCESSED* ─────────────────────
+ *
+ * The backfill's guard is `whereNull('catalogue_task_id')`. A held row - ambiguous
+ * or absent - stays NULL, so a resumed run RE-DERIVES it rather than skipping it.
+ * That is harmless and idempotent, but it means THE GUARD IS NOT A PROGRESS
+ * MARKER: the script cannot state what it did from the guard alone, which is why
+ * it prints before/after counts and compares them itself.
  *
  * ── NULL IS A CORRECT ANSWER FOR 126 ROWS ────────────────────────────────
  *
@@ -91,6 +116,21 @@ if (!$doBackfill) {
 if (!$hasCol) { echo "\nREFUSING: no column. Run --add first.\n"; exit(1); }
 
 /* ---- APPLY ------------------------------------------------------------ */
+//
+// SUCCESS IS THE TABLE QUERY MATCHING THE PREDICTION - not the exit code, not the
+// absence of an error. `exit 0` is a TWO-VERDICT PROPERTY OVER THREE OUTCOMES:
+// completed, failed, and KILLED BY THE HARNESS MID-WRITE. The first run of this
+// migration exited 0 having written 11,698 of 80,064 rows, and it would have read
+// as a clean run without querying the table.
+//
+// So the script's last act is a SELECT it compares to PREDICTED itself, and every
+// chunk prints a boundary so an interruption leaves a stated position rather than
+// an unknown one.
+$startedWith = DB::table('s_user_jobrole_task')->whereNotNull('catalogue_task_id')->count();
+printf("
+BEFORE THIS RUN: %d row(s) already keyed
+", $startedWith);
+
 $written = 0;
 DB::table('s_user_jobrole_task')
     ->whereNull('catalogue_task_id')->whereNotNull('task')->where('task', '!=', '')
@@ -103,6 +143,11 @@ DB::table('s_user_jobrole_task')
                 ->update(['catalogue_task_id' => $h]);
             $written++;
         }
+        // A STATED BOUNDARY. If this run is killed, the last line printed says
+        // where it had reached - the difference between resuming from a known
+        // point and resuming from a guess.
+        printf("  ... through id %d, written so far %d
+", $rows->last()->id ?? 0, $written);
     });
 
 $actual = DB::table('s_user_jobrole_task')->whereNotNull('catalogue_task_id')->count();
@@ -114,6 +159,7 @@ printf("  keyed rows           %d\n", $actual);
 printf("  NULL rows            %d\n", $nulls);
 
 /* ---- COMPARE, and FLAG divergence rather than reconciling it ---------- */
+// THE COMPLETION CRITERION. Read from the table, not inferred from control flow.
 $delta = $actual - $predKey;
 printf("\nPREDICTED %d keyed, ACTUAL %d keyed, DIVERGENCE %+d\n", $predKey, $actual, $delta);
 if ($delta !== 0) {
