@@ -7790,6 +7790,70 @@ found the controller already existed.
 
 ---
 
+# THE FIRST FALSE ALARM IN THE FAMILY, RATHER THAN A FALSE CLEARANCE
+
+**A closing report comparing only ACTUAL to PREDICTED would have said this:**
+
+    PREDICTED keyed 80,064   ACTUAL keyed 62,835   DIVERGENCE -17,229
+
+**and flagged a failed migration. It is an unfinished write.**
+
+**The same two-verdict error in the REPORTING layer that the exit code made in the
+EXECUTION layer** - actual-vs-predicted has two outcomes and the world has three:
+
+    matches      -> closes
+    BELOW        -> INCOMPLETE, still running
+    above        -> divergence, flag it
+
+## WHAT IS DIFFERENT ABOUT THIS INSTANCE
+
+**Every prior member of this family HID a problem. This one would have INVENTED
+one.**
+
+    the exit code             hid 68,000 unwritten rows
+    header vs loader count    hid one missing statement
+    two reads of a live table hid nothing, showed a row that was not lost
+    THIS ONE                  would have shown a failure that did not exist
+
+**First false alarm rather than false clearance** - and it is the more dangerous
+direction on a migration, because **a fabricated divergence is the kind of thing
+that gets a correct run rolled back.** The rollback would have been the damage.
+
+## AND THE VERDICT BELONGS TO THE INSTRUMENT
+
+The report says CLOSES or DIVERGENCE FLAGGED **on its own**, from one statement
+whose SQL it prints. **The reader does not reach the verdict; the instrument does**
+- which is the only arrangement where a reader who trusts it is safe.
+
+---
+
+# TWO READS OF A MOVING TABLE ARE NOT A SNAPSHOT OF IT
+
+    keyed 59,576 + NULL 26,086 = 85,662        two queries
+    total 85,663, keyed + NULL  = 85,663       ONE query
+
+**A row keyed between the two queries is missed by BOTH** - the first sees it as
+not-yet-keyed, the second sees it as no-longer-NULL. **The sum undercounts by
+exactly the number of rows keyed in the gap**, and it reads as a lost row.
+
+**THIRD MEMBER OF THE FAMILY, and the first where the SUBJECT was moving rather
+than the reader being wrong:**
+
+    the exit code             two verdicts over three outcomes
+    header vs loader count    4,879 lines, 4,878 statements
+    two reads of a live table 85,662 vs 85,663
+
+**TWO NUMBERS PRODUCED SEPARATELY WILL DISAGREE, AND THE DISAGREEMENT IS IN THE
+INSTRUMENT, NOT THE SUBJECT.**
+
+## THE CLOSING REPORT USES ONE STATEMENT, AND SHOWS IT
+
+**A single-query count is only a snapshot if the query really is one statement**,
+so the closing report prints the SQL beside the numbers. The next reader should be
+able to SEE that it was one read, not trust that it was.
+
+---
+
 # STANDING OPENER - **COUNT THE ROWS, THEN LOOK AT THREE**
 
 **For any row whose target is a SHAPE CHANGE.** Not a suggestion - the opener,
