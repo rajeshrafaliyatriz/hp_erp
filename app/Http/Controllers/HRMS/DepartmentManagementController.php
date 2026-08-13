@@ -4,12 +4,32 @@ namespace App\Http\Controllers\HRMS;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class DepartmentManagementController extends Controller
 {
+    /**
+     * G-SEC-29. THE TENANT COMES FROM THE TOKEN.
+     *
+     * Every `$request->...sub_institute_id` in this controller was replaced with
+     * `$this->apiTenantId($request)`. Confirmed by execution before the change: a
+     * tenant-7 caller asking for `sub_institute_id=3` received tenant 3's rows.
+     *
+     * THIS CONTROLLER HAD NO SESSION FALLBACK. Nine of the eighteen leaking
+     * controllers read `session() ?? $request`, which leaks only when the session
+     * is absent. This one read the request and nothing else, so it leaked on
+     * EVERY call - the worst of the three shapes, which is why it went first.
+     *
+     * ONE IMPLEMENTATION, NOT THIRTEEN. `apiTenantId()` lives in
+     * ResolvesApiIdentity and is called directly. A private wrapper per
+     * controller would put the resolution in thirteen places, which is how four
+     * identity resolvers happened.
+     */
+    use ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         $type = $request->query('type');
@@ -34,7 +54,7 @@ class DepartmentManagementController extends Controller
             }
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         if (!$sub_institute_id) {
             return response()->json(['error' => 'sub_institute_id is required'], 400);
@@ -100,7 +120,7 @@ class DepartmentManagementController extends Controller
             ], 400);
         }
 
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = $this->apiTenantId($request);
         $department = $request->department;
         $parent_id = $request->parent_id ?? 0;
         $user_id = $request->user_id;
@@ -174,7 +194,7 @@ class DepartmentManagementController extends Controller
             ], 400);
         }
 
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = $this->apiTenantId($request);
         $department = $request->department;
         $user_id = $request->user_id;
 
@@ -224,7 +244,7 @@ class DepartmentManagementController extends Controller
             }
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         if (!$sub_institute_id) {
             return response()->json(['error' => 'sub_institute_id is required'], 400);

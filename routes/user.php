@@ -6,7 +6,6 @@ use App\Http\Controllers\user\tblindividual_rightsController;
 use App\Http\Controllers\user\tbluserController;
 use App\Http\Controllers\user\tbluserPastEducationController;
 use App\Http\Controllers\user\tbluserprofilemasterController;
-use App\Http\Controllers\user\tbluserContactDetails;
 use App\Http\Controllers\user\userReportController;
 use App\Http\Controllers\user\tbluserProfileWiseMenuController;
 use App\Http\Controllers\user\tblmobileAppMenuRightsController;
@@ -21,7 +20,9 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
     Route::resource('add_user_past_education', tbluserPastEducationController::class);
     Route::resource('user_profile_wise_menu_rights', tbluserProfileWiseMenuController::class);
 
-    Route::resource('user_contact_details', tbluserContactDetails::class);
+    // Removed: tbluserContactDetails does not exist - no such controller
+    // anywhere. This resource declared 7 routes that all threw on dispatch and
+    // broke route:cache. Nothing referenced `user_contact_details`.
     
     Route::get('mobile_app_menu_rights', [tblmobileAppMenuRightsController::class, 'create'])->name("mobile_app_menu_rights");
     Route::post('mobile_app_menu_rights/store', [tblmobileAppMenuRightsController::class, 'store'])->name("mobile_app_menu_rights.store");

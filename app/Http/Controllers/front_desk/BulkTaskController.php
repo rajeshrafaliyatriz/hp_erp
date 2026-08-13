@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\front_desk;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Requests\TaskManagement\BulkTaskImportRequest;
 use App\Models\front_desk\taskModel;
 use App\Models\user\tbluserModel;
@@ -14,6 +15,8 @@ use Kreait\Firebase\Messaging\CloudMessage;
 
 class BulkTaskController extends Controller
 {
+    use ResolvesApiIdentity;
+
     /**
      * Bulk Task Import (supports CSV file or JSON task_details)
      */
@@ -23,7 +26,7 @@ class BulkTaskController extends Controller
             $type = $request->type;
             $user_id = $request->user_id;
             $sub_institute_id = ($type == "API")
-                ? $request->sub_institute_id
+                ? $this->apiTenantId($request)
                 : $request->session()->get("sub_institute_id");
 
             if ($request->formType != "BulkTask") {

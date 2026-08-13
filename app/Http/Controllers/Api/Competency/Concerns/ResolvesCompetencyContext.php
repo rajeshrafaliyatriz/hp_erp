@@ -2,45 +2,117 @@
 
 namespace App\Http\Controllers\Api\Competency\Concerns;
 
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Shared request context resolution for the Competency Management API.
  *
- * Mirrors ResolvesLeaveContext: every endpoint under /api/competency/* that
- * this trait guards is token authenticated (Sanctum personal access token
- * passed as `token`) and tenant scoped by sub_institute_id. Competency data is
- * not fiscal-year scoped, so there is no leave-year handling here.
+ * Every endpoint under /api/competency/* that this trait guards is token
+ * authenticated (Sanctum personal access token) and tenant scoped by
+ * sub_institute_id. Competency data is not fiscal-year scoped, so there is no
+ * leave-year handling here.
+ *
+ * Identity comes from ResolvesApiIdentity, i.e. from the token's owner. It used
+ * to come from the request body, which let any caller read another
+ * organisation's competency data and forge the actor on every audit-log row.
  */
 trait ResolvesCompetencyContext
 {
+    use ResolvesApiIdentity;
+
     /**
      * @return array{sub_institute_id:int, user_id:int|null}|\Illuminate\Http\JsonResponse
      */
     protected function competencyContext(Request $request)
     {
-        $token = $request->input('token');
+        $identity = $this->resolveApiIdentity($request);
 
-        if (!$token) {
-            return response()->json(['status' => 0, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => 0, 'message' => 'Invalid token'], 401);
-        }
-
-        $subInstituteId = $request->input('sub_institute_id') ?? $request->header('sub_institute_id');
-
-        if (!$subInstituteId || !is_numeric($subInstituteId)) {
-            return response()->json(['status' => 0, 'message' => 'sub_institute_id is required'], 400);
+        if (!is_array($identity)) {
+            return $identity;
         }
 
         return [
-            'sub_institute_id' => (int) $subInstituteId,
-            'user_id'          => is_numeric($request->input('user_id')) ? (int) $request->input('user_id') : null,
+            'sub_institute_id' => $identity['sub_institute_id'],
+            'user_id'          => $identity['user_id'],
         ];
+    }
+
+    /**
+     * Roles that may act on somebody else's competency profile.
+     *
+     * Keyed on role_key, the stable machine name added in D-010 - not on a
+     * substring of the display name, which renames.
+     *
+     * department_head and reporting_manager are DELIBERATELY ABSENT. Their
+     * legitimate scope is "my department" and "my team", and neither can be
+     * evaluated while tbluser.reporting_manager_id is NULL for every user
+     * (G-ORG-02). Granting them org-wide access in the meantime would be a
+     * wider grant than the one being closed. They return here as team scope,
+     * the day reporting-line coverage exists.
+     */
+    private const COMPETENCY_ELEVATED = [
+        'administrator', 'hr_manager', 'hr_executive', 'executive', 'auditor',
+    ];
+
+    /**
+     * Resolve the SUBJECT of a competency request - the employee whose profile
+     * is being read or written - and refuse when the caller may not act on them.
+     *
+     * G-COMP-SEC-01: every method on EmployeeCompetencyProfileController took
+     * $id straight from the route and never compared it to the caller. The
+     * tenant boundary held; the ownership boundary did not exist. Any employee
+     * could read a colleague's full profile, and addSkill/updateSkill let them
+     * WRITE it - so anyone could raise their own ratings or lower someone
+     * else's. Gap analysis, readiness and succession all resolve against that
+     * table, and a tampered rating does not announce itself.
+     *
+     * Two checks, both required:
+     *   1. the subject must belong to the CALLER'S OWN tenant, so an elevated
+     *      role cannot reach across organisations;
+     *   2. the caller must be the subject, or hold an elevated role.
+     *
+     * @return int|\Illuminate\Http\JsonResponse
+     */
+    protected function competencySubject(array $context, $requestedId)
+    {
+        $subjectId = (int) $requestedId;
+        $callerId  = (int) ($context['user_id'] ?? 0);
+
+        if ($subjectId <= 0 || $callerId <= 0) {
+            return response()->json(['status' => 0, 'message' => 'Employee not found.'], 404);
+        }
+
+        // The subject must exist inside the caller's own organisation. Checked
+        // before the ownership rule so a cross-tenant id cannot be probed for
+        // existence by an elevated caller.
+        $inTenant = DB::table('tbluser')
+            ->where('id', $subjectId)
+            ->where('sub_institute_id', $context['sub_institute_id'])
+            ->exists();
+
+        if (!$inTenant) {
+            return response()->json(['status' => 0, 'message' => 'Employee not found.'], 404);
+        }
+
+        if ($subjectId === $callerId) {
+            return $subjectId;
+        }
+
+        $roleKey = DB::table('tbluser as u')
+            ->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
+            ->where('u.id', $callerId)
+            ->value('p.role_key');
+
+        if (in_array((string) $roleKey, self::COMPETENCY_ELEVATED, true)) {
+            return $subjectId;
+        }
+
+        return response()->json([
+            'status'  => 0,
+            'message' => 'You may only access your own competency profile.',
+        ], 403);
     }
 
     /**

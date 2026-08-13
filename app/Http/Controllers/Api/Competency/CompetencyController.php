@@ -17,6 +17,21 @@ use Illuminate\Support\Facades\Validator;
  * Library screen. Competency status maps onto the skill's approve_status
  * (published -> Approved, otherwise Pending).
  */
+/**
+ * ⚠ THIS CLASS MANAGES SKILL LIBRARY ENTRIES, NOT COMPETENCIES.
+ *
+ * store() inserts into `s_users_skills` - a FLAT SKILL ROW. It does not touch
+ * `competency` or `competency_kasba_item`, so what the product calls "creating a
+ * competency" here has never created a competency in Q-A2's sense (a named
+ * bundle of KASBA items).
+ *
+ * A competency is created by {@see CompetencyDefinitionController} on
+ * /api/competency/definitions.
+ *
+ * Left in place deliberately: the library screen reads what it writes, and
+ * changing the target to save a rename would break a working screen. The routes
+ * alias it as SkillLibraryCrudController so the route file says what it does.
+ */
 class CompetencyController extends Controller
 {
     use ResolvesCompetencyContext;
@@ -101,7 +116,10 @@ class CompetencyController extends Controller
             'category'         => $request->input('category'),
             'department_id'    => $request->input('department_id'),
             'status'           => 'Active',
-            'approve_status'   => $request->input('status') === 'published' ? 'Approved' : 'Pending',
+            // G-COMP-01: approval state is SERVER-OWNED. Sending status=published
+            // used to mint an Approved competency with no review. Always Pending;
+            // only ApprovalController may move it.
+            'approve_status'   => 'Pending',
             'created_by'       => $context['user_id'],
             'updated_by'       => $context['user_id'],
             'created_at'       => now(),

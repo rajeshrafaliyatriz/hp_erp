@@ -3,15 +3,18 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class CareerJourneyController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getCareerJourney(Request $request)
     {
         $userId = $request->user_id;
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
 
         if (! $userId || ! $subInstituteId) {
             return response()->json([

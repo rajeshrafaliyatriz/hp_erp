@@ -1,0 +1,138 @@
+https://claude.ai/chat/bc6b6e4e-0468-4772-9576-fcb3e60afbd4 
+ 
+Learning Management System — Role-Wise Feature List 
+ 
+ 
+1. Admin (System/LMS Admin) 
+ 
+Course & Content Management 
+●​ Create/upload/organize courses (SCORM, video, PDF, quizzes, AICC/xAPI 
+support) 
+●​ Course categorization (by department, role, skill, mandatory/optional) 
+●​ Content versioning and archiving 
+●​ Bulk course upload and metadata tagging 
+User & Access Management 
+●​ Role-based access control (who can view/assign/approve) 
+●​ Bulk user enrollment (CSV/HRIS sync) 
+●​ Course catalog visibility rules (by department, location, grade) 
+System Configuration 
+●​ Course expiry & re-certification cycles 
+●​ Mandatory/compliance training rules engine 
+●​ Integration management (HRIS, SSO, video conferencing tools) 
+●​ Branding/white-labeling of learning portal 
+●​ Multi-language content support 
+Reporting & Audit 
+●​ Audit logs (who completed/edited/assigned what) 
+●​ System-wide completion & compliance reports 
+●​ Data export for external audits (ISO, regulatory) 
+Trainer/Vendor Management 
+●​ Internal trainer profile management 
+●​ External vendor/course provider onboarding 
+●​ Session/classroom scheduling (instructor-led training) 
+
+ 
+ 
+ 
+2. Executives (Leadership/CXO view) 
+ 
+Strategic Dashboards 
+●​ Org-wide learning health dashboard (completion %, hours invested, 
+compliance status) 
+●​ Skill-gap heatmap across business units (consumption view, not the ROI/uplift 
+one we're building) 
+●​ Learning spend overview by BU/region (cost tracking, distinct from our 
+ROI-uplift view) 
+●​ Benchmarking vs industry/internal targets 
+Governance 
+●​ Compliance risk view (mandatory training overdue by BU) 
+●​ High-level succession-readiness learning indicators (consumption side) 
+Visibility, not action 
+●​ Mostly read-only/dashboard access — minimal transactional features, 
+drill-down only 
+ 
+3. Department Head 
+ 
+Team Learning Oversight 
+●​ Team-level training completion dashboard 
+●​ Course assignment to team members (non-competency-linked, e.g., 
+compliance, onboarding, functional courses) 
+●​ Approve/reject team members' optional course enrollment requests 
+●​ Track team mandatory/compliance training status 
+Planning Support 
+
+●​ View team skill/training calendar (scheduling, not the development-plan 
+sign-off we're building) 
+●​ Nominate team members for external training/conferences (separate from 
+formal "training nomination sign-off" in Competency) 
+●​ Budget visibility for team's L&D spend (department-level, not org ROI) 
+Reporting 
+●​ Department training completion vs target reports 
+●​ Drop-off/non-completion alerts for their team 
+ 
+4. HR Manager 
+ 
+Program Administration 
+●​ Design/manage learning catalog structure (categories, paths, curricula) — 
+content architecture, not the targeted plan templates 
+●​ Onboarding learning journeys (new hire induction tracks) 
+●​ Compliance/mandatory training program setup & monitoring org-wide 
+●​ Learning path/curriculum builder (sequenced courses, not 
+auto-recommendation engine) 
+●​ "Skills-to-course mapping" maintenance feature — even though 
+recommendation logic lives in Competency, someone needs to tag LMS 
+courses with which skills/competencies they build, or our 
+auto-recommendation engine has nothing to point to. 
+Operations 
+●​ Manage instructor-led training logistics (venues, vendors, schedules) 
+●​ Track certification/license renewals (general L&D certs, not 
+competency-linked assessments) 
+●​ Budget tracking & vendor invoice management for training 
+Reporting & Compliance 
+●​ Org-wide LMS completion reports (by BU, role, location) 
+●​ Statutory/compliance training reports for audits 
+●​ Employee learning transcript/history generation 
+Employee Experience 
+●​ Learning portal content curation (featured/recommended courses — manual 
+curation, not auto-recommendation) 
+
+●​ Survey/feedback collection post-training (course-level, not assessment cycle 
+feedback) 
+ 
+ 
+ 
+ 
+5. Employee 
+ 
+My Learning Dashboard 
+●​ Personal learning homepage showing assigned, in-progress, completed, and 
+overdue courses 
+●​ Upcoming deadlines and renewal reminders (general LMS reminders — not 
+the assessment-cycle notification engine we're building in Competency) 
+●​ Learning transcript/history (all courses completed, certificates earned, dates) 
+Course Access & Consumption 
+●​ Browse/search course catalog (by category, role-relevance, popularity, rating) 
+●​ Enroll in optional/self-directed courses 
+●​ Resume in-progress courses (bookmarking, progress tracking) 
+●​ Access content across formats — video, SCORM modules, PDFs, 
+live/instructor-led sessions 
+●​ Mobile/offline access to learning content 
+Compliance & Mandatory Training 
+●​ Clear flagging of mandatory vs optional courses 
+●​ Certificate download/print for completed mandatory or external courses 
+●​ Re-certification/expiry alerts for time-bound compliance courses 
+Engagement & Feedback 
+●​ Course ratings and feedback submission post-completion 
+●​ Discussion/Q&A or comments on course content 
+●​ Badges/points/leaderboard for gamification (optional, nice-to-have) 
+Career-Adjacent (LMS-only, not competency-linked) 
+●​ View manager-assigned courses with context (why assigned, due date) 
+
+●​ Request enrollment in external training/conference (submission only — 
+approval workflow sits with Department Head) 
+●​ View curated/recommended courses (manually curated by HR, not the 
+auto-recommendation engine in Competency) 
+Calendar & Scheduling 
+●​ View instructor-led/classroom session calendar 
+●​ Self-register for live sessions (subject to seat availability) 
+●​ Sync course deadlines with personal calendar (Google Calendar integration) 
+ 

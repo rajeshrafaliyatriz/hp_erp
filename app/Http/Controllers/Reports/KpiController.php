@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Reports;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class KpiController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         $type = $request->type;
@@ -26,7 +29,7 @@ class KpiController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
         $departmentId = $request->department_id;
 
         try {

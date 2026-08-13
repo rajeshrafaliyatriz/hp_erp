@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\build_with_AI;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -14,6 +15,8 @@ use App\Models\build_with_AI\AiCourseOutline;
 
 class buildwithAIController extends Controller
 {
+    use ResolvesApiIdentity;
+
      public function index(Request $request)
      {
          $token = $request->input('token');
@@ -96,7 +99,7 @@ class buildwithAIController extends Controller
                 'input_fields'      => json_encode($request->input_fields),
                 'configure_fields'  => json_encode($request->configure_fields),
                 'outline'           => json_encode($request->outline),
-                'sub_institute_id'  => $request->sub_institute_id,
+                'sub_institute_id'  => $this->apiTenantId($request),
                'created_by' => $user_id,
             ]);
             return response()->json([

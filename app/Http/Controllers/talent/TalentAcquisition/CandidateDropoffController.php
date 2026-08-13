@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\talent\TalentAcquisition;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class CandidateDropoffController extends Controller
 {
+    use ResolvesApiIdentity;
+
     private function maskSensitiveData(array $data): array
     {
         $masked = $data;
@@ -45,7 +48,7 @@ class CandidateDropoffController extends Controller
                 }
             }
 
-            $subInstituteId = $request->input('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
             $departmentId = $request->input('department_id');
             $experience = $request->input('experience');
 
@@ -138,7 +141,7 @@ class CandidateDropoffController extends Controller
                 }
             }
 
-            $subInstituteId = $request->input('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
             $departmentId = $request->input('department_id');
             $experience = $request->input('experience');
 
@@ -221,7 +224,7 @@ class CandidateDropoffController extends Controller
                 }
             }
 
-            $subInstituteId = $request->input('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
 
             // ---------------------------------------
             // 1. READ QUERY PARAMETERS

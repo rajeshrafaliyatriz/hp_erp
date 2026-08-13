@@ -3,6 +3,24 @@
 namespace App\Http\Controllers\leave;
 
 use App\Http\Controllers\Controller;
+
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\HRMS\hrmsDepartmentModel;
 use App\Models\HRMS\HrmsHoliday;
 use App\Models\HRMS\HrmsWeekday;
@@ -17,6 +35,24 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class HolidayController extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     /**
      * Display a listing of the resource.
      *
@@ -51,7 +87,7 @@ class HolidayController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
 
         $res['holidayList'] = HrmsHoliday::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
@@ -109,7 +145,7 @@ class HolidayController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $user_id = $request->get('user_id');
             $insert = DB::table('hrms_holidays')->updateOrInsert(
                 [
@@ -208,7 +244,7 @@ class HolidayController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $user_id = $request->get('user_id');
 
 
@@ -271,23 +307,23 @@ class HolidayController extends Controller
                 // Try to update first
                 $checked = DB::table('hrms_weekdays')
                     ->where('day', $day)
-                    ->where('sub_institute_id',$request->sub_institute_id)
+                    ->where('sub_institute_id',$this->apiTenantId($request))
                     ->whereNull('deleted_at')
                     ->first();
 
                 if (isset($checked->id)) {
                       $updated = DB::table('hrms_weekdays')
                     ->where('day', $day)
-                    ->where('sub_institute_id',$request->sub_institute_id)
-                    ->update(['day_type' => $dayType,'updated_at'=>now(),'updated_by'=>$request->user_id]);
+                    ->where('sub_institute_id',$this->apiTenantId($request))
+                    ->update(['day_type' => $dayType,'updated_at'=>now(),'updated_by'=>$this->g2gActorId($request)]);
                     $status=2;
                 } else {
                     DB::table('hrms_weekdays')->insert([
                         'day'      => $day,
                         'day_type' => $dayType,
-                        'sub_institute_id' => $request->sub_institute_id,
+                        'sub_institute_id' => $this->apiTenantId($request),
                         'created_at'=>now(),
-                        'created_by'=>$request->user_id,
+                        'created_by'=>$this->g2gActorId($request),
                     ]);
                     $status=1;
                 }

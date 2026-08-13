@@ -4,6 +4,7 @@ namespace App\Http\Controllers\settings;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use function App\Helpers\is_mobile;
 use App\Models\settings\organizationDetails;
 use App\Models\settings\organizationSisterDetails;
@@ -15,6 +16,25 @@ use Illuminate\Support\Facades\DB;
 
 class organizationDetailsController extends Controller
 {
+    /**
+     * G-SEC-29. THE TENANT COMES FROM THE TOKEN.
+     *
+     * Every `$request->...sub_institute_id` in this controller was replaced with
+     * `$this->apiTenantId($request)`. Confirmed by execution before the change: a
+     * tenant-7 caller asking for `sub_institute_id=3` received tenant 3's rows.
+     *
+     * THIS CONTROLLER HAD NO SESSION FALLBACK. Nine of the eighteen leaking
+     * controllers read `session() ?? $request`, which leaks only when the session
+     * is absent. This one read the request and nothing else, so it leaked on
+     * EVERY call - the worst of the three shapes, which is why it went first.
+     *
+     * ONE IMPLEMENTATION, NOT THIRTEEN. `apiTenantId()` lives in
+     * ResolvesApiIdentity and is called directly. A private wrapper per
+     * controller would put the resolution in thirteen places, which is how four
+     * identity resolvers happened.
+     */
+    use ResolvesApiIdentity;
+
     /**
      * Display a listing of the resource.
      */
@@ -39,7 +59,7 @@ class organizationDetailsController extends Controller
                 'sub_institute_id' => 'required|numeric',
             ]);
 
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
 
             if ($validator->fails()) {
                 $response['status'] = '0';
@@ -47,7 +67,7 @@ class organizationDetailsController extends Controller
                 return response()->json($response);
             }
             
-            $res['org_data'] = organizationDetails::with('sistersOrg')->where('sub_institute_id',$request->sub_institute_id)->get();
+            $res['org_data'] = organizationDetails::with('sistersOrg')->where('sub_institute_id',$this->apiTenantId($request))->get();
     
             return is_mobile($type, "settings/add_institute_detail", $res, "view");
         }
@@ -98,7 +118,7 @@ public function store(Request $request)
     }
 
     $orgDetail = organizationDetails::updateOrCreate(
-        ['sub_institute_id' => $request->sub_institute_id],
+        ['sub_institute_id' => $this->apiTenantId($request)],
         [
             'legal_name'         => $request->legal_name,
             'cin'                => $request->cin,
@@ -138,7 +158,7 @@ public function store(Request $request)
         // Save to DB
         $orgDetail->logo = $file_name;
         // Update school_setup table
-        school_setupModel::where('Id', $request->sub_institute_id)->update(['Logo' => $file_name]);
+        school_setupModel::where('Id', $this->apiTenantId($request))->update(['Logo' => $file_name]);
         // $orgDetail->logo = $file_name; // assuming you have a logo column
     }
 
@@ -147,13 +167,13 @@ public function store(Request $request)
     // Handle sister companies
     if ($request->has('sister_companies') && isset($orgDetail->id)) {
         organizationSisterDetails::where('org_id', $orgDetail->id)
-            ->where('sub_institute_id', $request->sub_institute_id)
+            ->where('sub_institute_id', $this->apiTenantId($request))
             ->delete();
 
         foreach ($request->sister_companies as $index => $sisterCompany) {
             $sister = new organizationSisterDetails([
                 'org_id'            => $orgDetail->id,
-                'sub_institute_id'  => $request->sub_institute_id,
+                'sub_institute_id'  => $this->apiTenantId($request),
                 'legal_name'        => $sisterCompany['legal_name'],
                 'cin'               => $sisterCompany['cin'],
                 'gstin'             => $sisterCompany['gstin'] ?? null,

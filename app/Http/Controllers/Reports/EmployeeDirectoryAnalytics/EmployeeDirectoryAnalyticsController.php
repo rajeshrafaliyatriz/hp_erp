@@ -3,30 +3,31 @@
 namespace App\Http\Controllers\Reports\EmployeeDirectoryAnalytics;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
-use Laravel\Sanctum\PersonalAccessToken;
 
 class EmployeeDirectoryAnalyticsController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    /*
+     * Every endpoint here reports on the whole organisation - headcount,
+     * growth, attrition, lifecycle, the skill matrix. Seven of the eight
+     * had no authentication at all, and the eighth only checked a token if
+     * the caller volunteered `type=API`. All eight took the organisation
+     * from the request, so one query parameter reached any tenant's
+     * workforce analytics. The token decides both now.
+     */
+
     public function getKPIs(Request $request)
     {
-        $type = $request->type;
-
-        if ($type == "API") {
-            $token = $request->input('token');
-            if (!$token) {
-                return response()->json(['message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) {
-                return response()->json(['message' => 'Invalid token'], 401);
-            }
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
-
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $identity['sub_institute_id'];
         $departmentId = $request->department_id;
 
         try {
@@ -140,7 +141,11 @@ class EmployeeDirectoryAnalyticsController extends Controller
     {
         try {
             $period = $request->query('period', 'monthly');
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $identity = $this->resolveApiIdentity($request);
+            if (!is_array($identity)) {
+                return $identity;
+            }
+            $subInstituteId = $identity['sub_institute_id'];
             $departmentId = $request->department_id;
 
             if ($period !== 'monthly') {
@@ -212,7 +217,11 @@ class EmployeeDirectoryAnalyticsController extends Controller
     {
         try {
             $year = $request->query('year', Carbon::now()->year);
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $identity = $this->resolveApiIdentity($request);
+            if (!is_array($identity)) {
+                return $identity;
+            }
+            $subInstituteId = $identity['sub_institute_id'];
 
             // Get list of departments
             $departments = DB::table('hrms_departments')->where('sub_institute_id', $subInstituteId)->pluck('department', 'id');
@@ -257,7 +266,11 @@ class EmployeeDirectoryAnalyticsController extends Controller
 
     public function getDepartmentDistribution(Request $request)
     {
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+        $subInstituteId = $identity['sub_institute_id'];
 
         try {
             $data = DB::table('hrms_departments as d')
@@ -288,7 +301,11 @@ class EmployeeDirectoryAnalyticsController extends Controller
 
     public function getJobRoleDistribution(Request $request)
     {
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+        $subInstituteId = $identity['sub_institute_id'];
 
         try {
             $roles = DB::table('tbluser as u')
@@ -315,7 +332,11 @@ class EmployeeDirectoryAnalyticsController extends Controller
 
     public function getLifecycle(Request $request)
     {
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+        $subInstituteId = $identity['sub_institute_id'];
 
         try {
             // Get current counts
@@ -375,7 +396,11 @@ class EmployeeDirectoryAnalyticsController extends Controller
 
     public function getAttritionBreakdown(Request $request)
     {
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+        $subInstituteId = $identity['sub_institute_id'];
 
         try {
             $data = DB::table('hrms_departments as d')
@@ -409,7 +434,11 @@ class EmployeeDirectoryAnalyticsController extends Controller
 
     public function getSkillMatrix(Request $request)
     {
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+        $subInstituteId = $identity['sub_institute_id'];
         $departmentFilter = $request->query('department', 'all');
 
         try {

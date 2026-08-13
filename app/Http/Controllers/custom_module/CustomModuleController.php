@@ -19,12 +19,57 @@ use Illuminate\Support\Facades\Schema;
 
 class CustomModuleController extends Controller
 {
+
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
+    /**
+     * The caller's own organisation, or null when nobody is identified.
+     *
+     * G-SEC-22. tableDelete() resolved NO tenant and performed NO authentication
+     * check: it took $id, found the row, dropped the table and deleted the row.
+     * The route group carries `web` only (routes/web.php:186-190) - session and
+     * CSRF, no `auth` - so nothing upstream supplied either check.
+     *
+     * The rest of this controller reads the tenant from the session (:24, :69,
+     * :310), so the session is honoured here too; the token is accepted first
+     * for the mobile/API callers that is_mobile() serves. Null when neither
+     * identifies the caller, and every caller must refuse on null.
+     */
+    private function customModuleTenantId(Request $request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return (int) $fromToken;
+        }
+
+        $fromSession = $request->hasSession() ? $request->session()->get('sub_institute_id') : null;
+
+        return $fromSession ? (int) $fromSession : null;
+    }
+
     public function tables(Request $request)
     {
         $subInstituteId = $request->session()->get('sub_institute_id');
         $tables = CustomModuleTable::where('sub_institute_id', $subInstituteId)->get();
         $data = ['data' => $tables->map(function ($table) {
-            $tableExists = DB::select("SHOW TABLES LIKE '{$table['table_name']}'");
+            // Bound, not interpolated - same value, same exposure.
+            $tableExists = DB::select('SHOW TABLES LIKE ?', [$table['table_name']]);
             $table['is_exists'] = count($tableExists);
             return $table;
         })];
@@ -71,7 +116,12 @@ class CustomModuleController extends Controller
             'module_name' => 'required',
             'module_type' => 'required',
             'display_under' => 'required',
-            'table_name' => 'required|string|unique:custom_module_tables,table_name,' . $request->id,
+            // G-SEC-20: a strict whitelist. This value is concatenated into
+            // DDL later (tableDelete, and the SHOW TABLES LIKE at :27), and
+            // DB::statement was confirmed to execute MULTIPLE statements - so
+            // anything outside [A-Za-z0-9_] is SQL, not a table name.
+            'table_name' => ['required', 'string', 'max:60', 'regex:/^[A-Za-z0-9_ ]+$/',
+                             'unique:custom_module_tables,table_name,' . $request->id],
         ]);
 // echo "<pre>";print_r($subInstituteId);exit;
         if ($request->id > 0) {
@@ -211,20 +261,66 @@ class CustomModuleController extends Controller
         return is_mobile($type, "custom-module.tables", $res, "redirect");
     }
 
+
+    /**
+     * A stored table name that is safe to concatenate into DDL.
+     *
+     * G-SEC-20 - SECOND-ORDER INJECTION. `table_name` is written at :99 from
+     * $request->table_name, sanitised only by str_replace(' ','_') plus a "Z_"
+     * prefix, and SAVED BEFORE any table is created - so the row persists with
+     * whatever the caller sent. It is later concatenated into
+     * `DROP TABLE IF EXISTS ...`, and DB::statement was confirmed by test to
+     * execute MULTIPLE statements: `Z_probe;SELECT<empty-comment>1` ran.
+     *
+     * Spaces become underscores, so the naive `; DROP TABLE x` is defeated by
+     * accident - but MySQL accepts an empty block comment as a separator, so a
+     * payload needs no spaces at all.
+     *
+     * Validation at the door is the primary fix; this is the second lock, for
+     * rows written before it existed. Returns null when the name is not safe,
+     * and callers must skip the statement rather than run it.
+     */
+    private function safeTableName(?string $name): ?string
+    {
+        $name = (string) $name;
+
+        return preg_match('/^[A-Za-z0-9_]+$/', $name) === 1 ? $name : null;
+    }
+
     public function tableDelete(Request $request, $id)
     {
         $type = $request->input('type');
+
+        // G-SEC-22: identify the caller, and scope the row to their own
+        // organisation. Without this, any session holding a CSRF token could
+        // delete ANY tenant's module - and drop whatever its stored name
+        // expanded to (G-SEC-20).
+        $subInstituteId = $this->customModuleTenantId($request);
+        if (!$subInstituteId) {
+            return response()->json(['status' => 0, 'message' => 'Unauthenticated.'], 401);
+        }
+
         $i=0;
         if ($id > 0) {
             $i=1;
-            $table = CustomModuleTable::find($id);
+            $table = CustomModuleTable::where('id', $id)
+                ->where('sub_institute_id', $subInstituteId)
+                ->first();
+
+            if (!$table) {
+                return response()->json(['status' => 0, 'message' => 'Module not found.'], 404);
+            }
             // check in menumaster 09-04-2025
             $accessLink = (isset($table->access_link) && $table->access_link!='') ? $table->access_link : str_replace('_',' ',$table->module_name).'.index';
 
-            if (!empty($table)) {
-                DB::statement('DROP TABLE IF EXISTS ' . $table->table_name);
+            // Only ever a validated identifier. A name that fails the check is
+            // left alone: dropping the wrong thing is worse than not dropping.
+            if (!empty($table) && ($safeName = $this->safeTableName($table->table_name))) {
+                DB::statement('DROP TABLE IF EXISTS ' . $safeName);
             }
-            CustomModuleTable::where('id', $id)->delete();
+            CustomModuleTable::where('id', $id)
+                ->where('sub_institute_id', $subInstituteId)
+                ->delete();
         }
         // $res added by uma on 24-03-2025
         if($i>0){
@@ -277,7 +373,7 @@ class CustomModuleController extends Controller
         $user_id =session()->get('user_id');
         $user_profile_id =session()->get('user_profile_id');
         if(in_array($type,['API','JSON'])){
-            $sub_institute_id =$request->get('sub_institute_id');
+            $sub_institute_id =$this->apiTenantId($request);
             $user_id =$request->get('user_id');
             $user_profile_id =$request->get('user_profile_id');
         }
@@ -358,7 +454,7 @@ class CustomModuleController extends Controller
         $user_id =session()->get('user_id');
         $user_profile_id =session()->get('user_profile_id');
         if(in_array($type,['API','JSON'])){
-            $sub_institute_id =$request->get('sub_institute_id');
+            $sub_institute_id =$this->apiTenantId($request);
             $user_id =$request->get('user_id');
             $user_profile_id =$request->get('user_profile_id');
         }

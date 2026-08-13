@@ -5,12 +5,31 @@ namespace App\Http\Controllers\lms;
 use App\Http\Controllers\Controller;
 use App\Models\lms\lmsContentCategoryModel;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use function App\Helpers\is_mobile;
 
 class courseController extends Controller
 {
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
+    use ResolvesApiIdentity;
+
     /**
      * Display a listing of the resource.
      *
@@ -38,7 +57,7 @@ class courseController extends Controller
 	    $user_id = session()->get('user_id');
 
 		if($type=="API"){
-			$sub_institute_id = $request->get('sub_institute_id');
+			$sub_institute_id = $this->apiTenantId($request);
 			$syear = $request->get('syear');
 			$user_profile_name = $request->get('user_profile_name');
 			$user_id = $request->get('user_id');
@@ -118,12 +137,17 @@ class courseController extends Controller
 
         $mycourse_arr = [];
         $extra = "";
-        
+        // G-SEC-19: bound, not concatenated. $grade and $standard come from
+        // $request->input() (:112-113) and are spliced into raw SQL below.
+        $bindings = [];
+
         if ($grade != "") {
-            $extra .= " AND STD.grade_id = '".$grade."'";
+            $extra .= ' AND STD.grade_id = ?';
+            $bindings[] = $grade;
         }
         if ($standard != "") {
-            $extra .= " AND STD.id = '".$standard."'";
+            $extra .= ' AND STD.id = ?';
+            $bindings[] = $standard;
         }
 
         $arr = DB::select("SELECT STD.name AS standard_name,s.display_name AS subject_name,s.id as subject_id,STD.id AS standard_id,s.sub_institute_id,
@@ -135,7 +159,7 @@ class courseController extends Controller
                 LEFT JOIN content_master c ON c.subject_id = s.id AND c.standard_id = s.standard_id AND c.sub_institute_id = s.sub_institute_id
                 WHERE s.sub_institute_id = $sub_institute_id AND allow_content = 'Yes'
                  ".$extra." AND s.subject_category!='SEL'
-                GROUP BY s.id,s.standard_id,s.subject_category ORDER BY s.sort_order");
+                GROUP BY s.id,s.standard_id,s.subject_category ORDER BY s.sort_order", $bindings);
 
 		$arr = json_decode(json_encode($arr), true);
 				if (count($arr) > 0) {

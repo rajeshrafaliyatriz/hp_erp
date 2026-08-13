@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\lms\assignment;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use Illuminate\Http\Request;
 use App\Models\lms\assignment\LmsAssignment;
 use Illuminate\Support\Facades\Validator;
@@ -11,19 +12,39 @@ use Illuminate\Support\Facades\DB;
 
 class assignmentController extends Controller
 {
+    use ResolvesLmsIdentity;
+
     /**
-     * Validate API token when type=API.
+     * Authenticate the caller. ALWAYS - there is no opt-out.
+     *
+     * G-LMS-SEC-01. This method used to open with `if ($type == "API")`, so
+     * OMITTING the `type` parameter skipped authentication entirely. Verified
+     * before the fix: GET /api/lmsAssignment with no token and no type returned
+     * HTTP 200 and 20,777 bytes of learner names and course names, and
+     * POST /api/lmsAssignment/review/{id} reached the record lookup - it failed
+     * only because the id did not exist.
+     *
+     * These are API routes (routes/api.php:615-625) and none of them carries
+     * middleware, so this method was the only control on the endpoint.
+     *
+     * It is the same defect ResolvesLmsIdentity's own header records as closed
+     * for the other LMS controllers, still live here.
      */
     private function validateToken(Request $request)
     {
-        $type = $request->type;
-        if ($type == "API") {
-            $token = $request->input('token');
-            if (!$token) return response()->json(['message' => 'Token not provided'], 401);
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) return response()->json(['message' => 'Invalid token'], 401);
-        }
-        return null;
+        return $this->guardLmsToken($request);
+    }
+
+    /**
+     * The caller's own organisation, from the token.
+     *
+     * Replaces `$request->sub_institute_id ?? $request->header(...)`, which let
+     * any caller read or write another organisation's enrolments by changing one
+     * parameter.
+     */
+    private function tenantId(Request $request): ?int
+    {
+        return $this->lmsTenantId($request);
     }
 
     /**
@@ -35,7 +56,7 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
 
         // Join to get learner and course details
         $query = DB::table('lms_assignments as a')
@@ -117,7 +138,7 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
         $query = LmsAssignment::where('sub_institute_id', $subInstituteId)->whereNull('deleted_at');
 
         $total = $query->count();
@@ -236,7 +257,7 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
 
         $validator = Validator::make($request->all(), [
             'ids' => 'required|array|min:1',
@@ -300,7 +321,7 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
         $userId = $request->user_id ?? $request->header('user_id');
 
         $validator = Validator::make(
@@ -372,15 +393,17 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
-        if ($profile !== '' && !str_contains($profile, 'admin') && !str_contains($profile, 'hr')) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Your profile is not permitted to review enrolment requests.',
-            ], 403);
+        // The role comes from the TOKEN's user, never from the request, and an
+        // unresolvable profile is REFUSED. Previously the profile was read from
+        // $request->input('user_profile_name'), so `user_profile_name=admin`
+        // granted review rights - and the `$profile !== ''` clause meant that
+        // OMITTING the parameter passed the guard altogether. Failure-open.
+        if ($denied = $this->guardLmsProfile($request, ['admin', 'hr'],
+            'Your profile is not permitted to review enrolment requests.')) {
+            return $denied;
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
 
         $validator = Validator::make($request->all(), [
             'decision'    => 'required|in:approved,rejected',
@@ -437,15 +460,17 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
-        if ($profile !== '' && !str_contains($profile, 'admin') && !str_contains($profile, 'hr')) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Your profile is not permitted to review enrolment requests.',
-            ], 403);
+        // The role comes from the TOKEN's user, never from the request, and an
+        // unresolvable profile is REFUSED. Previously the profile was read from
+        // $request->input('user_profile_name'), so `user_profile_name=admin`
+        // granted review rights - and the `$profile !== ''` clause meant that
+        // OMITTING the parameter passed the guard altogether. Failure-open.
+        if ($denied = $this->guardLmsProfile($request, ['admin', 'hr'],
+            'Your profile is not permitted to review enrolment requests.')) {
+            return $denied;
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
 
         $validator = Validator::make($request->all(), [
             'ids'      => 'required|array|min:1',
@@ -496,7 +521,7 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
 
         if (!$subInstituteId) {
             return response()->json(['status' => false, 'message' => 'sub_institute_id is required'], 422);
@@ -564,7 +589,7 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
 
         if (!$subInstituteId) {
             return response()->json(['status' => false, 'message' => 'sub_institute_id is required'], 422);
@@ -612,7 +637,7 @@ class assignmentController extends Controller
         $authError = $this->validateToken($request);
         if ($authError) return $authError;
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->tenantId($request);
 
         $validator = Validator::make(
             array_merge($request->all(), ['sub_institute_id' => $subInstituteId]),

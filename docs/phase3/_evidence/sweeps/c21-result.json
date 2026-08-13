@@ -1,0 +1,2281 @@
+[
+ {
+  "controller": "skillLibraryController",
+  "path": "app\\Http\\Controllers\\libraries\\skillLibraryController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 43,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php",
+   "web.php"
+  ],
+  "hits": 74,
+  "samples": [
+   [
+    101,
+    "$userSkills = userSkills::where('sub_institute_id', $request->sub_institute_id)"
+   ],
+   [
+    165,
+    "->where('sub_institute_id', $request->sub_institute_id)"
+   ],
+   [
+    315,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "HrmsController",
+  "path": "app\\Http\\Controllers\\HRMS\\HrmsController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 31,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php",
+   "hrms.php"
+  ],
+  "hits": 45,
+  "samples": [
+   [
+    54,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    89,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    134,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "PayrollController",
+  "path": "app\\Http\\Controllers\\Payroll\\PayrollController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 39,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "hrms.php"
+  ],
+  "hits": 30,
+  "samples": [
+   [
+    75,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    137,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    138,
+    "$user_id = $request->get('user_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "jobroleLibraryController",
+  "path": "app\\Http\\Controllers\\libraries\\jobroleLibraryController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 24,
+  "samples": [
+   [
+    91,
+    "$usersJobroles = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)"
+   ],
+   [
+    170,
+    "->where('sub_institute_id', $request->sub_institute_id)"
+   ],
+   [
+    211,
+    "->where('sub_institute_id', $request->sub_institute_id)"
+   ]
+  ]
+ },
+ {
+  "controller": "AJAXController",
+  "path": "app\\Http\\Controllers\\AJAXController.php",
+  "trait": false,
+  "reads_tokenable": true,
+  "routes": 21,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php",
+   "hrms.php",
+   "web.php"
+  ],
+  "hits": 22,
+  "samples": [
+   [
+    156,
+    "return $this->tableDataNormaliseTenant($request->input('sub_institute_id'));"
+   ],
+   [
+    461,
+    "$res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)->w"
+   ],
+   [
+    465,
+    "$res['searchData'] = userJobroleModel::where('sub_institute_id', $request->sub_institute_id)"
+   ]
+  ]
+ },
+ {
+  "controller": "contentLibraryController",
+  "path": "app\\Http\\Controllers\\lms\\content_library\\contentLibraryController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 8,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 16,
+  "samples": [
+   [
+    45,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    47,
+    "$user_id = $request->get('user_id');"
+   ],
+   [
+    59,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "assignmentController",
+  "path": "app\\Http\\Controllers\\lms\\assignment\\assignmentController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 19,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php",
+   "lms.php"
+  ],
+  "hits": 15,
+  "samples": [
+   [
+    38,
+    "$subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');"
+   ],
+   [
+    120,
+    "$subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');"
+   ],
+   [
+    177,
+    "->where('id', $request->user_id)"
+   ]
+  ]
+ },
+ {
+  "controller": "lmsActivityStreamController",
+  "path": "app\\Http\\Controllers\\lms\\lmsActivityStreamController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 8,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 12,
+  "samples": [
+   [
+    25,
+    "$user_id = $request->user_id;"
+   ],
+   [
+    26,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    29,
+    "'sub_institute_id' => $request->sub_institute_id,"
+   ]
+  ]
+ },
+ {
+  "controller": "contentController",
+  "path": "app\\Http\\Controllers\\lms\\contentController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 16,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 11,
+  "samples": [
+   [
+    40,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    125,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    268,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "questionpaperController",
+  "path": "app\\Http\\Controllers\\lms\\questionpaperController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 11,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 11,
+  "samples": [
+   [
+    55,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    58,
+    "$user_id = $request->user_id;"
+   ],
+   [
+    163,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "jobroletexonomycontroller",
+  "path": "app\\Http\\Controllers\\libraries\\jobroletexonomycontroller.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 11,
+  "samples": [
+   [
+    45,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    92,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    120,
+    "$objjobrole->created_by = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "taskController",
+  "path": "app\\Http\\Controllers\\front_desk\\taskController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 7,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php",
+   "lms.php"
+  ],
+  "hits": 10,
+  "samples": [
+   [
+    181,
+    "$sub_institute_id = $request->get(\"sub_institute_id\");"
+   ],
+   [
+    184,
+    "$user_id = $request->get(\"user_id\");"
+   ],
+   [
+    312,
+    "//         $sub_institute_id = $request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "HolidayController",
+  "path": "app\\Http\\Controllers\\leave\\HolidayController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 14,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "hrms.php",
+   "web.php"
+  ],
+  "hits": 9,
+  "samples": [
+   [
+    54,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    112,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    113,
+    "$user_id = $request->get('user_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "LmsCourseEnrollController",
+  "path": "app\\Http\\Controllers\\lms_course_enroll\\LmsCourseEnrollController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 6,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 9,
+  "samples": [
+   [
+    39,
+    "$userId = $request->user_id ?? $request->header('user_id');"
+   ],
+   [
+    117,
+    "$userId = $request->user_id ?? $request->header('user_id');"
+   ],
+   [
+    357,
+    "$request->user_id,"
+   ]
+  ]
+ },
+ {
+  "controller": "instituteDetailController",
+  "path": "app\\Http\\Controllers\\settings\\instituteDetailController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "settings.php"
+  ],
+  "hits": 9,
+  "samples": [
+   [
+    35,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    37,
+    "$user_id = $request->get('user_id');"
+   ],
+   [
+    99,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "HrmsLeaveController",
+  "path": "app\\Http\\Controllers\\HRMS\\HrmsLeaveController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 8,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php",
+   "hrms.php"
+  ],
+  "hits": 8,
+  "samples": [
+   [
+    22,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    27,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    77,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "tbluserController",
+  "path": "app\\Http\\Controllers\\user\\tbluserController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 8,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php",
+   "user.php"
+  ],
+  "hits": 8,
+  "samples": [
+   [
+    72,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    73,
+    "$user_id = $request->get('user_id');"
+   ],
+   [
+    322,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "jobroletaskcontroller",
+  "path": "app\\Http\\Controllers\\libraries\\jobroletaskcontroller.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 8,
+  "samples": [
+   [
+    43,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    88,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    111,
+    "$objjobrole->created_by = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "ApplyLeaveController",
+  "path": "app\\Http\\Controllers\\leave\\ApplyLeaveController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 11,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 7,
+  "samples": [
+   [
+    38,
+    "$sub_institute_id=$request->sub_institute_id;"
+   ],
+   [
+    40,
+    "$user_id= $request->user_id;"
+   ],
+   [
+    160,
+    "$subInstituteId=$request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "questionmasterController",
+  "path": "app\\Http\\Controllers\\lms\\questionmasterController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 10,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 7,
+  "samples": [
+   [
+    70,
+    "//         $sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    203,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    335,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "organizationDetailsController",
+  "path": "app\\Http\\Controllers\\settings\\organizationDetailsController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "settings.php"
+  ],
+  "hits": 7,
+  "samples": [
+   [
+    42,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    50,
+    "$res['org_data'] = organizationDetails::with('sistersOrg')->where('sub_institute_id',$request->"
+   ],
+   [
+    120,
+    "$orgDetail->created_by = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "talent_interviewschedulescontroller",
+  "path": "app\\Http\\Controllers\\talent\\talent_interviewschedulescontroller.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 8,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 6,
+  "samples": [
+   [
+    98,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    169,
+    "$objtalent->created_by = $request->user_id;"
+   ],
+   [
+    215,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "DepartmentManagementController",
+  "path": "app\\Http\\Controllers\\HRMS\\DepartmentManagementController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 6,
+  "samples": [
+   [
+    37,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    103,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    106,
+    "$user_id = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "LeaveTypeController",
+  "path": "app\\Http\\Controllers\\leave\\LeaveTypeController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 6,
+  "samples": [
+   [
+    40,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    41,
+    "$userId = $request->get('user_id');"
+   ],
+   [
+    94,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "onlineExamController",
+  "path": "app\\Http\\Controllers\\lms\\onlineExamController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 7,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 5,
+  "samples": [
+   [
+    48,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    89,
+    "$user_id = $request->get('user_id');"
+   ],
+   [
+    90,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "talent_jobpostingcontroller",
+  "path": "app\\Http\\Controllers\\talent\\talent_jobpostingcontroller.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 6,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 5,
+  "samples": [
+   [
+    106,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    155,
+    "$objtalent->created_by = $request->user_id;"
+   ],
+   [
+    348,
+    "'updated_by' => $request->user_id,"
+   ]
+  ]
+ },
+ {
+  "controller": "discliplinaryManagementController",
+  "path": "app\\Http\\Controllers\\settings\\discliplinaryManagementController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "settings.php"
+  ],
+  "hits": 5,
+  "samples": [
+   [
+    42,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    127,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    174,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "shiftMasterController",
+  "path": "app\\Http\\Controllers\\HRMS\\shiftMasterController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "hrms.php"
+  ],
+  "hits": 5,
+  "samples": [
+   [
+    50,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    108,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    109,
+    "$user_id = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "talent_interviewpanelController",
+  "path": "app\\Http\\Controllers\\talent\\interview_panel\\talent_interviewpanelController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 5,
+  "samples": [
+   [
+    36,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    69,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    115,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "tblmenumasterG2gController",
+  "path": "app\\Http\\Controllers\\user\\tblmenumasterG2gController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "user.php"
+  ],
+  "hits": 5,
+  "samples": [
+   [
+    38,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    93,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    141,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "CustomModuleController",
+  "path": "app\\Http\\Controllers\\custom_module\\CustomModuleController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 15,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    280,
+    "$sub_institute_id =$request->get('sub_institute_id');"
+   ],
+   [
+    281,
+    "$user_id =$request->get('user_id');"
+   ],
+   [
+    361,
+    "$sub_institute_id =$request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "chapterController",
+  "path": "app\\Http\\Controllers\\lms\\chapterController.php",
+  "trait": false,
+  "reads_tokenable": true,
+  "routes": 13,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    52,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    120,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    300,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "talent_jobapplicationcontroller",
+  "path": "app\\Http\\Controllers\\talent\\talent_jobapplicationcontroller.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 8,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    167,
+    "'created_by'       => $request->user_id,"
+   ],
+   [
+    292,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    394,
+    "$application->updated_by = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "LeaveAuthorisationController",
+  "path": "app\\Http\\Controllers\\leave\\LeaveAuthorisationController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 7,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    30,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    72,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    117,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "lmsSyllabusController",
+  "path": "app\\Http\\Controllers\\lms\\lmsSyllabusController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 6,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    23,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    70,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    97,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "LeaveSummaryReportController",
+  "path": "app\\Http\\Controllers\\leave\\leave_summary_report\\LeaveSummaryReportController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    26,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    62,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    230,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "bulkUserShiftUpdateController",
+  "path": "app\\Http\\Controllers\\HRMS\\bulkUserShiftUpdateController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "hrms.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    53,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    100,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    159,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "curriculumLessonplanController",
+  "path": "app\\Http\\Controllers\\lms\\curriculum\\curriculumLessonplanController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    46,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    47,
+    "$user_id = $request->get('user_id');"
+   ],
+   [
+    107,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "lmsCurriculumController",
+  "path": "app\\Http\\Controllers\\lms\\lmsCurriculumController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 4,
+  "samples": [
+   [
+    24,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    86,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    114,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "tblgroupwise_rightsController",
+  "path": "app\\Http\\Controllers\\user\\tblgroupwise_rightsController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 7,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "user.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    47,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    126,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    236,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "masterSetupController",
+  "path": "app\\Http\\Controllers\\school_setup\\masterSetupController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 6,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    49,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    110,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    111,
+    "$user_id = $request->get('user_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "syllabusController",
+  "path": "app\\Http\\Controllers\\front_desk\\syllabus\\syllabusController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 6,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    120,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    122,
+    "$user_id = $request->get('user_id');"
+   ],
+   [
+    277,
+    "$sub_institute_id= $request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "tblindividual_rightsController",
+  "path": "app\\Http\\Controllers\\user\\tblindividual_rightsController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 6,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "user.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    89,
+    "$query = tblindividual_rightsModel::where([\"profile_id\" => $request->input('profile_id'), \"user"
+   ],
+   [
+    94,
+    "'user_id' => $request->input('user_id'),"
+   ],
+   [
+    171,
+    "$user_id = $request->input(\"user_id\");"
+   ]
+  ]
+ },
+ {
+  "controller": "leaveEncashmentController",
+  "path": "app\\Http\\Controllers\\leave\\leaveEncashmentController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "hrms.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    23,
+    "//             $sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    169,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    329,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "orgDashboardContorller",
+  "path": "app\\Http\\Controllers\\dashboards\\orgDashboardContorller.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    53,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    54,
+    "$user_id = $request->get('user_id');"
+   ],
+   [
+    65,
+    "$res['org_data'] = organizationDetails::with('sistersOrg')->where('sub_institute_id',$request->"
+   ]
+  ]
+ },
+ {
+  "controller": "skillcontroller",
+  "path": "app\\Http\\Controllers\\Api\\skillcontroller.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    20,
+    "$sub_institute_id = session()->get('sub_institute_id') ?? $request->get('sub_institute_id');"
+   ],
+   [
+    67,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    165,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "LeaveReportController",
+  "path": "app\\Http\\Controllers\\leave\\leave_report\\LeaveReportController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 3,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    25,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    65,
+    "//         $sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    139,
+    "$sub_institute_id = ($type === 'API') ? $request->input('sub_institute_id') : $request->session"
+   ]
+  ]
+ },
+ {
+  "controller": "blukCourseandQuetionGeneration",
+  "path": "app\\Http\\Controllers\\lms\\blukCourseandQuetionGeneration.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 1,
+  "verbs": [
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 3,
+  "samples": [
+   [
+    85,
+    "$subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id') ?? 1;"
+   ],
+   [
+    86,
+    "$createdBy = $request->user_id ?? $request->header('user_id') ?? 1;"
+   ],
+   [
+    330,
+    "$subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id') ?? 1;"
+   ]
+  ]
+ },
+ {
+  "controller": "sub_std_mapController",
+  "path": "app\\Http\\Controllers\\school_setup\\sub_std_mapController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 7,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php",
+   "web.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    34,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ],
+   [
+    96,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "courseController",
+  "path": "app\\Http\\Controllers\\lms\\courseController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 6,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    41,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    44,
+    "$user_id = $request->get('user_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "lmsDashboardController",
+  "path": "app\\Http\\Controllers\\lms\\lmsDashboardController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 6,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    34,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    36,
+    "$user_id = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "SkillDashboardController",
+  "path": "app\\Http\\Controllers\\dashboards\\SkillDashboardController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    45,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    46,
+    "$user_id = $request->get('user_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "departmentController",
+  "path": "app\\Http\\Controllers\\HRMS\\departmentController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "hrms.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    212,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ],
+   [
+    213,
+    "$user_id = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "SkillMatrixController",
+  "path": "app\\Http\\Controllers\\libraries\\SkillMatrixController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 3,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "web.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    53,
+    "$user_id = (int)$request->user_id;"
+   ],
+   [
+    285,
+    "$sub_institute_id = $request->sub_institute_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "buildwithAIController",
+  "path": "app\\Http\\Controllers\\build_with_AI\\buildwithAIController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 2,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    77,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    78,
+    "$user_id = $request->get('user_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "jobroleskillcontroller",
+  "path": "app\\Http\\Controllers\\libraries\\jobroleskillcontroller.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 2,
+  "verbs": [
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    34,
+    "$sub_institute_id = $request->get('sub_institute_id');"
+   ],
+   [
+    89,
+    "$objjobrole->created_by = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "ProjectController",
+  "path": "app\\Http\\Controllers\\Api\\TaskManagement\\ProjectController.php",
+  "trait": false,
+  "reads_tokenable": true,
+  "routes": 12,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    292,
+    "$subInstituteId = (int) ($user->sub_institute_id ?: $request->input('sub_institute_id'));"
+   ]
+  ]
+ },
+ {
+  "controller": "lmsPortfolioController",
+  "path": "app\\Http\\Controllers\\lms\\lmsPortfolioController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 8,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    269,
+    "$sub_institute_id = $request->get(\"sub_institute_id\");"
+   ]
+  ]
+ },
+ {
+  "controller": "DependencyController",
+  "path": "app\\Http\\Controllers\\Api\\TaskManagement\\DependencyController.php",
+  "trait": false,
+  "reads_tokenable": true,
+  "routes": 7,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    312,
+    "$subInstituteId = (int) ($user->sub_institute_id ?: $request->input('sub_institute_id'));"
+   ]
+  ]
+ },
+ {
+  "controller": "TemplateController",
+  "path": "app\\Http\\Controllers\\HRTemplates\\TemplateController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 7,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    55,
+    "$query->where('sub_institute_id', $request->sub_institute_id);"
+   ]
+  ]
+ },
+ {
+  "controller": "WorkspaceController",
+  "path": "app\\Http\\Controllers\\Api\\TaskManagement\\WorkspaceController.php",
+  "trait": false,
+  "reads_tokenable": true,
+  "routes": 7,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    467,
+    "'sub_institute_id' => (int) ($user->sub_institute_id ?: $request->input('sub_institute_id', 0))"
+   ]
+  ]
+ },
+ {
+  "controller": "ExcelAutomationAgentController",
+  "path": "app\\Http\\Controllers\\Api\\ExcelAutomationAgentController.php",
+  "trait": false,
+  "reads_tokenable": true,
+  "routes": 5,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    648,
+    "? (int) $request->input('sub_institute_id')"
+   ]
+  ]
+ },
+ {
+  "controller": "MobilityTalentPoolController",
+  "path": "app\\Http\\Controllers\\Api\\Mobility\\MobilityTalentPoolController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    133,
+    "$userId = $request->input('user_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "TalentOfferController",
+  "path": "app\\Http\\Controllers\\talent\\TalentOfferController.php",
+  "trait": true,
+  "reads_tokenable": true,
+  "routes": 5,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    93,
+    "'created_by' => $request->user_id,"
+   ]
+  ]
+ },
+ {
+  "controller": "virtualclassroomController",
+  "path": "app\\Http\\Controllers\\lms\\virtualclassroomController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 5,
+  "verbs": [
+   "DELETE",
+   "GET",
+   "PATCH",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    433,
+    "$sub_institute_id = $request->input(\"sub_institute_id\");"
+   ]
+  ]
+ },
+ {
+  "controller": "MobilityApplicationController",
+  "path": "app\\Http\\Controllers\\Api\\Mobility\\MobilityApplicationController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 3,
+  "verbs": [
+   "GET",
+   "POST",
+   "PUT"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    87,
+    "$userId = $request->input('user_id') ?: $actorId;"
+   ]
+  ]
+ },
+ {
+  "controller": "MyTasksController",
+  "path": "app\\Http\\Controllers\\Api\\TaskManagement\\MyTasksController.php",
+  "trait": false,
+  "reads_tokenable": true,
+  "routes": 3,
+  "verbs": [
+   "GET",
+   "PATCH"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    251,
+    "$subInstituteId = (int) ($user->sub_institute_id ?: $request->input('sub_institute_id'));"
+   ]
+  ]
+ },
+ {
+  "controller": "BulkTaskController",
+  "path": "app\\Http\\Controllers\\front_desk\\BulkTaskController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 2,
+  "verbs": [
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    27,
+    "$user_id = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "UserJourneyLogController",
+  "path": "app\\Http\\Controllers\\Api\\UserJourneyLogController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 2,
+  "verbs": [
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    68,
+    "$journeyLog->user_id = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "userReportController",
+  "path": "app\\Http\\Controllers\\user\\userReportController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 2,
+  "verbs": [
+   "GET",
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "user.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    164,
+    "$sub_institute_id = $request->input('sub_institute_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "SaveJDController",
+  "path": "app\\Http\\Controllers\\Api\\Gemini\\SaveJDController.php",
+  "trait": false,
+  "reads_tokenable": false,
+  "routes": 1,
+  "verbs": [
+   "POST"
+  ],
+  "writes_reachable": true,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    242,
+    "?? $request->header('sub_institute_id')"
+   ]
+  ]
+ },
+ {
+  "controller": "lms_apiController",
+  "path": "app\\Http\\Controllers\\lms\\lms_apiController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 1,
+  "verbs": [
+   "GET"
+  ],
+  "writes_reachable": false,
+  "route_files": [
+   "lms.php"
+  ],
+  "hits": 20,
+  "samples": [
+   [
+    49,
+    "$sub_institute_id = $request->input(\"sub_institute_id\");"
+   ],
+   [
+    76,
+    "$sub_institute_id = $request->input(\"sub_institute_id\");"
+   ],
+   [
+    118,
+    "$sub_institute_id = $request->input(\"sub_institute_id\");"
+   ]
+  ]
+ },
+ {
+  "controller": "SkillMatchingController",
+  "path": "app\\Http\\Controllers\\Api\\SkillMatchingController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 2,
+  "verbs": [
+   "GET"
+  ],
+  "writes_reachable": false,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    22,
+    "$userId = $request->input('user_id');"
+   ],
+   [
+    206,
+    "$userId = $request->input('user_id');"
+   ]
+  ]
+ },
+ {
+  "controller": "DepartmentSkillController",
+  "path": "app\\Http\\Controllers\\HRMS\\DepartmentSkillController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 1,
+  "verbs": [
+   "GET"
+  ],
+  "writes_reachable": false,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 2,
+  "samples": [
+   [
+    251,
+    "'created_by' => $request->user_id,"
+   ],
+   [
+    328,
+    "$updateData['updated_by'] = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "AttendanceApiController",
+  "path": "app\\Http\\Controllers\\Api\\HRITDashboard\\AttendanceApiController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 3,
+  "verbs": [
+   "GET"
+  ],
+  "writes_reachable": false,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    308,
+    "$userId         = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "CareerJourneyController",
+  "path": "app\\Http\\Controllers\\CareerJourneyController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 1,
+  "verbs": [
+   "GET"
+  ],
+  "writes_reachable": false,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    16,
+    "$userId = $request->user_id;"
+   ]
+  ]
+ },
+ {
+  "controller": "CompetencyDashboardController",
+  "path": "app\\Http\\Controllers\\Api\\CompetencyDashboard\\CompetencyDashboardController.php",
+  "trait": true,
+  "reads_tokenable": false,
+  "routes": 1,
+  "verbs": [
+   "GET"
+  ],
+  "writes_reachable": false,
+  "route_files": [
+   "api.php"
+  ],
+  "hits": 1,
+  "samples": [
+   [
+    816,
+    "$userId = $request->input('user_id');"
+   ]
+  ]
+ }
+]

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\lms;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\lms\chapterModel;
 use App\Models\lms\contentmappingtypeModel;
 use App\Models\lms\contentModel;
@@ -10,7 +11,6 @@ use App\Models\lms\lmsmappingtypeModel;
 use App\Models\lms\topicModel;
 use App\Models\lms\virtualclassroomModel;
 use App\Models\school_setup\sub_std_mapModel;
-use GenTux\Jwt\GetsJwtToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use function App\Helpers\is_mobile;
@@ -19,6 +19,13 @@ use Illuminate\Support\Facades\Storage;
 
 class virtualclassroomController extends Controller
 {
+    // Was GenTux\Jwt\GetsJwtToken. That package is absent from
+    // composer.json and not installed, so this class could not be
+    // loaded at all - fatal on every request, and fatal for
+    // route:list / route:cache application-wide. Authentication now
+    // uses Sanctum, like the rest of the codebase.
+    use ResolvesApiIdentity;
+
 
     public function index(Request $request)
     {
@@ -410,7 +417,7 @@ class virtualclassroomController extends Controller
     public function studentVirtualClassroomAPI(Request $request)
     {
         try {
-            if (! $this->jwtToken()->validate()) {
+            if (! $this->apiTokenIsValid()) {
                 $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
 
                 return response()->json($response, 401);

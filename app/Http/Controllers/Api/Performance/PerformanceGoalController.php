@@ -101,12 +101,37 @@ class PerformanceGoalController extends Controller
             'progress'       => 'nullable|integer|min:0|max:100',
             'status'         => 'nullable|in:draft,active,achieved,partially_achieved,missed,cancelled',
             'cycle_id'       => 'nullable|integer',
+            // TL-02(a). Until now `category` could be the STRING 'competency'
+            // while nothing pointed at a competency record - G-FLOW-26's second
+            // broken promise, "performance reviews informed by competency",
+            // existing as a validator value and a dropdown label.
+            //
+            // NULLABLE ON PURPOSE: "deliver the Q3 migration" develops no
+            // particular competency, and forcing every author to pick one
+            // produces worse data than an absence.
+            'competency_id'  => 'nullable|integer|min:1',
             'review_id'      => 'nullable|integer',
             // The goal owner. NOT `user_id` - that is the context actor.
             'user_id_target' => 'required|integer',
         ]);
 
         $ownerId = (int) $validated['user_id_target'];
+
+        // THE COMPETENCY MUST BE THE CALLER'S OWN. An id is unique to the table,
+        // not to a tenant, so an unchecked value here would let one organisation
+        // point a goal at another's competency - and the goal would look valid.
+        if (!empty($validated['competency_id'])) {
+            $ownsIt = DB::table('competency')
+                ->where('id', $validated['competency_id'])
+                ->where('sub_institute_id', $context['sub_institute_id'])
+                ->exists();
+            if (!$ownsIt) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'That competency is not in your organisation.',
+                ], 422);
+            }
+        }
         unset($validated['user_id_target']);
 
         // Derive cycle/department from the linked review so the Goals tab can be

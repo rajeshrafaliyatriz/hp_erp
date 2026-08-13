@@ -15,6 +15,37 @@ use Illuminate\Support\Facades\Validator;
 
 class chapterController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
+    /**
+     * The caller's own organisation. NEVER a literal.
+     *
+     * G-SEC-17. These controllers assigned `$sub_institute_id = 1` outright -
+     * not as a fallback - so any caller reaching the affected method read
+     * TENANT 1's content whatever tenant they belonged to. chapterController
+     * hardcoded the ROLE alongside it (`$user_profile_name = 1`).
+     *
+     * The token wins when one is present; the session is used for the Blade
+     * screens that have no token. When neither identifies the caller this
+     * returns null, so every `where sub_institute_id = ?` matches NOTHING -
+     * failing closed, the same contract ResolvesApiIdentity documents.
+     */
+    private function resolvedTenantId($request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return (int) $fromToken;
+        }
+
+        // hasSession() first: $request->session() THROWS "Session store not set
+        // on request" when there is none, so the null-safe operator never gets a
+        // chance to help. An API call with an unusable token would have died with
+        // a 500 instead of failing closed.
+        $fromSession = $request->hasSession() ? $request->session()->get('sub_institute_id') : null;
+
+        return $fromSession ? (int) $fromSession : null;
+    }
+
     public $searchArr = ["<p>", "</p>", "&nbsp;", "\n", "\r", "'", "<", '"'];
     public $replaceArr = ["", "", "", "", "", "", "", ''];
 
@@ -110,10 +141,10 @@ class chapterController extends Controller
     public function getData($request)
     {
         if($request->has('preload_lms')){
-            $sub_institute_id = 1;
+            $sub_institute_id = $this->resolvedTenantId($request);
             $year = DB::table('academic_year')->where('sub_institute_id',$sub_institute_id)->get()->toArray();
             $syear =$year[0]->syear;
-            $user_profile_name = 1;
+            $user_profile_name = $request->hasSession() ? $request->session()->get('user_profile_name') : null;
         }
         elseif($request->type=="API"){
             

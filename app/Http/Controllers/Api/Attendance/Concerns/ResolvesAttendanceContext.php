@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\Attendance\Concerns;
 
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 
 /**
  * Shared request context resolution for the Attendance Management API.
@@ -16,30 +16,22 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 trait ResolvesAttendanceContext
 {
+    use ResolvesApiIdentity;
+
     /**
      * @return array{sub_institute_id:int, user_id:int|null, syear:string|null}|\Illuminate\Http\JsonResponse
      */
     protected function attendanceContext(Request $request)
     {
-        $token = $request->input('token');
+        $identity = $this->resolveApiIdentity($request);
 
-        if (!$token) {
-            return response()->json(['status' => 0, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => 0, 'message' => 'Invalid token'], 401);
-        }
-
-        $subInstituteId = $request->input('sub_institute_id') ?? $request->header('sub_institute_id');
-
-        if (!$subInstituteId || !is_numeric($subInstituteId)) {
-            return response()->json(['status' => 0, 'message' => 'sub_institute_id is required'], 400);
+        if (!is_array($identity)) {
+            return $identity;
         }
 
         return [
-            'sub_institute_id' => (int) $subInstituteId,
-            'user_id'          => is_numeric($request->input('user_id')) ? (int) $request->input('user_id') : null,
+            'sub_institute_id' => $identity['sub_institute_id'],
+            'user_id'          => $identity['user_id'],
             'syear'            => $request->input('syear'),
         ];
     }

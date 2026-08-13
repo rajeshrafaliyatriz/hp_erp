@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\libraries;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use App\Models\libraries\industryModel;
 use App\Models\libraries\userSkills;
@@ -16,8 +17,48 @@ use App\Models\libraries\userKnowledgeAbility;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
-class jobroleLibrary2Controller extends Controller
+/**
+ * PSR-4 NAME MATCHED TO THE FILE, 2026-08-12.
+ *
+ * This file declared `class jobroleLibrary2Controller`. Composer's PSR-4
+ * autoloader maps a class to a file OF THE SAME NAME, so the class could not be
+ * loaded at all: `class_exists()` returned false and nothing could reference it.
+ *
+ * IT WAS INVISIBLE RATHER THAN BROKEN. Nothing referenced either name - no route,
+ * no other controller - so nothing failed. A class that cannot be loaded and is
+ * never named produces no error; it just is not there. **The linter, the test
+ * suite and the router all agreed with its absence.**
+ *
+ * Found while consolidating `g2gActorId`: this was the one file of fifteen whose
+ * class the behaviour probe could not reflect on, and the reflection failure was
+ * the only signal that it existed in this state.
+ *
+ * RENAMED, NOT DELETED. It is a near-duplicate of `jobroleLibraryController`
+ * (same six methods, 820 lines against 681) and only that one is routed. Whether
+ * this variant should exist at all is a separate decision, filed rather than
+ * taken - the fix here is the name, so the file is at least loadable and its
+ * contents can be compared.
+ */
+class jobroleLibrary1Controller extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     //
     /**
      * Display a listing of the job roles.
@@ -283,7 +324,7 @@ class jobroleLibrary2Controller extends Controller
                     'has_lateral_movement' => $jobData->has_lateral_movement,
                     'progression_type' => $jobData->progression_type,
                     'sub_institute_id' => $request->sub_institute_id,
-                    'created_by' => $request->user_id,
+                    'created_by' => $this->g2gActorId($request),
                     'created_at' => now(),
                 ];
 
@@ -337,7 +378,7 @@ class jobroleLibrary2Controller extends Controller
                                                 'jobrole' => $jv->jobrole,
                                                 'proficiency_level' => $jv->proficiency_level,
                                                 'sub_institute_id' => $request->sub_institute_id,
-                                                'created_by' => $request->user_id,
+                                                'created_by' => $this->g2gActorId($request),
                                                 'created_at' => now(),
                                             ];
                                             $check = skillJobroleMap::where([
@@ -360,7 +401,7 @@ class jobroleLibrary2Controller extends Controller
                                                     'classification' => 'knowledge',
                                                     'classification_item' => $jv->knowledge_ability_items,
                                                     'sub_institute_id' => $request->sub_institute_id,
-                                                    'created_by' => $request->user_id,
+                                                    'created_by' => $this->g2gActorId($request),
                                                     'created_at' => now(),
                                                 ];
                                                 $insert = userKnowledgeAbility::insert($knowledgeInsert);
@@ -377,7 +418,7 @@ class jobroleLibrary2Controller extends Controller
                                                     'classification' => 'ability',
                                                     'classification_item' => $jv->knowledge_ability_items,
                                                     'sub_institute_id' => $request->sub_institute_id,
-                                                    'created_by' => $request->user_id,
+                                                    'created_by' => $this->g2gActorId($request),
                                                     'created_at' => now(),
                                                 ];
                                                 $insert = userKnowledgeAbility::insert($abilityInsert);
@@ -393,7 +434,7 @@ class jobroleLibrary2Controller extends Controller
                                                     'proficiency_level' => $jv->proficiency_level,
                                                     'application' => $jv->application,
                                                     'sub_institute_id' => $request->sub_institute_id,
-                                                    'created_by' => $request->user_id,
+                                                    'created_by' => $this->g2gActorId($request),
                                                     'created_at' => now(),
                                                 ];
                                                 $insert = userApplication::insert($applicationInsert);
@@ -411,7 +452,7 @@ class jobroleLibrary2Controller extends Controller
                                                     'critical_work_function' => $jv->critical_work_function,
                                                     'task' => $jv->task,
                                                     'sub_institute_id' => $request->sub_institute_id,
-                                                    'created_by' => $request->user_id,
+                                                    'created_by' => $this->g2gActorId($request),
                                                     'created_at' => now(),
                                                 ];
                                                 $insert = userJobroleTask::insert($taskInsert);
@@ -448,7 +489,7 @@ class jobroleLibrary2Controller extends Controller
                 'keyword_tags' => $request->keyword_tags,
                 'internal_tracking' => $request->internal_tracking,
                 'sub_institute_id' => $request->sub_institute_id,
-                'created_by' => $request->user_id,
+                'created_by' => $this->g2gActorId($request),
                 'created_at' => now(),
             ];
 
@@ -619,7 +660,7 @@ class jobroleLibrary2Controller extends Controller
                 'keyword_tags' => $request->keyword_tags,
                 'internal_tracking' => $request->internal_tracking,
                 'sub_institute_id' => $request->sub_institute_id,
-                'updated_by' => $request->user_id,
+                'updated_by' => $this->g2gActorId($request),
                 'updated_at' => now(),
             ];
 
@@ -645,7 +686,7 @@ class jobroleLibrary2Controller extends Controller
                         'title' => $skillName,
                         'description' => $skillDescription,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                         'status' => 'Active',
                         'approve_status' => 'approved'
@@ -657,7 +698,7 @@ class jobroleLibrary2Controller extends Controller
                             'jobrole' => $request->jobrole,
                             'description' => null,
                             'sub_institute_id' => $request->sub_institute_id,
-                            'created_by' => $request->user_id,
+                            'created_by' => $this->g2gActorId($request),
                             'created_at' => now(),
                         ];
                         $insert = skillJobroleMap::insert($insertArray);
@@ -671,7 +712,7 @@ class jobroleLibrary2Controller extends Controller
                             'title' => $skillName,
                             'description' => $skillDescription,
                             'sub_institute_id' => $request->sub_institute_id,
-                            'updated_by' => $request->user_id,
+                            'updated_by' => $this->g2gActorId($request),
                             'updated_at' => now(),
                             'status' => 'Active',
                             'approve_status' => 'approved'
@@ -694,7 +735,7 @@ class jobroleLibrary2Controller extends Controller
                         'critical_work_function' => $request->critical_work_function[$key] ?? null,
                         'task' => $taskName,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
+                        'created_by' => $this->g2gActorId($request),
                         'created_at' => now(),
                     ];
                     $lastInsertedId = userJobroleTask::insertGetId($insertData);
@@ -706,7 +747,7 @@ class jobroleLibrary2Controller extends Controller
                         'critical_work_function' => $request->critical_work_function[$key] ?? null,
                         'task' => $taskName,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $lastInsertedId = userJobroleTask::where('id', $request->id)->update($insertData);
@@ -767,21 +808,21 @@ class jobroleLibrary2Controller extends Controller
 
         // If deleting a skill
         if ($request->has('formType') && $request->formType == "skills") {
-            $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         // If deleting a task
         if ($request->has('formType') && $request->formType == "tasks") {
-            $delete = userJobroleTask::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userJobroleTask::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         // If deleting a user jobrole
         if ($request->has('formType') && $request->formType == "user") {
-            $delete = userJobroleModel::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userJobroleModel::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }

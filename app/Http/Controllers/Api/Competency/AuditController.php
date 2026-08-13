@@ -553,7 +553,15 @@ class AuditController extends Controller
             ])
             ->all();
 
-        $user = DB::table('tbluser')->where('id', $userId)->first();
+        // G-SEC-23, CHAIN A. Both activity queries above are tenant-scoped, so a
+        // foreign user's ACTIVITY was already empty - but this lookup was not
+        // scoped, so the endpoint still resolved and returned their NAME. A
+        // narrow leak, and a real one: it confirms an id exists in another
+        // tenant and attaches a person to it.
+        $user = DB::table('tbluser')
+            ->where('id', $userId)
+            ->where('sub_institute_id', $sid)
+            ->first();
         $name = $user
             ? (trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: ($user->user_name ?? 'User ' . $userId))
             : ('User ' . $userId);

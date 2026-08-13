@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Training sessions and the session calendar.
@@ -24,49 +24,32 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 class LmsSessionController extends Controller
 {
+    use ResolvesLmsIdentity;
+
     /** Profiles allowed to schedule sessions and manage attendees. */
     private const ADMIN_PROFILES = ['admin', 'hr'];
 
     private function guardApiToken(Request $request)
     {
-        if ($request->input('type') !== 'API') {
-            return null;
-        }
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-        }
-
-        return null;
+        // Was: `if ($request->input('type') !== 'API') return null;` followed by
+        // a token check that discarded the token's owner. Omitting `type`
+        // skipped authentication entirely. Identity now always comes from the
+        // token - see ResolvesLmsIdentity.
+        return $this->guardLmsToken($request);
     }
 
     private function guardAdmin(Request $request)
     {
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
-        if ($profile === '') {
-            return null;
-        }
-
-        foreach (self::ADMIN_PROFILES as $allowed) {
-            if (str_contains($profile, $allowed)) {
-                return null;
-            }
-        }
-
-        return response()->json([
-            'status' => false,
-            'message' => 'Your profile is not permitted to manage sessions.',
-        ], 403);
+        // The profile now comes from the caller's tbluser row, not from
+        // a `user_profile_name` they supplied themselves.
+        return $this->guardLmsProfile($request, self::ADMIN_PROFILES, 'Your profile is not permitted to manage sessions.');
     }
 
     private function tenantId(Request $request)
     {
-        return $request->sub_institute_id ?? $request->header('sub_institute_id');
+        // The caller's own organisation, from their token - not from whatever
+        // sub_institute_id the request asked for.
+        return $this->lmsTenantId($request);
     }
 
     /** Seats consumed per session - only live registrations count. */
@@ -127,7 +110,7 @@ class LmsSessionController extends Controller
         }
 
         $subInstituteId = $this->tenantId($request);
-        $userId = $request->user_id ?? $request->header('user_id');
+        $userId = $this->contextUserId($request);
 
         if (!$subInstituteId) {
             return response()->json(['status' => false, 'message' => 'sub_institute_id is required'], 422);
@@ -280,7 +263,7 @@ class LmsSessionController extends Controller
         }
 
         $subInstituteId = $this->tenantId($request);
-        $userId = (int) ($request->user_id ?? $request->header('user_id'));
+        $userId = (int) ($this->contextUserId($request));
 
         if (!$subInstituteId) {
             return response()->json(['status' => false, 'message' => 'sub_institute_id is required'], 422);
@@ -394,7 +377,7 @@ class LmsSessionController extends Controller
         try {
             $id = DB::table('lms_virtual_classroom')->insertGetId($this->payload($request) + [
                 'sub_institute_id' => $subInstituteId,
-                'created_by' => $request->user_id,
+                'created_by' => $this->contextUserId($request),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -464,7 +447,7 @@ class LmsSessionController extends Controller
         }
 
         DB::table('lms_virtual_classroom')->where('id', $id)->update($this->payload($request) + [
-            'updated_by' => $request->user_id,
+            'updated_by' => $this->contextUserId($request),
             'updated_at' => now(),
         ]);
 
@@ -499,9 +482,9 @@ class LmsSessionController extends Controller
 
         $now = now();
         DB::table('lms_virtual_classroom')->where('id', $id)
-            ->update(['deleted_at' => $now, 'deleted_by' => $request->user_id]);
+            ->update(['deleted_at' => $now, 'deleted_by' => $this->contextUserId($request)]);
         DB::table('lms_session_registrations')->where('session_id', $id)->whereNull('deleted_at')
-            ->update(['deleted_at' => $now, 'deleted_by' => $request->user_id]);
+            ->update(['deleted_at' => $now, 'deleted_by' => $this->contextUserId($request)]);
 
         return response()->json([
             'status' => true,
@@ -523,7 +506,7 @@ class LmsSessionController extends Controller
         }
 
         $subInstituteId = $this->tenantId($request);
-        $callerId = $request->user_id ?? $request->header('user_id');
+        $callerId = $this->contextUserId($request);
         $targetId = $request->input('learner_id', $callerId);
 
         if (!$targetId) {
@@ -623,7 +606,7 @@ class LmsSessionController extends Controller
             return $tokenError;
         }
 
-        $callerId = $request->user_id ?? $request->header('user_id');
+        $callerId = $this->contextUserId($request);
         $targetId = $request->input('learner_id', $callerId);
 
         if ((string) $targetId !== (string) $callerId) {

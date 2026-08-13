@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Reports\EmployeeSkillCoverageMatrix;
 
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -9,6 +10,8 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class EmployeeSkillCoverageMatrixController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         $type = $request->type;
@@ -84,21 +87,21 @@ class EmployeeSkillCoverageMatrixController extends Controller
 
     public function skillGaps(Request $request)
     {
-        $type = $request->type;
-
-        if ($type == "API") {
-            $token = $request->input('token');
-            if (!$token) {
-                return response()->json(['message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) {
-                return response()->json(['message' => 'Invalid token'], 401);
-            }
+        // G-SEC-24. This opened with `if ($type == "API")`, so OMITTING `type`
+        // skipped authentication entirely - G-SEC-18's form 1, the caller
+        // deciding whether checks run. api/kpis and api/skill-gaps carry the
+        // `api` group but NO auth middleware, so this was the only control.
+        //
+        // Verified before the fix: both returned HTTP 200 to an anonymous
+        // caller - live metrics, and a department-level skill-gap list.
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        // Tenant from the RESOLVED IDENTITY, never the request (C27: a trait
+        // being present is not the same as it being used).
+        $subInstituteId = $identity['sub_institute_id'];
 
         try {
             $department = $request->query('department', 'all');
@@ -215,21 +218,21 @@ class EmployeeSkillCoverageMatrixController extends Controller
 
     public function getKpiMetrics(Request $request)
     {
-        $type = $request->type;
-
-        if ($type == "API") {
-            $token = $request->input('token');
-            if (!$token) {
-                return response()->json(['message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) {
-                return response()->json(['message' => 'Invalid token'], 401);
-            }
+        // G-SEC-24. This opened with `if ($type == "API")`, so OMITTING `type`
+        // skipped authentication entirely - G-SEC-18's form 1, the caller
+        // deciding whether checks run. api/kpis and api/skill-gaps carry the
+        // `api` group but NO auth middleware, so this was the only control.
+        //
+        // Verified before the fix: both returned HTTP 200 to an anonymous
+        // caller - live metrics, and a department-level skill-gap list.
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        // Tenant from the RESOLVED IDENTITY, never the request (C27: a trait
+        // being present is not the same as it being used).
+        $subInstituteId = $identity['sub_institute_id'];
 
         try {
             $department = $request->query('department', 'all');

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,24 @@ use Barryvdh\DomPDF\Facade\Pdf as PDF;
 
 class TalentOfferController extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     /**
      * Store a newly created resource in storage.
      */
@@ -43,7 +62,7 @@ class TalentOfferController extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         // Fetch organization details
         $org = organizationDetails::where('sub_institute_id', $sub_institute_id)->first();
@@ -87,7 +106,7 @@ class TalentOfferController extends Controller
                 'start_date' => $request->start_date,
                 'notes' => $request->notes,
                 'sub_institute_id' => $sub_institute_id,
-                'created_by' => $request->user_id,
+                'created_by' => $this->g2gActorId($request),
                 'reportmanager' => $request->reportmanager,
                 'punchintime' => $request->punchintime,
                 'punchouttime' => $request->punchouttime,
@@ -175,6 +194,14 @@ class TalentOfferController extends Controller
                         $offer->save();
                     }
 
+                    // THE GATE. Authenticated, but it emails a real candidate at
+                    // a real address, so "email is off" has to cover it too.
+                    if (!\App\Support\MailGate::allowed()) {
+                        return response()->json([
+                            'status' => 0, 'message' => \App\Support\MailGate::reason(),
+                        ], 503);
+                    }
+
                     Mail::to($application->email)->send(new OfferLetterMail($offer, $pdfPath));
 
                     // Update status to 'sent' after successful email send
@@ -224,7 +251,7 @@ class TalentOfferController extends Controller
         }
 
         $user = $accessToken->tokenable;
-        $sub_institute_id = $request->input('sub_institute_id') ?? $user->sub_institute_id;
+        $sub_institute_id = $this->apiTenantId($request) ?? $user->sub_institute_id;
 
         if (!$sub_institute_id) {
             return response()->json(['message' => 'sub_institute_id not provided'], 400);

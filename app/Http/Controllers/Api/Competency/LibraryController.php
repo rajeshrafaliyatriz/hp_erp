@@ -382,7 +382,7 @@ class LibraryController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function payload(array $resource, Request $request): array
+    private function payload(array $resource, Request $request, int $subInstituteId): array
     {
         $data = [];
         // column => request key it is read from (identity unless aliased).
@@ -411,6 +411,33 @@ class LibraryController extends Controller
             }
 
             $data[$field] = ($value === '' || $value === null) ? null : $value;
+        }
+
+        // ── L-01 / L-02 ─────────────────────────────────────────────────────
+        // G-LIB-01: the backend has ACCEPTED `department_id` all along - it is in
+        // the fields whitelist above - and the form has never sent it. Measured:
+        // 0 occurrences in library-config.ts. So the column exists, the form
+        // offers a department by NAME, and the two never meet.
+        //
+        // RESOLVED HERE, NOT IN THE FORM. The picker is suggested-not-closed
+        // (X-03), so a genuinely new department must still be typeable - a form
+        // that could only send an id would refuse the one case the picker exists
+        // to allow. Resolving at write time is Q-C1's position and the same rule
+        // the framework importer uses: names become ids at the moment of writing,
+        // where "whose copy does this name mean" has exactly one answer.
+        //
+        // UNMATCHED IS HELD, NOT GUESSED (F-07b): the name stays in `department`
+        // and `department_id` stays NULL. A department nobody has created yet is
+        // a legitimate thing to type, and inventing an id for it would be the
+        // system manufacturing a claim nobody made.
+        if (array_key_exists('department_id', $data) === false
+            && in_array('department_id', $resource['fields'], true)
+            && !empty($data['department'])) {
+
+            $data['department_id'] = DB::table('hrms_departments')
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereRaw('LOWER(TRIM(department)) = ?', [mb_strtolower(trim($data['department']))])
+                ->value('id');
         }
 
         return $data;
@@ -592,7 +619,7 @@ class LibraryController extends Controller
             return $this->badRequest('Unknown library type.', 404);
         }
 
-        $data = $this->payload($resource, $request);
+        $data = $this->payload($resource, $request, (int) $context['sub_institute_id']);
 
         if ($message = $this->validatePayload($resource, $data, true)) {
             return $this->badRequest($message, 422);
@@ -670,7 +697,7 @@ class LibraryController extends Controller
             return $this->readOnlyOrMissing($resource, $context['sub_institute_id'], $id, 'edited');
         }
 
-        $data = $this->payload($resource, $request);
+        $data = $this->payload($resource, $request, (int) $context['sub_institute_id']);
 
         if ($message = $this->validatePayload($resource, $data, false)) {
             return $this->badRequest($message, 422);
@@ -1787,7 +1814,84 @@ class LibraryController extends Controller
             }
         }
 
+        // ── DEPARTMENT OPTIONS COME FROM hrms_departments, NOT FROM DISTINCT TEXT
+        //
+        // The UNION above builds `department` from SELECT DISTINCT over
+        // s_users_skills.department - the values somebody has already TYPED. That
+        // is self-referential: a tenant with no skill rows gets an EMPTY dropdown
+        // and no way to fill it, because you cannot pick a department until a row
+        // already has one. Meanwhile `hrms_departments` holds the real list, and
+        // LMS course creation has been validating against it all along.
+        //
+        // THE WRITE PATH IS NOT TOUCHED. It already does the right thing (L-01 /
+        // L-02, ~1,380 lines above): a name becomes an id at write time, and an
+        // unmatched name is HELD, not guessed. Measured before this change:
+        // 3,839 rows carry both columns and ALL 3,839 AGREE, 0 dangling ids, and
+        // all 45 text-only rows resolve by name. This is an OPTIONS-SOURCE
+        // change only.
+        //
+        // TENANT-SCOPED, AND THAT IS NOT THE "FILTERING" X-03 WARNS ABOUT.
+        // `hrms_departments` carries `sub_institute_id` (tenant 7: 25 rows,
+        // tenant 3: 74). Offering the whole 1,181-row table would show a caller
+        // other tenants' departments - a leak, not generosity. The tenant's own
+        // rows ARE its complete list, so nothing is hidden from anyone.
+        //
+        // ALREADY-USED VALUES FIRST. The tenant's real vocabulary is what it has
+        // actually typed; the rest of its department list stays available and out
+        // of the way. And the list remains SUGGESTED, NOT CLOSED - a genuinely new
+        // department must still be typeable, which is exactly the case the write
+        // path holds by name with a NULL id.
+        $used = $buckets['department'];
+        $master = DB::table('hrms_departments')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->whereNotNull('department')->where('department', '!=', '')
+            ->orderBy('department')
+            ->pluck('department')
+            ->all();
+
+        $seen = [];
+        $ordered = [];
+        foreach (array_merge($used, $master) as $name) {
+            $key = mb_strtolower(trim((string) $name));
+            if ($key === '' || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $ordered[] = $name;
+        }
+        $buckets['department'] = $ordered;
+
+        // X-03. Three fields named an entity and stored free text (G-LIB-02).
+        // The picker mechanism already existed; these are the lists it lacked.
+        //
+        // SUGGESTED, NOT CLOSED. Each is offered as an open list: a tenant whose
+        // library is incomplete must still be able to type a value the library
+        // does not hold yet, or the picker blocks the work it was meant to help.
+        //
+        // certification_qualifications is DELIBERATELY ABSENT: certification_type
+        // holds 0 rows, and a picker over an empty table looks like a closed list
+        // and offers nothing - worse than the free text it would replace.
+        // Scheduled on 'certification_type populated', not parked.
+        $relatedSkills = DB::table('s_users_skills')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->whereNotNull('title')->where('title', '!=', '')
+            ->distinct()->orderBy('title')->limit(2000)->pluck('title')->all();
+
+        $jobTitles = DB::table('s_user_jobrole')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->whereNotNull('jobrole')->where('jobrole', '!=', '')
+            ->distinct()->orderBy('jobrole')->limit(2000)->pluck('jobrole')->all();
+
+        $learningResources = DB::table('sub_std_map')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->whereNotNull('display_name')->where('display_name', '!=', '')
+            ->distinct()->orderBy('display_name')->limit(2000)->pluck('display_name')->all();
+
         return $this->ok('Library metadata fetched successfully', [
+            'related_skills'         => $relatedSkills,
+            'job_titles'             => $jobTitles,
+            'learning_resources'     => $learningResources,
             'departments'            => $buckets['department'],
             'sub_departments'        => array_values(array_unique($buckets['sub_department'])),
             'micro_categories'       => $buckets['micro_category'],

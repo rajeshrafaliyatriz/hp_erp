@@ -129,16 +129,21 @@ Route::middleware(['auth','session','menu'])->group(function () {
     Route::resource('application', skillLibraryController::class);
 
     Route::resource('leave-type', LeaveTypeController::class);
-    Route::resource('holiday', HolidayController::class);
+    // Also declared in routes/hrms.php, which serves the same controller under
+    // the hrms/ prefix. Two resources cannot share the holiday.* names -
+    // route:cache refuses to serialise the second - and hrms.php loads last, so
+    // it is the one route('holiday.index') already resolved to. This keeps the
+    // /holiday URLs working under distinct names rather than removing them.
+    Route::resource('holiday', HolidayController::class)->names('web.holiday');
     Route::resource('leave-apply', ApplyLeaveController::class);
     Route::post('/get-employees', [ApplyLeaveController::class, 'getEmployees'])->name('get-employees');
     Route::get('my-leave', [ApplyLeaveController::class,'myLeave'])->name('my-leave');
     Route::post('my-leave-update', [ApplyLeaveController::class,'updateLeave'])->name('my_leave_update');
     Route::get('get-leave', [ApplyLeaveController::class,'getYearwiseleave'])->name('get-leave');
     Route::get('import-leave', [ApplyLeaveController::class,'importLeave'])->name('import-leave');
-    Route::post('import-leave', [ApplyLeaveController::class,'importOldLeave'])->name('import-leave');
-    Route::get('holiday.weekdays', [HolidayController::class,'getWeekdays'])->name('holiday.weekdays');
-    Route::post('holiday.weekdays', [HolidayController::class,'storeWeekdays'])->name('holiday.weekdays');
+    Route::post('import-leave', [ApplyLeaveController::class,'importOldLeave']);
+    Route::get('holiday.weekdays', [HolidayController::class,'getWeekdays']);
+    Route::post('holiday.weekdays', [HolidayController::class,'storeWeekdays']);
     
     //Get Holiday Ajax
     Route::get('/getHolidays',[ApplyLeaveController::Class,'getHolidays'])->name('getHolidays');

@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Trainers, vendors and integrations for Administration & Governance.
@@ -24,46 +24,32 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 class LmsPartnerController extends Controller
 {
+    use ResolvesLmsIdentity;
+
     private const ADMIN_PROFILES = ['admin', 'hr', 'super', 'principal'];
 
     private function guardApiToken(Request $request)
     {
-        if ($request->input('type') !== 'API') {
-            return null;
-        }
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-        }
-
-        return null;
+        // Was: `if ($request->input('type') !== 'API') return null;` followed by
+        // a token check that discarded the token's owner. Omitting `type`
+        // skipped authentication entirely. Identity now always comes from the
+        // token - see ResolvesLmsIdentity.
+        return $this->guardLmsToken($request);
     }
 
     /** Administrative surface: an unstated profile is refused, not allowed. */
     private function guardAdmin(Request $request)
     {
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
-
-        foreach (self::ADMIN_PROFILES as $allowed) {
-            if ($profile !== '' && str_contains($profile, $allowed)) {
-                return null;
-            }
-        }
-
-        return response()->json([
-            'status' => false,
-            'message' => 'Your profile is not permitted to manage partners.',
-        ], 403);
+        // The profile now comes from the caller's tbluser row, not from
+        // a `user_profile_name` they supplied themselves.
+        return $this->guardLmsProfile($request, self::ADMIN_PROFILES, 'Your profile is not permitted to manage partners.');
     }
 
     private function tenantId(Request $request)
     {
-        return $request->input('sub_institute_id') ?: $request->header('sub_institute_id');
+        // The caller's own organisation, from their token - not from whatever
+        // sub_institute_id the request asked for.
+        return $this->lmsTenantId($request);
     }
 
     private function invalid($validator)
@@ -265,7 +251,7 @@ class LmsPartnerController extends Controller
             $id = DB::table('lms_trainers')->insertGetId(
                 $this->trainerPayload($request) + [
                     'sub_institute_id' => $subInstituteId,
-                    'created_by' => $request->input('user_id'),
+                    'created_by' => $this->contextUserId($request),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]
@@ -305,7 +291,7 @@ class LmsPartnerController extends Controller
         try {
             DB::table('lms_trainers')->where('id', $id)->update(
                 $this->trainerPayload($request) + [
-                    'updated_by' => $request->input('user_id'),
+                    'updated_by' => $this->contextUserId($request),
                     'updated_at' => now(),
                 ]
             );
@@ -339,7 +325,7 @@ class LmsPartnerController extends Controller
         try {
             DB::table('lms_trainers')->where('id', $id)->update([
                 'deleted_at' => now(),
-                'deleted_by' => $request->input('user_id'),
+                'deleted_by' => $this->contextUserId($request),
             ]);
 
             return response()->json(['status' => true, 'message' => 'Trainer removed']);
@@ -479,7 +465,7 @@ class LmsPartnerController extends Controller
             $id = DB::table('lms_vendors')->insertGetId(
                 $this->vendorPayload($request) + [
                     'sub_institute_id' => $subInstituteId,
-                    'created_by' => $request->input('user_id'),
+                    'created_by' => $this->contextUserId($request),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]
@@ -519,7 +505,7 @@ class LmsPartnerController extends Controller
         try {
             DB::table('lms_vendors')->where('id', $id)->update(
                 $this->vendorPayload($request) + [
-                    'updated_by' => $request->input('user_id'),
+                    'updated_by' => $this->contextUserId($request),
                     'updated_at' => now(),
                 ]
             );
@@ -570,7 +556,7 @@ class LmsPartnerController extends Controller
         try {
             DB::table('lms_vendors')->where('id', $id)->update([
                 'deleted_at' => now(),
-                'deleted_by' => $request->input('user_id'),
+                'deleted_by' => $this->contextUserId($request),
             ]);
 
             return response()->json(['status' => true, 'message' => 'Vendor removed']);
@@ -678,7 +664,7 @@ class LmsPartnerController extends Controller
                 'config'       => $request->has('config')
                     ? json_encode($request->input('config'))
                     : null,
-                'created_by'   => $request->input('user_id'),
+                'created_by'   => $this->contextUserId($request),
                 'created_at'   => now(),
                 'updated_at'   => now(),
             ]);
@@ -732,7 +718,7 @@ class LmsPartnerController extends Controller
                 'config'       => $request->has('config')
                     ? json_encode($request->input('config'))
                     : $integration->config,
-                'updated_by'   => $request->input('user_id'),
+                'updated_by'   => $this->contextUserId($request),
                 'updated_at'   => now(),
             ]);
 
@@ -765,7 +751,7 @@ class LmsPartnerController extends Controller
         try {
             DB::table('lms_integrations')->where('id', $id)->update([
                 'deleted_at' => now(),
-                'deleted_by' => $request->input('user_id'),
+                'deleted_by' => $this->contextUserId($request),
             ]);
 
             return response()->json(['status' => true, 'message' => 'Integration removed']);

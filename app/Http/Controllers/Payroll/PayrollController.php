@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Payroll;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\EmployeeMonthlySalaryData;
 use App\Models\EmployeeSalaryStructure;
 use App\Models\payroll\PayrollType;
@@ -34,6 +35,67 @@ use Dompdf\Options;
 
 class PayrollController extends Controller
 {
+    // Was GenTux\Jwt\GetsJwtToken. That package is absent from
+    // composer.json and not installed, so this class could not be
+    // loaded at all - fatal on every request, and fatal for
+    // route:list / route:cache application-wide. Authentication now
+    // uses Sanctum, like the rest of the codebase.
+    use ResolvesApiIdentity;
+
+    /**
+     * The acting tenant, for a controller that serves BOTH surfaces.
+     *
+     * G-SEC-10. This controller imported ResolvesApiIdentity and then never
+     * called it: its only trait usage was apiTokenIsValid(), which asks "is this
+     * token valid?" and not "whose is it?" - C22's proxy defect reproduced in
+     * application code. Tenant came from the request at ~17 sites, including an
+     * explicit branch that handed API callers whatever tenant they asked for.
+     *
+     * apiTenantId() alone is not enough here: 40 of these routes are Blade
+     * screens in routes/hrms.php authenticated by session, with no token at all,
+     * and a null tenant would silently return them nothing.
+     *
+     * Order is therefore token, then session, and NEVER the request body.
+     * Both sources are things the server established; the request body is a
+     * claim by the caller.
+     */
+    private function payrollTenantId(Request $request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+
+        $fromSession = $request->session()->get('sub_institute_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
+    /**
+     * The ACTING user, resolved the same way as the tenant.
+     *
+     * Same shape as payrollTenantId, and needed for the same reason: this
+     * controller serves both the token-authenticated API and the session-
+     * authenticated Blade screens, so the token is tried first and the session
+     * is the fallback.
+     *
+     * This exists because $request->get('user_id') was feeding created_by and
+     * updated_by directly - so a caller could attribute their own write to
+     * somebody else, and the audit trail would record it as fact. "Who did
+     * this" is an identity claim, never a request parameter.
+     */
+    private function payrollActorId(Request $request): ?int
+    {
+        $fromToken = $this->apiUserId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+
+        $fromSession = $request->session()->get('user_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
     
     public function payrollType(Request $request)
     {
@@ -64,7 +126,7 @@ class PayrollController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
         }
         $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
         // return view('payroll.payroll_type.index', ["data" => $data]);
@@ -126,8 +188,8 @@ if($type=="API"){
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
-            $user_id = $request->get('user_id');
+            $sub_institute_id = $this->payrollTenantId($request);
+            $user_id = $this->payrollActorId($request);   // identity, not a parameter
 
         }
         if ($request->id > 0) {
@@ -197,8 +259,8 @@ if($type=="API"){
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
-            $user_id = $request->get('user_id');
+            $sub_institute_id = $this->payrollTenantId($request);
+            $user_id = $this->payrollActorId($request);   // identity, not a parameter
 
         }
         $res['status_code'] = 0;
@@ -220,7 +282,7 @@ if($type=="API"){
     public function employeeSalaryStructure(Request $request)
     {
         // return $request;exit;
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $type=$request->input('type');
         $status=$request->input('emp_status') ?? 1;
         $syear = $request->get('syear');
@@ -253,7 +315,7 @@ if($type=="API"){
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->get('syear');
         }
 
@@ -321,7 +383,7 @@ if($type=="API"){
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
             $year = $request->get('syear');
 
         }
@@ -542,7 +604,7 @@ if($type=="API"){
         $syear = session()->get('syear');
         if($type=="API"){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid()) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);
@@ -552,7 +614,7 @@ if($type=="API"){
     
                 return response()->json($response, 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->get('syear');
         }   
         $res['payrollTypes'] = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->get();
@@ -587,7 +649,7 @@ if($type=="API"){
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->input('type');
         if ($type == 'API') {
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->input('syear');
         } else {
             $sub_institute_id = $request->session()->get('sub_institute_id');
@@ -671,7 +733,7 @@ if($type=="API"){
     public function hrmsSalaryCertificateIndex(Request $request)
     {
         $type = $request->input('type');
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $res['employee_id'] = $request->input('employee_id');
         $res['month_ids'] = [1=>"Jan",2=>"Feb",3=>"Mar",4=>"Apr",5=>"May",6=>"Jun",7=>"Jul",8=>"Aug",9=>"Sep",10=>"Oct",11=>"Nov",12=>"Dec"];
 
@@ -688,7 +750,7 @@ if($type=="API"){
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->input('type');
         if ($type == 'API') {
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
         } else {
             $sub_institute_id = $request->session()->get('sub_institute_id');
         }
@@ -773,7 +835,7 @@ if($type=="API"){
     {
         $employee_id = $request->get('employee_id');
 	    $year = $request->get('year');
-	    $sub_institute_id = $request->get('sub_institute_id');
+	    $sub_institute_id = $this->payrollTenantId($request);
 
         $get_salary_certificate_pdf_file = DB::table('hrms_salary_certificate')->where([['employee_id', $employee_id], ['year', $year], ['sub_institute_id', $sub_institute_id]])->first();
         
@@ -1027,7 +1089,7 @@ if($type=="API"){
 
     // ✅ Fix: get sub_institute_id correctly for API vs Web
     if ($type == "API") {
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = $this->payrollTenantId($request);
     } else {
         $sub_institute_id = session()->get('sub_institute_id');
     }
@@ -1183,7 +1245,7 @@ if($type=="API"){
 
     public function rolloverEmployeeSalaryStructure(Request $request)
 {
-    $sub_institute_id = $request->input('sub_institute_id') ?? session()->get('sub_institute_id');
+    $sub_institute_id = $this->payrollTenantId($request) ?? session()->get('sub_institute_id');
     $currentYear = $request->input('year') ?? Carbon::now()->format('Y');
 
     $employeeIds = $request->input('employee_id', []);
@@ -1238,10 +1300,10 @@ if($type=="API"){
     public function monthlyPayrollReport(Request $request)
     {
         $type= $request->type;
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $user_profile = $request->get('user_profile_name');
         if($type=="API"){
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->payrollTenantId($request);
             $user_profile = $request->user_profile_name;
         }
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->orderBy('sort_order')->get();
@@ -1420,7 +1482,7 @@ if($type=="API"){
 
         $type = $request->input('type');
             if ($type === "API") {
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->payrollTenantId($request);
             }
         if($request->month && $request->year) {
             $list['month'] = $request->month;
@@ -1468,7 +1530,7 @@ if($type=="API"){
     public function monthlyPayrollPdf(Request $request,$id, $month, $year,$pdfType='')
     {
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $syear = $request->get('syear');
         
         $employeeSalaryData = EmployeeMonthlySalaryData::with('getUser')->where([['employee_id', $id],[ 'sub_institute_id', $sub_institute_id],['month', $month],['year', $year]])->first();
@@ -1676,7 +1738,7 @@ if ($pdfType == 'storeDoc') {
         $sub_institute_id = $request->session()->get('sub_institute_id');
         if($type=="API"){
            
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->payrollTenantId($request);
         }
         $res['months'] = Helpers::getMonths();
         $res['years']= Helpers::getPairYears();
@@ -1840,7 +1902,7 @@ if ($pdfType == 'storeDoc') {
         $type = $request->type;
         $sub_institute_id = $request->session()->get('sub_institute_id');
         if($type=="API"){
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
         }
         $employeeLists = employeeDetails($sub_institute_id);
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->orderBy('sort_order')->get();
@@ -1958,7 +2020,7 @@ public function payrollTypeReport(Request $request)
         }
 
         // Use sub_institute_id from request
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
 
         $res = [];
         $res['months'] = Helpers::getMonths();
@@ -2023,7 +2085,7 @@ public function payrollTypeReport(Request $request)
         $sub_institute_id = session()->get('sub_institute_id');
         $syear = session()->get('syear');
         if($type=="API"){
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->syear;
         }
         $res = session()->get('data');
@@ -2049,10 +2111,10 @@ public function payrollTypeReport(Request $request)
         $res['selMonth'] = $month = $request->month;
 
         if($type=="API"){
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->syear;
             $userProfile = $request->user_profile_name;
-            $profileUserId = $request->user_id;
+            $profileUserId = $this->payrollActorId($request);
         }
        
         // get emp by search 
@@ -2141,7 +2203,7 @@ public function payrollTypeReport(Request $request)
 
     function getEmpMonthlyData(Request $request){
         // echo "<pre>";print_r($request->all());exit;
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $totalDay = $request->totalDay;
         $searchedYear = $request->year;
         if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
@@ -2383,7 +2445,7 @@ public function monthlyPayrollStore(Request $request)
     $type = $request->type;
     $sub_institute_id = session()->get('sub_institute_id');
     if ($type == "API") {
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = $this->payrollTenantId($request);
     }
 
     $payrollVal = $request->payrollVal;
@@ -2483,7 +2545,7 @@ public function deleteMonthlyPayrolls(Request $request, $month)
     $sub_institute_id = session()->get('sub_institute_id');
 
     if ($type == "API") {
-        $sub_institute_id = $request->sub_institute_id ?? $sub_institute_id;
+        $sub_institute_id = $this->payrollTenantId($request) ?? $sub_institute_id;
     }
 
     // Validation
@@ -2565,7 +2627,7 @@ public function deleteMonthlyPayrolls(Request $request, $month)
     // 2024-08-20 getTotal Days
     public function getTotalDays(Request $request){
         
-        $sub_institute_id=$request->sub_institute_id;
+        $sub_institute_id=$this->payrollTenantId($request);
         $syear=$request->syear;
 
         $from_date = $request->input('from_date') ? Carbon::parse($request->input('from_date')) : null;

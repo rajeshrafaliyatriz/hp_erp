@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Api\Leave\Concerns;
 
 use Illuminate\Http\Request;
-use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Facades\DB;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 
 /**
  * Shared request context resolution for the Leave Management API.
@@ -14,32 +15,94 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 trait ResolvesLeaveContext
 {
+    use ResolvesApiIdentity;
+
     /**
      * @return array{sub_institute_id:int, user_id:int|null, year:int, from:string, to:string}|\Illuminate\Http\JsonResponse
      */
+    /**
+     * Roles that may act on somebody else's leave. Keyed on role_key (D-010).
+     *
+     * department_head and reporting_manager are absent for the same reason as in
+     * ResolvesCompetencyContext: their scope is "my department" / "my team", and
+     * neither is evaluable while tbluser.reporting_manager_id is NULL for every
+     * user (G-ORG-02). They return with reporting-line coverage.
+     */
+    private const LEAVE_ELEVATED = [
+        'administrator', 'hr_manager', 'hr_executive',
+    ];
+
+    /**
+     * The employee a leave request or balance is FOR.
+     *
+     * G-LEAVE-SEC-01. The pattern replaced here was
+     *
+     *     $userId = (int) ($request->input('employee_id') ?: $context['user_id']);
+     *
+     * REQUEST-FIRST WITH A SAFE-LOOKING FALLBACK. It survives review because the
+     * caller appears in the expression - a reviewer scanning for "where does the
+     * subject come from" sees $context['user_id'] and moves on. The fallback only
+     * ever fires for the honest caller; anyone supplying employee_id bypasses it.
+     *
+     * REACH CHAIN, established before reporting (the boundary rule):
+     *   route      routes/api.php:521 `Route::prefix('leave')->group(...)`
+     *   middleware NONE on the group - the controller's own context guard is the
+     *              entire control
+     *   callers    LeaveRequestApiController::store():146 and
+     *              LeaveOptionsController::balances():96
+     *
+     * So nothing upstream supplied the missing check.
+     *
+     * @return int|\Illuminate\Http\JsonResponse
+     */
+    protected function leaveSubject(Request $request, array $context)
+    {
+        $callerId  = (int) ($context['user_id'] ?? 0);
+        $requested = $request->input('employee_id');
+
+        if ($requested === null || $requested === '' || (int) $requested === $callerId) {
+            return $callerId;
+        }
+
+        $subjectId = (int) $requested;
+
+        $inTenant = DB::table('tbluser')
+            ->where('id', $subjectId)
+            ->where('sub_institute_id', $context['sub_institute_id'])
+            ->exists();
+
+        if (!$inTenant) {
+            return response()->json(['status' => 0, 'message' => 'Employee not found.'], 404);
+        }
+
+        $roleKey = DB::table('tbluser as u')
+            ->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
+            ->where('u.id', $callerId)
+            ->value('p.role_key');
+
+        if (in_array((string) $roleKey, self::LEAVE_ELEVATED, true)) {
+            return $subjectId;
+        }
+
+        return response()->json([
+            'status'  => 0,
+            'message' => 'You may only act on your own leave.',
+        ], 403);
+    }
+
     protected function leaveContext(Request $request)
     {
-        $token = $request->input('token');
+        $identity = $this->resolveApiIdentity($request);
 
-        if (!$token) {
-            return response()->json(['status' => 0, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => 0, 'message' => 'Invalid token'], 401);
-        }
-
-        $subInstituteId = $request->input('sub_institute_id') ?? $request->header('sub_institute_id');
-
-        if (!$subInstituteId || !is_numeric($subInstituteId)) {
-            return response()->json(['status' => 0, 'message' => 'sub_institute_id is required'], 400);
+        if (!is_array($identity)) {
+            return $identity;
         }
 
         $year = $this->normaliseLeaveYear($request->input('syear') ?? $request->input('year'));
 
         return [
-            'sub_institute_id' => (int) $subInstituteId,
-            'user_id'          => is_numeric($request->input('user_id')) ? (int) $request->input('user_id') : null,
+            'sub_institute_id' => $identity['sub_institute_id'],
+            'user_id'          => $identity['user_id'],
             'year'             => $year,
             'from'             => $year . '-04-01',
             'to'               => ($year + 1) . '-03-31',

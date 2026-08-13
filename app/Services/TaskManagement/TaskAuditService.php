@@ -19,6 +19,10 @@ use Illuminate\Support\Facades\Log;
  */
 class TaskAuditService
 {
+    public function __construct(private \App\Services\Events\EventRecorder $events)
+    {
+    }
+
     /** The task row as it stands now, for callers that need a before-snapshot. */
     public function taskSnapshot(int $taskId): array
     {
@@ -49,17 +53,25 @@ class TaskAuditService
             'detail' => $before['detail'] ?? null,
         ];
 
+        // AMENDMENT A1 (05-data-flow-contracts.md §1): this service used to
+        // INSERT into task_management_audit_logs directly. It now EMITS AN EVENT,
+        // and g2g_audit_log is a projection built from the store. A projection
+        // alongside a surviving direct writer is the defect §1 exists to prevent.
+        //
+        // $actorId reaches here from the caller's RESOLVED identity - never from
+        // a request field. G-SEC-12 is what makes that true, and it is why the
+        // event store was sequenced after it.
         try {
-            DB::table('task_management_audit_logs')->insert([
-                'sub_institute_id' => (int) ($before['sub_institute_id'] ?? 0),
-                'task_id' => $taskId,
-                'event' => mb_substr($event, 0, 50),
-                'actor_id' => $actorId,
-                'before' => json_encode($snapshot),
-                'created_at' => now(),
-            ]);
+            $this->events->record(
+                type: 'task.' . mb_substr($event, 0, 50),
+                subInstituteId: (int) ($before['sub_institute_id'] ?? 0),
+                entityType: 'task',
+                entityId: $taskId,
+                actorId: $actorId,
+                payload: ['event' => $event, 'before' => $snapshot],
+            );
         } catch (\Throwable $exception) {
-            Log::warning('task.audit_insert_failed', ['task_id' => $taskId, 'error' => $exception->getMessage()]);
+            Log::warning('task.audit_event_failed', ['task_id' => $taskId, 'error' => $exception->getMessage()]);
         }
 
         Log::channel('single')->info('task.audit', [
@@ -80,17 +92,20 @@ class TaskAuditService
      */
     public function configChanged(int $subInstituteId, string $event, string $subject, ?int $actorId): void
     {
+        // A1: emitted, not inserted. entity_type 'task_config' rather than a
+        // task_id of 0 - a sentinel id was a workaround for a table that had no
+        // way to say "this is configuration, not a task".
         try {
-            DB::table('task_management_audit_logs')->insert([
-                'sub_institute_id' => $subInstituteId,
-                'task_id' => 0,
-                'event' => mb_substr($event, 0, 50),
-                'actor_id' => $actorId,
-                'before' => json_encode(['subject' => $subject]),
-                'created_at' => now(),
-            ]);
+            $this->events->record(
+                type: 'task_config.' . mb_substr($event, 0, 50),
+                subInstituteId: $subInstituteId,
+                entityType: 'task_config',
+                entityId: null,
+                actorId: $actorId,
+                payload: ['event' => $event, 'subject' => $subject],
+            );
         } catch (\Throwable $exception) {
-            Log::warning('task.audit_insert_failed', ['event' => $event, 'error' => $exception->getMessage()]);
+            Log::warning('task.audit_event_failed', ['event' => $event, 'error' => $exception->getMessage()]);
         }
 
         Log::channel('single')->info('task.audit', [

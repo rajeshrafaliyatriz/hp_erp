@@ -32,14 +32,43 @@ return Application::configure(basePath: dirname(__DIR__))
             // declared this alias since they were written; registering it is
             // what makes them dispatch instead of 500ing.
             'task.permission' => \App\Http\Middleware\TaskPermissionMiddleware::class,
+            // Requires a valid Sanctum token. Attached in routes/api.php to the
+            // routes whose controllers do not authenticate themselves.
+            'api.token' => \App\Http\Middleware\RequireApiToken::class,
+            // Restricts a route to named user profiles, e.g. 'profile:admin,hr'.
+            // Server-side role enforcement outside Task Management.
+            'profile' => \App\Http\Middleware\RequireProfile::class,
+            'menuright' => \App\Http\Middleware\RequireMenuRight::class,
         ]);
-          $middleware->validateCsrfTokens(except: [
-            'stripe/*',
-            'http://localhost:8000/*',
-            'http://localhost:3000/*',
-            'http://127.0.0.1:8000/*',
-            'https://hp.triz.co.in/*',
-        ]);
+        // CSRF exemptions.
+        //
+        // Stripe posts webhooks with no session and no token, so it has to be
+        // exempt - that one is legitimate and stays.
+        //
+        // The rest were dev conveniences committed to config:
+        //
+        //   http://localhost:8000/*   these match every request served by a
+        //   http://127.0.0.1:8000/*   local Laravel, i.e. CSRF entirely off
+        //
+        //   http://localhost:3000/*   the Next.js origin, never a URL this
+        //                             application serves - it matched nothing
+        //
+        //   https://hp.triz.co.in/*   a different host altogether. Harmless
+        //                             only for as long as this application is
+        //                             never served from it; if it ever were,
+        //                             CSRF would be off in production with no
+        //                             obvious sign.
+        //
+        // The two localhost entries are kept, but only when APP_ENV is local,
+        // so a production deployment cannot inherit them.
+        $csrfExcept = ['stripe/*'];
+
+        if (env('APP_ENV') === 'local') {
+            $csrfExcept[] = 'http://localhost:8000/*';
+            $csrfExcept[] = 'http://127.0.0.1:8000/*';
+        }
+
+        $middleware->validateCsrfTokens(except: $csrfExcept);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

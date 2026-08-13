@@ -13,6 +13,37 @@ use function App\Helpers\is_mobile;
 
 class topicController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
+    /**
+     * The caller's own organisation. NEVER a literal.
+     *
+     * G-SEC-17. These controllers assigned `$sub_institute_id = 1` outright -
+     * not as a fallback - so any caller reaching the affected method read
+     * TENANT 1's content whatever tenant they belonged to. chapterController
+     * hardcoded the ROLE alongside it (`$user_profile_name = 1`).
+     *
+     * The token wins when one is present; the session is used for the Blade
+     * screens that have no token. When neither identifies the caller this
+     * returns null, so every `where sub_institute_id = ?` matches NOTHING -
+     * failing closed, the same contract ResolvesApiIdentity documents.
+     */
+    private function resolvedTenantId($request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return (int) $fromToken;
+        }
+
+        // hasSession() first: $request->session() THROWS "Session store not set
+        // on request" when there is none, so the null-safe operator never gets a
+        // chance to help. An API call with an unusable token would have died with
+        // a 500 instead of failing closed.
+        $fromSession = $request->hasSession() ? $request->session()->get('sub_institute_id') : null;
+
+        return $fromSession ? (int) $fromSession : null;
+    }
+
     public function index(Request $request)
     {
         $data = $this->getData($request);
@@ -32,7 +63,7 @@ class topicController extends Controller
     public function getData($request)
     {
         if($request->has('preload_lms')){
-            $sub_institute_id = 1;
+            $sub_institute_id = $this->resolvedTenantId($request);
             $syear = $request->session()->get('syear');
             $ch_id = $request->input('id');
         }else{

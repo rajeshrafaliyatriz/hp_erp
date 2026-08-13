@@ -29,6 +29,13 @@ use function App\Helpers\is_mobile;
 
 class tbluserController extends Controller
 {
+    // Used by updateFcmToken(), and by the jwtToken() guard that used to come
+    // from GenTux\Jwt\GetsJwtToken - a package absent from composer.json and
+    // never installed, so any class using it could not be loaded at all.
+    // The rest of this controller serves session-authenticated web routes and
+    // is deliberately left alone.
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         // echo "<pre>";print_r(session()->all());exit;
@@ -893,8 +900,20 @@ class tbluserController extends Controller
             ], 400);
         }
 
-        $userId = $request->user_id;
+        // The device token decides which phone receives this user's push
+        // notifications. Taken from the request, anyone could point any
+        // colleague's notifications at their own handset - or silence them by
+        // writing a dead token. It comes from the caller's own token now, and
+        // the route requires one (see routes/api.php).
+        $userId = $this->apiUserId($request);
         $fcmToken = $request->fcm_token;
+
+        if (!$userId) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'Unable to identify the caller.'
+            ], 401);
+        }
 
         $updated = tbluserModel::where('id', $userId)->update([
             'fcm_token' => $fcmToken,
@@ -919,7 +938,7 @@ class tbluserController extends Controller
     {
 
         // try {
-        //           if (!$this->jwtToken()->validate()) {
+        //           if (!$this->apiTokenIsValid()) {
         //               $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
         //               return response()->json($response, 401);
         //           }

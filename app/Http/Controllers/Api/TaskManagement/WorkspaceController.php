@@ -264,14 +264,24 @@ class WorkspaceController extends Controller
             'task_description' => $request->input('description'),
             'task_allocated_to' => $request->integer('assignee_id'),
             'task_allocated' => $request->integer('owner_id'),
-            'status' => $resolvedStatus['status'],
-            'status_label' => $resolvedStatus['label'],
             'task_type' => $resolvedPriority,
             'task_date' => $request->input('due_date') ?: $task->task_date,
             'reply' => $request->filled('remarks') ? $request->input('remarks') : $task->reply,
             'updated_by' => $context['user_id'],
             'updated_at' => now(),
         ]);
+
+        // T-01. Status moves through its owner, not inline with the other fields.
+        // The bulk update above carries everything that is NOT a status concern.
+        $move = app(\App\Services\TaskManagement\TaskStatusWriter::class)->moveTo(
+            (int) $id,
+            $resolvedStatus['status'],
+            (int) $context['sub_institute_id'],
+            (int) $context['user_id']
+        );
+        if (!$move['ok']) {
+            return response()->json(['status' => 0, 'message' => $move['reason']], 422);
+        }
 
         $this->taskAudit->taskChanged($id, 'workspace_updated', (array) $task, $context['user_id']);
 

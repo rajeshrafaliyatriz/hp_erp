@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -12,6 +13,8 @@ use App\Models\talent\feedback\TalentEvaluationForm;
 
 class InterviewController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getPositions(Request $request)
     {
         $type = $request->type;
@@ -28,7 +31,7 @@ class InterviewController extends Controller
                 return response()->json(['message' => 'Invalid token'], 401);
             }
         }
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
 
         $positions = DB::table('talent_job_postings')
                     ->where('sub_institute_id', $subInstituteId)
@@ -58,7 +61,7 @@ class InterviewController extends Controller
                 return response()->json(['message' => 'Invalid token'], 401);
             }
         }
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
         
         
         $candidates = DB::table('talent_job_applications')
@@ -94,7 +97,7 @@ class InterviewController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
 
         // Validate the request
         $validator = Validator::make($request->all(), [

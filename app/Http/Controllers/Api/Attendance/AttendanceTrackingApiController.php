@@ -22,6 +22,40 @@ use Illuminate\Support\Facades\Validator;
  */
 class AttendanceTrackingApiController extends Controller
 {
+
+    /**
+     * The employee a punch is written FOR.
+     *
+     * G-ATT-SEC-01. punchIn() and punchOut() took the subject from
+     * `$request->input('employee')` and never compared it to the caller, and the
+     * route group carries NO middleware (routes/api.php:586-590) - so nothing
+     * else supplied the check. An employee could clock a colleague in or out by
+     * changing one parameter.
+     *
+     * These three routes are declared self-service in the route file itself
+     * ("Self service - my attendance calendar and punches"), so the subject is
+     * ALWAYS the caller. Administrative entry on someone else's behalf has its
+     * own legacy endpoints (hrms-attendance-in-time/store), which are not these.
+     *
+     * A mismatched `employee` is REFUSED rather than silently ignored: silently
+     * rewriting it would hide a client bug and make the audit trail disagree
+     * with what the client believed it sent.
+     */
+    private function punchSubject(Request $request, array $context)
+    {
+        $callerId   = (int) $context['user_id'];
+        $requested  = $request->input('employee');
+
+        if ($requested !== null && $requested !== '' && (int) $requested !== $callerId) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'You may only record your own attendance.',
+            ], 403);
+        }
+
+        return $callerId;
+    }
+
     use ResolvesAttendanceContext;
 
     private const WEEKDAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -217,10 +251,15 @@ class AttendanceTrackingApiController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        $employeeId = $this->punchSubject($request, $context);
+        if (!is_int($employeeId)) {
+            return $employeeId;
+        }
+
         $subInstituteId = $context['sub_institute_id'];
         $formattedDate = Carbon::parse($request->input('indate'))->format('Y-m-d');
 
-        $record = HrmsAttendance::where('user_id', $request->input('employee'))
+        $record = HrmsAttendance::where('user_id', $employeeId)
             ->where('sub_institute_id', $subInstituteId)
             ->whereDate('day', $formattedDate)
             ->first();
@@ -236,7 +275,7 @@ class AttendanceTrackingApiController extends Controller
             $record->save();
         } else {
             $record = new HrmsAttendance();
-            $record->user_id = $request->input('employee');
+            $record->user_id = $employeeId;
             $record->punchin_time = Carbon::parse($formattedDate . ' ' . $request->input('intime'))->format('Y-m-d H:i:s');
             $record->day = $formattedDate;
             $record->in_note = 1;
@@ -273,6 +312,11 @@ class AttendanceTrackingApiController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
+        $employeeId = $this->punchSubject($request, $context);
+        if (!is_int($employeeId)) {
+            return $employeeId;
+        }
+
         $subInstituteId = $context['sub_institute_id'];
         $dateOnly = Carbon::parse($request->input('outdate'))->format('Y-m-d');
         $punchoutTime = $request->input('outtime')
@@ -280,7 +324,7 @@ class AttendanceTrackingApiController extends Controller
             : null;
 
         // Either the open row for the day, or the latest one when a time was sent.
-        $attendance = HrmsAttendance::where('user_id', $request->input('employee'))
+        $attendance = HrmsAttendance::where('user_id', $employeeId)
             ->where('sub_institute_id', $subInstituteId)
             ->where('day', $dateOnly)
             ->when(!$punchoutTime, function ($query) {
@@ -306,7 +350,7 @@ class AttendanceTrackingApiController extends Controller
         } else {
             // Already punched out before - overwrite with the current time.
             $existingRecord = HrmsAttendance::where([
-                ['user_id', $request->input('employee')],
+                ['user_id', $employeeId],
                 ['sub_institute_id', $subInstituteId],
                 ['day', $dateOnly],
             ])->orderBy('id', 'desc')->first();

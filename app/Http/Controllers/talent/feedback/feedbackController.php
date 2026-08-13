@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent\feedback;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\DB;
@@ -15,23 +16,26 @@ use App\Models\talent\feedback\TalentEvaluationForm;
 
 class feedbackController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getAllFeedback(Request $request)
     {
-        $type = $request->type;
+        // G-SEC-23, CHAIN A. Two defects, and both had to go:
+        //
+        //   1. Authentication was gated on `if ($type == "API")` - G-SEC-18's
+        //      form 1, so omitting `type` skipped it. The route carries the
+        //      `api` group but NO auth middleware, so this was the only control.
+        //   2. $subInstituteId was RESOLVED and then never used: the query
+        //      filtered on candidate_id alone. An Employee in tenant 7 read
+        //      tenant 3's feedback, including the candidate's email address.
+        //
+        // Auth alone would leave any authenticated user reading every tenant's
+        // feedback; a tenant clause alone would leave it open. Both, per G-SEC-15.
+        $subInstituteId = $this->apiTenantId($request);
 
-        if ($type == "API") {
-
-            $token = $request->input('token');
-            if (!$token) {
-                return response()->json(['message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-            if (!$accessToken) {
-                return response()->json(['message' => 'Invalid token'], 401);
-            }
+        if (!$subInstituteId) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated.'], 401);
         }
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
         $data = DB::table('talent_evaluation_form as tef')
             ->leftJoin('talent_job_postings as tjp', 'tef.job_id', '=', 'tjp.id')
             ->leftJoin('talent_job_applications as tja', 'tef.candidate_id', '=', 'tja.id')
@@ -78,7 +82,7 @@ class feedbackController extends Controller
                 return response()->json(['message' => 'Invalid token'], 401);
             }
         }
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
         $data = DB::table('talent_evaluation_form as tef')
             ->leftJoin('talent_job_postings as tjp', 'tef.job_id', '=', 'tjp.id')
             ->leftJoin('talent_job_applications as tja', 'tef.candidate_id', '=', 'tja.id')
@@ -92,6 +96,7 @@ class feedbackController extends Controller
                 'tja.status as status'
             )
             ->where('tef.candidate_id', $id)
+            ->where('tef.sub_institute_id', $subInstituteId)
             ->orderBy('tef.created_at', 'DESC') // latest feedback
             ->first();
 
@@ -129,7 +134,7 @@ class feedbackController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
 
         // 📥 Convert JSON string to array if needed
         if (is_string($request->evaluation_criteria)) {
@@ -206,7 +211,7 @@ class feedbackController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
 
         // 📥 Convert JSON string to array if needed
         if (is_string($request->evaluation_criteria)) {
@@ -278,7 +283,7 @@ class feedbackController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
 
         $data = DB::table('talent_interview_schedules as tis')
             ->leftJoin('talent_job_postings as tjp', 'tis.job_id', '=', 'tjp.id')

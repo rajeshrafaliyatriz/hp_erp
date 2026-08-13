@@ -1,0 +1,206 @@
+https://claude.ai/chat/74ca5f1c-8ece-44db-abf0-6ce43cd29071 
+ 
+Talent Management — Role-Wise Feature List 
+ 
+1. Admin (System/TM Admin) 
+Job Portal & Requisition 
+●​ Job requisition workflow (raise → approve → publish)  
+●​ Job description template library, linked to job roles (pulls role data from 
+Competency's job-role matrix; doesn't rebuild it) 
+●​ Career site/job portal CMS (branding, careers page builder) 
+●​ Job posting syndication to external job boards/LinkedIn/Naukri 
+Application Tracking & Screening 
+●​ ATS pipeline/stage configuration (sourced → screened → interview → offer → 
+hired) 
+●​ AI resume screening engine configuration (parsing rules, 
+keyword/competency-weight scoring) 
+●​ Resume database & search (Boolean/AI search across applicant pool) 
+●​ Duplicate candidate detection 
+Interview Management 
+●​ Interview panel pool setup & skill-tagging of interviewers 
+●​ Interview scorecard/template builder (structured, competency-linked 
+questions) 
+●​ Interview scheduling engine configuration (calendar sync, video tool 
+integration) 
+●​ Communication template management (auto-emails/SMS at each pipeline 
+stage) 
+Offer & Onboarding 
+●​ Offer letter template & approval matrix configuration 
+●​ Compensation band/grade setup access (or integration with the compensation 
+module)  
+●​ Background verification vendor integration  
+●​ Pre-boarding workflow builder (documents, forms, asset requests before Day 
+1) 
+
+●​ New hire onboarding journey/checklist builder (buddy assignment, 
+IT/HR/admin tasks) 
+Goal, Performance, Appraisal & Compensation 
+●​ Goal/OKR cascading framework setup (org → department → team → 
+individual) 
+●​ Performance review cycle configuration (frequency, forms, rating scale — 
+performance-specific, not competency rating scale) 
+●​ Appraisal workflow & approval chain configuration 
+●​ Compensation structure setup (pay bands, grades, increment matrices) 
+●​ Bonus/variable pay rule engine  
+Cross-Cutting Admin 
+●​ Role-based access control for TM module 
+●​ Audit logs & version control for requisitions, offers, appraisals 
+●​ Integration management (LMS, Competency, Payroll/HRIS, 
+background-check vendors, job boards) 
+●​ Manpower budget/headcount master setup 
+●​ Exit/offboarding workflow configuration (clearance checklist, exit interview 
+forms) 
+ 
+2. Executives (Leadership/CXO) 
+●​ Talent acquisition funnel dashboard (time-to-hire, cost-per-hire, 
+offer-acceptance rate) 
+●​ Workforce composition & headcount analytics (planned vs actual, by 
+department/location) 
+●​ Performance distribution view (bell-curve/rating distribution org-wide — 
+performance ratings, not competency ratings) 
+●​ Compensation cost & payroll cost trend dashboard 
+●​ Attrition & retention analytics (voluntary/involuntary, regrettable attrition 
+flagging) 
+●​ Succession execution dashboard — bench strength/slate status for critical 
+roles (consumes Competency's readiness score but shows actual nominated 
+successors and movement plans) 
+●​ Internal mobility/talent marketplace activity (transfers, promotions trend) 
+●​ Board-level export (PPT/PDF) for talent reviews 
+●​ High-level read-only/drill-down access — no transactional rights 
+ 
+
+3. Department Head 
+Acquisition 
+●​ Raise manpower requisition / replacement request 
+●​ View pipeline status for own open roles 
+●​ Participate in interview panel; submit structured scorecards 
+●​ Approve/reject offer recommendation for own team's hires 
+Onboarding 
+●​ Onboarding task tracker for new joiners in own team (buddy nomination, 
+first-30-day plan) 
+Goal & Performance 
+●​ Set/cascade team goals & KPIs (distinct from competency development 
+plans) 
+●​ Conduct performance reviews/appraisals for direct reports 
+●​ Recommend increment/bonus/promotion for team members 
+●​ Performance calibration session participation (performance ratings — 
+separate from competency calibration) 
+Mobility & Succession 
+●​ Nominate team member for internal job opening / lateral move 
+●​ Identify backup/successor candidates for one's own critical positions (feeds 
+the Exec succession dashboard) 
+Offboarding 
+●​ Initiate/approve resignation acceptance and knowledge-transfer checklist for 
+exiting team member 
+Reporting 
+●​ Team hiring status, time-to-fill, offer-drop reports 
+●​ Team performance & compensation distribution report 
+ 
+4. HR Manager 
+Talent Acquisition 
+●​ Manage end-to-end requisition-to-offer pipeline org-wide 
+●​ Configure & tune AI resume screening rules 
+
+●​ Vendor/agency management for recruitment (RPO, staffing partners)  
+●​ Employee referral program management 
+●​ Offer negotiation & approval orchestration 
+●​ Background verification tracking & exception handling 
+Onboarding 
+●​ Org-wide onboarding journey management & completion tracking 
+●​ Pre-boarding document/compliance collection (PF, ID proofs, contracts) 
+●​ Probation tracking & confirmation workflow 
+Goal, Performance & Compensation 
+●​ Run org-wide performance review cycles (launch/monitor/close — 
+performance, not competency, cycles) 
+●​ Compensation review & annual increment cycle administration 
+●​ Bonus/variable pay processing coordination 
+●​ Promotion panel coordination 
+●​ Link performance outcomes to compensation recommendations 
+Mobility & Succession 
+●​ Internal job posting & internal mobility approval workflow 
+●​ Succession plan administration — maintain slates, track readiness movement, 
+coordinate talent review meetings (uses, not duplicates, Competency's 
+readiness scores) 
+Workforce Planning 
+●​ Headcount & manpower budget planning vs actuals 
+●​ Org structure / position management (vacant vs filled positions) 
+Offboarding & Retention 
+●​ Exit interview administration & attrition reason analytics 
+●​ Full & final settlement workflow coordination with Payroll 
+●​ Alumni network/rehire eligibility tracking 
+Reporting & Compliance 
+●​ Recruitment funnel & cost-per-hire/time-to-hire reports 
+●​ Performance & compensation distribution reports org-wide 
+●​ Statutory compliance tracking related to employment (contracts, labor law 
+docs) 
+ 
+
+5. Candidates (External Applicant Portal) 
+●​ Job portal browse/search (by role, location, department) 
+●​ Candidate profile creation & resume upload/parsing 
+●​ One-click/quick apply to job openings 
+●​ Application status tracker (applied → screened → interview → offer) 
+●​ Self-service interview slot booking/rescheduling 
+●​ Document upload center (ID proofs, certificates, experience letters) 
+●​ Assessment/test link access (if pre-hire assessment used) 
+●​ Offer letter view & online acceptance/e-signature 
+●​ Pre-boarding portal access post-offer acceptance (forms, joining checklist, 
+company info) before transitioning to Employee LMS/Competency access 
+●​ Communication/notification center (status updates, interview reminders) 
+●​ Referral submission (if referred by an employee, track referral status) 
+ 
+6. Employees 
+Career & Mobility 
+●​ Internal job board — view & apply to internal openings/talent marketplace 
+●​ Refer a candidate for open positions; track referral status 
+●​ View own career/position history (job title, department, grade changes) 
+Goals & Performance 
+●​ Set & track personal goals/KPIs (distinct from competency self-assessment in 
+the competency module) 
+●​ Self-appraisal submission during review cycle 
+●​ View manager feedback & final performance rating 
+●​ View performance-linked increment/bonus outcome (compensation 
+statement) 
+Compensation 
+●​ View compensation/payslip summary and benefits statement (if integrated 
+with payroll) 
+●​ Total rewards statement (salary + bonus + benefits view) 
+Onboarding (as new hire) 
+●​ New hire onboarding checklist & task tracker (Day 1–30/60/90 plan) 
+●​ Buddy/mentor info access 
+●​ Pre-boarding document submission status 
+
+Offboarding (if exiting) 
+●​ Resignation submission & notice-period tracker 
+●​ Exit clearance checklist (asset return, knowledge transfer, exit interview 
+scheduling) 
+ 
+Integration Points (so the 3 modules work as one system) 
+ 
+Data flowing out of Competency/LMS → 
+into Talent Management 
+Data flowing out of Talent 
+Management → into 
+Competency/LMS 
+Competency gap scores → feed Targeted 
+Training Plan assignment (LMS) and inform 
+promotion/succession readiness (TM) 
+New hire's role/job-profile → triggers 
+Competency framework mapping & 
+onboarding learning path 
+Job-role-to-competency matrix → used by 
+AI resume screening to weight candidate fit 
+Performance/goal outcomes → feed 
+9-box/talent-pool placement (owned 
+by Competency) 
+Skills-to-course mapping (LMS) → powers 
+auto-recommended learning after a 
+TM-identified gap or new role 
+Promotion/transfer event → triggers 
+re-mapping of employee's required 
+competency set 
+This keeps each module owning one job: Competency = define & measure skill, 
+LMS = build skill, Talent Management = acquire, place, evaluate, reward, and move 
+talent based on that data—with no duplicated build of framework, ratings, or course 
+delivery. 
+ 

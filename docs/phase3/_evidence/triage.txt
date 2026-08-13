@@ -1,0 +1,134 @@
+NON-LIVE NAV ROWS: 104 across 7 modules
+
+====================================================================================================
+Reports  (45 rows)
+====================================================================================================
+  id=6     lvl=1  container Reports                                        disabled
+  id=117   lvl=2  container Communication Report                           disabled
+  id=118   lvl=2  container Complaint                                      disabled
+  id=123   lvl=2  container Counselling Report                             disabled
+  id=120   lvl=2  container Document Report                                disabled
+  id=124   lvl=2  container Frontdesk Report                               disabled
+  id=119   lvl=2  container HRMS Reports                                   disabled
+  id=125   lvl=2  container LMS Report                                     disabled
+  id=121   lvl=2  container Log Report                                     disabled
+  id=122   lvl=2  container Organization Management Report                 hidden (ancestor 'Reports' disabled)
+  id=159   lvl=2  leaf     Task Analysis Report                           disabled
+  id=132   lvl=3  leaf     Attendance Report                              hidden (ancestor 'Reports' disabled)
+  id=143   lvl=3  leaf     Bankwise Payroll Report                        hidden (ancestor 'Reports' disabled)
+  id=131   lvl=3  leaf     Complaint Report                               hidden (ancestor 'Reports' disabled)
+  id=149   lvl=3  leaf     Counselling Report                             hidden (ancestor 'Reports' disabled)
+  id=135   lvl=3  leaf     Dept.wise Attendance Report                    hidden (ancestor 'Reports' disabled)
+  id=146   lvl=3  leaf     Document Report                                hidden (ancestor 'Reports' disabled)
+  id=134   lvl=3  leaf     Early Going Report                             hidden (ancestor 'Reports' disabled)
+  id=126   lvl=3  leaf     Email Report                                   hidden (ancestor 'Reports' disabled)
+  id=151   lvl=3  leaf     Employee Analysis Report                       hidden (ancestor 'Reports' disabled)
+  id=184   lvl=3  leaf     Employee Directory Analytics Report            disabled
+  id=148   lvl=3  leaf     Employee Info Report                           hidden (ancestor 'Reports' disabled)
+  id=185   lvl=3  leaf     Employee Skill Coverage Matrix Report          disabled
+  id=150   lvl=3  leaf     Frontdesk Report                               hidden (ancestor 'Reports' disabled)
+  id=195   lvl=3  leaf     HR Workforce Analysis Report                   hidden (ancestor 'Reports' disabled)
+  id=196   lvl=3  leaf     Human Productivity & Operational Excellence    hidden (ancestor 'Reports' disabled)
+  id=138   lvl=3  leaf     Leave Encashment                               hidden (ancestor 'Reports' disabled)
+  id=136   lvl=3  leaf     Leave Report                                   hidden (ancestor 'Reports' disabled)
+  id=137   lvl=3  leaf     Leave Summery Report                           hidden (ancestor 'Reports' disabled)
+  id=147   lvl=3  leaf     Log Report                                     hidden (ancestor 'Reports' disabled)
+  id=145   lvl=3  leaf     Monthly Attendance Report                      hidden (ancestor 'Reports' disabled)
+  id=197   lvl=3  leaf     My Learning Report                             hidden (ancestor 'Reports' disabled)
+  id=133   lvl=3  leaf     New Attendance Report                          hidden (ancestor 'Reports' disabled)
+  id=129   lvl=3  leaf     Notification Report                            hidden (ancestor 'Reports' disabled)
+  id=141   lvl=3  leaf     Payroll Report                                 hidden (ancestor 'Reports' disabled)
+  id=142   lvl=3  leaf     Payroll Type Report                            hidden (ancestor 'Reports' disabled)
+  id=153   lvl=3  leaf     Question wise Report                           hidden (ancestor 'Reports' disabled)
+  id=152   lvl=3  leaf     Quiz Progress Report                           hidden (ancestor 'Reports' disabled)
+  id=128   lvl=3  leaf     Register User Report                           hidden (ancestor 'Reports' disabled)
+  id=139   lvl=3  leaf     Salary Structure Report                        hidden (ancestor 'Reports' disabled)
+  id=127   lvl=3  leaf     Send SMS Report                                hidden (ancestor 'Reports' disabled)
+  id=160   lvl=3  leaf     Task Analysis Report                           hidden (ancestor 'Reports' disabled)
+  id=144   lvl=3  leaf     User Payroll History                           hidden (ancestor 'Reports' disabled)
+  id=130   lvl=3  leaf     WhatsApp Report                                hidden (ancestor 'Reports' disabled)
+  id=183   lvl=3  leaf     Workforce Analytics Report                     disabled
+
+====================================================================================================
+Organizational Management  (22 rows)
+====================================================================================================
+  id=9     lvl=2  container Communication Tools                            disabled
+  id=11    lvl=2  container Complaint Mgmt                                 disabled
+  id=161   lvl=2  leaf     Organization Dashboard                         disabled
+  id=10    lvl=2  container Template Management                            disabled
+  id=14    lvl=3  leaf     Admin and Configuration Module                 disabled
+  id=25    lvl=3  leaf     Certifications                                 disabled
+  id=33    lvl=3  leaf     Complaint Mgmt                                 hidden (ancestor 'Complaint Mgmt' disabled)
+  id=15    lvl=3  leaf     Group wise right management                    disabled
+  id=16    lvl=3  leaf     Individual right management                    disabled
+  id=17    lvl=3  leaf     Search Employees by Skills                     disabled
+  id=30    lvl=3  leaf     Send Email Other User                          hidden (ancestor 'Communication Tools' disabled)
+  id=29    lvl=3  leaf     Send Email User                                hidden (ancestor 'Communication Tools' disabled)
+  id=28    lvl=3  leaf     Send Notification User                         hidden (ancestor 'Communication Tools' disabled)
+  id=27    lvl=3  leaf     Send SMS to User                               hidden (ancestor 'Communication Tools' disabled)
+  id=31    lvl=3  leaf     Send WhatsApp User                             hidden (ancestor 'Communication Tools' disabled)
+  id=26    lvl=3  leaf     Skill Gap Analysis                             disabled
+  id=24    lvl=3  leaf     Skills                                         disabled
+  id=21    lvl=3  leaf     Suggestion for employee                        disabled
+  id=20    lvl=3  leaf     Suggestion to for department & Department head disabled
+  id=19    lvl=3  leaf     Suggestion to organization                     disabled
+  id=18    lvl=3  leaf     Task Assignment & Progress                     disabled
+  id=32    lvl=3  leaf     Template Management                            hidden (ancestor 'Template Management' disabled)
+
+====================================================================================================
+HRIT Management  (17 rows)
+====================================================================================================
+  id=96    lvl=2  container Compliance Management                          disabled
+  id=115   lvl=2  container Deceplinry management                          disabled
+  id=97    lvl=2  container Document Management System                     disabled
+  id=99    lvl=2  container Front Desk Operations                          disabled
+  id=181   lvl=2  leaf     HRIT Dashboard                                 disabled
+  id=98    lvl=2  container Organization Handbook                          disabled
+  id=162   lvl=3  leaf     Attendance Report                              disabled
+  id=111   lvl=3  leaf     Complaince library                             hidden (ancestor 'Compliance Management' disabled)
+  id=116   lvl=3  leaf     Deceplinary action and their management        hidden (ancestor 'Deceplinry management' disabled)
+  id=164   lvl=3  leaf     Department Wise Report                         disabled
+  id=163   lvl=3  leaf     Early going Report                             disabled
+  id=114   lvl=3  leaf     Front Desk                                     hidden (ancestor 'Front Desk Operations' disabled)
+  id=167   lvl=3  leaf     Holiday Master                                 disabled
+  id=166   lvl=3  leaf     Leave Allocation                               disabled
+  id=112   lvl=3  leaf     Manage Document                                hidden (ancestor 'Document Management System' disabled)
+  id=113   lvl=3  leaf     Manage Handbook                                hidden (ancestor 'Organization Handbook' disabled)
+  id=107   lvl=3  leaf     Rollover Salary Structure                      disabled
+
+====================================================================================================
+LMS  (10 rows)
+====================================================================================================
+  id=77    lvl=2  container Assesment library                              disabled
+  id=79    lvl=2  container Career Explorer                                disabled
+  id=78    lvl=2  container Skill Assessment                               disabled
+  id=86    lvl=3  leaf     Assessment List                                hidden (ancestor 'Assesment library' disabled)
+  id=89    lvl=3  leaf     Career Awareness                               hidden (ancestor 'Career Explorer' disabled)
+  id=92    lvl=3  leaf     Career Explorer                                hidden (ancestor 'Career Explorer' disabled)
+  id=90    lvl=3  leaf     Intrest Profiler                               hidden (ancestor 'Career Explorer' disabled)
+  id=91    lvl=3  leaf     Knowing Yourself                               hidden (ancestor 'Career Explorer' disabled)
+  id=87    lvl=3  leaf     Search skill                                   hidden (ancestor 'Skill Assessment' disabled)
+  id=88    lvl=3  leaf     Self skill rating                              hidden (ancestor 'Skill Assessment' disabled)
+
+====================================================================================================
+Talent Management  (5 rows)
+====================================================================================================
+  id=50    lvl=2  leaf     Compensation                                   disabled
+  id=198   lvl=2  leaf     HR Template Engine                             disabled
+  id=180   lvl=2  container Talent Onboarding                              disabled
+  id=179   lvl=2  leaf     Talent Onboarding Dashboard                    disabled
+  id=169   lvl=3  leaf     Employee Onboarding                            hidden (ancestor 'Talent Onboarding' disabled)
+
+====================================================================================================
+CRM  (4 rows)
+====================================================================================================
+  id=199   lvl=1  container CRM                                            disabled
+  id=200   lvl=2  container Marketing                                      hidden (ancestor 'CRM' disabled)
+  id=202   lvl=2  leaf     Master Fields                                  hidden (ancestor 'CRM' disabled)
+  id=201   lvl=3  leaf     Leads                                          hidden (ancestor 'CRM' disabled)
+
+====================================================================================================
+Agentic AI  (1 rows)
+====================================================================================================
+  id=187   lvl=2  leaf     Pal                                            disabled
+

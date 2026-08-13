@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\libraries;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use App\Models\libraries\industryModel;
 use App\Models\libraries\userSkills;
@@ -18,6 +19,24 @@ use Illuminate\Support\Facades\Validator;
 
 class jobroleLibraryController extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     //
     public function index(Request $request)
     {
@@ -310,7 +329,7 @@ class jobroleLibraryController extends Controller
                 'keyword_tags' => $request->keyword_tags,
                 'internal_tracking' => $request->internal_tracking,
                 'sub_institute_id' => $request->sub_institute_id,
-                'created_by' => $request->user_id,
+                'created_by' => $this->g2gActorId($request),
                 'created_at' => now(),
             ];
 
@@ -458,7 +477,7 @@ class jobroleLibraryController extends Controller
                 'training' => $request->training,
                 'experience' => $request->experience,
                 'sub_institute_id' => $request->sub_institute_id,
-                'updated_by' => $request->user_id,
+                'updated_by' => $this->g2gActorId($request),
                 'updated_at' => now(),
             ];
 
@@ -492,7 +511,7 @@ class jobroleLibraryController extends Controller
                             'title' => $skillName,
                             'description' => $skillDescription,
                             'sub_institute_id' => $request->sub_institute_id,
-                            'updated_by' => $request->user_id,
+                            'updated_by' => $this->g2gActorId($request),
                             'updated_at' => now(),
                             'status' => 'Active',
                             'approve_status' => 'approved'
@@ -504,7 +523,7 @@ class jobroleLibraryController extends Controller
                                 'jobrole' => $request->jobrole,
                                 'proficiency_level' => $request->proficiency_level[$key] ?? null,
                                 'sub_institute_id' => $request->sub_institute_id,
-                                'updated_by' => $request->user_id,
+                                'updated_by' => $this->g2gActorId($request),
                                 'updated_at' => now(),
                             ];
                             $update = skillJobroleMap::where('skill', $skillName)->where('jobrole', $request->jobrole)->where('sub_institute_id', $request->sub_institute_id)->update($updateArray);
@@ -520,7 +539,7 @@ class jobroleLibraryController extends Controller
                             'title' => $skillName,
                             'description' => $skillDescription,
                             'sub_institute_id' => $request->sub_institute_id,
-                            'created_by' => $request->user_id,
+                            'created_by' => $this->g2gActorId($request),
                             'created_at' => now(),
                             'status' => 'Active',
                             'approve_status' => 'approved'
@@ -532,7 +551,7 @@ class jobroleLibraryController extends Controller
                                 'jobrole' => $request->jobrole,
                                 'proficiency_level' => $request->proficiency_level[$key] ?? null,
                                 'sub_institute_id' => $request->sub_institute_id,
-                                'created_by' => $request->user_id,
+                                'created_by' => $this->g2gActorId($request),
                                 'created_at' => now(),
                             ];
                             $insert = skillJobroleMap::insert($insertArray);
@@ -554,7 +573,7 @@ class jobroleLibraryController extends Controller
                             'critical_work_function' => $request->critical_work_function[$key] ?? null,
                             'task' => $taskName,
                             'sub_institute_id' => $request->sub_institute_id,
-                            'created_by' => $request->user_id,
+                            'created_by' => $this->g2gActorId($request),
                             'created_at' => now(),
                         ];
                         $lastInsertedId = userJobroleTask::insertGetId($insertData);
@@ -567,7 +586,7 @@ class jobroleLibraryController extends Controller
                         'critical_work_function' => $request->critical_work_function[$key] ?? null,
                         'task' => $taskName,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
                     $lastInsertedId = userJobroleTask::where('id', $request->id)->update($updateData);
@@ -628,21 +647,21 @@ class jobroleLibraryController extends Controller
 
         // If deleting a skill
         if ($request->has('formType') && $request->formType == "skills") {
-            $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         // If deleting a task
         if ($request->has('formType') && $request->formType == "tasks") {
-            $delete = userJobroleTask::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userJobroleTask::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         // If deleting a user jobrole
         if ($request->has('formType') && $request->formType == "user") {
-            $delete = userJobroleModel::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userJobroleModel::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }

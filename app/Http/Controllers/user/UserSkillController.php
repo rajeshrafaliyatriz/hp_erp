@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\user;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class UserSkillController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getUserSkills(Request $request, $user_id)
     {
         try {
@@ -19,7 +22,7 @@ class UserSkillController extends Controller
 
             $type        = $request->type;
             $token           = $request->token;
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // Check Required Params
             if (!$type || !$token || !$sub_institute_id) {

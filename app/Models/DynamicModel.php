@@ -27,6 +27,38 @@ class DynamicModel extends Model
      * @param string $table
      * @return $this
      */
+
+    /**
+     * Every dynamic table name passes through here, and nothing else may set one.
+     *
+     * G-SEC-21 - THE STRUCTURAL FIX, not a per-site patch.
+     *
+     * The custom-module feature validated `table_name` ONLY at creation
+     * (CustomModuleController::tableStore) and every downstream use trusted the
+     * stored value - 21 uses across the controller and this model, plus 6
+     * external call sites. G-SEC-20 proved the door was unlocked: the column
+     * accepted `Z_probe;SELECT<empty-comment>1`, and DB::statement executes
+     * multiple statements.
+     *
+     * Validation at the door is necessary and NOT sufficient, because the door
+     * was open for the lifetime of the feature and the values are already
+     * stored. So the check lives at the point of USE, where it cannot be
+     * bypassed by any path that reaches a dynamic table.
+     *
+     * A table name is an IDENTIFIER, never data: MySQL identifiers here are
+     * [A-Za-z0-9_]. Anything else is refused loudly - a malformed table name is
+     * never a legitimate request, and failing silently would hand back an empty
+     * result that reads like "no records".
+     */
+    protected static function assertSafeTable(string $table): string
+    {
+        if (preg_match('/^[A-Za-z0-9_]+$/', $table) !== 1) {
+            throw new \InvalidArgumentException('Unsafe dynamic table name.');
+        }
+
+        return $table;
+    }
+
     public function initialize(string $table)
     {
         $this->setTable($table);
@@ -42,6 +74,8 @@ class DynamicModel extends Model
      */
     public function setTable($table)
     {
+        $table = static::assertSafeTable((string) $table);
+
         $this->table = $table;
         parent::setTable($table); // Set the table for the parent Model class
     }
@@ -71,6 +105,8 @@ class DynamicModel extends Model
      */
     public static function createRecord(string $table, array $data)
     {
+        $table = static::assertSafeTable($table);
+
         DB::table($table)->insert($data);
        /* $instance = (new static())->initialize($table);
 
@@ -100,6 +136,8 @@ class DynamicModel extends Model
      */
     public static function readRecords(string $table)
     {
+        $table = static::assertSafeTable($table);
+
         $instance = (new static())->initialize($table);
         $query = $instance->newQuery();
 
@@ -120,6 +158,8 @@ class DynamicModel extends Model
 
     public static function readSingleRecord(string $table, int $id)
     {
+        $table = static::assertSafeTable($table);
+
         $instance = (new static())->initialize($table);
         return $instance->find($id);
     }
@@ -134,6 +174,8 @@ class DynamicModel extends Model
      */
     public static function updateRecord(string $table, int $id, array $data)
     {
+        $table = static::assertSafeTable($table);
+
         DB::table($table)->where('id', $id)->update($data);
         /*$instance = (new static())->initialize($table);
         $record = $instance->findOrFail($id);
@@ -149,6 +191,8 @@ class DynamicModel extends Model
      */
     public static function deleteRecord(string $table, int $id)
     {
+        $table = static::assertSafeTable($table);
+
         $instance = (new static())->initialize($table);
         $record = $instance->findOrFail($id);
         return $record->delete();

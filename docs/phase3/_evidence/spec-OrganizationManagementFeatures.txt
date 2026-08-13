@@ -1,0 +1,146 @@
+Organization Management — Role-Wise Feature List 
+ 
+ 
+1. Admin 
+ 
+Feature 
+Scope 
+Organization Setup 
+Add/edit organization, sister concerns, branches, legal 
+entities 
+Department 
+Management 
+Create departments, subdepartments, teams, assign 
+department heads 
+Job Role & Position 
+Master 
+Create job roles, grades, designations, positions, vacancy 
+status 
+User Management 
+Invite users, activate/deactivate accounts, assign 
+department, role, manager 
+Roles & Permissions 
+Configure module/submodule/screen/action-level 
+permissions 
+Workflow 
+Configuration 
+Define approval chains, escalation rules, delegation rules 
+Organization Settings Fiscal year, working days, holidays, numbering series, 
+default rules 
+
+Integration Settings 
+SSO, email/SMS, HRIS/payroll sync, module enablement 
+Audit Control 
+View permission changes, user changes, master data 
+changes 
+Admin should own configuration, not daily HR operations. 
+ 
+2. Executives 
+ 
+Feature 
+Scope 
+Organization 
+Structure View 
+Read-only view of companies, departments, branches, 
+reporting hierarchy 
+Headcount & 
+Position View 
+Planned vs actual positions, vacancies, critical roles 
+Department 
+Ownership View 
+Who owns which department, team, role, and approval area 
+Compliance 
+Governance View 
+High-level compliance status by company, department, 
+location 
+Access 
+Governance View 
+Read-only view of major role/permission structures 
+Approval 
+Escalations 
+Approve only high-impact items if configured 
+
+Audit Summary 
+View sensitive admin/user/permission change summaries 
+Cross-module 
+Readiness View 
+Check whether org structure, roles, users, and permissions 
+are ready for Task, LMS, Competency, and Talent modules 
+Executives should mostly get visibility and exception-level approval, not 
+configuration rights. 
+ 
+3. Department Head 
+ 
+Feature 
+Scope 
+Department Profile 
+View 
+View own department, teams, reporting structure 
+Team Directory 
+View employees in own department with role, grade, 
+manager, status 
+Position Requests 
+Request new position, replacement, role change, or transfer 
+Department Role 
+Mapping 
+View roles and positions mapped to own department 
+Access Requests 
+Request module access for team members 
+Approval Queue 
+Approve team-level requests: task sign-off, course request, 
+requisition, onboarding step 
+
+Onboarding 
+Participation 
+Assign buddy/mentor, validate department checklist for new 
+joiners 
+Compliance 
+Participation 
+Complete or submit department-owned compliance 
+evidence 
+Department Audit 
+View 
+View department-level changes and approvals 
+Department Head should own department-level validation and approvals, not 
+global configuration. 
+ 
+4. HR Manager 
+ 
+Feature 
+Scope 
+Employee Master 
+Management 
+Maintain employee records, lifecycle status, documents 
+Employee Mapping 
+Assign/update department, manager, job role, grade, 
+location 
+Position Administration Maintain vacancies, filled positions, transfers, 
+replacements 
+Onboarding 
+Management 
+Configure and monitor role-wise, job-role-wise, 
+department-wise onboarding 
+
+Offboarding 
+Coordination 
+Clearance checklist, exit status, knowledge-transfer 
+tracking, access removal request 
+Compliance 
+Management 
+Maintain compliance register, owners, due dates, 
+evidence, status 
+Policy Management 
+Publish policies, track acknowledgements, maintain 
+versions 
+Disciplinary 
+Management 
+Manage cases, evidence, actions, restricted access, 
+closure 
+Approval Coordination 
+Route approvals between Department Head, Admin, and 
+Executives 
+HR Audit & Reports 
+Employee changes, compliance status, 
+onboarding/offboarding completion 
+HR Manager should own people operations and workforce data quality. 
+ 

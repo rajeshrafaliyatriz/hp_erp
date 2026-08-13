@@ -18,7 +18,11 @@ use App\Http\Controllers\HRMS\HrmsController;
 use App\Http\Controllers\Api\CompetencyDashboardController;
 use App\Http\Controllers\Api\CompetencyDashboard\CompetencyDashboardController as SubCompetencyDashboardController;
 use App\Http\Controllers\Api\Competency\CommandCenterController as CompetencyCommandCenterController;
-use App\Http\Controllers\Api\Competency\CompetencyController as CompetencyCrudController;
+// NAMED FOR WHAT IT DOES. CompetencyController manages SKILL LIBRARY entries -
+// its store() inserts into s_users_skills, a flat skill row. It does NOT create a
+// competency in Q-A2's sense (a named bundle of KASBA items); that is
+// CompetencyDefinitionController, on /competency/definitions.
+use App\Http\Controllers\Api\Competency\CompetencyController as SkillLibraryCrudController;
 use App\Http\Controllers\Api\Competency\FrameworkController as CompetencyFrameworkController;
 use App\Http\Controllers\Api\Competency\AssessmentController as CompetencyAssessmentController;
 use App\Http\Controllers\Api\Competency\AssessmentCycleController as CompetencyAssessmentCycleController;
@@ -170,17 +174,17 @@ use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
 Route::post('/verify-otp', [signupOtpController::class, 'verifyOtp']);
-Route::post('/newsletter/send', [NewsletterController::class, 'sendNewsletter']);
+Route::post('/newsletter/send', [NewsletterController::class, 'sendNewsletter'])->middleware('api.token');
 Route::match(['get', 'post'], '/user/profile', [UserProfileController::class, 'show']);
 
-Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
-Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
-Route::get('/departments/{deptId}/graph', [DepartmentGraphController::class, 'show']);
+Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show'])->middleware('api.token');
+Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show'])->middleware('api.token');
+Route::get('/departments/{deptId}/graph', [DepartmentGraphController::class, 'show'])->middleware('api.token');
 Route::post('/ai-generated-assessment/question/store',[generateQuestionController::class, 'store']);
 Route::get('/ai-generated-assessment/question/index',[generateQuestionController::class, 'index']);
 
-Route::post('/ai-generated-assessment/assessment/store', [generateAssessmentController::class, 'store']);
-Route::get('/ai-generated-assessment/assessment/index',[generateAssessmentController::class, 'index']);
+Route::post('/ai-generated-assessment/assessment/store', [generateAssessmentController::class, 'store'])->middleware('api.token');
+Route::get('/ai-generated-assessment/assessment/index',[generateAssessmentController::class, 'index'])->middleware('api.token');
 
 
 Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
@@ -201,12 +205,12 @@ Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject'
 Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
 Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
 
-Route::post('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis']);
+Route::post('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis'])->middleware('api.token');
 Route::post('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
 Route::post('/talent-acquisition/funnel', [CandidateDropoffController::class, 'getFunnelData']);
 Route::post('/talent-acquisition/requisitions', [CandidateDropoffController::class, 'getRequisitions']);
 
-Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
+Route::post('designation_leave', [HrmsLeaveController::class, 'store'])->middleware('api.token');
 
 Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
 
@@ -218,22 +222,22 @@ Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
 
 Route::resource('skills', skillcontroller::class);
 
-Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
+// Removed duplicate route declaration - exact duplicate of the declaration above.
 Route::put('/interview-schedules', [talent_interviewschedulescontroller::class, 'customUpdate']);
 Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::class, 'updateStatus']);
 Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications']);
-Route::resource('job-postings', talent_jobpostingcontroller::class);
+// Removed duplicate route declaration - exact duplicate.
 Route::post('designation_leave', [HrmsController::class, 'store']);
 Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
-Route::resource('job-role-tasks', jobroletaskcontroller::class);
-Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
-Route::resource('skills', skillcontroller::class);
+// Removed duplicate route declaration - exact duplicate.
+// Removed duplicate route declaration - exact duplicate.
+// Removed duplicate route declaration - exact duplicate.
 Route::get('skills/search', [jobrolecontroller::class, 'searchskills']);
 Route::get('jobrole/{id}/skills', [jobrolecontroller::class, 'skills']);
 Route::get('/department/{id}/jobroles', [jobrolecontroller::class, 'getJobRolesByDepartment']);
 Route::get('/industry/{id}/departments', [IndustryController::class, 'departments']);
 Route::get('/industries', [IndustryController::class, 'index']);
-Route::get('/competency-dashboard', [CompetencyDashboardController::class, 'index']);
+Route::get('/competency-dashboard', [CompetencyDashboardController::class, 'index'])->middleware('api.token');
 Route::get('/skill-development/progress', [SkillDevelopmentController::class, 'getSkillProgress']);
 Route::get('/skill-development/streak', [SkillDevelopmentController::class, 'getLearningStreak']);
 Route::get('/skill-development/weekly-goal', [SkillDevelopmentController::class, 'getWeeklyLearningGoal']);
@@ -242,13 +246,13 @@ Route::get('/skill-development/peer-comparison', [SkillDevelopmentController::cl
 Route::get('/skill-development/calendar', [SkillDevelopmentController::class, 'getLearningCalendar']);
 Route::get('/skill-development/recent-activity', [SkillDevelopmentController::class, 'getRecentActivity']);
 
-Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
-Route::get('/competency/kpi', [SubCompetencyDashboardController::class, 'getKPI']);
-Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity']);
-Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards']);
-Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar']);
-Route::get('/competency/skills-management-funnel', [SubCompetencyDashboardController::class, 'getSkillsManagementFunnel']);
-Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'getAlignment']);
+Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap'])->middleware('api.token');
+Route::get('/competency/kpi', [SubCompetencyDashboardController::class, 'getKPI'])->middleware('api.token');
+Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity'])->middleware('api.token');
+Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards'])->middleware('api.token');
+Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar'])->middleware('api.token');
+Route::get('/competency/skills-management-funnel', [SubCompetencyDashboardController::class, 'getSkillsManagementFunnel'])->middleware('api.token');
+Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'getAlignment'])->middleware('api.token');
 
 /*
 | Competency Command Center + domain CRUD (token authenticated, tenant scoped
@@ -344,21 +348,68 @@ Route::put('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleContr
 
 Route::get('/competency/employee-profiles/{id}', [EmployeeCompetencyProfileController::class, 'show'])->whereNumber('id');
 Route::get('/competency/employee-profiles/{id}/available-skills', [EmployeeCompetencyProfileController::class, 'availableSkills'])->whereNumber('id');
-Route::post('/competency/employee-profiles/{id}/skills', [EmployeeCompetencyProfileController::class, 'addSkill'])->whereNumber('id');
-Route::put('/competency/employee-profiles/{id}/skills/{matrixId}', [EmployeeCompetencyProfileController::class, 'updateSkill'])->whereNumber('id')->whereNumber('matrixId');
+Route::post('/competency/employee-profiles/{id}/skills', [EmployeeCompetencyProfileController::class, 'addSkill'])->whereNumber('id')->middleware('profile:admin,hr,manager');
+Route::put('/competency/employee-profiles/{id}/skills/{matrixId}', [EmployeeCompetencyProfileController::class, 'updateSkill'])->whereNumber('id')->whereNumber('matrixId')->middleware('profile:admin,hr,manager');
 Route::get('/competency/employee-profiles/{id}/skills/{skillId}/history', [EmployeeCompetencyProfileController::class, 'skillHistory'])->whereNumber('id')->whereNumber('skillId');
 Route::get('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'notes'])->whereNumber('id');
-Route::put('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'saveNotes'])->whereNumber('id');
+Route::put('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'saveNotes'])->whereNumber('id')->middleware('profile:admin,hr,manager');
 Route::get('/competency/employee-profiles/{id}/certifications', [EmployeeCompetencyProfileController::class, 'certifications'])->whereNumber('id');
 Route::get('/competency/employee-profiles/{id}/development-plans', [EmployeeCompetencyProfileController::class, 'developmentPlans'])->whereNumber('id');
 Route::get('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'evidence'])->whereNumber('id');
-Route::post('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'storeEvidence'])->whereNumber('id');
-Route::delete('/competency/employee-profiles/{id}/evidence/{evidenceId}', [EmployeeCompetencyProfileController::class, 'deleteEvidence'])->whereNumber('id')->whereNumber('evidenceId');
+Route::post('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'storeEvidence'])->whereNumber('id')->middleware('profile:admin,hr,manager');
+Route::delete('/competency/employee-profiles/{id}/evidence/{evidenceId}', [EmployeeCompetencyProfileController::class, 'deleteEvidence'])->whereNumber('id')->whereNumber('evidenceId')->middleware('profile:admin,hr,manager');
 Route::get('/competency/employee-profiles/{id}/career-path', [EmployeeCompetencyProfileController::class, 'careerPath'])->whereNumber('id');
 
-Route::get('/competency/competencies', [CompetencyCrudController::class, 'index']);
-Route::post('/competency/competencies', [CompetencyCrudController::class, 'store']);
-Route::delete('/competency/competencies/{id}', [CompetencyCrudController::class, 'destroy'])->whereNumber('id');
+/* SLICE 1 item 1 - competency DEFINITIONS (competency + competency_kasba_item).
+ * Distinct from /competency/competencies above, which serves the SKILL library
+ * (s_users_skills). Writes are HR/Admin only; the gate is RequireProfile, exact
+ * role_key matching since G-AUTH-02. */
+/* SLICE 1 item 7 - THE GAP. Read-only, so no profile gate: an employee may read
+ * their OWN gap (competencySubject), anyone else needs an elevated role_key. */
+Route::get('/competency/gap', [\App\Http\Controllers\Api\Competency\CompetencyGapController::class, 'show']);
+
+/* SLICE 1 item 3 - what a job role REQUIRES. jobrole_competency_map holds NO
+ * text key, which is what makes the rename proof possible. Writes are HR/Admin. */
+Route::get('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'index']);
+Route::post('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/role-map/{id}', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+// COURSE -> COMPETENCY. The table had two shipped consumers (LearningAssigner,
+// RemediationRecommender) and NO writer: 56 seeded rows and no way to add a 57th.
+// R-03 - the development plan report. Built STANDALONE: the plan says it gates
+// on R-01 (a 'consolidated reporting home'), and measurement says R-01 is a
+// container rather than a gate. 160 real plans, never reported on.
+Route::get('/competency/reports/development-plans', [\App\Http\Controllers\Api\Competency\DevelopmentPlanReportController::class, 'index']);
+Route::get('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'index']);
+Route::post('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+// KASBA RATINGS - the write half of the last link before the gap.
+// competency_kasba_rating had 160 seeded rows and NO writer anywhere: both
+// existing rating routes are GET and ProficiencyService only LEFT JOINs it.
+// These are NEW routes; the assessment-cycle GETs are untouched.
+Route::post('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'destroy'])->middleware('profile:admin,hr');
+
+// L-14: the TASK CATALOGUE -> COMPETENCY write path. Mirrors role-map one level
+// down. jobrole_task_id points at s_jobrole_task, a GLOBAL seed library with no
+// tenant column, so the task is checked for EXISTENCE and the competency for
+// OWNERSHIP - see the controller header.
+// Per-role browse for the task->competency panel. `index()` answers what is
+// MAPPED; these answer what EXISTS, including the unmapped tasks that by
+// definition have no row in the map.
+Route::get('/competency/task-map/roles', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'roles']);
+Route::get('/competency/task-map/tasks', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'tasks']);
+Route::get('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'index']);
+Route::post('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/task-map/{id}', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'destroy'])->middleware('profile:admin,hr');
+
+Route::get('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'index']);
+Route::post('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'store'])->middleware('profile:admin,hr');
+
+Route::get('/competency/competencies', [SkillLibraryCrudController::class, 'index']);
+Route::post('/competency/competencies', [SkillLibraryCrudController::class, 'store']);
+Route::delete('/competency/competencies/{id}', [SkillLibraryCrudController::class, 'destroy'])->whereNumber('id');
 
 Route::get('/competency/frameworks', [CompetencyFrameworkController::class, 'index']);
 Route::post('/competency/frameworks', [CompetencyFrameworkController::class, 'store']);
@@ -506,7 +557,7 @@ Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary
 Route::get('/KPI-HRITDashboard', [AttendanceApiController::class, 'KPI']);
 Route::get('/employee-attendance-monthly-report', [AttendanceApiController::class, 'employeeMonthlyReport']);
 
-Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise']);
+Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise'])->middleware('api.token');
 Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution']);
 
 /*
@@ -783,7 +834,7 @@ Route::post('skill_library/competency', [skillLibraryController::class, 'compete
 Route::put('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryUpdate'])->whereNumber('id');
 Route::delete('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryDestroy'])->whereNumber('id');
 
-Route::resource('skill_library', skillLibraryController::class);
+// Removed duplicate route declaration - unnamed duplicate; the ->names('api.skill_library') declaration below is the one to keep, and this one collided with web.php's holiday/skill_library names.
 /*
 | Named api.skill_library, not skill_library.
 |
@@ -800,7 +851,7 @@ Route::resource('skill_library', skillLibraryController::class);
 Route::resource('skill_library', skillLibraryController::class)->names('api.skill_library');
 Route::get('/positions', [InterviewController::class, 'getPositions']);
 Route::get('/interviewers', [InterviewController::class, 'getInterviewers']);
-Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings']);
+Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings'])->middleware('api.token');
 
 Route::get('/interview-panel/users', [talent_interviewpanelController::class, 'getInterviewers']);
 Route::post('/interview-panel/store', [talent_interviewpanelController::class, 'storeinterviewer']);
@@ -819,7 +870,13 @@ Route::post('/interviews/{id}/decision', [InterviewController::class, 'recordDec
 Route::get('/kpis', [EmployeeSkillCoverageMatrixController::class, 'getKpiMetrics']);
 Route::get('/skill-gaps', [EmployeeSkillCoverageMatrixController::class, 'skillGaps']);
 
-Route::group(['prefix' => 'reports'], function () {
+// Workforce reporting: headcount, growth, attrition, lifecycle, skill coverage.
+// Every endpoint in here reads organisation-wide employee data, so all of them
+// need a token. Without one the controllers already resolved a null tenant and
+// returned an empty set - safe, but a 200 with `data: []` reads as "your
+// organisation has no employees" rather than "you are not signed in", which
+// hides authentication failures from callers.
+Route::group(['prefix' => 'reports', 'middleware' => 'api.token'], function () {
     Route::get('/kpi', [KpiController::class, 'index']);
     Route::get('/hiring-analytics', [HiringAnalyticsController::class, 'getHiringTrends']);
     Route::get('/departments/distribution', [DepartmentDistributionController::class, 'index']);
@@ -839,14 +896,14 @@ Route::group(['prefix' => 'reports'], function () {
     Route::get('/employee-directory/skills/matrix', [EmployeeDirectoryAnalyticsController::class, 'getSkillMatrix']);
 });
 
-Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze']);
-Route::post('/gemini/save-jd', [SaveJDController::class, 'save']);
-Route::post('/gemini/generate-questions', [GenerateQuestionsController::class, 'generate']);
+Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze'])->middleware('api.token');
+Route::post('/gemini/save-jd', [SaveJDController::class, 'save'])->middleware('api.token');
+Route::post('/gemini/generate-questions', [GenerateQuestionsController::class, 'generate'])->middleware('api.token');
 
-Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks']);
-Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills']);
+Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks'])->middleware('api.token');
+Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills'])->middleware('api.token');
 
-Route::post('/employee/course-suggestions', [SuggestedCourseController::class, 'store']);
+Route::post('/employee/course-suggestions', [SuggestedCourseController::class, 'store'])->middleware('api.token');
 
 // Task API Routes
 Route::get('/tasks/counts', [TaskController::class, 'getTaskCounts']);
@@ -958,14 +1015,14 @@ Route::post('/school-setup', [SchoolSetupController::class, 'store']);
 
 
 Route::post('/user-signup', [UserSignupController::class, 'store']);
-Route::get('/user-signup/{id}', [UserSignupController::class, 'show']);
-Route::put('/user-signup/{id}', [UserSignupController::class, 'update']);
-Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy']);
+Route::get('/user-signup/{id}', [UserSignupController::class, 'show'])->middleware('api.token');
+Route::put('/user-signup/{id}', [UserSignupController::class, 'update'])->middleware('api.token');
+Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy'])->middleware('api.token');
 
-Route::post('/update-fcm-token', [tbluserController::class, 'updateFcmToken']);
+Route::post('/update-fcm-token', [tbluserController::class, 'updateFcmToken'])->middleware('api.token');
 
 // Skill Heatmap API Routes
-Route::prefix('skill-heatmap')->group(function () {
+Route::prefix('skill-heatmap')->middleware('api.token')->group(function () {
     // Main heatmap data — departments × skills matrix
     Route::get('/', [SkillHeatmapController::class, 'heatmap']);
 
@@ -985,17 +1042,20 @@ Route::get('/excel-agent/template', [ExcelAutomationAgentController::class, 'dow
 // Course Recommendation API - Get courses based on logged-in user's job role
 
 // Department Job Role Export API - Export department and job role data to CSV
-Route::get('/export-department-jobroles/{subInstituteId}', [DepartmentJobRoleExportController::class, 'exportToCsv']);
+// The tenant is a path segment here and the controller has no token check of
+// its own, so this exported any organisation's departments and job roles to
+// anyone who could guess an id.
+Route::get('/export-department-jobroles/{subInstituteId}', [DepartmentJobRoleExportController::class, 'exportToCsv'])->middleware('api.token');
 
 // Template API Routes
-Route::resource('templates', TemplateController::class);
-Route::get('templates/{id}/versions', [TemplateController::class, 'versions']);
-Route::post('templates/{id}/restore/{version}', [TemplateController::class, 'restore']);
+Route::resource('templates', TemplateController::class)->middleware('api.token');
+Route::get('templates/{id}/versions', [TemplateController::class, 'versions'])->middleware('api.token');
+Route::post('templates/{id}/restore/{version}', [TemplateController::class, 'restore'])->middleware('api.token');
 
-Route::get('/career-journey', [CareerJourneyController::class, 'getCareerJourney']);
+Route::get('/career-journey', [CareerJourneyController::class, 'getCareerJourney'])->middleware('api.token');
 
 // Bulk Task Import API
-Route::post('bulk-task/import', [BulkTaskController::class, 'import']);
+Route::post('bulk-task/import', [BulkTaskController::class, 'import'])->middleware('api.token');
 // Path the legacy frontend posts deadline-extension requests to.
 Route::post('/deadline-extension', [App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController::class, 'store']);
 
@@ -1034,23 +1094,23 @@ Route::get('/performance/timeline', [PerformanceOverviewController::class, 'time
 
 // Review cycles - the cycle selector and the Create / Launch button.
 Route::get('/performance/cycles', [PerformanceCycleController::class, 'index']);
-Route::post('/performance/cycles', [PerformanceCycleController::class, 'store']);
+Route::post('/performance/cycles', [PerformanceCycleController::class, 'store'])->middleware('profile:admin,hr');
 Route::get('/performance/cycles/{id}', [PerformanceCycleController::class, 'show'])->whereNumber('id');
-Route::put('/performance/cycles/{id}', [PerformanceCycleController::class, 'update'])->whereNumber('id');
-Route::post('/performance/cycles/{id}/launch', [PerformanceCycleController::class, 'launch'])->whereNumber('id');
-Route::post('/performance/cycles/{id}/close', [PerformanceCycleController::class, 'close'])->whereNumber('id');
-Route::delete('/performance/cycles/{id}', [PerformanceCycleController::class, 'destroy'])->whereNumber('id');
+Route::put('/performance/cycles/{id}', [PerformanceCycleController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/performance/cycles/{id}/launch', [PerformanceCycleController::class, 'launch'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/performance/cycles/{id}/close', [PerformanceCycleController::class, 'close'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::delete('/performance/cycles/{id}', [PerformanceCycleController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 
 // Employee reviews - the main table, the Review Board and the sidebar.
 // Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
 Route::get('/performance/reviews/board', [PerformanceReviewController::class, 'board']);
-Route::post('/performance/reviews/bulk', [PerformanceReviewController::class, 'bulk']);
+Route::post('/performance/reviews/bulk', [PerformanceReviewController::class, 'bulk'])->middleware('profile:admin,hr');
 Route::get('/performance/reviews', [PerformanceReviewController::class, 'index']);
 Route::get('/performance/reviews/{id}', [PerformanceReviewController::class, 'show'])->whereNumber('id');
 Route::put('/performance/reviews/{id}', [PerformanceReviewController::class, 'update'])->whereNumber('id');
-Route::post('/performance/reviews/{id}/advance', [PerformanceReviewController::class, 'advance'])->whereNumber('id');
+Route::post('/performance/reviews/{id}/advance', [PerformanceReviewController::class, 'advance'])->whereNumber('id')->middleware('profile:admin,hr,manager');
 Route::post('/performance/reviews/{id}/reminder', [PerformanceReviewController::class, 'sendReminder'])->whereNumber('id');
-Route::delete('/performance/reviews/{id}', [PerformanceReviewController::class, 'destroy'])->whereNumber('id');
+Route::delete('/performance/reviews/{id}', [PerformanceReviewController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 
 // Comments / Notes and Attachments, both scoped to a review.
 Route::get('/performance/reviews/{reviewId}/notes', [PerformanceActivityController::class, 'notes'])->whereNumber('reviewId');
@@ -1165,27 +1225,27 @@ Route::delete('/talent/onboarding/documents/{id}', [OnboardingDocumentController
 
 // Mobility: internal-only job postings and the requests raised against them.
 Route::get('/talent/mobility/internal-jobs', [InternalJobController::class, 'index']);
-Route::post('/talent/mobility/internal-jobs', [InternalJobController::class, 'store']);
+Route::post('/talent/mobility/internal-jobs', [InternalJobController::class, 'store'])->middleware('profile:admin,hr');
 Route::get('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'show'])->whereNumber('id');
-Route::put('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'update'])->whereNumber('id');
-Route::delete('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'destroy'])->whereNumber('id');
+Route::put('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::delete('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 
 Route::get('/talent/mobility/requests', [MobilityRequestController::class, 'index']);
 Route::post('/talent/mobility/requests', [MobilityRequestController::class, 'store']);
 Route::get('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'show'])->whereNumber('id');
 Route::put('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'update'])->whereNumber('id');
-Route::put('/talent/mobility/requests/{id}/decision', [MobilityRequestController::class, 'decision'])->whereNumber('id');
+Route::put('/talent/mobility/requests/{id}/decision', [MobilityRequestController::class, 'decision'])->whereNumber('id')->middleware('profile:admin,hr');
 Route::delete('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'destroy'])->whereNumber('id');
 
 // Succession: critical roles and the bench behind them (the 9-box matrix).
 Route::get('/talent/succession/plans', [SuccessionPlanController::class, 'index']);
-Route::post('/talent/succession/plans', [SuccessionPlanController::class, 'store']);
+Route::post('/talent/succession/plans', [SuccessionPlanController::class, 'store'])->middleware('profile:admin,hr');
 Route::get('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'show'])->whereNumber('id');
-Route::put('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'update'])->whereNumber('id');
-Route::delete('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'destroy'])->whereNumber('id');
-Route::post('/talent/succession/plans/{id}/candidates', [SuccessionPlanController::class, 'storeCandidate'])->whereNumber('id');
-Route::put('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'updateCandidate'])->whereNumber('id');
-Route::delete('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'destroyCandidate'])->whereNumber('id');
+Route::put('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::delete('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/talent/succession/plans/{id}/candidates', [SuccessionPlanController::class, 'storeCandidate'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::put('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'updateCandidate'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::delete('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'destroyCandidate'])->whereNumber('id')->middleware('profile:admin,hr');
 
 // Offboarding: exit cases, their clearance checklist and the exit interview.
 Route::get('/talent/offboarding/cases', [OffboardingCaseController::class, 'index']);
@@ -1424,3 +1484,84 @@ Route::prefix('agentic')->group(function () {
     Route::post('/reflection/analyse', [AgenticReflectionController::class, 'analyse']);
     Route::put('/reflection/optimizations/{id}', [AgenticReflectionController::class, 'updateOptimization'])->whereNumber('id');
 });
+
+/*
+|--------------------------------------------------------------------------
+| X-06 — notifications and terminology
+|--------------------------------------------------------------------------
+| NO MIDDLEWARE GROUP, DELIBERATELY. Every method resolves the caller from
+| their own token and scopes to that person's inbox, so there is no "who may
+| call this" question separate from "whose rows come back" - the two are the
+| same question here, and the controller is the only place that can answer it.
+|
+| /api/terminology is read by screen labels and report headings, not only by
+| notifications. It is placed here because X-06 built it; the contract is the
+| path, not the namespace behind it.
+*/
+Route::get('/notifications', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'index']);
+Route::get('/notifications/unread-count', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'unreadCount']);
+Route::patch('/notifications/read-all', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'markAllRead']);
+Route::patch('/notifications/{id}/read', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'markRead'])->whereNumber('id');
+
+Route::get('/terminology', [App\Http\Controllers\Api\Notifications\TerminologyController::class, 'index']);
+Route::put('/terminology', [App\Http\Controllers\Api\Notifications\TerminologyController::class, 'update'])->middleware('profile:admin,hr');
+
+/*
+|--------------------------------------------------------------------------
+| X-16 — reporting-line assignment
+|--------------------------------------------------------------------------
+| THE WRITE PATH ReportingLineValidator NEVER HAD. F-05a asked for the
+| validator to be called from every write path that sets reporting_manager_id;
+| there were none, which is why it sat NOT STARTED from Gate B (G-ORG-01/02).
+|
+| Coverage is readable by anyone authenticated - it is a health figure, not a
+| secret. Writes need admin/hr: a reporting line decides whose data a manager
+| can see, so assigning one is a permission change in effect.
+*/
+Route::get('/reporting-line/coverage', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'coverage']);
+Route::post('/reporting-line/assign', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'assign'])->middleware('profile:admin,hr');
+Route::post('/reporting-line/bulk', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'bulkAssign'])->middleware('profile:admin,hr');
+Route::post('/reporting-line/department-head', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'setDepartmentHead'])->middleware('profile:admin,hr');
+
+// L-06 — what depends on a library row, counted BY KEY (G-LIB-09). Read-only and
+// authenticated; the controller scopes the subject to the caller's organisation.
+Route::get('/competency/library/dependants', [\App\Http\Controllers\Api\Competency\LibraryDependantsController::class, 'index']);
+
+// The 9-box's second axis (G-FLOW-26). Read-only; the controller scopes to the
+// caller's organisation. Elevated roles only - it shows every employee's rating.
+Route::get('/competency/nine-box', [\App\Http\Controllers\Api\Competency\NineBoxController::class, 'index'])->middleware('profile:admin,hr');
+
+// X-08(a) — what a seed-library import would give you, before you run it.
+// Reports only; imports nothing (G-SEED-01 R5).
+Route::get('/competency/seed-library/preview', [\App\Http\Controllers\Api\Competency\SeedLibraryPreviewController::class, 'index'])->middleware('profile:admin,hr');
+
+// X-08(b) part 1 — bring-your-own framework, DRY RUN ONLY. Writes nothing.
+// Not skillLibraryController::competencyLibraryImport, which writes flat skill
+// rows; this one is KASBA-aware across all five dimensions.
+Route::post('/competency/framework-import/dry-run', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'dryRun'])->middleware('profile:admin,hr');
+Route::post('/competency/framework-import/commit', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'commitImport'])->middleware('profile:admin,hr');
+
+// X-07d - readiness gates, admin surface. The guard is the EXISTING
+// profile:admin,hr middleware (exact role_key match, alias map for legacy
+// profiles); the controller deliberately does not re-implement it.
+Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware('profile:admin,hr');   // menuright:225,view RE-ADD WITH THE MENU
+// ⚠ THE MATRIX GUARD IS TEMPORARILY UNWIRED FROM THESE TWO ROUTES.
+//
+// They carried menuright:225,view / :225,edit. Menu 225 was created to prove the
+// guard and then ROLLED BACK - so no rights row exists, and the precedence tail
+// is DENY. The result: /api/readiness/gates returned 403 TO EVERYONE, the
+// administrator included.
+//
+// A GUARD THAT NAMES A MENU IS A DEPENDENCY ON A ROW. Committing the guard while
+// rolling back the row left a correct guard pointing at nothing, and "deny when
+// undeclared" - which is the right default - turned that into a dead endpoint.
+//
+// RE-ADD BOTH when G-NAV-02 is re-run. The guard itself is unchanged and proven;
+// only its wiring is deferred, and it is deferred because the data it depends on
+// is deliberately absent.
+// MATRIX-ENFORCED. `menuright:225,edit` consults tblgroupwise_rights_g2g: menu 225 is
+// Readiness Gates, and acknowledging is an EDIT. hr_manager holds can_view=1 and
+// can_edit=0 there, so HR is refused BY THE ROW - flip the row and the answer
+// flips. profile:admin,hr STAYS as the outer coarse guard; the menu right is the
+// finer one inside it.
+Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware('profile:admin,hr');   // menuright:225,edit RE-ADD WITH THE MENU

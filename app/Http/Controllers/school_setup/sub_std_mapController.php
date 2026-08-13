@@ -4,6 +4,7 @@ namespace App\Http\Controllers\school_setup;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\lms\chapterModel;
 use App\Models\lms\lmsContentCategoryModel;
 use App\Models\HRMS\hrmsDepartmentModel;
@@ -17,6 +18,24 @@ use Illuminate\Support\Facades\Storage;
 
 class sub_std_mapController extends Controller
 {
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
+    use ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         $data = $this->getData($request);
@@ -31,7 +50,7 @@ class sub_std_mapController extends Controller
     public function getData($request)
     {
         if($request->input('type') == "API"){
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }else{
             $sub_institute_id = $request->session()->get('sub_institute_id');
         }
@@ -93,7 +112,7 @@ class sub_std_mapController extends Controller
         //echo "<pre>";print_r($request->all());exit;
         $type = $request->input('type');
         if($type == "API"){
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $standard_id = (array) $request->input('standard_id');
 
         }else{

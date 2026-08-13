@@ -19,6 +19,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $sid = $context['sub_institute_id'];
 
         // 1. Fetch User Data using the actual tbluser column names
@@ -207,6 +214,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $sid = $context['sub_institute_id'];
 
         $existingSkillIds = DB::table('s_skill_matrix')
@@ -242,6 +256,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $validator = Validator::make($request->all(), [
             'skill_id' => 'required|integer',
             'skill_level' => 'required|integer|min:1|max:5',
@@ -274,7 +295,17 @@ class EmployeeCompetencyProfileController extends Controller
             'skill_id' => $request->input('skill_id'),
             'skill_level' => $request->input('skill_level'),
             'interest_level' => $request->input('interest_level', 0),
-            'type' => 'competency',
+            // s_skill_matrix.type is an ENUM('skill','knowledge','ability',
+            // 'attitude','behaviour') - it names which KASBA dimension the row
+            // records, not what the screen calls the action. 'competency' is
+            // not a member, so with STRICT_TRANS_TABLES active (it is on this
+            // server) MySQL rejected the whole INSERT and adding a competency
+            // rating always failed. Nothing in the table carries 'competency':
+            // 146 rows are 'skill', 23 are NULL, none are 'competency'.
+            //
+            // A competency rating IS a skill row - SkillMatrixController, the
+            // writer that works, uses the same vocabulary.
+            'type' => 'skill',
             'created_by' => $context['user_id'],
             'updated_by' => $context['user_id'],
             'created_at' => now(),
@@ -312,6 +343,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $validator = Validator::make($request->all(), [
             'skill_level' => 'required|integer|min:1|max:5',
         ]);
@@ -376,6 +414,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         // Since we don't have a dedicated history table, return the current entry
         // along with activity log entries for this skill.
         $current = DB::table('s_skill_matrix as m')
@@ -444,6 +489,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $row = DB::table('s_competency_employee_notes')
             ->where('sub_institute_id', $context['sub_institute_id'])
             ->where('user_id', $id)
@@ -465,6 +517,13 @@ class EmployeeCompetencyProfileController extends Controller
         $context = $this->competencyContext($request);
         if (!is_array($context)) {
             return $context;
+        }
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
         }
         $sid = $context['sub_institute_id'];
 
@@ -522,6 +581,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $rows = DB::table('s_competency_certifications')
             ->where('sub_institute_id', $context['sub_institute_id'])
             ->where('user_id', $id)
@@ -550,6 +616,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $rows = DB::table('s_competency_development_plans')
             ->where('sub_institute_id', $context['sub_institute_id'])
             ->where('user_id', $id)
@@ -577,6 +650,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $rows = DB::table('s_competency_evidence as e')
             ->leftJoin('s_users_skills as s', 's.id', '=', 'e.competency_id')
             ->where('e.sub_institute_id', $context['sub_institute_id'])
@@ -605,6 +685,13 @@ class EmployeeCompetencyProfileController extends Controller
         $context = $this->competencyContext($request);
         if (!is_array($context)) {
             return $context;
+        }
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
         }
         $sid = $context['sub_institute_id'];
 
@@ -647,6 +734,13 @@ class EmployeeCompetencyProfileController extends Controller
             return $context;
         }
 
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
+        }
         $evidence = DB::table('s_competency_evidence')
             ->where('id', $evidenceId)->where('user_id', $id)
             ->where('sub_institute_id', $context['sub_institute_id'])->whereNull('deleted_at')->first();
@@ -681,6 +775,13 @@ class EmployeeCompetencyProfileController extends Controller
         $context = $this->competencyContext($request);
         if (!is_array($context)) {
             return $context;
+        }
+
+        // G-COMP-SEC-01: $id is a route parameter. Resolve it to a subject
+        // the caller is actually allowed to act on, or refuse.
+        $id = $this->competencySubject($context, $id);
+        if (!is_int($id)) {
+            return $id;
         }
         $sid = $context['sub_institute_id'];
 

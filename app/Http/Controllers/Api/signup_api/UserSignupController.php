@@ -11,6 +11,8 @@ use App\Models\auth\academicSectionModel;
 
 class UserSignupController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
     /**
      * Store a newly created user and academic year.
      *
@@ -101,10 +103,32 @@ class UserSignupController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function show($id)
+    /**
+     * G-SEC-23, CHAIN B — AUTHENTICATED AND THEN NOT TENANT-SCOPED.
+     *
+     * This route carries `api.token` (routes/api.php:967), so a reviewer
+     * skimming the route file would call it guarded - and it IS authenticated.
+     * It simply never asked which organisation the caller belongs to: the method
+     * did not even receive the Request, and `find($id)` returned any user in the
+     * database. An Employee in tenant 7 read tenant 3's full user record,
+     * 4,224 bytes with profile, organization and client relations attached.
+     *
+     * THE FIX IS NOT "ADD AUTH". It is the missing layer of G-SEC-09, in a place
+     * that looks protected.
+     */
+    public function show(Request $request, $id)
     {
         try {
-            $user = tbluserModel::with('userProfile', 'organization', 'client', 'yearData')->find($id);
+            $subInstituteId = $this->apiTenantId($request);
+
+            if (!$subInstituteId) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $user = tbluserModel::with('userProfile', 'organization', 'client', 'yearData')
+                ->where('id', $id)
+                ->where('sub_institute_id', $subInstituteId)
+                ->first();
 
             if (!$user) {
                 return response()->json([

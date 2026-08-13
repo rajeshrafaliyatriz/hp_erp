@@ -171,7 +171,12 @@ class LeaveRequestApiController extends Controller
             ], 422);
         }
 
-        $userId = (int) ($request->input('employee_id') ?: $context['user_id']);
+        // G-LEAVE-SEC-01: request-first with a safe-looking fallback.
+        // The subject is now resolved AGAINST the caller, not merged with them.
+        $userId = $this->leaveSubject($request, $context);
+        if (!is_int($userId)) {
+            return $userId;
+        }
 
         if (!$userId) {
             return response()->json(['status' => 0, 'message' => 'Unable to resolve the employee for this request'], 422);

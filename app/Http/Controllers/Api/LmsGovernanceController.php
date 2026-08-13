@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Administration & Governance - users, roles, the permission matrix, audit and
@@ -25,25 +25,18 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 class LmsGovernanceController extends Controller
 {
+    use ResolvesLmsIdentity;
+
     /** Profiles permitted to administer users, roles and permissions. */
     private const ADMIN_PROFILES = ['admin', 'hr', 'super', 'principal'];
 
     private function guardApiToken(Request $request)
     {
-        if ($request->input('type') !== 'API') {
-            return null;
-        }
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-        }
-
-        return null;
+        // Was: `if ($request->input('type') !== 'API') return null;` followed by
+        // a token check that discarded the token's owner. Omitting `type`
+        // skipped authentication entirely. Identity now always comes from the
+        // token - see ResolvesLmsIdentity.
+        return $this->guardLmsToken($request);
     }
 
     /**
@@ -55,97 +48,94 @@ class LmsGovernanceController extends Controller
      */
     private function guardAdmin(Request $request)
     {
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
-
-        foreach (self::ADMIN_PROFILES as $allowed) {
-            if ($profile !== '' && str_contains($profile, $allowed)) {
-                return null;
-            }
-        }
-
-        return response()->json([
-            'status' => false,
-            'message' => 'Your profile is not permitted to administer this institute.',
-        ], 403);
+        // The profile now comes from the caller's tbluser row, not from
+        // a `user_profile_name` they supplied themselves.
+        return $this->guardLmsProfile($request, self::ADMIN_PROFILES, 'Your profile is not permitted to administer this institute.');
     }
 
     private function tenantId(Request $request)
     {
-        return $request->input('sub_institute_id') ?: $request->header('sub_institute_id');
+        // The caller's own organisation, from their token - not from whatever
+        // sub_institute_id the request asked for.
+        return $this->lmsTenantId($request);
     }
 
     /**
-     * Scope a hpbrain_audit_logs query to one tenant.
+     * Scope a `g2g_audit_log` query to one tenant.
      *
-     * That table predates the sub_institute_id convention: its tenant_id is a
-     * string of the form "t1", not the numeric institute id. Matching on the
-     * raw number therefore returns nothing, and matching on nothing at all -
-     * which the KPI first did - counts every other tenant's activity. Both
-     * spellings are accepted so the column can be normalised later without
-     * this breaking.
+     * C-SEP-01 / G-XPROD-01. This previously scoped `hpbrain_audit_logs`, whose
+     * tenant_id is the string "t1" rather than the numeric institute id - and
+     * matching that spelling is CORRECT WITHIN G2G but MEANINGLESS ACROSS
+     * PRODUCTS. HP Brain uses the same column for its own tenants, so a G2G
+     * administrator was shown 141 of HP Brain's Person and Department rows.
+     *
+     * `g2g_audit_log` is G2G's own projection, keyed on the numeric
+     * sub_institute_id, so one plain comparison is the whole scope.
      */
     private function scopeAuditToTenant($query, $subInstituteId)
     {
-        return $query->where(function ($scope) use ($subInstituteId) {
-            $scope->where('tenant_id', $subInstituteId)
-                  ->orWhere('tenant_id', 't' . $subInstituteId);
-        });
+        return $query->where('sub_institute_id', (int) $subInstituteId);
     }
 
     /**
-     * Record an administrative change in hpbrain_audit_logs.
+     * Record an administrative change as a G2G EVENT.
      *
-     * The Audit tab had nothing to show because nothing wrote to that table
-     * from this module - it was populated only by other subsystems. Every
-     * privileged write here now leaves a trail, which is the point of having an
-     * audit surface at all.
+     * C-SEP-01. This used to INSERT into `hpbrain_audit_logs` - another product's
+     * table, in a shared schema. Q-C4 rules that out: G2G and HP Brain stay
+     * separate and integration is API-only, so a planned integration through a
+     * shared table is precisely what the decision forbids.
      *
-     * Deliberately best-effort: a failure to log must not roll back or fail the
-     * change the administrator actually asked for, so it is swallowed. It is
-     * also called after the write succeeds, never before, so the log cannot
-     * claim something that did not happen.
+     * THE CROSS-WRITE HAD NEVER FIRED. G2G writes entity types `user`, `role`,
+     * `permission_matrix`; every one of the 342 stored rows is `Person`,
+     * `Department`, `Organization`, `Capability` or `Authorization` - HP Brain's
+     * vocabulary. Zero overlap. A latent coupling, not an integration anyone
+     * depended on, which is why removal is risk-free.
      *
-     * `changes` records what was altered. Never pass a password, hashed or not.
+     * `hpbrain_audit_logs` and its 342 rows are UNTOUCHED - not copied, not
+     * cleaned, not deleted.
+     *
+     * The event is the record; `g2g_audit_log` is a projection of it
+     * (05-data-flow-contracts.md §1) - the same shape as TaskAuditService's
+     * conversion, which is built and verified.
+     *
+     * Best-effort, as before: a failure to log must not roll back the change the
+     * administrator asked for, and it runs AFTER that write succeeds so the log
+     * cannot claim something that did not happen.
      */
     private function audit(Request $request, string $entityType, $entityId, string $action, array $changes = []): void
     {
         try {
-            DB::table('hpbrain_audit_logs')->insert([
-                // id is varchar(36) with no auto-increment - this table is
-                // UUID-keyed, so the id has to be supplied rather than left to
-                // the database. event_id gets its own UUID so a single logical
-                // event can later be correlated across sources.
-                'id'          => (string) \Illuminate\Support\Str::uuid(),
-                'event_id'    => (string) \Illuminate\Support\Str::uuid(),
-                // The column stores "t{id}"; see scopeAuditToTenant.
-                'tenant_id'   => 't' . $this->tenantId($request),
-                'entity_type' => $entityType,
-                'entity_id'   => (string) $entityId,
-                'action'      => $action,
-                'actor_id'    => $request->input('user_id'),
-                'actor_name'  => $request->input('user_profile_name'),
-                'changes'     => $changes ? json_encode($changes) : null,
-                'ip_address'  => $request->ip(),
-                'user_agent'  => substr((string) $request->userAgent(), 0, 500),
-                'source'      => 'lms-governance',
-                'status'      => 'success',
-                'created_at'  => now(),
-            ]);
-        } catch (\Exception $e) {
-            // Intentionally ignored - see the note above.
+            $identity = $this->lmsIdentity($request);
+            $identity = is_array($identity) ? $identity : [];
+
+            $tenantId = (int) $this->tenantId($request);
+            if (!$tenantId) {
+                return;
+            }
+
+            app(\App\Services\Events\EventRecorder::class)->record(
+                type: 'governance.' . $entityType . '.' . $action,
+                subInstituteId: $tenantId,
+                entityType: $entityType,
+                entityId: is_numeric($entityId) ? (int) $entityId : null,
+                actorId: $identity['user_id'] ?? null,
+                payload: [
+                    'action'     => $action,
+                    'entity_id'  => (string) $entityId,
+                    'actor_name' => $identity['profile_name'] ?? null,
+                    'changes'    => $changes ?: null,
+                ],
+                metadata: [
+                    'ip'         => $request->ip(),
+                    'user_agent' => substr((string) $request->userAgent(), 0, 255),
+                ],
+            );
+
+            app(\App\Services\Events\AuditLogProjector::class)->catchUp();
+        } catch (\Throwable $e) {
+            // swallowed, as before
         }
     }
-
-    private function fail(\Exception $e, string $message)
-    {
-        return response()->json([
-            'status' => false,
-            'message' => $message,
-            'error' => $e->getMessage(),
-        ], 500);
-    }
-
-    /* ─── KPIs ─────────────────────────────────────────────────────────────── */
 
     /**
      * GET /api/lms/governance/kpis
@@ -209,8 +199,8 @@ class LmsGovernanceController extends Controller
                     // The card is labelled "Total Logs (30 Days)". Scoped to
                     // this tenant, so it cannot count another institute's rows.
                     'audit_logs' => $this->scopeAuditToTenant(
-                        DB::table('hpbrain_audit_logs'), $subInstituteId
-                    )->where('created_at', '>=', $auditWindow)->count(),
+                        DB::table('g2g_audit_log'), $subInstituteId
+                    )->where('occurred_at', '>=', $auditWindow)->count(),
                 ],
             ]);
         } catch (\Exception $e) {
@@ -387,7 +377,7 @@ class LmsGovernanceController extends Controller
                 'department_id'   => $request->input('department_id'),
                 'status'          => (int) $request->input('status', 1),
                 'sub_institute_id' => $subInstituteId,
-                'created_by'      => $request->input('user_id'),
+                'created_by'      => $this->contextUserId($request),
                 'created_at'      => now(),
                 'updated_at'      => now(),
             ]);
@@ -449,7 +439,7 @@ class LmsGovernanceController extends Controller
                 'user_profile_id' => $request->input('user_profile_id'),
                 'department_id'   => $request->input('department_id'),
                 'status'          => (int) $request->input('status', $user->status),
-                'updated_by'      => $request->input('user_id'),
+                'updated_by'      => $this->contextUserId($request),
                 'updated_at'      => now(),
             ];
 
@@ -489,7 +479,7 @@ class LmsGovernanceController extends Controller
         }
 
         $subInstituteId = $this->tenantId($request);
-        $actorId = (int) $request->input('user_id');
+        $actorId = (int) $this->contextUserId($request);
 
         if ((int) $id === $actorId) {
             return response()->json([
@@ -670,7 +660,7 @@ class LmsGovernanceController extends Controller
                 'user_profile_id' => $request->input('user_profile_id'),
                 'sub_institute_id' => $subInstituteId,
                 'status' => 1,
-                'created_by' => $request->input('user_id'),
+                'created_by' => $this->contextUserId($request),
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
@@ -1087,8 +1077,7 @@ class LmsGovernanceController extends Controller
     /**
      * GET /api/lms/governance/audit-logs
      *
-     * hpbrain_audit_logs is the structured trail (entity, action, actor,
-     * changes). tbl_user_journey_logs records navigation, which is a different
+     * g2g_audit_log is G2G's OWN structured trail, projected from g2g_event. tbl_user_journey_logs records navigation, which is a different
      * question, so it is surfaced as a separate count rather than merged in.
      */
     public function auditLogs(Request $request)
@@ -1112,19 +1101,19 @@ class LmsGovernanceController extends Controller
             // Null tenant_id rows are platform-level events, which an admin of
             // any tenant may see.
             $query = $this->scopeAuditToTenant(
-                DB::table('hpbrain_audit_logs'), $subInstituteId
+                DB::table('g2g_audit_log'), $subInstituteId
             );
 
             if ($search = trim((string) $request->input('search', ''))) {
                 $query->where(function ($q) use ($search) {
                     $q->where('entity_type', 'like', "%{$search}%")
-                      ->orWhere('action', 'like', "%{$search}%")
-                      ->orWhere('actor_name', 'like', "%{$search}%");
+                      ->orWhere('type', 'like', "%{$search}%")
+                      ->orWhere('detail', 'like', "%{$search}%");
                 });
             }
 
             if ($action = $request->input('action')) {
-                $query->where('action', $action);
+                $query->whereRaw("SUBSTRING_INDEX(type, '.', -1) = ?", [$action]);
             }
 
             if ($entityType = $request->input('entity_type')) {
@@ -1132,16 +1121,25 @@ class LmsGovernanceController extends Controller
             }
 
             if ($from = $request->input('from')) {
-                $query->where('created_at', '>=', $from);
+                $query->where('occurred_at', '>=', $from);
             }
 
             if ($to = $request->input('to')) {
-                $query->where('created_at', '<=', $to . ' 23:59:59');
+                $query->where('occurred_at', '<=', $to . ' 23:59:59');
             }
 
-            $logs = $query->orderByDesc('created_at')->paginate($perPage, [
-                'id', 'entity_type', 'entity_id', 'action', 'actor_id', 'actor_name',
-                'ip_address', 'status', 'source', 'created_at',
+            // g2g_audit_log carries the EVENT's shape. `action` rides in `type`
+            // (governance.user.create) and actor_name lives in the projected
+            // payload, so both are derived rather than stored twice.
+            $logs = $query->orderByDesc('occurred_at')->paginate($perPage, [
+                'id',
+                'entity_type',
+                'entity_id',
+                DB::raw("SUBSTRING_INDEX(type, '.', -1) as action"),
+                'actor_id',
+                DB::raw("JSON_UNQUOTE(JSON_EXTRACT(detail, '$.actor_name')) as actor_name"),
+                DB::raw("'g2g' as source"),
+                DB::raw('occurred_at as created_at'),
             ]);
 
             return response()->json([
@@ -1158,10 +1156,11 @@ class LmsGovernanceController extends Controller
                 ],
                 'filters' => [
                     'actions' => $this->scopeAuditToTenant(
-                        DB::table('hpbrain_audit_logs'), $subInstituteId
-                    )->whereNotNull('action')->distinct()->orderBy('action')->pluck('action'),
+                        DB::table('g2g_audit_log'), $subInstituteId
+                    )->selectRaw("DISTINCT SUBSTRING_INDEX(type, '.', -1) as action")
+                     ->orderBy('action')->pluck('action'),
                     'entity_types' => $this->scopeAuditToTenant(
-                        DB::table('hpbrain_audit_logs'), $subInstituteId
+                        DB::table('g2g_audit_log'), $subInstituteId
                     )->whereNotNull('entity_type')->distinct()->orderBy('entity_type')->pluck('entity_type'),
                 ],
             ]);

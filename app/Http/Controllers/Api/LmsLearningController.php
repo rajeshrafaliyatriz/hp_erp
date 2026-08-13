@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * My Learning - the course player.
@@ -22,54 +22,37 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 class LmsLearningController extends Controller
 {
+    use ResolvesLmsIdentity;
+
     /** Profiles allowed to author course content. */
     private const AUTHORING_PROFILES = ['admin', 'hr'];
 
     private function guardApiToken(Request $request)
     {
-        if ($request->input('type') !== 'API') {
-            return null;
-        }
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-        }
-
-        return null;
+        // Was: `if ($request->input('type') !== 'API') return null;` followed by
+        // a token check that discarded the token's owner. Omitting `type`
+        // skipped authentication entirely. Identity now always comes from the
+        // token - see ResolvesLmsIdentity.
+        return $this->guardLmsToken($request);
     }
 
     private function guardAuthoring(Request $request)
     {
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
-        if ($profile === '') {
-            return null;
-        }
-
-        foreach (self::AUTHORING_PROFILES as $allowed) {
-            if (str_contains($profile, $allowed)) {
-                return null;
-            }
-        }
-
-        return response()->json([
-            'status' => false,
-            'message' => 'Your profile is not permitted to edit course content.',
-        ], 403);
+        // The profile now comes from the caller's tbluser row, not from
+        // a `user_profile_name` they supplied themselves.
+        return $this->guardLmsProfile($request, self::AUTHORING_PROFILES, 'Your profile is not permitted to edit course content.');
     }
 
     private function tenantId(Request $request)
     {
-        return $request->sub_institute_id ?? $request->header('sub_institute_id');
+        // The caller's own organisation, from their token - not from whatever
+        // sub_institute_id the request asked for.
+        return $this->lmsTenantId($request);
     }
 
     private function requireUser(Request $request)
     {
-        return $request->user_id ?? $request->header('user_id');
+        return $this->contextUserId($request);
     }
 
     /**
@@ -1111,8 +1094,11 @@ class LmsLearningController extends Controller
 
         $userId = $this->requireUser($request);
         $subInstituteId = $this->tenantId($request);
-        $isAdmin = $this->guardAuthoring($request) === null
-            && trim((string) $request->input('user_profile_name', '')) !== '';
+        // guardAuthoring() now refuses an unresolvable profile outright, so its
+        // passing already means admin/hr. The old second clause re-read
+        // user_profile_name from the request and would have downgraded a real
+        // admin who simply did not send the parameter.
+        $isAdmin = $this->guardAuthoring($request) === null;
 
         $certificate = DB::table('lms_certificates as c')
             ->leftJoin('tbluser as u', 'u.id', '=', 'c.user_id')
@@ -1263,9 +1249,9 @@ class LmsLearningController extends Controller
                 'status' => 'active',
                 'supersedes' => $original->id,
                 'reissued_at' => $now,
-                'reissued_by' => $request->user_id,
+                'reissued_by' => $this->contextUserId($request),
                 'sub_institute_id' => $subInstituteId,
-                'created_by' => $request->user_id,
+                'created_by' => $this->contextUserId($request),
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
@@ -1274,7 +1260,7 @@ class LmsLearningController extends Controller
             DB::table('lms_certificates')->where('id', $original->id)->update([
                 'superseded_by' => $newId,
                 'status' => 'superseded',
-                'updated_by' => $request->user_id,
+                'updated_by' => $this->contextUserId($request),
                 'updated_at' => $now,
             ]);
 
@@ -1533,15 +1519,17 @@ class LmsLearningController extends Controller
 
     private function isInstructor(Request $request): bool
     {
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
+        // Was read from $request->input('user_profile_name'), so any caller
+        // could claim to be an instructor. Resolved from the token's user now.
+        $identity = $this->lmsIdentity($request);
 
-        foreach (self::AUTHORING_PROFILES as $allowed) {
-            if (str_contains($profile, $allowed)) {
-                return true;
-            }
+        if (!is_array($identity)) {
+            return false;
         }
 
-        return false;
+        // G-AUTH-02: exact role_key match, shared with guardLmsProfile so the
+        // two gates cannot drift apart.
+        return $this->lmsRoleMatches($identity['user'], self::AUTHORING_PROFILES);
     }
 
     /** GET /api/lms/learning/discussions - threads for a course, with replies. */

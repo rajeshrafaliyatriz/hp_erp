@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -14,6 +15,24 @@ use Storage;
 
 class talent_jobapplicationcontroller extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     public function index(request $request)
     {
         {
@@ -44,7 +63,7 @@ class talent_jobapplicationcontroller extends Controller
                     ], 400);
                 }
 
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->apiTenantId($request);
 
                 // fetch jobrole data from table
                 $talent = DB::table('talent_job_applications as a')
@@ -94,7 +113,7 @@ class talent_jobapplicationcontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         // Validation rules
         $validator = Validator::make($request->all(), [
@@ -161,7 +180,7 @@ class talent_jobapplicationcontroller extends Controller
                 'applied_date'     => $request->applied_date,
                 'status'           => $request->status,
                 'sub_institute_id' => $sub_institute_id,
-                'created_by'       => $request->user_id,
+                'created_by'       => $this->g2gActorId($request),
             ]);
 
             if ($objtalent->save()) {
@@ -214,7 +233,7 @@ class talent_jobapplicationcontroller extends Controller
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // 🧩 Fetch single application with job details
             $application = DB::table('talent_job_applications as a')
@@ -440,7 +459,7 @@ public function updateStatus(Request $request, $id)
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // 🔍 Find the application
             $application = \App\Models\talent\talent_jobapplication::where([
@@ -510,7 +529,7 @@ public function getCandidateApplications(Request $request, $candidate_id)
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // 🧠 Fetch applications for the given candidate
             $applications = DB::table('talent_job_applications as a')
@@ -587,7 +606,7 @@ public function getShortlistedCandidates(Request $request)
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // 🧠 Fetch shortlisted applications
             $applications = DB::table('talent_job_applications as a')
