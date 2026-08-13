@@ -149,20 +149,47 @@ class JobroleTaskCompetencyMapController extends Controller
             ], 422);
         }
 
+        // CHANGED FROM APPEND TO SYNC 2026-08-13, and the reason is the same one
+        // the course map carries: A COMPETENCY REMOVED FROM A TASK MUST STOP
+        // COUNTING. An append-only writer gives a user no way to unsay something -
+        // the row would survive every later save and keep contributing to the
+        // task's competency signal with nothing in the UI able to remove it.
+        //
+        // SAFE TO CHANGE: the table holds 0 rows, so no existing mapping depends
+        // on the old behaviour. Left as append it would have shipped a third
+        // writer whose save button means something different from the other two.
+        //
+        // Rows absent from `items` are deleted for THIS task and THIS tenant,
+        // never wider.
         $now = now();
-        DB::transaction(function () use ($seen, $sid, $taskId, $now) {
+        $result = DB::transaction(function () use ($seen, $sid, $taskId, $now) {
+            $removed = DB::table('jobrole_task_competency_map')
+                ->where('sub_institute_id', $sid)
+                ->where('jobrole_task_id', $taskId)
+                ->whereNotIn('competency_id', array_keys($seen))
+                ->delete();
+
             foreach (array_keys($seen) as $cid) {
                 DB::table('jobrole_task_competency_map')->updateOrInsert(
                     ['sub_institute_id' => $sid, 'jobrole_task_id' => $taskId, 'competency_id' => $cid],
                     ['updated_at' => $now, 'created_at' => $now]
                 );
             }
+
+            return $removed;
         });
 
         $count = DB::table('jobrole_task_competency_map')
             ->where('sub_institute_id', $sid)->where('jobrole_task_id', $taskId)->count();
 
-        return response()->json(['status' => 1, 'message' => 'Saved.', 'mapped' => $count]);
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Saved.',
+            'mapped'  => $count,
+            // Reported so the screen can say it in words: a silent deletion is
+            // worse than no deletion, and this endpoint now deletes.
+            'removed' => $result,
+        ]);
     }
 
     public function destroy(Request $request, $id)
