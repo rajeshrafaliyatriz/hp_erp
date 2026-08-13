@@ -186,6 +186,99 @@ class AiAssessmentController extends Controller
     }
 
     /**
+     * POST /competency/ai-assessment/publish — make a draft visible to employees.
+     *
+     * Body: test_id, [publish=true|false]
+     *
+     * WHY THIS EXISTS AS ITS OWN STEP: generate() writes a DRAFT. Without a
+     * publish step a generated test can never reach anybody, which is the state
+     * this feature shipped in until now. It is deliberately not automatic —
+     * an LLM wrote these questions and a person should look at them before an
+     * employee is assessed on them.
+     *
+     * ONE PUBLISHED TEST PER JOB ROLE. Publishing supersedes any other published
+     * test for that role rather than adding a second, because mine() returns the
+     * latest and two live tests would make which-one-you-get a matter of ordering.
+     * THE SUPERSEDED COUNT IS RETURNED IN WORDS, never silently.
+     *
+     * Unpublishing is supported (publish=false) and is NOT a delete: responses
+     * already recorded are untouched.
+     */
+    public function publish(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'test_id' => 'required|integer',
+            'publish' => 'nullable|boolean',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $sid    = (int) $context['sub_institute_id'];
+        $testId = $request->integer('test_id');
+        $wants  = $request->boolean('publish', true);
+
+        $test = DB::table('competency_assessment_test')
+            ->where('id', $testId)->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->first(['id', 'jobrole_id', 'status', 'title']);
+
+        if (!$test) {
+            return response()->json(['status' => 0, 'message' => 'Assessment not found.'], 404);
+        }
+
+        // A test with no questions cannot be published. It would appear to an
+        // employee as an empty exam - present-looking and assessing nothing,
+        // which is the failure this whole feature is built to refuse.
+        $questions = DB::table('competency_assessment_question')->where('test_id', $testId)->count();
+        if ($wants && $questions === 0) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'This assessment has no questions, so it cannot be published.',
+                'reason'  => 'no_questions',
+            ], 422);
+        }
+
+        $superseded = 0;
+        DB::transaction(function () use (&$superseded, $sid, $test, $wants) {
+            if ($wants) {
+                $superseded = DB::table('competency_assessment_test')
+                    ->where('sub_institute_id', $sid)
+                    ->where('jobrole_id', $test->jobrole_id)
+                    ->where('id', '!=', $test->id)
+                    ->where('status', 'published')
+                    ->update(['status' => 'superseded', 'updated_at' => now()]);
+            }
+
+            DB::table('competency_assessment_test')->where('id', $test->id)->update([
+                'status'       => $wants ? 'published' : 'draft',
+                'published_at' => $wants ? now() : null,
+                'updated_at'   => now(),
+            ]);
+        });
+
+        return response()->json([
+            'status' => 1,
+            'data'   => [
+                'test_id'    => $test->id,
+                'jobrole_id' => (int) $test->jobrole_id,
+                'status_is'  => $wants ? 'published' : 'draft',
+                'questions'  => $questions,
+                'superseded' => $superseded,
+            ],
+            'message' => $wants
+                ? ($superseded > 0
+                    ? "Published. {$superseded} previously published assessment(s) for this job role were superseded and are no longer shown to employees. Their recorded answers are untouched."
+                    : 'Published. Employees in this job role can now see it.')
+                : 'Unpublished. Employees can no longer see it. Answers already recorded are untouched.',
+        ]);
+    }
+
+    /**
      * GET /competency/ai-assessment/mine — TAKES NO SUBJECT.
      *
      * The published test for the caller's own job role, without answers. A

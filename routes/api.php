@@ -1583,3 +1583,6 @@ Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness
 Route::post('/competency/ai-assessment/generate', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'generate'])->middleware('profile:admin,hr');
 Route::get('/competency/ai-assessment/mine', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'mine'])->middleware('api.token');
 Route::post('/competency/ai-assessment/submit', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'submit'])->middleware('api.token');
+// PUBLISH is admin/hr and deliberately separate from generate(): an LLM wrote the
+// questions and a person should read them before an employee is assessed on them.
+Route::post('/competency/ai-assessment/publish', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'publish'])->middleware('profile:admin,hr');
