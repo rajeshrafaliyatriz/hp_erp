@@ -7790,6 +7790,43 @@ found the controller already existed.
 
 ---
 
+# ONLY A TOOL THAT MUST BE BYPASSED SURVIVES
+
+**Six instances, and the remedy was wrong for the sixth.**
+
+    A rule in prose does not survive contact with the point of use.
+    NEITHER DOES A TOOL THAT MUST BE CHOSEN.
+    Only a tool that must be BYPASSED survives.
+
+**The sixth instance proves the distinction.** The remedy for instances 1-5 was
+*make it unskippable* - and what was built was , which is
+**available but optional**.  remained the default path, so using the remedy
+took deliberate action. **A second rule wearing a tool's clothes.**
+
+    STRUCTURAL means USING IT IS THE DEFAULT PATH and SKIPPING IT TAKES
+    DELIBERATE ACTION.
+    It does not mean the safe option exists.
+
+**Built: ** - takes the message on stdin via heredoc, refuses an
+empty one, prints what it is about to commit, and commits from a file. There is no
+ to reach past.
+
+## AND THE R30 WRAPPER HAS THE SAME WEAKNESS - **reported, not fixed**
+
+The R30 guard in the suite is a **DETECTOR, NOT A PREVENTER.** It parses every
+evidence script and fails if one is mangled. **Writing a script to a file instead
+of a heredoc is still a per-script choice**, and the guard only speaks on the next
+suite run.
+
+**That is better than nothing and it is not structural.** It will fail exactly the
+way  did - on a turn when something is already going wrong, which is when it
+matters. The structural version is a runner that is the ONLY way a script gets
+executed, and that needs design rather than a quick fix.
+
+**Left as a detector, deliberately, with its weakness named.**
+
+---
+
 # THE OLD ARTEFACT LEFT ALONGSIDE THE NEW ONE
 
 **Nothing in the file says which style is live.**
