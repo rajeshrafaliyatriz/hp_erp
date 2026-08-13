@@ -7790,6 +7790,31 @@ found the controller already existed.
 
 ---
 
+# THE MISSING VERDICT IS NEVER ABSENT-LOOKING
+
+**The mechanism of the whole family, and what makes it FINDABLE rather than only
+recognisable afterwards.**
+
+**A third outcome does not appear as a gap. It is ABSORBED SILENTLY into one of the
+two verdicts that exist, so the instrument reads as complete.**
+
+    a killed write        was absorbed into SUCCESS      exit 0
+    an unchecked item_id  was absorbed into VALIDATED    it stored the id
+    a raw-pattern test    was absorbed into VERIFIED     the negative "passed"
+    an unfinished write   would be absorbed into FAILED  -17,229 divergence
+    a stuck process       would be absorbed into DEAD    static count
+
+**IN EVERY CASE THE READER SAW A VERDICT, NOT A MISSING ONE.** Nothing looked
+incomplete, nothing errored, nothing was blank. That is why five instances passed
+review by people actively looking for defects.
+
+## HOW TO FIND IT RATHER THAN RECOGNISE IT
+
+**Ask of any check: how many outcomes can the WORLD produce here, and how many can
+this instrument express?** Not "is the check right" - **count its verdicts against
+reality's.** Every instance above was a two-verdict instrument over a three-outcome
+world, and the count is answerable before the check is ever run.
+
 # THE FAILURE MODE DOES NOT STAY IN ONE LAYER
 
 **Two verdicts over three outcomes, fifth appearance - and the first OUTSIDE THE
