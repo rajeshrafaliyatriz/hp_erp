@@ -12,6 +12,8 @@ use DB;
 
 class HrmsLeaveController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
     //
     //use GetsJwtToken;
 
@@ -92,14 +94,25 @@ class HrmsLeaveController extends Controller
     public function store(Request $request){
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->type;
-        $sub_institute_id = $request->input('sub_institute_id');
         $syear = $request->input('syear');
         $res['formType'] =  $formType = $request->formType;
 
-        if($type=="API"){
-            
-            $sub_institute_id = $request->input('sub_institute_id');
-            $syear = $request->input('syear');            
+        // store() is reachable two ways: POST /api/designation_leave (token
+        // authenticated, see routes/api.php) and the session-authenticated
+        // resource route in routes/hrms.php. It cannot simply take the tenant
+        // from the token, because the web path has no token - and it must not
+        // take it from the request, because the API path let one organisation
+        // write leave allocations into another's departments.
+        //
+        // So: the token decides when there is one, the session decides
+        // otherwise, and a caller who has neither is refused.
+        $sub_institute_id = $this->apiTenantId($request) ?: session('sub_institute_id');
+
+        if (!$sub_institute_id) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Unable to identify your organisation.',
+            ], 401);
         }
         $insert = 0;
         // for department wise starts

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Reports;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\Validator;
 
 class DepartmentDistributionController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         $type = $request->type;
@@ -36,10 +39,10 @@ class DepartmentDistributionController extends Controller
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
             $departmentId = $request->department_id;
         } else {
-            $sub_institute_id = $request->sub_institute_id ?? null;
+            $sub_institute_id = $this->apiTenantId($request) ?? null;
             $departmentId = $request->department_id;
         }
 
@@ -103,9 +106,9 @@ class DepartmentDistributionController extends Controller
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
         } else {
-            $sub_institute_id = $request->sub_institute_id ?? null;
+            $sub_institute_id = $this->apiTenantId($request) ?? null;
         }
 
         try {

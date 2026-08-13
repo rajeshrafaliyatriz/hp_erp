@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Api\CompetencyDashboard;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class CompetencyDashboardController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getWorkloadHeatmap(Request $request)
     {
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
 
         if (! $subInstituteId) {
             return response()->json([
@@ -68,7 +71,7 @@ class CompetencyDashboardController extends Controller
     {
         $threshold = $request->input('threshold', 0.5); // 50% default similarity
         $department = $request->input('department', null);
-        $subInstituteId = $request->input('sub_institute_id', null);
+        $subInstituteId = $this->apiTenantId($request);
         $limit = $request->input('limit', 50); // Limit nodes to prevent large responses
 
         try {
@@ -199,7 +202,7 @@ class CompetencyDashboardController extends Controller
 
     public function getCoverageScorecards(Request $request)
     {
-        $subInstituteId = $request->input('sub_institute_id', null);
+        $subInstituteId = $this->apiTenantId($request);
 
         try {
             // Base query for filtering by sub_institute_id if provided
@@ -378,7 +381,7 @@ class CompetencyDashboardController extends Controller
 
     public function getHealthRadar(Request $request)
     {
-        $subInstituteId = $request->input('sub_institute_id', null);
+        $subInstituteId = $this->apiTenantId($request);
 
         try {
             // Base query for filtering by sub_institute_id if provided
@@ -572,7 +575,7 @@ class CompetencyDashboardController extends Controller
 
     public function getSkillsManagementFunnel(Request $request)
     {
-        $subInstituteId = $request->input('sub_institute_id', null);
+        $subInstituteId = $this->apiTenantId($request);
 
         try {
             // Base query for s_users_skills
@@ -668,7 +671,7 @@ class CompetencyDashboardController extends Controller
     {
         $type = $request->query('type', 'o'); // default type
         $type = strtolower($type);
-        $subInstituteId = $request->input('sub_institute_id', null);
+        $subInstituteId = $this->apiTenantId($request);
 
         // Map type to framework
         $frameworkMap = [
@@ -743,7 +746,7 @@ class CompetencyDashboardController extends Controller
 
     public function getAttitudeBehaviourMapping(Request $request)
     {
-        $subInstituteId = $request->input('sub_institute_id', null);
+        $subInstituteId = $this->apiTenantId($request);
 
         try {
             // Base query for s_library_map
@@ -809,7 +812,7 @@ class CompetencyDashboardController extends Controller
 
     public function getKPI(Request $request)
     {
-        $subInstituteId = $request->input('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
         $userId = $request->input('user_id');
 
         try {

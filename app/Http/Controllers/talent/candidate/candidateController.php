@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent\candidate;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -11,6 +12,8 @@ use App\Models\talent\talent_jobapplication;
 
 class candidateController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getCandidate(Request $request)
     {
                 $type = $request->type;
@@ -27,7 +30,7 @@ class candidateController extends Controller
                 return response()->json(['message' => 'Invalid token'], 401);
             }
         }
-        $sub_institute_id = $request->sub_institute_id; // Get institute wise data
+        $sub_institute_id = $this->apiTenantId($request); // Get institute wise data
 
         $data = DB::table('talent_job_applications as tja')
             ->leftJoin('talent_interview_schedules as tis', function($join){

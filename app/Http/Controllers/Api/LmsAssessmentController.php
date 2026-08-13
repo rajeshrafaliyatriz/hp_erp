@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Course assessments (quizzes) for the Course Builder.
@@ -28,6 +28,8 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 class LmsAssessmentController extends Controller
 {
+    use ResolvesLmsIdentity;
+
     /** Profiles allowed to author assessments. */
     private const ADMIN_PROFILES = ['admin', 'hr', 'super', 'principal', 'teacher'];
 
@@ -37,45 +39,26 @@ class LmsAssessmentController extends Controller
      */
     private function guardApiToken(Request $request)
     {
-        if ($request->input('type') !== 'API') {
-            return null;
-        }
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-        }
-
-        return null;
+        // Was: `if ($request->input('type') !== 'API') return null;` followed by
+        // a token check that discarded the token's owner. Omitting `type`
+        // skipped authentication entirely. Identity now always comes from the
+        // token - see ResolvesLmsIdentity.
+        return $this->guardLmsToken($request);
     }
 
     /** Null when the caller may author, a 403 response otherwise. */
     private function guardAdmin(Request $request)
     {
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
-        if ($profile === '') {
-            return null;
-        }
-
-        foreach (self::ADMIN_PROFILES as $allowed) {
-            if (str_contains($profile, $allowed)) {
-                return null;
-            }
-        }
-
-        return response()->json([
-            'status' => false,
-            'message' => 'Your profile is not permitted to manage assessments.',
-        ], 403);
+        // The profile now comes from the caller's tbluser row, not from
+        // a `user_profile_name` they supplied themselves.
+        return $this->guardLmsProfile($request, self::ADMIN_PROFILES, 'Your profile is not permitted to manage assessments.');
     }
 
     private function tenantId(Request $request)
     {
-        return $request->input('sub_institute_id') ?: $request->header('sub_institute_id');
+        // The caller's own organisation, from their token - not from whatever
+        // sub_institute_id the request asked for.
+        return $this->lmsTenantId($request);
     }
 
     /** The course, or null when it does not exist in this tenant. */
@@ -274,7 +257,7 @@ class LmsAssessmentController extends Controller
                 $this->payload($request, $course) + [
                     'sub_institute_id' => $subInstituteId,
                     'syear'            => $request->input('syear'),
-                    'created_by'       => $request->input('user_id'),
+                    'created_by'       => $this->contextUserId($request),
                     'created_at'       => now(),
                     'updated_at'       => now(),
                 ]
@@ -334,7 +317,7 @@ class LmsAssessmentController extends Controller
         try {
             DB::table('question_paper')->where('id', $id)->update(
                 $this->payload($request, $course) + [
-                    'updated_by' => $request->input('user_id'),
+                    'updated_by' => $this->contextUserId($request),
                     'updated_at' => now(),
                 ]
             );
@@ -383,7 +366,7 @@ class LmsAssessmentController extends Controller
         try {
             DB::table('question_paper')->where('id', $id)->update([
                 'deleted_at' => now(),
-                'deleted_by' => $request->input('user_id'),
+                'deleted_by' => $this->contextUserId($request),
             ]);
 
             return response()->json(['status' => true, 'message' => 'Assessment deleted']);

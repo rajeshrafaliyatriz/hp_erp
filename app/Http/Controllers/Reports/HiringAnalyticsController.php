@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Reports;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class HiringAnalyticsController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getHiringTrends(Request $request)
     {
         $type = $request->type;
@@ -25,7 +28,7 @@ class HiringAnalyticsController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
         $departmentId = $request->department_id;
         try {
             // Fetch hires from talent_job_applications

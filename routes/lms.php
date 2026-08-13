@@ -1,7 +1,6 @@
 <?php
 
 
-use App\Http\Controllers\front_desk\book_list\book_listController;
 use App\Http\Controllers\lms\assignment\annotateAssignmentController;
 use App\Http\Controllers\lms\assignment\assignmentController;
 use App\Http\Controllers\lms\assignment\assignmentSubmissionController;
@@ -40,8 +39,11 @@ use App\Http\Controllers\lms\subtopicController;
 use App\Http\Controllers\lms\teacher_resource\lms_teacherResourceController;
 use App\Http\Controllers\lms\topicController;
 use App\Http\Controllers\lms\questionWiseReportController;
-use App\Http\Controllers\bazar\bulkUploadSheetController;
-use App\Http\Controllers\bazar\bulkUploadedReportController;
+// Used at lms_syllabus and /api/get-curriculum-list but never imported. This
+// file declares no namespace, so the bare name resolved to the global
+// namespace - \lmsSyllabusController - which does not exist. Same failure as
+// the string-form routes above: 500 on dispatch, and route:cache broken.
+use App\Http\Controllers\lms\lmsSyllabusController;
 use App\Http\Controllers\lms\pal\palController;
 use App\Http\Controllers\lms\virtualclassroomController;
 use App\Http\Controllers\school_setup\sub_std_mapController;
@@ -160,8 +162,12 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
     Route::get('ajax_LMS_SubjectwiseChapter', [lmsPortfolioController::class, 'ajax_LMS_SubjectwiseChapter'])
         ->name('ajax_LMS_SubjectwiseChapter');
 
-    Route::get('ajax_LMS_SubjectwiseChapterForBooklist', [book_listController::class, 'ajax_LMS_SubjectwiseChapterForBooklist'])
-        ->name('ajax_LMS_SubjectwiseChapterForBooklist');
+    // Removed: routed to App\Http\Controllers\front_desk\book_list\book_listController,
+    // which does not exist - there is no book_list directory and no method of
+    // that name anywhere in the codebase. The route 500'd on every request, and
+    // because Laravel reflects on controller classes to build the route table it
+    // also broke `php artisan route:list` and `route:cache` outright. Nothing in
+    // resources/ or public/ referenced the route name.
 
     Route::get('ajax_LMS_ChapterwiseTopic', [lmsPortfolioController::class, 'ajax_LMS_ChapterwiseTopic'])->name('ajax_LMS_ChapterwiseTopic');
 
@@ -204,10 +210,19 @@ Route::group(['prefix' => 'lms', 'middleware' => ['auth','session','menu']], fun
 
     Route::resource('lms_lessonplan', lms_lessonplanController::class);
     Route::get('ajax_Timetable', [lms_lessonplanController::class, 'ajax_Timetable'])->name('ajax_Timetable');
-     Route::GET('ajax_daywisedata', 'lms\lessonplan\lms_lessonplanController@ajax_DayWiseData')->name('ajax_daywisedata');
-    Route::GET('ajax_contentmasterdata', 'lms\lessonplan\lms_lessonplanController@ajax_contentMasterData')->name('ajax_contentmasterdata');
-    Route::GET('ajax_questionpaperdata', 'lms\lessonplan\lms_lessonplanController@ajax_questionPaperData')->name('ajax_questionpaperdata');
-    Route::GET('ajax_daywisedata', 'lms\lessonplan\lms_lessonplanController@ajax_DayWiseData')->name('ajax_daywisedata');
+    // These four used the Laravel 7 string form,
+    // 'lms\lessonplan\lms_lessonplanController@method'. Laravel 8 removed the
+    // implicit App\Http\Controllers\ prefix, so the string resolved to a
+    // root-namespace class that does not exist: the routes 500'd, and the
+    // reflection Laravel performs to build the route table took route:list and
+    // route:cache down with them. The class is real and already imported above,
+    // so the array form fixes it.
+    //
+    // 'ajax_daywisedata' was also declared twice, identically - the second
+    // silently replaced the first. Declared once now.
+    Route::get('ajax_daywisedata', [lms_lessonplanController::class, 'ajax_DayWiseData'])->name('ajax_daywisedata');
+    Route::get('ajax_contentmasterdata', [lms_lessonplanController::class, 'ajax_contentMasterData'])->name('ajax_contentmasterdata');
+    Route::get('ajax_questionpaperdata', [lms_lessonplanController::class, 'ajax_questionPaperData'])->name('ajax_questionpaperdata');
 
     Route::get('ajax_getTeacher', [lms_lessonplanController::class, 'ajax_getTeacher'])->name('ajax_getTeacher');
     Route::get('get_chat_data', [lms_lessonplanController::class, 'getChatOutput'])->name('get_chat_data');    
@@ -262,18 +277,18 @@ Route::controller(lms_apiController::class)->group(function () {
     Route::get('/getSuggestedCoursesByUser', 'getSuggestedCoursesByUser');
 });
 
-Route::group(['prefix' => 'bazar', 'middleware' => ['auth','session','menu']], function () {
-    Route::resource('bulk_upload_sheet', bulkUploadSheetController::class);
-    Route::get('bulk_position_data', [bulkUploadSheetController::class, 'bulk_position_data'])->name('bulk_position_data');
-    Route::post('store_position_data', [bulkUploadSheetController::class, 'store_position_data'])->name('store_position_data');
-    Route::get('bulk_margin_data', [bulkUploadSheetController::class, 'bulk_margin_data'])->name('bulk_margin_data');
-    Route::post('store_margin_data', [bulkUploadSheetController::class, 'store_margin_data'])->name('store_margin_data');
-    Route::get('bulk_pnl_data', [bulkUploadSheetController::class, 'bulk_pnl_data'])->name('bulk_pnl_data');
-    Route::post('store_pnl_data', [bulkUploadSheetController::class, 'store_pnl_data'])->name('store_pnl_data');
-
-    Route::resource('bazar_report', bulkUploadedReportController::class);
-    Route::post('show_bazar_report', [bulkUploadedReportController::class, 'show_bazar_report'])->name('show_bazar_report');
-});
+// Removed: the whole 'bazar' group routed to App\Http\Controllers\bazar\
+// bulkUploadSheetController and bulkUploadedReportController. There is no
+// `bazar` directory under app/Http/Controllers and neither class exists
+// anywhere, so all 9 routes threw on dispatch - and, because Laravel reflects
+// on controller classes to build the route table, they broke route:list and
+// route:cache for the entire application.
+//
+// Nothing in resources/ or public/ referenced any of the route names
+// (bulk_upload_sheet, bazar_report, bulk_position_data, bulk_margin_data,
+// bulk_pnl_data, show_bazar_report), so no view or script has been orphaned.
+// Restore from version control alongside the controllers if the feature is
+// revived.
 
 Route::resource('task', taskController::class);
 Route::match(['put', 'post'], 'task/update-status/{id}', [TaskUpdateController::class, 'updateStatusAndDescription'])->name('task.updateStatus');
@@ -304,7 +319,9 @@ Route::post('/ai/processData',[contentController::class,'processAIData'])->name(
 Route::post('/ai/generateLessonPlan', [contentController::class, 'generateLessonPlan'])->name('ai.generateLessonPlan');
 Route::post('/ai/generateLessonPlanNew', [contentController::class, 'generateLessonPlanNew'])->name('ai.generateLessonPlanNew');
 Route::post('/ai/generateSportsData', [contentController::class, 'generateSportsData'])->name('ai.generateSportsData');
-Route::post('/paraphraseNew', [ParaphraseController::class, 'paraphrase']);
+// Removed: ParaphraseController does not exist anywhere in the codebase, and
+// there is no `use` importing it either, so this route both 500'd and broke
+// route:cache. Nothing referenced /paraphraseNew.
 Route::post('/set-book-session',[contentController::class,'setBookSession'])->name('set-book-session');
 
 Route::get('/download-File', [contentLibraryController::class, 'downloadFile'])->name('downloadFile');

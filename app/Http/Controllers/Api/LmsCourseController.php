@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use App\Models\school_setup\sub_std_mapModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * Learning Catalog API.
@@ -32,6 +32,8 @@ use Laravel\Sanctum\PersonalAccessToken;
  */
 class LmsCourseController extends Controller
 {
+    use ResolvesLmsIdentity;
+
     /** Columns a caller may sort by, mapped to their qualified SQL name. */
     private const SORTABLE = [
         'title'      => 's.display_name',
@@ -51,25 +53,18 @@ class LmsCourseController extends Controller
      */
     private function guardApiToken(Request $request)
     {
-        if ($request->input('type') !== 'API') {
-            return null;
-        }
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-        }
-
-        return null;
+        // Was: `if ($request->input('type') !== 'API') return null;` followed by
+        // a token check that discarded the token's owner. Omitting `type`
+        // skipped authentication entirely. Identity now always comes from the
+        // token - see ResolvesLmsIdentity.
+        return $this->guardLmsToken($request);
     }
 
     private function tenantId(Request $request)
     {
-        return $request->sub_institute_id ?? $request->header('sub_institute_id');
+        // The caller's own organisation, from their token - not from whatever
+        // sub_institute_id the request asked for.
+        return $this->lmsTenantId($request);
     }
 
     /**
@@ -158,7 +153,7 @@ class LmsCourseController extends Controller
         }
 
         $settings = (array) $request->input('settings', []);
-        $userId = $request->input('user_id');
+        $userId = $this->contextUserId($request);
 
         $payload = [
             'sub_institute_id'     => $subInstituteId,
@@ -239,7 +234,7 @@ class LmsCourseController extends Controller
                     'course_id'              => $courseId,
                     'prerequisite_course_id' => $id,
                     'sub_institute_id'       => $subInstituteId,
-                    'created_by'             => $request->input('user_id'),
+                    'created_by'             => $this->contextUserId($request),
                     'created_at'             => now(),
                     'updated_at'             => now(),
                 ])->all()
@@ -703,7 +698,7 @@ class LmsCourseController extends Controller
                 'allow_content'    => 'Yes',
                 'elective_subject' => 'No',
                 'add_content'      => 'chapterwise',
-                'created_by'       => $request->user_id,
+                'created_by'       => $this->contextUserId($request),
                 'created_at'       => now(),
             ];
 
@@ -836,7 +831,7 @@ class LmsCourseController extends Controller
                 'sort_order'       => $request->sort_order,
                 'certificate_validity_months' => $request->certificate_validity_months,
                 'status'           => (int) $request->status,
-                'updated_by'       => $request->user_id,
+                'updated_by'       => $this->contextUserId($request),
                 'updated_at'       => now(),
             ]);
 
@@ -892,7 +887,7 @@ class LmsCourseController extends Controller
 
         try {
             $course->update([
-                'deleted_by' => $request->user_id,
+                'deleted_by' => $this->contextUserId($request),
                 'updated_at' => now(),
             ]);
             $course->delete();
@@ -967,7 +962,7 @@ class LmsCourseController extends Controller
 
             if ($action === 'delete') {
                 sub_std_mapModel::whereIn('id', $matchedIds)->update([
-                    'deleted_by' => $request->user_id,
+                    'deleted_by' => $this->contextUserId($request),
                     'updated_at' => now(),
                 ]);
                 sub_std_mapModel::whereIn('id', $matchedIds)->delete();
@@ -975,7 +970,7 @@ class LmsCourseController extends Controller
             } else {
                 sub_std_mapModel::whereIn('id', $matchedIds)->update([
                     'status'     => $action === 'activate' ? 1 : 0,
-                    'updated_by' => $request->user_id,
+                    'updated_by' => $this->contextUserId($request),
                     'updated_at' => now(),
                 ]);
                 $message = count($matchedIds) . ' course(s) '

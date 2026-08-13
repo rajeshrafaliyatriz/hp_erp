@@ -3,35 +3,68 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\PersonalAccessToken;
 
 class SkillDevelopmentController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    /** Resolved once per request; every endpoint here needs the same identity. */
+    private ?array $identityCache = null;
+
+    /**
+     * @return array{user:object, user_id:int, sub_institute_id:int}|\Illuminate\Http\JsonResponse
+     */
+    private function identity(Request $request)
+    {
+        if ($this->identityCache !== null) {
+            return $this->identityCache;
+        }
+
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->identityCache = $identity;
+    }
+
     /**
      * Validate the Sanctum token on API calls.
      *
-     * Same contract as LmsCourseEnrollController: when the caller identifies
-     * itself with type=API a valid token must accompany the request. Returns
-     * null when the request may proceed, or the error response to return.
+     * Was: `if ($request->input('type') !== 'API') return null;` - a caller who
+     * omitted `type` skipped authentication entirely. A token is required now,
+     * always, and it is what decides the caller's identity.
      */
     private function guardApiToken(Request $request)
     {
-        if ($request->input('type') !== 'API') {
-            return null;
-        }
+        $identity = $this->identity($request);
 
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-        }
+        return is_array($identity) ? null : $identity;
+    }
 
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-        }
+    /**
+     * The caller's own id and organisation.
+     *
+     * Both used to be read straight from the request, so changing `user_id`
+     * returned another employee's learning progress, streak and achievements,
+     * and changing `sub_institute_id` reached into another organisation.
+     */
+    private function contextUserId(Request $request): ?int
+    {
+        $identity = $this->identity($request);
 
-        return null;
+        return is_array($identity) ? $identity['user_id'] : null;
+    }
+
+    private function contextTenantId(Request $request): ?int
+    {
+        $identity = $this->identity($request);
+
+        return is_array($identity) ? $identity['sub_institute_id'] : null;
     }
 
     /**
@@ -47,8 +80,8 @@ class SkillDevelopmentController extends Controller
                 return $tokenError;
             }
 
-            $userId = $request->user_id ?? $request->header('user_id');
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $userId = $this->contextUserId($request);
+            $subInstituteId = $this->contextTenantId($request);
 
             if (!$userId) {
                 return response()->json([
@@ -220,8 +253,8 @@ class SkillDevelopmentController extends Controller
                 return $tokenError;
             }
 
-            $userId = $request->user_id ?? $request->header('user_id');
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $userId = $this->contextUserId($request);
+            $subInstituteId = $this->contextTenantId($request);
 
             if (!$userId) {
                 return response()->json([
@@ -353,8 +386,8 @@ class SkillDevelopmentController extends Controller
                 return $tokenError;
             }
 
-            $userId = $request->user_id ?? $request->header('user_id');
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $userId = $this->contextUserId($request);
+            $subInstituteId = $this->contextTenantId($request);
 
             if (!$userId) {
                 return response()->json([
@@ -431,8 +464,8 @@ class SkillDevelopmentController extends Controller
                 return $tokenError;
             }
 
-            $userId = $request->user_id ?? $request->header('user_id');
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $userId = $this->contextUserId($request);
+            $subInstituteId = $this->contextTenantId($request);
 
             if (!$userId) {
                 return response()->json([
@@ -558,8 +591,8 @@ class SkillDevelopmentController extends Controller
                 return $tokenError;
             }
 
-            $userId = $request->user_id ?? $request->header('user_id');
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $userId = $this->contextUserId($request);
+            $subInstituteId = $this->contextTenantId($request);
 
             if (!$userId) {
                 return response()->json([
@@ -707,8 +740,8 @@ class SkillDevelopmentController extends Controller
                 return $tokenError;
             }
 
-            $userId = $request->user_id ?? $request->header('user_id');
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $userId = $this->contextUserId($request);
+            $subInstituteId = $this->contextTenantId($request);
             $month = $request->input('month', now()->format('m')); // Default to current month
             $year = $request->input('year', now()->format('Y')); // Default to current year
 
@@ -786,8 +819,8 @@ class SkillDevelopmentController extends Controller
                 return $tokenError;
             }
 
-            $userId = $request->user_id ?? $request->header('user_id');
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $userId = $this->contextUserId($request);
+            $subInstituteId = $this->contextTenantId($request);
             $limit = (int) $request->input('limit', 8);
 
             if (!$userId) {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -14,6 +15,8 @@ use App\Models\talent\talent_jobposting;
 
 class talent_interviewschedulescontroller extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function index(request $request)
     {
         {
@@ -44,7 +47,7 @@ class talent_interviewschedulescontroller extends Controller
                     ], 400);
                 }
 
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->apiTenantId($request);
 
                 // fetch jobrole data from table
                 $interview_schedules = DB::table('talent_interview_schedules as a')
@@ -463,9 +466,9 @@ class talent_interviewschedulescontroller extends Controller
                     ], 400);
                 }
 
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->apiTenantId($request);
             } else {
-                $sub_institute_id = $request->sub_institute_id ?? null;
+                $sub_institute_id = $this->apiTenantId($request) ?? null;
             }
 
             // Fetch candidate details from database
@@ -535,7 +538,7 @@ class talent_interviewschedulescontroller extends Controller
                     ], 400);
                 }
 
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->apiTenantId($request);
 
                 // Define the pipeline stages
                 $stages = [

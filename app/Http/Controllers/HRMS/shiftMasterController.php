@@ -3,17 +3,21 @@
 namespace App\Http\Controllers\HRMS;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
-use GenTux\Jwt\GetsJwtToken;
-use GenTux\Jwt\JwtToken;
 use Illuminate\Support\Facades\Validator;
 use App\Models\HRMS\userShiftMaster;
 use DB;
 
 class shiftMasterController extends Controller
 {
-    use GetsJwtToken; // used to check security token only for API
+    // Replaces GenTux\Jwt\GetsJwtToken. That package is absent from
+    // composer.json and not installed, so this class could not even be
+    // loaded - fatal on every request, and fatal for route:list and
+    // route:cache application-wide.
+    use ResolvesApiIdentity;
+
 
 
     /**
@@ -30,7 +34,7 @@ class shiftMasterController extends Controller
         if(in_array($type,["API","JSON"])){
             try {
                  // used to check security token only for API
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed'];
     
                     return response()->json($response, 401);
@@ -83,7 +87,7 @@ class shiftMasterController extends Controller
         if(in_array($type,["API","JSON"])){
             try {
                  // used to check security token only for API
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed'];
     
                     return response()->json($response, 401);
@@ -206,7 +210,7 @@ class shiftMasterController extends Controller
         if(in_array($type,["API","JSON"])){
             try {
                  // used to check security token only for API
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid($request)) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed'];
     
                     return response()->json($response, 401);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\HRITDashboard;
 
 use App\Http\Controllers\Controller;  
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -11,6 +12,8 @@ use Carbon\Carbon;
 
 class AttendanceApiController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function weeklySummary(Request $request)
     {
         $type = $request->input('type');
@@ -30,7 +33,7 @@ class AttendanceApiController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
         $departmentId   = $request->department_id;  // <── NEW FILTER VARIABLE
 
         if (!$subInstituteId) {
@@ -197,7 +200,7 @@ class AttendanceApiController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
         $departmentId   = $request->department_id;
 
         if (!$subInstituteId) {
@@ -301,7 +304,7 @@ class AttendanceApiController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
         $userId         = $request->user_id;
         $month          = $request->month; // Expected format: YYYY-MM
 

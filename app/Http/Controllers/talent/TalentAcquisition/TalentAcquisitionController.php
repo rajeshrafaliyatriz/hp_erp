@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\talent\TalentAcquisition;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Services\TalentAcquisitionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class TalentAcquisitionController extends Controller
 {
+    use ResolvesApiIdentity;
+
     /**
      * Mask sensitive fields from payload
      */
@@ -38,7 +41,7 @@ class TalentAcquisitionController extends Controller
             ]);
 
             // Get input
-            $subInstituteId = $request->input('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
 
             // Call service
             $data = $service->getKpiMetrics($subInstituteId);

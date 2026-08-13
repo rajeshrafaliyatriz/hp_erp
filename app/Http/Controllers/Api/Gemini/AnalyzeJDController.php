@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Gemini;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 class AnalyzeJDController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function analyze(Request $request)
     {
         try {
@@ -22,7 +25,7 @@ class AnalyzeJDController extends Controller
             ]);
 
             $jd = $request->jd;
-            $subInstituteId = session()->get('sub_institute_id') ?? $request->sub_institute_id ?? 3;
+            $subInstituteId = session()->get('sub_institute_id') ?? $this->apiTenantId($request) ?? 3;
 
             /* ===============================
              * 2️⃣ Fetch Gemini API Keys (MULTIPLE – Fallback Support)

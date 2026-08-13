@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use App\Models\build_with_AI\AiCourseOutline;
 use App\Models\school_setup\sub_std_mapModel;
 use App\Services\DeepSeekService;
@@ -10,7 +11,6 @@ use App\Services\GammaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 use RuntimeException;
 
 /**
@@ -27,6 +27,8 @@ use RuntimeException;
  */
 class AiCourseController extends Controller
 {
+    use ResolvesLmsIdentity;
+
     /** Profiles allowed to generate and publish courses. */
     private const AUTHORING_PROFILES = ['admin', 'hr'];
 
@@ -38,20 +40,11 @@ class AiCourseController extends Controller
 
     private function guardApiToken(Request $request)
     {
-        if ($request->input('type') !== 'API') {
-            return null;
-        }
-
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['status' => false, 'message' => 'Token not provided'], 401);
-        }
-
-        if (!PersonalAccessToken::findToken($token)) {
-            return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
-        }
-
-        return null;
+        // Was: `if ($request->input('type') !== 'API') return null;` followed by
+        // a token check that discarded the token's owner. Omitting `type`
+        // skipped authentication entirely. Identity now always comes from the
+        // token - see ResolvesLmsIdentity.
+        return $this->guardLmsToken($request);
     }
 
     /**
@@ -60,27 +53,16 @@ class AiCourseController extends Controller
      */
     private function guardAuthoring(Request $request)
     {
-        $profile = strtolower(trim((string) $request->input('user_profile_name', '')));
-
-        if ($profile === '') {
-            return null; // Nothing to check against; token guard still applies.
-        }
-
-        foreach (self::AUTHORING_PROFILES as $allowed) {
-            if (str_contains($profile, $allowed)) {
-                return null;
-            }
-        }
-
-        return response()->json([
-            'status' => false,
-            'message' => 'Your profile is not permitted to author courses.',
-        ], 403);
+        // The profile now comes from the caller's tbluser row, not from
+        // a `user_profile_name` they supplied themselves.
+        return $this->guardLmsProfile($request, self::AUTHORING_PROFILES, 'Your profile is not permitted to author courses.');
     }
 
     private function tenantId(Request $request)
     {
-        return $request->sub_institute_id ?? $request->header('sub_institute_id');
+        // The caller's own organisation, from their token - not from whatever
+        // sub_institute_id the request asked for.
+        return $this->lmsTenantId($request);
     }
 
     /**
@@ -373,7 +355,7 @@ class AiCourseController extends Controller
                 'configure_fields' => json_encode($request->input('configure_fields', [])),
                 'outline' => json_encode($outline),
                 'sub_institute_id' => $subInstituteId,
-                'created_by' => $request->user_id,
+                'created_by' => $this->contextUserId($request),
                 'presentation_platform' => 'gamma',
                 'ai_model' => $request->input('ai_model') ?: $this->deepSeek->model(),
                 'slide_count' => $slideCount,
@@ -430,7 +412,7 @@ class AiCourseController extends Controller
                     'status' => $result['status'],
                     'gamma_url' => $result['gammaUrl'] ?? $record->gamma_url,
                     'export_url' => $result['exportUrl'] ?? $record->export_url,
-                    'updated_by' => $request->user_id,
+                    'updated_by' => $this->contextUserId($request),
                 ]);
             }
 
@@ -592,13 +574,13 @@ class AiCourseController extends Controller
                 'allow_content' => 'Yes',
                 'elective_subject' => 'No',
                 'add_content' => 'chapterwise',
-                'created_by' => $request->user_id,
+                'created_by' => $this->contextUserId($request),
                 'created_at' => now(),
             ]);
 
             $outline->update([
                 'course_id' => $courseId,
-                'updated_by' => $request->user_id,
+                'updated_by' => $this->contextUserId($request),
             ]);
 
             return response()->json([

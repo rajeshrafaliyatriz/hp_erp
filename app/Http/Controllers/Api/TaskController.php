@@ -3,54 +3,51 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\PersonalAccessToken;
 
 class TaskController extends Controller
 {
+    use ResolvesApiIdentity;
+
     /**
      * Validate the API token
      */
     private function validateToken($request)
     {
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
+        // Was findToken() with the owner discarded, and no expiry check.
+        $identity = $this->resolveApiIdentity($request);
 
-        $accessToken = PersonalAccessToken::findToken($token);
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
-
-        return null;
+        return is_array($identity) ? null : $identity;
     }
 
     /**
      * The tenant every query MUST be filtered by.
      *
-     * Previously the sub_institute_id filter was applied only "if provided",
-     * so omitting the parameter returned every tenant's tasks to any valid
-     * token. Now the parameter wins when present, the token's own user
-     * supplies it otherwise, and a request that resolves neither is refused.
-     *
      * @return int|\Illuminate\Http\JsonResponse
+     *
+     * This was request-FIRST: whatever sub_institute_id arrived in the query
+     * string won, and the token's own user was consulted only as a fallback.
+     * That is the same defect the module traits had - one query parameter
+     * reached another organisation's tasks - written out by hand, which is why
+     * fixing the traits did not fix it here.
      */
     private function resolveTenant($request)
     {
-        $fromRequest = (int) $request->input('sub_institute_id', 0);
-        if ($fromRequest > 0) {
-            return $fromRequest;
-        }
+        $identity = $this->resolveApiIdentity($request);
 
-        $user = PersonalAccessToken::findToken((string) $request->input('token'))?->tokenable;
-        $fromUser = (int) ($user->sub_institute_id ?? 0);
-        if ($fromUser > 0) {
-            return $fromUser;
-        }
+        return is_array($identity) ? $identity['sub_institute_id'] : $identity;
+    }
 
-        return response()->json(['message' => 'sub_institute_id is required'], 400);
+    /**
+     * The caller themselves. These endpoints report "my" task counts and daily,
+     * weekly and monthly tasks, so user_id was never meant to name anyone else;
+     * taken from the request, it returned any colleague's workload.
+     */
+    private function resolveUserId($request): ?int
+    {
+        return $this->apiUserId($request);
     }
 
     /**
@@ -66,7 +63,7 @@ class TaskController extends Controller
             return $validationError;
         }
 
-        $userId = $request->input('user_id');
+        $userId = $this->resolveUserId($request);
         $subInstituteId = $this->resolveTenant($request);
         if (!is_int($subInstituteId)) {
             return $subInstituteId;
@@ -270,7 +267,7 @@ class TaskController extends Controller
         }
 
         $today = now()->toDateString();
-        $userId = $request->input('user_id');
+        $userId = $this->resolveUserId($request);
         $subInstituteId = $this->resolveTenant($request);
         if (!is_int($subInstituteId)) {
             return $subInstituteId;
@@ -320,7 +317,7 @@ class TaskController extends Controller
 
         $startOfWeek = now()->startOfWeek()->toDateString();
         $endOfWeek = now()->endOfWeek()->toDateString();
-        $userId = $request->input('user_id');
+        $userId = $this->resolveUserId($request);
         $subInstituteId = $this->resolveTenant($request);
         if (!is_int($subInstituteId)) {
             return $subInstituteId;
@@ -373,7 +370,7 @@ class TaskController extends Controller
 
         $startOfMonth = now()->startOfMonth()->toDateString();
         $endOfMonth = now()->endOfMonth()->toDateString();
-        $userId = $request->input('user_id');
+        $userId = $this->resolveUserId($request);
         $subInstituteId = $this->resolveTenant($request);
         if (!is_int($subInstituteId)) {
             return $subInstituteId;
