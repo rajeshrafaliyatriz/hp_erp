@@ -1011,10 +1011,10 @@ being read as organisational fact.**
 
 | ID | Title | Gap | Thread | Cost (R7) | Blocks | Blocked by | Test | Verif | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| R-01 | Consolidated reporting home | Q-A4 | — | **ESTIMATE PENDING** | — | F-01, F-02 | AT-R01 | SCREEN | Not started |
-| R-02 | Competency gap report | — | 1 | **M** | — | R-01 | AT-R02 | SCREEN | Not started |
-| R-03 | Development plan report | — | 4 | **M** | — | R-01, M-02 | AT-R03 | SCREEN | Not started |
-| R-04 | Certification expiry report | G-CERT-01 | 8 | **M** | — | R-01, F-02 | AT-R04 | SCREEN | Not started |
+| R-01 | Consolidated reporting home — **A CONTAINER, NOT A GATE** | Q-A4 | — | **ESTIMATE PENDING** | ~~R-02, R-03, R-04~~ **nothing** | F-01, F-02 | AT-R01 | SCREEN | Not started — measured 2026-08-13: none of R-02/03/04 needs it |
+| R-02 | Competency gap report | — | 1 | **M** | — | ~~R-01~~ **nothing — ships empty in any order** | AT-R02 | SCREEN | Not started — **BUILD-WITH-AUTHORING-CONTENT**: 23 gap-map rows, 0 outside the demo tenant |
+| R-03 | Development plan report | — | 4 | **M** | — | ~~R-01, M-02~~ **nothing** | AT-R03 | API | ✅ **BUILT 2026-08-13, 7/7** — 160 real plans in tenant 1, tenant-scoped from identity, empty_is_expected in the payload |
+| R-04 | Certification expiry report | G-CERT-01 | 8 | **M** | — | ~~R-01, F-02~~ **G-CERT-01** | AT-R04 | SCREEN | Not started — **BLOCKED ON G-CERT-01, not on R-01**: 221 certifications and 0 certification TYPES, and the expiry rule lives on the type |
 | R-05 | 9-box second axis | **G-FLOW-26** | 5 | **M** | — | TL-02 | AT-R05 | SCREEN | Not started |
 
 ### §5.1 — whole-plan reconciliation

@@ -376,6 +376,10 @@ Route::delete('/competency/role-map/{id}', [\App\Http\Controllers\Api\Competency
 
 // COURSE -> COMPETENCY. The table had two shipped consumers (LearningAssigner,
 // RemediationRecommender) and NO writer: 56 seeded rows and no way to add a 57th.
+// R-03 - the development plan report. Built STANDALONE: the plan says it gates
+// on R-01 (a 'consolidated reporting home'), and measurement says R-01 is a
+// container rather than a gate. 160 real plans, never reported on.
+Route::get('/competency/reports/development-plans', [\App\Http\Controllers\Api\Competency\DevelopmentPlanReportController::class, 'index']);
 Route::get('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'index']);
 Route::post('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
