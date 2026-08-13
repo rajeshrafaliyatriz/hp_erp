@@ -388,6 +388,9 @@ Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competen
 // competency_kasba_rating had 160 seeded rows and NO writer anywhere: both
 // existing rating routes are GET and ProficiencyService only LEFT JOINs it.
 // These are NEW routes; the assessment-cycle GETs are untouched.
+// The candidate list the write half never had. Guarded the same as the write:
+// a rating names a person, so reading who can be rated is not a public question.
+Route::get('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'index'])->middleware('profile:admin,hr');
 Route::post('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'destroy'])->middleware('profile:admin,hr');
 
