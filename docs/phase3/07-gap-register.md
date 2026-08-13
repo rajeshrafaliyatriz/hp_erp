@@ -7790,6 +7790,25 @@ found the controller already existed.
 
 ---
 
+# THE FAMILY HAS A DIRECTION
+
+    exit code                  HID 68,000 unwritten rows
+    header vs loader           HID one missing statement
+    two reads of a live table  showed a row that was NOT LOST
+    the closing report         would have shown a FAILURE THAT DID NOT EXIST
+
+**Three false clearances and one false alarm.**
+
+**ON A WRITE, THE FALSE ALARM IS THE MORE DANGEROUS DIRECTION.** A false clearance
+leaves work undone and it is still there to find. **A false alarm on a migration
+gets a CORRECT run rolled back, and THE ROLLBACK WOULD HAVE BEEN THE DAMAGE.**
+
+**Direction is not a detail of an instrument - it decides what the wrong answer
+costs**, and an instrument that can only err in one direction is a different risk
+from one that can err in both.
+
+---
+
 # THE FIRST FALSE ALARM IN THE FAMILY, RATHER THAN A FALSE CLEARANCE
 
 **A closing report comparing only ACTUAL to PREDICTED would have said this:**
