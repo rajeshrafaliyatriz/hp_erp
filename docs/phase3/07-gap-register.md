@@ -7790,6 +7790,41 @@ found the controller already existed.
 
 ---
 
+# STANDING OPENER - **COUNT THE ROWS, THEN LOOK AT THREE**
+
+**For any row whose target is a SHAPE CHANGE.** Not a suggestion - the opener,
+before the size check's number is used for anything.
+
+    the size check          finds an EMPTY SUBJECT
+    three sample values     find a WRONG DESTINATION
+
+**Two of five rows in the library block were wrongly specified and both were found
+by reading three values.** L-15 would have reduced named regulations to a boolean;
+L-17 would have forced 453 multi-valued rows into a single-valued enum. **Neither
+is visible in a count**, and both would have shipped as working migrations to the
+wrong place.
+
+**It is cheaper than the size check** - three rows, one query - **and it catches
+the class the size check structurally cannot.**
+
+---
+
+# L-22 DECIDED - **PER-ITEM ANCHOR, AND THE ALTERNATIVE IS REJECTED**
+
+    1,009 distinct measurement_metrics over 1,014 rows
+
+**Build as-is.** That is not a shared scale that drifted - **it is a per-item
+anchor used as intended.**
+
+**REJECTED: deriving a shared vocabulary from the text.** A shared scale is not
+derivable from 1,009 unique strings, and inventing one would **manufacture a claim
+nobody made** - the same rule that keeps unmatched rows held rather than guessed.
+
+**Recorded as rejected so it is not re-proposed.** The next reader seeing 1,009
+distinct values will read them as drift from a scale; they are not.
+
+---
+
 # LOOKING AT THE VALUES BEFORE MIGRATING FOUND A SECOND L-15
 
 Carried from L-15: **look at the values, not just the count.** Applied to all four
