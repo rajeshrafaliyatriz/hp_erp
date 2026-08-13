@@ -109,6 +109,22 @@ figure is **30 audited · 1 duplicate · 1 out of scope = 32**.
 
 ---
 
+> # EVERY ROW WAS WRITTEN BEFORE ANYONE COUNTED WHAT WAS UNDERNEATH IT
+>
+> **Four consecutive blocks where the size check changed the answer. This is now a
+> fact about the plan, not an observation about a row.**
+>
+> | block | what the size check found |
+> |---|---|
+> | the 51 "remaining" rows | **14 were already done** |
+> | the reports block | **3 of 4 closed by measurement**, and R-01 gates nothing |
+> | the library block | **L-19's column does not exist**; 3 more rows are near-empty |
+> | the 40 dead calls | **0 are user-reachable** |
+>
+> **A row's cost was estimated from its description. Its subject was never
+> counted.** The size check is now the cheapest thing in the queue and it has
+> changed the answer every time it has been run.
+
 # §1. DIAGNOSIS
 
 > # THE CHAIN CAN NOW BE FILLED END TO END, AND NOTHING HAS FILLED IT.
@@ -979,14 +995,14 @@ being read as organisational fact.**
 | L-13 | Propagate taxonomy renames | G-LIB-02 | 1 | **M** | — | L-12 | AT-L13 | DB | Not started |
 | L-14 | Task catalogue → competency **[BUILD-WITH-AUTHORING-CONTENT]** | G-LIB-03 | 2 | **L** | thread 2 | *(= F-01)* | AT-F01 | DB | Not started |
 | L-15 | Compliance Relevance → boolean + regulation ref | G-LIB-02 | 8 | **M** · migration + `library-config.ts` | thread 8 | F-01 | AT-L15 | SCREEN | Not started |
-| L-16 | Risk Implications → severity enum → `competency.criticality` | G-LIB-02 | — | **M** | — | F-01 | AT-L16 | DB | Not started |
+| L-16 | Risk Implications → severity enum → `competency.criticality` | G-LIB-02 | — | **M** | — | F-01 | AT-L16 | DB | ⏸ **DEFERRED — 39 rows.** Same migration work as for 1,876 rows, and not the same payoff. **TRIGGER: re-open if `risk_implications` exceeds ~500 populated rows** |
 | L-17 | `assessment_method` enum, **additive** | G-LIB-02 | 3 | **M** · keeps both element columns | — | F-01 | AT-L17 | DB | Not started |
 | L-18 | Importance → `competency_kasba_item.weight` | G-LIB-02 | 1 | **S** | — | F-01 | AT-L18 | DB | Not started |
-| L-19 | Experience → numeric min years, text kept | G-LIB-02 | 6, 7 | **M** · parse clear patterns, **report coverage** | thread 6 | F-01 | AT-L19 | DB | Not started |
+| ~~L-19~~ **L-19a** | **Experience — A COLUMN ADD PLUS A PARSE, NOT A MIGRATION** | G-LIB-02 | 6, 7 | **RE-ESTIMATE** · `min_years_experience` **does not exist in any of the five tables**, so the cost was written as if it did — wrong SHAPE of work, not wrong size | thread 6 | F-01 | AT-L19 | DB | Not started |
 | L-20 | Three `*_tags` → shared categories | G-LIB-02 | — | **S** | — | L-12 | AT-L20 | DB | Not started |
 | L-21 | Performance Metrics on the rating screen | G-LIB-02 | 3 | **S** *(re-costed from display)* | — | F-01 | AT-L21 | SCREEN | Not started |
 | L-22 | Measurement Metrics as scale anchor | G-LIB-02 | 3 | **S** *(re-costed)* | — | F-01 | AT-L22 | SCREEN | Not started |
-| L-23 | Development Methods at plan creation | G-LIB-02 | 4 | **S** *(re-costed)* | — | F-01 | AT-L23 | SCREEN | Not started |
+| L-23 | Development Methods at plan creation | G-LIB-02 | 4 | **S** *(re-costed)* | — | F-01 | AT-L23 | SCREEN | ⏸ **DEFERRED — 18 rows.** With L-16, 57 rows between them. **TRIGGER: re-open if `development_methods` exceeds ~500 populated rows** |
 | C-10 | Library drawer: 5 unrendered fields | — | — | **display** · data already on the wire | — | — | AT-C10 | SCREEN | Not started |
 | M-01 | Learning edit controls | G-FLOW-26 | 4 | **XS** · endpoint already accepts both | — | — | AT-M01 | SCREEN | Not started |
 | M-02 | Learning assignment records its gap | G-FLOW-26 | 4 | **M** | thread 4 | F-01 | AT-M02 | SCREEN | Not started |

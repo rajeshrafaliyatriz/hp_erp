@@ -7790,6 +7790,36 @@ found the controller already existed.
 
 ---
 
+# L-15 IS PLACED ON ITS DATA, AND THE TARGET SHAPE IS WRONG
+
+**Asked whether L-15 (804 rows, one table) joins the migration turn or defers with
+the 57-row pair. Neither - because its DESTINATION is wrong.**
+
+The row reads *"Compliance Relevance -> boolean + regulation ref"*. The column
+already holds the regulation reference:
+
+    Theoretical Standards, Model Application Guidelines      4
+    Patient Assessment Standards, Documentation Requirements 2
+    Educational Accreditation Standards, Clinical Training   2
+    Cleaning Standards, Health and Safety Regulations        2
+
+**These are named standards in a comma-separated list. Converting to a boolean
+DESTROYS information**: *is this compliance-relevant* loses *which regulations*.
+
+**So L-15 is not a volume question.** Its 804 rows are ample - **the migration as
+specified would take a populated, structured column and reduce it to one bit.**
+
+    L-15 -> RE-SPECIFY, not defer and not build.
+    The regulation-ref half is right. The boolean half is a downgrade of data
+    that already exists.
+
+**Third row in this plan whose SPECIFICATION rather than SIZE was the problem**,
+after L-19 (a column add written as a migration) and R-01 (a container written as
+a gate). **A size check finds an empty subject; it does not find a wrong
+destination - that needs looking at the values.**
+
+---
+
 # THE LIBRARY BLOCK SPLITS THREE WAYS - **and one row's column does not exist**
 
 Size check on all eleven rows, measured against the columns they target.
