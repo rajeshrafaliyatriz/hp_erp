@@ -7790,6 +7790,31 @@ found the controller already existed.
 
 ---
 
+# THE ARTEFACT DESCRIBES THE CODE; THE RUN DESCRIBES THE BEHAVIOUR
+
+**Third instance, and the first caught BEFORE it shipped.**
+
+    counting a file's INSERT lines   4,879   vs   LOADING it   4,878 statements
+    scraping DB::table literals      blind   vs   RESOLVING the model's getTable()
+    reading check( call sites        49      vs   RUNNING the suite   55 checks
+
+**A registry built by reading the source would have been wrong the day it was
+written** - five checks come from loops, so one call site yields several names.
+**It would have reported six phantom missing checks, forever, on every run.**
+
+**That is the FALSE-ALARM direction, inside the instrument built to catch missing
+verdicts.** The guard against a silent disappearance would itself have announced a
+disappearance that never happened - and on a green suite, a permanent phantom
+failure is what teaches people to ignore the guard.
+
+**Caught before it shipped rather than after**, which is the first time in this set.
+
+**A registry is a claim about BEHAVIOUR - which checks RUN. Source is a claim about
+CODE - which checks are WRITTEN.** They differ wherever code generates behaviour:
+loops, factories, dynamic dispatch. The rule generalises past registries.
+
+---
+
 # THE TEST USED PROSPECTIVELY, AND IT STOPPED A MIGRATION
 
 **First use of "count its verdicts against reality's" BEFORE building rather than
