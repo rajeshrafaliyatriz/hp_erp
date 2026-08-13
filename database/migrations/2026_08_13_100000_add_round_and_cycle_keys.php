@@ -33,23 +33,56 @@ use Illuminate\Support\Facades\Schema;
  * finish it.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * NOTE 2 — THERE IS NO NATURAL KEY ON s_competency_assessments
+ * NOTE 2 — CORRECTED. A NATURAL KEY DOES EXIST, AND IT CONTAINS NO ROUND.
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Anyone reaching for one later needs to know there is not one to reach for:
+ * THIS NOTE ORIGINALLY SAID THERE WAS NO NATURAL KEY. THAT WAS WRONG, and it is
+ * corrected here rather than deleted because a wrong note gets trusted:
  *
- *     rows                                             140
- *     distinct (cycle_id, user_id, assessor_id)         32   -> 108 rows over
- *     distinct (cycle_id, user_id, assessor_id, due_date) 138 -> STILL COLLIDES
+ *     rows                                                        140
+ *     distinct (cycle, user, assessor)                             32   108 collide
+ *     distinct (cycle, user, assessor, framework_id)              130    10 collide
+ *     distinct (cycle, user, assessor, framework_id, due_date)    140     0 collide
  *
- * Even the four-column combination collides twice. NO UNIQUE CONSTRAINT IS
- * ADDED HERE, and the one previously proposed on (cycle, user, assessor) was
- * the WRONG FIX — it would have required destroying 108 real assessment
- * records. The 108 are ROUNDS, not duplicates: they diverge on score, status,
- * review_status, due_date and completed_at, and were created a median of 51
- * days apart. Not one group is a repeated write.
+ *     -> (cycle_id, user_id, assessor_id, framework_id, due_date) IS UNIQUE
+ *        across all 140 rows. framework_id accounts for 98 of the 108
+ *        collisions; due_date closes the remaining 10.
  *
- *     ANY FUTURE UNIQUENESS CONSTRAINT ON THIS TABLE MUST INCLUDE THE ROUND KEY.
+ * THE KEY CONTAINS NO ROUND. A cycle spans many frameworks - 24 in cycle 37, 20
+ * in cycle 39, and 6 to 19 for a single person inside a single cycle - so the
+ * rows that looked like repeated assessments are mostly PER-FRAMEWORK
+ * assessments, discriminated by a column that was already in the table.
+ *
+ * The 108 are still NOT duplicates: they diverge on score, status,
+ * review_status, due_date and completed_at, created a median of 51 days apart,
+ * and not one group is a repeated write. The constraint once proposed on
+ * (cycle, user, assessor) was still the WRONG FIX and would still have
+ * destroyed 98 per-framework and 10 further real records.
+ *
+ * NO UNIQUE CONSTRAINT IS ADDED HERE. If one is wanted later it is the
+ * five-column key above - NOT one including `round`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * NOTE 2b — WHY `round` EXISTS ANYWAY, AND WHY IT IS UNUSED
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ *     `round` WAS JUSTIFIED BY 108 UNEXPLAINED ROWS.
+ *     98 OF THEM WERE EXPLAINED BY framework_id, ALREADY PRESENT IN THE TABLE.
+ *
+ * The justification did not survive the next measurement. The column is RETAINED
+ * NULLABLE AND UNUSED rather than reversed the same day it was added, because a
+ * same-day schema reversal costs more than an unused nullable column.
+ *
+ *     IT IS UNUSED. NOTHING WRITES IT AND NOTHING READS IT.
+ *     DO NOT INFER A MEANING FROM ITS EXISTENCE.
+ *
+ * HOW THE ERROR HAPPENED, recorded because the shape recurs: DIVERGENCE WAS READ
+ * AS EVIDENCE FOR A SPECIFIC CAUSE. The rows differed, the difference was real,
+ * and the conclusion named a mechanism the data never pointed to. Divergence
+ * proved they were not duplicates; IT NEVER PROVED THEY WERE ROUNDS.
+ *
+ *     GUARD: what else varies between these rows that I have not checked?
+ *     Ask it BEFORE naming a cause, not after.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * NOTE 3 — THE 140 EXISTING SCORES ARE HISTORICAL AND NOT DERIVED
@@ -70,6 +103,25 @@ use Illuminate\Support\Facades\Schema;
  * which is how the name-join got into s_user_jobrole_task and cost 80,064 rows
  * to remove. One nullable cycle_id is what makes a rating belong to a campaign;
  * every rating already recorded stays valid as a role-based rating with NULL.
+ *
+ *     cycle_id ON THE RATINGS TABLE STANDS. The reasoning above is unaffected.
+ *
+ * BUT THE JUSTIFICATION FOR `round` ON THAT TABLE IS VOID.
+ *
+ * It was approved on the reasoning that a rating belonging to a campaign belongs
+ * to a ROUND of that campaign. Rounds have since stopped existing (NOTE 2). The
+ * discriminator between assessments of one person in one cycle is FRAMEWORK, not
+ * round.
+ *
+ *     competency_kasba_rating.round is UNUSED and its stated reason is WITHDRAWN.
+ *     It is NOT dropped this turn, for the same same-day-reversal reason.
+ *
+ * OPEN, AND FLAGGED RATHER THAN DECIDED: whether that column should carry
+ * framework_id instead. A rating needs to say which assessment it came from, and
+ * on this evidence framework is what identifies one. It is not changed here
+ * because swapping a column's meaning is exactly the move that put a wrong note
+ * in this file in the first place - the second measurement is what should decide
+ * it, not the first correction.
  */
 return new class extends Migration
 {
