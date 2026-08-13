@@ -7790,6 +7790,56 @@ found the controller already existed.
 
 ---
 
+# THE TEST USED PROSPECTIVELY, AND IT STOPPED A MIGRATION
+
+**First use of "count its verdicts against reality's" BEFORE building rather than
+after failing. Applied to the two instruments still to be built.**
+
+## L-18's UNMATCHED REPORT - **and the fourth outcome is EVERY ROW**
+
+**Outcomes the subject can produce, counted before writing the report:**
+
+    1  importance_level maps to a known weight
+    2  a FIFTH value appears, outside High/Medium/Critical/(+1)
+    3  the value is NULL or empty
+    4  THERE IS NO competency_kasba_item TO WRITE THE WEIGHT ONTO
+
+**A naive report expresses two - mapped and unmapped - and absorbs 3 and 4 into
+"unmapped".** So the fourth was measured before anything was built:
+
+    abilities with importance_level   1,014
+    of those, HAVE a kasba item           0
+    NOWHERE TO WRITE THE WEIGHT       1,014
+
+**ALL OF THEM.** `importance_level` lives on `s_user_ability`; `weight` lives on
+`competency_kasba_item`. **Not one of the 1,014 abilities is bundled into any
+competency**, so the migration has no destination row for any source row.
+
+**L-18 was "the one real migration" of the library block. It is a migration with a
+populated source, a correct target column, and ZERO rows to write to.**
+
+    L-18 -> BLOCKED ON POPULATION, not built. It becomes possible when the
+            composer bundles abilities into competencies - the writer shipped
+            this week. Fifth member of BUILD-WITH-AUTHORING-CONTENT.
+
+**Found in one query, before a line was written.** The size check said 1,014 rows;
+the value check said four clean values; **only the verdict count asked where the
+answer would GO.**
+
+## THE FINAL VERIFICATION SUITE - **three verdicts, and the fourth is a deleted check**
+
+    PASS / FAIL / SKIPPED   the suite already expresses three
+
+    THE MISSING ONE: A CHECK THAT NO LONGER EXISTS. The suite reports on checks it
+    RAN. A check deleted, renamed or lost during a refactor is absorbed into "all
+    green" - it does not appear as absent, exactly as the family predicts.
+
+**Same shape as the baseline COUNT that could not name which file left.** The fix
+is the same: **the suite should assert its own check COUNT**, so a check that
+disappears fails rather than vanishes.
+
+---
+
 # THE MISSING VERDICT IS NEVER ABSENT-LOOKING
 
 **The mechanism of the whole family, and what makes it FINDABLE rather than only
