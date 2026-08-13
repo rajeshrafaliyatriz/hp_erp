@@ -7790,6 +7790,108 @@ found the controller already existed.
 
 ---
 
+# FINAL VERIFICATION - **THE SUITE RUNS AT ONE INSTANT, AND THE SYSTEM DOES NOT**
+
+    54 PASS   1 FAIL   0 SKIPPED   55 checks, registry intact
+    the one FAIL is the two held offenders, by decision, and the check says so
+
+## THE VERDICT-COUNT TEST, APPLIED TO THE SUITE AS A WHOLE
+
+*What can the system do that the suite cannot express?*
+
+**THE SYSTEM PASSES THROUGH TIME. THE SUITE DOES NOT.** Every check is one
+request, one query, one instant - and an entire class of this product's behaviour
+only exists across instants:
+
+    readiness gates       hysteresis, `sustained_periods` - a gate that must hold
+                          for N periods cannot be observed in one run
+    certification expiry  a credential lapses on a date; nothing in the suite
+                          advances a clock
+    the event store       a projector's idempotency across DELIVERIES, not within
+                          one call
+    proficiency decay     "never auto-lowers" is a claim about a sequence
+
+**Third verdict, absent as always rather than blank:** every one of these has a
+check that PASSES on its one-instant behaviour, so the suite reads as covering
+them. **It is not that the time dimension fails - it is that it is never asked.**
+
+**Named in the suite's own coverage statement**, which already lists three
+uncovered classes (C23's 912-route half, frontend types, rendered screens). **This
+is the fourth and it was the only one nobody had written down**, because the other
+three are visibly absent and this one is invisibly absent.
+
+---
+
+# THE PHASE'S POSITION - **a statement of state, not of turns**
+
+## WHAT WORKS END TO END
+
+**Every link of the capability chain now has a user-facing writer.** Before this
+stretch each was fed by provisioning and parsers alone.
+
+    KASBA item -> competency      Competency Definitions   menu 227
+    competency -> job role        Role Requirements panel
+    course -> competency          Course Competencies      menu 228
+    job-role task -> competency   Task Competencies        menu 229
+    employee -> rating            POST /competency/kasba-rating
+    gap                           reads the chain, correctly, at every link
+
+**Proved by store -> re-read -> idempotent re-store -> destroy -> re-read**, each
+against a real tenant, each returning that tenant to its starting state, and the
+demo tenant never touched.
+
+**Plus**: the email off-switch is a real gate over every send path, asserted;
+`item_id` resolves for all five KASBA dimensions; department options come from
+`hrms_departments`; R-03 reports on 160 real development plans; the task path's
+last name-join is a key (F-10a, 80,064 rows, exact).
+
+## WHAT SHIPS EMPTY AND WAITS ON A CUSTOMER
+
+**Five members, and this is the honest headline: THE CHAIN CAN NOW BE FILLED END
+TO END, AND NOTHING HAS FILLED IT.**
+
+    competency_kasba_item          226 rows, all seed
+    jobrole_competency_map          23 rows, ALL in the demo tenant
+    course_competency_map           56 rows, all seed
+    jobrole_task_competency_map      0 rows
+    L-18's weight migration          blocked: 0 of 1,014 abilities are bundled
+
+**They are not unfinished. They are unauthored** - a different thing, and the
+normal state of a product before its first customer uses it.
+
+## WHAT IS BLOCKED ON THE 50 UNCOMMITTED FILES
+
+    S-03   remaining leaks, data-class order   Api/ x23 and talent/ x5 are inside them
+    S-08   authorization coverage
+    O-04   blocked, not open
+    the matrix guard registration, and the identity-resolver consolidation
+
+**Untouched by instruction, all engagement.**
+
+## WHAT WAS DELIBERATELY NOT BUILT, WITH ITS REASON
+
+    L-15   RE-SPECIFY  a boolean would destroy named regulations already stored
+    L-17   RE-SPECIFY  an enum cannot hold "Descriptive, Casestudy" - 453 rows say both
+    L-19a  RE-FILED    the column does not exist; it is an ADD plus a parse
+    L-16   DEFERRED    39 rows. Trigger: ~500
+    L-23   DEFERRED    18 rows. Trigger: ~500
+    F-10b  FILED       3,127 duplicate catalogue pairs cap any key at 93.47%
+    R-01   DEMOTED     a container, not a gate; it blocks nothing
+    R-02   AUTHORING   would show every real customer nothing, correctly
+    R-04   RE-POINTED  blocked on G-CERT-01, not on R-01
+    the 40 dead calls  deferred-dead, no deletions, no repoints, no remainder
+    the parser for 49 unclassified writers, and the R30 runner - instrument work
+                       with no product consequence
+
+## WHAT REMAINS BEFORE A CUSTOMER
+
+    X-21 on menus 227 / 228 / 229    the only step between "built and proved"
+                                     and "verified by a person"
+    C24's write half                 the authentication question is closed;
+                                     what remains is C23's property applied to writes
+
+---
+
 # THE ARTEFACT DESCRIBES THE CODE; THE RUN DESCRIBES THE BEHAVIOUR
 
 **Third instance, and the first caught BEFORE it shipped.**
