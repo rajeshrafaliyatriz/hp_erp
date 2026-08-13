@@ -7790,6 +7790,62 @@ found the controller already existed.
 
 ---
 
+# LOOKING AT THE VALUES BEFORE MIGRATING FOUND A SECOND L-15
+
+Carried from L-15: **look at the values, not just the count.** Applied to all four
+rows of the migration turn, before anything was written.
+
+    L-17 assessment_method   1,876 rows, and the values are MULTI-VALUED
+                             "Descriptive, Casestudy"   453
+                             "MCQ, Descriptive"         290
+                             "MCQ, Casestudy"            61
+
+    L-18 importance_level    1,014 rows, FOUR distinct values
+                             High 508 - Medium 360 - Critical 138 - (+1)
+
+    L-22 measurement_metrics 1,014 rows, 1,009 DISTINCT - essentially unique
+    L-21 performance_metrics   938 rows,   695 distinct - mostly unique
+
+## L-17 IS THE SAME DEFECT AS L-15, IN THE OPPOSITE DIRECTION
+
+The row says *"assessment_method ENUM, additive"*. **An enum holds ONE value. The
+column holds several, comma-separated, in its most common rows.** Migrating it to
+an enum forces a choice between "Descriptive" and "Casestudy" for 453 rows that
+say both.
+
+**L-15 reduced a structured column to one bit. L-17 would reduce a multi-value
+column to one value.** Both are populated columns whose data already exceeds the
+target shape.
+
+    L-17 -> RE-SPECIFY as a SET or a join table, not an enum.
+
+## THE OTHER THREE SURVIVE THE LOOK, FOR DIFFERENT REASONS
+
+**L-18 is genuinely enum-shaped** - four values over 1,014 rows, ordered, no
+multi-values. The one row of the four that is a straightforward migration.
+
+**L-21 is a SCREEN row, not a migration** - *"Performance Metrics on the rating
+screen"* is display. 695 distinct values is fine for text shown per item; nothing
+moves.
+
+**L-22 needs a decision rather than a re-spec**: 1,009 distinct anchors over 1,014
+rows means the "scale anchor" is PER ITEM, not a shared scale. That may be exactly
+right - each competency item carrying its own measurement wording - but the row
+does not say which was meant, and a shared scale is not derivable from unique text.
+
+## SO THE MIGRATION TURN IS ONE ROW
+
+    L-18   BUILD - a real migration with a real vocabulary
+    L-17   RE-SPECIFY - enum cannot hold the data
+    L-21   SCREEN, not a migration
+    L-22   QUESTION - per-item anchor or shared scale?
+
+**Four rows, one migration.** And the check that found it was reading three sample
+values per column - **cheaper than the size check, and it caught what the size
+check structurally cannot.**
+
+---
+
 # L-15 IS PLACED ON ITS DATA, AND THE TARGET SHAPE IS WRONG
 
 **Asked whether L-15 (804 rows, one table) joins the migration turn or defers with
