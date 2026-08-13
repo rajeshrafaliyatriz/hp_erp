@@ -388,6 +388,12 @@ Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competen
 // competency_kasba_rating had 160 seeded rows and NO writer anywhere: both
 // existing rating routes are GET and ProficiencyService only LEFT JOINs it.
 // These are NEW routes; the assessment-cycle GETs are untouched.
+// THE EMPLOYEE'S OWN CAPABILITY. Guarded by api.token only - every authenticated
+// employee may see their own, and no profile is required for that. It takes NO
+// user_id, so there is no subject to authorise: the endpoint cannot return
+// anybody else's data because it has no way to name anybody else.
+Route::get('/competency/my-capability', [\App\Http\Controllers\Api\Competency\MyCapabilityController::class, 'index'])->middleware('api.token');
+
 // The candidate list the write half never had. Guarded the same as the write:
 // a rating names a person, so reading who can be rated is not a public question.
 Route::get('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'index'])->middleware('profile:admin,hr');
@@ -1568,3 +1574,12 @@ Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGat
 // flips. profile:admin,hr STAYS as the outer coarse guard; the menu right is the
 // finer one inside it.
 Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware('profile:admin,hr');   // menuright:225,edit RE-ADD WITH THE MENU
+
+// ── AI-generated capability assessment ────────────────────────────────────────
+// GENERATE is admin/hr: it creates content for a whole job role.
+// MINE and SUBMIT are api.token only - any authenticated employee may take their
+// own test, and NEITHER ENDPOINT ACCEPTS A user_id, so there is no subject to
+// authorise and nothing to tamper with.
+Route::post('/competency/ai-assessment/generate', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'generate'])->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/mine', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'mine'])->middleware('api.token');
+Route::post('/competency/ai-assessment/submit', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'submit'])->middleware('api.token');
