@@ -7790,6 +7790,36 @@ found the controller already existed.
 
 ---
 
+# THE HEADER COUNTED LINES; THE LOADER COUNTS STATEMENTS
+
+    4,879 INSERT lines  ->  4,878 executable statements
+
+**Small here. In a dump used to actually restore, it is ONE SILENTLY MISSING ROW -
+and it is the LAST row, the one a reader is least likely to notice absent.**
+
+**Counting the file agreed with the header because the same script wrote both.
+Only EXECUTING disagreed.** Self-consistency is not verification: two numbers
+produced by one process will agree whether or not either is right.
+
+---
+
+# A LONG OPERATION IS CONFIRMED BY QUERYING ITS EFFECT, NEVER BY ITS RETURN
+
+**Three for three in one session - not a property of one call:**
+
+    F-10a's first run    exit 0, having written 11,698 of 80,064 rows
+    the audit script     completed, having searched 14 of 90 scripts
+    the scratch load     cut at 4,181 of 4,878, no error surfaced
+
+**An exit code, an absent error, and a finished-looking log all report THE
+HARNESS'S VIEW, NOT THE WORK'S.**
+
+**This applies BEFORE a long operation is started, not as a check afterwards** -
+the completion criterion has to be designed in, because by the time you are
+reading the output it is too late to have measured the effect.
+
+---
+
 # THE INSTRUMENT PENALISED THE SAFER SCRIPT
 
 **Not imprecision - INVERSION.**
