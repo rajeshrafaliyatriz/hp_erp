@@ -7815,6 +7815,17 @@ only exists across instants:
 check that PASSES on its one-instant behaviour, so the suite reads as covering
 them. **It is not that the time dimension fails - it is that it is never asked.**
 
+**FILED AS A STATED LIMIT, NOT AS A DEFECT.** It has no severity, no owner and no
+fix, because nothing here is known to be broken. **Nothing here is known to be
+right either** - and saying which of those two it is, out loud, is the only honest
+way to end a verification. A defect gets fixed; **a limit gets DECLARED, so the
+next person does not mistake green for covered.**
+
+**IT IS NOW THE FOURTH LINE OF THE SUITE'S OWN COVERAGE STATEMENT**, printed on
+every run beneath the three that were already there - not held in a document
+somebody has to know to open. *A rule in prose does not survive contact with the
+point of use.*
+
 **Named in the suite's own coverage statement**, which already lists three
 uncovered classes (C23's 912-route half, frontend types, rendered screens). **This
 is the fourth and it was the only one nobody had written down**, because the other
