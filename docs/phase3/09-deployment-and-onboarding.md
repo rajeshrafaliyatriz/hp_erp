@@ -66,6 +66,30 @@
 | 17 | `2026_08_11_000700_suggested_course_task_optional` | **RELAX NOT NULL** | ⚠️ **NO** — alters a column |
 | 18 | `2026_08_11_120000_create_tenant_readiness_gate_table` | CREATE | ✅ additive |
 
+> ### CORRECTION — THERE ARE ZERO UNRUN MIGRATIONS
+>
+> I reported that 23 migrations were written and never run, and warned that a copy
+> of this database would inherit them. **Both wrong. PENDING = 0.**
+>
+> **The filter manufactured the discrepancy**: my script globbed every file matching
+> `2026_0[78]_*` but compared them against a `migrations` list I had already
+> filtered to `>= 2026_07_29`. The July 25–28 files *had* run; their rows were
+> excluded by my own filter.
+>
+> **Same cause, second error:** I reported `task_option_sets` and
+> `competency_approvals` ABSENT. The migration `..._create_task_option_sets.php`
+> creates **`task_management_statuses`** and **`task_management_priorities`**. I
+> checked for a table named after the FILE instead of the table named in the
+> MIGRATION.
+>
+> **Resolve, do not match — broken twice in one script, on a report about what is
+> in the database.** On a report a false alarm is the dangerous direction: it sends
+> someone to fix what is not broken, and it discredits the true findings beside it.
+>
+> **Still true and re-confirmed:** 337 migration rows against 228 files on disk —
+> **109 recorded migrations whose files no longer exist.** That one was read from
+> the database, not derived from a name I supplied.
+
 **14 of 18 are purely additive.** On a fresh database all 18 are safe, because the
 four non-additive ones operate on rows that will not exist yet — **an ALIGN with
 nothing to align and a data FIX with nothing to fix are both no-ops.** They are
