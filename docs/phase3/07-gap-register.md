@@ -7790,6 +7790,50 @@ found the controller already existed.
 
 ---
 
+# THE REPORTS BLOCK DOES NOT COLLAPSE - **it splits two and two**
+
+R-01 gates R-02/03/04, so the size check opened on what those three would report
+on. **The block was expected to collapse the way four rows already have. It does
+not.**
+
+    R-02 gap report          jobrole_competency_map           23 rows, 0 outside demo
+    R-03 development plans   s_competency_development_plans  161 rows, 160 outside demo
+    R-04 certification type  certification_type                0 rows
+    R-04 certifications      s_competency_certifications     221 rows, 220 outside demo
+
+## TWO HAVE REAL DATA AND TWO DO NOT
+
+**R-03 and R-04 REPORT ON SOMETHING TODAY.** 160 development plans and 220
+certifications exist outside the demo tenant - **real customer rows, unreported.**
+The first two report rows in this plan whose subject is populated.
+
+**R-02 IS EMPTY FOR EVERY REAL TENANT.** 23 gap-map rows, all tenant 3. A gap
+report built now shows every real customer nothing, **and correctly** - the writers
+shipped this week are what will fill it. **Fourth member of
+BUILD-WITH-AUTHORING-CONTENT.**
+
+**R-04 SPLITS AGAIN**: 221 certifications and **0 certification types**. An expiry
+report needs the expiry rule, and the rule lives on the type. **The certifications
+are there; the thing that says when they lapse is not.** That is G-CERT-01, already
+filed.
+
+## R-01 ITSELF IS A CONTAINER, NOT A CAPABILITY
+
+No consolidated reporting home exists, but per-module report screens do - **
+attendance, leave, payroll, task.** The pattern is established.
+
+## SO THE BLOCK IS NOT ONE ROW DEEP IN THE WAY THE PLAN IMPLIES
+
+    R-03  could be built against real data WITHOUT R-01 existing
+    R-02  would ship empty whatever order it is built in
+    R-04  is blocked on a TYPE TABLE, not on R-01
+
+**Building R-01 as a container for two reports that cannot yet show anything, while
+a third has real data and no dependency on it, is the wrong order** - so the
+sequencing goes back to Triz rather than being assumed.
+
+---
+
 # ONLY A TOOL THAT MUST BE BYPASSED SURVIVES
 
 **Six instances, and the remedy was wrong for the sixth.**
