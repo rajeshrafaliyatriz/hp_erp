@@ -7800,7 +7800,7 @@ found the controller already existed.
 
 **The sixth instance proves the distinction.** The remedy for instances 1-5 was
 *make it unskippable* - and what was built was , which is
-**available but optional**.  remained the default path, so using the remedy
+**available but optional**. `-m` remained the default path, so using the remedy
 took deliberate action. **A second rule wearing a tool's clothes.**
 
     STRUCTURAL means USING IT IS THE DEFAULT PATH and SKIPPING IT TAKES
@@ -7809,7 +7809,7 @@ took deliberate action. **A second rule wearing a tool's clothes.**
 
 **Built: ** - takes the message on stdin via heredoc, refuses an
 empty one, prints what it is about to commit, and commits from a file. There is no
- to reach past.
+ `-m` to reach past.
 
 ## AND THE R30 WRAPPER HAS THE SAME WEAKNESS - **reported, not fixed**
 
@@ -7824,6 +7824,20 @@ matters. The structural version is a runner that is the ONLY way a script gets
 executed, and that needs design rather than a quick fix.
 
 **Left as a detector, deliberately, with its weakness named.**
+
+## POSTSCRIPT - **THIS ENTRY WAS DAMAGED BY THE FAILURE IT DESCRIBES**
+
+It was written with `python -c "..."`, and bash substituted its backticked shell
+tokens away before Python ever saw the string. **Three phrases vanished from an
+entry whose subject is losing text to the shell.**
+
+**The commit that carried it went through `_tools/commit.sh` and was intact.** The
+register write did not go through anything - it was a `-c` one-liner, the default
+path, chosen without thinking exactly as `-m` had been minutes earlier.
+
+**So the structural fix covered commits and not file writes**, and the gap showed
+itself immediately. Repaired from a script FILE. **Scope of a remedy is its own
+question: making one path safe says nothing about the others.**
 
 ---
 
