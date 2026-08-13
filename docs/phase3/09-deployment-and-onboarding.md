@@ -170,9 +170,9 @@ script instead — that is the part Milan must build or run.**
 |---|---|---|---|
 | 1 | **Run migrations** (18 + the new 19th) | — | `php artisan migrate` |
 | 2 | **Seed menus + rights** | — | ⚠️ **SCRIPT — SEEDER NOT WRITTEN (§b.1)** |
-| 3 | **Create the organization / sub-institute** | Organization setup | ⚠️ **verify: provisioning-only on the test DB** |
+| 3 | **Create the organization / sub-institute** | ⚠️ **NO MENU ENTRY** | ⚠️ **MEASURED, and the flag was right.** The organization module maps six screens and **none of them creates an organization**: Organization Profile is an EDIT screen for one that already exists. A component `add-organization-detail.tsx` and an `onboarding/` directory exist on disk but are **not in the menu map** — reachable only from inside another screen, if at all, and that is unverified. |
 | 4 | **Departments** | Organization → Departments | ✅ screen exists (`hrms_departments`) |
-| 5 | **Job roles** | Organization → Job Roles | ✅ screen exists |
+| 5 | **Job roles** | ⚠️ **NOT in Organization** — Competency → Libraries & Taxonomy (menu 223/39) and Skill Taxonomy (41) | ⚠️ **I named the wrong screen.** Job roles are authored in the COMPETENCY module, not the organization one. Corrected by measuring the content maps rather than by describing them. |
 | 6 | **Tasks per job role** | Task Management → Job Role Tasks | ✅ screen exists |
 | 7 | **Users** | HRMS → Employee | ✅ screen exists; bulk import for volume |
 | 8 | **Profiles + rights per user** | Settings → Rights | ✅ screen exists (tri-state) |
