@@ -7790,6 +7790,47 @@ found the controller already existed.
 
 ---
 
+# THE LIBRARY BLOCK SPLITS THREE WAYS - **and one row's column does not exist**
+
+Size check on all eleven rows, measured against the columns they target.
+
+    L-17 assessment_method     1,876 rows   knowledge 804, ability 1015, attitude 18, behaviour 39
+    L-18 importance_level      1,014        ability only
+    L-22 measurement_metrics   1,014        ability only
+    L-21 performance_metrics     977        skills 938, behaviour 39
+    L-15 compliance_relevance    804        knowledge only
+    L-16 risk_implications        39        behaviour only
+    L-23 development_methods      18        attitude only
+    L-19 min_years_experience      0        THE COLUMN DOES NOT EXIST IN ANY TABLE
+
+    L-12 / L-20 tags           knowledge 804 - ability 1,015 - attitude 18 - behaviour 39
+
+## THREE GROUPS, AND ONLY THE FIRST IS WORTH BUILDING NOW
+
+**REAL DATA (4 rows)**: L-17, L-18, L-21, L-22 - each over 950 populated rows.
+These are migrations with something to migrate.
+
+**THIN (3 rows)**: L-15 at 804 in one table, L-16 at 39, L-23 at 18. **L-16 and
+L-23 are a migration for 57 rows between them** - the work is the same size as for
+1,876 and the payoff is not.
+
+**L-19 IS NOT A MIGRATION AT ALL.** `min_years_experience` **does not exist in any
+of the five tables.** The row says *"Experience -> numeric min years, text kept"* -
+it is a column ADD plus a parse, and its cost was written as if the column were
+there. **The plan's estimate is for the wrong shape of work.**
+
+## THE PATTERN ACROSS FOUR BLOCKS
+
+    the 51-row split      14 already done
+    the reports block     3 of 4 closed by measurement
+    the library block     1 row's subject does not exist; 3 more are near-empty
+    the 40 dead calls     0 user-reachable
+
+**Four consecutive blocks where the size check changed the answer**, and in every
+case the plan's row was written before anyone counted the rows underneath it.
+
+---
+
 # THE REPORTS BLOCK DOES NOT COLLAPSE - **it splits two and two**
 
 R-01 gates R-02/03/04, so the size check opened on what those three would report
