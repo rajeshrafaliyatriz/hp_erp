@@ -7790,6 +7790,28 @@ found the controller already existed.
 
 ---
 
+# THE FAILURE MODE DOES NOT STAY IN ONE LAYER
+
+**Two verdicts over three outcomes, fifth appearance - and the first OUTSIDE THE
+WORK.**
+
+    1  the exit code            completed / failed / KILLED MID-WRITE
+    2  the item_id branch       skill validated / others written unchecked
+    3  the mail-gate negative   raw pattern / the pipeline the scan uses
+    4  the closing report       matches / DIVERGENT / merely incomplete
+    5  the monitoring threshold rising / static-dead / STATIC-BUT-STUCK
+
+**One to four were in the work or in the instruments measuring it. The fifth was in
+the thing WATCHING the instrument** - and the monitoring layer is the one nobody
+inspects, because it is not where the work is and not where the checks are.
+
+**And it would have felt resolved.** A second identical count reads like
+confirmation; it separates nothing the first did not. **The shape that makes this
+family dangerous is that the missing verdict is never absent-looking - it is
+absorbed silently into one of the two that exist.**
+
+---
+
 # A THRESHOLD PROMPTS A CHECK; IT DOES NOT ANSWER ONE
 
 **Monitoring F-10a, and the distinction is the register's own lesson applied to the
