@@ -7790,6 +7790,51 @@ found the controller already existed.
 
 ---
 
+# THE OLD ARTEFACT LEFT ALONGSIDE THE NEW ONE
+
+**Nothing in the file says which style is live.**
+
+    DEAD    getAttendanceRecords(params?)  checkIn(userId)  checkOut(userId)
+            raw params - NO LaravelContext - NO comment
+    LIVE    getAttendanceKpis(context, ...)  getAttendanceWeeklySummary(context, ...)
+            context-first - attendanceParams(context) - EACH carries a comment
+
+**Not abandonment and not a backend gap - A GENERATION GAP.** The dead methods
+predate the  convention. The live ones were added ALONGSIDE them
+under the new convention, and the old generation was never removed.
+
+** and  both exist**, so /
+is a genuine repoint, not a deletion.
+
+## SAME FAMILY AS THE TRAIT THAT LOOKED COMPLETE TO EVERY CHECKER
+
+It survives for the same reason: **the file is internally consistent, and nothing
+in it distinguishes current from superseded.** A reader sees two working-looking
+styles and no marker saying which one is now correct.
+
+## THE SIGNATURE TELL IS THE FIRST THING THAT MAKES A GENERATION VISIBLE
+
+**And it works here only because the convention change touched the SIGNATURE.**
+ became the first argument, so the generation is readable from the
+declaration without tracing a single call.
+
+**It would not work for a convention change that did not move a signature** - a
+new error-handling rule, a changed header, a different base URL. Those leave the
+old generation looking identical to the new one, and nothing cheap would find
+them.
+
+## AND THE TELL HAS TWO VERDICTS WHERE THE WORLD HAS THREE
+
+    pre-convention AND dead          cleanup or repoint, no behaviour change
+    pre-convention BUT STILL CALLED  a repoint CHANGES BEHAVIOUR - and IS a fix
+    post-convention but dead anyway  the tell misses it entirely
+
+**A signature says which generation a method belongs to. It does not say whether
+anything calls it.** Only the second question decides what a repoint does, which
+is why the read is two columns and not one.
+
+---
+
 # THE HEADER COUNTED LINES; THE LOADER COUNTS STATEMENTS
 
     4,879 INSERT lines  ->  4,878 executable statements
