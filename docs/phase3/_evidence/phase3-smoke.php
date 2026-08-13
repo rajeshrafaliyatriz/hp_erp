@@ -1717,6 +1717,54 @@ $tally = ['PASS' => 0, 'FAIL' => 0, 'SKIPPED' => 0];
 foreach ($RESULTS as [, , $s]) $tally[$s]++;
 
 printf("\n%s\n", str_repeat('=', 72));
+
+/* ══════════════════ THE SUITE ASSERTS ITS OWN CHECKS ══════════════════
+ *
+ * PASS / FAIL / SKIPPED is THREE verdicts. The fourth outcome is A CHECK THAT NO
+ * LONGER EXISTS - deleted, renamed, or lost in a refactor. The suite reports on
+ * checks it RAN, so a vanished one is absorbed into "all green" and never appears
+ * as absent. That is the family's signature: the missing verdict is never
+ * absent-looking.
+ *
+ * NAMES, NOT A COUNT. A count catches a deletion and MISSES A SWAP - one check
+ * removed and another added reads as unchanged. Same weakness as the baseline
+ * count that could not say which file had left.
+ *
+ * RUNTIME, NOT A SOURCE SCAN. There are 49 `check(` call sites and 54 checks:
+ * five come from loops, so one site yields several names. A registry built by
+ * reading the source would be wrong the day it was written.
+ */
+$__regFile = __DIR__ . '/_check-registry.txt';
+$__ran = array_map(fn ($r) => $r[1], $RESULTS ?? []);
+sort($__ran);
+
+if (!is_file($__regFile)) {
+    file_put_contents($__regFile, implode("\n", $__ran) . "\n");
+    printf("\nCHECK REGISTRY CREATED with %d name(s). Commit it - from now on a\n", count($__ran));
+    printf("check that disappears will FAIL rather than vanish.\n");
+} else {
+    $__want = array_values(array_filter(array_map('trim', file($__regFile))));
+    sort($__want);
+    $__gone  = array_values(array_diff($__want, $__ran));
+    $__added = array_values(array_diff($__ran, $__want));
+
+    if ($__gone) {
+        printf("\n*** CHECKS THAT NO LONGER RUN: %d ***\n", count($__gone));
+        foreach ($__gone as $g) printf("      MISSING: %s\n", $g);
+        printf("*** A check may be removed deliberately - but it must be removed from\n");
+        printf("*** _check-registry.txt in the same change, so it is a DECISION and\n");
+        printf("*** not a disappearance.\n");
+        $__registryFailed = true;
+    }
+    if ($__added) {
+        printf("\nNEW CHECKS (not a failure, but re-commit the registry): %d\n", count($__added));
+        foreach (array_slice($__added, 0, 5) as $a) printf("      NEW: %s\n", $a);
+    }
+    if (!$__gone && !$__added) {
+        printf("\nCHECK REGISTRY: all %d checks present, none added.\n", count($__want));
+    }
+}
+
 printf("PASS %d   FAIL %d   SKIPPED %d   (%.0fs)\n", $tally['PASS'], $tally['FAIL'], $tally['SKIPPED'], microtime(true) - $t0);
 if ($tally['FAIL']) {
     echo "\nFAILURES:\n";
