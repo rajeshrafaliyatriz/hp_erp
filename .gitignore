@@ -23,3 +23,8 @@ yarn-error.log
 /.zed
 /public/ckeditor_wiris
 /public/plugins
+# Live-database artefacts — never committed.
+# Real production data and host names. Kept locally for rollback only.
+_local-backups/
+docs/phase3/_changes/LIVE-*.sql
+docs/phase3/_changes/*backup*.sql
