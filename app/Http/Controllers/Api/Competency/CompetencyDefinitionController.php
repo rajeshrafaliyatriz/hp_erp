@@ -132,6 +132,11 @@ class CompetencyDefinitionController extends Controller
             'name'                => 'required|string|max:191',
             'code'                => 'nullable|string|max:64',
             'description'         => 'nullable|string',
+            // OPTIONAL, AND VERIFIED AGAINST THE CALLER'S OWN TENANT BELOW.
+            // `exists:` alone would accept another organisation's framework id,
+            // which is the shape of leak G-SEC-29 closed across twenty
+            // controllers - a valid id that belongs to somebody else.
+            'framework_id'        => 'nullable|integer',
             'competency_type'     => 'nullable|string|max:64',
             'criticality'         => 'nullable|string|max:32',
             'items'               => 'required|array|min:1',
@@ -197,9 +202,32 @@ class CompetencyDefinitionController extends Controller
             }
         }
 
-        $competencyId = DB::transaction(function () use ($request, $sid, $actor) {
+        // THE FRAMEWORK MUST BE THE CALLER'S OWN. Checked here rather than with
+        // `exists:` because a bare exists rule accepts ANY tenant's framework id -
+        // a valid id belonging to somebody else, which is exactly the leak shape
+        // G-SEC-29 closed across twenty controllers. `$sid` comes from the token.
+        $frameworkId = $request->input('framework_id') !== null
+            ? (int) $request->input('framework_id')
+            : null;
+
+        if ($frameworkId !== null) {
+            $ok = DB::table('s_competency_frameworks')
+                ->where('id', $frameworkId)->where('sub_institute_id', $sid)->exists();
+
+            if (!$ok) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'That framework does not exist in your organisation.',
+                ], 404);
+            }
+        }
+
+        $competencyId = DB::transaction(function () use ($request, $sid, $actor, $frameworkId) {
             $id = DB::table('competency')->insertGetId([
                 'sub_institute_id' => $sid,
+                // NULL is permitted and permanent: a competency not filed under a
+                // framework is a normal competency, not an incomplete one.
+                'framework_id'     => $frameworkId,
                 'code'             => $request->input('code'),
                 'name'             => $request->input('name'),
                 'description'      => $request->input('description'),

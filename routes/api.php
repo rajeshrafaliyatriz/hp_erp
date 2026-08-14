@@ -1586,3 +1586,6 @@ Route::post('/competency/ai-assessment/submit', [\App\Http\Controllers\Api\Compe
 // PUBLISH is admin/hr and deliberately separate from generate(): an LLM wrote the
 // questions and a person should read them before an employee is assessed on them.
 Route::post('/competency/ai-assessment/publish', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'publish'])->middleware('profile:admin,hr');
+// The tenant's job roles with ids, and how many competencies each has — the list
+// generate() needs and nothing on the frontend could previously produce.
+Route::get('/competency/ai-assessment/jobroles', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'jobroles'])->middleware('profile:admin,hr');

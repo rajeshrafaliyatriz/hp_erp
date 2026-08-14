@@ -98,7 +98,7 @@ class AiAssessmentController extends Controller
             ->leftJoin('competency as c', 'c.id', '=', 'm.competency_id')
             ->where('m.sub_institute_id', $sid)->where('k.sub_institute_id', $sid)
             ->where('m.jobrole_id', $jobroleId)
-            ->get(['k.id', 'k.kasba_type', 'k.item_label', 'c.name as competency_name']);
+            ->get(['k.id', 'k.kasba_type', 'k.item_label', 'k.competency_id', 'c.name as competency_name', 'm.required_proficiency']);
 
         if ($items->isEmpty()) {
             return response()->json([
@@ -125,7 +125,7 @@ class AiAssessmentController extends Controller
             ], 502);
         }
 
-        $rows = $this->acceptable($generated, $items, $formats);
+        $rows = $this->acceptable($generated, $items, $formats, $jobrole->jobrole);
 
         if (!$rows) {
             return response()->json([
@@ -153,6 +153,12 @@ class AiAssessmentController extends Controller
                     'sub_institute_id' => $sid,
                     'test_id'          => $testId,
                     'kasba_item_id'    => $r['kasba_item_id'],
+                    'cited_item_label'           => $r['cited_item_label'],
+                    'cited_kasba_type'           => $r['cited_kasba_type'],
+                    'cited_competency_id'        => $r['cited_competency_id'],
+                    'cited_competency_name'      => $r['cited_competency_name'],
+                    'cited_jobrole'              => $r['cited_jobrole'],
+                    'cited_required_proficiency' => $r['cited_required_proficiency'],
                     'format'           => $r['format'],
                     'question_text'    => $r['question_text'],
                     'options'          => $r['options'] !== null ? json_encode($r['options']) : null,
@@ -183,6 +189,64 @@ class AiAssessmentController extends Controller
             'questions_dropped'   => max(0, ($items->count() * $perItem) - count($rows)),
             'message' => 'Test generated as a draft. Publish it to make it visible to employees in this job role.',
         ], 201);
+    }
+
+    /**
+     * GET /competency/ai-assessment/jobroles — the tenant's job roles.
+     *
+     * generate() needs a jobrole_id and NOTHING ON THE FRONTEND COULD PRODUCE ONE.
+     * The two existing lists were both the wrong shape: the task-map roles are the
+     * GLOBAL catalogue keyed by NAME with no tenant column, and role-requirements
+     * needs an id to start from. This returns the caller's own job roles with ids.
+     *
+     * IT REPORTS HOW MANY COMPETENCIES EACH ROLE HAS. A role with 0 cannot be
+     * assessed — generate() refuses it — so the screen can say why BEFORE the
+     * button is pressed rather than after. An option that is offered and then
+     * refused is worse than one that explains itself.
+     *
+     * Tenant from the token. Guarded profile:admin,hr like the rest of this half.
+     */
+    public function jobroles(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $sid = (int) $context['sub_institute_id'];
+
+        $roles = DB::table('s_user_jobrole as j')
+            ->leftJoin('jobrole_competency_map as m', function ($join) use ($sid) {
+                $join->on('m.jobrole_id', '=', 'j.id')->where('m.sub_institute_id', '=', $sid);
+            })
+            ->where('j.sub_institute_id', $sid)
+            ->whereNull('j.deleted_at')
+            ->groupBy('j.id', 'j.jobrole', 'j.department')
+            ->orderBy('j.jobrole')
+            ->get([
+                'j.id',
+                'j.jobrole as name',
+                'j.department',
+                DB::raw('COUNT(m.id) as competency_count'),
+            ]);
+
+        $assessable = $roles->where('competency_count', '>', 0)->count();
+
+        return response()->json([
+            'status' => 1,
+            'data'   => [
+                'roles'      => $roles,
+                'total'      => $roles->count(),
+                'assessable' => $assessable,
+            ],
+            // A tenant with job roles but none mapped is the NORMAL state before
+            // anyone authors Role Requirements. Said here so the screen explains
+            // it rather than showing a list where every option fails.
+            'empty_is_expected' => $assessable === 0,
+            'empty_reason'      => $assessable === 0
+                ? 'None of your job roles has competencies mapped yet. Add them in Role Requirements before generating an assessment.'
+                : null,
+        ]);
     }
 
     /**
@@ -478,8 +542,12 @@ class AiAssessmentController extends Controller
      * invents an id produces a question that reads perfectly and assesses
      * nothing; it is dropped here and counted, never stored.
      */
-    private function acceptable($generated, $items, array $formats): array
+    private function acceptable($generated, $items, array $formats, string $jobroleName): array
     {
+        // KEYED, not just flipped: the item itself is needed to write the
+        // CITATION beside the question. A live id says what it points at now;
+        // the citation says what was asked.
+        $byId = $items->keyBy(fn ($i) => (int) $i->id);
         $valid = $items->pluck('id')->map('intval')->flip();
         $out = [];
 
@@ -501,8 +569,17 @@ class AiAssessmentController extends Controller
                 continue;
             }
 
+            $src = $byId->get($id);
+
             $out[] = [
                 'kasba_item_id' => $id,
+                // THE CITATION, taken at generation time and never recomputed.
+                'cited_item_label'           => $src->item_label ?? null,
+                'cited_kasba_type'           => $src->kasba_type ?? null,
+                'cited_competency_id'        => isset($src->competency_id) ? (int) $src->competency_id : null,
+                'cited_competency_name'      => $src->competency_name ?? null,
+                'cited_jobrole'              => $jobroleName,
+                'cited_required_proficiency' => $src->required_proficiency ?? null,
                 'format'        => $fmt,
                 'question_text' => $text,
                 'options'       => $fmt === 'mcq' ? $options : null,
