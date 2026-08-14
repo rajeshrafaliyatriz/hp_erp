@@ -74,14 +74,35 @@ return [
             'strict' => false,
         ],
 
+        /*
+         * NO FALLBACK VALUES ON THIS CONNECTION, DELIBERATELY.
+         *
+         * `password` previously read env('DB2_PASSWORD', 'dev@sql') — a real
+         * password as a hardcoded default, in a tracked file, on origin/main.
+         * The same string opened the live database, so it was not a throwaway
+         * dev credential; it was a working one, published in every clone and in
+         * the full commit history.
+         *
+         * A DEFAULT CREDENTIAL DOES NOT FAIL — IT CONNECTS. That is what makes
+         * it dangerous: a missing DB2_PASSWORD silently succeeded with a known
+         * password instead of stopping. Host, database and username carried the
+         * same problem in smaller form, naming real infrastructure to anyone
+         * with the repository.
+         *
+         * Now every value must come from the environment. A missing variable
+         * fails loudly, which is the correct behaviour for a credential.
+         *
+         * REMOVING THIS LINE DOES NOT UNDO THE EXPOSURE — the old commits still
+         * contain it. Rotation is the only thing that closes it.
+         */
         'mysql_Dev' => [
             'driver' => 'mysql',
             'url' => env('DB2_URL'),
-            'host' => env('DB2_HOST', '192.168.0.2'),
+            'host' => env('DB2_HOST'),
             'port' => env('DB2_PORT', '3306'),
-            'database' => env('DB2_DATABASE', 'triz_erp_21'),
-            'username' => env('DB2_USERNAME', 'dev_db'),
-            'password' => env('DB2_PASSWORD', 'dev@sql'),
+            'database' => env('DB2_DATABASE'),
+            'username' => env('DB2_USERNAME'),
+            'password' => env('DB2_PASSWORD'),
         ],
 
         'mariadb' => [
