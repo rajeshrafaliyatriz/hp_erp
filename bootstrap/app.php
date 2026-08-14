@@ -13,6 +13,15 @@ return Application::configure(basePath: dirname(__DIR__))
         then: function () {
             Route::middleware(['web','auth','session','menu'])
                 ->group(base_path('routes/lms.php'));
+            // REGISTERED BEFORE user.php, AND THAT ORDER IS THE POINT. These
+            // four endpoints are called by the token-authenticated frontend and
+            // must not carry the session guard. Declared first, so they win over
+            // any same-path definition in user.php below.
+            //
+            // NOT wrapped in ['auth','session','menu'] — that wrapper is exactly
+            // what returned 403 to an admin saving the rights matrix.
+            Route::group([], base_path('routes/user-api.php'));
+
             Route::middleware(['web','auth','session','menu'])
                 ->group(base_path('routes/user.php'));
             Route::middleware(['web','auth','session','menu'])
