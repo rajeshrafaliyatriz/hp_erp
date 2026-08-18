@@ -346,6 +346,9 @@ Route::get('/competency/assessment-cycles/{id}/audit-trail', [CompetencyAssessme
 Route::get('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleController::class, 'show'])->whereNumber('id');
 Route::put('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleController::class, 'update'])->whereNumber('id');
 
+// The employee LIST. Employee Profiles took a userId prop and nothing ever passed
+// one, because no index endpoint existed - only show/{id}. HR saw their own record.
+Route::get('/competency/employee-profiles', [EmployeeCompetencyProfileController::class, 'index'])->middleware('profile:admin,hr');
 Route::get('/competency/employee-profiles/{id}', [EmployeeCompetencyProfileController::class, 'show'])->whereNumber('id');
 Route::get('/competency/employee-profiles/{id}/available-skills', [EmployeeCompetencyProfileController::class, 'availableSkills'])->whereNumber('id');
 Route::post('/competency/employee-profiles/{id}/skills', [EmployeeCompetencyProfileController::class, 'addSkill'])->whereNumber('id')->middleware('profile:admin,hr,manager');
@@ -1589,3 +1592,22 @@ Route::post('/competency/ai-assessment/publish', [\App\Http\Controllers\Api\Comp
 // The tenant's job roles with ids, and how many competencies each has — the list
 // generate() needs and nothing on the frontend could previously produce.
 Route::get('/competency/ai-assessment/jobroles', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'jobroles'])->middleware('profile:admin,hr');
+
+/*
+ * THE COMPETENCY LIBRARY — real competencies behind the rich library screen.
+ *
+ * Same six endpoints and the same response shape the screen already consumes,
+ * served from `competency` instead of `s_users_skills`. The 1,799-line screen
+ * needs no change: only its service BASE moves from /skill_library to here.
+ *
+ * The /skill_library routes are LEFT IN PLACE. Skill management has no other
+ * home, and re-pointing the menu without a replacement would orphan creation,
+ * editing, import and the taxonomy editor with no error to say so.
+ */
+Route::prefix('competency-library')->group(function () {
+    Route::get('/competency-list', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'index'])->middleware('api.token');
+    Route::get('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'show'])->whereNumber('id')->middleware('api.token');
+    Route::post('/competency', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'store'])->middleware('profile:admin,hr');
+    Route::put('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+    Route::delete('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+});
