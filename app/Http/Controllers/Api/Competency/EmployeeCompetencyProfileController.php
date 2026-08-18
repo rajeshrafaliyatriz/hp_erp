@@ -12,6 +12,66 @@ class EmployeeCompetencyProfileController extends Controller
 {
     use ResolvesCompetencyContext;
 
+    /**
+     * GET /competency/employee-profiles — THE LIST THIS SCREEN NEVER HAD.
+     *
+     * Employee Profiles takes a `userId` prop and NOTHING EVER PASSED ONE, so it
+     * fell back to `user?.id` and showed HR their own record. The screen was not
+     * broken — it was built to receive a person and no list existed to choose
+     * from. There was no index endpoint at all: only show/{id}.
+     *
+     * Tenant from the token. An HR user cannot list another organization's
+     * people because $sid is never taken from the request.
+     */
+    public function index(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $sid = (int) $context['sub_institute_id'];
+        $q   = trim((string) $request->input('q', ''));
+
+        $rows = DB::table('tbluser as u')
+            ->leftJoin('s_user_jobrole as j', 'j.id', '=', 'u.jobtitle_id')
+            ->where('u.sub_institute_id', $sid)
+            ->when($q !== '', function ($w) use ($q) {
+                $w->where(function ($x) use ($q) {
+                    $x->where('u.first_name', 'like', "%{$q}%")
+                      ->orWhere('u.last_name', 'like', "%{$q}%")
+                      ->orWhere('u.email', 'like', "%{$q}%");
+                });
+            })
+            ->orderBy('u.first_name')->orderBy('u.last_name')
+            ->limit(500)
+            ->get([
+                'u.id',
+                'u.first_name',
+                'u.last_name',
+                'u.email',
+                'u.jobtitle_id',
+                'j.jobrole',
+            ]);
+
+        $total = DB::table('tbluser')->where('sub_institute_id', $sid)->count();
+
+        return response()->json([
+            'status' => 1,
+            'data'   => [
+                'employees' => $rows,
+                'shown'     => $rows->count(),
+                'total'     => $total,
+            ],
+            // Stated so nobody reads 500 as "all of them".
+            'truncated' => $total > 500 && $q === '',
+            'empty_is_expected' => $rows->isEmpty(),
+            'empty_reason' => $rows->isEmpty()
+                ? ($q !== '' ? 'No employee matches that search.' : 'No employees have been added to this organization yet.')
+                : null,
+        ]);
+    }
+
     public function show(Request $request, $id)
     {
         $context = $this->competencyContext($request);
