@@ -91,6 +91,144 @@ class JobroleTaskCompetencyMapController extends Controller
         ]);
     }
 
+    /**
+     * GET /competency/task-map/for-task — WHAT THIS TASK EXERCISES, AND WHERE
+     * THE PERSON BEING ASSIGNED IT STANDS.
+     *
+     * Built for the assign-task modal, which is where this mapping belongs. The
+     * separate Task Competencies screen is a matrix somebody must remember to
+     * open, and the evidence that nobody does is in the data: 121 mappings exist
+     * because a script wrote them, not a person.
+     *
+     * THE MAPPING IS PER-TENANT EVEN THOUGH THE TASK IS NOT. s_jobrole_task has
+     * no sub_institute_id - it is the shared catalogue - but
+     * jobrole_task_competency_map does. So two organisations can hold the same
+     * standard task and decide it demands entirely different capabilities, and
+     * neither sees the other. THAT IS WHY EDITING THIS FROM AN OPERATIONAL SCREEN
+     * IS SAFE: a manager is describing their own organisation, not everyone.
+     *
+     * `user_id` is OPTIONAL and names the SUBJECT - the person being assigned the
+     * task. Their rating is rolled up from the KASBA items beneath each
+     * competency. Absent user_id means "just show me the mapping".
+     */
+    public function forTask(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'jobrole_task_id' => 'required|integer',
+            'user_id'         => 'nullable|integer',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $sid     = (int) $context['sub_institute_id'];
+        $taskId  = $request->integer('jobrole_task_id');
+        $subject = $request->input('user_id') !== null ? (int) $request->input('user_id') : null;
+
+        // ACCEPTS EITHER ID, AND RESOLVES. The assign modal holds an
+        // s_user_jobrole_task id (the tenant's own task row); the mapping is
+        // keyed on s_jobrole_task (the shared catalogue). Requiring the caller to
+        // know which is which pushes a schema detail into every screen - and it
+        // is exactly the mistake that produced a 404 the first time this was
+        // mounted.
+        //
+        // Try the catalogue directly, then via catalogue_task_id - the bridge
+        // F-10a populated for precisely this.
+        $task = DB::table('s_jobrole_task')->where('id', $taskId)->first(['id', 'task', 'jobrole']);
+        $resolvedFrom = 'catalogue';
+
+        if (!$task) {
+            $bridged = DB::table('s_user_jobrole_task')
+                ->where('id', $taskId)->value('catalogue_task_id');
+
+            if ($bridged) {
+                $task = DB::table('s_jobrole_task')->where('id', $bridged)->first(['id', 'task', 'jobrole']);
+                $taskId = (int) $bridged;
+                $resolvedFrom = 'tenant_task';
+            }
+        }
+
+        if (!$task) {
+            // TWO DIFFERENT ABSENCES, AND THE CALLER NEEDS TO TELL THEM APART.
+            $own = DB::table('s_user_jobrole_task')->where('id', $taskId)->exists();
+
+            return response()->json([
+                'status'  => 0,
+                'message' => $own
+                    ? 'This task is not linked to the shared task catalogue, so competencies cannot be mapped to it yet.'
+                    : 'Job role task not found.',
+                'reason'  => $own ? 'no_catalogue_bridge' : 'not_found',
+            ], 404);
+        }
+
+        // Mapped competencies for THIS tenant.
+        $mapped = DB::table('jobrole_task_competency_map as m')
+            ->join('competency as c', 'c.id', '=', 'm.competency_id')
+            ->where('m.sub_institute_id', $sid)->where('m.jobrole_task_id', $taskId)
+            ->whereNull('c.deleted_at')
+            ->get(['c.id', 'c.name', 'c.code', 'c.criticality']);
+
+        // The subject's rating per competency, rolled up from its KASBA items.
+        // ROUNDED, NEVER INVENTED: a competency with no rated items returns null,
+        // not zero - unrated and rated-badly are different facts.
+        $ratings = [];
+        if ($subject && $mapped->isNotEmpty()) {
+            $ratings = DB::table('competency_kasba_item as k')
+                ->leftJoin('competency_kasba_rating as r', function ($j) use ($subject) {
+                    $j->on('r.kasba_item_id', '=', 'k.id')->where('r.user_id', '=', $subject);
+                })
+                ->where('k.sub_institute_id', $sid)
+                ->whereIn('k.competency_id', $mapped->pluck('id'))
+                ->selectRaw('k.competency_id, COUNT(k.id) items, COUNT(r.rating) rated, AVG(r.rating) avg_rating')
+                ->groupBy('k.competency_id')
+                ->get()->keyBy('competency_id');
+        }
+
+        $competencies = $mapped->map(function ($c) use ($ratings) {
+            $r = $ratings[$c->id] ?? null;
+            return [
+                'id'          => (int) $c->id,
+                'name'        => $c->name,
+                'code'        => $c->code,
+                'criticality' => $c->criticality,
+                'items'       => $r ? (int) $r->items : 0,
+                'items_rated' => $r ? (int) $r->rated : 0,
+                // null means UNRATED. A zero here would read as "scored nothing".
+                'rating'      => ($r && $r->rated > 0) ? round((float) $r->avg_rating, 1) : null,
+            ];
+        })->values();
+
+        // Everything this tenant could map, so the picker has options without a
+        // second request.
+        $available = DB::table('competency')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->orderBy('name')->get(['id', 'name', 'code']);
+
+        return response()->json([
+            'status' => 1,
+            'data'   => [
+                // The CATALOGUE id, after resolution - so the caller can save
+                // with it and never has to know which kind it started with.
+                'jobrole_task_id' => $taskId,
+                'resolved_from'   => $resolvedFrom,
+                'task'            => $task->task,
+                'jobrole'         => $task->jobrole,
+                'user_id'         => $subject,
+                'competencies'    => $competencies,
+                'available'       => $available,
+            ],
+            'empty_is_expected' => $competencies->isEmpty(),
+            'empty_reason'      => $competencies->isEmpty()
+                ? 'No competencies are mapped to this task yet. Add them here so this work counts towards capability.'
+                : null,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $context = $this->competencyContext($request);
