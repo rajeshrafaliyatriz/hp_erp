@@ -412,6 +412,10 @@ Route::delete('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\
 // definition have no row in the map.
 Route::get('/competency/task-map/roles', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'roles']);
 Route::get('/competency/task-map/tasks', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'tasks']);
+// What ONE task exercises, plus where the person being assigned it stands.
+// Built for the assign-task modal: the mapping belongs where the judgement is
+// made, not on a matrix screen somebody must remember to open.
+Route::get('/competency/task-map/for-task', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'forTask'])->middleware('api.token');
 Route::get('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'index']);
 Route::post('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/task-map/{id}', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'destroy'])->middleware('profile:admin,hr');
