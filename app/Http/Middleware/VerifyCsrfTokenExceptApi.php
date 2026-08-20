@@ -3,7 +3,15 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as Base;
+// ValidateCsrfToken, not VerifyCsrfToken: since Laravel 11 this is the class
+// the `web` group is actually built with, and the one bootstrap/app.php
+// replaces. VerifyCsrfToken is its parent, kept only as an alias. Extending the
+// class being replaced keeps this in step if the alias is ever retired.
+//
+// The `except` list from validateCsrfTokens() still applies either way -
+// `$neverVerify` is a static declared once on VerifyCsrfToken and shared down
+// the whole hierarchy.
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken as Base;
 use Laravel\Sanctum\PersonalAccessToken;
 
 /**

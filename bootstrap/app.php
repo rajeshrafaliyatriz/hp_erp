@@ -86,10 +86,40 @@ return Application::configure(basePath: dirname(__DIR__))
         // carrying a valid, unexpired Sanctum token - the case where the
         // controller uses the token's identity rather than the session cookie.
         // Everything else still goes through normal CSRF verification.
-        $middleware->replace(
+        //
+        // ═══════════════════════════════════════════════════════════════════
+        // THIS WAS `$middleware->replace(...)`, AND IT DID NOTHING AT ALL.
+        // ═══════════════════════════════════════════════════════════════════
+        //
+        // TWO separate mistakes, either one enough to make it a silent no-op:
+        //
+        //   1. WRONG METHOD. `replace()` records into `$replacements`, which is
+        //      applied to the GLOBAL middleware stack only. Middleware GROUPS
+        //      are rewritten from `$groupReplacements`, which only
+        //      `replaceInGroup()` writes to. See getMiddlewareGroups() in
+        //      Foundation/Configuration/Middleware.php.
+        //
+        //   2. WRONG CLASS. Laravel 11 renamed it: the `web` group is built
+        //      with ValidateCsrfToken. VerifyCsrfToken is now just its parent,
+        //      kept as an alias, and is not in any group.
+        //
+        // Neither mistake raises anything. The call returns $this and the stock
+        // CSRF middleware carries on running, so the code reads as a fix while
+        // changing nothing.
+        //
+        // AND IT COULD NOT BE CAUGHT LOCALLY, for the exact reason written
+        // above: the two localhost entries blanket-exempt every route when
+        // APP_ENV=local, so CSRF never runs here whether this works or not.
+        // Production kept answering 419 to POST /task the whole time.
+        //
+        // Both class names are named so the swap survives the alias being
+        // retired or reinstated in a future release.
+        foreach ([
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
             \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
-            \App\Http\Middleware\VerifyCsrfTokenExceptApi::class,
-        );
+        ] as $stockCsrf) {
+            $middleware->replaceInGroup('web', $stockCsrf, \App\Http\Middleware\VerifyCsrfTokenExceptApi::class);
+        }
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

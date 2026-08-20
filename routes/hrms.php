@@ -24,7 +24,10 @@ use App\Http\Controllers\leave\HolidayController;
 
 Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], function () {
 
-    Route::resource('add_department', departmentController::class);
+    // ->except(['show','edit']): departmentController has no show() or edit()
+    // method. Route::resource registered both anyway, so /hrms/add_department/5
+    // and /hrms/add_department/5/edit were live URLs that could only ever throw.
+    Route::resource('add_department', departmentController::class)->except(['show', 'edit']);
     Route::resource('holiday', HolidayController::class);
     route::get('department-Emp-Lists', [departmentController::class, 'departmentEmpLists'])->name('departmentEmpLists');
     route::get('sub-department-list', [departmentController::class, 'subDepartmentList'])->name('subDepartmentList');

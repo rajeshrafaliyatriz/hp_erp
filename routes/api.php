@@ -155,6 +155,9 @@ use App\Http\Controllers\Api\GoogleAuthController;
 use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
 use App\Http\Controllers\HRMS\DepartmentSkillController;
+use App\Http\Controllers\HRMS\DepartmentSopController;
+use App\Http\Controllers\HRMS\DepartmentPolicyController;
+use App\Http\Controllers\HRMS\DepartmentRuleController;
 use App\Http\Controllers\HRTemplates\TemplateController;
 use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\CareerJourneyController;
@@ -827,7 +830,59 @@ Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
 Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
 
 
-Route::resource('departments-management', DepartmentManagementController::class);
+/*
+ * Department Management.
+ *
+ * ORDER MATTERS. The literal paths are declared BEFORE the resource, because
+ * Route::resource registers `departments-management/{id}` for show() and the
+ * router takes the first match: registered after the resource,
+ * `/departments-management/export` would be dispatched to show() with
+ * $id = "export".
+ *
+ * The resource itself is limited to the five methods that exist. It previously
+ * registered create() and edit() too, which this controller has never had.
+ */
+Route::prefix('departments-management')->group(function () {
+    Route::get('/export', [DepartmentManagementController::class, 'export']);
+    Route::get('/employees', [DepartmentManagementController::class, 'employees']);
+    Route::post('/reorder', [DepartmentManagementController::class, 'reorder']);
+    Route::patch('/{id}/head', [DepartmentManagementController::class, 'setHead']);
+    Route::patch('/{id}/parent', [DepartmentManagementController::class, 'setParent']);
+});
+
+Route::resource('departments-management', DepartmentManagementController::class)
+    ->only(['index', 'store', 'show', 'update', 'destroy']);
+
+// Per-department content: SOPs, Policies and Rules.
+// These three tabs previously had no backend at all - they rendered hardcoded
+// arrays and discarded every edit. See DepartmentContentController.
+Route::prefix('department-sops')->group(function () {
+    Route::get('/', [DepartmentSopController::class, 'index']);
+    Route::post('/', [DepartmentSopController::class, 'store']);
+    Route::get('/{id}/download', [DepartmentSopController::class, 'download']);
+    Route::delete('/{id}/document', [DepartmentSopController::class, 'removeDocument']);
+    // POST rather than PUT: the edit form can carry a file, and PHP does not
+    // populate $_FILES for PUT bodies. The client sends _method=PUT when it
+    // has no upload; this accepts both.
+    Route::post('/{id}', [DepartmentSopController::class, 'update']);
+    Route::put('/{id}', [DepartmentSopController::class, 'update']);
+    Route::delete('/{id}', [DepartmentSopController::class, 'destroy']);
+});
+
+Route::prefix('department-policies')->group(function () {
+    Route::get('/', [DepartmentPolicyController::class, 'index']);
+    Route::post('/', [DepartmentPolicyController::class, 'store']);
+    Route::put('/{id}', [DepartmentPolicyController::class, 'update']);
+    Route::delete('/{id}', [DepartmentPolicyController::class, 'destroy']);
+});
+
+Route::prefix('department-rules')->group(function () {
+    Route::get('/categories', [DepartmentRuleController::class, 'categories']);
+    Route::get('/', [DepartmentRuleController::class, 'index']);
+    Route::post('/', [DepartmentRuleController::class, 'store']);
+    Route::put('/{id}', [DepartmentRuleController::class, 'update']);
+    Route::delete('/{id}', [DepartmentRuleController::class, 'destroy']);
+});
 
 // Department Skills API Routes
 Route::get('/department-skills', [DepartmentSkillController::class, 'index']);
