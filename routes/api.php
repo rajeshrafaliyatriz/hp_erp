@@ -932,7 +932,7 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::get('/session', [SessionController::class, 'show']);
     // Module metadata for the Administration screens: the permission matrix
     // as enforced, and which integrations are configured (never their keys).
-    Route::get('/permissions', [SessionController::class, 'permissions']);
+    Route::get('/permissions', [SessionController::class, 'permissions'])->middleware('task.permission:report.view');
     // Tenant status/priority vocabularies. System entries are constants; the
     // CRUD below manages the tenant's custom additions.
     Route::get('/statuses', [TaskOptionController::class, 'statuses']);
@@ -943,7 +943,7 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::post('/priorities', [TaskOptionController::class, 'storePriority'])->middleware('task.permission:notification.manage');
     Route::put('/priorities/{id}', [TaskOptionController::class, 'updatePriority'])->middleware('task.permission:notification.manage')->whereNumber('id');
     Route::delete('/priorities/{id}', [TaskOptionController::class, 'destroyPriority'])->middleware('task.permission:notification.manage')->whereNumber('id');
-    Route::get('/integrations', [SessionController::class, 'integrations']);
+    Route::get('/integrations', [SessionController::class, 'integrations'])->middleware('task.permission:report.view');
     Route::delete('/session', [SessionController::class, 'destroy'])->middleware('task.permission:notification.manage');
     Route::post('/bulk-tasks/import', [BulkTaskController::class, 'import'])->middleware('task.permission:task.create');
     Route::post('/assignment-capacity', [CapacityController::class, 'check'])->middleware('task.permission:task.create');
@@ -960,8 +960,13 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::get('/templates', [TaskTemplateController::class, 'index']);
     Route::post('/templates', [TaskTemplateController::class, 'store'])->middleware('task.permission:task.create');
     Route::delete('/templates/{id}', [TaskTemplateController::class, 'destroy'])->middleware('task.permission:task.create')->whereNumber('id');
-    Route::get('/reports/productivity', [ReportController::class, 'productivity']);
-    Route::get('/reports/delays', [ReportController::class, 'delays']);
+    // GATED: these read EVERY employee's numbers, org-wide. They were open to
+    // any token holder, so an employee could pull the whole productivity table.
+    // /workspace, /my-tasks and /dependencies are deliberately NOT gated -
+    // those are a person's own work and gating them would 403 employees out of
+    // their own task list.
+    Route::get('/reports/productivity', [ReportController::class, 'productivity'])->middleware('task.permission:report.view');
+    Route::get('/reports/delays', [ReportController::class, 'delays'])->middleware('task.permission:report.view');
     // Admin-only: the audit trail is org-wide and the export is the whole
     // thing as a file. Gated with the same privileged ability the other
     // Administration routes use.
@@ -1002,6 +1007,10 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::post('/dependencies', [DependencyController::class, 'store'])->middleware('task.permission:dependency.manage');
     Route::put('/dependencies/{id}', [DependencyController::class, 'update'])->middleware('task.permission:dependency.manage')->whereNumber('id');
     Route::delete('/dependencies/{id}', [DependencyController::class, 'destroy'])->middleware('task.permission:dependency.manage')->whereNumber('id');
+    // Reading milestones is not a privileged act - anyone who can see the
+    // dependency graph can already see them inside it. Only the writes below
+    // carry milestone.manage.
+    Route::get('/milestones', [DependencyController::class, 'indexMilestones']);
     Route::post('/milestones', [DependencyController::class, 'storeMilestone'])->middleware('task.permission:milestone.manage');
     Route::put('/milestones/{id}', [DependencyController::class, 'updateMilestone'])->middleware('task.permission:milestone.manage')->whereNumber('id');
     Route::delete('/milestones/{id}', [DependencyController::class, 'destroyMilestone'])->middleware('task.permission:milestone.manage')->whereNumber('id');

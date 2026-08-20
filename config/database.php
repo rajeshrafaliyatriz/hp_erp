@@ -105,6 +105,39 @@ return [
             'password' => env('DB2_PASSWORD'),
         ],
 
+        /*
+         * The live/production database.
+         *
+         * DB3_* has been in .env since before this connection existed, but
+         * nothing in this file read it, so the credentials were inert: the
+         * application could not reach live through Laravel at all, and schema
+         * changes made against dev had no supported path to production.
+         *
+         * NO FALLBACK VALUES, for the reason spelled out on mysql_Dev above.
+         *
+         * IMPORTANT — this connection is NOT `migrate`-safe as a whole. Live is
+         * far behind dev on the migrations table, so a bare
+         * `php artisan migrate --database=live` would run every unrelated
+         * pending migration at once. Always target one file:
+         *
+         *     php artisan migrate --database=live --path=database/migrations/<file>.php
+         */
+        'live' => [
+            'driver' => 'mysql',
+            'url' => env('DB3_URL'),
+            'host' => env('DB3_HOST'),
+            'port' => env('DB3_PORT', '3306'),
+            'database' => env('DB3_DATABASE'),
+            'username' => env('DB3_USERNAME'),
+            'password' => env('DB3_PASSWORD'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => false,
+            'engine' => null,
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

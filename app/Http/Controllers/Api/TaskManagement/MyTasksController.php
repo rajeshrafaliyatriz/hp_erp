@@ -224,6 +224,22 @@ class MyTasksController extends Controller
         $this->taskAudit->taskChanged($id, 'status_changed', $before, $context['user_id']);
         if ($resolved['status'] === 'COMPLETED') $this->dependencyResolution->resolveAfterCompletion($id, $context['user_id']);
 
+        // OUT-OF-ORDER WORK IS REPORTED, NOT REFUSED. The dependency graph has
+        // never been consulted on a status change, so starting or finishing a
+        // task ahead of its predecessor happened in complete silence. The move
+        // still succeeds - the caller is simply told what it stepped over.
+        $warnings = [];
+        if (in_array($resolved['status'], ['IN-PROGRESS', 'COMPLETED'], true)) {
+            $open = $this->dependencyResolution->openPredecessors($id, (int) $context['sub_institute_id'], (string) $context['syear']);
+            foreach ($open as $predecessor) {
+                $warnings[] = [
+                    'code' => 'predecessor_open',
+                    'message' => 'This task depends on "' . $predecessor['title'] . '", which is still ' . $predecessor['status'] . '.',
+                    'task_id' => $predecessor['id'],
+                ];
+            }
+        }
+
         return response()->json([
             'status' => 1,
             'message' => 'Task status updated successfully.',
@@ -233,6 +249,7 @@ class MyTasksController extends Controller
                 'status_label' => $resolved['label'],
                 'remarks' => $request->input('remarks'),
             ],
+            'warnings' => $warnings,
         ]);
     }
 

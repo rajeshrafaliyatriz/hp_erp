@@ -84,8 +84,25 @@ class TaskStatusWriter
             'status_label' => $resolved['label'],
             // DELAY FIELDS BELONG TO THE HOLD STATE. Leaving a stale reason on a
             // task that has resumed would explain a delay that is over.
-            'delay_category' => $onHold ? ($extra['delay_category'] ?? null) : ($before->delay_category ?? null),
-            'delay_reason'   => $onHold ? ($extra['delay_reason'] ?? $extra['remarks'] ?? null) : ($before->delay_reason ?? null),
+            //
+            // BOTH BRANCHES WERE INVERTED relative to that sentence:
+            //
+            //   going ON HOLD without a category  ->  wrote null, ERASING an
+            //     existing reason. WorkspaceController::update calls moveTo()
+            //     with no $extra at all, so parking a task from the workspace
+            //     silently wiped its delay category - and that category is the
+            //     one thing TaskDependencyResolutionService needs to later
+            //     un-park the task when its predecessor completes. The only
+            //     dependency behaviour in the product was being disarmed by an
+            //     unrelated status change.
+            //
+            //   RESUMING  ->  carried the old value forward, which is exactly
+            //     the stale reason the comment says must not survive.
+            //
+            // Now: on hold, take what the caller supplied or keep what is there;
+            // off hold, clear both.
+            'delay_category' => $onHold ? ($extra['delay_category'] ?? $before->delay_category ?? null) : null,
+            'delay_reason'   => $onHold ? ($extra['delay_reason'] ?? $extra['remarks'] ?? $before->delay_reason ?? null) : null,
             'updated_by'   => $actorId,
             'updated_at'   => now(),
         ]);

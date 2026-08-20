@@ -285,12 +285,30 @@ class WorkspaceController extends Controller
 
         $this->taskAudit->taskChanged($id, 'workspace_updated', (array) $task, $context['user_id']);
 
+        // OUT-OF-ORDER WORK IS REPORTED, NOT REFUSED - the same rule as
+        // MyTasksController::updateStatus. Moving a task forward while its
+        // predecessor is untouched has always been silent; it stays permitted,
+        // and now says what it stepped over.
+        $warnings = [];
+        if (in_array($resolvedStatus['status'], ['IN-PROGRESS', 'COMPLETED'], true)) {
+            $open = app(\App\Services\TaskManagement\TaskDependencyResolutionService::class)
+                ->openPredecessors((int) $id, (int) $context['sub_institute_id'], (string) $context['syear']);
+            foreach ($open as $predecessor) {
+                $warnings[] = [
+                    'code' => 'predecessor_open',
+                    'message' => 'This task depends on "' . $predecessor['title'] . '", which is still ' . $predecessor['status'] . '.',
+                    'task_id' => $predecessor['id'],
+                ];
+            }
+        }
+
         $fresh = $this->baseQuery($context, 'all')->where('t.id', $id)->first();
 
         return response()->json([
             'status' => 1,
             'message' => 'Task updated successfully.',
             'data' => $this->resource($fresh, true),
+            'warnings' => $warnings,
         ]);
     }
 

@@ -17,6 +17,48 @@ use Illuminate\Support\Facades\Log;
  */
 class TaskDependencyResolutionService
 {
+    /**
+     * PREDECESSORS OF THIS TASK THAT ARE STILL OPEN.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY THIS WARNS RATHER THAN REFUSES
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * Nothing in this product has ever consulted the dependency graph when a
+     * status changes — TaskStatusTransitionService is a fixed table of allowed
+     * moves and never queries it. So a task whose predecessor had not been
+     * touched could be started and completed in silence, and the graph was
+     * decoration.
+     *
+     * The fix is a warning, not a block, and deliberately so: real work runs
+     * out of order, and the data here is imperfect enough that a hard refusal
+     * would strand people whose predecessor's owner is on leave. The caller
+     * proceeds and is told what it just stepped over.
+     *
+     * TENANT SCOPING: dependency rows are filtered by the task's own tenant and
+     * year. resolveAfterCompletion() below reads the same table unscoped —
+     * pre-existing, and safe only because the write it leads to is scoped.
+     *
+     * @return array<int,array{id:string,title:string,status:string}>
+     */
+    public function openPredecessors(int $taskId, int $tenantId, string $syear): array
+    {
+        return DB::table('task_management_dependencies as d')
+            ->join('task as p', 'p.id', '=', 'd.predecessor_task_id')
+            ->where('d.successor_task_id', $taskId)
+            ->where('d.sub_institute_id', $tenantId)
+            ->where('d.syear', $syear)
+            ->whereNull('p.deleted_at')
+            ->whereRaw("UPPER(COALESCE(p.status, 'PENDING')) <> 'COMPLETED'")
+            ->get(['p.id', 'p.task_title', 'p.status'])
+            ->map(fn ($row) => [
+                'id' => (string) $row->id,
+                'title' => $row->task_title,
+                'status' => $row->status ?: 'PENDING',
+            ])
+            ->all();
+    }
+
     public function resolveAfterCompletion(int $taskId, ?int $actorId): void
     {
         $successorIds = DB::table('task_management_dependencies')
