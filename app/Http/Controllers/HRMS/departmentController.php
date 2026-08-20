@@ -101,9 +101,14 @@ class departmentController extends Controller
     ->select(
         'sub.*',
         DB::raw('IFNULL((select count(DISTINCT id) from hrms_departments where parent_id = sub.id),"-") as sub_dep'),
-        DB::raw("IFNULL((select count(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id = {$sub_institute_id} and status = 1), '-') as total_emp"),
-        DB::raw("IFNULL((select group_concat(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id = {$sub_institute_id} and status = 1), '-') as emp_ids")
+        // Bound, not interpolated. $sub_institute_id reaches this query from
+        // the session, so it is not attacker-controlled today - but a value
+        // pasted into SQL is one refactor away from being unsafe, and there is
+        // no reason for it to be a string here rather than a parameter.
+        DB::raw("IFNULL((select count(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id = ? and status = 1), '-') as total_emp"),
+        DB::raw("IFNULL((select group_concat(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id = ? and status = 1), '-') as emp_ids")
     )
+    ->addBinding([$sub_institute_id, $sub_institute_id], 'select')
     ->where('sub.status', 1)
     ->where('sub.parent_id', 0)
     ->where(function($query) use ($sub_institute_id) {
@@ -123,9 +128,10 @@ class departmentController extends Controller
             'sub.*',
             DB::raw('(CASE WHEN sub.parent_id!=0 THEN (SELECT department FROM hrms_departments WHERE id = sub.parent_id) ELSE "-" END) as mainDepartment'),
             DB::raw('(CASE WHEN sub.parent_id=0 THEN (SELECT count(id) FROM hrms_departments WHERE parent_id = sub.id group by parent_id) ELSE "0" END) total_subDep'),
-            DB::Raw('IFNULL((select count(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id='.$sub_institute_id.' and status=1),"-") as total_emp'),
-            DB::Raw('IFNULL((select group_concat(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id='.$sub_institute_id.' and status=1),"-") as emp_ids')
+            DB::Raw('IFNULL((select count(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id = ? and status=1),"-") as total_emp'),
+            DB::Raw('IFNULL((select group_concat(DISTINCT id) from tbluser where department_id = sub.id and sub_institute_id = ? and status=1),"-") as emp_ids')
         )
+        ->addBinding([$sub_institute_id, $sub_institute_id], 'select')
         ->where('sub.status', 1)
         // ->where('sub.parent_id', '!=', 0)
         ->where('sub.sub_institute_id', $sub_institute_id)
@@ -290,12 +296,27 @@ class departmentController extends Controller
             $old_sub_department = $request->old_sub_department;
             $sub_department = $request->sub_department;
 
+            /*
+             * The parent lookup was a DB::raw() subquery with $department -
+             * a raw request field - interpolated into it inside single quotes.
+             * Of all the interpolation in this controller that was the one
+             * that mattered: the others spliced a session integer, this one
+             * spliced whatever the client typed into the department box,
+             * straight into a WHERE clause.
+             *
+             * The very next line already resolved the same parent id with a
+             * bound query. So this is not a new lookup - it is that one, moved
+             * up to where it was needed, and the raw subquery deleted.
+             */
+            $parentId = DB::table('hrms_departments')
+                ->where(['sub_institute_id'=>$sub_institute_id,'department'=>$department, 'parent_id'=>0])
+                ->value('id');
+
             $checkSubDepartment = DB::table('hrms_departments')
-                ->where(['sub_institute_id'=>$sub_institute_id,'department'=>$old_sub_department, 'parent_id'=>DB::raw("(SELECT id FROM hrms_departments WHERE department='{$department}' AND parent_id=0 AND sub_institute_id={$sub_institute_id})")])
+                ->where(['sub_institute_id'=>$sub_institute_id,'department'=>$old_sub_department, 'parent_id'=>$parentId])
                 ->first();
 
             if(!empty($checkSubDepartment) && isset($checkSubDepartment->id)){
-                $parentId = DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$department, 'parent_id'=>0])->value('id');
                 DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$old_sub_department, 'parent_id'=>$parentId])->update(['department'=>$sub_department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
                 $i=1;
             }
@@ -414,14 +435,37 @@ class departmentController extends Controller
             $parent_id = $request->parentDiv;
         }
 
-        $update = DB::table('hrms_departments')->where('id',$id)->Update([
+        /*
+         * THE TENANT FILTER BELONGS IN THE WHERE, NOT THE SET.
+         *
+         * This wrote `sub_institute_id` as a value while matching on `id`
+         * alone. Two consequences, both reachable by any logged-in user
+         * changing one number in the URL:
+         *
+         *   - it edited another organisation's department, and
+         *   - it then MOVED that department into the caller's organisation,
+         *     because the tenant column was part of the update payload.
+         *
+         * The row's tenant is not something an edit form gets to change, so it
+         * is gone from the SET and is now the thing that scopes the WHERE.
+         *
+         * whereNull('deleted_at') stops an edit resurrecting a deleted
+         * department: `status => 1` below would otherwise set a soft-deleted
+         * row back to active while deleted_at stayed put, which is exactly the
+         * inconsistent state the API's index() used to leak.
+         */
+        $update = DB::table('hrms_departments')
+            ->where('id',$id)
+            ->where('sub_institute_id',$sub_institute_id)
+            ->whereNull('deleted_at')
+            ->Update([
                 'department'=>$department_name,
                 'parent_id'=>$parent_id,
                 'tasks'=>$task,
                 'roles_responsibility'=>$roles_responsibility,
                 'status'=>1,
                 'is_calculated'=>$is_calculated,
-                'sub_institute_id'=>$sub_institute_id
+                'updated_at'=>now()
             ]);
 
         if($update){
@@ -434,40 +478,159 @@ class departmentController extends Controller
         return is_mobile($type, "add_department.create", $res);
     }
 
+    /**
+     * Retire a department.
+     *
+     * WAS A HARD DELETE, ACROSS TENANTS, WITH NO REFERENCE CHECK. Three
+     * separate problems in four lines:
+     *
+     *   1. `where('id',$id)` and nothing else - any logged-in user could
+     *      destroy any organisation's department by its id.
+     *   2. `->delete()` on a table the rest of the application soft-deletes.
+     *      The row was gone, and so was any chance of undoing it.
+     *   3. The LMS reuses hrms_departments as its "standard" table through
+     *      seven foreign keys holding hundreds of rows of question banks,
+     *      chapters and content. A hard delete either failed on the constraint
+     *      or stranded that content. Nothing checked.
+     *
+     * It also hard-deleted the department's s_user_jobrole rows - employees'
+     * job-role assignments - as a side effect of removing a department.
+     */
     public function destroy(Request $request,$id){
 
         $type = $request->input('type');
         $sub_institute_id = session()->get('sub_institute_id');
 
-        $delete = DB::table('hrms_departments')->where('id',$id)->delete();
-        DB::table('s_user_jobrole')->where('department_id',$id)->delete();
+        $department = DB::table('hrms_departments')
+            ->where('id',$id)
+            ->where('sub_institute_id',$sub_institute_id)
+            ->whereNull('deleted_at')
+            ->first();
 
-        if($delete){
-            $res['status_code']=1;
-            $res['message']="Deleted Successfully!!";
-        }else{
+        if(!$department){
             $res['status_code']=0;
-            $res['message']="Failed to Delete!!";
+            $res['message']="Department not found!!";
+            return is_mobile($type, "add_department.create", $res);
         }
+
+        $blocking = $this->lmsReferenceCounts($id);
+
+        if($blocking !== []){
+            $res['status_code']=0;
+            $res['message']="This department is used as a standard by LMS content and cannot be deleted.";
+            $res['references']=$blocking;
+            return is_mobile($type, "add_department.create", $res);
+        }
+
+        DB::transaction(function () use ($id, $sub_institute_id) {
+            DB::table('hrms_departments')
+                ->where('id',$id)
+                ->where('sub_institute_id',$sub_institute_id)
+                ->update([
+                    'status'=>0,
+                    'deleted_at'=>now(),
+                    'updated_at'=>now(),
+                ]);
+
+            // Soft, to match the department itself. s_user_jobrole already
+            // uses SoftDeletes on its model, so this is the delete that model
+            // would have performed.
+            DB::table('s_user_jobrole')
+                ->where('department_id',$id)
+                ->whereNull('deleted_at')
+                ->update(['deleted_at'=>now()]);
+        });
+
+        $res['status_code']=1;
+        $res['message']="Deleted Successfully!!";
+
+        return is_mobile($type, "add_department.create", $res);
+    }
+
+    /**
+     * Turn a comma-separated request parameter into a list of integer ids.
+     *
+     * Three endpoints here took "1,2,3" style parameters and pasted them into
+     * whereRaw(), so anything the caller sent became SQL. This is what makes
+     * whereIn() usable instead: non-numeric entries are dropped rather than
+     * escaped, because an id that is not a number is not an id.
+     *
+     * Returns [0] rather than [] when nothing survives - an empty whereIn()
+     * matches no rows in Laravel, but relying on that leaves the caller's
+     * intent ("no valid ids") indistinguishable from a bug.
+     */
+    private function idList($value): array
+    {
+        $ids = array_values(array_filter(
+            array_map('intval', array_filter(explode(',', (string) $value), 'is_numeric')),
+            fn ($id) => $id > 0
+        ));
+
+        return $ids === [] ? [0] : $ids;
+    }
+
+    /**
+     * LMS rows pointing at this department through `standard_id`, per table.
+     * Empty array means nothing references it.
+     *
+     * Mirrors DepartmentManagementController::lmsReferenceCounts(). The two
+     * delete paths are separate controllers with separate auth models, and a
+     * guard that only one of them honours is not a guard.
+     */
+    private function lmsReferenceCounts($departmentId): array
+    {
+        $tables = [
+            'lms_question_master',
+            'chapter_master',
+            'content_master',
+            'sub_std_map',
+            'lms_curriculum',
+            'lms_lesson_plan',
+            'lms_flashcard',
+        ];
+
+        $counts = [];
+
+        foreach($tables as $table){
+            try {
+                $count = DB::table($table)->where('standard_id',$departmentId)->count();
+            } catch (\Throwable $e) {
+                continue;
+            }
+
+            if($count > 0){
+                $counts[$table] = $count;
+            }
+        }
+
+        return $counts;
     }
 
     public function departmentEmpLists(Request $request){
         $sub_institute_id = session()->get('sub_institute_id');
-        $emp_ids = explode(',',$request->emp_ids);
+        $emp_ids = $this->idList($request->emp_ids);
+
          return DB::table('tbluser')
          ->selectRaw('CONCAT_WS(" ",COALESCE(first_name,"-"),COALESCE(middle_name,"-"),COALESCE(last_name,"-")) as name,mobile')
         ->whereIn('id',$emp_ids)
+        // This listed employees by id with no tenant filter at all, so an id
+        // from any organisation returned that person's name and mobile number.
+        ->where('sub_institute_id',$sub_institute_id)
         ->get()
         ->toArray();
     }
 
     public function subDepartmentList(Request $request){
         $sub_institute_id = session()->get('sub_institute_id');
-        $depIds = $request->depId;
+        // Was: whereRaw('parent_id in ('.$depIds.')') - a request parameter
+        // spliced straight into SQL. whereIn over a validated integer list
+        // binds every value instead.
+        $depIds = $this->idList($request->depId);
 
          return DB::table('hrms_departments')
-        ->whereRaw('parent_id in ('.$depIds.')')
+        ->whereIn('parent_id',$depIds)
         ->where('sub_institute_id',$sub_institute_id)
+        ->whereNull('deleted_at')
         ->groupBy('id')
         ->get()
         ->toArray();
@@ -475,18 +638,17 @@ class departmentController extends Controller
 
     public function departmentEmployeeList(Request $request){
         $sub_institute_id = session()->get('sub_institute_id');
-        $depIds = $request->depId;
-        $where = "(department_id in ($depIds)";
-        
+
+        // Was two request parameters concatenated into a whereRaw() string.
+        $depIds = $this->idList($request->depId);
+
         if($request->has('subDepId')){
-            $subDepIds = $request->subDepId;
-            $where .= " OR department_id in ($subDepIds))";
-        }else{
-            $where .= " AND 1=1)";
+            $depIds = array_values(array_unique(array_merge($depIds, $this->idList($request->subDepId))));
         }
+
          return DB::table('tbluser')
          ->selectRaw('id,CONCAT_WS(" ",COALESCE(first_name,"-"),COALESCE(middle_name,"-"),COALESCE(last_name,"-")) as name,mobile')
-        ->whereRaw($where)
+        ->whereIn('department_id',$depIds)
         ->where('sub_institute_id',$sub_institute_id)
         ->where('status',1)
         ->groupBy('id')
