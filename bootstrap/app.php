@@ -78,6 +78,18 @@ return Application::configure(basePath: dirname(__DIR__))
         }
 
         $middleware->validateCsrfTokens(except: $csrfExcept);
+
+        // Web routes that the token-authenticated frontend posts to (POST /task
+        // among them) answered 419 in production while passing locally, because
+        // the localhost entries above blanket-exempt every route in local only.
+        // This variant skips CSRF for a request that is BOTH type=API and
+        // carrying a valid, unexpired Sanctum token - the case where the
+        // controller uses the token's identity rather than the session cookie.
+        // Everything else still goes through normal CSRF verification.
+        $middleware->replace(
+            \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+            \App\Http\Middleware\VerifyCsrfTokenExceptApi::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
