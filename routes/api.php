@@ -15,7 +15,6 @@ use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
 use App\Http\Controllers\HRMS\HrmsController;
-use App\Http\Controllers\Api\CompetencyDashboardController;
 use App\Http\Controllers\Api\CompetencyDashboard\CompetencyDashboardController as SubCompetencyDashboardController;
 use App\Http\Controllers\Api\Competency\CommandCenterController as CompetencyCommandCenterController;
 // NAMED FOR WHAT IT DOES. CompetencyController manages SKILL LIBRARY entries -
@@ -237,7 +236,10 @@ Route::get('jobrole/{id}/skills', [jobrolecontroller::class, 'skills']);
 Route::get('/department/{id}/jobroles', [jobrolecontroller::class, 'getJobRolesByDepartment']);
 Route::get('/industry/{id}/departments', [IndustryController::class, 'departments']);
 Route::get('/industries', [IndustryController::class, 'index']);
-Route::get('/competency-dashboard', [CompetencyDashboardController::class, 'index'])->middleware('api.token');
+// REMOVED 2026-08-19: GET /competency-dashboard returned 350 lines of hardcoded
+// mock (total_roles=247, completion_rate="87%") and had zero callers across the
+// frontend. Replaced by /api/dashboard/hr/* below. A live mock that looks
+// plausible is how the wrong endpoint gets wired later.
 Route::get('/skill-development/progress', [SkillDevelopmentController::class, 'getSkillProgress']);
 Route::get('/skill-development/streak', [SkillDevelopmentController::class, 'getLearningStreak']);
 Route::get('/skill-development/weekly-goal', [SkillDevelopmentController::class, 'getWeeklyLearningGoal']);
@@ -1614,4 +1616,30 @@ Route::prefix('competency-library')->group(function () {
     Route::post('/competency', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'store'])->middleware('profile:admin,hr');
     Route::put('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
     Route::delete('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Home dashboard - HR / Admin
+|--------------------------------------------------------------------------
+| Sectioned rather than one aggregate: /summary is cheap and paints first,
+| /workforce carries the six-month attendance scan, /signals carries the feeds.
+| A slow or failing section then degrades only itself instead of blanking the
+| whole page.
+|
+| profile:admin,hr matches EXACTLY on tbluserprofilemaster.role_key
+| (administrator, hr_manager, hr_executive) - the same guard /api/readiness/gates
+| already uses. The profile_id the frontend sends on every request comes from
+| localStorage; it is a UI hint and is NEVER consulted for authorisation.
+|
+| The prefix is /hr from the first line so the employee dashboard can land at
+| /api/dashboard/me/* beside it with no rename and no client churn.
+*/
+Route::prefix('dashboard')->group(function () {
+    Route::prefix('hr')->middleware('profile:admin,hr')->group(function () {
+        Route::get('/filters',   [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'filters']);
+        Route::get('/summary',   [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'summary']);
+        Route::get('/workforce', [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'workforce']);
+        Route::get('/signals',   [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'signals']);
+    });
 });
