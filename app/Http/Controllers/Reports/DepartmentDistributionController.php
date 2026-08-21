@@ -112,7 +112,14 @@ class DepartmentDistributionController extends Controller
         }
 
         try {
+            // The three join closures below were tenant-scoped; the department
+            // table itself was not, so this returned EVERY organisation's
+            // departments to any caller - 1,256 rows where a tenant-2 caller
+            // should see 35. Same class of leak the department controller's own
+            // header documents closing.
             $data = DB::table('hrms_departments as d')
+                ->where('d.sub_institute_id', $sub_institute_id)
+                ->whereNull('d.deleted_at')
                 ->leftJoin('tbluser as u', function($join) use ($sub_institute_id) {
                     $join->on('d.id', '=', 'u.department_id')
                          ->where('u.sub_institute_id', $sub_institute_id)

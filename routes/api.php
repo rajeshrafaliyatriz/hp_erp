@@ -848,6 +848,15 @@ Route::prefix('departments-management')->group(function () {
     Route::post('/reorder', [DepartmentManagementController::class, 'reorder']);
     Route::patch('/{id}/head', [DepartmentManagementController::class, 'setHead']);
     Route::patch('/{id}/parent', [DepartmentManagementController::class, 'setParent']);
+    // Move employees in / out. Both log an s_mobility_transfers row per
+    // employee, so a headcount never changes without a record of who moved.
+    Route::post('/{id}/employees', [DepartmentManagementController::class, 'assignEmployees']);
+    Route::delete('/{id}/employees', [DepartmentManagementController::class, 'unassignEmployees']);
+    // What is attached, before anything is done to it. ?mode=delete counts the
+    // subtree (delete cascades); ?mode=merge counts only this department.
+    Route::get('/{id}/impact', [DepartmentManagementController::class, 'impact']);
+    // The alternative to deleting: everything becomes the target's.
+    Route::post('/{id}/merge', [DepartmentManagementController::class, 'merge']);
 });
 
 Route::resource('departments-management', DepartmentManagementController::class)

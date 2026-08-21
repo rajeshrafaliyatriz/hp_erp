@@ -66,25 +66,41 @@ abstract class DepartmentContentController extends Controller
             return response()->json(['status' => 0, 'message' => 'Department not found'], 404);
         }
 
-        $query = DB::table($this->table())
-            ->where('department_id', $departmentId)
-            ->where('sub_institute_id', $tenantId)
-            ->whereNull('deleted_at');
+        $table = $this->table();
+
+        // The UI shows "last updated by" against each record. Resolving the
+        // name here keeps the client from having to fetch the whole employee
+        // list just to turn two ids into two names.
+        $nameExpression = function (string $alias): string {
+            return "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', {$alias}.first_name, {$alias}.middle_name, {$alias}.last_name)), ''), {$alias}.user_name)";
+        };
+
+        $query = DB::table($table . ' as r')
+            ->leftJoin('tbluser as cu', 'cu.id', '=', 'r.created_by')
+            ->leftJoin('tbluser as uu', 'uu.id', '=', 'r.updated_by')
+            ->where('r.department_id', $departmentId)
+            ->where('r.sub_institute_id', $tenantId)
+            ->whereNull('r.deleted_at')
+            ->select([
+                'r.*',
+                DB::raw($nameExpression('cu') . ' as created_by_name'),
+                DB::raw($nameExpression('uu') . ' as updated_by_name'),
+            ]);
 
         if ($status = trim((string) $request->query('status', ''))) {
-            $query->where('status', $status);
+            $query->where('r.status', $status);
         }
 
         if ($search = trim((string) $request->query('search', ''))) {
             $query->where(function ($q) use ($search) {
-                $q->where('title', 'like', '%' . $search . '%')
-                  ->orWhere('code', 'like', '%' . $search . '%');
+                $q->where('r.title', 'like', '%' . $search . '%')
+                  ->orWhere('r.code', 'like', '%' . $search . '%');
             });
         }
 
         return response()->json([
             'status' => 1,
-            'data'   => $query->orderByDesc('updated_at')->orderByDesc('id')->get(),
+            'data'   => $query->orderByDesc('r.updated_at')->orderByDesc('r.id')->get(),
         ]);
     }
 

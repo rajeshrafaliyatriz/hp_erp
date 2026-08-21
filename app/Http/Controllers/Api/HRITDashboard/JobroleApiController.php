@@ -24,9 +24,22 @@ class JobroleApiController extends Controller
     }
 
     // Base query
+    //
+    // whereNull('j.deleted_at'): s_user_jobrole is soft-deleted, and this
+    // listed retired roles alongside live ones. The Department Management job
+    // roles tab reads this endpoint, so a deleted role would have shown up as
+    // an assignable role for a department.
     $query = DB::table('s_user_jobrole AS j')
-        ->leftJoin('hrms_departments AS d', 'j.department_id', '=', 'd.id')
+        ->leftJoin('hrms_departments AS d', function ($join) use ($subInstituteId) {
+            $join->on('j.department_id', '=', 'd.id')
+                 // Scoping the joined department to the same tenant stops a
+                 // department name from another organisation being rendered
+                 // beside this tenant's role.
+                 ->where('d.sub_institute_id', '=', $subInstituteId)
+                 ->whereNull('d.deleted_at');
+        })
         ->where('j.sub_institute_id', $subInstituteId)
+        ->whereNull('j.deleted_at')
         ->select(
             'j.id',
             'j.jobrole',

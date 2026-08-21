@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Competency;
 
+use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Services\DeepSeekService;
@@ -40,6 +41,7 @@ use Illuminate\Support\Facades\Validator;
  */
 class AiAssessmentController extends Controller
 {
+    use ResolvesEmployeeJobRole;
     use ResolvesCompetencyContext;
 
     /** Formats this controller knows how to store and score. */
@@ -359,9 +361,12 @@ class AiAssessmentController extends Controller
         $me  = (int) $context['user_id'];   // THE CALLER. Never a request field.
 
         $user = DB::table('tbluser')->where('id', $me)->where('sub_institute_id', $sid)
-            ->first(['id', 'jobtitle_id']);
+            ->first(['id', 'jobtitle_id', 'allocated_standards']);
 
-        if (!$user || !$user->jobtitle_id) {
+        // Both columns, not just jobtitle_id - see ResolvesEmployeeJobRole.
+        $jobroleId = $user ? $this->resolveJobRoleId($user) : null;
+
+        if (!$user || !$jobroleId) {
             return response()->json([
                 'status' => 1,
                 'data'   => ['test' => null, 'questions' => []],
@@ -372,7 +377,7 @@ class AiAssessmentController extends Controller
         }
 
         $test = DB::table('competency_assessment_test')
-            ->where('sub_institute_id', $sid)->where('jobrole_id', $user->jobtitle_id)
+            ->where('sub_institute_id', $sid)->where('jobrole_id', $jobroleId)
             ->where('status', 'published')->whereNull('deleted_at')
             ->orderByDesc('published_at')->first(['id', 'title', 'instructions', 'published_at']);
 
