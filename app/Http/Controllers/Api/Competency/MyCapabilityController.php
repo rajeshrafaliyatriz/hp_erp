@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Competency;
 
+use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use Illuminate\Http\Request;
@@ -43,6 +44,7 @@ use Illuminate\Support\Facades\DB;
  */
 class MyCapabilityController extends Controller
 {
+    use ResolvesEmployeeJobRole;
     use ResolvesCompetencyContext;
 
     /**
@@ -67,7 +69,7 @@ class MyCapabilityController extends Controller
 
         $user = DB::table('tbluser')
             ->where('id', $me)->where('sub_institute_id', $sid)
-            ->first(['id', 'jobtitle_id']);
+            ->first(['id', 'jobtitle_id', 'allocated_standards']);
 
         if (!$user) {
             // The token resolved to a user who is not in the token's own tenant.
@@ -76,7 +78,9 @@ class MyCapabilityController extends Controller
             return response()->json(['status' => 0, 'message' => 'Unable to identify your record.'], 401);
         }
 
-        $jobroleId = $user->jobtitle_id ? (int) $user->jobtitle_id : null;
+        // Resolved through both columns - jobtitle_id is 0 for most employees
+        // because the employee form writes the role to allocated_standards.
+        $jobroleId = $this->resolveJobRoleId($user);
 
         if (!$jobroleId) {
             return $this->payload($me, null, null, collect(), true,

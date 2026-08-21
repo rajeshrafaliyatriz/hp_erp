@@ -648,8 +648,12 @@ class AJAXController extends Controller
 
         $getClass = [];
 
+        // `is_active` is not a column on hrms_departments - the flag is
+        // `status`. This threw "Unknown column 'is_active' in 'where clause'"
+        // on every single call, so whatever screen depends on it has never
+        // worked.
         $query = DB::table('hrms_departments')
-            ->where(['sub_institute_id' => $sub_institute_id, 'is_active' => 1])
+            ->where(['sub_institute_id' => $sub_institute_id, 'status' => 1])
             ->whereNull('deleted_at');
         // $query->where("grade_id", $request->grade_id);
 
@@ -1459,13 +1463,20 @@ class AJAXController extends Controller
             if ($checkStandard) {
                 $standard = $checkStandard->id;
             } else {
+                // `name` and `short_name` are not columns on hrms_departments -
+                // they were copied from the academic_section insert above. The
+                // real column is `department`, and it is NOT NULL, so this
+                // statement could never execute.
                 $standardInsert = DB::table('hrms_departments')->insertGetId([
                     'sub_institute_id' => $sub_institute_id,
-                    'name' => $skill_department,
-                    'short_name' => $skill_department,
-                    'sort_order' => '1',
+                    'department' => $skill_department,
+                    'parent_id' => 0,
+                    'status' => 1,
+                    'is_calculated' => 0,
+                    'sort_order' => 1,
                     'created_by' => $user_id,
-                    'created_at' => now()
+                    'created_at' => now(),
+                    'updated_at' => now()
                 ]);
                 $standard = $standardInsert;
             }

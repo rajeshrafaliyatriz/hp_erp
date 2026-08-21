@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Competency;
 
+use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use Illuminate\Http\Request;
@@ -37,6 +38,7 @@ use Illuminate\Support\Facades\Validator;
  */
 class KasbaRatingController extends Controller
 {
+    use ResolvesEmployeeJobRole;
     use ResolvesCompetencyContext;
 
     /** 1..5. Zero is deliberately not a rating - see the class docblock. */
@@ -90,16 +92,22 @@ class KasbaRatingController extends Controller
         // Same tenant check the write makes. A read that leaks is still a leak.
         $user = DB::table('tbluser')
             ->where('id', $subject)->where('sub_institute_id', $sid)
-            ->first(['id', 'jobtitle_id']);
+            ->first(['id', 'jobtitle_id', 'allocated_standards']);
 
         if (!$user) {
             return response()->json(['status' => 0, 'message' => 'Employee not found.'], 404);
         }
 
+        // The employee's job role, resolved through BOTH columns that can hold
+        // it. This read jobtitle_id alone and declared "no job role" for anyone
+        // whose role lives in allocated_standards - 74 of 98 live employees -
+        // so their competencies looked empty when they were simply unreachable.
+        $jobroleId = $this->resolveJobRoleId($user);
+
         // A person with no job role has no requirements, so nothing to rate. That
         // is a NORMAL state for a new employee, not a failure - said in the payload
         // so the screen can explain it rather than showing a blank list.
-        if (!$user->jobtitle_id) {
+        if (!$jobroleId) {
             return response()->json([
                 'status' => 1,
                 'data'   => ['user_id' => $subject, 'jobrole_id' => null, 'items' => []],
@@ -116,7 +124,7 @@ class KasbaRatingController extends Controller
             })
             ->where('m.sub_institute_id', $sid)
             ->where('k.sub_institute_id', $sid)
-            ->where('m.jobrole_id', $user->jobtitle_id)
+            ->where('m.jobrole_id', $jobroleId)
             ->orderBy('c.name')->orderBy('k.kasba_type')->orderBy('k.item_label')
             ->get([
                 'k.id as kasba_item_id',
@@ -136,7 +144,7 @@ class KasbaRatingController extends Controller
             'status' => 1,
             'data'   => [
                 'user_id'    => $subject,
-                'jobrole_id' => (int) $user->jobtitle_id,
+                'jobrole_id' => $jobroleId,
                 'items'      => $items,
                 'rated'      => $items->whereNotNull('rating')->count(),
                 'total'      => $items->count(),

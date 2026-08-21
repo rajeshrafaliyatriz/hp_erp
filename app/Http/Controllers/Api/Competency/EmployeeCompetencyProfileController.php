@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Validator;
 class EmployeeCompetencyProfileController extends Controller
 {
     use ResolvesCompetencyContext;
+    use ResolvesEmployeeJobRole;
 
     /**
      * GET /competency/employee-profiles — THE LIST THIS SCREEN NEVER HAD.
@@ -33,8 +35,18 @@ class EmployeeCompetencyProfileController extends Controller
         $sid = (int) $context['sub_institute_id'];
         $q   = trim((string) $request->input('q', ''));
 
+        // Joins on jobtitle_id when it is set, otherwise on the role id held in
+        // allocated_standards - the same order ResolvesEmployeeJobRole applies
+        // in PHP. Joining on jobtitle_id alone left `jobrole` null for 74 of 98
+        // live employees, so the picker showed names with no role beside them.
         $rows = DB::table('tbluser as u')
-            ->leftJoin('s_user_jobrole as j', 'j.id', '=', 'u.jobtitle_id')
+            ->leftJoin('s_user_jobrole as j', function ($join) use ($sid) {
+                $join->on('j.id', '=', DB::raw(
+                    'COALESCE(NULLIF(u.jobtitle_id, 0), NULLIF(SUBSTRING_INDEX(u.allocated_standards, ",", 1), ""))'
+                ))
+                ->where('j.sub_institute_id', '=', $sid)
+                ->whereNull('j.deleted_at');
+            })
             ->where('u.sub_institute_id', $sid)
             ->when($q !== '', function ($w) use ($q) {
                 $w->where(function ($x) use ($q) {
@@ -98,6 +110,10 @@ class EmployeeCompetencyProfileController extends Controller
                 'u.last_name',
                 'u.employee_no',
                 'u.jobtitle_id',
+                // The other half of the job role link - see
+                // ResolvesEmployeeJobRole. Without it the fallback has nothing
+                // to fall back to.
+                'u.allocated_standards',
                 'u.department_id',
                 'u.joined_date',
                 'u.supervisor_opt',
@@ -113,14 +129,14 @@ class EmployeeCompetencyProfileController extends Controller
             ], 404);
         }
 
-        // Resolve job role name from s_user_jobrole using jobtitle_id
-        $jobRole = null;
-        if ($user->jobtitle_id) {
-            $jobRole = DB::table('s_user_jobrole')
-                ->where('id', $user->jobtitle_id)
-                ->whereNull('deleted_at')
-                ->first();
-        }
+        // Resolve the employee's job role.
+        //
+        // This read jobtitle_id alone, which is 0 for most employees because
+        // the employee form writes the role to allocated_standards instead -
+        // so this profile showed "N/A" for 74 of 98 live employees who do have
+        // a role. jobRoleFromUserRow() applies the fallback the Competency
+        // module already documented elsewhere.
+        $jobRole = $this->jobRoleFromUserRow((int) $sid, $user);
         $jobRoleName = $jobRole ? $jobRole->jobrole : 'N/A';
 
         // Resolve department name from hrms_departments_mapping
@@ -850,27 +866,13 @@ class EmployeeCompetencyProfileController extends Controller
             return response()->json(['status' => 0, 'message' => 'User not found'], 404);
         }
 
-        $currentRole = null;
-        if ($user->jobtitle_id) {
-            $currentRole = DB::table('s_user_jobrole')
-                ->where('id', $user->jobtitle_id)->whereNull('deleted_at')->first();
-        }
-
-        // Fallback: this tenant doesn't populate tbluser.jobtitle_id, so derive
-        // the current role from the employee's most recent assessment's jobrole.
+        // jobtitle_id, then allocated_standards, then the job role named on the
+        // most recent assessment. The middle step was missing here: this knew
+        // jobtitle_id is unreliable and jumped straight to assessments, so an
+        // employee with a role in allocated_standards but no assessment
+        // resolved to nothing.
+        $currentRole = $this->jobRoleForUser((int) $sid, (int) $id, true);
         $currentRoleName = $currentRole->jobrole ?? null;
-        if (!$currentRole) {
-            $recent = DB::table('s_competency_assessments')
-                ->where('sub_institute_id', $sid)->where('user_id', $id)
-                ->whereNull('deleted_at')->whereNotNull('jobrole')->where('jobrole', '!=', '')
-                ->orderByDesc('id')->first();
-            if ($recent) {
-                $currentRoleName = $recent->jobrole;
-                $currentRole = DB::table('s_user_jobrole')
-                    ->where('sub_institute_id', $sid)->where('jobrole', $currentRoleName)
-                    ->whereNull('deleted_at')->first();
-            }
-        }
 
         $current = $currentRoleName ? [
             'jobrole'     => $currentRoleName,

@@ -522,27 +522,25 @@ class departmentController extends Controller
             return is_mobile($type, "add_department.create", $res);
         }
 
-        DB::transaction(function () use ($id, $sub_institute_id) {
-            DB::table('hrms_departments')
-                ->where('id',$id)
-                ->where('sub_institute_id',$sub_institute_id)
-                ->update([
-                    'status'=>0,
-                    'deleted_at'=>now(),
-                    'updated_at'=>now(),
-                ]);
-
-            // Soft, to match the department itself. s_user_jobrole already
-            // uses SoftDeletes on its model, so this is the delete that model
-            // would have performed.
-            DB::table('s_user_jobrole')
-                ->where('department_id',$id)
-                ->whereNull('deleted_at')
-                ->update(['deleted_at'=>now()]);
-        });
+        /*
+         * SAME ENGINE AS THE API DELETE.
+         *
+         * This screen and the API used to disagree about what deleting a
+         * department means: this one soft-deleted a single row and its job
+         * roles, leaving children orphaned; the API cascaded the whole subtree
+         * and left job roles alone. Neither released the ~30 other tables
+         * pointing at the department, which is how live stranded 77 skill
+         * records and seven employees.
+         *
+         * release() is now the single definition: employees unassigned (never
+         * deleted), the department's own content soft-deleted, everything else
+         * set to NULL rather than left dangling.
+         */
+        $result = app(\App\Services\Org\DepartmentMergeService::class)
+            ->release([(int) $id], (int) $sub_institute_id, session()->get('user_id'));
 
         $res['status_code']=1;
-        $res['message']="Deleted Successfully!!";
+        $res['message']="Deleted Successfully!! ".$result['employees']." employee(s) are now unassigned.";
 
         return is_mobile($type, "add_department.create", $res);
     }
