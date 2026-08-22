@@ -1668,6 +1668,19 @@ Route::get('/competency/seed-library/preview', [\App\Http\Controllers\Api\Compet
 Route::post('/competency/framework-import/dry-run', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'dryRun'])->middleware('profile:admin,hr');
 Route::post('/competency/framework-import/commit', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'commitImport'])->middleware('profile:admin,hr');
 
+// ADOPT — the write half that seed-library/preview above never had.
+//
+// Signup used to copy the whole catalogue into every new organisation: 98-99%
+// of everything a new tenant received on live, none of it asked for. That copy
+// is gone from SchoolSetupController, and this is what replaces it - the
+// customer names the roles and skills they want, and only those move.
+//
+// Each adopted row records the catalogue id it came from, so adopting the same
+// rows twice does nothing instead of duplicating them. Role-skill mappings,
+// tasks and departments are NOT copied.
+Route::post('/competency/catalogue-adopt/preview', [\App\Http\Controllers\Api\Competency\CatalogueAdoptController::class, 'preview'])->middleware('profile:admin,hr');
+Route::post('/competency/catalogue-adopt/commit', [\App\Http\Controllers\Api\Competency\CatalogueAdoptController::class, 'adopt'])->middleware('profile:admin,hr');
+
 // X-07d - readiness gates, admin surface. The guard is the EXISTING
 // profile:admin,hr middleware (exact role_key match, alias map for legacy
 // profiles); the controller deliberately does not re-implement it.

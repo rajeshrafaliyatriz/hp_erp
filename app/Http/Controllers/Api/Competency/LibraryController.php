@@ -96,7 +96,14 @@ class LibraryController extends Controller
             'search'   => ['task', 'jobrole', 'critical_work_function', 'track'],
             'required' => ['task'],
             'fields'   => [
-                'task', 'jobrole', 'critical_work_function', 'task_type',
+                // `jobrole` is the display name; `jobrole_id` is the link.
+                //
+                // The id was absent from this whitelist, and payload() iterates
+                // the whitelist rather than the request - so a client sending
+                // jobrole_id got a 200 and no column written, silently. That is
+                // why the column is 0 of 91,539 populated on live while the
+                // name column carries the whole relation.
+                'task', 'jobrole', 'jobrole_id', 'critical_work_function', 'task_type',
                 'task_category', 'sector', 'track',
             ],
         ],
@@ -430,14 +437,94 @@ class LibraryController extends Controller
         // and `department_id` stays NULL. A department nobody has created yet is
         // a legitimate thing to type, and inventing an id for it would be the
         // system manufacturing a claim nobody made.
+        //
+        // AND AN AMBIGUOUS NAME IS HELD TOO, which is the same rule one step
+        // further. This used `->value('id')`, which silently takes the FIRST
+        // match - and department names are more ambiguous than role names, not
+        // less: 557 ambiguous (tenant, name) groups covering 1,120 rows on
+        // live, with "Workplace Safety and Health" appearing four times inside
+        // tenant 1 alone. Picking the first of four is a coin toss reported as
+        // a fact. Two matches now resolve to NULL, exactly as zero matches do.
+        //
+        // `whereNull('deleted_at')` for the reason the job-role resolver below
+        // gives: a retired department resolving to a live id is worse than NULL.
         if (array_key_exists('department_id', $data) === false
             && in_array('department_id', $resource['fields'], true)
             && !empty($data['department'])) {
 
-            $data['department_id'] = DB::table('hrms_departments')
+            // limit(2) is all it takes to tell "exactly one" from "more than
+            // one" - the rest of the matches are not needed to know it is
+            // ambiguous.
+            $matches = DB::table('hrms_departments')
                 ->where('sub_institute_id', $subInstituteId)
+                ->whereNull('deleted_at')
                 ->whereRaw('LOWER(TRIM(department)) = ?', [mb_strtolower(trim($data['department']))])
-                ->value('id');
+                ->limit(2)
+                ->pluck('id');
+
+            $data['department_id'] = $matches->count() === 1 ? (int) $matches->first() : null;
+        }
+
+        /*
+         * The same rule for a job role task's role.
+         *
+         * `s_user_jobrole_task.jobrole` is the only link a task has to its
+         * role, and it is a NAME - so renaming the role orphaned every one of
+         * its tasks with nothing left pointing back. The id column has existed
+         * all along and is 0 of 91,539 populated on live.
+         *
+         * TWO DIFFERENCES FROM THE DEPARTMENT CASE ABOVE, both deliberate:
+         *
+         *   - `->whereNull('deleted_at')`. s_user_jobrole soft-deletes, and a
+         *     retired role resolving to a live id is worse than NULL.
+         *   - the name is AMBIGUOUS far more often here. There are 91 (tenant,
+         *     role name) groups covering 220 rows - tenant 1 alone has "Vice
+         *     President" eleven times - so this can match more than one row.
+         *     `value('id')` takes the first, which is a guess.
+         *
+         * That is why the field is whitelisted as well: the Job Role Task form
+         * uses a CLOSED select and already holds the id, so it can send it and
+         * skip this entirely. This resolver is the fallback for the writers
+         * that only have a name, and it holds rather than guesses when the
+         * name is ambiguous.
+         */
+        if (in_array('jobrole_id', $resource['fields'], true)) {
+
+            if (array_key_exists('jobrole_id', $data) && !empty($data['jobrole_id'])) {
+                /*
+                 * AN ID SUPPLIED BY THE CALLER IS NOT TRUSTED.
+                 *
+                 * Whitelisting the column means a request can now name a role
+                 * directly, and without this check a tenant-1 caller could
+                 * attach their task to tenant 2's role simply by sending its
+                 * id - the exact cross-tenant shape this work exists to close.
+                 * Verified: it did, before this guard.
+                 *
+                 * A foreign or retired id is dropped to NULL rather than
+                 * refused, so the task is still created and still carries its
+                 * name. Held, not guessed - and never someone else's.
+                 */
+                $ownRole = DB::table('s_user_jobrole')
+                    ->where('id', (int) $data['jobrole_id'])
+                    ->where('sub_institute_id', $subInstituteId)
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                $data['jobrole_id'] = $ownRole ? (int) $data['jobrole_id'] : null;
+
+            } elseif (!empty($data['jobrole'])) {
+                $matches = DB::table('s_user_jobrole')
+                    ->where('sub_institute_id', $subInstituteId)
+                    ->whereNull('deleted_at')
+                    ->whereRaw('LOWER(TRIM(jobrole)) = ?', [mb_strtolower(trim($data['jobrole']))])
+                    ->limit(2)
+                    ->pluck('id');
+
+                // Exactly one match is a resolution. Two is a coin toss, and a
+                // wrong id is worse than none - the name stays and the id is
+                // NULL, the same rule the department resolver above follows.
+                $data['jobrole_id'] = $matches->count() === 1 ? (int) $matches->first() : null;
+            }
         }
 
         return $data;

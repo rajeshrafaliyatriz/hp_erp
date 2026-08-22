@@ -148,9 +148,18 @@ return new class extends Migration
             Schema::create('jobrole_task_competency_map', function (Blueprint $t) {
                 $t->bigIncrements('id');
                 $t->unsignedBigInteger('sub_institute_id')->index();
-                $t->unsignedBigInteger('jobrole_task_id');     // s_user_jobrole_task.id
+                // s_jobrole_task.id - the SHARED CATALOGUE, not the tenant's own
+                // s_user_jobrole_task. This comment said the latter for months
+                // while every code path enforced the former; corrected here to
+                // match the code, which holds the coherent reading: a global task
+                // catalogue with a tenant-owned mapping laid over it.
+                $t->unsignedBigInteger('jobrole_task_id');
                 $t->unsignedBigInteger('competency_id');
                 $t->timestamps();
+                // NOTE: widened to include sub_institute_id by
+                // 2026_08_22_120000. Two organisations must be able to map the
+                // same catalogue task to different competencies, and this
+                // two-column key made that impossible.
                 $t->unique(['jobrole_task_id', 'competency_id'], 'uq_jtcm');
                 $t->index('competency_id', 'idx_jtcm_competency');
             });

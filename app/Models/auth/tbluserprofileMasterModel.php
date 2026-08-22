@@ -12,6 +12,11 @@ class tbluserprofileMasterModel extends Model
         'parent_id',
         'name',
         'description',
+        // The STABLE identifier authorization matches on (RequireProfile). It
+        // was missing from this list, so signup's create() silently dropped it
+        // and every profile ever created here fell back to matching on the
+        // editable display name.
+        'role_key',
         'sort_order',
         'status',
         'sub_institute_id',
