@@ -209,6 +209,22 @@ class CompetencyLibraryCrudController extends Controller
             return response()->json(['status' => false, 'message' => 'That competency code is already used in this organisation.'], 422);
         }
 
+        /*
+         * competency.code is NOT NULL, and the library form has no Code field.
+         *
+         * So every create from that screen inserted NULL and died with
+         * "Column 'code' cannot be null" - a 500, not a validation message.
+         * Creating a competency from the Competency Library has never worked.
+         *
+         * A code is generated from the name rather than made required: it is a
+         * human reference, the existing 226 rows carry curated ones like
+         * HC-CLIN-01, and asking every author to invent a unique string before
+         * they can save is a worse screen than deriving one they can edit later.
+         */
+        if (!$code) {
+            $code = $this->generateCode($sid, (string) $request->input('name'));
+        }
+
         $items = $request->input('items', []);
         $id = null;
         $written = 0;
@@ -263,6 +279,31 @@ class CompetencyLibraryCrudController extends Controller
     }
 
     /** PUT /competency-library/competency/{id} */
+    /**
+     * A tenant-unique code derived from the competency's name.
+     *
+     * Shape follows what is already in the table - uppercase, hyphenated, short
+     * - so a generated code sits beside the curated ones without looking alien.
+     * The numeric suffix only appears when it has to, and uq_competency_tenant_code
+     * is what it is defending.
+     */
+    private function generateCode(int $sid, string $name): string
+    {
+        $stem = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '-', trim($name)) ?: 'COMPETENCY');
+        $stem = trim($stem, '-');
+        // Leave room for a "-99" suffix inside varchar(64).
+        $stem = substr($stem, 0, 60) ?: 'COMPETENCY';
+
+        $candidate = $stem;
+        $suffix    = 1;
+
+        while (DB::table('competency')->where('sub_institute_id', $sid)->where('code', $candidate)->exists()) {
+            $candidate = $stem . '-' . (++$suffix);
+        }
+
+        return $candidate;
+    }
+
     public function update(Request $request, $id)
     {
         $context = $this->competencyContext($request);
@@ -287,6 +328,22 @@ class CompetencyLibraryCrudController extends Controller
             'criticality'     => 'nullable|string|max:32',
             'framework_id'    => 'nullable|integer',
             'status'          => 'nullable|integer',
+            // THE COMPOSITION, EDITABLE AT LAST.
+            //
+            // store() has always accepted items; update() did not, so once a
+            // competency existed its KASBA bundle was frozen - there was no
+            // route and no screen that could add, correct or remove one. That
+            // is a large part of why 66 of 266 items on live are still
+            // free-text labels: whoever typed them had no way back in.
+            //
+            // Omitting `items` leaves the composition untouched. Sending it
+            // REPLACES it, the same sync semantics RoleCompetencyMapController
+            // uses, so the client sends the state it wants rather than a diff.
+            'items'              => 'nullable|array',
+            'items.*.kasba_type' => 'required_with:items|string|in:knowledge,ability,skill,behaviour,attitude',
+            'items.*.item_id'    => 'nullable|integer',
+            'items.*.item_label' => 'nullable|string|max:191',
+            'items.*.weight'     => 'nullable|numeric|min:0|max:100',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'message' => $validator->errors()->first()], 422);
@@ -312,9 +369,50 @@ class CompetencyLibraryCrudController extends Controller
         $update['updated_by'] = (int) $context['user_id'];
         $update['updated_at'] = now();
 
-        DB::table('competency')->where('id', (int) $id)->where('sub_institute_id', $sid)->update($update);
+        $itemsGiven = $request->has('items');
+        $items      = $request->input('items', []);
+        $written    = 0;
 
-        return response()->json(['status' => true, 'message' => 'Competency updated.', 'data' => ['id' => (int) $id]]);
+        // One transaction: a competency whose row updated but whose composition
+        // did not is a competency that measures something other than it claims.
+        DB::transaction(function () use ($id, $sid, $update, $itemsGiven, $items, &$written) {
+            DB::table('competency')->where('id', (int) $id)->where('sub_institute_id', $sid)->update($update);
+
+            if (!$itemsGiven) {
+                return;
+            }
+
+            // Replace, tenant-scoped. competency_kasba_item has no deleted_at,
+            // so this is a hard delete by design - an item removed from a
+            // competency was never part of it, rather than retired from it.
+            DB::table('competency_kasba_item')
+                ->where('competency_id', (int) $id)
+                ->where('sub_institute_id', $sid)
+                ->delete();
+
+            foreach ($items as $item) {
+                DB::table('competency_kasba_item')->insert([
+                    'sub_institute_id' => $sid,
+                    'competency_id'    => (int) $id,
+                    'kasba_type'       => $item['kasba_type'],
+                    // Same rule as store(): item_id is the resolved target,
+                    // item_label the holding state. Neither is invented from
+                    // the other.
+                    'item_id'          => isset($item['item_id']) ? (int) $item['item_id'] : null,
+                    'item_label'       => $item['item_label'] ?? null,
+                    'weight'           => $item['weight'] ?? 1,
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ]);
+                $written++;
+            }
+        });
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Competency updated.',
+            'data'    => ['id' => (int) $id, 'items_written' => $itemsGiven ? $written : null],
+        ]);
     }
 
     /** DELETE /competency-library/competency/{id} — SOFT, and it says what it kept. */

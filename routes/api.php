@@ -91,6 +91,7 @@ use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
 use App\Http\Controllers\HRMS\HrmsLeaveController;
 use App\Http\Controllers\HRMS\DepartmentManagementController;
+use App\Http\Controllers\HRMS\EmployeeDirectoryController;
 use App\Http\Controllers\build_with_AI\buildwithAIController;
 use App\Http\Controllers\Api\GammaApiController;
 use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
@@ -357,6 +358,10 @@ Route::get('/competency/employee-profiles', [EmployeeCompetencyProfileController
 Route::get('/competency/employee-profiles/{id}', [EmployeeCompetencyProfileController::class, 'show'])->whereNumber('id');
 Route::get('/competency/employee-profiles/{id}/available-skills', [EmployeeCompetencyProfileController::class, 'availableSkills'])->whereNumber('id');
 Route::post('/competency/employee-profiles/{id}/skills', [EmployeeCompetencyProfileController::class, 'addSkill'])->whereNumber('id')->middleware('profile:admin,hr,manager');
+// BEFORE the {matrixId} route: '/skills/by-skill/...' would otherwise be a
+// candidate for it, and whereNumber('matrixId') is the only thing stopping the
+// router from trying. Declared first, it wins outright.
+Route::put('/competency/employee-profiles/{id}/skills/by-skill/{skillId}', [EmployeeCompetencyProfileController::class, 'upsertSkillBySkillId'])->whereNumber('id')->whereNumber('skillId')->middleware('profile:admin,hr,manager');
 Route::put('/competency/employee-profiles/{id}/skills/{matrixId}', [EmployeeCompetencyProfileController::class, 'updateSkill'])->whereNumber('id')->whereNumber('matrixId')->middleware('profile:admin,hr,manager');
 Route::get('/competency/employee-profiles/{id}/skills/{skillId}/history', [EmployeeCompetencyProfileController::class, 'skillHistory'])->whereNumber('id')->whereNumber('skillId');
 Route::get('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'notes'])->whereNumber('id');
@@ -406,6 +411,11 @@ Route::get('/competency/my-capability', [\App\Http\Controllers\Api\Competency\My
 // a rating names a person, so reading who can be rated is not a public question.
 Route::get('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'index'])->middleware('profile:admin,hr');
 Route::post('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'store'])->middleware('profile:admin,hr');
+// Rate a LIBRARY ITEM directly, by (kasba_type, item_id), rather than by a
+// competency link that mostly does not exist yet - see storeByItem(). Declared
+// before nothing in particular, but guarded identically to its siblings: a
+// rating names a person either way.
+Route::post('/competency/kasba-rating/by-item', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'storeByItem'])->middleware('profile:admin,hr');
 Route::delete('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'destroy'])->middleware('profile:admin,hr');
 
 // L-14: the TASK CATALOGUE -> COMPETENCY write path. Mirrors role-map one level
@@ -861,6 +871,32 @@ Route::prefix('departments-management')->group(function () {
 
 Route::resource('departments-management', DepartmentManagementController::class)
     ->only(['index', 'store', 'show', 'update', 'destroy']);
+
+/*
+ * Employee Directory.
+ *
+ * The sibling of departments-management, and the same ORDER MATTERS rule
+ * applies: /reference-data is declared before the resource, or the router
+ * dispatches it to show() with $id = "reference-data".
+ *
+ * Reads need only a valid token. Writes are gated on profile, because
+ * creating an employee mints a login and suspending one revokes access -
+ * neither is something an ordinary employee should be able to do by calling
+ * the endpoint directly. Hiding the button is not a control.
+ */
+Route::prefix('employees-management')->middleware('api.token')->group(function () {
+    Route::get('/reference-data', [EmployeeDirectoryController::class, 'referenceData']);
+
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/', [EmployeeDirectoryController::class, 'store']);
+        Route::put('/{id}', [EmployeeDirectoryController::class, 'update'])->whereNumber('id');
+        Route::patch('/{id}/status', [EmployeeDirectoryController::class, 'setStatus'])->whereNumber('id');
+        Route::post('/{id}/invite', [EmployeeDirectoryController::class, 'invite'])->whereNumber('id');
+    });
+
+    Route::get('/', [EmployeeDirectoryController::class, 'index']);
+    Route::get('/{id}', [EmployeeDirectoryController::class, 'show'])->whereNumber('id');
+});
 
 // Per-department content: SOPs, Policies and Rules.
 // These three tabs previously had no backend at all - they rendered hardcoded
