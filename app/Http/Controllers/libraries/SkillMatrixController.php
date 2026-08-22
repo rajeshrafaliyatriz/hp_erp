@@ -16,6 +16,12 @@ use App\Models\libraries\SLibraryMap;
 
 class SkillMatrixController extends Controller
 {
+    // Tenant and actor come from the Sanctum token, never from the request.
+    // Both /get-kaba and /skill-matrix/store-bulk used to take
+    // sub_institute_id and user_id straight off the query string with no
+    // authentication at all - see the note on their routes in routes/web.php.
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         $user_id = $request->session()->get('user_id');
@@ -47,10 +53,42 @@ class SkillMatrixController extends Controller
 
     public function storeBulk(Request $request)
     {
+        /*
+         * THE SUBJECT MUST BE THE CALLER'S OWN EMPLOYEE.
+         *
+         * This took `user_id` off the request on an unauthenticated route and
+         * wrote a competency rating for whoever it named, against whatever
+         * skill id it was given. s_skill_matrix has no sub_institute_id, so
+         * there was nothing to scope even in principle.
+         *
+         * The damage is measurable and already in production: 20 rows on live
+         * where the rated employee's tenant differs from the rated skill's,
+         * and 52 rows whose user_id matches no employee at all.
+         */
+        $identity = $this->resolveApiIdentity($request);
+        if (!\is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = $identity['sub_institute_id'];
+
+        $user_id = (int) $request->user_id;
+
+        $subjectOk = DB::table('tbluser')
+            ->where('id', $user_id)
+            ->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (!$subjectOk) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee not found in your organisation.',
+            ], 404);
+        }
+
         try {
             DB::beginTransaction();
-            
-            $user_id = (int)$request->user_id;
+
             $skills = $request->skills;
 
             $validator = $this->validateSkillData($skills);
@@ -59,6 +97,39 @@ class SkillMatrixController extends Controller
                     'success' => false,
                     'message' => 'Validation failed',
                     'errors' => $validator->errors()
+                ], 422);
+            }
+
+            /*
+             * Every skill must be the caller's own too.
+             *
+             * Scoping only the employee would still allow rating them against
+             * another organisation's skill - which is exactly the shape of the
+             * 20 contaminated rows on live, e.g. a tenant-3 employee rated on
+             * tenant 1's "Workplace Safety and Health".
+             */
+            $skillIds = array_values(array_unique(array_map(
+                fn ($s) => (int) ($s['skill_id'] ?? 0),
+                $skills
+            )));
+
+            $ownSkillIds = DB::table('s_users_skills')
+                ->whereIn('id', $skillIds)
+                ->where('sub_institute_id', $tenantId)
+                ->whereNull('deleted_at')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $foreign = array_diff($skillIds, $ownSkillIds);
+
+            if ($foreign !== []) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'One or more skills do not belong to your organisation.',
+                    'skill_ids' => array_values($foreign),
                 ], 422);
             }
 
@@ -280,9 +351,20 @@ class SkillMatrixController extends Controller
 	
 	public function getKaba(Request $request)
 	{
+	    /*
+	     * THE TENANT COMES FROM THE TOKEN.
+	     *
+	     * It used to be `$request->sub_institute_id` - a query-string value on
+	     * an unauthenticated route - and the rows returned were fetched by raw
+	     * id with no tenant condition at all. Anyone could read any
+	     * organisation's job roles, tasks and KASBA library by guessing ids.
+	     */
+	    $identity = $this->resolveApiIdentity($request);
+	    if (!\is_array($identity)) {
+	        return $identity;
+	    }
+	    $sub_institute_id = $identity['sub_institute_id'];
 
-    // return $request;
-	    $sub_institute_id = $request->sub_institute_id;
 	    $type = $request->type;
 	    $typeId = $request->type_id;
 	    $titleSearch = $request->title;
@@ -383,7 +465,36 @@ class SkillMatrixController extends Controller
 		    // Use ONE MODEL but dynamic table
 		    $model = \App\Models\libraries\KabaMaster::fromType($type);
 
-		    return $model->whereIn('id', $idList)->get()->map(function ($item) use ($type, $subInstituteId) {
+		    /*
+		     * SCOPED TO THE CALLER'S ORGANISATION.
+		     *
+		     * This was `whereIn('id', $idList)` alone. Every table KabaMaster
+		     * resolves to - s_users_skills, s_user_knowledge, s_user_ability,
+		     * s_user_attitude, s_user_behaviour, s_user_jobrole_task,
+		     * s_user_jobrole - carries sub_institute_id, and none of them was
+		     * filtered by it, so a caller received whatever rows those ids
+		     * happened to name in any organisation on the platform.
+		     *
+		     * The tenanted tables are named explicitly rather than probed with
+		     * Schema::hasColumn(): that helper selects `generation_expression`,
+		     * which live's MariaDB 10.1 does not have, so it throws there while
+		     * working fine on dev. An explicit list also means a new KabaMaster
+		     * table has to be considered deliberately rather than defaulting
+		     * to unfiltered.
+		     */
+		    $tenanted = [
+		        's_users_skills', 's_user_knowledge', 's_user_ability',
+		        's_user_attitude', 's_user_behaviour',
+		        's_user_jobrole', 's_user_jobrole_task',
+		    ];
+
+		    $query = $model->whereIn('id', $idList);
+
+		    if (\in_array($model->getTable(), $tenanted, true)) {
+		        $query->where('sub_institute_id', $subInstituteId);
+		    }
+
+		    return $query->get()->map(function ($item) use ($type, $subInstituteId) {
 		        $data = [
 		            'id'           => $item->id,
 		            'category'     => $item->category ?? $item->track,

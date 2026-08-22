@@ -945,7 +945,11 @@ class tbluserController extends Controller
         }
 
         // }
-        $detailsLevel = SLevelResponsibility::where('level', $editData['subject_ids'])->get()->toArray();
+        // subject_ids holds ROW IDs, not level numbers - see
+        // responsibilityLevelsFor(). Comparing it to `level` matched nothing for
+        // 150 of the 187 employees who have a level set.
+        $detailsLevel = SLevelResponsibility::whereIn('level', $this->responsibilityLevelsFor($editData['subject_ids'] ?? null))
+            ->get()->toArray();
         $allLevels = $attrData = [];
         foreach ($detailsLevel as $key => $value) {
             $allLevels[$value['level']] = $value;
@@ -957,6 +961,10 @@ class tbluserController extends Controller
         }
         $res['usersLevelData']['levelsData'] = array_values($allLevels);
         $res['usersLevelData']['attrData'] = $attrData;
+        // attrData is keyed by LEVEL, and subject_ids holds an ID, so the view
+        // cannot index one with the other. Hand it the resolved level.
+        $res['usersLevelData']['selectedLevel'] =
+            $this->responsibilityLevelsFor($editData['subject_ids'] ?? null)[0] ?? null;
         $res['usersLevelData']['allData'] = $detailsLevel;
         $res['usersJobroleComponent'] = DB::table('s_user_jobrole')->where('jobrole', $assignedJobrole->jobrole)->where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->first();
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();
@@ -1452,7 +1460,11 @@ class tbluserController extends Controller
         }
 
         // }
-        $detailsLevel = SLevelResponsibility::where('level', $editData['subject_ids'])->get()->toArray();
+        // subject_ids holds ROW IDs, not level numbers - see
+        // responsibilityLevelsFor(). Comparing it to `level` matched nothing for
+        // 150 of the 187 employees who have a level set.
+        $detailsLevel = SLevelResponsibility::whereIn('level', $this->responsibilityLevelsFor($editData['subject_ids'] ?? null))
+            ->get()->toArray();
         $allLevels = $attrData = [];
         foreach ($detailsLevel as $key => $value) {
             $allLevels[$value['level']] = $value;
@@ -1464,10 +1476,68 @@ class tbluserController extends Controller
         }
         $res['usersLevelData']['levelsData'] = array_values($allLevels);
         $res['usersLevelData']['attrData'] = $attrData;
+        // attrData is keyed by LEVEL, and subject_ids holds an ID, so the view
+        // cannot index one with the other. Hand it the resolved level.
+        $res['usersLevelData']['selectedLevel'] =
+            $this->responsibilityLevelsFor($editData['subject_ids'] ?? null)[0] ?? null;
         $res['usersLevelData']['allData'] = $detailsLevel;
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();
 
         // echo "<pre>";print_r($res['skills']);exit;
         return is_mobile($type, 'user/edit_user', $res, 'view');
+    }
+
+    /**
+     * `tbluser.subject_ids` -> the SFIA responsibility level(s) it refers to.
+     *
+     * ── WHAT THE COLUMN ACTUALLY HOLDS ──────────────────────────────────────
+     *
+     * ROW IDS from `s_level_responsibility`, not level numbers. Measured across
+     * live, every non-empty value is one of:
+     *
+     *     1, 17, 33, 49, 65, 81, 97
+     *
+     * which are exactly MIN(id) per level - the ids that
+     * `SLevelResponsibility::groupBy('level')` hands the dropdown. 150 of the
+     * 187 employees who have a value are above 7, so they cannot be levels.
+     *
+     * ── THE BUG ────────────────────────────────────────────────────────────
+     *
+     * Two call sites queried `where('level', $subject_ids)`, comparing an id to
+     * a level. For every employee above level 1 that matched NOTHING, so the
+     * legacy Level of Responsibility page and the edit dropdown came up blank -
+     * silently, because an empty result looks like "not set yet". A third site
+     * (:566) already used `where('id', …)` and was right, which is how the two
+     * readings sat side by side without anyone noticing.
+     *
+     * ── WHY PLURAL HANDLING ────────────────────────────────────────────────
+     *
+     * The column is TEXT named `subject_ids` and the add form posts
+     * `subject_ids[]` as a MULTIPLE select, so a comma list is expressible.
+     * Nothing on live actually stores one, but splitting costs nothing and
+     * means a multi-valued row degrades to "all of them" rather than to
+     * silence.
+     *
+     * @return list<int> the levels, possibly empty - never null, so whereIn()
+     *                   stays a safe call.
+     */
+    private function responsibilityLevelsFor($subjectIds): array
+    {
+        $ids = array_values(array_filter(
+            array_map('intval', preg_split('/\s*,\s*/', (string) $subjectIds, -1, PREG_SPLIT_NO_EMPTY) ?: []),
+            static fn ($id) => $id > 0
+        ));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        return SLevelResponsibility::whereIn('id', $ids)
+            ->orderBy('level')
+            ->pluck('level')
+            ->unique()
+            ->values()
+            ->map(static fn ($level) => (int) $level)
+            ->all();
     }
 }

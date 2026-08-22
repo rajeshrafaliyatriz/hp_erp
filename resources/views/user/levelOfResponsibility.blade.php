@@ -57,12 +57,14 @@
             </p>
         </div>
         @php
-            $attributes = isset($usersLevelData['attrData'][$data['subject_ids']]['Attributes'])
-                ? $usersLevelData['attrData'][$data['subject_ids']]['Attributes']
-                : [];
-            $businss_skills = isset($usersLevelData['attrData'][$data['subject_ids']]['Business_skills'])
-                ? $usersLevelData['attrData'][$data['subject_ids']]['Business_skills']
-                : [];
+            // attrData is keyed by LEVEL (1-7); subject_ids holds a ROW ID
+            // (1, 17, 33, 49, …). Indexing one with the other missed for every
+            // employee above level 1, so this page rendered empty for 150 of
+            // the 187 people who have a level set. The controller resolves the
+            // id and passes the level down as selectedLevel.
+            $selectedLevel = $usersLevelData['selectedLevel'] ?? null;
+            $attributes = $usersLevelData['attrData'][$selectedLevel]['Attributes'] ?? [];
+            $businss_skills = $usersLevelData['attrData'][$selectedLevel]['Business_skills'] ?? [];
         @endphp
         @if (isset($usersLevelData['levelsData'][0]) && !empty($attributes))
             @foreach ($attributes as $key => $val)

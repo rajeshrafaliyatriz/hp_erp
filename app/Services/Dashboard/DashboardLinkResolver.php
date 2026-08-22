@@ -2,7 +2,7 @@
 
 namespace App\Services\Dashboard;
 
-use Illuminate\Support\Facades\DB;
+use App\Models\tblmenumaster_g2gModel;
 
 /**
  * DASHBOARD DESTINATIONS, RESOLVED FROM tblmenumaster_g2g.
@@ -42,7 +42,14 @@ use Illuminate\Support\Facades\DB;
  * TENANT MATCHING: tblmenumaster_g2g.sub_institute_id is a TEXT comma-list
  * ("1,2,3,6,7"), not an integer, so `= 6` would be a string comparison that
  * matches only a tenant whose entire list is the literal "6". FIND_IN_SET is
- * the correct test.
+ * the correct test - but it is no longer written here.
+ *
+ * It moved to tblmenumaster_g2gModel::scopeVisibleToTenant(), because this was
+ * the FOURTH copy of that predicate and the column turned out to hold one
+ * hard-coded literal on every row rather than real per-tenant data. Every
+ * organisation with an id of 12 or above resolved ZERO dashboard links, which
+ * looked from here like "that tenant's plan omits those modules" - the exact
+ * misreading the comment above warns about. See the scope for the full story.
  */
 class DashboardLinkResolver
 {
@@ -76,10 +83,13 @@ class DashboardLinkResolver
     {
         $slugs = array_values(array_unique(array_column(self::KEYS, 0)));
 
-        $rows = DB::table('tblmenumaster_g2g')
+        // deleted_at is handled by the model's SoftDeletes trait, not repeated
+        // here - it used to be filtered in this one place and nowhere else,
+        // so a soft-deleted menu vanished from dashboard links while staying
+        // in the sidebar.
+        $rows = tblmenumaster_g2gModel::query()
             ->where('status', 1)
-            ->whereNull('deleted_at')
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sid])
+            ->visibleToTenant($sid)
             ->get(['access_link']);
 
         // slug => the full stored path

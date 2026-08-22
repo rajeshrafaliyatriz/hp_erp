@@ -145,6 +145,12 @@ class KasbaRatingController extends Controller
             ->get([
                 'k.id as kasba_item_id',
                 'k.kasba_type',
+                // item_id IS SELECTED NOW, and that is the fix. Only item_label
+                // came back, and an item that RESOLVED to a library row has
+                // item_label NULL by design - so the correctly-resolved items
+                // were exactly the ones rendering as blank rows, while the
+                // unresolved label-only ones displayed fine. 203 rows on live.
+                'k.item_id',
                 'k.item_label',
                 'k.weight',
                 'm.competency_id',
@@ -155,6 +161,8 @@ class KasbaRatingController extends Controller
                 'r.note',
                 'r.rated_at',
             ]);
+
+        $items = $this->attachTitles($items, $sid);
 
         return response()->json([
             'status' => 1,
@@ -413,5 +421,95 @@ class KasbaRatingController extends Controller
             'message' => $deleted ? 'Rating removed; the item is unmeasured again.' : 'No rating to remove.',
             'data'    => ['removed' => $deleted],
         ]);
+    }
+
+    /** The five KASBA dimensions and the library table each one names. */
+    private const DIMENSION_TABLES = [
+        'skill'     => 's_users_skills',
+        'knowledge' => 's_user_knowledge',
+        'ability'   => 's_user_ability',
+        'attitude'  => 's_user_attitude',
+        'behaviour' => 's_user_behaviour',
+    ];
+
+    /**
+     * Gives every item a `title` the screen can actually render.
+     *
+     * ── THE DEFECT ─────────────────────────────────────────────────────────
+     *
+     * `competency_kasba_item` stores an item one of two ways: RESOLVED, with
+     * `item_id` pointing into a library table and `item_label` NULL; or HELD,
+     * with the customer's wording in `item_label` and `item_id` NULL. The read
+     * above selected only `item_label`.
+     *
+     * So the items that were CORRECTLY resolved - 203 of them on live - came
+     * back with no text at all, while the unresolved ones displayed fine. The
+     * better the data, the emptier the screen.
+     *
+     * ── WHY IN PHP AND NOT A FIVE-WAY LEFT JOIN ────────────────────────────
+     *
+     * Because the join would be five OUTER joins against five tables to
+     * populate one string, and COALESCE across five nullable columns is a
+     * shape nobody reads twice. The list is 9-12 items for the largest role on
+     * live and at most one query per dimension present, so the cost is a
+     * handful of indexed lookups against a fixed, tiny set of ids.
+     *
+     * ── SOFT-DELETED LIBRARY ROWS ARE STILL TITLED, DELIBERATELY ───────────
+     *
+     * No `whereNull('deleted_at')` here. If a library item is retired while a
+     * competency still references it, the honest thing to show is its name -
+     * that is how somebody works out what to fix. Blanking it would hide the
+     * problem rather than report it.
+     *
+     * @param \Illuminate\Support\Collection $items
+     * @return \Illuminate\Support\Collection sorted by competency, dimension, title
+     */
+    private function attachTitles($items, int $sid)
+    {
+        // One bucket of ids per dimension actually present - never five queries
+        // when the role only uses two.
+        $wanted = [];
+        foreach ($items as $row) {
+            $type = mb_strtolower((string) $row->kasba_type);
+            if ($row->item_id !== null && isset(self::DIMENSION_TABLES[$type])) {
+                $wanted[$type][] = (int) $row->item_id;
+            }
+        }
+
+        $titles = [];
+        foreach ($wanted as $type => $ids) {
+            $titles[$type] = DB::table(self::DIMENSION_TABLES[$type])
+                ->where('sub_institute_id', $sid)
+                ->whereIn('id', array_values(array_unique($ids)))
+                ->pluck('title', 'id')
+                ->all();
+        }
+
+        foreach ($items as $row) {
+            $type = mb_strtolower((string) $row->kasba_type);
+            $resolved = ($row->item_id !== null && isset($titles[$type][(int) $row->item_id]))
+                ? $titles[$type][(int) $row->item_id]
+                : null;
+
+            // item_label is the fallback, not the other way round: a resolved
+            // item's library title is the current name, and a label is a
+            // snapshot of what somebody typed once.
+            $row->title = $resolved ?? $row->item_label;
+
+            // An id that resolves to nothing is a real condition - the library
+            // row was hard-deleted - and the screen should say so rather than
+            // print an empty cell.
+            $row->title_missing = $row->title === null || $row->title === '';
+        }
+
+        // Re-sorted here because the SQL ordered by `k.item_label`, which is
+        // NULL for exactly the rows this method just gave a title to.
+        return $items
+            ->sortBy(fn ($r) => [
+                (string) ($r->competency_name ?? ''),
+                (string) $r->kasba_type,
+                mb_strtolower((string) ($r->title ?? '')),
+            ])
+            ->values();
     }
 }

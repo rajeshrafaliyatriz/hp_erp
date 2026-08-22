@@ -51,7 +51,11 @@ class SeedLibraryPreviewController extends Controller
 
         // ── what this tenant already holds ──────────────────────────────────
         $ownRoles  = DB::table('s_user_jobrole')->where('sub_institute_id', $tenant)->whereNull('deleted_at')->count();
-        $ownSkills = DB::table('s_users_skills')->where('sub_institute_id', $tenant)->count();
+        // whereNull('deleted_at') to match the job-role line above, which had it.
+        // Without it this counted soft-deleted skills as content the tenant
+        // holds - tenant 3 read as 170 when it has 168 - so the preview slightly
+        // understated what an import would add.
+        $ownSkills = DB::table('s_users_skills')->where('sub_institute_id', $tenant)->whereNull('deleted_at')->count();
 
         // ── OVERLAP, by name, because that is how an import would match ─────
         // Reported as a candidate count and labelled as such: a name match is a
@@ -64,7 +68,7 @@ class SeedLibraryPreviewController extends Controller
 
         $skillOverlap = DB::table('s_users_skills as t')
             ->join('master_skills as g', 'g.title', '=', 't.title')
-            ->where('t.sub_institute_id', $tenant)
+            ->where('t.sub_institute_id', $tenant)->whereNull('t.deleted_at')
             ->distinct()->count('t.title');
 
         // ── THE VOCABULARY-DISTANCE NUMBER (G-SEED-01 R5) ───────────────────

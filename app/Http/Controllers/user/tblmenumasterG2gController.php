@@ -58,7 +58,7 @@ class tblmenumasterG2gController extends Controller
         $sub_institute_id = $this->apiTenantId($request);
 
         $allMenus = tblmenumaster_g2gModel::where('status', 1)
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
+            ->visibleToTenant($sub_institute_id)
             ->orderBy('sort_order', 'ASC')
             ->get();
 
@@ -114,7 +114,7 @@ class tblmenumasterG2gController extends Controller
         $profile_id = $request->get('profile_id');
 
         $allMenus = tblmenumaster_g2gModel::where('status', 1)
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
+            ->visibleToTenant($sub_institute_id)
             ->orderBy('sort_order', 'ASC')
             ->get();
 
@@ -163,7 +163,7 @@ class tblmenumasterG2gController extends Controller
         $rights = $request->input('rights', []);
 
         $validMenuIds = tblmenumaster_g2gModel::where('status', 1)
-            ->whereRaw('FIND_IN_SET(?, sub_institute_id)', [$sub_institute_id])
+            ->visibleToTenant($sub_institute_id)
             ->pluck('id')
             ->flip();
 

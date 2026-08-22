@@ -208,8 +208,31 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
 });
 
-Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->name('skill-matrix.store-bulk');
-Route::get('/get-kaba', [SkillMatrixController::class, 'getKaba']);
+/*
+ * THESE TWO WERE OPEN TO THE INTERNET.
+ *
+ * Both sat outside the ['auth','session','menu'] group that closes above, and
+ * routes/web.php is registered with only the `web` group - so neither had any
+ * authentication at all.
+ *
+ *   /get-kaba            read seven TENANTED tables by raw id, taking
+ *                        sub_institute_id from the query string, with no
+ *                        tenant filter on the rows it returned. Any caller
+ *                        could read any organisation's job roles, tasks,
+ *                        skills, knowledge, abilities, attitudes and
+ *                        behaviours.
+ *   /skill-matrix/store-bulk  wrote competency ratings for any user_id
+ *                        against any skill_id, with no caller identity at all.
+ *
+ * The write hole was not theoretical: live carries 20 rows where the rated
+ * employee's tenant differs from the rated skill's tenant, and 52 rows whose
+ * user_id matches no employee.
+ *
+ * `api.token` requires a valid Sanctum token; the controllers now take the
+ * tenant from that token and ignore any sub_institute_id in the request.
+ */
+Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->middleware('api.token')->name('skill-matrix.store-bulk');
+Route::get('/get-kaba', [SkillMatrixController::class, 'getKaba'])->middleware('api.token');
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 
 Route::get('menuLevel2', [CustomModuleController::class, 'menuLevel2'])->name('menuLevel2.index');

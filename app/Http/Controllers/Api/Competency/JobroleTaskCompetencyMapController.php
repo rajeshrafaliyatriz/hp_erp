@@ -142,7 +142,7 @@ class JobroleTaskCompetencyMapController extends Controller
         $task = DB::table('s_jobrole_task')->where('id', $taskId)->first(['id', 'task', 'jobrole']);
         $resolvedFrom = 'catalogue';
 
-        if (!$task) {
+        if (!$task && self::hasCatalogueBridge()) {
             $bridged = DB::table('s_user_jobrole_task')
                 ->where('id', $taskId)->value('catalogue_task_id');
 
@@ -469,5 +469,40 @@ class JobroleTaskCompetencyMapController extends Controller
             // says so rather than leaving a screen to infer it from zeroes.
             'empty_is_expected' => $mapped === 0,
         ]);
+    }
+
+    /**
+     * Is the catalogue bridge column actually there?
+     *
+     * `s_user_jobrole_task.catalogue_task_id` was created by a one-off script
+     * and existed in no migration, so a freshly migrated database did not have
+     * it and the read above threw - on the exact "new organisation starting
+     * clean" path this feature is for. 2026_08_22_120000 now creates it
+     * properly, and this check covers the window where code is deployed ahead
+     * of that migration.
+     *
+     * CACHED FOR THE PROCESS. An information_schema lookup on every request to
+     * confirm a fact that cannot change while the process runs would be a real
+     * cost for no information.
+     *
+     * Not Schema::hasColumn(): Laravel 11 introspects with a query selecting
+     * `generation_expression`, a column live's MariaDB 10.1 does not have, so
+     * that helper throws on production while working on dev - it would turn a
+     * guard against a 500 into a cause of one.
+     */
+    private static function hasCatalogueBridge(): bool
+    {
+        static $exists = null;
+
+        if ($exists === null) {
+            $exists = DB::select(
+                'SELECT 1 FROM information_schema.COLUMNS
+                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+                  LIMIT 1',
+                ['s_user_jobrole_task', 'catalogue_task_id']
+            ) !== [];
+        }
+
+        return $exists;
     }
 }
