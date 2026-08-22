@@ -36,6 +36,70 @@ class tbluserController extends Controller
     // is deliberately left alone.
     use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 
+    /**
+     * Columns an API caller may see for someone else.
+     *
+     * Deliberately an allow-list, not a deny-list: a column added to tbluser
+     * later should have to be named here before it reaches a browser, rather
+     * than leaking by default. Nothing secret belongs in it - no password,
+     * plain_password, otp, remember_token, fcm_token, pan_no, aadhar_no,
+     * account_no or ifsc_code.
+     */
+    private const API_LIST_COLUMNS = [
+        'tbluser.id',
+        'tbluser.first_name',
+        'tbluser.middle_name',
+        'tbluser.last_name',
+        'tbluser.full_name',
+        'tbluser.email',
+        'tbluser.mobile',
+        'tbluser.image',
+        'tbluser.employee_no',
+        'tbluser.employee_id',
+        'tbluser.department_id',
+        'tbluser.allocated_standards',
+        'tbluser.jobtitle_id',
+        'tbluser.user_profile_id',
+        'tbluser.joined_date',
+        'tbluser.city',
+        'tbluser.state',
+        'tbluser.supervisor_opt',
+    ];
+
+    /**
+     * The single-employee shape, for the drawer. Wider than the list because
+     * the drawer edits these fields - but bank account numbers, identity
+     * documents and credentials are still not among them.
+     */
+    private const API_DETAIL_COLUMNS = [
+        'id', 'name_suffix', 'first_name', 'middle_name', 'last_name', 'full_name',
+        'email', 'mobile', 'gender', 'birthdate', 'image',
+        'employee_no', 'employee_id', 'joined_date',
+        'department_id', 'allocated_standards', 'jobtitle_id', 'user_profile_id',
+        'subject_ids', 'status', 'supervisor_opt', 'reporting_method', 'reporting_manager_id',
+        'address', 'address_2', 'city', 'state', 'pincode',
+        'bank_name', 'branch_name', 'qualification',
+        'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+        'monday_in_date', 'monday_out_date', 'tuesday_in_date', 'tuesday_out_date',
+        'wednesday_in_date', 'wednesday_out_date', 'thursday_in_date', 'thursday_out_date',
+        'friday_in_date', 'friday_out_date', 'saturday_in_date', 'saturday_out_date',
+        'sunday_in_date', 'sunday_out_date',
+    ];
+
+    /**
+     * Columns no request may ever write, whatever it posts.
+     *
+     * saveData()/updateData() copy every request key into the write, so
+     * without this a caller could post is_admin=1 or user_profile_id=<admin>
+     * and escalate. Mirrors UserImportController's list, which exists for the
+     * same reason on the import path.
+     */
+    private const NEVER_WRITABLE = [
+        'id', 'sub_institute_id', 'client_id', 'is_admin', 'portal_user',
+        'password', 'plain_password', 'otp', 'remember_token', 'fcm_token',
+        'created_by', 'created_at', 'deleted_by', 'deleted_at', 'last_login',
+    ];
+
     public function index(Request $request)
     {
         // echo "<pre>";print_r(session()->all());exit;
@@ -73,13 +137,32 @@ class tbluserController extends Controller
             $user_id = $request->get('user_id');
             $user_profile = $request->get('user_profile_name');
         }
+        /*
+         * `tbluser.*` for an API caller is a credential leak.
+         *
+         * The model declares no $hidden, so selecting every column serialised
+         * all 99 of them per employee to the browser: the bcrypt `password`,
+         * the cleartext `plain_password` (non-empty on 296 of 298 live rows),
+         * plus `account_no`, `ifsc_code`, `pan_no`, `aadhar_no` and
+         * `fcm_token`. The Employee Directory fetched that on every load.
+         *
+         * The Blade branch keeps `tbluser.*` because show_user.blade.php and
+         * edit_user.blade.php read columns straight off the row - including
+         * plain_password, which edit_user.blade.php:255 renders into its
+         * password input. Narrowing that path would break those screens, so
+         * the two callers get the two shapes they actually need.
+         */
         $user_data = tbluserModel::select(
-            'tbluser.*',
-            'tbluserprofilemaster.name as profile_name',
-            DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
-            DB::raw('IFNULL(hrms_departments.department,"-") as department_name'),
-            DB::raw('IFNULL(s_user_jobrole.jobrole,"-") as jobrole'),
-            DB::raw('IFNULL(org_designation.designation,"-") as designation'),
+            array_merge(
+                $type == 'API' ? self::API_LIST_COLUMNS : ['tbluser.*'],
+                [
+                    'tbluserprofilemaster.name as profile_name',
+                    DB::raw('if(tbluser.status = 1,"Active","Inactive") as status'),
+                    DB::raw('IFNULL(hrms_departments.department,"-") as department_name'),
+                    DB::raw('IFNULL(s_user_jobrole.jobrole,"-") as jobrole'),
+                    DB::raw('IFNULL(org_designation.designation,"-") as designation'),
+                ]
+            )
         )
             ->join('tbluserprofilemaster', 'tbluser.user_profile_id', '=', 'tbluserprofilemaster.id')
             ->leftJoin('hrms_departments', 'tbluser.department_id', '=', 'hrms_departments.id')
@@ -100,7 +183,10 @@ class tbluserController extends Controller
 
         $res['status_code'] = 1;
         $res['message'] = 'Success';
-        $res['departments'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->get()->toArray();
+        // whereNull('deleted_at') matters now that Department Management soft
+        // deletes: without it a retired department stays selectable in the
+        // employee's Department picker and reassigns people back into it.
+        $res['departments'] = DB::table('hrms_departments')->where('sub_institute_id', $sub_institute_id)->where('status', 1)->whereNull('deleted_at')->get()->toArray();
         $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
         $res['levelOfResponsbility'] = SLevelResponsibility::groupBy('level')->get()->toArray();
         $res['user_profiles'] = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
@@ -243,19 +329,25 @@ class tbluserController extends Controller
         $finalArray['sub_institute_id'] = $sub_institute_id;
         $finalArray['status'] = 1;
         unset($newRequest['user_image']);
+
+        // Same allow-list as updateData(): tbluserModel::insert() below is the
+        // query builder, so $fillable is never consulted and every request key
+        // would otherwise be written - including is_admin.
+        $writable = array_diff($this->userColumns(), self::NEVER_WRITABLE);
+
         foreach ($newRequest as $key => $value) {
-            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name' && $key != 'plain_password') {
+            if (in_array($key, $writable, true)) {
                 if (is_array($value)) {
                     $value = implode(',', $value);
                 }
                 $finalArray[$key] = $value;
             }
 
-            if ($key == 'password') {
+            if ($key == 'password' && ! empty($value)) {
                 $finalArray[$key] = Hash::make($value);
             }
 
-            if ($key == 'birthdate') {
+            if ($key == 'birthdate' && ! empty($value)) {
                 $finalArray[$key] = carbon::parse($value)->format('Y-m-d');
             }
         }
@@ -325,10 +417,33 @@ class tbluserController extends Controller
         $newRequest = $request->all();
         // $user_id = $newRequest['id'];
         $finalArray['sub_institute_id'] = $sub_institute_id;
-        $finalArray['status'] = 1;
         unset($newRequest['user_image']);
+
+        /*
+         * `status` used to be forced to 1 on every update, so saving any field
+         * on a suspended employee silently reactivated them - deactivating
+         * anyone was impossible while this ran. It is now only written when
+         * the caller actually asked, and only as 0 or 1.
+         */
+        if ($request->has('status')) {
+            $finalArray['status'] = (int) $request->input('status') === 0 ? 0 : 1;
+        }
+        unset($newRequest['status']);
+
+        /*
+         * Only real columns, and never the ones in NEVER_WRITABLE.
+         *
+         * Every request key used to be copied straight into the update, so a
+         * caller could post is_admin=1 or user_profile_id=<admin> and escalate,
+         * and a key that was not a column threw a SQL error instead. The
+         * column list is intersected rather than enumerated because the Blade
+         * edit form posts most of the table and an allow-list would silently
+         * stop saving whatever it forgot.
+         */
+        $writable = array_diff($this->userColumns(), self::NEVER_WRITABLE);
+
         foreach ($newRequest as $key => $value) {
-            if ($key != 'type' && $key != 'user_id' && $key != '_method' && $key != '_token' && $key != 'submit' && $key != 'id' && $key != 'update' && $key != 'token' && $key != 'user_name' && $key != 'plain_password') {
+            if (in_array($key, $writable, true)) {
                 if (is_array($value)) {
                     $value = implode(',', $value);
                 }
@@ -345,11 +460,14 @@ class tbluserController extends Controller
                 $finalArray[$key] = $value;
             }
 
-            if ($key == 'password') {
+            // password is in NEVER_WRITABLE so it is not in $writable, but the
+            // Blade edit form does legitimately change it. Hash it here rather
+            // than letting a raw value through the loop above.
+            if ($key == 'password' && ! empty($value)) {
                 $finalArray[$key] = Hash::make($value);
             }
 
-            if ($key == 'birthdate') {
+            if ($key == 'birthdate' && ! empty($value)) {
                 $finalArray[$key] = carbon::parse($value)->format('Y-m-d');
             }
         }
@@ -357,7 +475,49 @@ class tbluserController extends Controller
         $finalArray['updated_at'] = now();
         $finalArray['updated_by'] = $user_id;
 
-        return tbluserModel::where(['id' => $id])->update($finalArray);
+        // Tenant scope: without it any signed-in caller could overwrite any
+        // employee in any tenant by id.
+        return tbluserModel::where('id', $id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->update($finalArray);
+    }
+
+    /**
+     * tbluser's real column list, resolved once per request.
+     *
+     * Schema::getColumnListing is safe on the live MariaDB 10.1 box - it is
+     * hasColumn()/hasTable() that throw there, because Laravel 11 selects
+     * `generation_expression`, which 10.1 does not have.
+     */
+    /**
+     * One classification group as {id, item} pairs.
+     *
+     * The id is s_skill_knowledge_ability.id, which is what the Jobrole Skill
+     * tab stores when someone confirms an item, and what
+     * EmployeeCompetencyProfileController::upsertSkillBySkillId validates
+     * against. The label rides along for display.
+     */
+    private function classificationItems($grouped, string $classification): array
+    {
+        if (! $grouped->has($classification)) {
+            return [];
+        }
+
+        return $grouped[$classification]
+            ->map(fn ($row) => ['id' => (int) $row->id, 'item' => $row->classification_item])
+            ->values()
+            ->all();
+    }
+
+    private function userColumns(): array
+    {
+        static $columns = null;
+
+        if ($columns === null) {
+            $columns = \Illuminate\Support\Facades\Schema::getColumnListing('tbluser');
+        }
+
+        return $columns;
     }
 
     public function edit(Request $request, $id)
@@ -385,7 +545,22 @@ class tbluserController extends Controller
             $syear = session()->get('syear');
         }
 
-        $editData = tbluserModel::find($id)->toArray();
+        /*
+         * find($id) was unscoped, so any signed-in caller could read any
+         * employee in any tenant by guessing an id - and ->toArray() on the
+         * null it returns for a missing id was a fatal, not a 404.
+         */
+        $editRow = tbluserModel::where('id', $id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->first();
+
+        if (! $editRow) {
+            $res = ['status' => '0', 'message' => 'Employee not found'];
+
+            return is_mobile($type, 'add_user.index', $res);
+        }
+
+        $editData = $editRow->toArray();
         $data = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $subject_data = subjectModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $userLevels = DB::table('s_level_responsibility')->where('id', $editData['subject_ids'])
@@ -521,7 +696,16 @@ class tbluserController extends Controller
         // 29-10-2024 end
         $res['masterSetups'] = $pluckedData;
         $res['departments'] = $departments;
-        $res['employees'] = tbluserModel::where('sub_institute_id', $sub_institute_id)->get();
+        /*
+         * This list exists to fill one "Reporting Manager" dropdown, and it
+         * used to return every column of every employee in the tenant to do
+         * it - 298 full rows including plain_password. The consumer
+         * (PersonalInfoTab) reads a name and an id.
+         */
+        $res['employees'] = tbluserModel::where('sub_institute_id', $sub_institute_id)
+            ->whereNull('deleted_at')
+            ->when($type == 'API', fn ($q) => $q->select('id', 'first_name', 'last_name', 'employee_no'))
+            ->get();
         $res['job_titles'] = []; // HrmsJobTitle::where('sub_institute_id',$sub_institute_id)->get();
         $res['custom_fields'] = $dataCustomFields;
         $res['subject_data'] = $subject_data;
@@ -531,7 +715,11 @@ class tbluserController extends Controller
         // db::enableQueryLog();
         $res['contactDetails'] = [];
         // dd(db::getQueryLog($res['contactDetails']));
-        $res['data'] = $editData;
+        // API callers get the editable subset; Blade keeps the whole row,
+        // which edit_user.blade.php depends on (it prefills plain_password).
+        $res['data'] = $type == 'API'
+            ? array_intersect_key($editData, array_flip(self::API_DETAIL_COLUMNS))
+            : $editData;
         // 10-01-2025 start supervisor rights
         $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
         $user_id = $id;
@@ -634,18 +822,21 @@ class tbluserController extends Controller
                         'sub_category' => $item->userSkills->sub_category,
                         'description' => $item->userSkills->description,
                         'proficiency_level' => $item->proficiency_level,
-                        'knowledge' => $classificationItems->has('knowledge')
-                                                ? $classificationItems['knowledge']->pluck('classification_item')->toArray()
-                                                : [],
-                        'ability' => $classificationItems->has('ability')
-                                                ? $classificationItems['ability']->pluck('classification_item')->toArray()
-                                                : [],
-                        'behaviour' => $classificationItems2->has('behaviour')
-                                                ? $classificationItems2['behaviour']->pluck('classification_item')->toArray()
-                                                : [],
-                        'attitude' => $classificationItems2->has('attitude')
-                                                ? $classificationItems2['attitude']->pluck('classification_item')->toArray()
-                                                : [],
+                        /*
+                         * id AND label, not just the label.
+                         *
+                         * These used to be pluck('classification_item') - the
+                         * prose only, with s_skill_knowledge_ability.id thrown
+                         * away even though the query had already fetched it.
+                         * That is why the Jobrole Skill tab could not persist
+                         * its confirmations: it had nothing stable to store.
+                         * A label is not an identity; renaming a library item
+                         * would silently orphan every tick against it.
+                         */
+                        'knowledge' => $this->classificationItems($classificationItems, 'knowledge'),
+                        'ability' => $this->classificationItems($classificationItems, 'ability'),
+                        'behaviour' => $this->classificationItems($classificationItems2, 'behaviour'),
+                        'attitude' => $this->classificationItems($classificationItems2, 'attitude'),
                     ];
                 })
                 ->values(); // reset array keys
@@ -1041,7 +1232,22 @@ class tbluserController extends Controller
             $syear = session()->get('syear');
         }
 
-        $editData = tbluserModel::find($id)->toArray();
+        /*
+         * find($id) was unscoped, so any signed-in caller could read any
+         * employee in any tenant by guessing an id - and ->toArray() on the
+         * null it returns for a missing id was a fatal, not a 404.
+         */
+        $editRow = tbluserModel::where('id', $id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->first();
+
+        if (! $editRow) {
+            $res = ['status' => '0', 'message' => 'Employee not found'];
+
+            return is_mobile($type, 'add_user.index', $res);
+        }
+
+        $editData = $editRow->toArray();
         $data = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $dataCustomFields = tblcustomfieldsModel::where([
             'sub_institute_id' => $sub_institute_id,
@@ -1097,7 +1303,11 @@ class tbluserController extends Controller
         // db::enableQueryLog();
         $res['contactDetails'] = [];
         // dd(db::getQueryLog($res['contactDetails']));
-        $res['data'] = $editData;
+        // API callers get the editable subset; Blade keeps the whole row,
+        // which edit_user.blade.php depends on (it prefills plain_password).
+        $res['data'] = $type == 'API'
+            ? array_intersect_key($editData, array_flip(self::API_DETAIL_COLUMNS))
+            : $editData;
         // 10-01-2025 start supervisor rights
         $res['jobroleList'] = userJobroleModel::where('sub_institute_id', $sub_institute_id)->whereNull('deleted_at')->get()->toArray();
         $user_id = $id;

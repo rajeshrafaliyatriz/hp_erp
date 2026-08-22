@@ -139,12 +139,25 @@ class EmployeeCompetencyProfileController extends Controller
         $jobRole = $this->jobRoleFromUserRow((int) $sid, $user);
         $jobRoleName = $jobRole ? $jobRole->jobrole : 'N/A';
 
-        // Resolve department name from hrms_departments_mapping
+        /*
+         * hrms_departments, not hrms_departments_mapping.
+         *
+         * tbluser.department_id points at hrms_departments - the table every
+         * other consumer in the codebase reads, and the one with 1,266 rows.
+         * hrms_departments_mapping is EMPTY on both databases and is named in
+         * exactly one file, this one, so this lookup matched nothing and every
+         * employee's department came back as 'N/A'.
+         *
+         * Tenant-scoped and deleted_at-aware, like the rest of the department
+         * reads, so a retired department does not resurface here.
+         */
         $deptName = 'N/A';
         if ($user->department_id) {
-            $dept = DB::table('hrms_departments_mapping')
+            $dept = DB::table('hrms_departments')
                 ->where('id', $user->department_id)
-                ->first();
+                ->where('sub_institute_id', $sid)
+                ->whereNull('deleted_at')
+                ->first(['department']);
             $deptName = $dept ? $dept->department : 'N/A';
         }
 
@@ -188,6 +201,8 @@ class EmployeeCompetencyProfileController extends Controller
                 'm.interest_level',
                 'm.knowledge',
                 'm.ability',
+                'm.attitude',
+                'm.behaviour',
                 'm.updated_at',
                 'asr.first_name as assessor_fname',
                 'asr.last_name as assessor_lname'
@@ -223,8 +238,13 @@ class EmployeeCompetencyProfileController extends Controller
                 'required' => $requiredLevel,
                 'current' => $currentLevel,
                 'interest_level' => (int) ($skill->interest_level ?: 0),
+                // All four KASBA dimensions. attitude and behaviour were
+                // missing although the columns exist, so a caller could write
+                // them and never read them back.
                 'knowledge' => (int) ($skill->knowledge ?: 0),
                 'ability' => (int) ($skill->ability ?: 0),
+                'attitude' => (int) ($skill->attitude ?: 0),
+                'behaviour' => (int) ($skill->behaviour ?: 0),
                 'gap' => $gap,
                 'date' => $skill->updated_at ? date('d M Y', strtotime($skill->updated_at)) : 'N/A',
                 'assessor' => $assessorName ?: 'System'
@@ -325,6 +345,145 @@ class EmployeeCompetencyProfileController extends Controller
      * POST /competency/employee-profiles/{id}/skills
      * Add a competency rating for an employee (insert into s_skill_matrix).
      */
+    /**
+     * PUT /competency/employee-profiles/{id}/skills/by-skill/{skillId}
+     *
+     * Upsert the employee's row for one skill, keyed on (user_id, skill_id).
+     *
+     * WHY NOT THE {matrixId} ROUTE. That one requires an existing
+     * s_skill_matrix row scoped to the user, and there are 169 such rows across
+     * 8 of 298 employees - so for roughly 97% of people there is nothing to
+     * update and it can only 404. The Jobrole Skill tab needs to record a
+     * first assessment, which means an upsert on the pair the UI actually
+     * holds. The old route stays for callers that legitimately have a matrix id.
+     *
+     * THE FOUR KASBA COLUMNS HOLD CONFIRMED IDS, AS JSON.
+     *
+     * knowledge/ability/attitude/behaviour on s_skill_matrix are TEXT and
+     * currently hold prose in the ~20 rows that use them. The tab's ✓/× marks
+     * are confirmations of specific s_skill_knowledge_ability rows, so they are
+     * stored as an array of those ids: prose would re-render wrong the moment a
+     * library item is edited, and there would be no way to tell a confirmed
+     * item from a renamed one. Legacy prose does not parse as JSON, so a reader
+     * can still fall back to displaying it.
+     *
+     * Absence of a key means "not reviewed"; an empty array means "reviewed,
+     * nothing confirmed". Those are different answers and both are storable.
+     */
+    public function upsertSkillBySkillId(Request $request, $id, $skillId)
+    {
+        $context = $this->competencyContext($request);
+        if (!\is_array($context)) {
+            return $context;
+        }
+
+        $id = $this->competencySubject($context, $id);
+        if (!\is_int($id)) {
+            return $id;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'skill_level' => 'nullable|integer|min:1|max:5',
+            'knowledge'   => 'nullable|array',
+            'knowledge.*' => 'integer',
+            'ability'     => 'nullable|array',
+            'ability.*'   => 'integer',
+            'attitude'    => 'nullable|array',
+            'attitude.*'  => 'integer',
+            'behaviour'   => 'nullable|array',
+            'behaviour.*' => 'integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $sid     = (int) $context['sub_institute_id'];
+        $actor   = (int) $context['user_id'];
+        $skillId = (int) $skillId;
+
+        $skill = DB::table('s_users_skills')
+            ->where('id', $skillId)
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->first(['id', 'title']);
+
+        if (!$skill) {
+            return response()->json(['status' => 0, 'message' => 'Skill not found.'], 404);
+        }
+
+        $update = ['updated_by' => $actor, 'updated_at' => now()];
+
+        if ($request->filled('skill_level')) {
+            $update['skill_level'] = $request->integer('skill_level');
+        }
+
+        // Every confirmed id must genuinely classify THIS skill for this
+        // tenant. Without the check a caller could store any integer and the
+        // tab would render confirmations that correspond to nothing.
+        foreach (['knowledge', 'ability', 'attitude', 'behaviour'] as $dimension) {
+            if (!$request->has($dimension)) {
+                continue;
+            }
+
+            $ids = array_values(array_unique(array_map('intval', (array) $request->input($dimension))));
+
+            if ($ids !== []) {
+                $valid = DB::table('s_skill_knowledge_ability')
+                    ->whereIn('id', $ids)
+                    ->where('skill_id', $skillId)
+                    ->where('sub_institute_id', $sid)
+                    ->whereNull('deleted_at')
+                    ->pluck('id')
+                    ->map(fn ($value) => (int) $value)
+                    ->all();
+
+                if (count($valid) !== count($ids)) {
+                    return response()->json([
+                        'status'  => 0,
+                        'message' => 'One or more ' . $dimension . ' items do not belong to this skill.',
+                    ], 422);
+                }
+
+                $ids = $valid;
+            }
+
+            $update[$dimension] = json_encode($ids);
+        }
+
+        $existing = DB::table('s_skill_matrix')
+            ->where('user_id', $id)
+            ->where('skill_id', $skillId)
+            ->whereNull('deleted_at')
+            ->first(['id']);
+
+        if ($existing) {
+            DB::table('s_skill_matrix')->where('id', $existing->id)->update($update);
+            $matrixId = (int) $existing->id;
+        } else {
+            $matrixId = (int) DB::table('s_skill_matrix')->insertGetId(array_merge($update, [
+                'user_id'    => $id,
+                'skill_id'   => $skillId,
+                // Always 'skill'. The dimension of a KASBA rating lives in
+                // competency_kasba_rating, not here - skill_id on this table
+                // means s_users_skills.id and nothing else.
+                'type'       => 'skill',
+                'created_by' => $actor,
+                'created_at' => now(),
+            ]));
+        }
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Saved.',
+            'data'    => ['matrix_id' => $matrixId, 'skill_id' => $skillId, 'title' => $skill->title],
+        ]);
+    }
+
     public function addSkill(Request $request, $id)
     {
         $context = $this->competencyContext($request);

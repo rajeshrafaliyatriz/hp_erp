@@ -46,6 +46,22 @@ class KasbaRatingController extends Controller
     private const MAX = 5;
 
     /**
+     * The five KASBA dimensions and the library table each one lives in.
+     *
+     * Identical to CompetencyDefinitionController::ITEM_TABLES, and it has to
+     * stay identical: an item id only means something inside its own
+     * dimension's table, so reading it against the wrong one silently resolves
+     * to an unrelated row.
+     */
+    private const ITEM_TABLES = [
+        'skill'     => 's_users_skills',
+        'knowledge' => 's_user_knowledge',
+        'ability'   => 's_user_ability',
+        'attitude'  => 's_user_attitude',
+        'behaviour' => 's_user_behaviour',
+    ];
+
+    /**
      * Rate one KASBA item for one employee.
      *
      * Idempotent on (tenant, user, item): rating the same item again UPDATES the
@@ -214,6 +230,153 @@ class KasbaRatingController extends Controller
             'status'  => 1,
             'message' => 'Rating saved.',
             'data'    => ['kasba_item_id' => $itemId, 'user_id' => $subject],
+        ], 201);
+    }
+
+    /**
+     * POST /competency/kasba-rating/by-item - rate a LIBRARY ITEM directly.
+     *
+     * WHY THIS EXISTS ALONGSIDE store().
+     *
+     * store() keys on competency_kasba_item.id, so an item could only be rated
+     * once somebody had linked it to a competency. On live that link exists for
+     * one dimension and effectively no others:
+     *
+     *     skill      221 rows, 199 with a usable item_id
+     *     knowledge   18 rows,   0
+     *     ability      9 rows,   0
+     *     attitude     8 rows,   0
+     *     behaviour   10 rows,   1
+     *
+     * The 66 unlinked rows carry prose in item_label - "Infection control
+     * protocols", "Hand hygiene compliance" - and none of those labels matches
+     * a row in the dimension's library table in ANY tenant, so no backfill can
+     * repair them. The effect on the product was that four of the Competency
+     * Rating tab's five categories could not save at all.
+     *
+     * So a rating may now name (kasba_type, item_id) directly. WHERE THE ITEM
+     * IS ALSO LINKED TO COMPETENCIES, BOTH ARE WRITTEN - the direct row and one
+     * competency-linked row per link - so ProficiencyService::rollUp keeps
+     * reading exactly what it read before. Nothing regresses for mapped items;
+     * unmapped ones simply become ratable.
+     *
+     * An item belonging to no competency is NOT an error. The rating has a home
+     * either way; the response says so, and the UI shows it as a note rather
+     * than a failure.
+     */
+    public function storeByItem(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!\is_array($context)) {
+            return $context;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'user_id'    => 'required|integer',
+            'kasba_type' => 'required|in:' . implode(',', array_keys(self::ITEM_TABLES)),
+            'item_id'    => 'required|integer|min:1',
+            'rating'     => 'required|integer|min:' . self::MIN . '|max:' . self::MAX,
+            'note'       => 'nullable|string|max:2000',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $sid     = (int) $context['sub_institute_id'];
+        $actor   = (int) $context['user_id'];
+        $type    = (string) $request->input('kasba_type');
+        $itemId  = $request->integer('item_id');
+        $subject = $request->integer('user_id');
+        $rating  = $request->integer('rating');
+        $note    = $request->input('note');
+
+        // The subject must be the caller's own tenant's employee. A rating names
+        // a person; naming someone else's is a leak in both directions.
+        $userOk = DB::table('tbluser')
+            ->where('id', $subject)->where('sub_institute_id', $sid)->exists();
+        if (!$userOk) {
+            return response()->json(['status' => 0, 'message' => 'Employee not found.'], 404);
+        }
+
+        /*
+         * The item must exist IN ITS OWN DIMENSION'S TABLE, for this tenant.
+         *
+         * Checking the id without the dimension is what let kasba_type=behaviour
+         * item_id=2645 dangle at a row that never existed. Five id spaces, five
+         * tables; the pair is the key, never the id alone.
+         */
+        $item = DB::table(self::ITEM_TABLES[$type])
+            ->where('id', $itemId)
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->first(['id', 'title']);
+
+        if (!$item) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'That ' . $type . ' item does not exist in this organisation\'s library.',
+            ], 404);
+        }
+
+        // Every competency this item belongs to. An item can sit in several, and
+        // one measurement of one thing is the same measurement in all of them.
+        $linkedItemIds = DB::table('competency_kasba_item')
+            ->where('sub_institute_id', $sid)
+            ->where('kasba_type', $type)
+            ->where('item_id', $itemId)
+            ->pluck('id');
+
+        $shared = [
+            'rating'      => $rating,
+            'assessor_id' => $actor,
+            'source'      => 'kasba_library',
+            'note'        => $note,
+            'rated_at'    => now(),
+            'updated_at'  => now(),
+        ];
+
+        DB::transaction(function () use ($sid, $subject, $type, $itemId, $linkedItemIds, $shared) {
+            // The direct row - uq_ckr_direct makes this idempotent.
+            DB::table('competency_kasba_rating')->updateOrInsert(
+                [
+                    'sub_institute_id' => $sid,
+                    'user_id'          => $subject,
+                    'kasba_type'       => $type,
+                    'item_id'          => $itemId,
+                ],
+                $shared
+            );
+
+            // And one per competency link, so the existing roll-up is unaffected.
+            foreach ($linkedItemIds as $kasbaItemId) {
+                DB::table('competency_kasba_rating')->updateOrInsert(
+                    [
+                        'sub_institute_id' => $sid,
+                        'user_id'          => $subject,
+                        'kasba_item_id'    => (int) $kasbaItemId,
+                    ],
+                    $shared
+                );
+            }
+        });
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Rating saved.',
+            'data'    => [
+                'kasba_type'       => $type,
+                'item_id'          => $itemId,
+                'user_id'          => $subject,
+                'title'            => $item->title,
+                'competencies_hit' => $linkedItemIds->count(),
+                // Not an error, but the caller should be able to say so: a
+                // rating on an unlinked item is recorded and will not appear in
+                // any competency roll-up until somebody maps it.
+                'rolls_up'         => $linkedItemIds->isNotEmpty(),
+                'notice'           => $linkedItemIds->isEmpty()
+                    ? 'Saved. This item is not part of any competency yet, so it will not affect competency scores until it is mapped in Competency Library.'
+                    : null,
+            ],
         ], 201);
     }
 
