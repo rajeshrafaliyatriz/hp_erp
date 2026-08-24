@@ -1678,6 +1678,11 @@ Route::post('/competency/framework-import/commit', [\App\Http\Controllers\Api\Co
 // Each adopted row records the catalogue id it came from, so adopting the same
 // rows twice does nothing instead of duplicating them. Role-skill mappings,
 // tasks and departments are NOT copied.
+// BROWSE is what makes the two below reachable from the product. Both take
+// catalogue ids, and nothing else in the API hands a client one: the seed-library
+// preview returns counts with no rows, and jobrolecontroller selects the name
+// without the id. Paged and searched - the catalogue is 3,347 roles and 5,640 skills.
+Route::get('/competency/catalogue-adopt/browse', [\App\Http\Controllers\Api\Competency\CatalogueAdoptController::class, 'browse'])->middleware('profile:admin,hr');
 Route::post('/competency/catalogue-adopt/preview', [\App\Http\Controllers\Api\Competency\CatalogueAdoptController::class, 'preview'])->middleware('profile:admin,hr');
 Route::post('/competency/catalogue-adopt/commit', [\App\Http\Controllers\Api\Competency\CatalogueAdoptController::class, 'adopt'])->middleware('profile:admin,hr');
 

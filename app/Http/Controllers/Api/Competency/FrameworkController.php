@@ -53,6 +53,72 @@ class FrameworkController extends Controller
         ]);
     }
 
+    /**
+     * THE FRAMEWORK'S LINK TO A JOB ROLE, RESOLVED TO AN ID.
+     *
+     * ── WHY THIS EXISTS ─────────────────────────────────────────────────────
+     *
+     * `s_competency_frameworks.jobrole` is a TEXT column holding the role's
+     * NAME, while its sibling `department_id` is already a proper id - so the
+     * name was the odd one out, not a house style. A name is not a key: rename
+     * the role and the framework quietly stops pointing at it, and two roles
+     * sharing a name inside one organisation cannot be told apart. This was the
+     * last place in the capability chain still keyed that way.
+     *
+     * ── THE PRECEDENCE ──────────────────────────────────────────────────────
+     *
+     *   1. an explicit `jobrole_id`, IF the tenant owns it
+     *   2. otherwise the name, IF it resolves to exactly one live role
+     *   3. otherwise NULL
+     *
+     * ── IT REFUSES TO GUESS, AND THAT IS THE POINT ──────────────────────────
+     *
+     * An ambiguous name yields NULL rather than the first match. The backfill
+     * migration made the same choice and left 2 of 32 frameworks unkeyed - both
+     * "Head of Treasury", which exists twice in tenant 1. A coin-toss link that
+     * looks authoritative is worse than a visibly missing one: the earlier
+     * name-matched provenance backfill resolved 5,470 rows by guessing and none
+     * of them can now be trusted.
+     *
+     * ── THE OWNERSHIP CHECK IS NOT OPTIONAL ─────────────────────────────────
+     *
+     * Whitelisting an id column without it is how a tenant-1 caller could attach
+     * a task to tenant 2's role - a hole I opened and then found by testing when
+     * `jobrole_id` was added to job role tasks. The foreign key added alongside
+     * this enforces EXISTENCE only, never tenancy, so this check is the guard
+     * that actually keeps organisations apart.
+     */
+    private function resolveJobroleId(Request $request, int $subInstituteId): ?int
+    {
+        $explicit = $request->input('jobrole_id');
+
+        if ($explicit !== null && $explicit !== '') {
+            $owned = DB::table('s_user_jobrole')
+                ->where('id', (int) $explicit)
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereNull('deleted_at')
+                ->exists();
+
+            return $owned ? (int) $explicit : null;
+        }
+
+        $name = trim((string) $request->input('jobrole', ''));
+        if ($name === '') {
+            return null;
+        }
+
+        // limit(2) is enough to tell "exactly one" from "more than one", and
+        // avoids dragging back every namesake just to count them.
+        $matches = DB::table('s_user_jobrole')
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->whereRaw('LOWER(TRIM(jobrole)) = ?', [mb_strtolower($name)])
+            ->limit(2)
+            ->pluck('id');
+
+        return $matches->count() === 1 ? (int) $matches->first() : null;
+    }
+
     public function store(Request $request)
     {
         $context = $this->competencyContext($request);
@@ -67,6 +133,9 @@ class FrameworkController extends Controller
             'status'        => 'nullable|in:draft,active,archived',
             'department_id' => 'nullable|integer',
             'jobrole'       => 'nullable|string|max:191',
+            // The id is what the chain resolves through. `jobrole` stays as the
+            // human label and as the fallback when no id is sent.
+            'jobrole_id'    => 'nullable|integer|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -85,6 +154,7 @@ class FrameworkController extends Controller
             'status'           => $request->input('status', 'draft'),
             'department_id'    => $request->input('department_id'),
             'jobrole'          => $request->input('jobrole'),
+            'jobrole_id'       => $this->resolveJobroleId($request, (int) $context['sub_institute_id']),
             'created_by'       => $context['user_id'],
             'updated_by'       => $context['user_id'],
             'created_at'       => now(),
@@ -199,6 +269,9 @@ class FrameworkController extends Controller
             'status'        => 'nullable|in:draft,active,archived',
             'department_id' => 'nullable|integer',
             'jobrole'       => 'nullable|string|max:191',
+            // The id is what the chain resolves through. `jobrole` stays as the
+            // human label and as the fallback when no id is sent.
+            'jobrole_id'    => 'nullable|integer|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -216,6 +289,7 @@ class FrameworkController extends Controller
             'status'        => $request->input('status', $framework->status),
             'department_id' => $request->input('department_id'),
             'jobrole'       => $request->input('jobrole'),
+            'jobrole_id'    => $this->resolveJobroleId($request, (int) $context['sub_institute_id']),
         ];
 
         DB::table('s_competency_frameworks')->where('id', $id)->update($update + [
@@ -238,6 +312,7 @@ class FrameworkController extends Controller
                 'status'        => 'Status',
                 'department_id' => 'Department',
                 'jobrole'       => 'Job Role',
+                'jobrole_id'    => 'Job Role (link)',
             ])
         );
 
@@ -275,6 +350,10 @@ class FrameworkController extends Controller
             'status'           => 'draft',
             'department_id'    => $source->department_id,
             'jobrole'          => $source->jobrole,
+            // Carried too, or a clone would keep the label and silently lose the
+            // link - leaving a copy that looks role-scoped and resolves to nothing.
+            // Safe to copy directly: a clone is always within the same tenant.
+            'jobrole_id'       => $source->jobrole_id ?? null,
             'created_by'       => $context['user_id'],
             'updated_by'       => $context['user_id'],
             'created_at'       => now(),
