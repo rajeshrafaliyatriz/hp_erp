@@ -102,6 +102,120 @@ class CatalogueAdoptController extends Controller
         return $this->run($request, true);
     }
 
+    /**
+     * BROWSE — the catalogue, so that a person can choose from it.
+     *
+     * ── WHY THIS HAD TO BE ADDED ────────────────────────────────────────────
+     *
+     * preview() and adopt() both take catalogue ids, and until this method there
+     * was no way for a client to LEARN one. SeedLibraryPreviewController returns
+     * counts and not a single row; the only other reader of `s_jobrole` that a
+     * client can reach (`jobrolecontroller::getJobRolesByDepartment`) selects the
+     * name and DROPS the id. So adopt was complete on the server and unreachable
+     * from the product: you could adopt, but only if you already knew the numbers.
+     *
+     * ── PAGED AND SEARCHED, NOT DUMPED ──────────────────────────────────────
+     *
+     * The catalogue is 3,347 job roles and 5,640 skills. A picker that loads all
+     * of them is a picker nobody can use, so this pages and searches instead.
+     *
+     * ── ANNOTATED WITH WHAT ADOPTING WOULD DO ───────────────────────────────
+     *
+     * Every row carries `already_adopted` and `name_collision`, computed the same
+     * way plan() computes them, so the list shows the outcome BEFORE anything is
+     * selected. The name check is scoped to the names on THIS PAGE rather than
+     * loading the tenant's whole library, so its cost does not grow with the
+     * customer.
+     *
+     * ⚠ DELIBERATELY CONSISTENT WITH plan(), INCLUDING WHERE plan() IS ARGUABLY
+     * WRONG. Neither excludes the tenant's SOFT-DELETED rows, so a role that was
+     * adopted and later deleted still reads as `already_adopted` and cannot be
+     * re-adopted. That is worth fixing, but it must be fixed in BOTH or in
+     * NEITHER: a browse that says "available" while the preview says
+     * "ALREADY_ADOPTED" is exactly the two-paths-that-disagree defect this
+     * controller exists to avoid. Reported rather than changed here.
+     */
+    public function browse(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $data = $request->validate([
+            'kind'   => 'required|in:role,skill',
+            'q'      => 'sometimes|nullable|string|max:120',
+            'limit'  => 'sometimes|integer|min:1|max:200',
+            'offset' => 'sometimes|integer|min:0',
+        ]);
+
+        $tenant = (int) $identity['sub_institute_id'];
+        $kind   = $data['kind'];
+        $q      = trim((string) ($data['q'] ?? ''));
+        $limit  = (int) ($data['limit'] ?? 50);
+        $offset = (int) ($data['offset'] ?? 0);
+
+        [$sourceTable, $targetTable, $nameColumn, $provenance] = $this->tables($kind);
+
+        // No deleted_at on either catalogue table - confirmed on live, and the
+        // same reason SeedLibraryPreviewController counts them unfiltered.
+        $query = DB::table($sourceTable);
+
+        if ($q !== '') {
+            // `%` and `_` are escaped: a customer searching for "50_ Nurse"
+            // should not silently match more than they asked for.
+            $query->where($nameColumn, 'like', '%' . addcslashes($q, '%_\\') . '%');
+        }
+
+        $total = (clone $query)->count();
+        $rows  = $query->orderBy($nameColumn)->offset($offset)->limit($limit)->get();
+
+        $ids   = $rows->pluck('id')->map(static fn ($i) => (int) $i)->all();
+        $names = $rows->pluck($nameColumn)->map(static fn ($n) => (string) $n)->all();
+
+        $adopted = $ids === [] ? [] : DB::table($targetTable)
+            ->where('sub_institute_id', $tenant)
+            ->whereIn($provenance, $ids)
+            ->pluck('id', $provenance)
+            ->all();
+
+        $ownNames = [];
+        if ($names !== []) {
+            $held = DB::table($targetTable)
+                ->where('sub_institute_id', $tenant)
+                ->whereIn($nameColumn, $names)
+                ->pluck($nameColumn);
+
+            foreach ($held as $name) {
+                $ownNames[mb_strtolower(trim((string) $name))] = true;
+            }
+        }
+
+        $categoryColumn = $kind === 'role' ? 'jobrole_category' : 'category';
+
+        $items = [];
+        foreach ($rows as $row) {
+            $id   = (int) $row->id;
+            $name = (string) ($row->{$nameColumn} ?? '');
+
+            $items[] = [
+                'catalogue_id'    => $id,
+                'name'            => $name,
+                'category'        => $row->{$categoryColumn} ?? null,
+                'already_adopted' => isset($adopted[$id]),
+                'name_collision'  => isset($ownNames[mb_strtolower(trim($name))]),
+            ];
+        }
+
+        return response()->json(['status' => 1, 'data' => [
+            'kind'   => $kind,
+            'total'  => $total,
+            'shown'  => count($items),
+            'offset' => $offset,
+            'items'  => $items,
+        ]]);
+    }
+
     /** THE ONE PATH. `$write` is the only difference. */
     private function run(Request $request, bool $write)
     {
