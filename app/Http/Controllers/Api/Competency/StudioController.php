@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Api\Competency\Concerns\ManagesCompetencySettings;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Http\Controllers\Api\Competency\Concerns\ResolvesKasbaTitles;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -25,6 +26,7 @@ use Illuminate\Support\Facades\Validator;
 class StudioController extends Controller
 {
     use ResolvesCompetencyContext;
+    use ResolvesKasbaTitles;
     use ManagesCompetencySettings;
 
     /**
@@ -287,62 +289,196 @@ class StudioController extends Controller
 
         $search = $this->activeFilter($request->input('search'));
 
-        $base = DB::table('s_users_skills')
+        /*
+         * FRAMEWORK -> COMPETENCY -> KASBA BUNDLE.
+         *
+         * This method used to return a SKILL CATEGORY tree read from
+         * `s_users_skills`, which is why a screen called Competency Framework
+         * showed the skill taxonomy and why framework, competency and KASBA felt
+         * impossible to tell apart. The competency table was never consulted.
+         *
+         * Three flat queries assembled in PHP rather than one nested join: the
+         * populations are small (33 frameworks, 227 competencies, 269 bundle
+         * items on live) and a three-level join returns the framework row once
+         * per leaf, which is more rows to ship and more shape to unpick than the
+         * tree it is meant to produce.
+         */
+
+        $frameworks = DB::table('s_competency_frameworks')
             ->where('sub_institute_id', $sid)
             ->whereNull('deleted_at')
-            ->where('approve_status', 'Approved')
-            ->whereNotNull('category')
-            ->where('category', '!=', '');
+            ->orderBy('name')
+            ->get(['id', 'name', 'status', 'version', 'department_id', 'jobrole_id', 'jobrole']);
 
-        // Category-level counts.
-        $categoryRows = (clone $base)
-            ->select('category', DB::raw('COUNT(*) as c'))
-            ->groupBy('category')
-            ->orderByDesc('c')
-            ->get();
+        /*
+         * ⚠ TWO LINKS EXIST BETWEEN A COMPETENCY AND A FRAMEWORK, AND THEY HAVE
+         * NEVER ONCE AGREED.
+         *
+         *     competency.framework_id            18 competencies (live)
+         *     s_competency_framework_items      155 rows
+         *     rows where the two agree            0
+         *
+         * Measured on both databases. Not "mostly disagree" - ZERO overlap. They
+         * are two parallel systems that have never described the same competency,
+         * which is a broken link of the same family as the varchar/tinyint target
+         * fixed in 2026_08_24_100000.
+         *
+         * WHICH ONE IS THE FILING: `competency.framework_id`. It is the column
+         * the Competency Library form writes (the Framework picker added in
+         * Phase 1), it is a real foreign key, and it expresses the rule that a
+         * competency belongs to exactly ONE framework - which a join table
+         * cannot enforce.
+         *
+         * `s_competency_framework_items` keeps a narrower job: the framework's
+         * DEFAULT TARGET LEVEL for a competency. Its rows are read here as a
+         * lookup, never as the filing, and any row that does not correspond to a
+         * competency's actual filing is REPORTED rather than silently honoured.
+         */
+        $competencies = DB::table('competency')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->whereNotNull('framework_id')
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'framework_id']);
 
-        // Sub-category counts, bucketed under their category.
-        $subRows = (clone $base)
-            ->whereNotNull('sub_category')
-            ->where('sub_category', '!=', '')
-            ->select('category', 'sub_category', DB::raw('COUNT(*) as c'))
-            ->groupBy('category', 'sub_category')
-            ->orderBy('category')
-            ->orderByDesc('c')
-            ->get();
+        $targetRows = DB::table('s_competency_framework_items')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            // TINYINT since 2026_08_24_100000. It was varchar 'Level 3', which
+            // could never be compared with a role's integer target.
+            ->get(['framework_id', 'competency_id', 'required_proficiency']);
 
-        $childrenByCategory = [];
-        foreach ($subRows as $r) {
-            $childrenByCategory[$r->category][] = [
-                'name'  => $r->sub_category,
-                'count' => (int) $r->c,
+        $targetBy = [];
+        foreach ($targetRows as $t) {
+            $targetBy[(int) $t->framework_id . ':' . (int) $t->competency_id] = $t->required_proficiency;
+        }
+
+        // Shaped like the old $items so the assembly below is unchanged.
+        $items = $competencies->map(function ($c) use ($targetBy) {
+            $key = (int) $c->framework_id . ':' . (int) $c->id;
+
+            return (object) [
+                'framework_id'         => $c->framework_id,
+                'competency_id'        => $c->id,
+                'required_proficiency' => $targetBy[$key] ?? null,
+                'competency_name'      => $c->name,
+                'competency_code'      => $c->code,
+            ];
+        });
+
+        $kasba = collect();
+        if ($items->isNotEmpty()) {
+            $kasba = DB::table('competency_kasba_item')
+                ->where('sub_institute_id', $sid)
+                ->whereIn('competency_id', $items->pluck('competency_id')->unique()->all())
+                ->get(['competency_id', 'kasba_type', 'item_id', 'item_label', 'weight']);
+
+            // THE SHARED RESOLVER, not a second copy - see ResolvesKasbaTitles.
+            $kasba = $this->attachKasbaTitles($kasba, (int) $sid);
+        }
+
+        $bundleByCompetency = [];
+        foreach ($kasba as $k) {
+            $bundleByCompetency[(int) $k->competency_id][] = [
+                'kasba_type'    => $k->kasba_type,
+                'item_id'       => $k->item_id !== null ? (int) $k->item_id : null,
+                'title'         => $k->title,
+                'title_missing' => $k->title_missing,
+                'weight'        => (float) $k->weight,
             ];
         }
+
+        $competenciesByFramework = [];
+        foreach ($items as $row) {
+            $competenciesByFramework[(int) $row->framework_id][] = [
+                'competency_id'   => (int) $row->competency_id,
+                'name'            => $row->competency_name,
+                'code'            => $row->competency_code,
+                // The framework DEFAULT. A role may override it; the effective
+                // target is `role override ?? this`.
+                'framework_target' => $row->required_proficiency !== null
+                    ? (int) $row->required_proficiency
+                    : null,
+                'items'           => $bundleByCompetency[(int) $row->competency_id] ?? [],
+            ];
+        }
+
+        $matches = function (string $haystack) use ($search): bool {
+            return !$search || stripos($haystack, $search) !== false;
+        };
 
         $tree = [];
         $index = 0;
-        foreach ($categoryRows as $r) {
-            if ($search && stripos($r->category, $search) === false) {
-                // Keep the category if a child matches the search.
-                $childMatch = collect($childrenByCategory[$r->category] ?? [])
-                    ->contains(fn ($c) => stripos($c['name'], $search) !== false);
-                if (!$childMatch) {
+        foreach ($frameworks as $f) {
+            $own = $competenciesByFramework[(int) $f->id] ?? [];
+
+            // A framework survives the search if it matches, or if any
+            // competency inside it does - searching for a competency should
+            // show you where it lives, not hide it.
+            if ($search) {
+                $childMatch = collect($own)->contains(fn ($c) => $matches((string) $c['name']));
+                if (!$matches((string) $f->name) && !$childMatch) {
                     continue;
                 }
             }
+
             $index++;
             $tree[] = [
-                'index'    => $index,
-                'category' => $r->category,
-                'count'    => (int) $r->c,
-                'children' => $childrenByCategory[$r->category] ?? [],
+                'index'         => $index,
+                'framework_id'  => (int) $f->id,
+                'name'          => $f->name,
+                'status'        => $f->status,
+                'version'       => $f->version,
+                'department_id' => $f->department_id !== null ? (int) $f->department_id : null,
+                'jobrole_id'    => $f->jobrole_id !== null ? (int) $f->jobrole_id : null,
+                'jobrole'       => $f->jobrole,
+                'count'         => count($own),
+                'competencies'  => $own,
             ];
         }
+
+        /*
+         * COMPETENCIES BELONGING TO NO FRAMEWORK ARE REPORTED, NOT HIDDEN.
+         *
+         * On live, tenant 1 holds 199 competencies with no `framework_id` -
+         * damage from the period when the create form sent a skill `category`
+         * that the backend correctly discarded. A structure view that silently
+         * omitted them would show an author a tidy tree and no hint that most of
+         * their library is missing from it.
+         */
+        $unfiled = DB::table('competency')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->whereNull('framework_id')
+            ->when($search !== null && $search !== '', fn ($q) => $q->where('name', 'like', '%' . $search . '%'))
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
 
         return response()->json([
             'status'  => 1,
             'message' => 'Framework structure fetched successfully',
             'data'    => $tree,
+            'meta'    => [
+                'frameworks'    => count($tree),
+                'competencies'  => $items->count(),
+                'unfiled_count' => $unfiled->count(),
+                'unfiled'       => $unfiled,
+                /*
+                 * Target rows that describe a (framework, competency) pairing
+                 * the competency itself does not claim. Currently that is EVERY
+                 * row - the two links have zero overlap - so this number is the
+                 * size of the disagreement, and it belongs on screen rather than
+                 * in a comment.
+                 */
+                'orphan_targets' => $targetRows
+                    ->reject(function ($t) use ($competencies) {
+                        return $competencies->contains(
+                            fn ($c) => (int) $c->id === (int) $t->competency_id
+                                && (int) $c->framework_id === (int) $t->framework_id
+                        );
+                    })
+                    ->count(),
+            ],
         ]);
     }
 
