@@ -482,6 +482,350 @@ class StudioController extends Controller
         ]);
     }
 
+    /**
+     * THE REQUIREMENTS GRID — competencies × job roles, every axis an id.
+     *
+     * ── WHAT THIS REPLACES ──────────────────────────────────────────────────
+     *
+     * `RoleMappingController::matrix` reads `s_users_skills` for its rows and
+     * `s_user_skill_jobrole` for its cells, and BOTH are keyed by NAME. It is a
+     * skill grid wearing the Competency Framework label, which is why the Role
+     * Mapping Matrix never showed competencies and why its roles were neither
+     * department-scoped nor stable across a rename.
+     *
+     * That endpoint is deliberately left alone: existing tenants hold 84,380
+     * rows behind it and it still serves export. Only the TAB moves here.
+     *
+     * ── THE MERGE, VISIBLE IN EVERY CELL ────────────────────────────────────
+     *
+     * `level` is the EFFECTIVE target and `source` says where it came from:
+     *
+     *   'role'      the role's own row in jobrole_competency_map - a decision
+     *               somebody made about this role
+     *   'framework' inherited from the framework's default for that competency
+     *
+     * Without `source`, an inherited default renders identically to a chosen
+     * value, and an author cannot tell what they have actually decided. That
+     * distinction IS the merge you asked for.
+     *
+     * ── INHERITANCE IS NARROW ON PURPOSE ────────────────────────────────────
+     *
+     * A framework default reaches a role ONLY where the framework names that
+     * role (`s_competency_frameworks.jobrole_id`, the id link added in Phase 1).
+     * Letting every role inherit every framework's defaults would fill the grid
+     * with requirements nobody set and quietly inflate every gap report.
+     *
+     * ── WRITES DO NOT LIVE HERE ─────────────────────────────────────────────
+     *
+     * Cells are saved through the existing guarded `POST /competency/role-map`.
+     * One table, one writer - the rule Phase 1 established when it made the old
+     * matrix read-only.
+     */
+    public function requirementsMatrix(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = (int) $context['sub_institute_id'];
+
+        $department  = $this->activeFilter($request->input('department'));
+        $frameworkId = $request->filled('framework_id') ? (int) $request->input('framework_id') : null;
+
+        /* ---- Columns: job roles, BY ID, scoped to a department ---------- */
+        $roleQuery = DB::table('s_user_jobrole')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->whereNotNull('jobrole')
+            ->where('jobrole', '!=', '');
+
+        if ($department !== null) {
+            $roleQuery->where('department', $department);
+        }
+
+        $explicit = array_values(array_filter(array_map('intval', (array) $request->input('jobrole_ids', []))));
+        if ($explicit !== []) {
+            $roleQuery->whereIn('id', $explicit);
+        }
+
+        // A grid is read across, so the column count is bounded by what a person
+        // can actually scan rather than by what the tenant happens to hold.
+        $roles = $roleQuery->orderBy('jobrole')->limit(40)->get(['id', 'jobrole', 'department']);
+        $roleTotal = (clone $roleQuery)->count();
+
+        /* ---- Rows: competencies, from the competency table -------------- */
+        $compQuery = DB::table('competency as c')
+            ->leftJoin('s_competency_frameworks as f', 'f.id', '=', 'c.framework_id')
+            ->where('c.sub_institute_id', $sid)
+            ->whereNull('c.deleted_at');
+
+        if ($frameworkId !== null) {
+            $compQuery->where('c.framework_id', $frameworkId);
+        }
+
+        $competencies = $compQuery
+            ->orderBy('c.name')
+            ->limit(300)
+            ->get(['c.id', 'c.name', 'c.code', 'c.framework_id', 'f.name as framework_name', 'f.jobrole_id as framework_jobrole_id']);
+
+        /* ---- Framework defaults, keyed (framework, competency) ---------- */
+        $defaults = [];
+        foreach (
+            DB::table('s_competency_framework_items')
+                ->where('sub_institute_id', $sid)
+                ->whereNull('deleted_at')
+                ->get(['framework_id', 'competency_id', 'required_proficiency']) as $d
+        ) {
+            $defaults[(int) $d->framework_id . ':' . (int) $d->competency_id] = $d->required_proficiency;
+        }
+
+        /* ---- Cells: the role's own requirements come first -------------- */
+        $cells = [];
+        if ($roles->isNotEmpty() && $competencies->isNotEmpty()) {
+            $rows = DB::table('jobrole_competency_map')
+                ->where('sub_institute_id', $sid)
+                ->whereIn('jobrole_id', $roles->pluck('id')->all())
+                ->whereIn('competency_id', $competencies->pluck('id')->all())
+                ->get(['id', 'jobrole_id', 'competency_id', 'required_proficiency', 'is_mandatory']);
+
+            foreach ($rows as $r) {
+                $cells[(int) $r->jobrole_id][(int) $r->competency_id] = [
+                    'id'           => (int) $r->id,
+                    'level'        => $r->required_proficiency !== null ? (int) $r->required_proficiency : null,
+                    'is_mandatory' => (bool) $r->is_mandatory,
+                    'source'       => 'role',
+                ];
+            }
+        }
+
+        /* ---- Then inherit, only where the framework names the role ------ */
+        $inherited = 0;
+        foreach ($roles as $role) {
+            foreach ($competencies as $c) {
+                if (isset($cells[(int) $role->id][(int) $c->id])) {
+                    continue;                       // an explicit decision wins
+                }
+                if ((int) ($c->framework_jobrole_id ?? 0) !== (int) $role->id) {
+                    continue;                       // this framework is not this role's
+                }
+
+                $level = $defaults[(int) $c->framework_id . ':' . (int) $c->id] ?? null;
+                if ($level === null) {
+                    continue;                       // no default to inherit
+                }
+
+                $cells[(int) $role->id][(int) $c->id] = [
+                    'id'           => null,         // nothing persisted yet
+                    'level'        => (int) $level,
+                    'is_mandatory' => false,
+                    'source'       => 'framework',
+                ];
+                $inherited++;
+            }
+        }
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Requirements matrix fetched successfully',
+            'data'    => [
+                'department'   => $department,
+                'framework_id' => $frameworkId,
+                'roles'        => $roles,
+                'competencies' => $competencies,
+                'cells'        => $cells,
+            ],
+            'meta'    => [
+                'role_total'    => $roleTotal,
+                'roles_shown'   => $roles->count(),
+                // Reported rather than silently truncated: a grid that quietly
+                // drops columns reads as "this role has no requirements".
+                'roles_truncated' => $roleTotal > $roles->count(),
+                'competencies'  => $competencies->count(),
+                'inherited_cells' => $inherited,
+            ],
+        ]);
+    }
+
+    /**
+     * RECONCILIATION — the broken links between frameworks and roles, named.
+     *
+     * You asked for the gap between the two mapping tables to be VISIBLE rather
+     * than something that quietly drifts. Every list here returns ROWS, not a
+     * count: a number tells you something is wrong, a list tells you what to fix.
+     *
+     * The four problems, and why each is a problem:
+     *
+     *   1. NOT_APPLIED     the framework says this role needs the competency,
+     *                      but no requirement row exists - so gap analysis will
+     *                      never test for it and the role looks compliant
+     *   2. NO_FRAMEWORK    a role requires a competency that no framework backs
+     *                      - a target nobody can trace to a standard
+     *   3. CONTRADICTS     the role's target differs from its framework default
+     *                      - legitimate as an override, but it must be a choice
+     *                      somebody made, not a divergence nobody noticed
+     *   4. ORPHAN_TARGET   a framework_items row for a (framework, competency)
+     *                      pairing the competency itself does not claim
+     *
+     * ⚠ NUMBER 3 WAS IMPOSSIBLE TO DETECT UNTIL 2026_08_24_100000. The framework
+     * target was `varchar('Level 3')` and the role target `tinyint(3)`, so the
+     * comparison was between a sentence and a number and every row differed.
+     *
+     * ⚠ NUMBER 4 IS CURRENTLY EVERY ROW. `competency.framework_id` and
+     * `s_competency_framework_items` have never once agreed - 0 overlap on both
+     * databases - so this list is the whole 155 until the two are reconciled.
+     * That is reported, not silently repaired: deciding which of two
+     * disagreeing records is right is the customer's call, not a migration's.
+     */
+    public function reconciliation(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = (int) $context['sub_institute_id'];
+
+        // Frameworks that name a role, so "the framework applies to this role"
+        // is a fact rather than an inference.
+        $frameworks = DB::table('s_competency_frameworks')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->get(['id', 'name', 'jobrole_id']);
+
+        $roleNames = DB::table('s_user_jobrole')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->pluck('jobrole', 'id')
+            ->all();
+
+        $competencies = DB::table('competency')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->get(['id', 'name', 'framework_id'])
+            ->keyBy('id');
+
+        $items = DB::table('s_competency_framework_items')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->get(['framework_id', 'competency_id', 'required_proficiency']);
+
+        $requirements = DB::table('jobrole_competency_map')
+            ->where('sub_institute_id', $sid)
+            ->get(['id', 'jobrole_id', 'competency_id', 'required_proficiency']);
+
+        $haveRequirement = [];
+        foreach ($requirements as $r) {
+            $haveRequirement[(int) $r->jobrole_id . ':' . (int) $r->competency_id] = $r;
+        }
+
+        $frameworkById = $frameworks->keyBy('id');
+
+        $notApplied = [];
+        $contradicts = [];
+        $orphanTargets = [];
+
+        foreach ($items as $it) {
+            $fw = $frameworkById->get($it->framework_id);
+            $comp = $competencies->get($it->competency_id);
+
+            // 4. the competency does not claim this framework
+            if (!$comp || (int) ($comp->framework_id ?? 0) !== (int) $it->framework_id) {
+                $orphanTargets[] = [
+                    'framework_id'      => (int) $it->framework_id,
+                    'framework_name'    => $fw->name ?? null,
+                    'competency_id'     => (int) $it->competency_id,
+                    'competency_name'   => $comp->name ?? null,
+                    // `$comp` is null when the target row points at a competency
+                    // that no longer exists - a deleted competency leaving its
+                    // framework target behind. That is itself an orphan worth
+                    // reporting, so it must not throw on the way to saying so.
+                    'competency_filed_under' => ($comp && $comp->framework_id !== null)
+                        ? (int) $comp->framework_id
+                        : null,
+                    'competency_missing' => !$comp,
+                ];
+                continue;
+            }
+
+            if (!$fw || $fw->jobrole_id === null) {
+                continue;               // framework names no role - nothing to apply to
+            }
+
+            $key = (int) $fw->jobrole_id . ':' . (int) $it->competency_id;
+            $existing = $haveRequirement[$key] ?? null;
+
+            if (!$existing) {
+                // 1. the framework expects it; the role does not require it
+                $notApplied[] = [
+                    'framework_id'    => (int) $fw->id,
+                    'framework_name'  => $fw->name,
+                    'jobrole_id'      => (int) $fw->jobrole_id,
+                    'jobrole'         => $roleNames[$fw->jobrole_id] ?? null,
+                    'competency_id'   => (int) $it->competency_id,
+                    'competency_name' => $comp->name,
+                    'framework_target' => $it->required_proficiency !== null ? (int) $it->required_proficiency : null,
+                ];
+                continue;
+            }
+
+            // 3. both exist but disagree
+            if (
+                $it->required_proficiency !== null
+                && $existing->required_proficiency !== null
+                && (int) $it->required_proficiency !== (int) $existing->required_proficiency
+            ) {
+                $contradicts[] = [
+                    'framework_id'     => (int) $fw->id,
+                    'framework_name'   => $fw->name,
+                    'jobrole_id'       => (int) $fw->jobrole_id,
+                    'jobrole'          => $roleNames[$fw->jobrole_id] ?? null,
+                    'competency_id'    => (int) $it->competency_id,
+                    'competency_name'  => $comp->name,
+                    'framework_target' => (int) $it->required_proficiency,
+                    'role_target'      => (int) $existing->required_proficiency,
+                ];
+            }
+        }
+
+        // 2. a role requires something no framework backs
+        $backed = [];
+        foreach ($items as $it) {
+            $backed[(int) $it->competency_id] = true;
+        }
+
+        $noFramework = [];
+        foreach ($requirements as $r) {
+            if (isset($backed[(int) $r->competency_id])) {
+                continue;
+            }
+            $comp = $competencies->get($r->competency_id);
+            $noFramework[] = [
+                'jobrole_id'      => (int) $r->jobrole_id,
+                'jobrole'         => $roleNames[$r->jobrole_id] ?? null,
+                'competency_id'   => (int) $r->competency_id,
+                'competency_name' => $comp->name ?? null,
+                'role_target'     => $r->required_proficiency !== null ? (int) $r->required_proficiency : null,
+            ];
+        }
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Reconciliation fetched successfully',
+            'data'    => [
+                'not_applied'    => $notApplied,
+                'no_framework'   => $noFramework,
+                'contradicts'    => $contradicts,
+                'orphan_targets' => $orphanTargets,
+            ],
+            'meta'    => [
+                'not_applied'    => count($notApplied),
+                'no_framework'   => count($noFramework),
+                'contradicts'    => count($contradicts),
+                'orphan_targets' => count($orphanTargets),
+                'clean'          => $notApplied === [] && $noFramework === [] && $contradicts === [] && $orphanTargets === [],
+            ],
+        ]);
+    }
+
     /* ----------------------------------------------------------------- *
      * Proficiency scale + KASA behavioural indicators
      * ----------------------------------------------------------------- */

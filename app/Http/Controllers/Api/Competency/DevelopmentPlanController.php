@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,10 @@ use Illuminate\Support\Facades\Validator;
 class DevelopmentPlanController extends Controller
 {
     use ResolvesCompetencyContext;
+    // The ONE gap rule, shared with CompetencyGapController. This controller
+    // used to implement its own, from the skill library, scoring unmeasured as
+    // zero - see gaps().
+    use ResolvesCompetencyGap;
 
     private const TABLE = 's_competency_development_plans';
 
@@ -587,19 +592,74 @@ class DevelopmentPlanController extends Controller
             return response()->json([
                 'status'  => 1,
                 'message' => 'Competency gaps fetched successfully',
-                'data'    => ['jobrole' => $plan->jobrole, 'items' => [], 'summary' => $this->emptyGapSummary()],
+                'data'    => [
+                    'jobrole'          => $plan->jobrole,
+                    'jobrole_id'       => null,
+                    'competency_gaps'  => ['items' => [], 'summary' => $this->emptyGapSummary()],
+                    'skill_gaps'       => ['items' => [], 'summary' => $this->emptyGapSummary()],
+                    'items'            => [],
+                    'summary'          => $this->emptyGapSummary(),
+                ],
             ]);
         }
 
-        $required = collect();
-        if ($plan->jobrole) {
-            $required = DB::table('s_user_skill_jobrole')
+        /*
+         * ── TWO ARMS, NAMED, AND THEY ARE NOT THE SAME QUESTION ─────────────
+         *
+         * This method used to return ONE unlabelled list built from the SKILL
+         * library, under a heading that said "Competency". It was a second gap
+         * engine standing beside `CompetencyGapController`, and it disagreed
+         * with it in the way that matters most:
+         *
+         *     $currentLevel = $held ? (int) $held->skill_level : 0;
+         *
+         * Measured on live before this change: **3,873 gap rows, of which 3,328
+         * (85.9%) were items nobody had ever assessed, shown as shortfalls**,
+         * and 55 of 164 plans displayed a person failing every requirement when
+         * the truth was that nobody had rated them.
+         *
+         *   competency_gaps - the ASSESSMENT arm. ProficiencyService over
+         *                     jobrole_competency_map, through the one shared
+         *                     rule in ResolvesCompetencyGap. No arithmetic here.
+         *   skill_gaps      - the GUIDANCE arm. s_user_skill_jobrole against
+         *                     s_skill_matrix, kept because it is what 161 of 164
+         *                     plans actually have - but NEVER called a
+         *                     competency gap, and no longer scoring unrated
+         *                     items as zero.
+         */
+
+        // ── the assessment arm ──────────────────────────────────────────────
+        $jobroleId = $plan->jobrole_id
+            ?? $this->resolveJobroleIdByName($sid, $plan->jobrole);
+
+        $competencyGaps = $jobroleId
+            ? $this->competencyGapFor((int) $sid, (int) $plan->user_id, (int) $jobroleId)
+            : ['competencies' => [], 'mandatory_below_required' => [], 'coverage' => []];
+
+        $compItems = array_map(fn ($c) => [
+            'competency_id' => $c['competency_id'],
+            'name'          => $c['competency_name'],
+            'code'          => $c['competency_code'],
+            'required'      => $c['required_proficiency'],
+            // NULL means UNMEASURED. Never 0 - a zero asserts a score of
+            // nothing, which is a different and much worse claim.
+            'current'       => $c['measured_level'],
+            'gap'           => $c['gap'],
+            'state'         => $c['state'],
+            'is_mandatory'  => $c['is_mandatory'],
+            'coverage'      => $c['coverage'],
+            'is_focus'      => $this->isFocusArea((string) $c['competency_name'], $plan->focus_areas),
+        ], $competencyGaps['competencies']);
+
+        // ── the guidance arm ────────────────────────────────────────────────
+        $required = $plan->jobrole
+            ? DB::table('s_user_skill_jobrole')
                 ->where('sub_institute_id', $sid)
                 ->where('jobrole', $plan->jobrole)
                 ->whereNull('deleted_at')
                 ->get()
-                ->keyBy('skill');
-        }
+                ->keyBy('skill')
+            : collect();
 
         $current = DB::table('s_skill_matrix as m')
             ->join('s_users_skills as s', 'm.skill_id', '=', 's.id')
@@ -609,49 +669,146 @@ class DevelopmentPlanController extends Controller
             ->get(['s.id as skill_id', 's.title', 's.category', 'm.skill_level', 'm.updated_at'])
             ->keyBy('title');
 
-        $items = [];
+        $skillItems = [];
         foreach ($required as $skillName => $row) {
-            $requiredLevel = (int) $row->proficiency_level;
-            $held = $current->get($skillName);
-            $currentLevel = $held ? (int) $held->skill_level : 0;
+            /*
+             * `s_user_skill_jobrole.proficiency_level` IS A VARCHAR holding a
+             * mixture. Measured on live: 84,222 numeric (1-6), plus 35
+             * "Advanced", 96 "Intermediate", 26 "Basic" and one empty.
+             *
+             * `(int) 'Advanced'` is 0 - and the old code then compared an
+             * unrated skill's 0 against that 0 and called it **MET**. That is
+             * how 54 requirements on live were reported as satisfied by people
+             * nobody had assessed against targets nobody could read.
+             *
+             * A word is not a level on this scale. It is NOT guessed at a
+             * number - mapping Basic/Intermediate/Advanced onto 1-6 would
+             * invent a target somebody could then be measured against, the same
+             * refusal `FrameworkController::normaliseProficiency()` makes when
+             * it turns an out-of-scale value into NULL rather than clamping it.
+             */
+            $requiredLevel = is_numeric($row->proficiency_level) && (int) $row->proficiency_level > 0
+                ? (int) $row->proficiency_level
+                : null;
 
-            $items[] = [
-                'competency_id' => $held ? (int) $held->skill_id : null,
+            $held = $current->get($skillName);
+
+            // THE FIX. `$held ? ... : 0` is gone: an unrated skill is
+            // NOT ASSESSED and has no gap, because there is nothing to
+            // subtract from. It is counted in its own bucket below.
+            $currentLevel = $held ? (int) $held->skill_level : null;
+
+            $state = match (true) {
+                $requiredLevel === null           => 'no_target',
+                $currentLevel === null            => 'not_assessed',
+                $currentLevel >= $requiredLevel   => 'met',
+                default                           => 'gap',
+            };
+
+            $skillItems[] = [
+                // `skill_id`, NOT `competency_id`. This field was named for one
+                // id-space and filled from another, and those ids were then
+                // saved onto plan actions - 47 action rows and 14 plan rows on
+                // live hold a skill id in a competency column because of it.
+                'skill_id'      => $held ? (int) $held->skill_id : null,
                 'name'          => (string) $skillName,
                 'category'      => $held->category ?? null,
                 'required'      => $requiredLevel,
+                // The stored text, shown as-is where it is not a number, so a
+                // reader sees "Advanced" and knows to fix it rather than
+                // wondering why the row has no target.
+                'required_raw'  => (string) $row->proficiency_level,
                 'current'       => $currentLevel,
-                'gap'           => $currentLevel - $requiredLevel,
-                'is_focus'      => $this->isFocusArea($skillName, $plan->focus_areas),
+                'gap'           => $state === 'gap' ? $requiredLevel - $currentLevel : null,
+                'state'         => $state,
+                'is_focus'      => $this->isFocusArea((string) $skillName, $plan->focus_areas),
                 'last_assessed' => $held && $held->updated_at ? $this->humanDate($held->updated_at) : null,
             ];
         }
 
-        // Biggest shortfall first, then alphabetical.
-        usort($items, function ($a, $b) {
-            if ($a['gap'] === $b['gap']) {
-                return strcasecmp($a['name'], $b['name']);
-            }
-            return $a['gap'] <=> $b['gap'];
-        });
-
-        $met = count(array_filter($items, fn ($i) => $i['gap'] >= 0));
-        $total = count($items);
+        // Biggest shortfall first, then the states with nothing to act on -
+        // a known shortfall is more actionable than an unknown one.
+        $rank = fn (array $i) => match ($i['state']) {
+            'gap' => 0, 'met' => 1, 'not_assessed' => 2, default => 3,
+        };
+        $order = fn (array $a, array $b) => [$rank($a), -($a['gap'] ?? 0)]
+            <=> [$rank($b), -($b['gap'] ?? 0)]
+                ?: strcasecmp($a['name'], $b['name']);
+        usort($skillItems, $order);
+        usort($compItems, $order);
 
         return response()->json([
             'status'  => 1,
             'message' => 'Competency gaps fetched successfully',
             'data'    => [
-                'jobrole' => $plan->jobrole,
-                'items'   => $items,
-                'summary' => [
-                    'total'        => $total,
-                    'met'          => $met,
-                    'gaps'         => $total - $met,
-                    'met_percent'  => $total > 0 ? (int) round($met / $total * 100) : 0,
+                'jobrole'    => $plan->jobrole,
+                'jobrole_id' => $jobroleId ? (int) $jobroleId : null,
+
+                'competency_gaps' => [
+                    'items'                    => $compItems,
+                    'summary'                  => $this->gapSummary($compItems),
+                    'mandatory_below_required' => $competencyGaps['mandatory_below_required'],
+                    // Distinguishes "this role has no competency requirements
+                    // yet" from "this role is fully met" - identical on screen
+                    // otherwise, and only the first has a next action.
+                    'has_requirements'         => $compItems !== [],
+                    'jobrole_resolved'         => $jobroleId !== null,
                 ],
+
+                'skill_gaps' => [
+                    'items'   => $skillItems,
+                    'summary' => $this->gapSummary($skillItems),
+                ],
+
+                /*
+                 * LEGACY KEYS, kept so an un-deployed client does not break on
+                 * the way past. They carry the SKILL arm, which is what they
+                 * always carried - but with `not_assessed` no longer counted as
+                 * a gap, so even an old client stops reporting false shortfalls.
+                 */
+                'items'   => $skillItems,
+                'summary' => $this->gapSummary($skillItems),
             ],
         ]);
+    }
+
+    /**
+     * One summary shape for both arms.
+     *
+     * `not_assessed` IS ITS OWN NUMBER and is not folded into either `met` or
+     * `gaps`. `met_percent` is the share of what was MEASURED, so a role with
+     * two of thirty items assessed cannot report 93% met by counting the
+     * twenty-eight nobody looked at.
+     */
+    private function gapSummary(array $items): array
+    {
+        $count = fn (string $state) => count(array_filter($items, fn ($i) => $i['state'] === $state));
+
+        $met         = $count('met');
+        $gaps        = $count('gap');
+        // `unmeasured` is the competency arm's word for it, `not_assessed` the
+        // skill arm's. One summary counts both rather than each arm carrying a
+        // shape of its own.
+        $notAssessed = $count('not_assessed') + $count('unmeasured');
+        $noTarget    = $count('no_target');
+        $measured    = $met + $gaps;
+
+        return [
+            'total'        => count($items),
+            'met'          => $met,
+            'gaps'         => $gaps,
+            'not_assessed' => $notAssessed,
+            // A requirement whose level is not a number on this scale - live
+            // holds 157 reading "Advanced" / "Intermediate" / "Basic". Counted
+            // apart because the fix is to correct the data, not to assess
+            // somebody.
+            'no_target'    => $noTarget,
+            'measured'     => $measured,
+            // The share of what was MEASURED. A role with two of thirty items
+            // assessed cannot report 93% met by counting the twenty-eight
+            // nobody looked at.
+            'met_percent'  => $measured > 0 ? (int) round($met / $measured * 100) : 0,
+        ];
     }
 
     /** GET /competency/development-plans/{id}/actions */

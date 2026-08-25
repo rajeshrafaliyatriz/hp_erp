@@ -431,6 +431,10 @@ Route::get('/competency/task-map/tasks', [\App\Http\Controllers\Api\Competency\J
 // Built for the assign-task modal: the mapping belongs where the judgement is
 // made, not on a matrix screen somebody must remember to open.
 Route::get('/competency/task-map/for-task', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'forTask'])->middleware('api.token');
+// Read-only, and an employee may read their OWN readiness - so `api.token`,
+// with the elevated-role check applied per subject inside competencySubject().
+// A blanket profile gate here would lock a person out of their own answer.
+Route::get('/competency/task-map/readiness', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'readiness'])->middleware('api.token');
 Route::get('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'index']);
 Route::post('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/task-map/{id}', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'destroy'])->middleware('profile:admin,hr');
@@ -505,6 +509,13 @@ Route::delete('/competency/learning-assignments/{id}', [CompetencyLearningAssign
 */
 Route::get('/competency/studio/summary', [CompetencyStudioController::class, 'summary']);
 Route::get('/competency/studio/framework-structure', [CompetencyStudioController::class, 'frameworkStructure']);
+// The requirements grid on COMPETENCIES: rows are `competency`, columns are job
+// roles by id and scoped to a department, cells are the effective target with
+// `source` saying whether it was chosen for the role or inherited from its
+// framework. `/competency/role-mapping/matrix` stays for the skill grid.
+Route::get('/competency/studio/requirements-matrix', [CompetencyStudioController::class, 'requirementsMatrix']);
+// The broken links between frameworks and roles, as rows rather than counts.
+Route::get('/competency/studio/reconciliation', [CompetencyStudioController::class, 'reconciliation']);
 Route::get('/competency/studio/proficiency-scale', [CompetencyStudioController::class, 'proficiencyScale']);
 Route::post('/competency/studio/proficiency-scale', [CompetencyStudioController::class, 'storeLevel']);
 Route::put('/competency/studio/proficiency-scale/{id}', [CompetencyStudioController::class, 'updateLevel'])->whereNumber('id');
@@ -1743,6 +1754,12 @@ Route::prefix('competency-library')->group(function () {
     Route::post('/competency', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'store'])->middleware('profile:admin,hr');
     Route::put('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
     Route::delete('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+    // What L1 vs L4 means FOR THIS COMPETENCY. Sparse: a level with no row
+    // inherits the organisation's generic descriptor, which the read returns
+    // alongside so an editor can show what it would be overriding.
+    Route::get('/competency/{id}/levels', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'levels'])->whereNumber('id')->middleware('api.token');
+    Route::put('/competency/{id}/levels', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'saveLevels'])->whereNumber('id')->middleware('profile:admin,hr');
 });
 
 /*

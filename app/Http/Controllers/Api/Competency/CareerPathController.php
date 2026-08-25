@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,10 @@ use Illuminate\Support\Facades\Validator;
 class CareerPathController extends Controller
 {
     use ResolvesCompetencyContext;
+    // The ONE gap rule. `competencyMatch()` compares nothing itself - it asks
+    // the same engine the drawer and the development plan ask, so this screen
+    // cannot disagree with them about whether somebody meets a requirement.
+    use ResolvesCompetencyGap;
 
     private const PATHS = 's_competency_career_paths';
     private const STEPS = 's_competency_career_path_steps';
@@ -381,14 +386,41 @@ class CareerPathController extends Controller
             }
         }
 
+        // The employee's own role AS AN ID, so the current node is identified by
+        // key rather than by comparing two strings that a rename can separate.
+        $currentRoleId = $employeeId ? ($this->roleForUser($sid, (int) $employeeId)->id ?? null) : null;
+
         foreach ($nodes as $index => $node) {
-            $isCurrent = $matchedCurrent
-                ? strcasecmp((string) $node['jobrole'], (string) $currentRole) === 0
-                : ($node['step_type'] ?? '') === 'current';
+            // Prefer the id. `s_competency_career_path_steps.jobrole_id` is
+            // populated on all 72 live rows, every one valid, and 0 of them
+            // disagree with the name stored beside it - so the id path is
+            // always available and the name comparison is only a fallback for
+            // a derived node that has none.
+            $isCurrent = $currentRoleId && $node['jobrole_id']
+                ? (int) $node['jobrole_id'] === (int) $currentRoleId
+                : ($matchedCurrent
+                    ? strcasecmp((string) $node['jobrole'], (string) $currentRole) === 0
+                    : ($node['step_type'] ?? '') === 'current');
 
             $nodes[$index]['is_current'] = $isCurrent;
             $nodes[$index]['step_type'] = $isCurrent ? 'current' : 'future';
-            $nodes[$index]['match_percent'] = $isCurrent ? 100 : $this->matchPercent($sid, (string) $node['jobrole'], $held);
+
+            // TWO READINGS, NAMED - the same two arms the development plan's
+            // gaps tab shows, so one idea is learned rather than two.
+            $nodes[$index]['competency_match'] = $isCurrent
+                ? null
+                : $this->competencyMatch($sid, $node['jobrole_id'] ?? null, $employeeId ? (int) $employeeId : null);
+            $nodes[$index]['skill_match'] = $isCurrent
+                ? null
+                : $this->matchPercent($sid, (string) $node['jobrole'], $held);
+
+            // Kept for callers that still read a single number. It is the SKILL
+            // percent, which is what this field always carried - now NULL where
+            // nothing was measured rather than a confident 0.
+            $nodes[$index]['match_percent'] = $isCurrent
+                ? 100
+                : ($nodes[$index]['skill_match']['percent'] ?? null);
+
             $nodes[$index]['required_skills'] = $this->requiredCount($sid, (string) $node['jobrole']);
         }
 
@@ -710,12 +742,19 @@ class CareerPathController extends Controller
             ->orderBy('jr.sequence_order')->limit(6)
             ->get(['jr.id', 'jr.jobrole', 'jr.job_level'])
             ->unique('jobrole')->values()
-            ->map(fn ($r) => [
-                'jobrole'       => $r->jobrole,
-                'jobrole_id'    => (int) $r->id,
-                'job_level'     => $r->job_level,
-                'match_percent' => $this->matchPercent($sid, (string) $r->jobrole, $held),
-            ])->all();
+            ->map(function ($r) use ($sid, $held) {
+                $skill = $this->matchPercent($sid, (string) $r->jobrole, $held);
+
+                return [
+                    'jobrole'       => $r->jobrole,
+                    'jobrole_id'    => (int) $r->id,
+                    'job_level'     => $r->job_level,
+                    'skill_match'   => $skill,
+                    // NULL where nothing was measured, not 0 - a lateral role
+                    // nobody has been assessed against is unknown, not unsuitable.
+                    'match_percent' => $skill['percent'] ?? null,
+                ];
+            })->all();
     }
 
     private function roleByName(int $sid, string $name)
@@ -779,16 +818,27 @@ class CareerPathController extends Controller
     }
 
     /**
-     * Readiness for a target role: the share of its required proficiency the
-     * employee already holds, capped per competency so one over-qualified skill
-     * cannot mask several missing ones.
+     * Readiness for a target role on the SKILL arm: the share of its required
+     * proficiency the employee already holds, capped per skill so one
+     * over-qualified skill cannot mask several missing ones.
+     *
+     * ── WHAT CHANGED, AND WHY IT MATTERED ──────────────────────────────────
+     *
+     * This used to read `$held[$row->skill] ?? 0` - an UNRATED skill counted as
+     * a zero against the target, and therefore as a shortfall. Live holds
+     * 84,380 skill requirements against **169 ratings**, so almost every
+     * requirement scored zero and every future role looked unreachable. A
+     * readiness number computed mostly from things nobody measured is not a low
+     * score; it is not a score at all.
+     *
+     * Unmeasured skills are now EXCLUDED from both sides of the fraction, and
+     * `coverage` says how much of the requirement the number actually speaks
+     * for - the same shape `ProficiencyService` returns one level down.
+     *
+     * @return array{percent:?int, coverage:float, measured:int, required:int}|null
      */
-    private function matchPercent(int $sid, string $jobrole, array $held): ?int
+    private function matchPercent(int $sid, string $jobrole, array $held): ?array
     {
-        if (!$held) {
-            return null;
-        }
-
         $required = DB::table('s_user_skill_jobrole')
             ->where('sub_institute_id', $sid)->where('jobrole', $jobrole)->whereNull('deleted_at')
             ->get(['skill', 'proficiency_level']);
@@ -799,16 +849,72 @@ class CareerPathController extends Controller
 
         $needed = 0;
         $have = 0;
+        $countRequired = 0;
+        $countMeasured = 0;
+
         foreach ($required as $row) {
-            $level = (int) $row->proficiency_level;
-            if ($level <= 0) {
+            // A word is not a level. Live holds "Advanced" / "Intermediate" /
+            // "Basic" in this column; `(int)` turns each into 0, which used to
+            // make an unrated skill compare as satisfied.
+            if (!is_numeric($row->proficiency_level) || (int) $row->proficiency_level <= 0) {
                 continue;
             }
+            $level = (int) $row->proficiency_level;
+            $countRequired++;
+
+            if (!array_key_exists($row->skill, $held)) {
+                continue;            // UNMEASURED - excluded, never a zero
+            }
+
+            $countMeasured++;
             $needed += $level;
-            $have += min((int) ($held[$row->skill] ?? 0), $level);
+            $have   += min((int) $held[$row->skill], $level);
         }
 
-        return $needed > 0 ? (int) round($have / $needed * 100) : null;
+        return [
+            // NULL, not 0, when nothing was measured: "we do not know" and
+            // "they have none of it" are different answers.
+            'percent'  => $needed > 0 ? (int) round($have / $needed * 100) : null,
+            'coverage' => $countRequired > 0 ? round($countMeasured / $countRequired, 2) : 0.0,
+            'measured' => $countMeasured,
+            'required' => $countRequired,
+        ];
+    }
+
+    /**
+     * Readiness for a target role on the COMPETENCY arm.
+     *
+     * The assessment half of the model, and the one the gap engine speaks for.
+     * Reuses `competencyGapFor()` rather than comparing anything here, so this
+     * screen cannot disagree with the employee drawer or the development plan
+     * about whether somebody meets a requirement.
+     *
+     * @return array{percent:?int, coverage:float, measured:int, required:int}|null
+     */
+    private function competencyMatch(int $sid, ?int $jobroleId, ?int $userId): ?array
+    {
+        if (!$jobroleId || !$userId) {
+            return null;
+        }
+
+        $gap = $this->competencyGapFor($sid, $userId, $jobroleId);
+        $items = $gap['competencies'];
+
+        if ($items === []) {
+            return null;              // no requirements: nothing to be ready for
+        }
+
+        $measured = array_values(array_filter($items, fn ($c) => $c['state'] !== 'unmeasured'));
+        $met      = count(array_filter($measured, fn ($c) => $c['state'] === 'met'));
+
+        return [
+            // The share of what was MEASURED, so a role with one competency
+            // assessed out of eight cannot report 100% ready.
+            'percent'  => $measured === [] ? null : (int) round($met / count($measured) * 100),
+            'coverage' => round(count($measured) / count($items), 2),
+            'measured' => count($measured),
+            'required' => count($items),
+        ];
     }
 
     private function requiredCount(int $sid, string $jobrole): int

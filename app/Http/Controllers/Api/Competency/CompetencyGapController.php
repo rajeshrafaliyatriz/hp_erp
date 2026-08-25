@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
 use App\Services\Competency\ProficiencyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,7 @@ use Illuminate\Support\Facades\Validator;
 class CompetencyGapController extends Controller
 {
     use ResolvesCompetencyContext;
+    use ResolvesCompetencyGap;
 
     public function __construct(private ProficiencyService $proficiency)
     {
@@ -113,16 +115,22 @@ class CompetencyGapController extends Controller
             ], 422);
         }
 
-        // The requirements. Resolved BY KEY - the job role's name is read for
-        // display and never used to match.
-        $required = DB::table('jobrole_competency_map as m')
-            ->join('competency as c', 'c.id', '=', 'm.competency_id')
-            ->where('m.sub_institute_id', $sid)
-            ->where('m.jobrole_id', $jobroleId)
-            ->orderBy('c.name')
-            ->get(['m.competency_id', 'm.required_proficiency', 'm.is_mandatory', 'c.name', 'c.code']);
+        /*
+         * THE COMPARISON MOVED TO `Concerns\ResolvesCompetencyGap`, UNCHANGED.
+         *
+         * Not because this controller needed it elsewhere, but because
+         * `DevelopmentPlanController::gaps()` was answering the same question a
+         * second time from the skill library, keyed by name, and scoring
+         * unmeasured items as ZERO - which turned 3,328 of 3,873 live gap rows
+         * into shortfalls nobody had assessed.
+         *
+         * The rule now has one home and two callers. The payload below is
+         * byte-identical to what this endpoint returned before the extraction,
+         * verified against a captured baseline across four employees.
+         */
+        $gap = $this->competencyGapFor((int) $sid, $subject, $jobroleId);
 
-        if ($required->isEmpty()) {
+        if ($gap['competencies'] === []) {
             return response()->json([
                 'status'  => 1,
                 'message' => 'This job role has no competency requirements defined yet.',
@@ -130,79 +138,17 @@ class CompetencyGapController extends Controller
             ]);
         }
 
-        // THE ONE NAMED ROLL-UP. No arithmetic in this controller.
-        $levels = $this->proficiency->rollUp($sid, $subject, $required->pluck('competency_id')->all());
-
-        $competencies = [];
-        $mandatoryBelow = [];
-        $unmeasuredCount = 0;
-
-        foreach ($required as $req) {
-            $roll = $levels[$req->competency_id] ?? null;
-            $level = $roll['level'] ?? null;
-
-            // Three states, kept apart on purpose.
-            $state = match (true) {
-                $level === null                        => 'unmeasured',
-                $level >= (float) $req->required_proficiency => 'met',
-                default                                => 'gap',
-            };
-
-            if ($state === 'unmeasured') {
-                $unmeasuredCount++;
-            }
-
-            $competencies[] = [
-                'competency_id'        => (int) $req->competency_id,
-                'competency_name'      => $req->name,     // display only
-                'competency_code'      => $req->code,
-                'required_proficiency' => (int) $req->required_proficiency,
-                'is_mandatory'         => (bool) $req->is_mandatory,
-                'measured_level'       => $level,          // NULL means unmeasured
-                'state'                => $state,
-                // A gap is only meaningful where something was measured.
-                'gap'                  => $state === 'gap'
-                    ? round((float) $req->required_proficiency - $level, 2)
-                    : null,
-                'coverage'             => $roll['coverage'] ?? 0.0,
-            ];
-
-            // NUMBER TWO: mandatory ITEMS below required, not competencies. An
-            // average can sit above the bar while an item inside it does not.
-            if ($req->is_mandatory) {
-                foreach ($roll['items'] ?? [] as $item) {
-                    if (!$item['measured']) {
-                        continue;    // unmeasured is not a shortfall
-                    }
-                    if ($item['rating'] < (int) $req->required_proficiency) {
-                        $mandatoryBelow[] = [
-                            'competency_id'   => (int) $req->competency_id,
-                            'competency_name' => $req->name,
-                            'kasba_item_id'   => $item['kasba_item_id'],
-                            'kasba_type'      => $item['kasba_type'],
-                            'item_label'      => $item['item_label'],
-                            'rating'          => $item['rating'],
-                            'required'        => (int) $req->required_proficiency,
-                        ];
-                    }
-                }
-            }
-        }
-
         return response()->json([
             'status' => 1,
             'data'   => [
-                'user_id'     => $subject,
-                'jobrole_id'  => $jobroleId,
-                'competencies' => $competencies,
+                'user_id'      => $subject,
+                'jobrole_id'   => $jobroleId,
+                'competencies' => $gap['competencies'],
                 // The second number, separately.
-                'mandatory_below_required' => $mandatoryBelow,
+                'mandatory_below_required' => $gap['mandatory_below_required'],
                 // Feeds the capability-coverage gate. Reported, never inferred
                 // from the absence of a gap.
-                'coverage' => [
-                    'competencies_required'   => $required->count(),
-                    'competencies_unmeasured' => $unmeasuredCount,
-                ],
+                'coverage' => $gap['coverage'],
             ],
         ]);
     }
