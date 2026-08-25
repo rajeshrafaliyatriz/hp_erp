@@ -161,6 +161,14 @@ class CompetencyLibraryCrudController extends Controller
         $shaped['items'] = $items;
         $shaped['items_by_type'] = $items->groupBy('kasba_type')->map->count();
 
+        /*
+         * The scale, so the edit dialog can seed it without a second request.
+         * Each level carries what it INHERITS as well as what it overrides -
+         * an editor that showed only an empty box could not tell an author
+         * what they were replacing.
+         */
+        $shaped['levels'] = $this->readLevels((int) $row->id, $sid);
+
         return response()->json(['status' => true, 'message' => 'Success', 'data' => $shaped]);
     }
 
@@ -189,6 +197,18 @@ class CompetencyLibraryCrudController extends Controller
             'items.*.item_id'    => 'nullable|integer',
             'items.*.item_label' => 'nullable|string|max:191',
             'items.*.weight'     => 'nullable|numeric|min:0|max:100',
+
+            /*
+             * The competency's own L1-L5 scale, riding the same payload as its
+             * bundle. Levels are keyed by competency_id, which does not exist
+             * during create - sending them together is what lets create and
+             * edit behave identically without threading a new id back through
+             * the mutation layer.
+             */
+            'levels'              => 'nullable|array|max:5',
+            'levels.*.level'      => 'required_with:levels|integer|min:1|max:5',
+            'levels.*.descriptor' => 'nullable|string',
+            'levels.*.indicators' => 'nullable|string',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'message' => $validator->errors()->first()], 422);
@@ -262,6 +282,11 @@ class CompetencyLibraryCrudController extends Controller
                 ]);
                 $written++;
             }
+
+            // The competency's own L1-L5 scale, in the SAME transaction and
+            // through the SAME writer the standalone endpoint uses. A blank
+            // level stores nothing and inherits the organisation default.
+            $this->writeLevels($id, $sid, $request->input('levels', []), $actor);
         });
 
         return response()->json([
@@ -344,6 +369,18 @@ class CompetencyLibraryCrudController extends Controller
             'items.*.item_id'    => 'nullable|integer',
             'items.*.item_label' => 'nullable|string|max:191',
             'items.*.weight'     => 'nullable|numeric|min:0|max:100',
+
+            /*
+             * The competency's own L1-L5 scale, riding the same payload as its
+             * bundle. Levels are keyed by competency_id, which does not exist
+             * during create - sending them together is what lets create and
+             * edit behave identically without threading a new id back through
+             * the mutation layer.
+             */
+            'levels'              => 'nullable|array|max:5',
+            'levels.*.level'      => 'required_with:levels|integer|min:1|max:5',
+            'levels.*.descriptor' => 'nullable|string',
+            'levels.*.indicators' => 'nullable|string',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'message' => $validator->errors()->first()], 422);
@@ -375,8 +412,18 @@ class CompetencyLibraryCrudController extends Controller
 
         // One transaction: a competency whose row updated but whose composition
         // did not is a competency that measures something other than it claims.
-        DB::transaction(function () use ($id, $sid, $update, $itemsGiven, $items, &$written) {
+        DB::transaction(function () use ($id, $sid, $update, $itemsGiven, $items, $request, $context, &$written) {
             DB::table('competency')->where('id', (int) $id)->where('sub_institute_id', $sid)->update($update);
+
+            /*
+             * Levels are written BEFORE the items early-return, because a
+             * caller may edit the scale without touching the bundle. Putting
+             * it after `if (!$itemsGiven) return;` would silently drop every
+             * scale edit that did not also resend the items.
+             */
+            if ($request->has('levels')) {
+                $this->writeLevels((int) $id, $sid, $request->input('levels', []), $context['user_id']);
+            }
 
             if (!$itemsGiven) {
                 return;
@@ -416,6 +463,205 @@ class CompetencyLibraryCrudController extends Controller
     }
 
     /** DELETE /competency-library/competency/{id} — SOFT, and it says what it kept. */
+    /**
+     * WHAT L1 VERSUS L4 ACTUALLY LOOKS LIKE, PER COMPETENCY.
+     *
+     * ── WHY THIS EXISTS ─────────────────────────────────────────────────────
+     *
+     * A target level was a number with no definition behind it. `s_proficiency_
+     * levels` is keyed by `skill_id` and has no `competency_id` column at all,
+     * so a competency could not say what "Level 3" means for it — which is why
+     * the proficiency scale never felt real. `competency_proficiency_levels`
+     * (2026_08_24_100000) fixes that, and this is its only reader and writer.
+     *
+     * ── SPARSE BY DESIGN: BLANK MEANS "USE THE ORGANISATION DEFAULT" ────────
+     *
+     * The table holds ONLY authored overrides. Seeding five rows per competency
+     * would be 1,135 copies of the same boilerplate and would make every
+     * competency look authored when none were. A level with no row falls back
+     * to the organisation's generic descriptor, returned here as `default_
+     * descriptor` so the editor can show what it would inherit rather than an
+     * empty box that says nothing.
+     *
+     * ── SAVING A BLANK DELETES, IT DOES NOT STORE AN EMPTY STRING ──────────
+     *
+     * Clearing a descriptor must return the level to the default, not pin it to
+     * "". An empty override and no override look identical on screen and mean
+     * opposite things.
+     */
+    public function levels(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = (int) $context['sub_institute_id'];
+
+        $competency = DB::table('competency')
+            ->where('id', $id)->where('sub_institute_id', $sid)->whereNull('deleted_at')->first();
+
+        if (!$competency) {
+            return response()->json(['status' => 0, 'message' => 'Competency not found'], 404);
+        }
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Proficiency levels fetched successfully',
+            'data'    => [
+                'competency_id' => (int) $id,
+                'levels'        => $this->readLevels((int) $id, $sid),
+            ],
+        ]);
+    }
+
+    /**
+     * THE ONE READER for a competency's scale — used by `levels()` and by
+     * `show()`, so the edit dialog and the standalone endpoint cannot disagree
+     * about what a level says.
+     *
+     * Always returns five rows, authored or not. A level the competency has not
+     * overridden carries `is_authored: false` and the `default_descriptor` it
+     * inherits, because an editor showing only an empty box cannot tell an
+     * author what they would be replacing.
+     *
+     * @return list<array{level:int, descriptor:?string, indicators:?string, default_descriptor:?string, is_authored:bool}>
+     */
+    private function readLevels(int $competencyId, int $subInstituteId): array
+    {
+        // keyBy, not pluck: the whole row is wanted, keyed by level.
+        $authored = DB::table('competency_proficiency_levels')
+            ->where('competency_id', $competencyId)
+            ->get(['level', 'descriptor', 'indicators'])
+            ->keyBy(fn ($r) => (int) $r->level);
+
+        /*
+         * The organisation's generic scale. `skill_id IS NULL` marks the
+         * generic rows; `proficiency_type` holds the level number.
+         *
+         * NULL sub_institute_id is accepted alongside the tenant's own, because
+         * the platform ships a default scale that predates per-tenant ones.
+         */
+        $defaults = DB::table('s_proficiency_levels')
+            ->whereNull('skill_id')
+            ->where(function ($q) use ($subInstituteId) {
+                $q->where('sub_institute_id', $subInstituteId)->orWhereNull('sub_institute_id');
+            })
+            ->orderBy('id')
+            ->get(['proficiency_type', 'description'])
+            ->keyBy(fn ($r) => (int) $r->proficiency_type);
+
+        $levels = [];
+        foreach (range(1, 5) as $level) {
+            $own = $authored->get($level);
+            $levels[] = [
+                'level'              => $level,
+                'descriptor'         => $own->descriptor ?? null,
+                'indicators'         => $own->indicators ?? null,
+                'default_descriptor' => $defaults[$level]->description ?? null,
+                'is_authored'        => $own !== null,
+            ];
+        }
+
+        return $levels;
+    }
+
+    /** PUT — replace this competency's authored levels. */
+    public function saveLevels(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = (int) $context['sub_institute_id'];
+
+        $competency = DB::table('competency')
+            ->where('id', $id)->where('sub_institute_id', $sid)->whereNull('deleted_at')->first();
+
+        if (!$competency) {
+            return response()->json(['status' => 0, 'message' => 'Competency not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'levels'              => 'required|array|max:5',
+            'levels.*.level'      => 'required|integer|min:1|max:5',
+            'levels.*.descriptor' => 'nullable|string',
+            'levels.*.indicators' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $result = DB::transaction(
+            fn () => $this->writeLevels((int) $id, $sid, $request->input('levels', []), $context['user_id'])
+        );
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Proficiency levels saved successfully',
+            'data'    => ['competency_id' => (int) $id] + $result,
+        ]);
+    }
+
+    /**
+     * THE ONE WRITER for a competency's authored levels.
+     *
+     * Called by three entry points — `PUT .../levels`, `store()` and `update()`
+     * — because the rule below must have exactly one implementation. Two copies
+     * of it would be two behaviours, and the one that drifted would be the one
+     * nobody tested.
+     *
+     * ── A BLANK DELETES; IT DOES NOT STORE AN EMPTY STRING ─────────────────
+     *
+     * Clearing a descriptor returns that level to the organisation default. An
+     * empty override and no override render identically and mean opposite
+     * things — "we decided L3 means nothing" versus "we have not decided yet" —
+     * so the empty one must not be storable.
+     *
+     * @param  array<int, array<string, mixed>>  $levels
+     * @return array{written:int, cleared:int}
+     */
+    private function writeLevels(int $competencyId, int $subInstituteId, array $levels, $userId): array
+    {
+        $written = 0;
+        $cleared = 0;
+
+        foreach ($levels as $row) {
+            $level = (int) ($row['level'] ?? 0);
+            if ($level < 1 || $level > 5) {
+                continue;               // outside the scale is not a level
+            }
+
+            $descriptor = trim((string) ($row['descriptor'] ?? ''));
+            $indicators = trim((string) ($row['indicators'] ?? ''));
+
+            if ($descriptor === '' && $indicators === '') {
+                $cleared += DB::table('competency_proficiency_levels')
+                    ->where('competency_id', $competencyId)->where('level', $level)->delete();
+                continue;
+            }
+
+            DB::table('competency_proficiency_levels')->updateOrInsert(
+                ['competency_id' => $competencyId, 'level' => $level],
+                [
+                    'sub_institute_id' => $subInstituteId,
+                    'descriptor'       => $descriptor !== '' ? $descriptor : null,
+                    'indicators'       => $indicators !== '' ? $indicators : null,
+                    'updated_by'       => $userId,
+                    'updated_at'       => now(),
+                    'created_at'       => now(),
+                ],
+            );
+            $written++;
+        }
+
+        return ['written' => $written, 'cleared' => $cleared];
+    }
+
     public function destroy(Request $request, $id)
     {
         $context = $this->competencyContext($request);
