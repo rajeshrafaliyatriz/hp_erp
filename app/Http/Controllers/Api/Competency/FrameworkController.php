@@ -119,6 +119,37 @@ class FrameworkController extends Controller
         return $matches->count() === 1 ? (int) $matches->first() : null;
     }
 
+    /**
+     * A PROFICIENCY TARGET, AS A NUMBER ON THE 1-5 SCALE.
+     *
+     * Accepts 3, '3' or 'Level 3' and returns 3. The string forms are tolerated
+     * because this column held `varchar` until 2026_08_24_100000 and an older
+     * client mid-deploy will still send 'Level 3'; normalising is what stops
+     * that landing in a TINYINT column as 0.
+     *
+     * ANYTHING OUTSIDE 1-5 BECOMES NULL RATHER THAN BEING CLAMPED. A level the
+     * scale cannot express is missing information, and rounding it into a real
+     * level would invent a requirement somebody could then be measured against.
+     * The measured scale is 1-5 across every operational table:
+     * `s_proficiency_knowledge`/`_ability`/`_attitude`/`_behaviour` and the
+     * framework targets themselves.
+     */
+    private function normaliseProficiency($value): ?int
+    {
+        if ($value === null || $value === '' || $value === []) {
+            return null;
+        }
+
+        $digits = preg_replace('/[^0-9]/', '', (string) $value);
+        if ($digits === '') {
+            return null;
+        }
+
+        $level = (int) $digits;
+
+        return ($level >= 1 && $level <= 5) ? $level : null;
+    }
+
     public function store(Request $request)
     {
         $context = $this->competencyContext($request);
@@ -420,9 +451,23 @@ class FrameworkController extends Controller
         }
         $sid = $context['sub_institute_id'];
 
+        /*
+         * `required_proficiency` IS A LEVEL ON A 1-5 SCALE, NOT A SENTENCE.
+         *
+         * It was validated as `string|max:50` and written raw, so this column
+         * held 'Level 3' while `jobrole_competency_map.required_proficiency`
+         * held the integer 3 for the identical idea. Two incompatible types for
+         * one concept is why a framework's target could never be compared to,
+         * defaulted into, or reconciled against a role's target - the broken
+         * link between frameworks and job roles.
+         *
+         * The column is now TINYINT (2026_08_24_100000). `string` is still
+         * accepted so an older client sending 'Level 3' is not rejected mid-
+         * deploy, but it is NORMALISED below rather than stored as written.
+         */
         $validator = Validator::make($request->all(), [
             'competency_id'        => 'required|integer',
-            'required_proficiency' => 'nullable|string|max:50',
+            'required_proficiency' => 'nullable',
         ]);
         if ($validator->fails()) {
             return response()->json([
@@ -439,6 +484,7 @@ class FrameworkController extends Controller
         }
 
         $competencyId = (int) $request->input('competency_id');
+        $required     = $this->normaliseProficiency($request->input('required_proficiency'));
 
         $existing = DB::table('s_competency_framework_items')
             ->where('framework_id', $id)
@@ -449,7 +495,7 @@ class FrameworkController extends Controller
 
         if ($existing) {
             DB::table('s_competency_framework_items')->where('id', $existing->id)->update([
-                'required_proficiency' => $request->input('required_proficiency'),
+                'required_proficiency' => $required,
                 'updated_at'           => now(),
             ]);
             $itemId = (int) $existing->id;
@@ -458,7 +504,7 @@ class FrameworkController extends Controller
                 'sub_institute_id'     => $sid,
                 'framework_id'         => (int) $id,
                 'competency_id'        => $competencyId,
-                'required_proficiency' => $request->input('required_proficiency'),
+                'required_proficiency' => $required,
                 'created_by'           => $context['user_id'],
                 'created_at'           => now(),
                 'updated_at'           => now(),
@@ -479,7 +525,7 @@ class FrameworkController extends Controller
             $existing
                 ? $this->diffChanges(
                     $existing,
-                    ['required_proficiency' => $request->input('required_proficiency')],
+                    ['required_proficiency' => $required],
                     ['required_proficiency' => 'Required Proficiency']
                 )
                 : null
