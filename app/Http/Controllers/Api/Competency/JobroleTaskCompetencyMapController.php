@@ -203,8 +203,19 @@ class JobroleTaskCompetencyMapController extends Controller
      */
     private static function competencyVerdict(?float $level, ?float $required): array
     {
-        if ($level === null)    return ['state' => 'unknown', 'reason' => 'not_assessed'];
+        /*
+         * NO TARGET IS CHECKED FIRST, and the order matters for the words the
+         * screen shows.
+         *
+         * Both absences produce `unknown`, so no count moves either way. But a
+         * person whose role does not require this competency AND who is
+         * unrated used to be reported as "not assessed" - which tells an
+         * assigner to go and rate them, when rating them would change nothing.
+         * There is no bar to clear. "No target" is the actionable truth: this
+         * competency is not part of that role's requirements.
+         */
         if ($required === null) return ['state' => 'unknown', 'reason' => 'no_target'];
+        if ($level === null)    return ['state' => 'unknown', 'reason' => 'not_assessed'];
 
         return $level >= $required
             ? ['state' => 'met',   'reason' => null]
