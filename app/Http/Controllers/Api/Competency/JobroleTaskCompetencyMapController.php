@@ -183,6 +183,95 @@ class JobroleTaskCompetencyMapController extends Controller
             ->pluck('id')->map(fn ($i) => (int) $i)->all();
     }
 
+    /**
+     * IS THIS PERSON AT THE LEVEL THIS COMPETENCY DEMANDS?
+     *
+     * The single implementation, shared by `forTask()` (one task, during
+     * assignment) and `readiness()` (every task on a role). Two copies of this
+     * comparison would let the assign modal and the employee drawer disagree
+     * about whether somebody can do a job — which is the one thing a capability
+     * system must never do.
+     *
+     * `met` and `below` are MEASURED VERDICTS. `unknown` is not a verdict at
+     * all, and it carries the reason so a screen can say which of the two
+     * absences it is:
+     *
+     *   not_assessed - nobody has rated this person on this competency
+     *   no_target    - their role does not say what level this competency needs
+     *
+     * @return array{state:string,reason:?string}
+     */
+    private static function competencyVerdict(?float $level, ?float $required): array
+    {
+        if ($level === null)    return ['state' => 'unknown', 'reason' => 'not_assessed'];
+        if ($required === null) return ['state' => 'unknown', 'reason' => 'no_target'];
+
+        return $level >= $required
+            ? ['state' => 'met',   'reason' => null]
+            : ['state' => 'below', 'reason' => null];
+    }
+
+    /**
+     * The task's own verdict, from its competencies' verdicts.
+     *
+     * NOT_CLEARED OUTRANKS UNKNOWN, deliberately: if one competency is known to
+     * be short, the person is not cleared whatever else is unmeasured. More
+     * measurement cannot make a known shortfall go away.
+     *
+     * `unmapped` is separate from `unknown` because the fix differs — one needs
+     * somebody to map the task, the other needs an assessment.
+     *
+     * @param  array<int,array{state:string}>  $competencies
+     */
+    private static function taskVerdict(array $competencies): string
+    {
+        if ($competencies === []) {
+            return 'unmapped';
+        }
+
+        $states = array_column($competencies, 'state');
+
+        if (in_array('below', $states, true))   return 'not_cleared';
+        if (in_array('unknown', $states, true)) return 'unknown';
+
+        return 'cleared';
+    }
+
+    /**
+     * A job role's competency targets, keyed by competency id.
+     *
+     * THE LEVEL A TASK DEMANDS COMES FROM THE ROLE, NOT THE TASK.
+     * `jobrole_task_competency_map` carries no `required_proficiency` and should
+     * not: a task says WHICH competencies it exercises, the role says AT WHAT
+     * LEVEL. Putting a level on the task too would create a third place a target
+     * could disagree with the other two.
+     *
+     * So "can this person perform this task" resolves as: the competencies the
+     * task exercises, measured against THEIR OWN ROLE's targets for those
+     * competencies.
+     */
+    private function roleTargets(int $sid, ?int $jobroleId)
+    {
+        if (!$jobroleId) {
+            return collect();
+        }
+
+        return DB::table('jobrole_competency_map')
+            ->where('sub_institute_id', $sid)
+            ->where('jobrole_id', $jobroleId)
+            ->get(['competency_id', 'required_proficiency', 'is_mandatory'])
+            ->keyBy('competency_id');
+    }
+
+    /** The job role an employee holds, as an id. */
+    private function jobroleOf(int $sid, int $userId): ?int
+    {
+        $id = (int) DB::table('tbluser')->where('id', $userId)
+            ->where('sub_institute_id', $sid)->value('allocated_standards');
+
+        return $id ?: null;
+    }
+
     /** The two key columns as a where-clause fragment. Exactly one is non-null. */
     private static function keyColumns(array $key): array
     {
@@ -401,8 +490,34 @@ class JobroleTaskCompetencyMapController extends Controller
                 ->rollUp($sid, $subject, $mapped->pluck('id')->map(fn ($i) => (int) $i)->all());
         }
 
-        $competencies = $mapped->map(function ($c) use ($rollUp) {
-            $r = $rollUp[(int) $c->id] ?? null;
+        /*
+         * ── CAN THIS PERSON PERFORM THIS TASK? ─────────────────────────────
+         *
+         * The question an assigner is actually asking, answered here rather
+         * than left for them to work out from a rating with no bar beside it.
+         *
+         * THE BAR COMES FROM THE ASSIGNEE'S OWN JOB ROLE. A task carries no
+         * level of its own — see roleTargets() — so "what does this task
+         * demand" resolves as "what does this person's role require of the
+         * competencies this task exercises". Assigning the same task to two
+         * people on different roles can therefore give two different answers,
+         * and that is correct: the standard they are held to is their own.
+         */
+        $targets = $subject ? $this->roleTargets($sid, $this->jobroleOf($sid, $subject)) : collect();
+
+        $competencies = $mapped->map(function ($c) use ($rollUp, $targets, $subject) {
+            $r      = $rollUp[(int) $c->id] ?? null;
+            $target = $targets[(int) $c->id] ?? null;
+
+            $required = $target && $target->required_proficiency !== null
+                ? (float) $target->required_proficiency
+                : null;
+            $level = $r['level'] ?? null;
+
+            // The ONE comparison, shared with readiness(). No arithmetic here.
+            $verdict = $subject
+                ? self::competencyVerdict($level === null ? null : (float) $level, $required)
+                : ['state' => 'unknown', 'reason' => 'no_subject'];
 
             return [
                 'id'          => (int) $c->id,
@@ -413,11 +528,28 @@ class JobroleTaskCompetencyMapController extends Controller
                 'items_rated' => $r ? count(array_filter($r['items'], fn ($i) => $i['measured'])) : 0,
                 // NULL means UNMEASURED. A zero here would read as "scored
                 // nothing", which is a different and much worse claim.
-                'rating'      => $r['level'] ?? null,
+                'rating'      => $level,
                 // How much of the competency's weight that level speaks for.
                 'coverage'    => $r['coverage'] ?? 0.0,
+                // The bar, and whether they clear it.
+                'required'     => $required,
+                'is_mandatory' => (bool) ($target->is_mandatory ?? false),
+                'state'        => $verdict['state'],
+                'reason'       => $verdict['reason'],
+                // How far short, where that is a knowable number.
+                'shortfall'    => $verdict['state'] === 'below'
+                    ? round($required - (float) $level, 2)
+                    : null,
             ];
         })->values();
+
+        /*
+         * THE TASK'S OWN VERDICT, for the banner the assigner reads first.
+         * Only meaningful with a subject: without one this endpoint is just
+         * showing the mapping, and "unknown" would imply a judgement was
+         * attempted.
+         */
+        $readiness = $subject ? self::taskVerdict($competencies->all()) : null;
 
         // Everything this tenant could map, so the picker has options without a
         // second request.
@@ -440,6 +572,23 @@ class JobroleTaskCompetencyMapController extends Controller
                 'task'                 => $key['task'],
                 'jobrole'              => $key['jobrole'],
                 'user_id'              => $subject,
+
+                /*
+                 * cleared / not_cleared / unknown / unmapped — or NULL when no
+                 * subject was named. NULL and 'unknown' are different: one
+                 * means nobody asked, the other means we asked and cannot say.
+                 */
+                'readiness'            => $readiness,
+                'readiness_summary'    => $subject ? [
+                    'met'          => $competencies->where('state', 'met')->count(),
+                    'below'        => $competencies->where('state', 'below')->count(),
+                    'unknown'      => $competencies->where('state', 'unknown')->count(),
+                    'total'        => $competencies->count(),
+                    // Called out separately: an average can clear the bar while
+                    // a MANDATORY competency inside the task does not.
+                    'mandatory_below' => $competencies->where('state', 'below')->where('is_mandatory', true)->count(),
+                ] : null,
+
                 'competencies'         => $competencies,
                 'available'            => $available,
             ],
@@ -582,10 +731,9 @@ class JobroleTaskCompetencyMapController extends Controller
         }
 
         // ── targets and levels, each read once for the whole page ───────────
-        $targets = DB::table('jobrole_competency_map')
-            ->where('sub_institute_id', $sid)->where('jobrole_id', $jobroleId)
-            ->get(['competency_id', 'required_proficiency', 'is_mandatory'])
-            ->keyBy('competency_id');
+        // Same reader `forTask()` uses, so one task viewed during assignment
+        // and the same task viewed in the drawer resolve the same bar.
+        $targets = $this->roleTargets($sid, $jobroleId);
 
         // THE ONE NAMED ROLL-UP. No arithmetic in this controller.
         $levels = $competencyMeta === []
@@ -603,22 +751,15 @@ class JobroleTaskCompetencyMapController extends Controller
             )));
 
             $comps = [];
-            $anyBelow = false; $anyUnknown = false;
 
             foreach ($ids as $cid) {
                 $target = $targets[$cid] ?? null;
                 $req    = $target && $target->required_proficiency !== null ? (float) $target->required_proficiency : null;
                 $level  = $levels[$cid]['level'] ?? null;
 
-                if ($level === null) {
-                    $state = 'unknown'; $reason = 'not_assessed'; $anyUnknown = true;
-                } elseif ($req === null) {
-                    $state = 'unknown'; $reason = 'no_target';    $anyUnknown = true;
-                } elseif ((float) $level >= $req) {
-                    $state = 'met';     $reason = null;
-                } else {
-                    $state = 'below';   $reason = null; $anyBelow = true;
-                }
+                // THE ONE COMPARISON, shared with forTask().
+                ['state' => $state, 'reason' => $reason] =
+                    self::competencyVerdict($level === null ? null : (float) $level, $req);
 
                 $comps[] = [
                     'id'           => $cid,
@@ -635,10 +776,8 @@ class JobroleTaskCompetencyMapController extends Controller
                 ];
             }
 
-            if ($ids === [])         $state = 'unmapped';
-            elseif ($anyBelow)       $state = 'not_cleared';   // outranks unknown
-            elseif ($anyUnknown)     $state = 'unknown';
-            else                     $state = 'cleared';
+            // THE ONE ROLL-UP OF THOSE VERDICTS, shared with forTask().
+            $state = self::taskVerdict($comps);
 
             $counts['total']++;
             $counts[$state]++;
