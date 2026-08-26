@@ -138,6 +138,15 @@ class KasbaRatingController extends Controller
             ->leftJoin('competency_kasba_rating as r', function ($j) use ($subject) {
                 $j->on('r.kasba_item_id', '=', 'k.id')->where('r.user_id', '=', $subject);
             })
+            // WHO made this assessment, not only when.
+            //
+            // `assessor_id` has always been stored and never returned, so the
+            // drawer could show a rating and a date with no way to tell a
+            // self-assessment from a manager's. Scoped to the tenant on the
+            // join so a name can never be borrowed from another organisation.
+            ->leftJoin('tbluser as ass', function ($j) use ($sid) {
+                $j->on('ass.id', '=', 'r.assessor_id')->where('ass.sub_institute_id', '=', $sid);
+            })
             ->where('m.sub_institute_id', $sid)
             ->where('k.sub_institute_id', $sid)
             ->where('m.jobrole_id', $jobroleId)
@@ -160,6 +169,8 @@ class KasbaRatingController extends Controller
                 'r.rating',
                 'r.note',
                 'r.rated_at',
+                'r.source',
+                DB::raw("TRIM(CONCAT_WS(' ', ass.first_name, ass.last_name)) as assessor_name"),
             ]);
 
         $items = $this->attachTitles($items, $sid);

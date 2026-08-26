@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Services\Competency\ProficiencyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +39,10 @@ use Illuminate\Support\Facades\DB;
 class NineBoxController extends Controller
 {
     use ResolvesApiIdentity;
+    // The ONE role resolver. tbluser has TWO role columns that disagree for
+    // some employees; reading either directly puts this grid on a different
+    // role from the gap engine for exactly those people.
+    use ResolvesEmployeeJobRole;
 
     /** Performance is a 1-5 manager rating. */
     private const PERF_BANDS = ['low' => 2.5, 'medium' => 3.5];
@@ -82,10 +87,17 @@ class NineBoxController extends Controller
         $userIds = array_keys($latest);
 
         // Each employee's job role, then that role's required competencies.
-        $roles = DB::table('tbluser')
+        $roleRows = DB::table('tbluser')
             ->whereIn('id', $userIds)
             ->where('sub_institute_id', $tenant)
-            ->pluck('allocated_standards', 'id');
+            ->get(['id', 'jobtitle_id', 'allocated_standards']);
+
+        // jobRoleFromUserRow's sibling: resolve per already-loaded row rather
+        // than re-querying tbluser once per employee.
+        $roles = [];
+        foreach ($roleRows as $row) {
+            $roles[(int) $row->id] = $this->resolveJobRoleId($row);
+        }
 
         $employees = [];
         $grid = [];
