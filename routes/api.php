@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\Competency\CommandCenterController as CompetencyCom
 // competency in Q-A2's sense (a named bundle of KASBA items); that is
 // CompetencyDefinitionController, on /competency/definitions.
 use App\Http\Controllers\Api\Competency\CompetencyController as SkillLibraryCrudController;
+use App\Http\Controllers\Api\Competency\JobRoleMergeController;
 use App\Http\Controllers\Api\Competency\FrameworkController as CompetencyFrameworkController;
 use App\Http\Controllers\Api\Competency\AssessmentController as CompetencyAssessmentController;
 use App\Http\Controllers\Api\Competency\AssessmentCycleController as CompetencyAssessmentCycleController;
@@ -308,6 +309,20 @@ Route::post('/competency/library/jobroles', [CompetencyLibraryController::class,
 Route::get('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'showJobrole'])->whereNumber('id');
 Route::put('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'updateJobrole'])->whereNumber('id');
 Route::delete('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'destroyJobrole'])->whereNumber('id');
+
+/*
+ * MERGING TWO JOB ROLES.
+ *
+ * Literal segments before any resource route, or /{id}/merge dispatches to
+ * showJobrole($id = 'merge').
+ *
+ * Gated profile:admin,hr. The department merge deliberately is NOT - its only
+ * gate is the frontend hiding the button - but merging a job role retires a
+ * role, moves every employee on it and rewrites tens of thousands of rows, so
+ * it is gated the same way the neighbouring competency routes already are.
+ */
+Route::get('/competency/library/jobroles/{id}/merge-impact', [JobRoleMergeController::class, 'impact'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/library/jobroles/{id}/merge', [JobRoleMergeController::class, 'merge'])->whereNumber('id')->middleware('profile:admin,hr');
 
 Route::get('/competency/library/jobrole-tasks', [CompetencyLibraryController::class, 'jobroleTasks']);
 Route::post('/competency/library/jobrole-tasks', [CompetencyLibraryController::class, 'storeJobroleTask']);
