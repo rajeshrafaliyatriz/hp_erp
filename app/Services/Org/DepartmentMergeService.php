@@ -2,6 +2,7 @@
 
 namespace App\Services\Org;
 
+use App\Services\Org\Concerns\RepointsReferences;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -46,6 +47,9 @@ use Illuminate\Support\Facades\DB;
  */
 class DepartmentMergeService
 {
+    /** repoint(), countIn() and hasColumn() - shared with JobRoleMergeService. */
+    use RepointsReferences;
+
     /**
      * Tables owned by a department through `department_id`.
      *
@@ -144,27 +148,12 @@ class DepartmentMergeService
         ['talent_mobility_requests', 'to_department_id',   'to_department'],
     ];
 
-    /**
-     * Tables keyed on a job role id.
-     *
-     * Only used when two same-named job roles are folded together, so that the
-     * retired role's mappings follow the survivor.
-     *
-     * NOTE s_user_skill_jobrole is excluded on purpose: its `jobrole_id` is
-     * NULL on all 84,380 live rows (the backfill never ran), so repointing it
-     * reaches nothing. It links by name, and on a same-name merge the name does
-     * not change.
+    /*
+     * JOBROLE_ID_TABLES used to live here. It has moved to
+     * JobRoleMergeService::ROLE_ID_TABLES, which owns the whole question of
+     * what a job role points at - including the name columns and the two
+     * unique keys this list never accounted for.
      */
-    public const JOBROLE_ID_TABLES = [
-        'jobrole_competency_map',
-        's_user_jobrole_task',
-        's_competency_career_path_steps',
-        'career_journey',
-        'course_jobrole_map',
-        'user_rating_details',
-        'competency_assessment_test',
-        's_skill_jobrole',
-    ];
 
     /**
      * Everything attached to a department, labelled, for the confirmation
@@ -495,6 +484,30 @@ class DepartmentMergeService
      * Name-keyed tables need nothing: the name is identical on both sides,
      * which is the whole reason they are being folded.
      */
+    /**
+     * Two departments merging can each own a job role with the SAME NAME.
+     *
+     * This used to repoint eight id columns and soft-delete the loser, which
+     * was incomplete in ways that only showed up when JobRoleMergeService was
+     * written and the data was measured:
+     *
+     *   - tbluser was never touched, so employees kept pointing at the folded
+     *     role - and 95 of 98 live employees are attached through
+     *     allocated_standards, which nothing here wrote at all.
+     *   - a competency required by BOTH roles violates
+     *     uq_jcm(sub_institute_id, jobrole_id, competency_id) on the repoint.
+     *     Eight competencies on live are already mapped to more than one role
+     *     in one tenant, so this could abort a department merge outright.
+     *   - career_journey.to_jobrole_id, s_competency_frameworks and
+     *     s_competency_development_plans were all missing from the list.
+     *
+     * It now calls the job role merge, so there is ONE answer to "what does
+     * folding a job role mean" instead of two that disagree.
+     *
+     * Mobility rows are suppressed: both roles have the same name, so no
+     * employee's job role is changing, and the department move is already
+     * recorded by moveEmployees().
+     */
     private function foldDuplicateJobRoles($db, int $fromId, int $toId, int $tenantId): int
     {
         $sourceRoles = $db->table('s_user_jobrole')
@@ -514,6 +527,7 @@ class DepartmentMergeService
             ->get(['id', 'jobrole'])
             ->keyBy(fn ($role) => mb_strtolower(trim((string) $role->jobrole)));
 
+        $merges = app(JobRoleMergeService::class);
         $folded = 0;
 
         foreach ($sourceRoles as $role) {
@@ -524,14 +538,7 @@ class DepartmentMergeService
                 continue;
             }
 
-            foreach (self::JOBROLE_ID_TABLES as $table) {
-                $this->repoint($db, $table, 'jobrole_id', (int) $role->id, (int) $survivor->id);
-            }
-
-            $db->table('s_user_jobrole')
-                ->where('id', $role->id)
-                ->update(['deleted_at' => now(), 'updated_at' => now()]);
-
+            $merges->merge((int) $role->id, (int) $survivor->id, $tenantId, null, $db, false);
             $folded++;
         }
 
@@ -687,63 +694,4 @@ class DepartmentMergeService
         }
     }
 
-    /**
-     * Repoint one column. Returns rows affected.
-     *
-     * Unlike the version this was extracted from, a failure here is NOT
-     * swallowed. Inside a transaction, catching a duplicate-key error and
-     * carrying on is how a merge reports success while leaving rows pointing at
-     * a department that has just been retired. A missing table is skipped; a
-     * real failure propagates and rolls the whole merge back.
-     *
-     * @param int|list<int> $from
-     */
-    private function repoint($db, string $table, string $column, $from, ?int $to): int
-    {
-        $fromIds = is_array($from) ? $from : [$from];
-
-        if (!$this->hasColumn($db, $table, $column)) {
-            return 0;
-        }
-
-        return $db->table($table)->whereIn($column, $fromIds)->update([$column => $to]);
-    }
-
-    private function countIn($db, string $table, string $column, array $ids): int
-    {
-        if (!$this->hasColumn($db, $table, $column)) {
-            return 0;
-        }
-
-        return $db->table($table)->whereIn($column, $ids)->count();
-    }
-
-    /**
-     * Schema check that works on MariaDB 10.1.
-     *
-     * Laravel's Schema::hasColumn() selects generation_expression from
-     * information_schema, a column 10.1 does not have - and live runs 10.1, so
-     * that call throws there while working fine on dev.
-     *
-     * @var array<string,bool>
-     */
-    private array $columnCache = [];
-
-    private function hasColumn($db, string $table, string $column): bool
-    {
-        $key = $table . '.' . $column;
-
-        if (!array_key_exists($key, $this->columnCache)) {
-            $found = $db->select(
-                'SELECT 1 FROM information_schema.COLUMNS
-                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
-                  LIMIT 1',
-                [$table, $column]
-            );
-
-            $this->columnCache[$key] = $found !== [];
-        }
-
-        return $this->columnCache[$key];
-    }
 }
