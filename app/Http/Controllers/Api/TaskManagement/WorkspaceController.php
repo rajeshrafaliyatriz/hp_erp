@@ -211,6 +211,24 @@ class WorkspaceController extends Controller
         $data = $this->resource($task, true);
         $data['comments'] = $this->comments($context, $id);
 
+        /*
+         * WHICH WORKSTREAM, NOT JUST WHICH PROJECT.
+         *
+         * The list query reduces a task's project links to MIN(project_id) so
+         * one row comes back per task; that aggregate cannot carry the
+         * workstream alongside it. The edit form needs it - a task moved
+         * between projects must not silently lose its workstream - so the
+         * single-task read looks it up for the project it actually reported.
+         */
+        $data['workstream_id'] = null;
+        if (!empty($data['project_id'])) {
+            $link = DB::table('task_management_project_tasks')
+                ->where('task_id', $id)
+                ->where('project_id', (int) $data['project_id'])
+                ->value('workstream_id');
+            $data['workstream_id'] = $link ? (string) $link : null;
+        }
+
         return response()->json([
             'status' => 1,
             'message' => 'Workspace task retrieved successfully.',
@@ -584,6 +602,7 @@ class WorkspaceController extends Controller
             ->selectRaw("t.id, t.task_title, t.task_description, t.task_type, t.task_date, t.planned_start_date, t.status,
                 t.task_allocated, t.task_allocated_to, t.created_by, t.created_at, t.updated_at,
                 t.reply, t.approve_status, t.approved_on, t.task_attachment, t.file_size, t.file_type, t.status_label,
+                t.kra, t.kpa, t.required_skills, t.skill_id, t.observation_point,
                 pt.project_id, proj.name as project_name, department.department as department_name,
                 TRIM(CONCAT_WS(' ', allocator.first_name, allocator.middle_name, allocator.last_name)) as allocator_name,
                 TRIM(CONCAT_WS(' ', assignee.first_name, assignee.middle_name, assignee.last_name)) as assignee_name");
@@ -729,6 +748,22 @@ class WorkspaceController extends Controller
         ];
 
         if ($includeMeta) {
+            /*
+             * THE FIELDS AN EDIT FORM CANNOT SAFELY OMIT.
+             *
+             * The task update is a full replace: a field it is not sent is
+             * written as NULL. The edit form therefore has to be able to READ
+             * kra, kpa, skills and monitoring points, or opening a task and
+             * pressing Save would silently blank all four.
+             *
+             * Meta-only, not in the list payload - these five columns on 2,818
+             * rows are cost the board has no use for.
+             */
+            $data['kra'] = $task->kra ?? null;
+            $data['kpa'] = $task->kpa ?? null;
+            $data['required_skills'] = $task->required_skills ?? null;
+            $data['skill_id'] = $task->skill_id ?? null;
+            $data['observation_point'] = $task->observation_point ?? null;
             $data['attachment'] = $task->task_attachment ? [
                 'name' => $task->task_attachment,
                 'type' => $task->file_type ?? null,

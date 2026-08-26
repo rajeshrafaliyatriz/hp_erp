@@ -2704,7 +2704,33 @@ class AJAXController extends Controller
         //
         // ABSENT AND BROKEN ARE DIFFERENT ANSWERS. The caller can now tell them
         // apart: supervisor === null with a reason, versus a real error status.
-        if (empty($user->employee_id)) {
+        /*
+         * ── WHICH COLUMN ACTUALLY HOLDS THE MANAGER ────────────────────────
+         *
+         * `tbluser` carries THREE names for one fact, and this method was
+         * reading the one the product no longer writes:
+         *
+         *   supervisor_opt        the Employee Directory form writes this, and
+         *                         labels it "Reporting manager"
+         *                         (EmployeeDirectoryController:587, :619)
+         *   employee_id           legacy
+         *   reporting_manager_id  written by nothing, read by nothing
+         *
+         * Measured on live tenant 6 (20 employees): supervisor_opt set for 10,
+         * employee_id for 6, reporting_manager_id for 0.
+         *
+         * So a manager assigned through the Employee Directory never reached
+         * the assign-task form, which then reported "no reporting manager set"
+         * - saying something untrue about data the user had just entered.
+         *
+         * supervisor_opt FIRST because it is what the current form writes;
+         * employee_id second so existing rows keep working. Same shape as
+         * Concerns\ResolvesEmployeeJobRole, which exists for exactly this
+         * problem one table over.
+         */
+        $supervisorId = $user->supervisor_opt ?: ($user->employee_id ?: null);
+
+        if (empty($supervisorId)) {
             return response()->json([
                 'status_code' => 1,
                 'message' => 'No supervisor is recorded for this employee.',
@@ -2717,7 +2743,7 @@ class AJAXController extends Controller
 
         // 🔥 Step 3: Correct Query (id wise search)
         $supervisor = DB::table('tbluser')
-            ->where('id', $user->employee_id) // ✅ FIX
+            ->where('id', $supervisorId)
             ->where('sub_institute_id', $sub_institute_id)
             ->where('status', 1)
             ->whereNull('deleted_at')

@@ -132,6 +132,11 @@ class LegacyTaskController extends Controller
             'kra' => 'nullable|string|max:1000',
             'kpa' => 'nullable|string|max:1000',
             'required_skills' => 'nullable|string|max:2000',
+            // The ids behind those names. Create writes both (taskController's
+            // store sets skill_id alongside required_skills); update wrote only
+            // the names, so a task edited here kept its skill TEXT and lost the
+            // ids the capability chain resolves against.
+            'skill_id' => 'nullable|string|max:2000',
             'observation_point' => 'nullable|string|max:2000',
         ];
     }
@@ -148,6 +153,7 @@ class LegacyTaskController extends Controller
             'kra' => $request->input('kra'),
             'kpa' => $request->input('kpa'),
             'required_skills' => $request->input('required_skills'),
+            'skill_id' => $request->input('skill_id'),
             'observation_point' => $request->input('observation_point'),
         ];
     }
