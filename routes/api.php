@@ -1138,6 +1138,10 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::put('/projects/{id}/tasks', [ProjectController::class, 'syncTasks'])->middleware('task.permission:project.manage')->whereNumber('id');
     // Attach a single task without disturbing the project's other tasks.
     Route::post('/projects/{id}/tasks', [ProjectController::class, 'attachTask'])->middleware('task.permission:project.manage')->whereNumber('id');
+    // Unlink ONE task. syncTasks replaces a project's whole list, so detaching
+    // one task through it means resending every other - and losing whatever a
+    // concurrent editor just linked. See ProjectController::detachTask.
+    Route::delete('/projects/{id}/tasks/{taskId}', [ProjectController::class, 'detachTask'])->middleware('task.permission:project.manage')->whereNumber(['id', 'taskId']);
     Route::post('/projects/{id}/workstreams', [ProjectController::class, 'storeWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('id');
     Route::put('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'updateWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
     Route::delete('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'destroyWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');

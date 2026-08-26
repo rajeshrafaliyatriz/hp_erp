@@ -286,6 +286,49 @@ class ProjectController extends Controller
         ], $existing ? 200 : 201);
     }
 
+    /**
+     * DELETE /task-management/projects/{id}/tasks/{taskId} - unlink ONE task.
+     *
+     * ── WHY THIS EXISTS ────────────────────────────────────────────────────
+     *
+     * `attachTask` above only ever moves a task WITHIN one project: its lookup
+     * is scoped to `project_id = $id`, and `task_management_project_tasks` is
+     * many-to-many. So attaching a task to a second project left the first
+     * link in place and the task belonged to both - which the workspace list
+     * then hid, because its query takes `MIN(project_id)` and shows one.
+     *
+     * `syncTasks` could detach, but it DELETES a project's entire task list and
+     * re-inserts what you send, so removing one task means resending every
+     * other one. Two people editing different tasks at the same time would
+     * silently unlink each other's work. Moving one task should touch one row.
+     *
+     * Guarded `project.manage` like every sibling, and idempotent: unlinking a
+     * task that is not linked is a 200 with `removed: 0`, not a 404. The caller
+     * asked for it to be gone, and it is.
+     */
+    public function detachTask(Request $request, int $id, int $taskId)
+    {
+        $context = $this->context($request);
+        if (!is_array($context)) return $context;
+        if (!$this->canManage($context, $id)) {
+            return response()->json(['status' => 0, 'message' => 'You cannot unlink tasks.'], 403);
+        }
+
+        // Tenant-checked through the PROJECT, which canManage() already scoped.
+        // The link row carries no tenant of its own, so the project is what
+        // makes this safe - never the task id from the URL.
+        $removed = DB::table('task_management_project_tasks')
+            ->where('project_id', $id)
+            ->where('task_id', $taskId)
+            ->delete();
+
+        return response()->json([
+            'status' => 1,
+            'message' => $removed ? 'Task unlinked from the project.' : 'That task was not linked to this project.',
+            'data' => ['project_id' => (string) $id, 'task_id' => (string) $taskId, 'removed' => $removed],
+        ]);
+    }
+
     private function context(Request $request)
     {
         $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
