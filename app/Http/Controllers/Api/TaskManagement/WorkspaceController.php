@@ -112,12 +112,29 @@ class WorkspaceController extends Controller
             $query->where('pt.project_id', $request->integer('project_id'));
         }
 
+        /*
+         * THE WINDOW IS AN OVERLAP TEST, NOT A DUE-DATE TEST.
+         *
+         * This filtered on `task_date` alone, so a task that STARTS inside the
+         * window but is due after it was absent from the calendar entirely -
+         * the three-week task you are in the middle of simply did not appear in
+         * the month you were looking at.
+         *
+         * A task occupies [start, due]; the window is [from, to]; they overlap
+         * when start <= to AND due >= from. Where a task has only one of the
+         * two dates, COALESCE makes that date stand for both, which is the same
+         * single-day treatment the calendar renders.
+         *
+         * COST: the COALESCE means this no longer uses the plain index on
+         * task_date. Acceptable here because the workspace query is already
+         * tenant- and year-scoped before this runs; revisit if `task` grows.
+         */
         if ($request->filled('from')) {
-            $query->whereDate('t.task_date', '>=', $request->input('from'));
+            $query->whereRaw('COALESCE(t.task_date, t.planned_start_date) >= ?', [$request->input('from')]);
         }
 
         if ($request->filled('to')) {
-            $query->whereDate('t.task_date', '<=', $request->input('to'));
+            $query->whereRaw('COALESCE(t.planned_start_date, t.task_date) <= ?', [$request->input('to')]);
         }
 
         $tasks = $query
@@ -557,7 +574,14 @@ class WorkspaceController extends Controller
             ->leftJoin('task_management_projects as proj', 'proj.id', '=', 'pt.project_id')
             ->where('t.sub_institute_id', $context['sub_institute_id'])
             ->where('t.SYEAR', $context['syear'])
-            ->selectRaw("t.id, t.task_title, t.task_description, t.task_type, t.task_date, t.status,
+            // `planned_start_date` IS SELECTED NOW, and that is the calendar fix.
+            //
+            // The column has always existed and is written by TaskScheduleController;
+            // DependencyController and MyTasksController both read it. This query
+            // never did, so `WorkspaceTask` had no start field at all and the
+            // calendar could only place a task on its DUE date - a task running
+            // three weeks appeared as a single chip on the last day of it.
+            ->selectRaw("t.id, t.task_title, t.task_description, t.task_type, t.task_date, t.planned_start_date, t.status,
                 t.task_allocated, t.task_allocated_to, t.created_by, t.created_at, t.updated_at,
                 t.reply, t.approve_status, t.approved_on, t.task_attachment, t.file_size, t.file_type, t.status_label,
                 pt.project_id, proj.name as project_name, department.department as department_name,
@@ -689,6 +713,12 @@ class WorkspaceController extends Controller
             'status_label' => $task->status_label ?? null,
             // Custom priorities pass through; the FE renders unknowns as text.
             'priority' => $task->task_type ?: null,
+            // Both ends of the schedule, in the same format. NULL where the
+            // task has no start recorded - most legacy rows - and the calendar
+            // renders those as a single day rather than inventing a span.
+            'planned_start_date' => isset($task->planned_start_date) && $task->planned_start_date
+                ? Carbon::parse($task->planned_start_date)->toDateString()
+                : null,
             'due_date' => $task->task_date ? Carbon::parse($task->task_date)->toDateString() : null,
             'remarks' => $task->reply ?? null,
             'approved' => in_array(strtolower(trim((string) ($task->approve_status ?? ''))), self::APPROVED_VALUES, true),

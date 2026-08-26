@@ -875,7 +875,29 @@ class taskController extends Controller
                 $data['approved_on'] = null;
             }
         } else {
-            $data = $request->except(['_method', '_token', 'submit', 'TASK_ATTACHMENT', 'formName', 'selDepartment', 'selSubDepartment', 'selType', 'task_date', 'add', 'type', 'syear', 'sub_institute_id', 'user_id', 'manageby', 'KRA', 'KPA', 'skills','department','jobrole']);
+            /*
+             * `token` IS EXCLUDED NOW, AND THAT IS THE WHOLE TASK-EDIT BUG.
+             *
+             * This list is a BLACKLIST feeding straight into
+             * `taskModel::update($data)` on a model with `$guarded = []`, so
+             * anything not named here is written as a column. The API caller
+             * passes its bearer in the QUERY STRING (`?type=API&token=...`) and
+             * `$request->except()` covers query input as well as the body — so
+             * `token` reached the UPDATE and MySQL rejected the statement:
+             *
+             *   SQLSTATE[42S22]: Unknown column 'token' in 'field list'
+             *
+             * Every edit through this route 500'd. It is the only task-edit
+             * path wired anywhere in the app, which is why editing a task
+             * appeared to be missing entirely rather than broken.
+             *
+             * ⚠ A blacklist here will leak again the next time a caller sends a
+             * new parameter. The durable fix is to build `$data` from an
+             * explicit allow-list of task columns; that is a wider change to a
+             * method the old frontend also posts to, so it is noted rather than
+             * done in the same edit as the outage fix.
+             */
+            $data = $request->except(['_method', '_token', 'token', 'submit', 'TASK_ATTACHMENT', 'formName', 'selDepartment', 'selSubDepartment', 'selType', 'task_date', 'add', 'type', 'syear', 'sub_institute_id', 'user_id', 'manageby', 'KRA', 'KPA', 'skills','department','jobrole']);
 
             $data['kra'] = $KRA;
             $data['TASK_DATE'] = Carbon::parse($request->TASK_DATE)->format('Y-m-d');
@@ -920,10 +942,26 @@ class taskController extends Controller
             ], 422);
         }
 
-        $updateStatus = taskModel::where(['id' => $id])->update($data);
+        /*
+         * TENANT-SCOPED. This was `where(['id' => $id])` — id alone.
+         *
+         * `taskModel` declares no global scope and `protected $guarded = []`,
+         * so any authenticated caller could update ANY task in ANY organisation
+         * by passing its id, and `$data` (built from `$request->except([...])`)
+         * could set arbitrary columns on it — including `sub_institute_id`.
+         *
+         * The tenant comes from the session or, for `type=API`, from the token
+         * via `apiTenantId()` — never from a request field — so adding it here
+         * is safe for both callers and changes nothing for a legitimate one:
+         * their own tasks still match. A task belonging to someone else now
+         * simply updates no rows.
+         */
+        $updateStatus = taskModel::where('id', $id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->update($data);
         if ($updateStatus) {
             $this->taskAudit->taskChanged((int) $id, 'updated', $before, $user_id ? (int) $user_id : null);
-            if ($requestedStatus !== null && $this->statusTransitions->normalize($requestedStatus) === 'COMPLETED') {
+            if ($requestedStatus !== null && $this->statusTransitions->normalise($requestedStatus) === 'COMPLETED') {
                 $this->dependencyResolution->resolveAfterCompletion((int) $id, $user_id ? (int) $user_id : null);
             }
         }

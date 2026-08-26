@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Competency;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
+use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Services\Competency\ProficiencyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,6 +43,8 @@ class CompetencyGapController extends Controller
 {
     use ResolvesCompetencyContext;
     use ResolvesCompetencyGap;
+    // The ONE role resolver - two columns, one answer. See show().
+    use ResolvesEmployeeJobRole;
 
     public function __construct(private ProficiencyService $proficiency)
     {
@@ -97,16 +100,28 @@ class CompetencyGapController extends Controller
             );
         }
 
-        // The employee's job role comes from `tbluser.allocated_standards`, which
-        // holds an s_user_jobrole id (287 of 387 users populated). I first wrote
-        // this against `s_user_jobrole_map` - A TABLE THAT DOES NOT EXIST. Caught
-        // by checking, not by review.
+        /*
+         * THE EMPLOYEE'S JOB ROLE, THROUGH THE SHARED RESOLVER.
+         *
+         * This read `tbluser.allocated_standards` directly, which
+         * `Concerns\ResolvesEmployeeJobRole` explicitly forbids: there are TWO
+         * role columns and they disagree for some employees - 6 of 21 on dev
+         * tenant 6, 1 of 20 on live.
+         *
+         * The cost was visible in the employee drawer. Its competency ROWS come
+         * from here (allocated_standards) and its KASBA ATOMS come from
+         * `KasbaRatingController` (which uses the trait, so jobtitle_id first).
+         * Where the columns differed, the drawer listed one role's competencies
+         * against another role's atoms - every competency rendered "no items
+         * bundled" while the atoms existed the whole time.
+         */
+        $user = DB::table('tbluser')->where('id', $subject)
+            ->where('sub_institute_id', $sid)
+            ->first(['id', 'jobtitle_id', 'allocated_standards']);
+
         $jobroleId = $request->filled('jobrole_id')
             ? $request->integer('jobrole_id')
-            : (int) DB::table('tbluser')
-                ->where('id', $subject)
-                ->where('sub_institute_id', $sid)
-                ->value('allocated_standards');
+            : (int) ($user ? ($this->resolveJobRoleId($user) ?? 0) : 0);
 
         if (!$jobroleId) {
             return response()->json([

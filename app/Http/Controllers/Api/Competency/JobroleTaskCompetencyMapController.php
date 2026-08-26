@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -68,6 +69,9 @@ use Illuminate\Support\Facades\Validator;
 class JobroleTaskCompetencyMapController extends Controller
 {
     use ResolvesCompetencyContext;
+    // The ONE role resolver. Reading jobtitle_id / allocated_standards directly
+    // is what made this controller disagree with KasbaRatingController.
+    use ResolvesEmployeeJobRole;
 
     /**
      * THE ONE PLACE THAT DECIDES WHICH COLUMN A MAPPING IS KEYED ON.
@@ -274,13 +278,30 @@ class JobroleTaskCompetencyMapController extends Controller
             ->keyBy('competency_id');
     }
 
-    /** The job role an employee holds, as an id. */
+    /**
+     * The job role an employee holds, as an id.
+     *
+     * ── WHY THIS DELEGATES INSTEAD OF READING THE COLUMN ───────────────────
+     *
+     * `tbluser` holds TWO role columns, `jobtitle_id` and `allocated_standards`,
+     * and they do not always agree - 6 of 21 employees on dev tenant 6, 1 of 20
+     * on live. `Concerns\ResolvesEmployeeJobRole` is the shared resolver that
+     * settles the order (jobtitle_id, then allocated_standards) and its own
+     * docblock says: NEVER read either column directly.
+     *
+     * This method used to read `allocated_standards` and therefore disagreed
+     * with `KasbaRatingController`, which uses the trait. The visible symptom
+     * was the employee drawer listing one role's competencies with the OTHER
+     * role's KASBA atoms - so every competency rendered "no items bundled"
+     * while the atoms existed the whole time.
+     */
     private function jobroleOf(int $sid, int $userId): ?int
     {
-        $id = (int) DB::table('tbluser')->where('id', $userId)
-            ->where('sub_institute_id', $sid)->value('allocated_standards');
+        $user = DB::table('tbluser')->where('id', $userId)
+            ->where('sub_institute_id', $sid)
+            ->first(['id', 'jobtitle_id', 'allocated_standards']);
 
-        return $id ?: null;
+        return $user ? $this->resolveJobRoleId($user) : null;
     }
 
     /** The two key columns as a where-clause fragment. Exactly one is non-null. */

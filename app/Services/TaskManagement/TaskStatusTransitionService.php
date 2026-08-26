@@ -48,7 +48,16 @@ class TaskStatusTransitionService
     }
 
     /** The table holds historical spellings; judge transitions on one form. */
-    private function normalise(?string $status): string
+    /**
+     * The canonical form of a status string.
+     *
+     * PUBLIC because callers outside this class need the same canonicalisation
+     * before comparing - `taskController@update` was calling a `normalize()`
+     * that never existed, so every edit that sent a status 500'd with
+     * "Call to undefined method" AFTER the row had already been written.
+     * Keeping it private forced that duplication; one spelling, one owner.
+     */
+    public function normalise(?string $status): string
     {
         $status = strtoupper(trim((string) $status));
 

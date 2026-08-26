@@ -169,6 +169,36 @@ class CompetencyLibraryCrudController extends Controller
          */
         $shaped['levels'] = $this->readLevels((int) $row->id, $sid);
 
+        /*
+         * WHO A CHANGE HERE WOULD REACH.
+         *
+         * A competency's bundle and weights are shared by everyone assessed
+         * against it: re-weighting one item silently re-scores every employee
+         * who holds it, including people the editor is not looking at. An
+         * editor that does not say so is asking for a decision without showing
+         * its cost.
+         *
+         * Two different numbers, deliberately:
+         *   roles_requiring  - how many job roles ask for this competency
+         *   employees_rated  - how many people already have a rating that
+         *                      feeds its roll-up, i.e. whose LEVEL moves
+         *
+         * The second is the one that matters for a weight change; the first
+         * is what matters for renaming or re-describing it.
+         */
+        $shaped['usage'] = [
+            'roles_requiring' => (int) DB::table('jobrole_competency_map')
+                ->where('sub_institute_id', $sid)
+                ->where('competency_id', $row->id)
+                ->count(),
+            'employees_rated' => (int) DB::table('competency_kasba_rating as r')
+                ->join('competency_kasba_item as k', 'k.id', '=', 'r.kasba_item_id')
+                ->where('k.competency_id', $row->id)
+                ->where('r.sub_institute_id', $sid)
+                ->distinct()
+                ->count('r.user_id'),
+        ];
+
         return response()->json(['status' => true, 'message' => 'Success', 'data' => $shaped]);
     }
 
@@ -429,30 +459,82 @@ class CompetencyLibraryCrudController extends Controller
                 return;
             }
 
-            // Replace, tenant-scoped. competency_kasba_item has no deleted_at,
-            // so this is a hard delete by design - an item removed from a
-            // competency was never part of it, rather than retired from it.
+            /*
+             * ── RECONCILE, DO NOT DELETE-AND-REINSERT ──────────────────────
+             *
+             * This block used to hard-delete every row and insert the list
+             * afresh. That is data loss, and it is not obvious from here:
+             * `competency_kasba_rating.kasba_item_id` points at these rows, so
+             * deleting them ORPHANS EVERY RATING on the competency. Adjusting
+             * one weight silently destroyed every employee's assessment for it.
+             *
+             * Proved by doing it: changing a weight on a 4-item competency
+             * orphaned 4 ratings, whose levels then read "not assessed".
+             *
+             * So an item that is STILL PRESENT keeps its id and just has its
+             * weight updated; only genuinely removed items are deleted, and
+             * only genuinely new ones inserted. Identity is (kasba_type, item_id)
+             * for a library-linked atom and (kasba_type, item_label) for a held
+             * label - the same two shapes store() writes, and the same pair the
+             * ratings themselves carry.
+             */
+            $existing = DB::table('competency_kasba_item')
+                ->where('competency_id', (int) $id)
+                ->where('sub_institute_id', $sid)
+                ->get(['id', 'kasba_type', 'item_id', 'item_label']);
+
+            $identity = static function ($type, $itemId, $label): string {
+                return strtolower(trim((string) $type)) . '|'
+                    . ($itemId ? 'id:' . (int) $itemId : 'label:' . strtolower(trim((string) $label)));
+            };
+
+            $byIdentity = [];
+            foreach ($existing as $row) {
+                $byIdentity[$identity($row->kasba_type, $row->item_id, $row->item_label)] = (int) $row->id;
+            }
+
+            $keptIds = [];
+            foreach ($items as $item) {
+                $itemId = isset($item['item_id']) ? (int) $item['item_id'] : null;
+                $label  = $item['item_label'] ?? null;
+                $key    = $identity($item['kasba_type'], $itemId, $label);
+
+                if (isset($byIdentity[$key])) {
+                    // SAME ATOM, POSSIBLY A NEW WEIGHT. Its id survives, so
+                    // every rating hanging off it survives with it.
+                    DB::table('competency_kasba_item')
+                        ->where('id', $byIdentity[$key])
+                        ->update(['weight' => $item['weight'] ?? 1, 'updated_at' => now()]);
+                    $keptIds[] = $byIdentity[$key];
+                } else {
+                    $keptIds[] = DB::table('competency_kasba_item')->insertGetId([
+                        'sub_institute_id' => $sid,
+                        'competency_id'    => (int) $id,
+                        'kasba_type'       => $item['kasba_type'],
+                        // Same rule as store(): item_id is the resolved target,
+                        // item_label the holding state. Neither is invented from
+                        // the other.
+                        'item_id'          => $itemId,
+                        'item_label'       => $label,
+                        'weight'           => $item['weight'] ?? 1,
+                        'created_at'       => now(),
+                        'updated_at'       => now(),
+                    ]);
+                }
+                $written++;
+            }
+
+            /*
+             * Anything the author actually removed. Still a hard delete - an
+             * item taken out of a competency was never part of it rather than
+             * retired from it - and its ratings go with it, which is correct:
+             * they measured something this competency no longer contains.
+             */
             DB::table('competency_kasba_item')
                 ->where('competency_id', (int) $id)
                 ->where('sub_institute_id', $sid)
+                ->when($keptIds !== [], fn ($q) => $q->whereNotIn('id', $keptIds))
                 ->delete();
-
-            foreach ($items as $item) {
-                DB::table('competency_kasba_item')->insert([
-                    'sub_institute_id' => $sid,
-                    'competency_id'    => (int) $id,
-                    'kasba_type'       => $item['kasba_type'],
-                    // Same rule as store(): item_id is the resolved target,
-                    // item_label the holding state. Neither is invented from
-                    // the other.
-                    'item_id'          => isset($item['item_id']) ? (int) $item['item_id'] : null,
-                    'item_label'       => $item['item_label'] ?? null,
-                    'weight'           => $item['weight'] ?? 1,
-                    'created_at'       => now(),
-                    'updated_at'       => now(),
-                ]);
-                $written++;
-            }
         });
 
         return response()->json([
