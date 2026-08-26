@@ -21,6 +21,8 @@ use Illuminate\Support\Facades\Validator;
  */
 class CertificationRequirementController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesJobRoleId;
+
     use ResolvesCompetencyContext;
 
     private const TABLE = 's_competency_certification_requirements';
@@ -122,7 +124,10 @@ class CertificationRequirementController extends Controller
             'issuing_body'          => $request->input('issuing_body'),
             'description'           => $request->input('description'),
             'department_id'         => $request->input('department_id'),
+            // Written alongside the name, never instead of it - see
+            // ResolvesJobRoleId. NULL when the name is ambiguous.
             'jobrole'               => $this->activeFilter($request->input('jobrole')),
+            'jobrole_id'            => $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id']),
             'competency_id'         => $request->input('competency_id'),
             'is_mandatory'          => $request->boolean('is_mandatory', true) ? 1 : 0,
             'validity_months'       => $request->input('validity_months'),
@@ -184,6 +189,9 @@ class CertificationRequirementController extends Controller
         }
         if ($request->has('jobrole')) {
             $update['jobrole'] = $this->activeFilter($request->input('jobrole'));
+            // The id has to move with the name, or an edit would leave the row
+            // keyed to the role it used to name.
+            $update['jobrole_id'] = $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id']);
         }
         if ($request->has('is_mandatory')) {
             $update['is_mandatory'] = $request->boolean('is_mandatory') ? 1 : 0;

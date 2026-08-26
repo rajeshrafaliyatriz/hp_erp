@@ -805,6 +805,27 @@ class LibraryController extends Controller
         $stamped = $this->stamp($data, $context['user_id'], false);
         DB::table($resource['table'])->where('id', $id)->update($stamped);
 
+        /*
+         * A RENAMED JOB ROLE MUST TAKE ITS LABELS WITH IT.
+         *
+         * A dozen tables store the role's NAME beside (or instead of) its id.
+         * Until now, renaming a role left every one of those rows holding the
+         * OLD text - still displayed, still filtered on, and matching nothing.
+         * That is one of the ways this data got into its current state.
+         *
+         * Scoped on jobrole_id ONLY, never on the old name: 90 role names on
+         * live belong to roles in more than one department, and a name-scoped
+         * update would rewrite the namesake's rows too.
+         */
+        if ($type === 'jobrole' && isset($data['jobrole'])) {
+            $this->propagateJobroleRename(
+                (int) $id,
+                (string) ($existing->jobrole ?? ''),
+                (string) $data['jobrole'],
+                (int) $context['sub_institute_id']
+            );
+        }
+
         $name = $data[$resource['title']] ?? $existing->{$resource['title']};
 
         $this->logCompetencyActivity(
@@ -822,6 +843,57 @@ class LibraryController extends Controller
         $this->forgetLibraryMeta((int) $context['sub_institute_id']);
 
         return $this->ok($resource['label'] . ' updated successfully', ['id' => $id]);
+    }
+
+    /**
+     * Carry a job role's new name onto every row keyed to it.
+     *
+     * Only rows whose `jobrole_id` IS this role are touched. Rows that still
+     * carry the name and no id are LEFT ALONE - they may belong to a namesake
+     * in another department, and `jobroles:backfill-ids` reports them rather
+     * than letting anything guess.
+     *
+     * The table list is JobRoleMergeService::ROLE_NAME_TABLES, reused rather
+     * than copied: a rename and a merge have to agree about which columns hold
+     * a role's label, and two lists would drift.
+     */
+    private function propagateJobroleRename(int $roleId, string $oldName, string $newName, int $subInstituteId): void
+    {
+        if (trim($oldName) === trim($newName) || trim($newName) === '') {
+            return;
+        }
+
+        foreach (\App\Services\Org\JobRoleMergeService::ROLE_NAME_TABLES as $table => [$column, $label]) {
+            $idColumn = $table === 's_mobility_succession_plans' ? 'critical_jobrole_id' : 'jobrole_id';
+
+            try {
+                if (!$this->hasJobroleColumn($table, $column) || !$this->hasJobroleColumn($table, $idColumn)) {
+                    continue;
+                }
+
+                DB::table($table)
+                    ->where('sub_institute_id', $subInstituteId)
+                    ->where($idColumn, $roleId)
+                    ->update([$column => $newName]);
+            } catch (\Throwable $e) {
+                // A label that failed to follow is not a reason to fail the
+                // rename itself - the role IS renamed, and the id link that
+                // actually matters is untouched.
+                \Log::warning('Job role renamed but a label did not follow', [
+                    'role' => $roleId, 'table' => $table, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /** information_schema directly - live is MariaDB 10.1. */
+    private function hasJobroleColumn(string $table, string $column): bool
+    {
+        return DB::select(
+            'SELECT 1 FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
+            [$table, $column]
+        ) !== [];
     }
 
     private function destroyResource(string $type, int $id, Request $request)

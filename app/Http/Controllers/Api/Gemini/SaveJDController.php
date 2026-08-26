@@ -126,6 +126,12 @@ class SaveJDController extends Controller
                             'sector' => $task['sector'],
                             'track' => $task['track'],
                             'jobrole' => $jobRoleName,
+                            // This controller HAS the role it just wrote, so it
+                            // keys directly. Resolving the name back into an id
+                            // would return NULL whenever another department
+                            // owns a role with the same name - throwing away an
+                            // id we already know for certain.
+                            'jobrole_id' => $jobRoleResult['id'] ?? null,
                             'critical_work_function' => $task['critical_work_function'],
                             'task' => $task['task'],
                             'task_type' => $task['task_type'],
@@ -181,6 +187,7 @@ class SaveJDController extends Controller
                     $this->saveSkillJobroleMap(
                         $skill,
                         $jobRoleName,
+                        $jobRoleResult['id'] ?? null,
                         $subInstituteId,
                         $userId,
                         $now,
@@ -389,6 +396,8 @@ class SaveJDController extends Controller
     private function saveSkillJobroleMap(
         array $skill,
         string $jobRoleName,
+        /** The role's id, known because this request just wrote it. */
+        ?int $jobRoleId,
         int $subInstituteId,
         ?int $userId,
         $now,
@@ -416,6 +425,7 @@ class SaveJDController extends Controller
                 'sector' => $this->cleanString($skill['sector'] ?? $defaultSector),
                 'track' => $this->cleanString($skill['track'] ?? $defaultTrack),
                 'jobrole' => $jobRoleName,
+                'jobrole_id' => $jobRoleId,
                 'skill' => $title,
                 'type' => $this->cleanString($skill['type'] ?? $skill['source_type'] ?? $defaultSkillType),
                 'proficiency_level' => isset($skill['proficiency_level']) ? (string) $skill['proficiency_level'] : null,

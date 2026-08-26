@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\Validator;
  */
 class DevelopmentPlanController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesJobRoleId;
+
     use ResolvesCompetencyContext;
     // The ONE gap rule, shared with CompetencyGapController. This controller
     // used to implement its own, from the skill library, scoring unmeasured as
@@ -421,7 +423,11 @@ class DevelopmentPlanController extends Controller
             'framework_id'     => $request->input('framework_id'),
             'career_path_id'   => $request->input('career_path_id'),
             'department_id'    => $request->input('department_id'),
+            // The id is what the merge, renames and every id-based reader use;
+            // the name stays because ~20 screens still read it. NULL when the
+            // name is ambiguous - ResolvesJobRoleId refuses to guess.
             'jobrole'          => $request->input('jobrole'),
+            'jobrole_id' => $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id']),
             'status'           => $request->input('status', 'active'),
             'progress'         => (int) $request->input('progress', 0),
             'start_date'       => $request->input('start_date'),

@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\Validator;
  */
 class MappingReviewController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesJobRoleId;
+
     use ResolvesCompetencyContext;
 
     public function index(Request $request)
@@ -110,7 +112,11 @@ class MappingReviewController extends Controller
 
         $id = DB::table('s_competency_mapping_reviews')->insertGetId([
             'sub_institute_id'  => $sid,
+            // The id is what the merge, renames and every id-based reader use;
+            // the name stays because ~20 screens still read it. NULL when the
+            // name is ambiguous - ResolvesJobRoleId refuses to guess.
             'jobrole'           => $request->input('jobrole'),
+            'jobrole_id' => $this->resolveJobRoleIdFromRequest($request, (int) $sid),
             'department'        => $request->input('department'),
             'department_id'     => $request->input('department_id'),
             'framework_id'      => $request->input('framework_id'),

@@ -94,6 +94,18 @@ class JobRoleMergeService
         's_competency_development_plans'  => ['jobrole_id', 'development plans'],
         's_mobility_succession_plans'     => ['critical_jobrole_id', 'succession plans'],
         's_user_skill_jobrole'            => ['jobrole_id', 'skill mappings (by id)'],
+        /*
+         * These six had NO id column until 2026_08_26_100000 added one, so the
+         * merge could only ever reach them through the name pass. They are
+         * re-pointed by id first now like everything else; the name pass has
+         * become their fallback rather than their only route.
+         */
+        's_competency_assessments'                => ['jobrole_id', 'assessments'],
+        's_competency_certifications'             => ['jobrole_id', 'certifications'],
+        's_competency_certification_requirements' => ['jobrole_id', 'certification requirements'],
+        's_competency_mapping_reviews'            => ['jobrole_id', 'mapping reviews'],
+        's_performance_reviews'                   => ['jobrole_id', 'performance reviews'],
+        's_performance_appraisals'                => ['jobrole_id', 'appraisals'],
         // Exists as a migration; the TABLE is absent from both dev and live.
         // hasColumn() skips it rather than failing every merge.
         'role_progressions'               => ['from_role_id', 'progression steps'],

@@ -292,6 +292,7 @@ class PerformanceCycleController extends Controller
                 'manager_id'       => $managerId,
                 'department_id'    => $departmentId,
                 'jobrole'          => $placement['jobrole'],
+                'jobrole_id'       => $placement['jobrole_id'],
                 'stage'            => 'self_review',
                 'status'           => 'pending',
                 'is_draft'         => true,
@@ -438,7 +439,7 @@ class PerformanceCycleController extends Controller
      * Competency module's Career Path Explorer already relies on - with
      * org_designation.designation as the fallback.
      *
-     * @return array{jobrole:?string, department_id:?int}
+     * @return array{jobrole:?string, jobrole_id:?int, department_id:?int}
      */
     private function resolvePlacement(int $tenant, int $userId): array
     {
@@ -449,20 +450,32 @@ class PerformanceCycleController extends Controller
             ->whereNotNull('jobrole')
             ->orderByDesc('created_at')
             ->orderByDesc('id')
-            ->first(['jobrole', 'department_id']);
+            ->first(['jobrole', 'jobrole_id', 'department_id']);
 
         if ($assessment) {
             return [
                 'jobrole'       => $assessment->jobrole,
+                // Taken from the assessment rather than re-resolved from its
+                // name: if THAT row could not be keyed, this one must not
+                // quietly reach a different answer for the same person.
+                'jobrole_id'    => $assessment->jobrole_id ? (int) $assessment->jobrole_id : null,
                 'department_id' => $assessment->department_id ? (int) $assessment->department_id : null,
             ];
         }
 
+        /*
+         * FALLBACK: org_designation.designation is a free-text job TITLE, not a
+         * job role. It has no id and is not the same vocabulary, so it is
+         * deliberately left unkeyed rather than name-matched into s_user_jobrole
+         * - a designation that happens to read like a role name is a
+         * coincidence, not a link.
+         */
         return [
             'jobrole' => DB::table('org_designation')
                 ->where('sub_institute_id', $tenant)
                 ->where('user_id', $userId)
                 ->value('designation'),
+            'jobrole_id'    => null,
             'department_id' => null,
         ];
     }

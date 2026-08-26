@@ -133,6 +133,10 @@ class PerformanceAppraisalController extends Controller
             'cycle_id'            => $cycleId,
             'department_id'       => $review->department_id ?? null,
             'jobrole'             => $review->jobrole ?? null,
+            // Carried from the review rather than re-resolved: the appraisal is
+            // ABOUT that review, so if the review could not be keyed this must
+            // not quietly reach a different conclusion.
+            'jobrole_id'          => $review->jobrole_id ?? null,
             'current_designation' => $validated['current_designation'] ?? ($review->jobrole ?? null),
             'final_rating'        => $validated['final_rating'] ?? ($review->overall_rating ?? null),
             'final_rating_label'  => $this->ratingLabel(

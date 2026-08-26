@@ -27,6 +27,8 @@ use Illuminate\Support\Facades\Validator;
  */
 class CertificationController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesJobRoleId;
+
     use ResolvesCompetencyContext;
 
     private const TABLE = 's_competency_certifications';
@@ -387,7 +389,11 @@ class CertificationController extends Controller
             'certification_type'  => $request->input('certification_type'),
             'credential_id'       => $request->input('credential_id'),
             'department_id'       => $request->input('department_id'),
+            // The id is what the merge, renames and every id-based reader use;
+            // the name stays because ~20 screens still read it. NULL when the
+            // name is ambiguous - ResolvesJobRoleId refuses to guess.
             'jobrole'             => $request->input('jobrole'),
+            'jobrole_id' => $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id']),
             'status'              => $request->input('status', 'valid'),
             // G-SEC-08: verification state is SERVER-OWNED. It was taken from the
             // request, so an uploaded credential could declare itself already
@@ -480,6 +486,12 @@ class CertificationController extends Controller
                 $update[$field] = $request->input($field);
             }
         }
+        // The id has to move with the name, or editing the role on a
+        // certification would leave it keyed to the role it used to name.
+        if ($request->has('jobrole') || $request->has('jobrole_id')) {
+            $update['jobrole_id'] = $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id']);
+        }
+
         // Reassigning the holder is deliberate and explicit only.
         if ($request->has('user_id_target')) {
             $update['user_id'] = $request->input('user_id_target');

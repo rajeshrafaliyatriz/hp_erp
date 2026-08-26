@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Validator;
  */
 class AssessmentController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesJobRoleId;
+
     use ResolvesCompetencyContext;
 
     public function index(Request $request)
@@ -88,7 +90,11 @@ class AssessmentController extends Controller
             'user_id'          => $request->input('user_id'),
             'assessor_id'      => $request->input('assessor_id'),
             'department_id'    => $request->input('department_id'),
+            // The id is what the merge, renames and every id-based reader use;
+            // the name stays because ~20 screens still read it. NULL when the
+            // name is ambiguous - ResolvesJobRoleId refuses to guess.
             'jobrole'          => $request->input('jobrole'),
+            'jobrole_id' => $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id']),
             'status'           => $request->input('status', 'open'),
             'due_date'         => $request->input('due_date'),
             'created_by'       => $context['user_id'],

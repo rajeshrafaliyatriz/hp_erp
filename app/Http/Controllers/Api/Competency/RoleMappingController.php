@@ -21,6 +21,8 @@ use Illuminate\Support\Facades\Validator;
  */
 class RoleMappingController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesJobRoleId;
+
     use ResolvesCompetencyContext;
 
     /* ----------------------------------------------------------------- *
@@ -209,6 +211,11 @@ class RoleMappingController extends Controller
         if ($existing) {
             DB::table('s_user_skill_jobrole')->where('id', $existing->id)->update([
                 'proficiency_level' => $level,
+                // An untouched legacy row gets keyed the first time anyone
+                // edits it, so the backlog shrinks through ordinary use as
+                // well as through the backfill command.
+                'jobrole_id'        => $existing->jobrole_id
+                    ?: $this->jobRoleIdByName($jobrole, (int) $sid),
                 'updated_by'        => $context['user_id'],
                 'updated_at'        => now(),
             ]);
@@ -223,6 +230,15 @@ class RoleMappingController extends Controller
 
             $id = DB::table('s_user_skill_jobrole')->insertGetId([
                 'jobrole'           => $jobrole,
+                /*
+                 * THE MATRIX WAS THE SOURCE OF THE PROBLEM, SO IT KEYS FROM NOW ON.
+                 *
+                 * Every one of the 84,380 live rows in this table was written
+                 * name-only, which is why an id-based merge could not move any
+                 * of them. New cells carry the id; the backfill handles the
+                 * history. NULL where the name is ambiguous - nothing guesses.
+                 */
+                'jobrole_id'        => $this->jobRoleIdByName($jobrole, (int) $sid),
                 'skill'             => $skill,
                 'type'              => 'S',
                 'proficiency_level' => $level,
