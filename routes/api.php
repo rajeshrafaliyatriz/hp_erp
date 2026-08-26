@@ -1755,6 +1755,37 @@ Route::post('/competency/ai-assessment/publish', [\App\Http\Controllers\Api\Comp
 // The tenant's job roles with ids, and how many competencies each has — the list
 // generate() needs and nothing on the frontend could previously produce.
 Route::get('/competency/ai-assessment/jobroles', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'jobroles'])->middleware('profile:admin,hr');
+// What one role CONTAINS - its competencies and their KASBA items - so the
+// generator can offer a scope narrower than the whole role.
+Route::get('/competency/ai-assessment/scope-options', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'scopeOptions'])->middleware('profile:admin,hr');
+
+/*
+ * TAKING one: START anchors the clock server-side, MY-RESULT is what the person
+ * scored. Both are api.token and NEITHER TAKES A user_id, so like mine() and
+ * submit() there is no subject to point at somebody else.
+ */
+Route::post('/competency/ai-assessment/start', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'start'])->middleware('api.token');
+Route::get('/competency/ai-assessment/my-result', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'myResult'])->middleware('api.token');
+// Marking is its own request so a slow model delays a SCORE, never a SUBMISSION.
+Route::post('/competency/ai-assessment/attempts/{id}/mark', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'markMine'])->whereNumber('id')->middleware('api.token');
+
+/*
+ * REVIEWING one - every route below is about SOMEBODY ELSE, so every route
+ * below is profile:admin,hr.
+ *
+ * `tests/{id}` is the only endpoint in the system that returns correct answers
+ * and model answers. That is deliberate and it is why it is gated here: the
+ * draft/publish split exists so a person reads what the model wrote, and that
+ * cannot be done without seeing what it marks against.
+ */
+Route::get('/competency/ai-assessment/tests', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'index'])->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/tests/{id}', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'show'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/ai-assessment/tests/{id}/assign', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'assign'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/attempts', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'attempts'])->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/attempts/{id}/answers', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'answers'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/ai-assessment/responses/{id}/score', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'scoreAnswer'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/proposals', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'proposals'])->middleware('profile:admin,hr');
+Route::post('/competency/ai-assessment/proposals/{id}/decide', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'decide'])->whereNumber('id')->middleware('profile:admin,hr');
 
 /*
  * THE COMPETENCY LIBRARY — real competencies behind the rich library screen.
