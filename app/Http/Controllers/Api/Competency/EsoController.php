@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Controller;
+use App\Services\Competency\EsoExporter;
 use App\Services\Competency\EsoGenerator;
 use App\Services\Competency\TaskExecutionClassifier;
 use Illuminate\Http\Request;
@@ -333,6 +334,75 @@ class EsoController extends Controller
             'message' => 'A Draft execution model was generated. It has not been reviewed by anyone — '
                 . 'read the steps and controls before moving it to Reviewed.',
         ], 201);
+    }
+
+    /**
+     * GET /competency/eso/{id}/export?format=md|pdf
+     *
+     * An ESO that cannot leave the screen is useless to both of its readers.
+     *
+     *   md   for an agent — YAML front matter it can parse, then the body
+     *   pdf  for a person — a printable SOP for a binder or an auditor
+     *
+     * Both carry the status and source INSIDE the file. A document that leaves
+     * the system loses the badge and the warning banner around it, so an
+     * unreviewed AI draft has to announce itself on its own face or it will be
+     * read as an agreed procedure.
+     */
+    public function export(Request $request, int $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $row = $this->findVisible($id, (int) $context['sub_institute_id']);
+        if (!$row) {
+            return response()->json(['status' => 0, 'message' => 'That execution model does not exist, or belongs to another organisation.'], 404);
+        }
+
+        $format = strtolower((string) $request->input('format', 'md'));
+        if (!in_array($format, ['md', 'pdf'], true)) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Choose a format: md for an agent, pdf for a person.',
+            ], 422);
+        }
+
+        $exporter = app(EsoExporter::class);
+        $task = $exporter->taskFor($row);
+
+        $this->audit($context, 'exported', $id, (string) $row->title, []);
+
+        if ($format === 'md') {
+            return response($exporter->toMarkdown($row, $task), 200, [
+                'Content-Type' => 'text/markdown; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $exporter->filename($row, 'md') . '"',
+            ]);
+        }
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView(
+            'competency.eso-pdf',
+            $exporter->viewData($row, $task)
+        )->setPaper('a4', 'portrait');
+
+        /*
+         * Raw bytes rather than ->download(): stray output anywhere in the app
+         * (a newline after a closing PHP tag, say) otherwise lands ahead of the
+         * %PDF header and strict readers reject the file. Same guard as the
+         * certificate export in LmsLearningController.
+         */
+        $output = $pdf->output();
+        $headerAt = strpos($output, '%PDF');
+        if ($headerAt !== false && $headerAt > 0) {
+            $output = substr($output, $headerAt);
+        }
+
+        return response($output, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $exporter->filename($row, 'pdf') . '"',
+            'Content-Length' => (string) strlen($output),
+        ]);
     }
 
     /* ------------------------------------------------------------------ *
