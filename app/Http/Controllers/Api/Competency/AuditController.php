@@ -70,6 +70,10 @@ class AuditController extends Controller
         'plan_action'               => ['Plan Action',              'development',   'Development & Career',      'cm-development-career'],
         'career_path'               => ['Career Path',              'development',   'Development & Career',      'cm-development-career'],
         'learning_assignment'       => ['Learning Assignment',      'development',   'Development & Career',      'cm-development-career'],
+        // ESO. A task execution classification is authored and reviewed on the
+        // Job Role Task tab of the Capability Library, so its record link points
+        // there rather than at a screen of its own.
+        'task_execution'            => ['Task Execution Model',     'library',       'Competency Library',        'cm-libraries-taxonomy'],
         'evidence'                  => ['Evidence',                 'profiles',      'Employee Profile',          'cm-employee-profiles'],
         'employee_note'             => ['Employee Note',            'profiles',      'Employee Profile',          'cm-employee-profiles'],
         'employee_skill'            => ['Employee Competency',      'profiles',      'Employee Profile',          'cm-employee-profiles'],
