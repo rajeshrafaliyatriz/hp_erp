@@ -1788,6 +1788,45 @@ Route::get('/competency/ai-assessment/proposals', [\App\Http\Controllers\Api\Com
 Route::post('/competency/ai-assessment/proposals/{id}/decide', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'decide'])->whereNumber('id')->middleware('profile:admin,hr');
 
 /*
+ * ESO — HOW A JOB ROLE'S WORK IS EXECUTED.
+ *
+ * A job role task has been a sentence and nothing else. These five endpoints
+ * add the execution model behind it: which tasks a person must do, which a
+ * machine could, at what risk, and what a role's work is actually composed of.
+ *
+ * ALL FIVE ARE admin/hr. The composition map states what share of a role could
+ * be automated - that is a workforce-planning statement about people's jobs and
+ * it does not belong to every token holder. `profile:admin,hr` is the same gate
+ * the Capability Library that hosts these screens already sits behind.
+ *
+ * `classify` calls DeepSeek and writes proposals. It NEVER writes 'Approved';
+ * `review` is the only path to that, and it is the one a person walks.
+ */
+Route::post('/competency/task-execution/classify', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'classify'])->middleware('profile:admin,hr');
+Route::get('/competency/task-execution', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'index'])->middleware('profile:admin,hr');
+Route::get('/competency/task-execution/roles', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'roles'])->middleware('profile:admin,hr');
+Route::get('/competency/task-execution/composition', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'composition'])->middleware('profile:admin,hr');
+Route::post('/competency/task-execution/review', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'review'])->middleware('profile:admin,hr');
+
+/*
+ * ESO — the execution model itself (§5 of the ESO v1 document).
+ *
+ * task-execution above answers HOW MUCH of a role could be automated. These
+ * answer HOW a task is actually done: steps, controls, inputs, evidence.
+ *
+ * `generate` drafts one with AI and always lands it as `Draft` / `ai-generated`.
+ * Templates are shared across every tenant and are READ-ONLY through this API —
+ * see EsoController::refuseIfNotWritable, which is the cross-tenant boundary.
+ */
+Route::get('/competency/eso', [\App\Http\Controllers\Api\Competency\EsoController::class, 'index'])->middleware('profile:admin,hr');
+Route::post('/competency/eso', [\App\Http\Controllers\Api\Competency\EsoController::class, 'store'])->middleware('profile:admin,hr');
+Route::post('/competency/eso/generate', [\App\Http\Controllers\Api\Competency\EsoController::class, 'generate'])->middleware('profile:admin,hr');
+Route::get('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'show'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::put('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/eso/{id}/status', [\App\Http\Controllers\Api\Competency\EsoController::class, 'setStatus'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::delete('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+/*
  * THE COMPETENCY LIBRARY — real competencies behind the rich library screen.
  *
  * Same six endpoints and the same response shape the screen already consumes,
