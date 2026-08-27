@@ -191,7 +191,79 @@ class AssessmentScoringService
         return [
             'total' => $total, 'max' => $max, 'percent' => $percent, 'awaiting' => $awaiting,
             'proposals' => $this->buildProposals($attempt, $rows, $tenantId),
+            'cycles'    => $this->feedReviewCycles($attempt, $percent, $tenantId),
         ];
+    }
+
+    /**
+     * A review cycle that uses this assessment gets the person's score.
+     *
+     * ── WHY THIS EXISTS ─────────────────────────────────────────────────────
+     *
+     * A review cycle asks "how capable is this person?" and, until now, could
+     * only answer it with a manager's judgement - while an assessment sat one
+     * table away having actually measured it. The two were built separately and
+     * never introduced.
+     *
+     * A cycle opts in by setting `test_id`. Cycles that do not (which is every
+     * existing one - all 4 live cycles and 140 participant rows) are untouched
+     * and keep working exactly as before.
+     *
+     * ── IT ONLY EVER FILLS A BLANK ──────────────────────────────────────────
+     *
+     * A participant already carrying a score was rated by a person, and a test
+     * result must not overwrite somebody's judgement - the same rule the rating
+     * proposals follow. Where both exist, the human one stands and the test
+     * result is still on record against the attempt.
+     *
+     * @return int participant rows updated
+     */
+    private function feedReviewCycles(object $attempt, ?float $percent, int $tenantId): int
+    {
+        if ($percent === null) {
+            return 0;
+        }
+
+        // The column is only present once 2026_08_26_160000 has run.
+        if (!$this->hasColumn('s_competency_assessment_cycles', 'test_id')
+            || !$this->hasColumn('s_competency_assessments', 'attempt_id')) {
+            return 0;
+        }
+
+        $cycleIds = DB::table('s_competency_assessment_cycles')
+            ->where('sub_institute_id', $tenantId)
+            ->where('test_id', $attempt->test_id)
+            ->whereNull('deleted_at')
+            ->pluck('id');
+
+        if ($cycleIds->isEmpty()) {
+            return 0;
+        }
+
+        return DB::table('s_competency_assessments')
+            ->where('sub_institute_id', $tenantId)
+            ->whereIn('cycle_id', $cycleIds)
+            ->where('user_id', $attempt->user_id)
+            ->whereNull('deleted_at')
+            // Only a blank. See the note above.
+            ->whereNull('score')
+            ->update([
+                'score'        => $percent,
+                'attempt_id'   => $attempt->id,
+                'status'       => 'completed',
+                'completed_at' => now(),
+                'updated_at'   => now(),
+            ]);
+    }
+
+    /** information_schema directly - live is MariaDB 10.1. */
+    private function hasColumn(string $table, string $column): bool
+    {
+        return DB::select(
+            'SELECT 1 FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
+            [$table, $column]
+        ) !== [];
     }
 
     /**
