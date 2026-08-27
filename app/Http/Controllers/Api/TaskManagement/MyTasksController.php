@@ -422,10 +422,31 @@ class MyTasksController extends Controller
 
         if ($includeDetails) {
             $resource['observation_point'] = $task->observation_point;
+
+            /*
+             * `has_download` IS NOT `name !== null`.
+             *
+             * The bytes for this column live in one of two places depending on
+             * which path uploaded them: task creation writes to DigitalOcean
+             * Spaces, while replaceTaskAttachment writes to the local disk via
+             * the versions table. The column stores a bare filename either way,
+             * so it cannot tell you which store holds the file.
+             *
+             * Only a row with a matching version record can be served, because
+             * only that record carries a real path. Everything else is shown as
+             * a name with the download disabled - which is honest, where a dead
+             * link that 404s is not.
+             */
             $resource['attachment'] = $task->task_attachment ? [
                 'name' => $task->task_attachment,
                 'type' => $task->file_type,
                 'size' => $task->file_size,
+                // The version number, not a boolean: the download route is
+                // keyed by version, and making the client fetch the list first
+                // just to learn it would be a second round trip for one integer.
+                // Null means the bytes are not reachable from here.
+                'download_version' => DB::table('task_management_attachment_versions')
+                    ->where('task_id', $task->id)->max('version'),
             ] : null;
         }
 

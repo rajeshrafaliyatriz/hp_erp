@@ -13,6 +13,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Concerns\ResolvesTaskDuty;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -28,6 +29,8 @@ use Kreait\Firebase\Messaging\CloudMessage;
 
 class taskController extends Controller
 {
+    use ResolvesTaskDuty;
+
     /**
      * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
      *
@@ -77,6 +80,24 @@ class taskController extends Controller
      */
     private function insertTaskWithReference(array $data, string|int|null $syear): int
     {
+        /*
+         * LINK THE WORK ITEM TO THE DUTY IT CAME FROM.
+         *
+         * Done here because this method is the single choke point every create
+         * path in this controller funnels through — one row per date for a
+         * recurring task, one per person for a multi-user assignment. Resolving
+         * at each call site would mean the rule drifting between them.
+         *
+         * Without this the task cannot reach its execution model or its ESO,
+         * and the employee's "How to do this" panel has nothing to show.
+         */
+        if (!array_key_exists('jobrole_task_id', $data)) {
+            $data['jobrole_task_id'] = $this->resolveTaskDuty(
+                (int) ($data['sub_institute_id'] ?? 0),
+                $data['task_title'] ?? null
+            );
+        }
+
         $taskId = (int) taskModel::insertGetId($data);
         $this->createdTaskIds[] = $taskId;
         $this->taskAudit->taskCreated($taskId, isset($data['created_by']) ? (int) $data['created_by'] : null);

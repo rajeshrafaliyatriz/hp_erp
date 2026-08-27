@@ -27,6 +27,8 @@ use Illuminate\Support\Facades\Validator;
  */
 class LegacyTaskController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesTaskDuty;
+
     use ResolvesTaskContext;
 
     public function __construct(
@@ -53,6 +55,13 @@ class LegacyTaskController extends Controller
                 'SYEAR' => $context['syear'],
                 'status' => 'PENDING',
                 'created_by' => $context['user_id'],
+                // Resolved here rather than in the form: the assign screen sends
+                // task TITLES, and the rule for turning one into a duty already
+                // lives on this side. See resolveDuty().
+                'jobrole_task_id' => $this->resolveTaskDuty(
+                    (int) $context['sub_institute_id'],
+                    (string) $request->input('title')
+                ),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]
