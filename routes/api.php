@@ -1827,6 +1827,38 @@ Route::get('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoCont
 // file, because an exported document loses the UI that would otherwise warn you.
 Route::get('/competency/eso/{id}/export', [\App\Http\Controllers\Api\Competency\EsoController::class, 'export'])->whereNumber('id')->middleware('profile:admin,hr');
 Route::put('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+
+/*
+ * THE EMPLOYEE'S VIEW OF THE PROCEDURE.
+ *
+ * Every other ESO route is profile:admin,hr. This pair is api.token, because
+ * the person who most needs the instructions is the one doing the work and they
+ * are not an administrator. Access is scoped by OWNERSHIP inside the controller
+ * - assignee, assigner, or admin/hr - which is the whole security story there.
+ *
+ * It returns the procedure WITHOUT the executability score or risk class: an
+ * employee opening their own task should not be told in passing that a machine
+ * could do it.
+ */
+Route::get('/competency/task-instructions/{taskId}', [\App\Http\Controllers\Api\Competency\TaskInstructionController::class, 'show'])->whereNumber('taskId')->middleware('api.token');
+Route::get('/competency/task-instructions/{taskId}/download', [\App\Http\Controllers\Api\Competency\TaskInstructionController::class, 'download'])->whereNumber('taskId')->middleware('api.token');
+
+/*
+ * REFERENCE DOCUMENTS ON A TASK.
+ *
+ * Distinct from the task ATTACHMENT (task.task_attachment and its versions):
+ * the attachment is the work, these are the material you need to do the work.
+ *
+ * api.token, not profile:admin,hr — the person who needs a checklist is the one
+ * performing the task. Ownership is enforced inside the controller (assignee,
+ * assigner, or admin/hr), and upload/delete are additionally gated to admin/hr
+ * there: an employee who could attach a document to their own task could put
+ * anything in front of whoever reviews it.
+ */
+Route::get('/task-management/tasks/{taskId}/documents', [\App\Http\Controllers\Api\TaskManagement\TaskDocumentController::class, 'index'])->whereNumber('taskId')->middleware('api.token');
+Route::post('/task-management/tasks/{taskId}/documents', [\App\Http\Controllers\Api\TaskManagement\TaskDocumentController::class, 'store'])->whereNumber('taskId')->middleware('api.token');
+Route::get('/task-management/tasks/{taskId}/documents/{id}/download', [\App\Http\Controllers\Api\TaskManagement\TaskDocumentController::class, 'download'])->whereNumber(['taskId', 'id'])->middleware('api.token');
+Route::delete('/task-management/tasks/{taskId}/documents/{id}', [\App\Http\Controllers\Api\TaskManagement\TaskDocumentController::class, 'destroy'])->whereNumber(['taskId', 'id'])->middleware('api.token');
 Route::post('/competency/eso/{id}/status', [\App\Http\Controllers\Api\Competency\EsoController::class, 'setStatus'])->whereNumber('id')->middleware('profile:admin,hr');
 Route::delete('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 

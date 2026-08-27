@@ -24,6 +24,17 @@ class TaskAttachmentVersionController extends Controller
     private const DISK = 'local';
     private const DIR = 'task-attachments';
 
+    /**
+     * A task attachment is a document or an image. Anything executable is not.
+     *
+     * Kept identical to DepartmentSopController and TaskDocumentController so
+     * there is one answer in this codebase to "what may be uploaded", plus the
+     * two image types a task attachment legitimately is (the assign form's own
+     * picker already accepts jpg/png).
+     */
+    private const ALLOWED_EXTENSIONS = 'pdf,doc,docx,xls,xlsx,ppt,pptx,txt,rtf,odt,csv,jpg,jpeg,png';
+    private const MAX_KILOBYTES = 20480; // 20 MB
+
     public function index(Request $request, int $id)
     {
         $context = $this->taskContext($request);
@@ -59,8 +70,20 @@ class TaskAttachmentVersionController extends Controller
             return $context;
         }
 
+        /*
+         * EXTENSION AND MIME, NOT JUST SIZE.
+         *
+         * This validated `required|file|max:20480` only — so it accepted a
+         * `.php`, a `.exe`, anything, as long as it was under 20 MB. The file
+         * lands on a disk this app serves, which makes an unrestricted upload
+         * endpoint the shortest route to running someone else's code.
+         *
+         * The list is the same one DepartmentSopController and
+         * TaskDocumentController use; a task attachment is a document or an
+         * image, and nothing else.
+         */
         $validator = Validator::make($request->all(), [
-            'file' => 'required|file|max:20480', // 20 MB
+            'file' => 'required|file|mimes:' . self::ALLOWED_EXTENSIONS . '|max:' . self::MAX_KILOBYTES,
         ]);
 
         if ($validator->fails()) {
