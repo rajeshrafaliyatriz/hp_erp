@@ -1822,6 +1822,10 @@ Route::get('/competency/eso', [\App\Http\Controllers\Api\Competency\EsoControlle
 Route::post('/competency/eso', [\App\Http\Controllers\Api\Competency\EsoController::class, 'store'])->middleware('profile:admin,hr');
 Route::post('/competency/eso/generate', [\App\Http\Controllers\Api\Competency\EsoController::class, 'generate'])->middleware('profile:admin,hr');
 Route::get('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'show'])->whereNumber('id')->middleware('profile:admin,hr');
+// Two formats, two readers: md carries YAML front matter for an agent to parse,
+// pdf is a printable SOP for a person. Both state status and source inside the
+// file, because an exported document loses the UI that would otherwise warn you.
+Route::get('/competency/eso/{id}/export', [\App\Http\Controllers\Api\Competency\EsoController::class, 'export'])->whereNumber('id')->middleware('profile:admin,hr');
 Route::put('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
 Route::post('/competency/eso/{id}/status', [\App\Http\Controllers\Api\Competency\EsoController::class, 'setStatus'])->whereNumber('id')->middleware('profile:admin,hr');
 Route::delete('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
