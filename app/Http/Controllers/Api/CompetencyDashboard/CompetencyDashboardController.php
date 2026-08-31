@@ -182,7 +182,24 @@ class CompetencyDashboardController extends Controller
                     'label' => $role->name,
                     'department' => $deptName,
                     'color' => $departmentColors[$deptName],
-                    'importance' => rand(1, 5),
+                    /*
+                     * NULL, NOT rand(1, 5).
+                     *
+                     * This returned a random integer per node, so the same job
+                     * role came back "importance 2" on one request and
+                     * "importance 5" on the next. A graph that sizes its nodes by
+                     * that is not showing the organisation anything — it is
+                     * showing the random number generator, confidently.
+                     *
+                     * Nothing in this schema measures how important a role is, so
+                     * NULL is the truthful answer: not measured. A consumer can
+                     * render an unsized node; it cannot recover from being lied
+                     * to. Deriving a stand-in (headcount, mapped-competency
+                     * count) would be a product decision about what "importance"
+                     * means, and is not one to make silently inside a graph
+                     * endpoint that currently has no caller at all.
+                     */
+                    'importance' => null,
                 ];
             });
 

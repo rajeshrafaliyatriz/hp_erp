@@ -104,30 +104,60 @@ class CommandCenterService
     }
 
     /**
-     * Total published competencies. In this ERP a competency IS an approved
-     * skill, so this reads the existing s_users_skills catalog rather than a
-     * duplicate competency table. Honours the same filters: Department maps to
-     * s_users_skills.department_id; the role-based filters restrict to the
-     * skills the in-scope job roles require (via s_jobrole_skills).
+     * Total competencies — FROM `competency`, the table the Library owns.
+     *
+     * ── WHAT THIS SAID BEFORE, AND WHY IT STOPPED BEING TRUE ────────────────
+     *
+     *   > "In this ERP a competency IS an approved skill, so this reads the
+     *   >  existing s_users_skills catalog rather than a duplicate competency
+     *   >  table."
+     *
+     * That was accurate when it was written and is not any more. The Competency
+     * Library was moved onto the `competency` table, and nothing reachable edits
+     * `s_users_skills` as a competency catalogue now — so this tile and the
+     * screen a user opens from it counted two different populations.
+     *
+     * The gap is not a rounding difference: for tenant 6 this reported 124 (dev)
+     * and 121 (live) while the Library listed 22. Two screens in one module using
+     * one word for numbers 5x apart, and the tile was the one users saw first.
+     *
+     * ── THE FILTERS HAD TO CHANGE SHAPE WITH IT ─────────────────────────────
+     *
+     * `competency` has no `department_id` — competencies are not departmental,
+     * job roles are — so Department now restricts to competencies mapped to a
+     * job role in that department, via `jobrole_competency_map`. That is the same
+     * question the old filter was reaching for, asked of a table that can answer
+     * it. The role-based filters go through the same map, replacing the
+     * skill-title match against `s_jobrole_skills`.
      */
     private function competenciesCount(int $sid, array $filters, ?array $scopeRoles): int
     {
-        $q = DB::table('s_users_skills')
+        $q = DB::table('competency')
             ->where('sub_institute_id', $sid)
-            ->whereNull('deleted_at')
-            ->where('approve_status', 'Approved');
+            ->whereNull('deleted_at');
 
         if ($filters['department_id'] !== null) {
-            $q->where('department_id', (int) $filters['department_id']);
+            $q->whereIn('id', function ($sub) use ($sid, $filters) {
+                $sub->select('m.competency_id')
+                    ->from('jobrole_competency_map as m')
+                    ->join('s_user_jobrole as r', 'r.id', '=', 'm.jobrole_id')
+                    ->where('m.sub_institute_id', $sid)
+                    ->where('r.department_id', (int) $filters['department_id']);
+            });
         }
 
         $roleFilterActive = $filters['jobrole'] !== null || $filters['location'] !== null
             || $filters['business_unit'] !== null || $filters['job_family'] !== null;
 
         if ($roleFilterActive) {
+            // A filter that resolves to no roles must return 0, not everything.
             $roles = ($scopeRoles && count($scopeRoles)) ? $scopeRoles : ['\0__none__'];
-            $q->whereIn('title', function ($sub) use ($roles) {
-                $sub->select('skill')->distinct()->from('s_jobrole_skills')->whereIn('jobrole', $roles);
+            $q->whereIn('id', function ($sub) use ($sid, $roles) {
+                $sub->select('m.competency_id')
+                    ->from('jobrole_competency_map as m')
+                    ->join('s_user_jobrole as r', 'r.id', '=', 'm.jobrole_id')
+                    ->where('m.sub_institute_id', $sid)
+                    ->whereIn('r.jobrole', $roles);
             });
         }
 

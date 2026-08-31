@@ -41,10 +41,16 @@ use Illuminate\Support\Facades\Validator;
  *                             because that is the honest equivalent - the thing
  *                             it is filed under.
  *   department                competencies are not departmental; job roles are.
- *   approve_status            there is a competency_approvals table, but it is
- *                             empty and its workflow is unbuilt. Reporting
- *                             "Approved" for everything would be a claim nobody
- *                             made.
+ *   approve_status            NO LONGER NULL — corrected 2026-08-31. The claim
+ *                             below was wrong twice over: `s_competency_approvals`
+ *                             has a complete submit/review workflow in
+ *                             ApprovalController, and it was pointed at
+ *                             `s_users_skills` while this screen moved to
+ *                             `competency`. Since the two tables' ids overlap, a
+ *                             submission from here would have stamped an
+ *                             unrelated skill row. Both are fixed; this returns
+ *                             the real value, and NULL still means "never
+ *                             submitted" rather than a decision nobody made.
  *   the eight detail columns  free-text skill fields with no competency
  *                             equivalent. NULL, not blank strings: absent and
  *                             empty are different answers.
@@ -77,22 +83,23 @@ class CompetencyLibraryCrudController extends Controller
         $perPage = min(max((int) $request->input('per_page', 25), 1), 200);
         $page    = max((int) $request->input('page', 1), 1);
         $search  = trim((string) $request->input('search', ''));
-        $sort    = self::SORTABLE[$request->input('sort_by', 'updated_at')] ?? 'c.updated_at';
-        $dir     = strtolower($request->input('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        /*
+         * THE SCREEN SENDS `sort` AND `direction`. THIS READ `sort_by` AND
+         * `sort_dir`, SO EVERY COLUMN-HEADER CLICK RETURNED THE SAME PAGE.
+         *
+         * Both spellings are accepted rather than picking one and breaking the
+         * other caller: `sort_by`/`sort_dir` is what this controller has always
+         * documented, `sort`/`direction` is what cm-competency-library.tsx has
+         * always sent. An unknown column still falls back to `updated_at` rather
+         * than erroring, which is what made the mismatch invisible.
+         */
+        $sortKey = (string) ($request->input('sort_by') ?? $request->input('sort') ?? 'updated_at');
+        $dirRaw  = (string) ($request->input('sort_dir') ?? $request->input('direction') ?? 'desc');
 
-        $base = fn () => DB::table('competency as c')
-            ->leftJoin('s_competency_frameworks as f', 'f.id', '=', 'c.framework_id')
-            ->where('c.sub_institute_id', $sid)
-            ->whereNull('c.deleted_at')
-            ->when($search !== '', function ($w) use ($search) {
-                $w->where(function ($x) use ($search) {
-                    $x->where('c.name', 'like', "%{$search}%")
-                      ->orWhere('c.code', 'like', "%{$search}%")
-                      ->orWhere('c.description', 'like', "%{$search}%");
-                });
-            })
-            ->when($request->filled('competency_type'), fn ($w) => $w->where('c.competency_type', $request->input('competency_type')))
-            ->when($request->filled('framework_id'), fn ($w) => $w->where('c.framework_id', $request->integer('framework_id')));
+        $sort = self::SORTABLE[$sortKey] ?? 'c.updated_at';
+        $dir  = strtolower($dirRaw) === 'asc' ? 'asc' : 'desc';
+
+        $base = fn () => $this->listQuery($request, $sid);
 
         $total = $base()->count();
 
@@ -100,7 +107,7 @@ class CompetencyLibraryCrudController extends Controller
             ->forPage($page, $perPage)
             ->get([
                 'c.id', 'c.name', 'c.code', 'c.description', 'c.competency_type',
-                'c.criticality', 'c.status', 'c.framework_id', 'c.created_by',
+                'c.criticality', 'c.status', 'c.approve_status', 'c.framework_id', 'c.created_by',
                 'c.created_at', 'c.updated_at', 'f.name as framework_name',
             ]);
 
@@ -128,6 +135,50 @@ class CompetencyLibraryCrudController extends Controller
         ]);
     }
 
+    /**
+     * The filtered library, WITHOUT paging or ordering.
+     *
+     * Extracted so index() and export() cannot drift apart. They had no shared
+     * definition, which is how an export silently answering a different question
+     * from the screen that launched it becomes possible.
+     */
+    private function listQuery(Request $request, int $sid)
+    {
+        $search = trim((string) $request->input('search', ''));
+
+        return DB::table('competency as c')
+            ->leftJoin('s_competency_frameworks as f', 'f.id', '=', 'c.framework_id')
+            ->where('c.sub_institute_id', $sid)
+            ->whereNull('c.deleted_at')
+            ->when($search !== '', function ($w) use ($search) {
+                $w->where(function ($x) use ($search) {
+                    $x->where('c.name', 'like', "%{$search}%")
+                      ->orWhere('c.code', 'like', "%{$search}%")
+                      ->orWhere('c.description', 'like', "%{$search}%");
+                });
+            })
+            ->when($request->filled('competency_type'), fn ($w) => $w->where('c.competency_type', $request->input('competency_type')))
+            ->when($request->filled('framework_id'), fn ($w) => $w->where('c.framework_id', $request->integer('framework_id')))
+            /*
+             * THE STATUS DROPDOWN NOW DOES SOMETHING. There was no status filter
+             * here at all, so the control was inert.
+             *
+             * Matched case-insensitively against BOTH columns because the screen's
+             * one dropdown covers two different lifecycles: `status` holds
+             * active/draft/published (what the competency IS) and `approve_status`
+             * holds Pending/Approved/Rejected (where it is in review). Requiring
+             * the user to know which column their word lives in would be a schema
+             * detail leaking into a filter.
+             */
+            ->when($request->filled('status') && $request->input('status') !== 'all', function ($w) use ($request) {
+                $value = strtolower(trim((string) $request->input('status')));
+                $w->where(function ($x) use ($value) {
+                    $x->whereRaw('LOWER(c.status) = ?', [$value])
+                      ->orWhereRaw('LOWER(COALESCE(c.approve_status, \'\')) = ?', [$value]);
+                });
+            });
+    }
+
     /** GET /competency-library/competency/{id} */
     public function show(Request $request, $id)
     {
@@ -143,7 +194,7 @@ class CompetencyLibraryCrudController extends Controller
             ->where('c.id', (int) $id)->where('c.sub_institute_id', $sid)->whereNull('c.deleted_at')
             ->first([
                 'c.id', 'c.name', 'c.code', 'c.description', 'c.competency_type',
-                'c.criticality', 'c.status', 'c.framework_id', 'c.created_by',
+                'c.criticality', 'c.status', 'c.approve_status', 'c.framework_id', 'c.created_by',
                 'c.created_at', 'c.updated_at', 'f.name as framework_name',
             ]);
 
@@ -781,6 +832,487 @@ class CompetencyLibraryCrudController extends Controller
         ]);
     }
 
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE FIVE ENDPOINTS THE SCREEN CALLED AND NOBODY REGISTERED
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `services/competency/library.ts` moved its BASE to `/competency-library`
+     * when this controller took over the screen, but only six routes came with
+     * it. Five service methods kept calling paths that were never registered:
+     *
+     *   getDetail   /competency-library/competency/{id}/detail
+     *   exportRows  /competency-library/competency-export
+     *   importRows  /competency-library/competency-import
+     *   clone       /competency-library/competency/{id}/clone
+     *   archive     /competency-library/competency/{id}/archive
+     *
+     * All five are wired to visible controls on menu 34 — the detail drawer,
+     * Export Library, Import Competencies, Clone and Archive/Restore — so every
+     * one of those buttons returned a 404.
+     *
+     * They are NOT re-pointed at the surviving /skill_library equivalents. Those
+     * read `s_users_skills`, so the detail drawer would have described a skill
+     * that merely shared an id with the competency on screen — a wrong answer
+     * rendered confidently, which is worse than the 404 it replaced.
+     */
+
+    /**
+     * GET /competency-library/competency/{id}/detail
+     *
+     * The Overview tab: where this competency is actually used. Every count is a
+     * real query — none is a placeholder — and a table that does not exist on
+     * this database contributes 0 rather than aborting the drawer.
+     */
+    public function detail(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $sid = (int) $context['sub_institute_id'];
+
+        $row = DB::table('competency as c')
+            ->leftJoin('s_competency_frameworks as f', 'f.id', '=', 'c.framework_id')
+            ->where('c.id', (int) $id)->where('c.sub_institute_id', $sid)->whereNull('c.deleted_at')
+            ->first([
+                'c.id', 'c.name', 'c.code', 'c.description', 'c.competency_type',
+                'c.criticality', 'c.status', 'c.approve_status', 'c.framework_id',
+                'c.created_by', 'c.created_at', 'c.updated_at', 'f.name as framework_name',
+            ]);
+
+        if (!$row) {
+            return response()->json(['status' => false, 'message' => 'Competency not found.'], 404);
+        }
+
+        $cid = (int) $row->id;
+
+        // ── where it is in use ──────────────────────────────────────────────
+        $roles = DB::table('jobrole_competency_map as m')
+            ->leftJoin('s_user_jobrole as r', 'r.id', '=', 'm.jobrole_id')
+            ->where('m.competency_id', $cid)
+            ->where('m.sub_institute_id', $sid)
+            ->orderBy('r.jobrole')
+            ->limit(200)
+            ->get(['r.jobrole', 'm.required_proficiency', 'r.department']);
+
+        $frameworks = DB::table('s_competency_framework_items as fi')
+            ->join('s_competency_frameworks as fr', 'fr.id', '=', 'fi.framework_id')
+            ->where('fi.competency_id', $cid)
+            ->where('fi.sub_institute_id', $sid)
+            ->limit(100)
+            ->get(['fr.id', 'fr.name', 'fr.status', 'fi.required_proficiency']);
+
+        $ratedEmployees = (int) DB::table('competency_kasba_rating as r')
+            ->join('competency_kasba_item as i', 'i.id', '=', 'r.kasba_item_id')
+            ->where('i.competency_id', $cid)
+            ->where('r.sub_institute_id', $sid)
+            ->distinct()
+            ->count('r.user_id');
+
+        $summary = [
+            'description'        => $row->description,
+            'category'           => $row->framework_name,
+            'sub_category'       => null,
+            'competency_type'    => $row->competency_type,
+            'status'             => $row->status !== null && $row->status !== '' ? ucfirst((string) $row->status) : null,
+            'role_count'         => $roles->count(),
+            'framework_count'    => $frameworks->count(),
+            'rated_employees'    => $ratedEmployees,
+            'plan_count'         => $this->countIfTable('s_competency_development_plans', 'competency_id', $cid, $sid),
+            'certification_count' => $this->countIfTable('s_competency_certifications', 'competency_id', $cid, $sid),
+            'assessment_count'   => $this->countIfTable('competency_assessment_test', 'competency_id', $cid, $sid),
+            'learning_count'     => $this->countIfTable('course_competency_map', 'competency_id', $cid, $sid),
+            'evidence_count'     => $this->countIfTable('competency_evidence', 'competency_id', $cid, $sid),
+        ];
+
+        // ── the proficiency scale, reusing the one levels() already builds ──
+        // `competency_proficiency_levels`, plural — the same table levels() reads.
+        $levels = DB::table('competency_proficiency_levels')
+            ->where('competency_id', $cid)
+            ->orderBy('level')
+            ->get(['level', 'descriptor', 'indicators']);
+
+        $scale = $levels->isNotEmpty()
+            ? $levels->map(fn ($l) => [
+                'level'       => (int) $l->level,
+                'label'       => 'Level ' . $l->level,
+                'name'        => $l->descriptor,
+                'description' => $l->indicators,
+            ])->values()
+            /*
+             * The organisation's generic scale, read exactly as levels() reads it
+             * — `skill_id IS NULL` marks the generic rows and `proficiency_type`
+             * holds the level number. This table has no `level` or `name` column;
+             * assuming it did is what made the detail drawer's first call throw.
+             *
+             * A NULL sub_institute_id is accepted alongside the tenant's own,
+             * because the platform ships a default scale predating per-tenant ones.
+             */
+            : DB::table('s_proficiency_levels')
+                ->whereNull('skill_id')
+                ->where(function ($q) use ($sid) {
+                    $q->where('sub_institute_id', $sid)->orWhereNull('sub_institute_id');
+                })
+                ->orderBy('id')
+                ->limit(10)
+                ->get(['proficiency_type', 'description'])
+                ->map(fn ($l) => [
+                    'level'       => (int) $l->proficiency_type,
+                    'label'       => 'Level ' . (int) $l->proficiency_type,
+                    'name'        => null,
+                    'description' => $l->description,
+                ])->values();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Success',
+            'data'    => [
+                'summary'   => $summary,
+                'top_roles' => $roles->take(5)->map(fn ($r) => [
+                    'jobrole'           => $r->jobrole,
+                    'proficiency_level' => $r->required_proficiency,
+                    'department'        => $r->department ?? null,
+                ])->values(),
+                'proficiency' => [
+                    // Named honestly: a competency with no levels of its own is
+                    // shown the tenant's default scale, and the scope says which
+                    // of the two the reader is looking at.
+                    'scale_label' => $levels->isNotEmpty() ? 'Competency scale' : 'Organisation default scale',
+                    'scope'       => $levels->isNotEmpty() ? 'competency' : 'organisation',
+                    'levels'      => $scale,
+                ],
+                'associations' => [
+                    'roles' => $roles->map(fn ($r) => [
+                        'jobrole'           => $r->jobrole,
+                        'proficiency_level' => $r->required_proficiency,
+                    ])->values(),
+                    'frameworks' => $frameworks->map(fn ($f) => [
+                        'id'                   => (int) $f->id,
+                        'name'                 => $f->name,
+                        'status'               => $f->status,
+                        'required_proficiency' => $f->required_proficiency,
+                    ])->values(),
+                    'role_count'      => $roles->count(),
+                    'framework_count' => $frameworks->count(),
+                ],
+                // EMPTY, AND SAYING SO. There is no attachment store for a
+                // competency and no per-row change log; returning [] is the
+                // truthful answer, and inventing entries from created_at/
+                // updated_at would be fabricating a history.
+                'attachments' => [],
+                'history'     => [],
+            ],
+        ]);
+    }
+
+    /**
+     * GET /competency-library/competency-export
+     *
+     * Every row matching the CURRENT filters, unpaginated. Deliberately shares
+     * listQuery() with index() so an export can never disagree with the screen
+     * it was launched from.
+     */
+    public function export(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $sid  = (int) $context['sub_institute_id'];
+        $rows = $this->listQuery($request, $sid)
+            ->orderBy('c.name')
+            // A ceiling, so one tenant cannot pull an unbounded result set into
+            // memory. Named in the response rather than silently truncating.
+            ->limit(5000)
+            ->get([
+                'c.id', 'c.name', 'c.code', 'c.description', 'c.competency_type',
+                'c.criticality', 'c.status', 'c.approve_status', 'c.framework_id',
+                'c.created_by', 'c.created_at', 'c.updated_at', 'f.name as framework_name',
+            ]);
+
+        $counts = DB::table('competency_kasba_item')
+            ->whereIn('competency_id', $rows->pluck('id'))
+            ->selectRaw('competency_id, COUNT(*) n')
+            ->groupBy('competency_id')->pluck('n', 'competency_id');
+
+        return response()->json([
+            'status'   => true,
+            'message'  => 'Success',
+            'data'     => $rows->map(fn ($r) => $this->shape($r, (int) ($counts[$r->id] ?? 0)))->values(),
+            'truncated' => $rows->count() >= 5000,
+        ]);
+    }
+
+    /**
+     * POST /competency-library/competency-import
+     *
+     * Rows parsed in the browser. Reports per-row outcomes rather than a single
+     * pass/fail: a 200-row file with three bad rows should import 197 and name
+     * the three, not refuse the file.
+     */
+    public function import(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'rows'          => 'required|array|min:1|max:2000',
+            'rows.*.name'   => 'required|string|max:191',
+            'rows.*.code'   => 'nullable|string|max:64',
+            'rows.*.description'     => 'nullable|string',
+            'rows.*.competency_type' => 'nullable|string|max:64',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $sid    = (int) $context['sub_institute_id'];
+        $userId = (int) $context['user_id'];
+
+        $created = 0;
+        $skipped = 0;
+        $errors  = [];
+
+        foreach ($request->input('rows') as $index => $raw) {
+            $name = trim((string) ($raw['name'] ?? ''));
+            if ($name === '') {
+                $errors[] = ['row' => $index + 1, 'reason' => 'Name is required.'];
+                continue;
+            }
+
+            // A NAME COLLISION IS A SKIP, NOT AN ERROR. Re-importing a file that
+            // overlaps one already loaded is normal, and failing the row would
+            // make a partially-applied import impossible to finish.
+            $exists = DB::table('competency')
+                ->where('sub_institute_id', $sid)
+                ->whereNull('deleted_at')
+                ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                ->exists();
+
+            if ($exists) {
+                $skipped++;
+                continue;
+            }
+
+            DB::table('competency')->insert([
+                'sub_institute_id' => $sid,
+                'name'             => $name,
+                // `competency.code` is NOT NULL, and a spreadsheet's Code column
+                // is very often blank. Generated from the name when absent —
+                // the same fallback store() uses — so a valid file is not
+                // rejected row by row over a column nobody filled in.
+                'code'             => trim((string) ($raw['code'] ?? '')) !== ''
+                    ? $raw['code']
+                    : $this->generateCode($sid, $name),
+                'description'      => $raw['description'] ?? null,
+                'competency_type'  => $raw['competency_type'] ?? null,
+                // An imported competency is a draft until somebody reviews it.
+                // Landing a file straight into 'active' would let a spreadsheet
+                // publish to the whole organisation.
+                'status'           => 'draft',
+                'approve_status'   => null,
+                'created_by'       => $userId,
+                'created_at'       => now(),
+                'updated_at'       => now(),
+            ]);
+            $created++;
+        }
+
+        return response()->json([
+            'status'  => true,
+            'message' => sprintf('%d imported, %d already present%s.',
+                $created, $skipped, $errors === [] ? '' : ', ' . count($errors) . ' rejected'),
+            'data'    => [
+                'created' => $created,
+                'skipped' => $skipped,
+                'errors'  => $errors,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /competency-library/competency/{id}/clone
+     *
+     * Copies the competency AND its KASBA items. Copying the row alone would
+     * produce an empty shell that looks like a competency and measures nothing,
+     * which is the opposite of what "duplicate" means to the person clicking it.
+     */
+    public function clone(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $sid    = (int) $context['sub_institute_id'];
+        $userId = (int) $context['user_id'];
+
+        $row = DB::table('competency')
+            ->where('id', (int) $id)->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            return response()->json(['status' => false, 'message' => 'Competency not found.'], 404);
+        }
+
+        $name = trim((string) $request->input('name', '')) ?: $this->uniqueCopyName($sid, (string) $row->name);
+
+        $newId = DB::transaction(function () use ($row, $sid, $userId, $name) {
+            $newId = (int) DB::table('competency')->insertGetId([
+                'sub_institute_id' => $sid,
+                'name'             => $name,
+                /*
+                 * A FRESH CODE, NOT THE ORIGINAL'S AND NOT NULL.
+                 *
+                 * Copying it would put two competencies under one organisational
+                 * identifier, which is a data problem rather than a duplicate.
+                 * NULL is not available either — `competency.code` is NOT NULL,
+                 * and store() carries a note about that same constraint
+                 * surfacing as a 500 instead of a validation message. So the
+                 * clone generates one the same way a new competency does.
+                 */
+                'code'             => $this->generateCode($sid, $name),
+                'description'      => $row->description,
+                'competency_type'  => $row->competency_type,
+                'criticality'      => $row->criticality,
+                'framework_id'     => $row->framework_id,
+                'status'           => 'draft',
+                'approve_status'   => null,
+                'created_by'       => $userId,
+                'created_at'       => now(),
+                'updated_at'       => now(),
+            ]);
+
+            $items = DB::table('competency_kasba_item')
+                ->where('competency_id', $row->id)->where('sub_institute_id', $sid)
+                ->get(['kasba_type', 'item_id', 'item_label', 'weight']);
+
+            foreach ($items as $item) {
+                DB::table('competency_kasba_item')->insert([
+                    'competency_id'    => $newId,
+                    'sub_institute_id' => $sid,
+                    'kasba_type'       => $item->kasba_type,
+                    'item_id'          => $item->item_id,
+                    'item_label'       => $item->item_label,
+                    'weight'           => $item->weight,
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ]);
+            }
+
+            return $newId;
+        });
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Competency duplicated.',
+            'data'    => ['id' => $newId, 'name' => $name],
+        ]);
+    }
+
+    /**
+     * PUT /competency-library/competency/{id}/archive
+     *
+     * Archive is `approve_status = 'Cancelled'`, and restore clears it back to
+     * NULL. NOT a delete: the competency stays referenced by role mappings,
+     * framework items, ratings, plans and certifications, and removing the row
+     * would orphan every one of them.
+     *
+     * Restore returns it to NULL — never-submitted — rather than to 'Approved'.
+     * Un-archiving is not an approval, and the row's real review state before it
+     * was archived is not recorded anywhere.
+     */
+    public function archive(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $sid     = (int) $context['sub_institute_id'];
+        $restore = filter_var($request->input('restore', false), FILTER_VALIDATE_BOOLEAN);
+
+        $row = DB::table('competency')
+            ->where('id', (int) $id)->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->first(['id', 'name', 'approve_status']);
+
+        if (!$row) {
+            return response()->json(['status' => false, 'message' => 'Competency not found.'], 404);
+        }
+
+        DB::table('competency')->where('id', $row->id)->update([
+            'approve_status' => $restore ? null : 'Cancelled',
+            'updated_by'     => (int) $context['user_id'],
+            'updated_at'     => now(),
+        ]);
+
+        return response()->json([
+            'status'  => true,
+            'message' => $restore ? 'Competency restored.' : 'Competency archived.',
+            'data'    => ['id' => (int) $row->id, 'approve_status' => $restore ? null : 'Cancelled'],
+        ]);
+    }
+
+    /** "Name (copy)", then "(copy 2)" and so on — never a silent duplicate. */
+    private function uniqueCopyName(int $sid, string $base): string
+    {
+        $candidate = $base . ' (copy)';
+        $n = 2;
+
+        while (DB::table('competency')->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($candidate)])->exists()) {
+            $candidate = $base . ' (copy ' . $n . ')';
+            $n++;
+
+            if ($n > 50) {
+                // Bounded rather than looping forever on a pathological library.
+                return $base . ' (copy ' . uniqid() . ')';
+            }
+        }
+
+        return $candidate;
+    }
+
+    /**
+     * COUNT, OR 0 IF THAT TABLE IS NOT ON THIS DATABASE.
+     *
+     * The detail drawer summarises across eight subsystems and the two databases
+     * do not carry an identical set of them. A missing table must contribute 0 to
+     * a summary rather than taking the whole drawer down with a SQL error —
+     * "nothing recorded" is the right answer for a subsystem that is not
+     * installed. Schema::hasTable() is avoided because it throws on live
+     * (MariaDB 10.1.48).
+     */
+    private function countIfTable(string $table, string $column, int $competencyId, int $sid): int
+    {
+        $exists = DB::selectOne(
+            'SELECT COUNT(*) AS c FROM information_schema.TABLES
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            [$table]
+        );
+
+        if ((int) ($exists->c ?? 0) === 0) {
+            return 0;
+        }
+
+        $hasTenant = DB::selectOne(
+            'SELECT COUNT(*) AS c FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+            [$table, 'sub_institute_id']
+        );
+
+        return (int) DB::table($table)
+            ->where($column, $competencyId)
+            ->when((int) ($hasTenant->c ?? 0) > 0, fn ($q) => $q->where('sub_institute_id', $sid))
+            ->count();
+    }
+
     /**
      * The shape the existing screen expects, from a competency row.
      *
@@ -803,10 +1335,35 @@ class CompetencyLibraryCrudController extends Controller
             'proficiency_level' => $r->criticality,
             'department'      => null,
             'department_id'   => null,
-            'status'          => ((int) ($r->status ?? 1)) === 1 ? 'Active' : 'Inactive',
-            // The approvals table exists and its workflow does not. Reporting a
-            // status nobody set would be a claim nobody made.
-            'approve_status'  => null,
+            /*
+             * `competency.status` IS A VARCHAR, NOT A FLAG.
+             *
+             * This read `((int) $r->status) === 1 ? 'Active' : 'Inactive'`. The
+             * column holds 'active' / 'draft' / 'published', and `(int) 'active'`
+             * is 0 — so every one of the 231 competencies on dev and 232 on live
+             * was labelled Inactive, which also meant isArchived() was never true
+             * and the Archive/Restore toggle was permanently mislabelled.
+             *
+             * Passed through as stored, capitalised for display. An unrecognised
+             * value shows itself rather than collapsing into a wrong label.
+             */
+            'status'          => $r->status !== null && $r->status !== ''
+                ? ucfirst((string) $r->status)
+                : null,
+            /*
+             * The workflow DOES exist — ApprovalController submits and reviews —
+             * it was simply pointed at `s_users_skills` while this screen moved to
+             * `competency`. Repointed, and this now reports what it finds.
+             *
+             * NULL means NEVER SUBMITTED, and stays null. It is a different fact
+             * from Approved and from Pending, and none of the existing rows has
+             * been through the workflow; defaulting them to either would be a
+             * claim nobody made. The client renders the null case explicitly
+             * rather than falling back to 'Pending'.
+             */
+            'approve_status'  => $r->approve_status !== null && $r->approve_status !== ''
+                ? (string) $r->approve_status
+                : null,
             'owner'           => null,
             'created_at'      => $r->created_at,
             'updated_at'      => $r->updated_at,

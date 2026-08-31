@@ -2,6 +2,7 @@
 
 namespace App\Services\Events;
 
+use App\Services\Events\Concerns\DrivesFromEventStore;
 use App\Services\Notifications\NotificationSender;
 use App\Services\Notifications\RecipientResolver;
 use Illuminate\Support\Facades\DB;
@@ -42,6 +43,8 @@ use Illuminate\Support\Facades\Log;
  */
 class NotificationDispatcher
 {
+    use DrivesFromEventStore;
+
     public const CONSUMER = 'notification_dispatcher';
 
     /**

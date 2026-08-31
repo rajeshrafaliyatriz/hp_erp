@@ -315,28 +315,41 @@ class AssessmentScoringService
                 ->where('kasba_item_id', $itemId)
                 ->value('rating');
 
-            DB::table('competency_assessment_rating_proposal')->updateOrInsert(
-                [
-                    'attempt_id'    => $attempt->id,
-                    'kasba_item_id' => $itemId,
-                    'kasba_type'    => $item->kasba_type ?? null,
-                    'item_id'       => $item->item_id ?? null,
-                ],
-                [
-                    'sub_institute_id' => $tenantId,
-                    'test_id'          => $attempt->test_id,
-                    'user_id'          => $attempt->user_id,
-                    'item_label'       => $item->item_label ?? ($agg['row']->cited_item_label ?? null),
-                    'competency_id'    => $item->competency_id ?? ($agg['row']->cited_competency_id ?? null),
-                    'questions'        => $agg['scored'],
-                    'scored_percent'   => $percent,
-                    'proposed_rating'  => $proposed,
-                    'current_rating'   => $current !== null ? (int) $current : null,
-                    'status'           => 'pending',
-                    'updated_at'       => now(),
-                    'created_at'       => now(),
-                ]
-            );
+            $keys = [
+                'attempt_id'    => $attempt->id,
+                'kasba_item_id' => $itemId,
+                'kasba_type'    => $item->kasba_type ?? null,
+                'item_id'       => $item->item_id ?? null,
+            ];
+
+            $values = [
+                'sub_institute_id' => $tenantId,
+                'test_id'          => $attempt->test_id,
+                'user_id'          => $attempt->user_id,
+                'item_label'       => $item->item_label ?? ($agg['row']->cited_item_label ?? null),
+                'competency_id'    => $item->competency_id ?? ($agg['row']->cited_competency_id ?? null),
+                'questions'        => $agg['scored'],
+                'scored_percent'   => $percent,
+                'proposed_rating'  => $proposed,
+                'current_rating'   => $current !== null ? (int) $current : null,
+                'status'           => 'pending',
+                'updated_at'       => now(),
+            ];
+
+            /*
+             * Same defect as approve(): updateOrInsert() writes its values on the
+             * update branch too, so re-finalising an attempt (which happens every
+             * time an assessor marks one more written answer) reset the
+             * proposal's `created_at` and lost when it was first raised.
+             */
+            $existing = DB::table('competency_assessment_rating_proposal')->where($keys)->exists();
+
+            if ($existing) {
+                DB::table('competency_assessment_rating_proposal')->where($keys)->update($values);
+            } else {
+                DB::table('competency_assessment_rating_proposal')
+                    ->insert($keys + $values + ['created_at' => now()]);
+            }
             $written++;
         }
 
@@ -384,6 +397,18 @@ class AssessmentScoringService
         }
 
         DB::transaction(function () use ($proposal, $tenantId, $actorId, $note) {
+            /*
+             * `created_at` IS NOT IN HERE, AND THAT IS THE FIX.
+             *
+             * updateOrInsert() applies its second argument on BOTH branches, so
+             * carrying `created_at` in it rewrote the ORIGINAL creation time of
+             * an existing rating every time somebody approved a later proposal
+             * for the same item. The row then claimed to have been created at the
+             * moment of its most recent edit, which quietly destroys the one fact
+             * "when was this person first rated on this?" depends on.
+             *
+             * See upsertRating() below: the timestamp is set on insert only.
+             */
             $common = [
                 'rating'      => (int) $proposal->proposed_rating,
                 'assessor_id' => $actorId,
@@ -391,11 +416,10 @@ class AssessmentScoringService
                 'note'        => $note ?: 'From assessment result.',
                 'rated_at'    => now(),
                 'updated_at'  => now(),
-                'created_at'  => now(),
             ];
 
             if ($proposal->kasba_item_id) {
-                DB::table('competency_kasba_rating')->updateOrInsert(
+                $this->upsertRating(
                     ['sub_institute_id' => $tenantId, 'user_id' => $proposal->user_id,
                      'kasba_item_id' => $proposal->kasba_item_id],
                     $common
@@ -405,7 +429,7 @@ class AssessmentScoringService
             // The direct row too, when the item resolves to a library entry -
             // the same pair storeByItem() keeps in step.
             if ($proposal->kasba_type && $proposal->item_id) {
-                DB::table('competency_kasba_rating')->updateOrInsert(
+                $this->upsertRating(
                     ['sub_institute_id' => $tenantId, 'user_id' => $proposal->user_id,
                      'kasba_type' => $proposal->kasba_type, 'item_id' => $proposal->item_id],
                     $common
@@ -421,6 +445,30 @@ class AssessmentScoringService
         return ['ok' => true, 'message' => sprintf(
             'Rating %d recorded for "%s".', $proposal->proposed_rating, $proposal->item_label ?: 'the item'
         )];
+    }
+
+    /**
+     * updateOrInsert, except `created_at` is written ONLY on the insert.
+     *
+     * Laravel's updateOrInsert applies one array to both branches, which is right
+     * for a value that should always be refreshed and wrong for a creation
+     * timestamp. There is no flag to say "insert only", so the branch is taken
+     * explicitly.
+     *
+     * @param  array<string,mixed>  $keys    identifying columns
+     * @param  array<string,mixed>  $values  columns to write, WITHOUT created_at
+     */
+    private function upsertRating(array $keys, array $values): void
+    {
+        $exists = DB::table('competency_kasba_rating')->where($keys)->exists();
+
+        if ($exists) {
+            DB::table('competency_kasba_rating')->where($keys)->update($values);
+
+            return;
+        }
+
+        DB::table('competency_kasba_rating')->insert($keys + $values + ['created_at' => now()]);
     }
 
     /** Reject: the result stays on record, the rating does not change. */

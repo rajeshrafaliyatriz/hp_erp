@@ -2,6 +2,7 @@
 
 namespace App\Services\Events;
 
+use App\Services\Events\Concerns\DrivesFromEventStore;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -43,13 +44,48 @@ use Illuminate\Support\Facades\Log;
  * notify either (G-ORG-02).
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * IT RECOMMENDS. IT DOES NOT ASSIGN. LearningAssigner (X-12) assigns, because an
- * assignment is a decision someone made and a recommendation is not. Writing
- * recommendations into `lms_assignments` would turn "you might want this" into
- * "you must do this" with no one having chosen it.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * IT RECOMMENDS FOR A FLAG. IT ASSIGNS FOR A RENEWAL. (changed 2026-08-31)
+ *
+ * This class used to refuse to assign under any circumstances, and argued for it:
+ *
+ *   > "an assignment is a decision someone made and a recommendation is not.
+ *   >  Writing recommendations into `lms_assignments` would turn 'you might want
+ *   >  this' into 'you must do this' with no one having chosen it."
+ *
+ * That reasoning is kept because it is still right about `capability.flag_raised`.
+ * It was wrong about `certification.expiring`, and the contract said so all along
+ * — `05-data-flow-contracts.md:243` specifies this consumer "assigns the renewal
+ * course (golden thread 8)". The code and the spec had disagreed since the day it
+ * was written, and only this docblock recorded which one had won.
+ *
+ * WHY THE RENEWAL IS DIFFERENT. Nobody chooses to hold a certification that
+ * lapses. The obligation was accepted when the certification was required of the
+ * role, and its expiry date was known from the moment it was issued. A renewal is
+ * not a new demand being invented by a machine; it is the one already agreed
+ * falling due. The premise "with no one having chosen it" simply does not hold.
+ *
+ * A flag is the opposite: it is this system forming an opinion that somebody may
+ * be weak at something. Turning that into a mandatory enrolment is exactly the
+ * overreach the original note guarded against, and it still recommends.
+ *
+ * WHAT THIS COSTS. Course coverage decides whether a renewal can assign anything
+ * at all: `course_competency_map` reaches 23-38 of the 135 competencies that
+ * certifications name, so of the certifications expiring within 90 days only
+ * 3 of 19 (dev) and 4 of 20 (live) resolve to a course. The rest ledger as
+ * `skipped - no course maps to that competency`, and NotificationDispatcher tells
+ * the holder anyway because `certification.expiring` is in its NOTIFIES list.
+ * So the honest description of this feature today is "it notifies about four
+ * lapses in five and assigns for the fifth" - which is the correct behaviour, and
+ * a long way from an assignment engine. Filling that map is domain work: knowing
+ * which course actually restores which competency is not something this class can
+ * infer.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 class RemediationRecommender
 {
+    use DrivesFromEventStore;
+
     public const CONSUMER = 'remediation_recommender';
 
     public const HANDLES = ['certification.expiring', 'capability.flag_raised'];
@@ -109,6 +145,10 @@ class RemediationRecommender
             return;
         }
 
+        // See the class docblock: a lapsing certification is an obligation already
+        // agreed, a raised flag is this system's opinion. Only the first assigns.
+        $assigns = $event->type === 'certification.expiring';
+
         $written = 0;
         foreach ($courses as $courseId) {
             // ALREADY ENROLLED OR ALREADY ASSIGNED IS NOT A RECOMMENDATION.
@@ -126,37 +166,89 @@ class RemediationRecommender
                 continue;
             }
 
-            $exists = DB::table('suggested_course')
-                ->where('employee_id', $userId)->where('course_id', $courseId)
-                ->where('sub_institute_id', $tenant)->whereNull('deleted_at')->exists();
-
-            if ($exists) {
-                continue;
-            }
-
-            $title = DB::table('sub_std_map')->where('id', $courseId)
-                ->where('sub_institute_id', $tenant)->value('display_name');
-
-            DB::table('suggested_course')->insert([
-                'employee_id'      => $userId,
-                'course_id'        => $courseId,
-                'course_name'      => $title,
-                'sub_institute_id' => $tenant,
-                'created_by'       => (int) ($event->actor_id ?: 0) ?: null,
-                'created_at'       => now(),
-                'updated_at'       => now(),
-            ]);
-            $written++;
+            $written += $assigns
+                ? $this->assign($event, $userId, (int) $courseId, $tenant)
+                : $this->suggest($event, $userId, (int) $courseId, $tenant);
         }
 
         $this->ledger($event, 'done', null);
 
-        Log::channel('single')->info('remediation.recommended', [
+        Log::channel('single')->info($assigns ? 'remediation.assigned' : 'remediation.recommended', [
             'event_id' => $event->id,
             'type'     => $event->type,
             'user_id'  => $userId,
             'courses'  => $written,
         ]);
+    }
+
+    /**
+     * The renewal path: a real assignment, mandatory, attributed to the event.
+     *
+     * Shaped to match LearningAssigner's insert deliberately — same table, same
+     * columns, same `origin_event_id` provenance — so `lms_assignments` has one
+     * vocabulary rather than two dialects depending on which reactor wrote a row.
+     * `insertOrIgnore` because the unique key over (user, course, origin_event)
+     * is what makes a retry of this event safe.
+     *
+     * @return int 1 if a row was written, 0 if one already existed
+     */
+    private function assign(object $event, int $userId, int $courseId, int $tenant): int
+    {
+        $written = DB::table('lms_assignments')->insertOrIgnore([
+            'user_id'          => $userId,
+            'course_id'        => $courseId,
+            // A certification the role requires is not optional, and the renewal
+            // of one is not either.
+            'assignment_type'  => 'Mandatory',
+            'status'           => 'assigned',
+            // Auto-assignment is not a request: it is already decided.
+            'approval_status'  => 'approved',
+            'progress'         => 0,
+            'sub_institute_id' => $tenant,
+            'competency_id'    => (int) ($this->payload($event)['competency_id'] ?? 0) ?: null,
+            'source'           => 'certification_renewal',
+            'origin_event_id'  => (int) $event->id,
+            'assigned_by'      => 'system',
+            // No actor: the scheduler that noticed the expiry is not a person,
+            // and naming one would put a fiction in the assignment's history.
+            'assigned_by_id'   => (int) ($event->actor_id ?: 0) ?: null,
+            'assigned_on'      => now(),
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        return $written > 0 ? 1 : 0;
+    }
+
+    /**
+     * The flag path: unchanged. A suggestion nobody is obliged to take.
+     *
+     * @return int 1 if a row was written, 0 if one already existed
+     */
+    private function suggest(object $event, int $userId, int $courseId, int $tenant): int
+    {
+        $exists = DB::table('suggested_course')
+            ->where('employee_id', $userId)->where('course_id', $courseId)
+            ->where('sub_institute_id', $tenant)->whereNull('deleted_at')->exists();
+
+        if ($exists) {
+            return 0;
+        }
+
+        $title = DB::table('sub_std_map')->where('id', $courseId)
+            ->where('sub_institute_id', $tenant)->value('display_name');
+
+        DB::table('suggested_course')->insert([
+            'employee_id'      => $userId,
+            'course_id'        => $courseId,
+            'course_name'      => $title,
+            'sub_institute_id' => $tenant,
+            'created_by'       => (int) ($event->actor_id ?: 0) ?: null,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        return 1;
     }
 
     /** The holder, and the competency their lapsing certification covers. */
@@ -197,7 +289,14 @@ class RemediationRecommender
                 ->whereNotNull('expiry_date')
                 ->whereBetween('expiry_date', [now()->toDateString(), now()->addDays(90)->toDateString()])
                 ->count(),
-            'capability_flag_table'      => \Illuminate\Support\Facades\Schema::hasTable('capability_flag'),
+            // NOT Schema::hasTable() — it throws outright on live (MariaDB
+            // 10.1.48), so the one method whose job is to report coverage
+            // honestly would have been the one that crashed there.
+            'capability_flag_table'      => (int) (DB::selectOne(
+                'SELECT COUNT(*) AS c FROM information_schema.TABLES
+                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+                ['capability_flag']
+            )->c ?? 0) > 0,
         ];
     }
 

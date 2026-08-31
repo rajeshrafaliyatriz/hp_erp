@@ -189,11 +189,18 @@ class StudioController extends Controller
             ->orderByDesc('id')
             ->first();
 
-        // Total published competencies == approved skills in the catalog.
-        $totalCompetencies = DB::table('s_users_skills')
+        /*
+         * FROM `competency`, the table the Library owns — not `s_users_skills`.
+         *
+         * The old comment ("a competency == an approved skill in the catalog")
+         * described the world before the Competency Library moved tables. It left
+         * this counting 124 for tenant 6 while the Library listed 22. See
+         * CommandCenterService::competenciesCount(), which had the identical bug
+         * and is fixed the same way.
+         */
+        $totalCompetencies = DB::table('competency')
             ->where('sub_institute_id', $sid)
             ->whereNull('deleted_at')
-            ->where('approve_status', 'Approved')
             ->count();
 
         // Roles + mapping coverage (distinct jobrole names, internally consistent).
