@@ -1821,6 +1821,12 @@ Route::post('/competency/task-execution/review', [\App\Http\Controllers\Api\Comp
 Route::get('/competency/eso', [\App\Http\Controllers\Api\Competency\EsoController::class, 'index'])->middleware('profile:admin,hr');
 Route::post('/competency/eso', [\App\Http\Controllers\Api\Competency\EsoController::class, 'store'])->middleware('profile:admin,hr');
 Route::post('/competency/eso/generate', [\App\Http\Controllers\Api\Competency\EsoController::class, 'generate'])->middleware('profile:admin,hr');
+// Read-only: which model this server actually resolves to. `deepseek-chat` is an
+// alias and can move without this repo changing, and live cannot be shelled into
+// — so the configuration has to be answerable over HTTP. Never echoes the key.
+// MUST stay above /competency/eso/{id}: that route is whereNumber-constrained, so
+// it would not capture 'diagnostics' today, but the ordering is not left to luck.
+Route::get('/competency/eso/diagnostics', [\App\Http\Controllers\Api\Competency\EsoController::class, 'diagnostics'])->middleware('profile:admin,hr');
 Route::get('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'show'])->whereNumber('id')->middleware('profile:admin,hr');
 // Two formats, two readers: md carries YAML front matter for an agent to parse,
 // pdf is a printable SOP for a person. Both state status and source inside the

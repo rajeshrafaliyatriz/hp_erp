@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Competency\EsoExporter;
 use App\Services\Competency\EsoGenerator;
 use App\Services\Competency\TaskExecutionClassifier;
+use App\Services\DeepSeekService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -284,6 +285,80 @@ class EsoController extends Controller
     }
 
     /**
+     * GET /competency/eso/diagnostics — what this server is actually configured to use.
+     *
+     * ── WHY THIS EXISTS ─────────────────────────────────────────────────────
+     *
+     * `deepseek-chat` is an ALIAS. config/deepseek.php records the probe that
+     * matters: on this account it answers a classification in 252 tokens, while
+     * `deepseek-v4-flash` and `deepseek-v4-pro` consume their ENTIRE output
+     * allowance and return nothing parseable. An alias can start resolving
+     * somewhere else without one line of this repository changing.
+     *
+     * When generation fails on a host nobody can shell into, the first question
+     * is "which model answered" — and until now there was no way to ask it.
+     * That turned a one-minute configuration check into guesswork.
+     *
+     * READ-ONLY, AND IT NEVER ECHOES THE KEY. It reports whether a key is
+     * present, never its value: a diagnostics endpoint that leaks the credential
+     * it is diagnosing is a worse problem than the one it solves.
+     *
+     * The live round trip is opt-in via ?probe=1 because it costs money.
+     */
+    public function diagnostics(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $ai = app(DeepSeekService::class);
+        $expected = 'deepseek-chat';
+        $model = (string) config('deepseek.model');
+        $floor = config('deepseek.min_balance_usd');
+
+        $data = [
+            'configured'       => $ai->isConfigured(),
+            'api_key_present'  => trim((string) config('deepseek.api_key')) !== '',
+            'model'            => $model,
+            'expected_model'   => $expected,
+            'model_unexpected' => $model !== $expected,
+            'base_url'         => (string) config('deepseek.base_url'),
+            'request_timeout'  => (int) config('deepseek.request_timeout'),
+            'min_balance_usd'  => (float) $floor,
+            /*
+             * THE FOOTGUN, REPORTED RATHER THAN LEFT TO BE DISCOVERED.
+             *
+             * An ABSENT DEEPSEEK_MIN_BALANCE_USD is safe — env() falls back to
+             * 1.00. A key that is PRESENT BUT EMPTY casts to 0.0, and
+             * DeepSeekService::guardBalance() returns early when the floor is
+             * <= 0, silently disabling the spend guard entirely. Absence and
+             * emptiness look identical in a .env and behave oppositely.
+             */
+            'balance_guard_active' => (float) $floor > 0,
+        ];
+
+        // Costs a request, so it is asked for explicitly.
+        if ($request->boolean('probe')) {
+            try {
+                $data['balance'] = $ai->balance();
+            } catch (\Throwable $e) {
+                $data['balance'] = null;
+                $data['balance_error'] = class_basename($e);
+            }
+        }
+
+        return response()->json([
+            'status' => 1,
+            'data' => $data,
+            'message' => $data['model_unexpected']
+                ? 'This server is set to "' . $model . '", which this feature has not been verified against. '
+                    . 'config/deepseek.php records what was measured.'
+                : 'AI configuration read successfully.',
+        ]);
+    }
+
+    /**
      * POST /competency/eso/generate — the §6.3 "Generate ESO with AI" action.
      *
      * Writes a Draft, marked `ai-generated`, attached to one task. It is a
@@ -309,20 +384,55 @@ class EsoController extends Controller
             $context['user_id'] !== null ? (int) $context['user_id'] : null,
         );
 
+        /*
+         * ── 502 IS FOR A FAILED UPSTREAM, NOT FOR AN ANSWER WE COULD NOT USE ──
+         *
+         * `truncated` used to return 502 as well, and that was wrong twice over.
+         *
+         * It made an application outcome indistinguishable from a gateway
+         * failure: nginx also answers 502, so the client could not tell "DeepSeek
+         * replied and the reply did not fit" from "PHP never answered". The two
+         * need opposite responses — one is retryable with a bigger budget, the
+         * other means the server is down.
+         *
+         * And because the two shared a status, the client fell back to
+         * SUBSTRING-MATCHING THE PROSE to tell them apart (load-state.tsx). That
+         * made the message text load-bearing: rewording this sentence silently
+         * reclassified the error. A status code is a contract; a sentence is not.
+         *
+         * 422 says what is true — the request was understood, and the answer it
+         * produced could not be used.
+         */
         $refusals = [
             'not_configured' => ['AI is not configured on this server, so nothing was generated.', 503],
             'insufficient_balance' => ['The AI account balance is too low to run this safely, so nothing was sent and nothing was charged.', 402],
-            'truncated' => ['The model ran out of room before finishing, so the draft could not be used.', 502],
+            'truncated' => ['The model ran out of room before finishing this task, so the draft could not be used.', 422],
             'ai_error'  => ['The model could not be reached, so nothing was generated. Nothing was guessed at.', 502],
             'no_task'   => ['That task does not exist in your organisation.', 404],
             'exists'    => ['This task already has an execution model. Open it rather than generating a second one.', 409],
         ];
 
         if ($result['reason'] !== null) {
-            [$message, $code] = $refusals[$result['reason']];
+            // A DEFAULT, because the generator owns this vocabulary and can grow
+            // it. Destructuring an unmapped key threw a TypeError and answered
+            // 500 — a new reason turning into a crash is the worst way to learn
+            // the map is stale.
+            [$message, $code] = $refusals[$result['reason']]
+                ?? ['Generation stopped for a reason this screen does not recognise yet.', 500];
+
+            $diagnostics = $result['diagnostics'] ?? null;
+
+            // THE MODEL NAMES ITSELF ON THE WAY OUT. Live cannot be shelled into,
+            // so a truncation there is only as diagnosable as what it returns.
+            if (is_array($diagnostics) && ($diagnostics['model_unexpected'] ?? false)) {
+                $message .= ' The server is configured to use "' . $diagnostics['model']
+                    . '", which this feature has not been verified against.';
+            }
+
             return response()->json([
                 'status' => 0, 'reason' => $result['reason'],
                 'detail' => $result['detail'] ?? null,
+                'diagnostics' => $diagnostics,
                 'message' => $message, 'data' => $result,
             ], $code);
         }

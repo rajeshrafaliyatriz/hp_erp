@@ -623,11 +623,42 @@ class SkillDevelopmentController extends Controller
                 ->sortByDesc('progress')
                 ->values();
 
+            /*
+             * AN EMPTY PEER SET IS AN EMPTY RESULT, NOT A MISSING ENDPOINT.
+             *
+             * This returned 404 with `status: false`, and that produced a
+             * genuinely misleading failure. 404 means the resource does not
+             * exist — so a browser console shows
+             * "peer-comparison ... 404 (Not Found)" and every reader, including
+             * me, concludes the route was never deployed. It was: the route has
+             * been on every branch since January, and the controller ran fine.
+             * The organisation simply had nobody with measurable progress.
+             *
+             * The client compounded it. use-lms-dashboard.ts swallows the 404
+             * with no log and sets peerComparison to null; the widget then omits
+             * the tile, and when streak and weekly goal are also empty the panel
+             * renders "No stats yet" — reporting a server response nobody can see
+             * as an absence of activity.
+             *
+             * So: 200 with an explicit empty payload and the reason it is empty.
+             * `empty_is_expected` distinguishes "nothing to compare yet" from
+             * "the comparison failed", which is the distinction the caller needs
+             * and could not previously make.
+             */
             if ($peerProgresses->isEmpty()) {
                 return response()->json([
-                    'status' => false,
-                    'message' => 'No peer data available'
-                ], 404);
+                    'status' => true,
+                    'data' => [
+                        'peer_count' => 0,
+                        'rank' => null,
+                        'percentile' => null,
+                        'user_progress' => $userProgressData['progress'] ?? null,
+                    ],
+                    'empty_is_expected' => true,
+                    'empty_reason' => 'Nobody in your organisation has recorded skill progress yet, '
+                        . 'so there is nothing to compare against. This fills once skill ratings exist.',
+                    'message' => 'No peer data available',
+                ], 200);
             }
 
             // Find user's rank

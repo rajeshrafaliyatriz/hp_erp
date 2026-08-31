@@ -15,17 +15,32 @@ class SeedG2gDefaultViewRights extends Command
      *
      * @var string
      */
-    protected $signature = 'g2g:seed-default-view-rights';
+    protected $signature = 'g2g:seed-default-view-rights {--force : Grant anyway, understanding this reverses revoked permissions}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Grants can_view=1 in tblgroupwise_rights_g2g for every active profile x menu row that has no rights row yet, so the new sidebar is not empty until an admin curates real rights.';
+    protected $description = 'Grants can_view=1 for every active profile x menu with no rights row. DESTRUCTIVE after go-live: it reverses revoked permissions. Requires --force.';
 
     /**
      * Execute the console command.
+     *
+     * ── WHY THIS NOW REFUSES BY DEFAULT ─────────────────────────────────────
+     *
+     * REVOCATION IN THIS SYSTEM IS ROW ABSENCE. storeGroupwiseRightsG2g deletes a
+     * profile's entire rights set and re-inserts only the ticked boxes, so there
+     * is not one can_view = 0 row in either database. "Never granted" and
+     * "deliberately taken away" are the same state.
+     *
+     * This command grants can_view = 1 to every profile x menu pair that has no
+     * row — which means running it SILENTLY RESTORES EVERY PERMISSION ANY
+     * ADMINISTRATOR HAS EVER REMOVED, and reports it as a count of rows inserted.
+     *
+     * That was safe exactly once: on an empty rights table, before anyone had
+     * curated anything. It is not safe now. The dry run below shows what would
+     * be re-granted, and --force is required to proceed.
      */
     public function handle()
     {
@@ -54,6 +69,37 @@ class SeedG2gDefaultViewRights extends Command
                     'created_at' => now(),
                 ];
             }
+        }
+
+        if ($rows === []) {
+            $this->info('Nothing to grant — every active profile already has a row for every menu.');
+
+            return self::SUCCESS;
+        }
+
+        if (! $this->option('force')) {
+            $this->warn(count($rows).' profile/menu pairs currently have NO rights row.');
+            $this->line('');
+            $this->line('Because revocation is stored as row absence, this command cannot tell');
+            $this->line('"never granted" from "an administrator revoked it". Granting all of');
+            $this->line('these would REVERSE every permission anyone has removed.');
+            $this->line('');
+
+            // Name a few, so the operator can judge rather than guess.
+            foreach (array_slice($rows, 0, 5) as $row) {
+                $menu = tblmenumaster_g2gModel::where('id', $row['menu_id'])->value('menu_name');
+                $profile = tbluserprofilemasterModel::where('id', $row['profile_id'])->value('name');
+                $this->line(sprintf('  profile %-28s would regain  %s', $profile ?? $row['profile_id'], $menu ?? $row['menu_id']));
+            }
+
+            if (count($rows) > 5) {
+                $this->line('  … and '.(count($rows) - 5).' more.');
+            }
+
+            $this->line('');
+            $this->error('Refusing without --force. Re-run with --force if that is genuinely intended.');
+
+            return self::FAILURE;
         }
 
         foreach (array_chunk($rows, 1000) as $chunk) {
