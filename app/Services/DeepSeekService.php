@@ -195,6 +195,25 @@ class DeepSeekService
             'total_tokens'            => (int) ($usage['total_tokens'] ?? 0),
             'prompt_cache_hit_tokens' => (int) ($usage['prompt_cache_hit_tokens'] ?? 0),
             'prompt_cache_miss_tokens'=> (int) ($usage['prompt_cache_miss_tokens'] ?? 0),
+
+            /*
+             * WHICH MODEL ANSWERED, AND WHAT CEILING IT HAD.
+             *
+             * These are not statistics, they are the diagnosis. `deepseek-chat`
+             * is an ALIAS that resolves to whatever the account currently serves,
+             * and config/deepseek.php records the measurement that matters: the
+             * v4 models consume their entire allowance and return nothing
+             * parseable, every time, while deepseek-chat answers in 252 tokens.
+             *
+             * Those two failures are indistinguishable from the counts alone —
+             * both end at finish_reason=length. Only the model name separates
+             * "the alias moved under us" from "the model genuinely rambled", and
+             * without it a caller on a server we cannot shell into has no way to
+             * tell which fix applies.
+             */
+            'model'            => (string) $payload['model'],
+            'max_tokens'       => (int) $payload['max_tokens'],
+            'finish_reason'    => (string) ($response->json('choices.0.finish_reason') ?? ''),
         ];
 
         /*

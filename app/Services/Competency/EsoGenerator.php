@@ -28,8 +28,54 @@ use Illuminate\Support\Facades\Log;
  */
 class EsoGenerator
 {
+    /**
+     * The first attempt's output ceiling.
+     *
+     * MEASURED: eso#7, the one completed ESO on live, serialises to 3,826
+     * characters across its twelve fields — about 1,100 output tokens. 2,600 is
+     * 2.4x that, which is room for a wordier task without room to ramble.
+     */
+    private const FIRST_BUDGET = 2600;
+
+    /** The model this codebase is known to work with. See config/deepseek.php. */
+    private const EXPECTED_MODEL = 'deepseek-chat';
+
     public function __construct(private readonly DeepSeekService $ai)
     {
+    }
+
+    /**
+     * What a caller needs to tell the three truncation causes apart.
+     *
+     * Live runs on a host we cannot shell into, so a failure there is only as
+     * diagnosable as what it puts in the response. The counts alone are not
+     * enough: a model that consumed its whole allowance and a model that
+     * genuinely ran long look identical from the numbers.
+     *
+     * `model_unexpected` is the one that matters. config/deepseek.php records
+     * the probe — deepseek-chat answers in 252 tokens, while the v4 models burn
+     * the entire ceiling and return nothing parseable. `deepseek-chat` is an
+     * ALIAS, so it can start resolving elsewhere without anything in this repo
+     * changing. If that has happened, this flag says so and the fix is a
+     * different model, not a bigger budget.
+     */
+    private function diagnostics(?array $spent, int $attempts): array
+    {
+        $model = $spent['model'] ?? null;
+        $used  = (int) ($spent['completion_tokens'] ?? 0);
+        $cap   = (int) ($spent['max_tokens'] ?? 0);
+
+        return [
+            'model'             => $model,
+            'expected_model'    => self::EXPECTED_MODEL,
+            'model_unexpected'  => $model !== null && $model !== self::EXPECTED_MODEL,
+            'attempts'          => $attempts,
+            'max_tokens'        => $cap,
+            'completion_tokens' => $used,
+            // The signature of an allowance consumed rather than an answer given.
+            'exhausted_budget'  => $cap > 0 && $used >= $cap,
+            'finish_reason'     => $spent['finish_reason'] ?? null,
+        ];
     }
 
     /**
@@ -64,24 +110,108 @@ class EsoGenerator
             ->where('sub_institute_id', $tenantId)->where('user_jobrole_task_id', $taskId)
             ->first(['execution_mode_target', 'risk_class', 'automation_rationale', 'classification_status']);
 
-        try {
-            $result = $this->ai->chatJson([
-                ['role' => 'system', 'content' =>
-                    'You write execution procedures for workplace tasks. You are precise and '
-                    . 'conservative: you never assign a machine work that needs human '
-                    . 'accountability, and you always state what must NOT be done. '
-                    . 'You return only valid JSON.'],
-                ['role' => 'user', 'content' => $this->prompt($task, $execution)],
-            ], ['json' => true, 'temperature' => 0.3, 'max_tokens' => 2600]);
-        } catch (DeepSeekBudgetException $e) {
-            return $empty + ['reason' => 'insufficient_balance', 'detail' => $e->getMessage()];
-        } catch (DeepSeekTruncatedException $e) {
-            return $empty + ['reason' => 'truncated', 'detail' => $e->getMessage(), 'spent' => $this->ai->lastUsage()];
-        } catch (\Throwable $e) {
-            Log::warning('ESO generation failed', [
-                'tenant' => $tenantId, 'task' => $taskId, 'error' => $e->getMessage(),
-            ]);
-            return $empty + ['reason' => 'ai_error', 'spent' => $this->ai->lastUsage()];
+        $messages = [
+            ['role' => 'system', 'content' =>
+                'You write execution procedures for workplace tasks. You are precise and '
+                . 'conservative: you never assign a machine work that needs human '
+                . 'accountability, and you always state what must NOT be done. '
+                . 'You return only valid JSON.'],
+            ['role' => 'user', 'content' => $this->prompt($task, $execution)],
+        ];
+
+        /*
+         * ── THE OUTPUT BUDGET, AND WHY IT ESCALATES ONCE ────────────────────
+         *
+         * MEASURED, not guessed: the one completed ESO on live (eso#7) serialises
+         * to 3,826 characters across its twelve fields — roughly 1,100 output
+         * tokens. So the first attempt is sized at 2,600, which is 2.4x what a
+         * finished procedure actually costs. A flat ceiling is fine here; the
+         * classifier has to size per batch (TaskExecutionClassifier::classifyRole)
+         * because its answer grows with the number of tasks, and an ESO's does not.
+         *
+         * ONE ESCALATION, THEN STOP. If 2,600 was not enough, either the model
+         * genuinely ran long on a wordy task — which doubling fixes — or the model
+         * is not the one we think it is, which doubling cannot fix and must not be
+         * repeated. config/deepseek.php records the probe: deepseek-v4-flash and
+         * v4-pro consume their ENTIRE allowance and return nothing parseable, every
+         * time, while deepseek-chat answers the same prompt in 252 tokens.
+         *
+         * So a second truncation is not a bigger budget problem. It is a signal,
+         * and the returned diagnostics below carry the model name that says which.
+         * Retrying further would just spend more of a small balance to relearn it.
+         */
+        $attempts = [self::FIRST_BUDGET, self::FIRST_BUDGET * 2];
+        $lastTruncation = null;
+
+        foreach ($attempts as $index => $budget) {
+            try {
+                $result = $this->ai->chatJson(
+                    $messages,
+                    ['json' => true, 'temperature' => 0.3, 'max_tokens' => $budget],
+                );
+
+                break;
+            } catch (DeepSeekBudgetException $e) {
+                // Nothing was sent and nothing was charged. Escalating would only
+                // ask a second time for money that is not there.
+                return $empty + ['reason' => 'insufficient_balance', 'detail' => $e->getMessage()];
+            } catch (DeepSeekTruncatedException $e) {
+                $lastTruncation = $e;
+                $spent = $this->ai->lastUsage();
+
+                Log::warning('ESO generation truncated', [
+                    'tenant'     => $tenantId,
+                    'task'       => $taskId,
+                    'attempt'    => $index + 1,
+                    'max_tokens' => $budget,
+                    'model'      => $spent['model'] ?? null,
+                    'usage'      => $spent,
+                ]);
+
+                if ($index === array_key_last($attempts)) {
+                    return $empty + [
+                        'reason' => 'truncated',
+                        'detail' => $e->getMessage(),
+                        'spent'  => $spent,
+                        'diagnostics' => $this->diagnostics($spent, $index + 1),
+                    ];
+                }
+
+                // Fall through and try once more with double the room.
+                continue;
+            } catch (\Throwable $e) {
+                /*
+                 * NOT "the model could not be reached".
+                 *
+                 * This catch sees a connection timeout, a DeepSeek 4xx, a JSON
+                 * decode failure and a database error alike. Reporting all of
+                 * them as an unreachable model sends whoever reads it to check
+                 * the network when the fault may be entirely local, so the class
+                 * of the exception is carried out rather than flattened away.
+                 */
+                Log::warning('ESO generation failed', [
+                    'tenant' => $tenantId, 'task' => $taskId,
+                    'type'   => get_class($e),
+                    'error'  => $e->getMessage(),
+                ]);
+
+                return $empty + [
+                    'reason' => 'ai_error',
+                    'spent'  => $this->ai->lastUsage(),
+                    'diagnostics' => ['exception' => class_basename($e)],
+                ];
+            }
+        }
+
+        if (!isset($result)) {
+            // Unreachable today — the loop either breaks with a result or returns.
+            // Kept so a future edit to the loop cannot fall through to an
+            // undefined variable and a 500.
+            return $empty + [
+                'reason' => 'truncated',
+                'detail' => $lastTruncation?->getMessage(),
+                'spent'  => $this->ai->lastUsage(),
+            ];
         }
 
         $spent = $this->ai->lastUsage();
