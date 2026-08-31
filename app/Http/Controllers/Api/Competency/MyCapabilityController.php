@@ -115,6 +115,13 @@ class MyCapabilityController extends Controller
                 'm.is_mandatory',
                 'r.rating',
                 'r.rated_at',
+                // WHO RATED THIS, so the reader can tell their own view from an
+                // assessor's verdict. Without it the self-rating control cannot
+                // know which items it may not touch, and would offer a button
+                // that the server then refuses — a control that looks live and
+                // then fails is worse than one that explains itself.
+                'r.source',
+                'r.assessor_id',
             ]);
 
         return $this->payload($me, $jobroleId, $jobrole, $items, $items->isEmpty(),
