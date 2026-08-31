@@ -422,6 +422,14 @@ Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competen
 // anybody else's data because it has no way to name anybody else.
 Route::get('/competency/my-capability', [\App\Http\Controllers\Api\Competency\MyCapabilityController::class, 'index'])->middleware('api.token');
 
+// SELF-RATING. `api.token`, like the read above and for the same reason: these
+// accept NO user_id, so there is no subject to tamper with and nothing for a
+// profile guard to protect. Employees could always SEE their capability and
+// never record a view of it — every kasba-rating write route is admin-only, so
+// self-rating returned 403 while `source = 'self'` rows sat in the table.
+Route::post('/competency/my-rating', [\App\Http\Controllers\Api\Competency\MyRatingController::class, 'store'])->middleware('api.token');
+Route::delete('/competency/my-rating', [\App\Http\Controllers\Api\Competency\MyRatingController::class, 'destroy'])->middleware('api.token');
+
 // The candidate list the write half never had. Guarded the same as the write:
 // a rating names a person, so reading who can be rated is not a public question.
 Route::get('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'index'])->middleware('profile:admin,hr');
