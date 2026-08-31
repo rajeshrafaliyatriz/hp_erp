@@ -110,6 +110,26 @@ class TaskStatusWriter
         // The event is emitted HERE because this is the only place that knows both
         // sides of the transition. A caller emitting it would be guessing at `from`.
         if ($before->status !== $resolved['status']) {
+            /*
+             * ── A REOPEN IS ITS OWN EVENT, NOT A STATUS CHANGE ──────────────
+             *
+             * COMPLETED -> IN-PROGRESS is the only legal way out of COMPLETED,
+             * and it means finished work was found wanting and sent back. That
+             * is exactly what CapabilityEvidenceProjector calls `task.reopened`
+             * and treats as negative evidence.
+             *
+             * It was emitted as a plain `task.status_changed`, which the
+             * projector does not handle — so half its trigger vocabulary could
+             * never fire. Nothing anywhere emitted `task.reopened`, on either
+             * database, ever.
+             *
+             * The generic event is ALSO emitted, unchanged: TaskStatusProjector
+             * and the history trail are built on it, and dropping it to make
+             * room for the specific one would trade one broken consumer for
+             * another.
+             */
+            $isReopen = $before->status === 'COMPLETED' && $resolved['status'] === 'IN-PROGRESS';
+
             $this->events->record(
                 'task.status_changed',
                 $tenantId,
@@ -120,8 +140,27 @@ class TaskStatusWriter
                     'from'   => $before->status,
                     'to'     => $resolved['status'],
                     'on_hold' => $onHold,
+                    // The shape TaskStatusProjector reads. It was absent, which
+                    // is why task_status_history stayed empty.
+                    'before' => ['status' => $before->status],
+                    'after'  => ['status' => $resolved['status']],
                 ]
             );
+
+            if ($isReopen) {
+                $this->events->record(
+                    'task.reopened',
+                    $tenantId,
+                    'task',
+                    $taskId,
+                    $actorId,
+                    [
+                        'from'   => $before->status,
+                        'to'     => $resolved['status'],
+                        'reason' => $extra['remarks'] ?? $extra['delay_reason'] ?? null,
+                    ]
+                );
+            }
         }
 
         return ['ok' => true, 'reason' => null, 'from' => $before->status, 'to' => $resolved['status']];

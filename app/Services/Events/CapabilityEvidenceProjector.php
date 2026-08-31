@@ -65,6 +65,21 @@ class CapabilityEvidenceProjector
     private const MEANING = [
         'task.rejected'            => ['outcome' => 'task_rejected',     'direction' => 'negative'],
         'task.reopened'            => ['outcome' => 'task_reopened',     'direction' => 'negative'],
+        /*
+         * APPROVAL IS EVIDENCE TOO, AND ITS ABSENCE WAS THE ASYMMETRY.
+         *
+         * Every task outcome this class understood was a failure, so a capability
+         * record built from it could only ever accumulate bad news — an employee
+         * who completed a hundred tasks correctly and had one sent back would show
+         * exactly one piece of evidence, and it would be against them.
+         *
+         * That is not what evidence is for. Doing a task to an approver's
+         * satisfaction demonstrates the capability the task exercises, which is
+         * the whole claim the ESO's Evidence section makes. It is recorded on
+         * APPROVAL rather than on self-reported completion, so nobody credits
+         * themselves by ticking their own box.
+         */
+        'task.approved'            => ['outcome' => 'task_approved',     'direction' => 'positive'],
         'capability.flag_resolved' => ['outcome' => 'flag_resolved',     'direction' => 'positive'],
         'certification.issued'     => ['outcome' => 'certificate_issued', 'direction' => 'positive'],
     ];

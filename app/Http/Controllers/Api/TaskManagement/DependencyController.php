@@ -21,6 +21,9 @@ class DependencyController extends Controller
         if (!is_array($context)) return $context;
         $validator = Validator::make($request->all(), [
             'project_id' => 'nullable|integer', 'assignee_id' => 'nullable|integer',
+            // Scoped to the caller's own tenant where it is applied, so an id
+            // from another organisation matches nothing rather than leaking.
+            'department_id' => 'nullable|integer',
             'status' => 'nullable|in:PENDING,IN-PROGRESS,ON HOLD,COMPLETED',
         ]);
         if ($validator->fails()) return $this->validationError($validator);
@@ -40,6 +43,21 @@ class DependencyController extends Controller
             });
         }
         if ($request->filled('assignee_id')) $query->where('successor.task_allocated_to', $request->integer('assignee_id'));
+        /*
+         * BY THE ASSIGNEE'S DEPARTMENT, not the project's.
+         *
+         * The two are different questions and conflating them is a documented
+         * bug elsewhere in this module. WorkspaceController and MyTasksController
+         * both already mean the assignee's department when they say "department",
+         * so this agrees with them rather than introducing a second meaning.
+         */
+        if ($request->filled('department_id')) {
+            $query->whereIn('successor.task_allocated_to', function ($sub) use ($request, $context) {
+                $sub->select('id')->from('tbluser')
+                    ->where('sub_institute_id', $context['sub_institute_id'])
+                    ->where('department_id', $request->integer('department_id'));
+            });
+        }
         if ($request->filled('status')) $query->whereRaw('UPPER(successor.status) = ?', [$request->input('status')]);
         $dependencies = $query->orderBy('successor.task_date')->get()->map(fn ($row) => $this->resource($row));
 
@@ -424,6 +442,9 @@ class DependencyController extends Controller
                 // rather than inventing a start.
                 't.planned_start_date', 'p.name as project', 'p.id as project_id',
                 'pt.workstream_id', 'w.name as workstream', 't.task_allocated_to as assignee_id',
+                // The assignee's department, so the client can group and filter
+                // by it without a second round trip per node.
+                'u.department_id',
                 DB::raw("TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name)) as assignee"))->get()
             ->map(fn ($task) => [
                 'id' => (string) $task->id, 'title' => $task->title, 'status' => $task->status,
@@ -437,6 +458,9 @@ class DependencyController extends Controller
                 // strings happened to agree.
                 'assignee_id' => $task->assignee_id ? (string) $task->assignee_id : null,
                 'assignee' => $task->assignee ?: 'Unassigned',
+                // Same rule as assignee_id: the client filters on the ID, never
+                // on a rendered name that two code paths must agree about.
+                'department_id' => $task->department_id ? (string) $task->department_id : null,
                 'at_risk' => $task->due_date && $task->due_date < now()->toDateString() && strtoupper((string) $task->status) !== 'COMPLETED',
             ])->unique('id')->values();
     }

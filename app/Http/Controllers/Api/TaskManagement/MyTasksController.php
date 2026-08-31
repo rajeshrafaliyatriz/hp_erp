@@ -326,6 +326,11 @@ class MyTasksController extends Controller
                 't.id', 't.task_title', 't.task_description', 't.task_attachment',
                 't.file_size', 't.file_type', 't.task_date', 't.planned_start_date', 't.estimated_hours', 't.actual_hours', 't.remaining_hours', 't.acceptance_criteria', 't.task_type',
                 't.status', 't.status_label', 't.reply', 't.delay_category', 't.delay_reason', 't.observation_point', 't.created_at',
+                // THE APPROVAL DECISION, WHICH THE ASSIGNEE COULD NOT SEE.
+                // A rejected task silently flipped to ON HOLD with no reason and
+                // no badge — the person whose work was sent back was the one
+                // person not told. approve_remarks is the reason they are owed.
+                't.approve_status', 't.approved_on', 't.approve_remarks',
                 't.updated_at', 't.task_allocated', 't.task_allocated_to',
                 DB::raw("TRIM(CONCAT_WS(' ', assignee.first_name, assignee.middle_name, assignee.last_name)) as assignee_name"),
                 DB::raw("TRIM(CONCAT_WS(' ', allocator.first_name, allocator.middle_name, allocator.last_name)) as allocator_name"),
@@ -406,6 +411,14 @@ class MyTasksController extends Controller
             'department' => (string) ($task->department_name ?? ''),
             'status' => $status,
             'status_label' => $task->status_label ?? null,
+            // Lowercased on the way out: the column held three spellings before
+            // it was normalised, and a client that switches on the value should
+            // not have to know which era a row was written in.
+            'approve_status' => $task->approve_status
+                ? strtolower(trim((string) $task->approve_status))
+                : null,
+            'approved_on' => $task->approved_on ?? null,
+            'approve_remarks' => $task->approve_remarks ?: null,
             'priority' => $task->task_type ?: null,
             'task_type' => $task->task_type,
             'estimated_hours' => $task->estimated_hours !== null ? (float) $task->estimated_hours : null,

@@ -406,19 +406,49 @@ class WorkspaceController extends Controller
 
         $approving = $request->input('decision') === 'approve';
 
+        /*
+         * LOWERCASE, DELIBERATELY. This wrote 'Approved'/'Rejected' in title case
+         * while the stored data holds 'approved', 'rejected' and 'PENDING' — three
+         * spellings of two ideas, so every reader needed its own case dance and the
+         * ones that forgot silently missed rows. One vocabulary, fixed here at the
+         * writer and normalised in the data by migration.
+         */
+        $newApproveStatus = $approving ? 'approved' : 'rejected';
+        $newStatus = $approving ? $task->status : 'ON HOLD';
+
         DB::table('task')->where('id', $id)->update([
-            'approve_status' => $approving ? 'Approved' : 'Rejected',
+            'approve_status' => $newApproveStatus,
             'approved_by' => $context['user_id'],
             'approved_on' => now(),
             'approve_remarks' => $request->input('remarks'),
             // A rejected task goes back into the working pile: ON HOLD is how
             // the board and the old screens represent "rework required".
-            'status' => $approving ? $task->status : 'ON HOLD',
+            'status' => $newStatus,
             'updated_by' => $context['user_id'],
             'updated_at' => now(),
         ]);
 
-        $this->taskAudit->taskChanged($id, $approving ? 'approved' : 'rejected', (array) $task, $context['user_id']);
+        /*
+         * THE `after` HALF IS WHAT MAKES THE DOWNSTREAM WORK.
+         *
+         * Without it TaskStatusProjector cannot fill to_status — task_status_history
+         * held zero rows on both databases — and the rejection notification composes
+         * to "— was not approved … Reason given: —", because its template reads
+         * {payload.task_title} and {payload.approve_remarks} and a missing key
+         * renders as an em dash.
+         */
+        $this->taskAudit->taskChanged(
+            $id,
+            $approving ? 'approved' : 'rejected',
+            (array) $task,
+            $context['user_id'],
+            [
+                'status'          => $newStatus,
+                'approve_status'  => $newApproveStatus,
+                'task_title'      => $task->task_title ?? null,
+                'approve_remarks' => $request->input('remarks'),
+            ],
+        );
 
         return response()->json([
             'status' => 1,
@@ -601,7 +631,7 @@ class WorkspaceController extends Controller
             // three weeks appeared as a single chip on the last day of it.
             ->selectRaw("t.id, t.task_title, t.task_description, t.task_type, t.task_date, t.planned_start_date, t.status,
                 t.task_allocated, t.task_allocated_to, t.created_by, t.created_at, t.updated_at,
-                t.reply, t.approve_status, t.approved_on, t.task_attachment, t.file_size, t.file_type, t.status_label,
+                t.reply, t.approve_status, t.approved_on, t.approve_remarks, t.task_attachment, t.file_size, t.file_type, t.status_label,
                 t.kra, t.kpa, t.required_skills, t.skill_id, t.observation_point,
                 pt.project_id, proj.name as project_name, department.department as department_name,
                 TRIM(CONCAT_WS(' ', allocator.first_name, allocator.middle_name, allocator.last_name)) as allocator_name,
@@ -741,6 +771,23 @@ class WorkspaceController extends Controller
             'due_date' => $task->task_date ? Carbon::parse($task->task_date)->toDateString() : null,
             'remarks' => $task->reply ?? null,
             'approved' => in_array(strtolower(trim((string) ($task->approve_status ?? ''))), self::APPROVED_VALUES, true),
+            /*
+             * THE DECISION ITSELF, NOT JUST "IS IT APPROVED".
+             *
+             * The payload exposed only a boolean, so the Rejected tab had nothing
+             * to filter on and fell back to `status === 'ON HOLD'` — a proxy that
+             * is wrong twice: both databases hold ZERO ON HOLD tasks so the tab was
+             * always empty, and ON HOLD is separately counted as "Blocked /
+             * Overdue", so a rejected task would double-count against itself.
+             *
+             * approve_remarks travels with it because a rejection without its
+             * reason is not something anybody can act on.
+             */
+            'approve_status' => $task->approve_status
+                ? strtolower(trim((string) $task->approve_status))
+                : null,
+            'approved_on' => $task->approved_on ?? null,
+            'approve_remarks' => $task->approve_remarks ?: null,
             'approved_on' => $task->approved_on ?? null,
             'created_at' => $task->created_at ? Carbon::parse($task->created_at)->toIso8601String() : null,
             'updated_at' => $task->updated_at ? Carbon::parse($task->updated_at)->toIso8601String() : null,
