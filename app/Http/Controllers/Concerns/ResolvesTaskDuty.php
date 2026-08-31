@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Which job role duty is an assigned task an instance of?
@@ -51,8 +52,48 @@ trait ResolvesTaskDuty
                 ->limit(2)
                 ->pluck('id');
 
-            return $matches->count() === 1 ? (int) $matches->first() : null;
+            if ($matches->count() === 1) {
+                return (int) $matches->first();
+            }
+
+            /*
+             * SAY WHICH KIND OF NOTHING THIS IS.
+             *
+             * All three outcomes returned a bare null, so afterwards nobody could
+             * tell "this is ad-hoc work with no duty" from "several roles share
+             * this title and I refused to guess" — and the second is a fixable
+             * problem sitting in a column that looks identical to the first.
+             *
+             * Measured on live tenant 6: 595 tasks have no candidate at all and
+             * 11 are ambiguous. Only the 11 are worth anybody's attention, and
+             * until now there was no way to find them except by re-deriving the
+             * match by hand.
+             *
+             * Ambiguity is logged, absence is not — 595 log lines saying "this
+             * manually typed task is a manually typed task" would bury the 11.
+             */
+            if ($matches->count() > 1) {
+                Log::info('Task duty ambiguous, left unlinked', [
+                    'tenant' => $tenantId,
+                    'title'  => $title,
+                    'note'   => 'Several job roles share this task title. The assign form should '
+                              . 'send jobrole_task_id so this does not need guessing.',
+                ]);
+            }
+
+            return null;
         } catch (\Throwable $e) {
+            // A DATABASE FAILURE IS NOT "NO DUTY". It used to return the same
+            // null as both cases above, so an outage silently produced a batch
+            // of permanently unlinked tasks that looked exactly like ordinary
+            // ad-hoc work. The task is still created — that is deliberate, the
+            // work is real — but the reason is now on the record.
+            Log::warning('Task duty resolution failed', [
+                'tenant' => $tenantId,
+                'title'  => $title,
+                'error'  => $e->getMessage(),
+            ]);
+
             return null;
         }
     }

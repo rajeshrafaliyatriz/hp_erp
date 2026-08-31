@@ -55,13 +55,14 @@ class LegacyTaskController extends Controller
                 'SYEAR' => $context['syear'],
                 'status' => 'PENDING',
                 'created_by' => $context['user_id'],
-                // Resolved here rather than in the form: the assign screen sends
-                // task TITLES, and the rule for turning one into a duty already
-                // lives on this side. See resolveDuty().
-                'jobrole_task_id' => $this->resolveTaskDuty(
-                    (int) $context['sub_institute_id'],
-                    (string) $request->input('title')
-                ),
+                // THE CALLER'S OWN ID WINS; TEXT MATCHING IS THE FALLBACK.
+                //
+                // This used to resolve unconditionally from the title, on the
+                // reasoning that "the assign screen sends task TITLES". It sends
+                // the id now, and a title shared by several job roles cannot be
+                // resolved from text at all — the shared catalogue means four
+                // roles routinely carry the same sentence.
+                'jobrole_task_id' => $this->duty($request, (int) $context['sub_institute_id']),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]
@@ -147,7 +148,46 @@ class LegacyTaskController extends Controller
             // ids the capability chain resolves against.
             'skill_id' => 'nullable|string|max:2000',
             'observation_point' => 'nullable|string|max:2000',
+            // Shape only. Ownership is checked in duty(), which has the tenant.
+            'jobrole_task_id' => 'nullable|integer|min:1',
         ];
+    }
+
+    /**
+     * Which job-role task this work item came from.
+     *
+     * The caller's own id is preferred, because the assign form knows which row
+     * the user clicked and the server cannot rediscover it: job roles draw from
+     * a shared catalogue, so the same title routinely belongs to four roles at
+     * once and no text rule can choose between them.
+     *
+     * VERIFIED AGAINST THE CALLER'S TENANT before it is trusted. Without that,
+     * a caller could file their task against another organisation's duty and
+     * pull that organisation's procedure into their own task detail. An id that
+     * is not theirs is discarded, not refused — the task is still real work.
+     */
+    private function duty(Request $request, int $tenantId): ?int
+    {
+        $claimed = (int) $request->input('jobrole_task_id', 0);
+
+        if ($claimed > 0 && $tenantId > 0) {
+            $ownsIt = DB::table('s_user_jobrole_task')
+                ->where('id', $claimed)
+                ->where('sub_institute_id', $tenantId)
+                ->whereNull('deleted_at')
+                ->exists();
+
+            if ($ownsIt) {
+                return $claimed;
+            }
+
+            Log::warning('Task create named a job-role task it does not own', [
+                'tenant'          => $tenantId,
+                'jobrole_task_id' => $claimed,
+            ]);
+        }
+
+        return $this->resolveTaskDuty($tenantId, (string) $request->input('title'));
     }
 
     protected function payload(Request $request, array $context): array

@@ -42,6 +42,19 @@ class StoreTaskRequest extends FormRequest
             'skills' => 'nullable|string|max:2000',
             'skill_id' => 'nullable|string|max:2000',
             'observation_point' => 'nullable|string|max:2000',
+            /*
+             * The job-role task this was assigned FROM, when the assign form
+             * picked it out of the catalogue. It is what lets the employee's
+             * task detail find the written procedure, because `eso` is filed
+             * under the same id.
+             *
+             * SHAPE ONLY HERE. Whether the id actually belongs to the caller's
+             * organisation is checked in insertTaskWithReference, because that
+             * needs the resolved tenant and this rule set does not have it.
+             * An `exists` rule here would validate the row exists SOMEWHERE,
+             * which is precisely the cross-tenant hole it looks like it closes.
+             */
+            'jobrole_task_id' => 'nullable|integer|min:1',
             'formType' => 'nullable|string|max:30',
             'task_details' => 'nullable|json',
             'idempotency_key' => 'nullable|string|max:100',
