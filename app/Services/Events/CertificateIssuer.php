@@ -2,6 +2,7 @@
 
 namespace App\Services\Events;
 
+use App\Services\Events\Concerns\DrivesFromEventStore;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -38,6 +39,8 @@ use Illuminate\Support\Facades\Log;
  */
 class CertificateIssuer
 {
+    use DrivesFromEventStore;
+
     public const CONSUMER = 'certificate_issuer';
 
     public const HANDLES = ['course.completed'];

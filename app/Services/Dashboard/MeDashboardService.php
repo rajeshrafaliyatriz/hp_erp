@@ -2,6 +2,7 @@
 
 namespace App\Services\Dashboard;
 
+use App\Services\Competency\ProficiencyService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -52,6 +53,16 @@ class MeDashboardService
      * one value.
      */
     private const STARTED = ['PENDING', 'IN-PROGRESS', 'IN PROGRESS', 'ON HOLD'];
+
+    /**
+     * The ONE proficiency roll-up. Injected rather than reimplemented — see
+     * capabilityGap(), which used to take an unweighted mean and disagree with
+     * every other capability screen for any competency whose KASBA items carry
+     * different weights.
+     */
+    public function __construct(private ProficiencyService $proficiency)
+    {
+    }
 
     private const STATUS_SQL = "UPPER(TRIM(COALESCE(task.status,'')))";
 
@@ -257,8 +268,7 @@ class MeDashboardService
             ->orderBy('c.name')
             ->selectRaw('m.competency_id, c.name as competency_name, m.required_proficiency, m.is_mandatory,
                          COUNT(DISTINCT k.id) as items_total,
-                         COUNT(DISTINCT r.id) as items_rated,
-                         AVG(r.rating) as current_avg')
+                         COUNT(DISTINCT r.id) as items_rated')
             ->get();
 
         if ($rows->isEmpty()) {
@@ -269,16 +279,44 @@ class MeDashboardService
             ];
         }
 
-        $axes = $rows->map(fn ($r) => [
-            'competency_id' => (int) $r->competency_id,
-            'competency'    => $r->competency_name ?: ('Competency #' . $r->competency_id),
-            'required'      => $r->required_proficiency === null ? null : (float) $r->required_proficiency,
-            // null when nothing has been rated. Never 0.
-            'current'       => (int) $r->items_rated === 0 ? null : round((float) $r->current_avg, 2),
-            'items_total'   => (int) $r->items_total,
-            'items_rated'   => (int) $r->items_rated,
-            'mandatory'     => (bool) $r->is_mandatory,
-        ])->values()->all();
+        /*
+         * THE LEVEL COMES FROM ProficiencyService, NOT FROM AVG(r.rating).
+         *
+         * This computed `AVG(r.rating)` in the query above — an UNWEIGHTED mean —
+         * while ProficiencyService divides Σ(weight × rating) by the weight of the
+         * MEASURED items only. Its own header says it is "never computed anywhere
+         * else… a second implementation is a second answer", and this was the
+         * second answer.
+         *
+         * It is not academic. 20 competencies hold KASBA items of differing
+         * weights, 11 of them belong to tenant 6 and all 11 are mapped to a
+         * tenant-6 job role — so for those, an employee's Me dashboard radar and
+         * their own My Capability screen showed DIFFERENT levels for the same
+         * competency on the same day. `JobroleTaskCompetencyMapController` already
+         * documents this exact bug as fixed there; it was still live here.
+         *
+         * Calling the service rather than porting its formula is the point: one
+         * implementation, one answer, and a change to the weighting rule reaches
+         * every screen at once.
+         */
+        $rollUp = $this->proficiency->rollUp($sid, $me, $rows->pluck('competency_id')->map(fn ($v) => (int) $v)->all());
+
+        $axes = $rows->map(function ($r) use ($rollUp) {
+            $level = $rollUp[(int) $r->competency_id]['level'] ?? null;
+
+            return [
+                'competency_id' => (int) $r->competency_id,
+                'competency'    => $r->competency_name ?: ('Competency #' . $r->competency_id),
+                'required'      => $r->required_proficiency === null ? null : (float) $r->required_proficiency,
+                // null when nothing has been rated. Never 0. rollUp() returns null
+                // for a competency with no measured weight, which is the same
+                // statement made in the same vocabulary.
+                'current'       => $level === null ? null : round((float) $level, 2),
+                'items_total'   => (int) $r->items_total,
+                'items_rated'   => (int) $r->items_rated,
+                'mandatory'     => (bool) $r->is_mandatory,
+            ];
+        })->values()->all();
 
         $measured = array_values(array_filter($axes, fn ($a) => $a['current'] !== null && $a['required'] !== null));
         $below    = array_values(array_filter($measured, fn ($a) => $a['current'] < $a['required']));

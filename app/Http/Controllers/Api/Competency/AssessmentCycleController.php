@@ -355,7 +355,45 @@ class AssessmentCycleController extends Controller
         ]);
     }
 
-    /** Approve / calibrate one assessment (sets review_status = reviewed). */
+    /**
+     * Approve / calibrate one assessment (sets review_status = reviewed).
+     *
+     * ── THIS DOES NOT MOVE ANYBODY'S PROFICIENCY, AND CANNOT ────────────────
+     *
+     * That reads like a gap and was investigated as one: the Approvals tab looks
+     * like an approval, and approving here changes `review_status` and nothing
+     * else. 87 completed, scored assessments sit behind it on each database with
+     * no path to a competency rating.
+     *
+     * The reason it cannot be wired is in the schema. `s_competency_assessments`
+     * scores against a FRAMEWORK — it has `framework_id` but no `competency_id`
+     * and no `kasba_item_id`. Measured across both databases: all 87 rows carry a
+     * framework, those resolve to 23 distinct frameworks, and EVERY ONE of the 23
+     * contains multiple competencies. Not one is single-competency.
+     *
+     * So turning a score of 72% on "Leadership Framework" into a proficiency
+     * would mean asserting the same level for every competency in it. That is not
+     * a roll-up, it is an invention — one measurement re-used as ten, each of
+     * which someone will later read as a fact about a person. An unattributable
+     * score is not evidence of a specific competency, and recording it as one is
+     * worse than recording nothing.
+     *
+     * ── WHERE THE REAL PATH IS ──────────────────────────────────────────────
+     *
+     * The AI assessment chain carries per-item attribution end to end and already
+     * implements propose-then-confirm: AssessmentScoringService::buildProposals()
+     * writes a `competency_assessment_rating_proposal` per KASBA item, and
+     * approve() is the only writer of `competency_kasba_rating` with
+     * `source='assessment'`.
+     *
+     * The intended bridge for legacy cycles exists too — feedReviewCycles() feeds
+     * an AI attempt's percent back into `s_competency_assessments.score`, gated on
+     * `s_competency_assessment_cycles.test_id`. That column is set on 0 of 4 (dev)
+     * and 0 of 2 (live) cycles, which is why the bridge has never carried
+     * anything. Pointing a cycle at a test is the migration path off this legacy
+     * shape, and it is a decision for whoever owns the cycle, not something to
+     * infer here.
+     */
     public function reviewAssessment(Request $request, $id)
     {
         $context = $this->competencyContext($request);
@@ -397,7 +435,18 @@ class AssessmentCycleController extends Controller
             $this->diffChanges($assessment, ['review_status' => $reviewStatus], ['review_status' => 'Review Status'])
         );
 
-        return response()->json(['status' => 1, 'message' => 'Assessment ' . $action . 'd successfully']);
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Assessment ' . $action . 'd successfully',
+            /*
+             * SAID OUT LOUD, because "approved" reads like it graded somebody.
+             * The screen can show this rather than leaving a reviewer to assume a
+             * proficiency moved. See the docblock for why it cannot.
+             */
+            'review_status'      => $reviewStatus,
+            'proficiency_moved'  => false,
+            'proficiency_reason' => 'This assessment scores a framework, not a single competency, so approving it records the review decision without changing any proficiency rating.',
+        ]);
     }
 
     /* ----------------------------------------------------------------- */

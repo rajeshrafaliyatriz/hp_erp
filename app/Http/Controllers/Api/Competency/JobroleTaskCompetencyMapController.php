@@ -446,9 +446,35 @@ class JobroleTaskCompetencyMapController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
-        $sid     = (int) $context['sub_institute_id'];
-        $taskId  = $request->integer('jobrole_task_id');
-        $subject = $request->input('user_id') !== null ? (int) $request->input('user_id') : null;
+        $sid    = (int) $context['sub_institute_id'];
+        $taskId = $request->integer('jobrole_task_id');
+
+        /*
+         * THE SUBJECT CHECK THIS ENDPOINT WAS MISSING.
+         *
+         * It read `$request->input('user_id')` straight into the query. Every
+         * other subject-taking endpoint in this class and in
+         * EmployeeCompetencyProfileController (14 call sites) goes through
+         * competencySubject(); readiness(), forty lines below in this same file,
+         * does it and says why. This one did not, so any authenticated employee
+         * could name a colleague and read back their per-competency ratings,
+         * coverage, shortfalls and a readiness verdict on them. Tenant scoping
+         * still held - `$sid` comes from the token - so the exposure was to
+         * same-organisation colleagues, which is precisely who would care.
+         *
+         * The id stays OPTIONAL: absent means "just show me the mapping", which
+         * is the assign-modal's first render before anyone is picked. Only a
+         * supplied id is checked, so the guard closes the leak without turning a
+         * legitimately anonymous read into a 404.
+         */
+        $subject = null;
+        if ($request->input('user_id') !== null) {
+            $resolved = $this->competencySubject($context, $request->integer('user_id'));
+            if (!is_int($resolved)) {
+                return $resolved;
+            }
+            $subject = $resolved;
+        }
 
         // ACCEPTS EITHER ID, AND RESOLVES - through `taskKey()`, the one resolver
         // every path in this controller shares. The assign modal holds an
@@ -691,10 +717,26 @@ class JobroleTaskCompetencyMapController extends Controller
 
         $sid = (int) $context['sub_institute_id'];
 
+        /*
+         * jobroleOf(), NOT `allocated_standards` READ DIRECTLY.
+         *
+         * This method's own docblock says it "must agree with
+         * CompetencyGapController to the number - two screens disagreeing about
+         * whether somebody is cleared is worse than either being incomplete." It
+         * then disagreed, because the gap controller resolves the role through
+         * ResolvesEmployeeJobRole and this line read one column.
+         *
+         * The trait exists precisely because a job role lives in BOTH
+         * `tbluser.jobtitle_id` and `tbluser.allocated_standards` and the two can
+         * disagree. This class already imports it, and already has jobroleOf() —
+         * forty lines up — wrapping it. Measured on tbluser: 6 of 21 dev tenant-6
+         * employees resolve to a DIFFERENT role under the trait than under
+         * `allocated_standards` alone, so for those six the readiness verdict and
+         * the gap screen were answering about two different jobs.
+         */
         $jobroleId = $request->filled('jobrole_id')
             ? $request->integer('jobrole_id')
-            : (int) DB::table('tbluser')->where('id', $subject)
-                ->where('sub_institute_id', $sid)->value('allocated_standards');
+            : (int) $this->jobroleOf($sid, $subject);
 
         if (!$jobroleId) {
             return response()->json([

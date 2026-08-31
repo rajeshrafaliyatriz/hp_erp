@@ -608,14 +608,36 @@ Route::delete('/competency/certification-requirements/{id}', [CompetencyCertific
 | tbl_user_journey_logs for the User Actions Log tab's screen-access history.
 | The only write is the export event the export endpoint logs about itself.
 | Static segments are declared BEFORE /{id} so user-actions is not swallowed.
+|
+| GATED profile:admin,hr - ADDED 2026-08-31, AND IT WAS OVERDUE.
+|
+| These seven carried NO middleware whatsoever. The controller self-guards to the
+| extent that ResolvesApiIdentity refuses a missing or expired token with a 401,
+| so they were never anonymous - but any authenticated employee could read their
+| whole organisation's competency activity log (2,038 rows dev / 1,987 live) and,
+| via user-actions/{userId}, any named colleague's screen-by-screen history.
+|
+| That was latent only because the screen behind it has never been reachable:
+| CmAudit is mapped on a menu id that exists on neither database. The same change
+| that creates menu 208 turns this from a URL nobody visits into a live screen, so
+| the gate has to land in the same release, not after it.
+|
+| admin,hr and not admin,hr,manager: an activity log naming every employee's
+| actions is an administrative record. Managers are excluded for the same reason
+| ResolvesCompetencyContext excludes them from COMPETENCY_ELEVATED - their honest
+| scope is "my team", and tbluser.reporting_manager_id is NULL for every user, so
+| there is no way to evaluate it. Granting org-wide reach in the meantime would be
+| a wider grant than the one being closed.
 */
-Route::get('/competency/audit/metrics', [CompetencyAuditController::class, 'metrics']);
-Route::get('/competency/audit/filters', [CompetencyAuditController::class, 'filters']);
-Route::get('/competency/audit/export', [CompetencyAuditController::class, 'export']);
-Route::get('/competency/audit/user-actions', [CompetencyAuditController::class, 'userActions']);
-Route::get('/competency/audit/user-actions/{userId}', [CompetencyAuditController::class, 'userActivity'])->whereNumber('userId');
-Route::get('/competency/audit', [CompetencyAuditController::class, 'index']);
-Route::get('/competency/audit/{id}', [CompetencyAuditController::class, 'show'])->whereNumber('id');
+Route::middleware('profile:admin,hr')->group(function () {
+    Route::get('/competency/audit/metrics', [CompetencyAuditController::class, 'metrics']);
+    Route::get('/competency/audit/filters', [CompetencyAuditController::class, 'filters']);
+    Route::get('/competency/audit/export', [CompetencyAuditController::class, 'export']);
+    Route::get('/competency/audit/user-actions', [CompetencyAuditController::class, 'userActions']);
+    Route::get('/competency/audit/user-actions/{userId}', [CompetencyAuditController::class, 'userActivity'])->whereNumber('userId');
+    Route::get('/competency/audit', [CompetencyAuditController::class, 'index']);
+    Route::get('/competency/audit/{id}', [CompetencyAuditController::class, 'show'])->whereNumber('id');
+});
 
 //HRIT dashboard
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
@@ -1889,6 +1911,22 @@ Route::delete('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoC
  */
 Route::prefix('competency-library')->group(function () {
     Route::get('/competency-list', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'index'])->middleware('api.token');
+    /*
+     * THE FIVE THE SERVICE ALREADY CALLED AND NOBODY REGISTERED.
+     *
+     * When library.ts moved its BASE here, six routes came with it and five did
+     * not — so the detail drawer, Export Library, Import Competencies, Clone and
+     * Archive/Restore have been 404ing on menu 34 ever since.
+     *
+     * Static and sub-resource paths are declared BEFORE /competency/{id} so the
+     * show route does not swallow `/competency/{id}/detail`, exactly as the
+     * /skill_library block above documents for the same reason.
+     */
+    Route::get('/competency-export', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'export'])->middleware('api.token');
+    Route::post('/competency-import', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'import'])->middleware('profile:admin,hr');
+    Route::get('/competency/{id}/detail', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'detail'])->whereNumber('id')->middleware('api.token');
+    Route::post('/competency/{id}/clone', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'clone'])->whereNumber('id')->middleware('profile:admin,hr');
+    Route::put('/competency/{id}/archive', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'archive'])->whereNumber('id')->middleware('profile:admin,hr');
     Route::get('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'show'])->whereNumber('id')->middleware('api.token');
     Route::post('/competency', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'store'])->middleware('profile:admin,hr');
     Route::put('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');

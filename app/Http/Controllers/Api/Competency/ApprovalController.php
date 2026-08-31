@@ -40,9 +40,22 @@ class ApprovalController extends Controller
      * neither pending nor approved, so the author can revise and resubmit.
      */
     private const SUBJECTS = [
+        /*
+         * `competency`, NOT `s_users_skills` — REPOINTED 2026-08-31.
+         *
+         * The Competency Library was moved onto the `competency` table and this
+         * workflow was left behind on the old one. Because the two tables' ids
+         * overlap completely (competency 21-447, s_users_skills 1-5458), a
+         * submission from the Library would have found a real `s_users_skills`
+         * row with the same id and set ITS approve_status — writing a decision
+         * onto an unrelated record rather than failing.
+         *
+         * It never fired only because a second bug hid the button. See the
+         * migration 2026_08_31_230000 for the whole account.
+         */
         'competency' => [
-            'table'    => 's_users_skills',
-            'name'     => 'title',
+            'table'    => 'competency',
+            'name'     => 'name',
             'column'   => 'approve_status',
             'pending'  => 'Pending',
             'approved' => 'Approved',
