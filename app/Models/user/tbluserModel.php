@@ -95,9 +95,28 @@ class tbluserModel extends Model
         'fcm_token'
     ];
 
+    /**
+     * The employee's display name.
+     *
+     * FILTERED, not concatenated. The old version glued all three parts with
+     * spaces unconditionally, so the 95% of rows with no middle name rendered
+     * as "Milan  Baldaniya" - a double space visible in the Employee
+     * Directory, the profile header and every picker that shows a name.
+     *
+     * This is an APPENDED ATTRIBUTE, never a column. tbluser has no full_name
+     * and a query that selects one is rejected outright - which is exactly how
+     * /user/add_user came to answer 500 for every API caller.
+     */
     public function getFullNameAttribute()
     {
-        return $this->first_name . ' ' . $this->middle_name . ' ' . $this->last_name;
+        // (string) before trim: these columns are nullable, and PHP 8.2
+        // deprecates passing null to trim().
+        $parts = array_filter(
+            array_map(fn ($part) => trim((string) $part), [$this->first_name, $this->middle_name, $this->last_name]),
+            fn ($part) => $part !== '',
+        );
+
+        return implode(' ', $parts);
     }
 
     public function organization()

@@ -67,7 +67,15 @@ class WorkforceTrendService
             // historical headcount would need joined_date/terminated_date
             // reconstruction, which this schema supports only partially — so it
             // is stated as an approximation rather than silently implied.
-            $active = (int) DB::table('tbluser')
+            //
+            // WHEN SCOPED TO ONE PERSON THE DENOMINATOR IS THAT PERSON. Every
+            // other query in this method already honours $scopeUserId; this one
+            // did not, because until the employee dashboard existed nothing ever
+            // passed a scope. Left as it was, `expected` would be one person's
+            // working days multiplied by the whole organisation's headcount, and
+            // `absent` — expected minus present minus leave — would report an
+            // employee as absent for hundreds of days they were never expected.
+            $active = $scopeUserId !== null ? 1 : (int) DB::table('tbluser')
                 ->where('tbluser.sub_institute_id', $sid)
                 ->where('tbluser.status', 1)
                 ->whereNull('tbluser.terminated_date')

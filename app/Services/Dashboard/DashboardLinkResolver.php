@@ -76,6 +76,23 @@ class DashboardLinkResolver
         'competency_dashboard' => ['dashboard', null],
         'task_dashboard'     => ['task-management-dashboard', null],
         'task_reports'       => ['reports-and-analysis', null],
+
+        // THE EMPLOYEE'S OWN DESTINATIONS. Every one verified present in
+        // tblmenumaster_g2g on both databases; a tenant whose plan omits one
+        // resolves null here and the control renders disabled with a reason,
+        // which is the whole point of asking for a key instead of a path.
+        //
+        // There is deliberately NO 'my_capability' key: no tenant has a menu row
+        // for it. Capability Explorer is where an employee's own competency data
+        // is reachable, so that is what the capability widget links to rather
+        // than a key that would resolve to null everywhere.
+        'my_tasks'           => ['my-tasks', null],
+        'my_learning'        => ['my-learning', null],
+        'my_assessment'      => ['my-assessment', null],
+        'capability_explorer'=> ['capability-explorer', null],
+        'learning_catalog'   => ['learning-catalog', null],
+        'my_learning_report' => ['my-learning-report', null],
+        'task_calendar'      => ['task-calendar', null],
     ];
 
     /** @return array<string,string|null> key => access_link, or null if absent */

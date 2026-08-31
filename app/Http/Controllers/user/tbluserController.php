@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\user;
 
+use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Http\Controllers\Controller;
 // use App\Models\HrmsJobTitle;
 use App\Models\libraries\skillJobroleMap;
@@ -29,6 +30,8 @@ use function App\Helpers\is_mobile;
 
 class tbluserController extends Controller
 {
+    use ResolvesEmployeeJobRole;
+
     // Used by updateFcmToken(), and by the jwtToken() guard that used to come
     // from GenTux\Jwt\GetsJwtToken - a package absent from composer.json and
     // never installed, so any class using it could not be loaded at all.
@@ -50,7 +53,13 @@ class tbluserController extends Controller
         'tbluser.first_name',
         'tbluser.middle_name',
         'tbluser.last_name',
-        'tbluser.full_name',
+        // NO 'tbluser.full_name' HERE - IT IS NOT A COLUMN, IT IS AN ACCESSOR.
+        // tbluser has 99 columns and full_name is not among them on either
+        // database; tbluserModel supplies it through getFullNameAttribute()
+        // and $appends. Listing it here made MySQL reject the whole SELECT, so
+        // this endpoint answered 500 for EVERY API caller - the Employee
+        // Directory and the profile page's Job Role Skills tab among them.
+        // Nothing needs to replace it: the accessor was always doing the work.
         'tbluser.email',
         'tbluser.mobile',
         'tbluser.image',
@@ -192,7 +201,145 @@ class tbluserController extends Controller
         $res['user_profiles'] = tbluserprofilemasterModel::where(['sub_institute_id' => $sub_institute_id])->get()->toArray();
         $res['data'] = $user_data;
 
+        // THE PROFILE PAGE'S "Job Role Skills" TAB READS THIS KEY.
+        // It was never set here, so the tab rendered empty even on a 200 - and
+        // before that it never got the chance, because this endpoint answered
+        // 500 for every API caller (see API_LIST_COLUMNS above).
+        //
+        // Only the API branch: Blade's show_user.blade.php does not read it.
+        if ($type == 'API' && $user_id) {
+            $res['skills'] = $this->jobRoleSkills((int) $sub_institute_id, (int) $user_id);
+        }
+
         return is_mobile($type, 'user/show_user', $res, 'view');
+    }
+
+    /**
+     * The skills the caller's JOB ROLE requires, for the profile page's
+     * "Job Role Skills" tab.
+     *
+     * ═══════════════════════════════════════════════════════════════════
+     * THE LIST NEVER DEPENDS ON A JOIN, AND THAT IS MEASURED
+     * ═══════════════════════════════════════════════════════════════════
+     *
+     * s_user_skill_jobrole already carries everything the panel needs - the
+     * role, the skill, its proficiency level and descriptor. The catalogue
+     * lookup only ADDS category and description, so it is done separately and
+     * is allowed to miss. Joining would be wrong twice over:
+     *
+     *   join on skill_id   dev: 16 of 16 rows resolve.  LIVE: 0 of 26 -
+     *                      skill_id is empty on every live row for this role,
+     *                      so an inner join returns an EMPTY skills tab.
+     *   join on title      fans out: 26 rows become 115, because
+     *                      s_users_skills.title is not unique. edit() joins
+     *                      this way and needs a groupBy to undo the damage.
+     *
+     * So: read the rows, then enrich by skill_id where it resolves and by
+     * title within the tenant otherwise (14 of 26 on live). A skill whose
+     * catalogue row is missing still appears, carrying its own descriptor.
+     *
+     * Knowledge/ability/behaviour/attitude come from s_skill_knowledge_ability
+     * in ONE query rather than one per skill. That table holds 168k rows and
+     * NONE for tenant 6, so those lists are legitimately empty there - the
+     * panel omits an empty list rather than showing a heading with nothing
+     * under it.
+     */
+    private function jobRoleSkills(int $subInstituteId, int $userId): array
+    {
+        $user = DB::table('tbluser')
+            ->where('id', $userId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->first(['id', 'jobtitle_id', 'allocated_standards']);
+
+        // Resolved through BOTH columns by the shared trait. jobtitle_id is 0
+        // for most employees because the employee form writes the role to
+        // allocated_standards; reading either alone loses most people.
+        $jobroleId = $user ? $this->resolveJobRoleId($user) : null;
+
+        if (! $jobroleId) {
+            return [];
+        }
+
+        $rows = DB::table('s_user_skill_jobrole')
+            ->where('jobrole_id', $jobroleId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->orderBy('skill')
+            ->get([
+                'id', 'jobrole', 'jobrole_id', 'skill', 'skill_id', 'type',
+                'proficiency_level', 'proficiency_description', 'skill_code',
+            ]);
+
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        // -- enrichment, allowed to miss --------------------------------
+        $ids = $rows->pluck('skill_id')->filter()->unique()->values();
+        $titles = $rows->pluck('skill')->filter()->unique()->values();
+
+        $catalogue = DB::table('s_users_skills')
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->where(function ($q) use ($ids, $titles) {
+                if ($ids->isNotEmpty()) {
+                    $q->orWhereIn('id', $ids);
+                }
+                if ($titles->isNotEmpty()) {
+                    $q->orWhereIn('title', $titles);
+                }
+            })
+            ->get(['id', 'title', 'category', 'sub_category', 'description']);
+
+        $byId = $catalogue->keyBy('id');
+        // FIRST MATCH WINS on title, deliberately. Duplicate titles are what
+        // makes the join fan out; picking one is what stops it.
+        $byTitle = $catalogue->groupBy('title')->map(fn ($g) => $g->first());
+
+        // -- knowledge / ability / behaviour / attitude, in ONE query ----
+        $kabaBySkill = collect();
+
+        if ($ids->isNotEmpty()) {
+            $kabaBySkill = DB::table('s_skill_knowledge_ability')
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereNull('deleted_at')
+                ->whereIn('skill_id', $ids)
+                ->get(['skill_id', 'proficiency_level', 'classification', 'classification_item'])
+                ->groupBy(fn ($r) => $r->skill_id . '|' . $r->proficiency_level);
+        }
+
+        return $rows->map(function ($r) use ($byId, $byTitle, $kabaBySkill) {
+            $cat = ($r->skill_id && $byId->has($r->skill_id))
+                ? $byId->get($r->skill_id)
+                : $byTitle->get($r->skill);
+
+            $kaba = $kabaBySkill->get($r->skill_id . '|' . $r->proficiency_level, collect())
+                ->groupBy('classification');
+
+            $items = fn (string $k) => $kaba->has($k)
+                ? $kaba->get($k)->pluck('classification_item')->values()->all()
+                : [];
+
+            return [
+                'jobrole_skill_id' => (int) $r->id,
+                'jobrole' => $r->jobrole,
+                'skill' => $r->skill,
+                'skill_id' => $r->skill_id ? (int) $r->skill_id : 0,
+                'title' => $cat->title ?? $r->skill,
+                'category' => $cat->category ?? null,
+                'sub_category' => $cat->sub_category ?? null,
+                // The role's own descriptor is the more specific of the two -
+                // it says what this level means FOR THIS ROLE - so it wins.
+                'description' => $r->proficiency_description ?: ($cat->description ?? null),
+                'proficiency_level' => $r->proficiency_level === null ? null : (string) $r->proficiency_level,
+                'skill_type' => $r->type,
+                'skill_code' => $r->skill_code,
+                'knowledge' => $items('knowledge'),
+                'ability' => $items('ability'),
+                'behaviour' => $items('behaviour'),
+                'attitude' => $items('attitude'),
+            ];
+        })->values()->all();
     }
 
     public function create(Request $request)

@@ -1911,4 +1911,24 @@ Route::prefix('dashboard')->group(function () {
         Route::get('/workforce', [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'workforce']);
         Route::get('/signals',   [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'signals']);
     });
+
+    /*
+    | Home dashboard - the employee's own
+    |
+    | GUARDED ONLY BY api.token, and that is deliberate rather than an omission.
+    | These routes accept NO user_id, no employee_id and no subject of any kind:
+    | the caller is resolved from the token and every query is bound to them. An
+    | endpoint with no subject to name cannot be pointed at somebody else, so
+    | there is nothing for a profile guard to protect. Adding one would only stop
+    | employees seeing their own figures.
+    |
+    | The section split mirrors /hr for the same reason - /summary is cheap and
+    | paints first, /signals carries the six-month attendance scan - so a slow or
+    | failing section degrades only itself.
+    */
+    Route::prefix('me')->middleware('api.token')->group(function () {
+        Route::get('/summary', [\App\Http\Controllers\Api\Dashboard\MeDashboardController::class, 'summary']);
+        Route::get('/growth',  [\App\Http\Controllers\Api\Dashboard\MeDashboardController::class, 'growth']);
+        Route::get('/signals', [\App\Http\Controllers\Api\Dashboard\MeDashboardController::class, 'signals']);
+    });
 });
