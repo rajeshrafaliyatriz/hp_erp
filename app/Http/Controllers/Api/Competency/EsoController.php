@@ -78,7 +78,27 @@ class EsoController extends Controller
             ->when($request->filled('scope'), fn ($q) => $q->where('scope', $request->input('scope')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
             ->when($request->filled('execution_mode'), fn ($q) => $q->where('execution_mode', $request->input('execution_mode')))
-            ->when($request->filled('task_id'), fn ($q) => $q->where('user_jobrole_task_id', (int) $request->input('task_id')))
+            /*
+             * FILTERED BY JOB-ROLE TASK, WHICH IS NOT THE ASSIGNED TASK.
+             *
+             * This accepted only `task_id`, and the name is a trap: there IS a
+             * `task.id` — the work item assigned to a person — and it lives in a
+             * different id space entirely. A caller passing one got a silently
+             * empty list rather than an error, because both are plausible
+             * integers. `TaskInstructionController` is the endpoint that takes an
+             * assigned task id; this one never did.
+             *
+             * `user_jobrole_task_id` is now the real name. `task_id` still works
+             * so nothing already calling it breaks, and it means what it always
+             * meant — which was never the assigned task.
+             */
+            ->when(
+                $request->filled('user_jobrole_task_id') || $request->filled('task_id'),
+                fn ($q) => $q->where(
+                    'user_jobrole_task_id',
+                    (int) $request->input('user_jobrole_task_id', $request->input('task_id'))
+                )
+            )
             ->orderBy('scope')->orderBy('title')
             ->limit(500)
             ->get();

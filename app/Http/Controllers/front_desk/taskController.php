@@ -91,9 +91,51 @@ class taskController extends Controller
          * Without this the task cannot reach its execution model or its ESO,
          * and the employee's "How to do this" panel has nothing to show.
          */
-        if (!array_key_exists('jobrole_task_id', $data)) {
+        $tenantId = (int) ($data['sub_institute_id'] ?? 0);
+
+        if (array_key_exists('jobrole_task_id', $data)) {
+            /*
+             * THE CALLER SAID WHICH DUTY THIS IS. VERIFY IT IS THEIRS.
+             *
+             * store() builds $data from $request->except([...]) — an EXCLUSION
+             * list — into a model with $guarded = []. So this key arrives
+             * straight from the request body, and without this check a caller
+             * could post any other organisation's job-role task id and file
+             * their task against it. That would leak the other tenant's
+             * procedure into this tenant's task detail, because the ESO lookup
+             * follows this id and nothing downstream re-checks the tenant.
+             *
+             * An id that does not belong here is discarded rather than refused:
+             * the task itself is legitimate work and should still be created.
+             * It falls through to text resolution below, exactly as if the
+             * caller had never named one.
+             */
+            $claimed = (int) ($data['jobrole_task_id'] ?? 0);
+            $data['jobrole_task_id'] = null;
+
+            if ($claimed > 0 && $tenantId > 0) {
+                $ownsIt = DB::table('s_user_jobrole_task')
+                    ->where('id', $claimed)
+                    ->where('sub_institute_id', $tenantId)
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                if ($ownsIt) {
+                    $data['jobrole_task_id'] = $claimed;
+                } else {
+                    \Log::warning('Task create named a job-role task it does not own', [
+                        'tenant'          => $tenantId,
+                        'jobrole_task_id' => $claimed,
+                    ]);
+                }
+            }
+        }
+
+        // Only when the caller did not name one, or named one that was not
+        // theirs. Text matching is the fallback now, not the mechanism.
+        if (($data['jobrole_task_id'] ?? null) === null) {
             $data['jobrole_task_id'] = $this->resolveTaskDuty(
-                (int) ($data['sub_institute_id'] ?? 0),
+                $tenantId,
                 $data['task_title'] ?? null
             );
         }
