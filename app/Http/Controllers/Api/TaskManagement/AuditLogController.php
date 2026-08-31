@@ -27,6 +27,10 @@ class AuditLogController extends Controller
         $validator = Validator::make($request->all(), [
             'task_id' => 'nullable|integer',
             'actor_id' => 'nullable|integer',
+            // Both scoped inside query() against the caller's own tenant, so an
+            // id from another organisation matches nothing rather than leaking.
+            'department_id' => 'nullable|integer',
+            'project_id' => 'nullable|integer',
             'event' => 'nullable|string|max:50',
             'from' => 'nullable|date',
             'to' => 'nullable|date|after_or_equal:from',
@@ -100,29 +104,78 @@ class AuditLogController extends Controller
 
     private function query(Request $request, array $context)
     {
-        $query = DB::table('task_management_audit_logs as a')
-            ->leftJoin('task as t', 't.id', '=', 'a.task_id')
+        /*
+         * READ THE PROJECTION, NOT THE TABLE THAT STOPPED BEING WRITTEN.
+         *
+         * This read `task_management_audit_logs`. Amendment A1 changed
+         * TaskAuditService to EMIT an event instead of inserting there, and
+         * nothing has written that table since — it held exactly 6 rows on both
+         * databases, frozen on 2 August, while 44 real task events accumulated in
+         * the store unread. The screen was not showing stale data by accident; it
+         * was reading a table that had been retired out from under it.
+         *
+         * g2g_audit_log is the projection A1 replaced it with. Its shape differs:
+         *   a.task_id  -> entity_id (with entity_type = 'task')
+         *   a.event    -> type, which is prefixed: 'task.updated', not 'updated'
+         *   a.before   -> detail, the whole payload rather than just the snapshot
+         *   a.created_at -> occurred_at
+         *
+         * The prefix is stripped below so the existing `event` filter and the
+         * client's labels keep working against the same vocabulary they always did.
+         *
+         * `before` IS BACKTICKED because it is a reserved word in MariaDB — an
+         * unquoted alias of that name is a syntax error, not a warning.
+         */
+        $query = DB::table('g2g_audit_log as a')
+            ->leftJoin('task as t', 't.id', '=', 'a.entity_id')
             ->leftJoin('tbluser as actor', 'actor.id', '=', 'a.actor_id')
             ->where('a.sub_institute_id', $context['sub_institute_id'])
+            ->where('a.entity_type', 'task')
             ->orderByDesc('a.id')
-            ->selectRaw("a.id, a.task_id, a.event, a.actor_id, a.before, a.created_at,
+            ->selectRaw("a.id, a.entity_id as task_id,
+                SUBSTRING(a.type, LOCATE('.', a.type) + 1) as event,
+                a.actor_id, a.detail as `before`, a.occurred_at as created_at,
                 t.task_title,
                 TRIM(CONCAT_WS(' ', actor.first_name, actor.middle_name, actor.last_name)) as actor_name");
 
         if ($request->filled('task_id')) {
-            $query->where('a.task_id', $request->integer('task_id'));
+            $query->where('a.entity_id', $request->integer('task_id'));
         }
         if ($request->filled('actor_id')) {
             $query->where('a.actor_id', $request->integer('actor_id'));
         }
         if ($request->filled('event')) {
-            $query->where('a.event', $request->input('event'));
+            // Matched against the un-prefixed name the client sends, so the
+            // filter vocabulary is unchanged by the move to the projection.
+            $query->where('a.type', 'task.' . $request->input('event'));
         }
         if ($request->filled('from')) {
-            $query->whereDate('a.created_at', '>=', $request->input('from'));
+            $query->whereDate('a.occurred_at', '>=', $request->input('from'));
         }
         if ($request->filled('to')) {
-            $query->whereDate('a.created_at', '<=', $request->input('to'));
+            $query->whereDate('a.occurred_at', '<=', $request->input('to'));
+        }
+
+        /*
+         * Filters the screen could not offer because the old table had no path to
+         * them. Both join through the task, which the projection already reaches.
+         */
+        if ($request->filled('department_id')) {
+            // The ASSIGNEE's department, consistent with WorkspaceController and
+            // MyTasksController. The project's own department is a different
+            // question and is deliberately not what this answers.
+            $query->whereIn('t.task_allocated_to', function ($sub) use ($request, $context) {
+                $sub->select('id')->from('tbluser')
+                    ->where('sub_institute_id', $context['sub_institute_id'])
+                    ->where('department_id', $request->integer('department_id'));
+            });
+        }
+
+        if ($request->filled('project_id')) {
+            $query->whereIn('a.entity_id', function ($sub) use ($request) {
+                $sub->select('task_id')->from('task_management_project_tasks')
+                    ->where('project_id', $request->integer('project_id'));
+            });
         }
 
         return $query;

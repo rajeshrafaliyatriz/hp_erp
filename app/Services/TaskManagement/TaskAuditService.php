@@ -12,10 +12,13 @@ use Illuminate\Support\Facades\Log;
  * against this class but it was never committed, which made every request
  * through them fail at constructor injection.
  *
- * Writes task_management_audit_logs (what AuditLogController and the task
- * activity feed read) plus a log line as belt-and-braces. The table write is
- * best-effort: an audit failure must never turn the change it describes into
- * an error.
+ * EMITS AN EVENT (amendment A1) plus a log line as belt-and-braces. It has NOT
+ * written task_management_audit_logs since A1 — this docblock claimed it did,
+ * twelve lines above the code that stopped. That contradiction is how the audit
+ * screen came to be read from a table nothing writes.
+ *
+ * The emit is best-effort: an audit failure must never turn the change it
+ * describes into an error.
  */
 class TaskAuditService
 {
@@ -39,8 +42,9 @@ class TaskAuditService
 
     /**
      * @param array<string, mixed> $before The task row before the change.
+     * @param array<string, mixed> $after  The values after it, where the caller knows them.
      */
-    public function taskChanged(int $taskId, string $event, array $before, ?int $actorId): void
+    public function taskChanged(int $taskId, string $event, array $before, ?int $actorId, array $after = []): void
     {
         // The pre-change values that matter for "who changed what".
         $snapshot = [
@@ -52,6 +56,47 @@ class TaskAuditService
             // a subtask being ticked, a timer stopping, a due date moving.
             'detail' => $before['detail'] ?? null,
         ];
+
+        /*
+         * ── THE `after` HALF, WITHOUT WHICH TWO CONSUMERS CANNOT WORK ────────
+         *
+         * This emitted only `before`. TaskStatusProjector reads
+         * $payload['after'] to fill to_status / to_approve_status, so both landed
+         * NULL, isActive() returned false, and reopen detection was structurally
+         * dead — task_status_history held ZERO rows on both databases despite 44
+         * task events sitting in the store.
+         *
+         * NotificationDispatcher has the same problem from the other end: the
+         * rejection template reads {payload.task_title} and
+         * {payload.approve_remarks}, and a missing key composes to "—", so an
+         * employee whose task was sent back would receive
+         * "— was not approved … Reason given: —".
+         *
+         * Both are one omission. `after` is optional so every existing caller
+         * keeps working unchanged; a caller that knows the new values passes them
+         * and the consumers downstream start functioning.
+         */
+        $afterSnapshot = $after === [] ? null : [
+            'status'         => $after['status'] ?? null,
+            'approve_status' => $after['approve_status'] ?? null,
+            'task_date'      => $after['task_date'] ?? null,
+        ];
+
+        $payload = ['event' => $event, 'before' => $snapshot];
+
+        if ($afterSnapshot !== null) {
+            $payload['after'] = $afterSnapshot;
+        }
+
+        // Read by the notification templates, which name them directly. Kept at
+        // the top level of the payload because that is where {payload.x} looks.
+        foreach (['task_title', 'approve_remarks'] as $key) {
+            if (array_key_exists($key, $after) && $after[$key] !== null && $after[$key] !== '') {
+                $payload[$key] = $after[$key];
+            } elseif (array_key_exists($key, $before) && $before[$key] !== null && $before[$key] !== '') {
+                $payload[$key] = $before[$key];
+            }
+        }
 
         // AMENDMENT A1 (05-data-flow-contracts.md §1): this service used to
         // INSERT into task_management_audit_logs directly. It now EMITS AN EVENT,
@@ -68,7 +113,7 @@ class TaskAuditService
                 entityType: 'task',
                 entityId: $taskId,
                 actorId: $actorId,
-                payload: ['event' => $event, 'before' => $snapshot],
+                payload: $payload,
             );
         } catch (\Throwable $exception) {
             Log::warning('task.audit_event_failed', ['task_id' => $taskId, 'error' => $exception->getMessage()]);
