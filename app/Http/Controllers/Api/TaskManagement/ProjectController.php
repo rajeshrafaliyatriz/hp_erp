@@ -264,9 +264,11 @@ class ProjectController extends Controller
                 'due_date' => $t->due_date,
                 'assignee' => $t->assignee ?: null,
                 'already_linked_project_id' => $t->linked_project_id ? (string) $t->linked_project_id : null,
-                'already_linked_project' => $t->linked_project_code
-                    ? trim($t->linked_project_code . ' · ' . $t->linked_project_name)
-                    : null,
+                // The NAME, on its own. The code travels beside it rather than
+                // glued in front, so a screen can show "already in G2G" and keep
+                // PRJ-00001 as a reference the reader can ask for.
+                'already_linked_project' => $t->linked_project_id ? $t->linked_project_name : null,
+                'already_linked_project_code' => $t->linked_project_code ?: null,
             ])->values(),
             // Said out loud rather than letting a capped list look complete.
             'capped' => $rows->count() >= 50,
