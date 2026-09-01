@@ -4,6 +4,7 @@ namespace App\Http\Controllers\front_desk;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Concerns\ResolvesTaskDuty;
 use App\Http\Requests\TaskManagement\BulkTaskImportRequest;
 use App\Models\front_desk\taskModel;
 use App\Models\user\tbluserModel;
@@ -16,6 +17,21 @@ use Kreait\Firebase\Messaging\CloudMessage;
 class BulkTaskController extends Controller
 {
     use ResolvesApiIdentity;
+    /*
+     * THE THIRD PLACE A TASK IS CREATED, AND THE LAST ONE TO LEARN THE RULE.
+     *
+     * ResolvesTaskDuty's own docblock names this controller as one of three
+     * places a `task` row is born, "so the rule has to be identical in all
+     * three" — and this was the one that never used it. Every task imported from
+     * a spreadsheet was written with no link to the job role duty it came from,
+     * so the employee opening it saw an empty "How to do this" panel even when
+     * the organisation had already written the procedure.
+     *
+     * Bulk import is in fact the BEST-informed of the three paths: the file
+     * carries a `jobrole` column and the row names the assignee, so where the
+     * assign form has to infer, this usually has the answer stated outright.
+     */
+    use ResolvesTaskDuty;
 
     /**
      * Bulk Task Import (supports CSV file or JSON task_details)
@@ -209,8 +225,51 @@ class BulkTaskController extends Controller
 
                 $dates = $this->getDatesWithoutSundays($task_type, $task_date, $repeat_days, $repeat_until);
 
+                /*
+                 * WHICH DUTY IS THIS? Resolved ONCE per row rather than per
+                 * generated date — a weekly task repeating for a year is one
+                 * duty and up to 52 rows, and asking the database the same
+                 * question 52 times would be the import's slowest step.
+                 *
+                 * The spreadsheet may also name the duty outright. If it does,
+                 * the id is verified against THIS organisation before it is
+                 * trusted, exactly as taskController does: an id belonging to
+                 * another tenant is discarded rather than refused, so the task is
+                 * still imported as ordinary work instead of failing the row.
+                 */
+                $claimedDutyId = (int) $this->getTaskFieldValue($taskValue, ['jobrole_task_id', 'duty_id'], 0);
+                $dutyId = null;
+
+                if ($claimedDutyId > 0) {
+                    $ownsIt = \Illuminate\Support\Facades\DB::table('s_user_jobrole_task')
+                        ->where('id', $claimedDutyId)
+                        ->where('sub_institute_id', $sub_institute_id)
+                        ->whereNull('deleted_at')
+                        ->exists();
+
+                    if ($ownsIt) {
+                        $dutyId = $claimedDutyId;
+                    } else {
+                        Log::warning('Bulk import named a job-role task it does not own', [
+                            'tenant'          => $sub_institute_id,
+                            'jobrole_task_id' => $claimedDutyId,
+                            'row'             => $rowNum,
+                        ]);
+                    }
+                }
+
+                if ($dutyId === null) {
+                    $dutyId = $this->resolveTaskDuty(
+                        (int) $sub_institute_id,
+                        $taskTitle,
+                        (int) $allocatedUserId,
+                        $jobRoleName
+                    );
+                }
+
                 $baseTask = [
                     'sub_institute_id'         => $sub_institute_id,
+                    'jobrole_task_id'          => $dutyId,
                     'SYEAR'                    => $request->syear ?? date('Y'),
                     'task_title'               => $taskTitle,
                     'task_description'         => $taskDesc,

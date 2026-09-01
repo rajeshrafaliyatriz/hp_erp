@@ -187,7 +187,14 @@ class LegacyTaskController extends Controller
             ]);
         }
 
-        return $this->resolveTaskDuty($tenantId, (string) $request->input('title'));
+        // The assignee is passed so a title shared by several roles can still
+        // resolve, by preferring the duty belonging to the role that person
+        // actually holds. Same tie-break the repair pass used on existing rows.
+        return $this->resolveTaskDuty(
+            $tenantId,
+            (string) $request->input('title'),
+            $request->integer('assignee_id') ?: null
+        );
     }
 
     protected function payload(Request $request, array $context): array
