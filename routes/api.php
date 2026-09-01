@@ -141,6 +141,8 @@ use App\Http\Controllers\Api\TaskManagement\NotificationController;
 use App\Http\Controllers\Api\TaskManagement\LegacyTaskController;
 use App\Http\Controllers\Api\TaskManagement\SessionController;
 use App\Http\Controllers\Api\TaskManagement\ProjectController;
+use App\Http\Controllers\Api\TaskManagement\WorkstreamController;
+use App\Http\Controllers\Api\TaskManagement\WorkstreamRecordController;
 use App\Http\Controllers\Api\TaskManagement\WorkspaceController;
 use App\Http\Controllers\Api\TaskManagement\DependencyController;
 use App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController;
@@ -1180,6 +1182,11 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::put('/projects/{id}', [ProjectController::class, 'update'])->middleware('task.permission:project.manage')->whereNumber('id');
     Route::patch('/projects/{id}/archive', [ProjectController::class, 'archive'])->middleware('task.permission:project.manage')->whereNumber('id');
     Route::put('/projects/{id}/members', [ProjectController::class, 'syncProjectMembers'])->middleware('task.permission:project.manage')->whereNumber('id');
+    // Candidates for the Link task picker, with whether each is already on
+    // another project. Read-only, so ungated like the other project reads.
+    Route::get('/projects/{id}/linkable-tasks', [ProjectController::class, 'linkableTasks'])->whereNumber('id');
+    // DEPRECATED — replaces the project's whole task list. See the docblock on
+    // ProjectController::syncTasks; attachTask/detachTask are the safe pair.
     Route::put('/projects/{id}/tasks', [ProjectController::class, 'syncTasks'])->middleware('task.permission:project.manage')->whereNumber('id');
     // Attach a single task without disturbing the project's other tasks.
     Route::post('/projects/{id}/tasks', [ProjectController::class, 'attachTask'])->middleware('task.permission:project.manage')->whereNumber('id');
@@ -1187,9 +1194,68 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     // one task through it means resending every other - and losing whatever a
     // concurrent editor just linked. See ProjectController::detachTask.
     Route::delete('/projects/{id}/tasks/{taskId}', [ProjectController::class, 'detachTask'])->middleware('task.permission:project.manage')->whereNumber(['id', 'taskId']);
-    Route::post('/projects/{id}/workstreams', [ProjectController::class, 'storeWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('id');
-    Route::put('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'updateWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
-    Route::delete('/projects/{projectId}/workstreams/{workstreamId}', [ProjectController::class, 'destroyWorkstream'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
+    /*
+    |------------------------------------------------------------------------
+    | WORKSTREAMS — the 360 lifecycle
+    |------------------------------------------------------------------------
+    |
+    | THE THREE WRITE URLS BELOW ARE UNCHANGED. They have moved off
+    | ProjectController onto WorkstreamController, whose workstream methods were
+    | deleted, so no client needs editing for them.
+    |
+    | READS ARE UNGATED, WRITES ARE NOT. Reading a plan is not a privileged act —
+    | the same call the milestone routes above make. Tenancy still binds
+    | absolutely: every one of these resolves through
+    | ResolvesWorkstreamScope::workstreamScope(), which is the only thing between
+    | a guessed id and another organisation's plan, because none of the eight
+    | workstream child tables carries a tenant column of its own.
+    |
+    | Static segments are declared BEFORE /workstreams/{id} so `options` is not
+    | swallowed by the show route.
+    */
+    Route::get('/workstreams/options', [WorkstreamController::class, 'options']);
+    Route::get('/projects/{id}/workstreams', [WorkstreamController::class, 'index'])->whereNumber('id');
+    Route::get('/workstreams/{id}', [WorkstreamController::class, 'show'])->whereNumber('id');
+
+    Route::post('/projects/{id}/workstreams', [WorkstreamController::class, 'store'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/projects/{projectId}/workstreams/{workstreamId}', [WorkstreamController::class, 'update'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
+    Route::delete('/projects/{projectId}/workstreams/{workstreamId}', [WorkstreamController::class, 'destroy'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
+
+    // The workstream graph — what makes the lifecycle diagram data rather than
+    // a picture drawn in JSX.
+    Route::post('/projects/{id}/workstream-links', [WorkstreamController::class, 'storeLink'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::delete('/workstream-links/{id}', [WorkstreamController::class, 'destroyLink'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+
+    /*
+    | The nine fields' child records. `members` and `statements` are whole-list
+    | replaces because they are authored as lists; everything else is per-record
+    | because each carries its own status, owner and dates.
+    */
+    Route::put('/workstreams/{id}/members', [WorkstreamRecordController::class, 'saveMembers'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/statements', [WorkstreamRecordController::class, 'saveStatements'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+
+    Route::post('/workstreams/{id}/deliverables', [WorkstreamRecordController::class, 'storeDeliverable'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/deliverables/{recordId}', [WorkstreamRecordController::class, 'updateDeliverable'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/deliverables/{recordId}', [WorkstreamRecordController::class, 'destroyDeliverable'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+
+    Route::post('/workstreams/{id}/checkpoints', [WorkstreamRecordController::class, 'storeCheckpoint'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/checkpoints/{recordId}', [WorkstreamRecordController::class, 'updateCheckpoint'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/checkpoints/{recordId}', [WorkstreamRecordController::class, 'destroyCheckpoint'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+
+    // `measurement` is declared BEFORE the generic {recordId} PUT: recording a
+    // reading and redefining what is measured are different acts.
+    Route::patch('/workstreams/{id}/kpis/{recordId}/measurement', [WorkstreamRecordController::class, 'recordMeasurement'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::post('/workstreams/{id}/kpis', [WorkstreamRecordController::class, 'storeKpi'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/kpis/{recordId}', [WorkstreamRecordController::class, 'updateKpi'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/kpis/{recordId}', [WorkstreamRecordController::class, 'destroyKpi'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+
+    Route::post('/workstreams/{id}/risks', [WorkstreamRecordController::class, 'storeRisk'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/risks/{recordId}', [WorkstreamRecordController::class, 'updateRisk'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/risks/{recordId}', [WorkstreamRecordController::class, 'destroyRisk'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+
+    Route::post('/workstreams/{id}/dependencies', [WorkstreamRecordController::class, 'storeDependency'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/dependencies/{recordId}', [WorkstreamRecordController::class, 'updateDependency'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/dependencies/{recordId}', [WorkstreamRecordController::class, 'destroyDependency'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
 });
 Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills']);
 

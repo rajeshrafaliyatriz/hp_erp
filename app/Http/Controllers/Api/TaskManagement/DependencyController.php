@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\TaskManagement;
 
+use App\Http\Controllers\Api\TaskManagement\Concerns\BuildsProjectOptions;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -12,6 +13,7 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class DependencyController extends Controller
 {
+    use BuildsProjectOptions;
     private const TYPES = ['FS', 'SS', 'FF', 'SF'];
     private const MILESTONE_STATUSES = ['UPCOMING', 'AT RISK', 'COMPLETED'];
 
@@ -82,8 +84,7 @@ class DependencyController extends Controller
             ],
             'options' => [
                 'types' => self::TYPES,
-                'projects' => DB::table('task_management_projects')->where('sub_institute_id', $context['sub_institute_id'])
-                    ->where('syear', $context['syear'])->whereNull('archived_at')->orderBy('name')->select('id', 'name')->get(),
+                'projects' => $this->projectOptions($context),
                 'tasks' => $this->taskOptions($context),
                 'users' => DB::table('tbluser')->where('sub_institute_id', $context['sub_institute_id'])
                     ->where('status', 1)->whereNull('deleted_at')->orderBy('first_name')
@@ -179,8 +180,7 @@ class DependencyController extends Controller
         return response()->json(['status' => 1, 'message' => 'Milestones retrieved successfully.', 'data' => [
             'milestones' => $this->withMilestoneCounts($context, $milestones),
             'options' => [
-                'projects' => DB::table('task_management_projects')->where('sub_institute_id', $context['sub_institute_id'])
-                    ->where('syear', $context['syear'])->whereNull('archived_at')->orderBy('name')->select('id', 'name')->get(),
+                'projects' => $this->projectOptions($context),
                 'workstreams' => DB::table('task_management_workstreams as w')
                     ->join('task_management_projects as p', 'p.id', '=', 'w.project_id')
                     ->where('p.sub_institute_id', $context['sub_institute_id'])->where('p.syear', $context['syear'])
