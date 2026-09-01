@@ -155,53 +155,138 @@ class ProjectController extends Controller
         $this->validateTenantUsers($request->input('member_ids'), $context);
         $this->syncMembers($id, $request->input('member_ids'), $context['user_id']);
         $memberIds = array_values(array_unique(array_map('intval', $request->input('member_ids'))));
-        DB::table('task_management_workstreams')->where('project_id', $id)
-            ->when($memberIds, fn ($query) => $query->whereNotIn('owner_id', $memberIds))
-            ->when(!$memberIds, fn ($query) => $query->whereNotNull('owner_id'))
-            ->update(['owner_id' => null, 'updated_by' => $context['user_id'], 'updated_at' => now()]);
+
+        /*
+         * REMOVING SOMEONE FROM THE TEAM REMOVES THEM FROM ITS WORKSTREAMS TOO.
+         *
+         * Clearing the owner has always happened here. The contributors table is
+         * new and needs the same treatment in the same transaction — otherwise a
+         * person taken off the project keeps appearing as a contributor on its
+         * workstreams, which is both wrong on screen and a stale reference to
+         * somebody who may have left the organisation entirely.
+         */
+        DB::transaction(function () use ($id, $memberIds, $context) {
+            DB::table('task_management_workstreams')->where('project_id', $id)
+                ->when($memberIds, fn ($query) => $query->whereNotIn('owner_id', $memberIds))
+                ->when(!$memberIds, fn ($query) => $query->whereNotNull('owner_id'))
+                ->update(['owner_id' => null, 'updated_by' => $context['user_id'], 'updated_at' => now()]);
+
+            DB::table('task_management_workstream_members')
+                ->whereIn('workstream_id', function ($sub) use ($id) {
+                    $sub->select('id')->from('task_management_workstreams')->where('project_id', $id);
+                })
+                ->when($memberIds, fn ($query) => $query->whereNotIn('user_id', $memberIds))
+                ->delete();
+        });
+
         return response()->json(['status' => 1, 'message' => 'Project team updated successfully.', 'data' => $this->members($id)]);
     }
 
-    public function storeWorkstream(Request $request, int $id)
+    /*
+     * WORKSTREAM CRUD MOVED TO WorkstreamController (2026-09-01).
+     *
+     * storeWorkstream / updateWorkstream / destroyWorkstream lived here, with no
+     * GET of any kind alongside them, which is why every workstream dropdown in
+     * the product fetched a whole project record to obtain a list of names. The
+     * three URLs are unchanged; only the controller behind them moved.
+     *
+     * The old destroy was a bare delete() with no checks: it returned 200 even
+     * when it removed nothing, took sub-workstreams with it silently, and left
+     * task_management_milestones.workstream_id pointing at a row that no longer
+     * existed — that column has no foreign key, so nothing caught it. The
+     * replacement refuses while children exist and releases milestones in the
+     * same transaction.
+     */
+
+    /**
+     * Candidate tasks to link, with whether each is already spoken for.
+     *
+     * ── WHY THIS IS NOT `options()` ────────────────────────────────────────
+     *
+     * The Tasks tab used to render `options()`'s task list — the tenant's 200
+     * most recent tasks, with no project filter and no search — as a permanent
+     * checkbox grid under the project's OWN tasks. Most of what it offered
+     * belonged to other projects, and it was the larger half of the tab.
+     *
+     * Linking belongs in a picker somebody opens deliberately, so it is its own
+     * endpoint: `options()` is fetched on every list render and has no business
+     * carrying a search parameter or a per-task subquery.
+     *
+     * ── ALREADY-LINKED IS REPORTED, NOT HIDDEN ─────────────────────────────
+     *
+     * A task can be linked to two projects. Hiding those would make a task
+     * somebody is looking for simply absent; the workspace list already suffers
+     * from double-linked tasks being masked by a MIN(project_id). So each
+     * candidate says which project holds it, and the client can show
+     * "already in PRJ-00003" rather than silently creating a second link.
+     */
+    public function linkableTasks(Request $request, int $id)
     {
         $context = $this->context($request);
         if (!is_array($context)) return $context;
-        if (!$this->canManage($context, $id)) return response()->json(['status' => 0, 'message' => 'You cannot manage workstreams.'], 403);
-        $validator = $this->workstreamValidator($request);
-        if ($validator->fails()) return $this->validationError($validator);
-        if ($request->filled('owner_id') && !$this->isProjectMember($id, (int) $request->input('owner_id'))) {
-            return response()->json(['status' => 0, 'message' => 'The selected owner must be a project team member.'], 422);
-        }
-        $workstreamId = DB::table('task_management_workstreams')->insertGetId($this->workstreamPayload($request) + [
-            'project_id' => $id, 'created_by' => $context['user_id'], 'created_at' => now(), 'updated_at' => now(),
-        ]);
-        return response()->json(['status' => 1, 'message' => 'Workstream created successfully.', 'data' => $this->workstream($id, $workstreamId)], 201);
+
+        $project = DB::table('task_management_projects')
+            ->where('id', $id)
+            ->where('sub_institute_id', $context['sub_institute_id'])
+            ->where('syear', $context['syear'])
+            ->first(['id']);
+
+        if (!$project) return response()->json(['status' => 0, 'message' => 'Project not found.'], 404);
+
+        $search = trim((string) $request->input('search', ''));
+
+        $rows = DB::table('task as t')
+            ->leftJoin('tbluser as assignee', 'assignee.id', '=', 't.task_allocated_to')
+            // The project each task is ALREADY linked to, if any.
+            ->leftJoin('task_management_project_tasks as pt', 'pt.task_id', '=', 't.id')
+            ->leftJoin('task_management_projects as p', 'p.id', '=', 'pt.project_id')
+            ->where('t.sub_institute_id', $context['sub_institute_id'])
+            ->where('t.syear', $context['syear'])
+            ->whereNull('t.deleted_at')
+            // Not already on THIS project — those are in the list above the picker.
+            ->whereNotIn('t.id', function ($sub) use ($id) {
+                $sub->select('task_id')->from('task_management_project_tasks')->where('project_id', $id);
+            })
+            ->when($search !== '', fn ($q) => $q->where('t.task_title', 'like', '%' . $search . '%'))
+            ->orderByDesc('t.id')
+            ->limit(50)
+            ->get([
+                't.id', 't.task_title as title', 't.status', 't.task_date as due_date',
+                'p.id as linked_project_id', 'p.code as linked_project_code', 'p.name as linked_project_name',
+                DB::raw("TRIM(CONCAT_WS(' ', assignee.first_name, assignee.middle_name, assignee.last_name)) as assignee"),
+            ]);
+
+        return response()->json(['status' => 1, 'message' => 'Success', 'data' => [
+            'tasks' => $rows->map(fn ($t) => [
+                'id' => (string) $t->id,
+                'title' => $t->title,
+                'status' => $t->status,
+                'due_date' => $t->due_date,
+                'assignee' => $t->assignee ?: null,
+                'already_linked_project_id' => $t->linked_project_id ? (string) $t->linked_project_id : null,
+                'already_linked_project' => $t->linked_project_code
+                    ? trim($t->linked_project_code . ' · ' . $t->linked_project_name)
+                    : null,
+            ])->values(),
+            // Said out loud rather than letting a capped list look complete.
+            'capped' => $rows->count() >= 50,
+        ]]);
     }
 
-    public function updateWorkstream(Request $request, int $projectId, int $workstreamId)
-    {
-        $context = $this->context($request);
-        if (!is_array($context)) return $context;
-        if (!$this->canManage($context, $projectId)) return response()->json(['status' => 0, 'message' => 'You cannot manage workstreams.'], 403);
-        $validator = $this->workstreamValidator($request);
-        if ($validator->fails()) return $this->validationError($validator);
-        if ($request->filled('owner_id') && !$this->isProjectMember($projectId, (int) $request->input('owner_id'))) {
-            return response()->json(['status' => 0, 'message' => 'The selected owner must be a project team member.'], 422);
-        }
-        DB::table('task_management_workstreams')->where(['id' => $workstreamId, 'project_id' => $projectId])
-            ->update($this->workstreamPayload($request) + ['updated_by' => $context['user_id'], 'updated_at' => now()]);
-        return response()->json(['status' => 1, 'message' => 'Workstream updated successfully.', 'data' => $this->workstream($projectId, $workstreamId)]);
-    }
-
-    public function destroyWorkstream(Request $request, int $projectId, int $workstreamId)
-    {
-        $context = $this->context($request);
-        if (!is_array($context)) return $context;
-        if (!$this->canManage($context, $projectId)) return response()->json(['status' => 0, 'message' => 'You cannot manage workstreams.'], 403);
-        DB::table('task_management_workstreams')->where(['id' => $workstreamId, 'project_id' => $projectId])->delete();
-        return response()->json(['status' => 1, 'message' => 'Workstream deleted successfully.']);
-    }
-
+    /**
+     * @deprecated 2026-09-01 — use attachTask / detachTask instead.
+     *
+     * THIS REPLACES A PROJECT'S ENTIRE TASK LIST. Its first act is
+     * `DELETE FROM task_management_project_tasks WHERE project_id = ?`, so it
+     * writes whatever ids the caller happened to be holding and unlinks
+     * everything else. Two people editing one project, or one stale tab, silently
+     * loses work.
+     *
+     * Its only browser caller was the project drawer's "Save Linked Tasks"
+     * button, which is gone. It is NOT deleted here: there may be callers this
+     * codebase cannot see, and silently changing a write endpoint's meaning is
+     * worse than carrying a deprecated one. Remove it once logs show no hits.
+     */
     public function syncTasks(Request $request, int $id)
     {
         $context = $this->context($request);
@@ -631,42 +716,16 @@ class ProjectController extends Controller
         return 'PRJ-' . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
     }
 
-    private function workstreamValidator(Request $request)
-    {
-        return Validator::make($request->all(), [
-            'name' => 'required|string|max:191', 'description' => 'nullable|string', 'owner_id' => 'nullable|integer',
-            'status' => ['required', Rule::in(self::STATUSES)], 'start_date' => 'nullable|date',
-            'due_date' => 'nullable|date|after_or_equal:start_date', 'sort_order' => 'nullable|integer|min:0',
-        ]);
-    }
-
     private function isProjectMember(int $projectId, int $userId): bool
     {
         return DB::table('task_management_project_members')
             ->where('project_id', $projectId)->where('user_id', $userId)->exists();
     }
 
-    private function workstreamPayload(Request $request): array
-    {
-        $payload = $request->only(['name', 'description', 'owner_id', 'status', 'start_date', 'due_date', 'sort_order']);
-
-        // Same normalisation as projects. `only()` omits absent keys so a
-        // partial update still leaves untouched fields alone — but any date
-        // that IS present must be pinned to a calendar day before it reaches
-        // the `date` column.
-        foreach (['start_date', 'due_date'] as $field) {
-            if (array_key_exists($field, $payload)) {
-                $payload[$field] = $this->dateOnly($payload[$field]);
-            }
-        }
-
-        return $payload;
-    }
-
-    private function workstream(int $projectId, int $id)
-    {
-        return DB::table('task_management_workstreams')->where(['project_id' => $projectId, 'id' => $id])->first();
-    }
+    // workstreamValidator / workstreamPayload / workstream() removed with the
+    // three CRUD methods they served — see the note above syncTasks().
+    // WorkstreamController owns them now, with the wider field set the lifecycle
+    // model needs.
 
     private function validationError($validator)
     {
