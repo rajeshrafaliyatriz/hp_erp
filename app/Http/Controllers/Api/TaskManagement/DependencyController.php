@@ -427,6 +427,9 @@ class DependencyController extends Controller
     {
         if (!$ids) return collect();
         return DB::table('task as t')->leftJoin('tbluser as u', 'u.id', '=', 't.task_allocated_to')
+            // LEFT join: a task whose assignee has no department still
+            // appears on the map, it simply carries no department.
+            ->leftJoin('hrms_departments as dept', 'dept.id', '=', 'u.department_id')
             ->leftJoin('task_management_project_tasks as pt', 'pt.task_id', '=', 't.id')
             ->leftJoin('task_management_projects as p', 'p.id', '=', 'pt.project_id')
             // THE WORKSTREAM BOARD GROUPED BY PROJECT because the workstream
@@ -445,6 +448,12 @@ class DependencyController extends Controller
                 // The assignee's department, so the client can group and filter
                 // by it without a second round trip per node.
                 'u.department_id',
+                // THE NAME AS WELL AS THE ID. The id alone let the client filter
+                // but gave it nothing to label the menu with, so the department
+                // filter could not be built at all. Same table and alias
+                // MyTasksController and ProjectController already use, so one
+                // department reads identically on every screen in this module.
+                'dept.department as department_name',
                 DB::raw("TRIM(CONCAT_WS(' ', u.first_name, u.middle_name, u.last_name)) as assignee"))->get()
             ->map(fn ($task) => [
                 'id' => (string) $task->id, 'title' => $task->title, 'status' => $task->status,
@@ -461,6 +470,10 @@ class DependencyController extends Controller
                 // Same rule as assignee_id: the client filters on the ID, never
                 // on a rendered name that two code paths must agree about.
                 'department_id' => $task->department_id ? (string) $task->department_id : null,
+                // Nullable and left null rather than defaulted: a person with no
+                // department set is not in a department called "Unassigned", and
+                // the filter menu simply does not offer one for them.
+                'department' => $task->department_name ?: null,
                 'at_risk' => $task->due_date && $task->due_date < now()->toDateString() && strtoupper((string) $task->status) !== 'COMPLETED',
             ])->unique('id')->values();
     }

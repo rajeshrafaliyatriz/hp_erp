@@ -134,9 +134,14 @@ class taskController extends Controller
         // Only when the caller did not name one, or named one that was not
         // theirs. Text matching is the fallback now, not the mechanism.
         if (($data['jobrole_task_id'] ?? null) === null) {
+            // The assignee is passed so a title shared by several roles can
+            // still resolve, by preferring the duty belonging to the role that
+            // person holds — the same tie-break the repair pass applied to
+            // existing rows, so new tasks stop rebuilding the backlog it cleared.
             $data['jobrole_task_id'] = $this->resolveTaskDuty(
                 $tenantId,
-                $data['task_title'] ?? null
+                $data['task_title'] ?? null,
+                (int) ($data['TASK_ALLOCATED_TO'] ?? $data['task_allocated_to'] ?? 0) ?: null
             );
         }
 
