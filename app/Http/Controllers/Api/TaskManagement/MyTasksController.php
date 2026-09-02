@@ -135,7 +135,31 @@ class MyTasksController extends Controller
                 $query
                     ->where('t.task_allocated_to', $context['user_id'])
                     ->orWhere('t.task_allocated', $context['user_id'])
-                    ->orWhereIn('t.task_allocated_to', $this->subordinateIds($context));
+                    ->orWhereIn('t.task_allocated_to', $this->subordinateIds($context))
+                    /*
+                     * ── A TASK ON YOUR PROJECT IS READABLE BY YOU ──────────
+                     *
+                     * The project's Tasks tab already lists every linked task
+                     * with its title, status, assignee and due date. Opening
+                     * one showed a 404 unless it happened to be yours or a
+                     * subordinate's — so a project manager could see a row and
+                     * not the row's detail, which reads as a broken screen
+                     * rather than a permission.
+                     *
+                     * Scoped to MEMBERSHIP, not to the tenant: being in the
+                     * same organisation is not a reason to read somebody's
+                     * task. Being on the project it is filed under is.
+                     */
+                    ->orWhereExists(function ($sub) use ($context) {
+                        $sub->selectRaw('1')
+                            ->from('task_management_project_tasks as pt')
+                            ->join('task_management_projects as p', 'p.id', '=', 'pt.project_id')
+                            ->join('task_management_project_members as pm', 'pm.project_id', '=', 'p.id')
+                            ->whereColumn('pt.task_id', 't.id')
+                            ->where('p.sub_institute_id', $context['sub_institute_id'])
+                            ->where('p.syear', $context['syear'])
+                            ->where('pm.user_id', $context['user_id']);
+                    });
             })
             ->first();
 

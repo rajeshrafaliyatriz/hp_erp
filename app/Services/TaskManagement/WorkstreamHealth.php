@@ -78,7 +78,7 @@ class WorkstreamHealth
         $tasks        = $counts['tasks'];
         $milestones   = $counts['milestones'];
 
-        $progress = $this->progress($deliverables);
+        $progress = $this->progress($deliverables, $tasks);
 
         // ── NOTHING PLANNED ────────────────────────────────────────────────
         $planned = $deliverables['total'] + $kpis['total'] + $risks['open'] + $risks['closed']
@@ -187,20 +187,53 @@ class WorkstreamHealth
     }
 
     /**
-     * Share of deliverables finished — or NULL when there are none.
+     * Share of this workstream's work that is finished — or NULL when there is
+     * none to measure.
      *
-     * NOT 0. Zero percent asserts that work exists and none of it is done; null
-     * says no deliverables have been defined, which is a different fact and the
-     * one that is true. The UI renders the null case as a sentence rather than an
-     * empty progress bar, because an empty bar reads as 0%.
+     * ── WHY TASKS COUNT NOW ─────────────────────────────────────────────────
+     *
+     * This used to divide deliverables alone, which meant a workstream with 20
+     * of 20 tasks COMPLETED and four untouched deliverables reported 0% — and
+     * reported it while the health rules said ON TRACK. The number and the
+     * verdict disagreed because they read different columns.
+     *
+     * Deliverables and tasks are both units of work this workstream owes, so
+     * both belong in the fraction. They are weighted BY COUNT rather than 50/50
+     * on purpose: a workstream with 4 deliverables and 20 tasks should not have
+     * its figure half-decided by the smaller set. One finished item moves the
+     * number by the same amount whichever kind it is, which is the only rule
+     * that stays explainable when the mix differs per workstream.
+     *
+     * Checkpoints are deliberately NOT counted. A checkpoint is a date a
+     * deliverable must clear, not a separate piece of work — counting it would
+     * bill the same work twice.
+     *
+     * ── NULL IS STILL NOT ZERO ──────────────────────────────────────────────
+     *
+     * Null now means no deliverables AND no tasks. Zero percent asserts that
+     * work exists and none of it is done; null says nothing has been defined,
+     * which is a different fact. The UI renders null as a sentence rather than
+     * an empty bar, because an empty bar reads as 0%.
      */
-    private function progress(array $deliverables): ?float
+    private function progress(array $deliverables, array $tasks): ?float
     {
-        if ($deliverables['total'] === 0) {
+        /*
+         * A DROPPED deliverable leaves the denominator.
+         *
+         * It is already excluded from `open` — abandoned work is neither done
+         * nor outstanding. But it stayed in `total`, so a workstream that
+         * delivered two of four and dropped the other two was pinned at 50%
+         * and could never reach 100% no matter what anyone did. `total` itself
+         * is left whole because the health counters read it as "deliverables
+         * defined", which remains true of one that was dropped.
+         */
+        $countable = ($deliverables['total'] - ($deliverables['dropped'] ?? 0)) + $tasks['total'];
+
+        if ($countable <= 0) {
             return null;
         }
 
-        return round(($deliverables['done'] / $deliverables['total']) * 100, 1);
+        return round((($deliverables['done'] + $tasks['completed']) / $countable) * 100, 1);
     }
 
     private function unmeasuredReason(array $deliverables, array $kpis): string

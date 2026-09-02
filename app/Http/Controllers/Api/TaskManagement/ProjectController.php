@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\TaskManagement;
 
 use App\Http\Controllers\Controller;
+use App\Services\TaskManagement\ProjectProgress;
+use App\Services\TaskManagement\WorkstreamRollup;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -44,7 +46,11 @@ class ProjectController extends Controller
         if ($request->filled('status')) $query->where('p.status', $request->input('status'));
 
         $projects = $query->orderByDesc('p.updated_at')->paginate((int) $request->input('per_page', 12));
-        $projects->getCollection()->transform(fn ($project) => $this->resource($project));
+
+        // One rollup for the whole page, not one per project — three queries
+        // whatever the page size, so paginating cannot turn this into an N+1.
+        $progress = $this->progressFor($context, $projects->getCollection()->pluck('id')->all());
+        $projects->getCollection()->transform(fn ($project) => $this->resource($project, $progress[(int) $project->id] ?? null));
 
         return response()->json(['status' => 1, 'message' => 'Projects retrieved successfully.', 'data' => [
             'projects' => $projects->items(),
@@ -592,15 +598,32 @@ class ProjectController extends Controller
                 DB::raw("TRIM(CONCAT_WS(' ', manager.first_name, manager.middle_name, manager.last_name)) as manager_name"),
                 DB::raw("TRIM(CONCAT_WS(' ', sponsor.first_name, sponsor.middle_name, sponsor.last_name)) as sponsor_name"),
                 DB::raw('(SELECT COUNT(*) FROM task_management_project_members pm WHERE pm.project_id = p.id) as members_count'),
-                DB::raw('(SELECT COUNT(*) FROM task_management_project_tasks pt WHERE pt.project_id = p.id) as tasks_total'),
-                DB::raw("(SELECT COUNT(*) FROM task_management_project_tasks pt JOIN task t ON t.id = pt.task_id WHERE pt.project_id = p.id AND UPPER(t.status) = 'COMPLETED') as tasks_completed"));
+                /*
+                 * ── A DELETED TASK IS NOT AN OUTSTANDING TASK ──────────────
+                 *
+                 * `tasks_total` never joined `task` at all, and neither count
+                 * filtered `deleted_at`. So a task that was soft-deleted stayed
+                 * in the denominator forever: nobody can see it, nobody can
+                 * complete it, and it holds the project's progress down
+                 * permanently.
+                 *
+                 * Measured on live project 7 (G2G): 4 of its 9 link rows point
+                 * at soft-deleted tasks, so it reported 1/9 = 11% when the real
+                 * figure is 1/5 = 20%.
+                 *
+                 * Both counts now join `task` and both exclude soft-deleted
+                 * rows, so numerator and denominator finally describe the same
+                 * set of tasks.
+                 */
+                DB::raw('(SELECT COUNT(*) FROM task_management_project_tasks pt JOIN task t ON t.id = pt.task_id WHERE pt.project_id = p.id AND t.deleted_at IS NULL AND t.sub_institute_id = p.sub_institute_id AND t.syear = p.syear) as tasks_total'),
+                DB::raw("(SELECT COUNT(*) FROM task_management_project_tasks pt JOIN task t ON t.id = pt.task_id WHERE pt.project_id = p.id AND t.deleted_at IS NULL AND t.sub_institute_id = p.sub_institute_id AND t.syear = p.syear AND UPPER(COALESCE(t.status, '')) = 'COMPLETED') as tasks_completed"));
     }
 
     private function findProject(array $context, int $id, bool $details = false)
     {
         $row = $this->projectQuery($context)->where('p.id', $id)->first();
         if (!$row) return null;
-        $resource = $this->resource($row);
+        $resource = $this->resource($row, $this->progressFor($context, [$id])[$id] ?? null);
         if ($details) {
             $resource['members'] = $this->members($id);
             $resource['workstreams'] = DB::table('task_management_workstreams as w')->leftJoin('tbluser as owner', 'owner.id', '=', 'w.owner_id')
@@ -662,9 +685,29 @@ class ProjectController extends Controller
             ->all();
     }
 
-    private function resource(object $row): array
+    /**
+     * @param  array|null  $progress  from ProjectProgress::evaluate(), when the
+     *   caller batched the rollup. Null falls back to the task-ledger figure,
+     *   which is what a project with no workstreams reduces to anyway.
+     */
+    private function resource(object $row, ?array $progress = null): array
     {
         $total = (int) $row->tasks_total; $completed = (int) $row->tasks_completed;
+
+        /*
+         * `progress_basis` is what makes the number answerable. A bare 12% is
+         * a claim; "3 of 24 — 0 of 19 deliverables, 3 of 5 tasks" is a
+         * statement somebody can check, and `source` distinguishes "0% because
+         * nothing is done" from "0% because there is nothing to measure".
+         */
+        $basis = $progress['basis'] ?? [
+            'done' => $completed, 'total' => $total,
+            'deliverables' => ['done' => 0, 'total' => 0],
+            'tasks' => ['done' => $completed, 'total' => $total],
+            'unplaced_tasks' => ['done' => $completed, 'total' => $total],
+            'delivery_workstreams' => 0,
+            'source' => $total > 0 ? 'TASKS' : 'NONE',
+        ];
         return [
             'id' => (string) $row->id, 'code' => $row->code, 'name' => $row->name,
             'category' => $row->category, 'description' => $row->description,
@@ -676,9 +719,34 @@ class ProjectController extends Controller
             'budget_estimate' => $row->budget_estimate, 'client_name' => $row->client_name,
             'regulatory_flags' => json_decode($row->regulatory_flags ?: '[]', true) ?: [],
             'members_count' => (int) $row->members_count, 'tasks_total' => $total,
-            'tasks_completed' => $completed, 'progress' => $total ? (int) round($completed * 100 / $total) : 0,
+            'tasks_completed' => $completed,
+            'progress' => $progress['percent'] ?? ($total ? (int) round($completed * 100 / $total) : 0),
+            'progress_basis' => $basis,
             'archived_at' => $row->archived_at,
         ];
+    }
+
+    /**
+     * Deliverable and task totals → a percentage, for every project at once.
+     *
+     * @param  int[]  $projectIds
+     * @return array<int, array{percent:int, basis:array}>
+     */
+    private function progressFor(array $context, array $projectIds): array
+    {
+        if ($projectIds === []) {
+            return [];
+        }
+
+        $totals   = app(WorkstreamRollup::class)->projectTotals($context, $projectIds);
+        $progress = app(ProjectProgress::class);
+
+        $out = [];
+        foreach ($totals as $projectId => $t) {
+            $out[(int) $projectId] = $progress->evaluate($t);
+        }
+
+        return $out;
     }
 
     private function members(int $id)
