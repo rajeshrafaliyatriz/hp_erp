@@ -98,6 +98,7 @@ class WorkstreamController extends Controller
             'workstreams' => $shaped->all(),
             'links'       => $this->linkRows((int) $project->id),
             'summary'     => $this->projectSummary($shaped),
+            'schedule'    => $this->schedule($ids),
             'project'     => [
                 'id'         => (string) $project->id,
                 'code'       => $project->code,
@@ -641,6 +642,77 @@ class WorkstreamController extends Controller
             ->pluck('n', 'parent_id')
             ->map(fn ($n) => (int) $n)
             ->all();
+    }
+
+    /**
+     * Everything in this project that carries a DATE, in one list.
+     *
+     * The Timeline used to plot workstream windows and nothing else, which on a
+     * real project draws one identical bar per workstream — every workstream is
+     * created carrying the project's own start and due date, so until somebody
+     * changes them there is no variation to chart.
+     *
+     * The dates that actually exist live on the children: a deliverable's due
+     * date and a checkpoint's target date. Tasks are dated too, but the project
+     * payload already carries those, so they are joined on the client rather
+     * than fetched twice.
+     *
+     * Two queries, both keyed on the workstream-id list the caller already has.
+     * Undated rows are excluded here on purpose — "no date" is a count the UI
+     * shows as a prompt, not a row it can place on a timeline.
+     *
+     * @param  int[]  $workstreamIds
+     */
+    private function schedule(array $workstreamIds): array
+    {
+        if ($workstreamIds === []) {
+            return [];
+        }
+
+        $out = [];
+
+        $deliverables = DB::table('task_management_workstream_deliverables as d')
+            ->join('task_management_workstreams as w', 'w.id', '=', 'd.workstream_id')
+            ->whereIn('d.workstream_id', $workstreamIds)
+            ->whereNotNull('d.due_date')
+            ->orderBy('d.due_date')
+            ->get(['d.id', 'd.name', 'd.due_date', 'd.status', 'w.id as workstream_id', 'w.name as workstream_name']);
+
+        foreach ($deliverables as $row) {
+            $out[] = [
+                'id'              => 'deliverable-' . $row->id,
+                'kind'            => 'DELIVERABLE',
+                'title'           => $row->name,
+                'date'            => $row->due_date,
+                'status'          => $row->status,
+                'workstream_id'   => (string) $row->workstream_id,
+                'workstream_name' => $row->workstream_name,
+            ];
+        }
+
+        $checkpoints = DB::table('task_management_workstream_checkpoints as c')
+            ->join('task_management_workstreams as w', 'w.id', '=', 'c.workstream_id')
+            ->whereIn('c.workstream_id', $workstreamIds)
+            ->whereNotNull('c.target_date')
+            ->orderBy('c.target_date')
+            ->get(['c.id', 'c.name', 'c.target_date', 'c.status', 'c.is_critical', 'w.id as workstream_id', 'w.name as workstream_name']);
+
+        foreach ($checkpoints as $row) {
+            $out[] = [
+                'id'              => 'checkpoint-' . $row->id,
+                'kind'            => 'CHECKPOINT',
+                'title'           => $row->name,
+                'date'            => $row->target_date,
+                'status'          => $row->status,
+                'is_critical'     => (bool) $row->is_critical,
+                'workstream_id'   => (string) $row->workstream_id,
+                'workstream_name' => $row->workstream_name,
+            ];
+        }
+
+        usort($out, fn ($a, $b) => strcmp((string) $a['date'], (string) $b['date']));
+
+        return $out;
     }
 
     private function summaryResource($row, ?array $counts, int $children): array
