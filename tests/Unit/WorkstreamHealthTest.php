@@ -189,8 +189,55 @@ class WorkstreamHealthTest extends TestCase
         ]));
 
         $this->assertSame(WorkstreamHealth::ON_TRACK, $result['state']);
-        $this->assertSame(75.0, $result['progress']);
+        // (3 deliverables + 8 tasks) of (4 + 10) = 11/14. It was 75.0 while
+        // progress divided deliverables alone and ignored the ten tasks.
+        $this->assertSame(78.6, $result['progress']);
         $this->assertStringContainsString('3 of 4 deliverables complete', $result['state_reason']);
+    }
+
+    /**
+     * The bug the blend exists to kill: every task finished, every deliverable
+     * untouched, and the figure reported 0% while the verdict said ON TRACK.
+     * The number and the health line were reading different columns.
+     */
+    public function test_completed_tasks_move_progress_even_with_no_deliverable_done(): void
+    {
+        $result = $this->health->evaluate($this->counts([
+            'deliverables' => ['total' => 4, 'done' => 0, 'open' => 4],
+            'tasks'        => ['total' => 20, 'completed' => 20],
+        ]));
+
+        // 20 of 24 items, not 0 of 4 deliverables.
+        $this->assertSame(83.3, $result['progress']);
+    }
+
+    /** Weighted by item count, so the smaller set cannot decide half the figure. */
+    public function test_progress_is_weighted_by_item_count_not_fifty_fifty(): void
+    {
+        $result = $this->health->evaluate($this->counts([
+            'deliverables' => ['total' => 2, 'done' => 2],
+            'tasks'        => ['total' => 18, 'completed' => 0],
+        ]));
+
+        // 2 of 20 = 10%. A 50/50 split would have claimed 50%.
+        $this->assertSame(10.0, $result['progress']);
+    }
+
+    /** Null still means "nothing to measure" — and now that means neither kind. */
+    public function test_progress_is_null_only_when_there_are_no_deliverables_and_no_tasks(): void
+    {
+        $nothing = $this->health->evaluate($this->counts([
+            'deliverables' => ['total' => 0],
+            'tasks'        => ['total' => 0],
+        ]));
+        $this->assertNull($nothing['progress']);
+
+        // Tasks alone are enough to measure — this used to be null.
+        $tasksOnly = $this->health->evaluate($this->counts([
+            'deliverables' => ['total' => 0],
+            'tasks'        => ['total' => 4, 'completed' => 1],
+        ]));
+        $this->assertSame(25.0, $tasksOnly['progress']);
     }
 
     public function test_reason_reads_as_a_sentence_when_several_things_are_wrong(): void

@@ -76,6 +76,124 @@ class WorkstreamRollup
     }
 
     /**
+     * The work totals behind each project's percentage — for MANY projects.
+     *
+     * ── THREE QUERIES, WHATEVER THE PAGE SIZE ───────────────────────────────
+     *
+     * The projects list renders up to 100 rows. Asking per project would make
+     * this an N+1 the moment somebody paginates, so every query below takes an
+     * `IN (...)` of project ids and groups in PHP. The query count in this
+     * method does not mention the number of projects or workstreams anywhere.
+     *
+     * Returns, per project id:
+     *   deliverables         done/total across its DELIVERY workstreams only
+     *   tasks                done/total for tasks filed under those workstreams
+     *   unplaced             done/total for tasks linked to the project with no
+     *                        workstream — still the project's work
+     *   delivery_workstreams how many counted, so the UI can say so
+     *
+     * @param  int[]  $projectIds
+     * @return array<int, array>  keyed by project id
+     */
+    public function projectTotals(array $context, array $projectIds): array
+    {
+        $out = [];
+        foreach ($projectIds as $id) {
+            $out[(int) $id] = [
+                'deliverables'         => ['done' => 0, 'total' => 0],
+                'tasks'                => ['done' => 0, 'total' => 0],
+                'unplaced'             => ['done' => 0, 'total' => 0],
+                'delivery_workstreams' => 0,
+            ];
+        }
+
+        if ($projectIds === []) {
+            return $out;
+        }
+
+        // ── 1 · which workstreams count, and for which project ──────────────
+        // Governance spans the flow rather than advancing it, so it is filtered
+        // out here — once, rather than in each caller.
+        $workstreams = DB::table('task_management_workstreams as w')
+            ->join('task_management_projects as p', 'p.id', '=', 'w.project_id')
+            ->where('p.sub_institute_id', $context['sub_institute_id'])
+            ->where('p.syear', $context['syear'])
+            ->whereIn('w.project_id', $projectIds)
+            ->where('w.kind', 'DELIVERY')
+            ->get(['w.id', 'w.project_id']);
+
+        $projectOfWorkstream = [];
+        foreach ($workstreams as $row) {
+            $projectOfWorkstream[(int) $row->id] = (int) $row->project_id;
+            $out[(int) $row->project_id]['delivery_workstreams']++;
+        }
+
+        // ── 2 · deliverables on those workstreams ───────────────────────────
+        if ($projectOfWorkstream !== []) {
+            $rows = DB::table('task_management_workstream_deliverables')
+                ->whereIn('workstream_id', array_keys($projectOfWorkstream))
+                ->groupBy('workstream_id', 'status')
+                ->get([DB::raw('workstream_id'), DB::raw('status'), DB::raw('COUNT(*) as n')]);
+
+            foreach ($rows as $row) {
+                $project = $projectOfWorkstream[(int) $row->workstream_id] ?? null;
+                if ($project === null) {
+                    continue;
+                }
+                $status = strtoupper((string) $row->status);
+                $n      = (int) $row->n;
+
+                // A dropped deliverable leaves the denominator entirely — it is
+                // neither done nor outstanding, and leaving it in would cap the
+                // project below 100% forever.
+                if ($status === 'DROPPED') {
+                    continue;
+                }
+
+                $out[$project]['deliverables']['total'] += $n;
+                if (in_array($status, self::DELIVERED, true)) {
+                    $out[$project]['deliverables']['done'] += $n;
+                }
+            }
+        }
+
+        // ── 3 · every linked task, placed or not ────────────────────────────
+        $tasks = DB::table('task_management_project_tasks as pt')
+            ->join('task as t', 't.id', '=', 'pt.task_id')
+            // project_tasks has no tenant column of its own; the project carries it.
+            ->join('task_management_projects as p', 'p.id', '=', 'pt.project_id')
+            ->where('p.sub_institute_id', $context['sub_institute_id'])
+            ->where('p.syear', $context['syear'])
+            ->whereIn('pt.project_id', $projectIds)
+            ->whereNull('t.deleted_at')
+            ->get(['pt.project_id', 'pt.workstream_id', 't.status']);
+
+        foreach ($tasks as $row) {
+            $project = (int) $row->project_id;
+            if (!isset($out[$project])) {
+                continue;
+            }
+
+            // Placed under a DELIVERY workstream, or not placed at all — a task
+            // filed under a GOVERNANCE workstream counts on neither side, the
+            // same way that workstream's deliverables do not.
+            $workstream = $row->workstream_id !== null ? (int) $row->workstream_id : null;
+            if ($workstream !== null && !isset($projectOfWorkstream[$workstream])) {
+                continue;
+            }
+
+            $bucket = $workstream === null ? 'unplaced' : 'tasks';
+            $out[$project][$bucket]['total']++;
+
+            if (strtoupper((string) $row->status) === 'COMPLETED') {
+                $out[$project][$bucket]['done']++;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Deliverables by status, plus how many are past their due date.
      *
      * Overdue is computed in SQL rather than by fetching rows, because it is the
@@ -104,6 +222,13 @@ class WorkstreamRollup
 
             $out[$id]['total']   += $n;
             $out[$id]['overdue'] += (int) $row->overdue;
+
+            // Tracked separately so progress can divide by `total - dropped`.
+            // `total` itself stays whole: the health counters and the UI read it
+            // as "deliverables defined", which is still true of a dropped one.
+            if ($status === 'DROPPED') {
+                $out[$id]['dropped'] += $n;
+            }
 
             if (in_array($status, self::DELIVERED, true)) {
                 $out[$id]['done'] += $n;
@@ -286,7 +411,7 @@ class WorkstreamRollup
 
     private function emptyDeliverables(): array
     {
-        return ['total' => 0, 'done' => 0, 'in_flight' => 0, 'open' => 0, 'overdue' => 0];
+        return ['total' => 0, 'done' => 0, 'dropped' => 0, 'in_flight' => 0, 'open' => 0, 'overdue' => 0];
     }
 
     private function emptyKpis(): array
