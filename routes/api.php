@@ -141,6 +141,7 @@ use App\Http\Controllers\Api\TaskManagement\NotificationController;
 use App\Http\Controllers\Api\TaskManagement\LegacyTaskController;
 use App\Http\Controllers\Api\TaskManagement\SessionController;
 use App\Http\Controllers\Api\TaskManagement\ProjectController;
+use App\Http\Controllers\Api\TaskManagement\BacklogController;
 use App\Http\Controllers\Api\TaskManagement\WorkstreamController;
 use App\Http\Controllers\Api\TaskManagement\WorkstreamRecordController;
 use App\Http\Controllers\Api\TaskManagement\WorkspaceController;
@@ -1213,6 +1214,28 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     | Static segments are declared BEFORE /workstreams/{id} so `options` is not
     | swallowed by the show route.
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Backlog — work written down before it has an owner
+    |--------------------------------------------------------------------------
+    |
+    | Reads are open to the tenant, the same as projects. Writes gate on
+    | `task.create` rather than `project.manage`: capturing an idea is a
+    | lighter act than assigning one, and an item with no project cannot be
+    | scoped against a project's permissions anyway.
+    |
+    | Every route resolves the row by id AND tenant, returning 404 on a miss —
+    | never 403, which would confirm the row exists. The table carries its own
+    | `sub_institute_id` because `project_id` is nullable, so an unfiled item
+    | has no parent to inherit tenancy from.
+    */
+    Route::get('/backlog', [BacklogController::class, 'index']);
+    Route::post('/backlog', [BacklogController::class, 'store'])->middleware('task.permission:task.create');
+    Route::put('/backlog/{id}', [BacklogController::class, 'update'])->middleware('task.permission:task.create')->whereNumber('id');
+    Route::delete('/backlog/{id}', [BacklogController::class, 'destroy'])->middleware('task.permission:task.create')->whereNumber('id');
+    Route::patch('/backlog/{id}/rank', [BacklogController::class, 'rank'])->middleware('task.permission:task.create')->whereNumber('id');
+    Route::patch('/backlog/{id}/assign', [BacklogController::class, 'assign'])->middleware('task.permission:task.create')->whereNumber('id');
+
     Route::get('/workstreams/options', [WorkstreamController::class, 'options']);
     Route::get('/projects/{id}/workstreams', [WorkstreamController::class, 'index'])->whereNumber('id');
     Route::get('/workstreams/{id}', [WorkstreamController::class, 'show'])->whereNumber('id');
