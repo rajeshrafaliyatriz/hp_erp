@@ -1013,6 +1013,9 @@ Route::delete('/lms/courses/{id}', [LmsCourseController::class, 'destroy']);
 Route::get('/lms/learning/courses', [LmsLearningController::class, 'courses']);
 Route::get('/lms/learning/assessments', [LmsLearningController::class, 'assessments']);
 Route::post('/lms/learning/progress', [LmsLearningController::class, 'saveProgress']);
+// The learner declaring themselves finished. Separate from the certificate,
+// which still requires every lesson.
+Route::post('/lms/learning/courses/{courseId}/complete', [LmsLearningController::class, 'completeCourse'])->whereNumber('courseId');
 Route::get('/lms/learning/notes', [LmsLearningController::class, 'notes']);
 Route::post('/lms/learning/notes', [LmsLearningController::class, 'storeNote']);
 Route::put('/lms/learning/notes/{id}', [LmsLearningController::class, 'updateNote']);

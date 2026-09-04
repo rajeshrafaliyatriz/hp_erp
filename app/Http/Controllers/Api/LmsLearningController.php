@@ -442,6 +442,48 @@ class LmsLearningController extends Controller
                 ->whereNull('deleted_at')
                 ->count();
 
+            $percent = $total > 0 ? (int) round($done / $total * 100) : 0;
+
+            /*
+             * ── OPENING A LESSON MEANS THE COURSE IS IN PROGRESS ────────────
+             *
+             * This percentage was computed, returned, and then forgotten.
+             * `lms_course_enroll.status` stayed 'enrolled' forever - the only
+             * thing that ever set 'completed' was claiming a certificate - so
+             * a course somebody was halfway through was indistinguishable
+             * from one they had never opened, and the UI showed both as
+             * "In Progress" alongside courses awaiting approval.
+             *
+             * Only from 'enrolled'. A completed course is not un-completed by
+             * revisiting a lesson, and a pending one must not quietly become
+             * active without an approval.
+             */
+            DB::table('lms_course_enroll')
+                ->where('user_id', $userId)
+                ->where('course_id', $request->course_id)
+                ->where('status', 'enrolled')
+                ->whereNull('deleted_at')
+                ->update(['status' => 'in-progress', 'updated_at' => now()]);
+
+            /*
+             * ── AND THE ASSIGNMENT HAS TO AGREE WITH MY LEARNING ────────────
+             *
+             * `lms_assignments` appeared nowhere in this controller, so its
+             * `progress` column was only ever the literal 0 or 100 somebody
+             * set by hand. The Assignments screen therefore showed 0% for a
+             * learner My Learning showed at 80% - two screens, one fact, two
+             * answers.
+             */
+            DB::table('lms_assignments')
+                ->where('user_id', $userId)
+                ->where('course_id', $request->course_id)
+                ->whereNull('deleted_at')
+                ->update([
+                    'progress' => $percent,
+                    'status' => $percent >= 100 ? 'Completed' : 'In Progress',
+                    'updated_at' => now(),
+                ]);
+
             return response()->json([
                 'status' => true,
                 'message' => 'Progress saved',
@@ -1212,6 +1254,105 @@ class LmsLearningController extends Controller
      * only what a verifier needs: whether it is genuine, for whom, and whether
      * it is still in date.
      */
+    /**
+     * POST /api/lms/learning/courses/{courseId}/complete
+     *
+     * The learner says they are finished.
+     *
+     * ── WHY A DECLARATION AND NOT A CALCULATION ─────────────────────────────
+     *
+     * Completion is the employee's own statement, by decision. Some of what a
+     * course asks for happens away from the screen - a conversation, a shift,
+     * a piece of practice - and a system that only counts opened lessons
+     * cannot see any of it.
+     *
+     * So the declaration is recorded AND the real lesson count is recorded
+     * beside it, and both are returned. A report can then say "marked complete
+     * with 3 of 8 lessons opened", which is the honest sentence. Hiding the
+     * gap would make the declaration meaningless; refusing the declaration
+     * would make the feature useless.
+     *
+     * ── IT DOES NOT MINT A CERTIFICATE ──────────────────────────────────────
+     *
+     * The certificate keeps its own rule: every lesson complete. A certificate
+     * granted for 3 of 8 lessons devalues every certificate that came before
+     * it, so the two artefacts stay separate - you may declare yourself done,
+     * and the certificate still has to be earned.
+     */
+    public function completeCourse(Request $request, $courseId)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+
+        $userId = $this->requireUser($request);
+        $subInstituteId = $this->tenantId($request);
+
+        // The caller's own enrolment, in their own organisation. A pending one
+        // is not completable - it has not been approved yet.
+        $enrolment = DB::table('lms_course_enroll as e')
+            ->join('sub_std_map as s', 's.id', '=', 'e.course_id')
+            ->where('e.user_id', $userId)
+            ->where('e.course_id', $courseId)
+            ->where('s.sub_institute_id', $subInstituteId)
+            ->whereNull('e.deleted_at')
+            ->whereIn('e.status', ['enrolled', 'in-progress', 'completed'])
+            ->orderByDesc('e.created_at')
+            ->select('e.id', 'e.status')
+            ->first();
+
+        if (! $enrolment) {
+            return response()->json(['status' => false, 'message' => 'You are not enrolled in this course.'], 404);
+        }
+
+        $total = DB::table('content_master')
+            ->where('subject_id', $courseId)
+            ->whereNull('deleted_at')
+            ->count();
+
+        $done = DB::table('lms_content_progress')
+            ->where('user_id', $userId)
+            ->where('course_id', $courseId)
+            ->where('status', 'completed')
+            ->whereNull('deleted_at')
+            ->count();
+
+        DB::transaction(function () use ($enrolment, $userId, $courseId, $total, $done) {
+            DB::table('lms_course_enroll')->where('id', $enrolment->id)->update([
+                'status' => 'completed',
+                'end_date' => now()->toDateString(),
+                'updated_at' => now(),
+            ]);
+
+            // The assignment screen has to agree with My Learning. `progress`
+            // stays the REAL figure, not 100 - the declaration is in `status`,
+            // and overwriting the measurement with it would erase the evidence.
+            DB::table('lms_assignments')
+                ->where('user_id', $userId)
+                ->where('course_id', $courseId)
+                ->whereNull('deleted_at')
+                ->update([
+                    'status' => 'Completed',
+                    'progress' => $total > 0 ? (int) round($done / $total * 100) : 0,
+                    'updated_at' => now(),
+                ]);
+        });
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Marked complete.',
+            'data' => [
+                'marked_complete' => true,
+                'total_content' => $total,
+                'completed_content' => $done,
+                'progress_percent' => $total > 0 ? (int) round($done / $total * 100) : 0,
+                // So the UI can say what the certificate still needs, rather
+                // than offering a button that will be refused.
+                'certificate_available' => $total > 0 && $done >= $total,
+            ],
+        ]);
+    }
+
     public function verifyCertificate(Request $request, string $code)
     {
         $certificate = DB::table('lms_certificates as c')
