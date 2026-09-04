@@ -60,15 +60,6 @@ use App\Http\Controllers\Api\Performance\PerformanceSavedViewController;
 // Talent Management: dashboard, onboarding, mobility & succession, offboarding
 // (routes in the "Talent Management -> Lifecycle" block at the end of this file).
 use App\Http\Controllers\Api\TalentDashboardController;
-use App\Http\Controllers\Api\Talent\OnboardingJourneyController;
-use App\Http\Controllers\Api\Talent\OnboardingTaskController;
-use App\Http\Controllers\Api\Talent\OnboardingDocumentController;
-use App\Http\Controllers\Api\Talent\InternalJobController;
-use App\Http\Controllers\Api\Talent\MobilityRequestController;
-use App\Http\Controllers\Api\Talent\SuccessionPlanController;
-use App\Http\Controllers\Api\Talent\OffboardingCaseController;
-use App\Http\Controllers\Api\Talent\OffboardingClearanceController;
-use App\Http\Controllers\Api\Talent\ExitInterviewController;
 use App\Http\Controllers\Api\Talent\AdminWorkflowController;
 // Talent Management -> Onboarding & Employee Lifecycle Center (route block at the
 // end of this file).
@@ -83,7 +74,11 @@ use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\talent\talent_screening_results_controller;
+use App\Http\Controllers\Api\Talent\TalentAssessmentController;
+use App\Http\Controllers\talent\CandidateAssessmentResponseController;
 use App\Http\Controllers\talent\TalentOfferController;
+use App\Http\Controllers\talent\CareersController;
+use App\Http\Controllers\talent\OfferResponseController;
 use App\Http\Controllers\talent\TalentAcquisition\TalentAcquisitionController;
 use App\Http\Controllers\talent\TalentAcquisition\CandidateDropoffController;
 use App\Http\Controllers\AJAXController;
@@ -179,6 +174,74 @@ use App\Http\Controllers\Api\Attendance\AttendanceReportApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
 
 
+/*
+|--------------------------------------------------------------------------
+| Careers - the candidate surface. PUBLIC, and deliberately so.
+|--------------------------------------------------------------------------
+|
+| A candidate is not a user of this product: no account, no token, no tenant of
+| their own. Until Sprint 4a that meant they had no surface at all, and every
+| application had to be typed in by somebody inside the company.
+|
+| These three routes are the entire public surface. The tenant comes from the
+| careers slug in the PATH - which is the resource identifier, uniquely indexed,
+| and used only to scope reads and to stamp a new application. It is not the
+| "tenant from the request" defect: there is no token here to contradict.
+|
+| RATE LIMITED, which is a new control rather than an existing pattern - the
+| application had no throttling anywhere. Reads are generous; apply is tight
+| because it writes a row and accepts a file upload.
+|
+| Everything else about recruitment stays authenticated and role-gated: see the
+| block further down for job-applications, candidates and offers.
+*/
+Route::middleware('throttle:30,1')->group(function () {
+    Route::get('/careers/{slug}', [CareersController::class, 'organisation']);
+    Route::get('/careers/{slug}/postings/{id}', [CareersController::class, 'posting'])->whereNumber('id');
+});
+Route::post('/careers/{slug}/postings/{id}/apply', [CareersController::class, 'apply'])
+    ->whereNumber('id')
+    ->middleware('throttle:5,1');
+
+/*
+| The offer decision, answered by the candidate themselves.
+|
+| The 64-character token in the path IS the authorisation: its sha256 is the
+| unique key of exactly one acceptance row, and it expires and burns on use. It
+| opens one offer and nothing else - it cannot list, cannot reach another offer,
+| and cannot read the application behind it.
+|
+| Throttled harder than the careers reads because the token is the only secret:
+| 20/min is ample for a person reading their own offer and useless for guessing
+| a 64-character string.
+*/
+Route::get('/offer-response/{token}', [OfferResponseController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:20,1');
+Route::post('/offer-response/{token}', [OfferResponseController::class, 'respond'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:10,1');
+
+/*
+| The assessment, sat by the candidate themselves. Same contract as the offer
+| link above: the 64-character token IS the authorisation, its sha256 is the
+| unique key of exactly one row, and unknown / expired / used all return 410.
+|
+| The answer route is throttled MORE GENEROUSLY than the offer's write, because
+| it is an autosave: a candidate typing a long written answer saves repeatedly,
+| and 10/min would start rejecting saves mid-sitting and lose their work.
+| Submit stays tight - it is once per sitting by definition.
+*/
+Route::get('/candidate-assessment/{token}', [CandidateAssessmentResponseController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:20,1');
+Route::post('/candidate-assessment/{token}/answer', [CandidateAssessmentResponseController::class, 'saveAnswer'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:120,1');
+Route::post('/candidate-assessment/{token}/submit', [CandidateAssessmentResponseController::class, 'submit'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:10,1');
+
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
 Route::post('/verify-otp', [signupOtpController::class, 'verifyOtp']);
 Route::post('/newsletter/send', [NewsletterController::class, 'sendNewsletter'])->middleware('api.token');
@@ -194,23 +257,120 @@ Route::post('/ai-generated-assessment/assessment/store', [generateAssessmentCont
 Route::get('/ai-generated-assessment/assessment/index',[generateAssessmentController::class, 'index'])->middleware('api.token');
 
 
-Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
-Route::get('/candidate-pipeline', [talent_interviewschedulescontroller::class, 'candidatepipeline']);
+/*
+|--------------------------------------------------------------------------
+| Recruitment - candidate data is personal data about non-users
+|--------------------------------------------------------------------------
+|
+| These endpoints carry applicants' names, email addresses, mobile numbers,
+| expected salary and CV paths. Until Sprint 1 they were reachable by any
+| authenticated employee: a token whose profile is "Employee" (role_key
+| employee, data_scope self) returned all 22 live applications for its tenant.
+|
+| profile:admin,hr,recruiter resolves through RequireProfile::ALIASES to
+| administrator, hr_manager, hr_executive and recruiter. A hiring manager who
+| needs candidate visibility should be granted it deliberately, by adding a
+| role here - not by the absence of a gate.
+|
+| The candidate-facing apply flow does NOT go through these routes; it gets its
+| own public, throttled endpoint in Sprint 4a.
+*/
+Route::resource('interview-schedules', talent_interviewschedulescontroller::class)
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/candidate-pipeline', [talent_interviewschedulescontroller::class, 'candidatepipeline'])
+    ->middleware('profile:admin,hr,recruiter');
 
-Route::get('job-applications/shortlisted', [talent_jobapplicationcontroller::class, 'getShortlistedCandidates']);
-Route::resource('job-applications', talent_jobapplicationcontroller::class);
+Route::get('job-applications/shortlisted', [talent_jobapplicationcontroller::class, 'getShortlistedCandidates'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::resource('job-applications', talent_jobapplicationcontroller::class)
+    ->middleware('profile:admin,hr,recruiter');
 
 Route::resource('job-postings', talent_jobpostingcontroller::class);
 Route::get('/talent/team-overview', [talent_jobpostingcontroller::class, 'getHiringStatus']);
 
-Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store']);
-Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show']);
+Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show'])
+    ->middleware('profile:admin,hr,recruiter');
 
-Route::get('offers', [TalentOfferController::class, 'index']);
-Route::post('talent-offers', [TalentOfferController::class, 'store']);
-Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject']);
-Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
-Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
+/*
+| A recruiter's own review of one CV - the score, the keywords, the comments and
+| the reviewer's name. Distinct from talent-screening-results above, which is the
+| AI verdict on a candidate; these two sit side by side in the Screening tab.
+|
+| Same gate as the rest of the recruitment surface: this is candidate PII plus a
+| hiring judgement, and F-53 was exactly the finding that this class of data was
+| readable by any employee.
+*/
+Route::middleware('profile:admin,hr,recruiter')->group(function () {
+    Route::get('talent/resume-screenings', [App\Http\Controllers\talent\ResumeScreeningController::class, 'index']);
+    Route::post('talent/resume-screenings', [App\Http\Controllers\talent\ResumeScreeningController::class, 'store']);
+    Route::put('talent/resume-screenings/{id}', [App\Http\Controllers\talent\ResumeScreeningController::class, 'update'])->whereNumber('id');
+    Route::delete('talent/resume-screenings/{id}', [App\Http\Controllers\talent\ResumeScreeningController::class, 'destroy'])->whereNumber('id');
+});
+
+/*
+| Who in this institute recruits, screens and interviews.
+|
+| Reads are gated too, not just writes: the roster names individual employees and
+| what they are trusted to do in hiring. Admin and HR maintain it; a recruiter can
+| see who else is on the team without being able to change it.
+*/
+Route::get('talent/hiring-team', [App\Http\Controllers\talent\HiringTeamController::class, 'index'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::middleware('profile:admin,hr')->group(function () {
+    Route::post('talent/hiring-team', [App\Http\Controllers\talent\HiringTeamController::class, 'store']);
+    Route::put('talent/hiring-team/{id}', [App\Http\Controllers\talent\HiringTeamController::class, 'update'])->whereNumber('id');
+    Route::delete('talent/hiring-team/{id}', [App\Http\Controllers\talent\HiringTeamController::class, 'destroy'])->whereNumber('id');
+});
+
+// Offers carry salary, start date and the candidate's identity - same class as
+// /job-applications above. job-postings deliberately stays open: a posting is the
+// thing a candidate is meant to read, and it becomes the public careers page.
+Route::get('offers', [TalentOfferController::class, 'index'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('talent-offers', [TalentOfferController::class, 'store'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject'])
+    ->middleware('profile:admin,hr,recruiter');
+// The other half of the decision. Until Sprint 2 an offer could be rejected but
+// never accepted, so the hire stopped here and the employee was retyped by hand.
+Route::post('talent-offers/{id}/accept', [TalentOfferController::class, 'accept'])
+    ->middleware('profile:admin,hr,recruiter');
+// Mint (or re-issue) the candidate's link and try to email it. Re-issuing
+// invalidates the previous link - the stored hash is overwritten.
+Route::post('talent-offers/{id}/candidate-link', [TalentOfferController::class, 'candidateLink'])
+    ->middleware('profile:admin,hr,recruiter');
+/*
+| Candidate assessment, HR side.
+|
+| Same role gate as offers: a blueprint sets the pass mark that decides who
+| reaches an interview, and an invitation reveals a candidate's email address.
+| Both are recruiting decisions, so both are admin/hr/recruiter only.
+|
+| The candidate's own side of this is the PUBLIC token route further up the
+| file - it carries no session and must never be inside this middleware.
+*/
+Route::get('talent/assessment/blueprints', [TalentAssessmentController::class, 'blueprints'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('talent/assessment/blueprints', [TalentAssessmentController::class, 'storeBlueprint'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::delete('talent/assessment/blueprints/{id}', [TalentAssessmentController::class, 'destroyBlueprint'])
+    ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent/assessment/jobroles', [TalentAssessmentController::class, 'jobroles'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('talent/applications/{id}/assessment/invite', [TalentAssessmentController::class, 'invite'])
+    ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent/applications/{id}/assessment', [TalentAssessmentController::class, 'result'])
+    ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+
+Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent-templates', [TalentOfferController::class, 'getTemplates'])
+    ->middleware('profile:admin,hr,recruiter');
 
 Route::post('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis'])->middleware('api.token');
 Route::post('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
@@ -230,9 +390,12 @@ Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
 Route::resource('skills', skillcontroller::class);
 
 // Removed duplicate route declaration - exact duplicate of the declaration above.
-Route::put('/interview-schedules', [talent_interviewschedulescontroller::class, 'customUpdate']);
-Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::class, 'updateStatus']);
-Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications']);
+Route::put('/interview-schedules', [talent_interviewschedulescontroller::class, 'customUpdate'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::class, 'updateStatus'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications'])
+    ->middleware('profile:admin,hr,recruiter');
 // Removed duplicate route declaration - exact duplicate.
 Route::post('designation_leave', [HrmsController::class, 'store']);
 Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
@@ -829,6 +992,10 @@ Route::delete('/lms/assessments/{id}', [LmsAssessmentController::class, 'destroy
 Route::get('/lms/courses/kpis', [LmsCourseController::class, 'kpis']);
 Route::get('/lms/courses/filters', [LmsCourseController::class, 'filters']);
 Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk']);
+// Who a course is for. Declared BEFORE /lms/courses/{id} so "audience" is not
+// captured as an id.
+Route::get('/lms/courses/{id}/audience/preview', [LmsCourseController::class, 'audiencePreview'])->whereNumber('id');
+Route::post('/lms/courses/{id}/audience', [LmsCourseController::class, 'assignAudience'])->whereNumber('id');
 Route::get('/lms/courses', [LmsCourseController::class, 'index']);
 Route::post('/lms/courses', [LmsCourseController::class, 'store']);
 Route::get('/lms/courses/{id}', [LmsCourseController::class, 'show']);
@@ -1030,19 +1197,52 @@ Route::get('/positions', [InterviewController::class, 'getPositions']);
 Route::get('/interviewers', [InterviewController::class, 'getInterviewers']);
 Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings'])->middleware('api.token');
 
-Route::get('/interview-panel/users', [talent_interviewpanelController::class, 'getInterviewers']);
-Route::post('/interview-panel/store', [talent_interviewpanelController::class, 'storeinterviewer']);
-Route::put('/interview-panel/update/{id}', [talent_interviewpanelController::class, 'update']);
-Route::delete('/interview-panel/delete/{id}', [talent_interviewpanelController::class, 'destroy']);
-Route::get('/interview-panel/list', [talent_interviewpanelController::class, 'getInterviewPanel']);
-Route::get('/candidate', [candidateController::class,'getCandidate']);
-Route::get('/feedback', [feedbackController::class, 'getAllFeedback']);
-Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
+Route::get('/interview-panel/users', [talent_interviewpanelController::class, 'getInterviewers'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('/interview-panel/store', [talent_interviewpanelController::class, 'storeinterviewer'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::put('/interview-panel/update/{id}', [talent_interviewpanelController::class, 'update'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::delete('/interview-panel/delete/{id}', [talent_interviewpanelController::class, 'destroy'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/interview-panel/list', [talent_interviewpanelController::class, 'getInterviewPanel'])
+    ->middleware('profile:admin,hr,recruiter');
+// Candidate PII, same class as /job-applications above - see the note there.
+Route::get('/candidate', [candidateController::class,'getCandidate'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/feedback', [feedbackController::class, 'getAllFeedback'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback'])
+    ->middleware('profile:admin,hr,recruiter');
+
+/*
+| DELIBERATELY NOT role-gated: an interview panel member submits their own
+| feedback, and a panellist is an ordinary employee - talent_interview_panel
+| stores available_interviewers as a list of user ids, not a role. Gating this
+| on admin,hr,recruiter would stop interviewers doing the one thing they are
+| there to do.
+|
+| It is not correctly guarded either: the controller does not check that the
+| caller is on the panel for the interview being scored. That check belongs
+| with the decision-payload fix in Sprint 3, which already rewrites this
+| contract. Recorded here so the gap is visible at the point the route is
+| declared, rather than looking like an oversight.
+*/
 Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
-Route::get('/pending-feedback', [feedbackController::class, 'getPendingFeedback']);
-Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'index']);
-Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
-Route::post('/interviews/{id}/decision', [InterviewController::class, 'recordDecision']);
+
+Route::get('/pending-feedback', [feedbackController::class, 'getPendingFeedback'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'index'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback'])
+    ->middleware('profile:admin,hr,recruiter');
+// The interview drawer has had a confirmed Delete button pointed at this route
+// since it was built; the route did not exist, so the confirmation led to a 405.
+Route::delete('/feedback/{id}', [feedbackController::class, 'deleteFeedback'])
+    ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('/interviews/{id}/decision', [InterviewController::class, 'recordDecision'])
+    ->middleware('profile:admin,hr,recruiter');
 
 Route::get('/kpis', [EmployeeSkillCoverageMatrixController::class, 'getKpiMetrics']);
 Route::get('/skill-gaps', [EmployeeSkillCoverageMatrixController::class, 'skillGaps']);
@@ -1479,71 +1679,32 @@ Route::delete('/performance/saved-views/{id}', [PerformanceSavedViewController::
 Route::get('/talent/dashboard', [TalentDashboardController::class, 'index']);
 Route::get('/talent/dashboard/filters', [TalentDashboardController::class, 'filters']);
 
-// Onboarding: journeys, their checklist tasks and their documents.
-// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
-Route::get('/talent/onboarding/journeys', [OnboardingJourneyController::class, 'index']);
-Route::post('/talent/onboarding/journeys', [OnboardingJourneyController::class, 'store']);
-Route::get('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'show'])->whereNumber('id');
-Route::put('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'update'])->whereNumber('id');
-Route::post('/talent/onboarding/journeys/{id}/complete', [OnboardingJourneyController::class, 'complete'])->whereNumber('id');
-Route::delete('/talent/onboarding/journeys/{id}', [OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
-
-Route::get('/talent/onboarding/tasks', [OnboardingTaskController::class, 'index']);
-Route::post('/talent/onboarding/tasks', [OnboardingTaskController::class, 'store']);
-Route::put('/talent/onboarding/tasks/{id}', [OnboardingTaskController::class, 'update'])->whereNumber('id');
-Route::post('/talent/onboarding/tasks/{id}/complete', [OnboardingTaskController::class, 'complete'])->whereNumber('id');
-Route::delete('/talent/onboarding/tasks/{id}', [OnboardingTaskController::class, 'destroy'])->whereNumber('id');
-
-Route::get('/talent/onboarding/documents', [OnboardingDocumentController::class, 'index']);
-Route::post('/talent/onboarding/documents', [OnboardingDocumentController::class, 'store']);
-Route::put('/talent/onboarding/documents/{id}', [OnboardingDocumentController::class, 'update'])->whereNumber('id');
-Route::delete('/talent/onboarding/documents/{id}', [OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
-
-// Mobility: internal-only job postings and the requests raised against them.
-Route::get('/talent/mobility/internal-jobs', [InternalJobController::class, 'index']);
-Route::post('/talent/mobility/internal-jobs', [InternalJobController::class, 'store'])->middleware('profile:admin,hr');
-Route::get('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'show'])->whereNumber('id');
-Route::put('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
-Route::delete('/talent/mobility/internal-jobs/{id}', [InternalJobController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
-
-Route::get('/talent/mobility/requests', [MobilityRequestController::class, 'index']);
-Route::post('/talent/mobility/requests', [MobilityRequestController::class, 'store']);
-Route::get('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'show'])->whereNumber('id');
-Route::put('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'update'])->whereNumber('id');
-Route::put('/talent/mobility/requests/{id}/decision', [MobilityRequestController::class, 'decision'])->whereNumber('id')->middleware('profile:admin,hr');
-Route::delete('/talent/mobility/requests/{id}', [MobilityRequestController::class, 'destroy'])->whereNumber('id');
-
-// Succession: critical roles and the bench behind them (the 9-box matrix).
-Route::get('/talent/succession/plans', [SuccessionPlanController::class, 'index']);
-Route::post('/talent/succession/plans', [SuccessionPlanController::class, 'store'])->middleware('profile:admin,hr');
-Route::get('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'show'])->whereNumber('id');
-Route::put('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
-Route::delete('/talent/succession/plans/{id}', [SuccessionPlanController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
-Route::post('/talent/succession/plans/{id}/candidates', [SuccessionPlanController::class, 'storeCandidate'])->whereNumber('id')->middleware('profile:admin,hr');
-Route::put('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'updateCandidate'])->whereNumber('id')->middleware('profile:admin,hr');
-Route::delete('/talent/succession/candidates/{id}', [SuccessionPlanController::class, 'destroyCandidate'])->whereNumber('id')->middleware('profile:admin,hr');
-
-// Offboarding: exit cases, their clearance checklist and the exit interview.
-Route::get('/talent/offboarding/cases', [OffboardingCaseController::class, 'index']);
-Route::post('/talent/offboarding/cases', [OffboardingCaseController::class, 'store']);
-Route::get('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'show'])->whereNumber('id');
-Route::put('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'update'])->whereNumber('id');
-Route::post('/talent/offboarding/cases/{id}/advance', [OffboardingCaseController::class, 'advance'])->whereNumber('id');
-Route::delete('/talent/offboarding/cases/{id}', [OffboardingCaseController::class, 'destroy'])->whereNumber('id');
-
-Route::get('/talent/offboarding/clearances', [OffboardingClearanceController::class, 'index']);
-Route::post('/talent/offboarding/clearances', [OffboardingClearanceController::class, 'store']);
-Route::put('/talent/offboarding/clearances/{id}', [OffboardingClearanceController::class, 'update'])->whereNumber('id');
-Route::post('/talent/offboarding/clearances/{id}/clear', [OffboardingClearanceController::class, 'clear'])->whereNumber('id');
-Route::delete('/talent/offboarding/clearances/{id}', [OffboardingClearanceController::class, 'destroy'])->whereNumber('id');
-
-Route::get('/talent/offboarding/exit-interviews', [ExitInterviewController::class, 'index']);
-Route::post('/talent/offboarding/exit-interviews', [ExitInterviewController::class, 'store']);
-Route::put('/talent/offboarding/exit-interviews/{id}', [ExitInterviewController::class, 'update'])->whereNumber('id');
-Route::delete('/talent/offboarding/exit-interviews/{id}', [ExitInterviewController::class, 'destroy'])->whereNumber('id');
+/*
+ * The v1 Talent routes that stood here - onboarding journeys/tasks/documents,
+ * mobility internal-jobs/requests, succession, and offboarding
+ * cases/clearances/exit-interviews - were deleted in Sprint 6.
+ *
+ * They were a superseded generation. Every screen reads the v2 modules
+ * (/api/onboarding/*, /api/mobility/*, /api/offboarding/*) instead, and the v1
+ * OffboardingCaseController could not execute at all: it wrote five columns
+ * that do not exist on talent_offboarding_cases.
+ *
+ * The two blocks either side of this note are LIVE and deliberately kept:
+ * /talent/dashboard* above, /talent/admin/workflows* below.
+ */
 
 // Administration & Governance: Workflows
+/*
+| The Administration screen's Audit Logs tab, reading the event store directly.
+| No new table: g2g_event is already the append-only record, written in the same
+| transaction as the change it describes, with no UPDATE or DELETE path.
+*/
+Route::get('/talent/admin/audit-logs', [AdminWorkflowController::class, 'auditLogs']);
 Route::get('/talent/admin/workflows', [AdminWorkflowController::class, 'index']);
+// The detail route was never registered, so opening a workflow in Administration
+// & Governance 404'd. The controller method has existed all along.
+Route::get('/talent/admin/workflows/{id}', [AdminWorkflowController::class, 'show'])
+    ->whereNumber('id');
 /*
 |--------------------------------------------------------------------------
 | Talent Management -> Onboarding & Employee Lifecycle Center
@@ -1625,39 +1786,66 @@ Route::post('/onboarding/probation/{journeyId}/terminate', [OnboardingProbationC
 |--------------------------------------------------------------------------
 | Sanctum token query param authenticated and tenant scoped by sub_institute_id.
 */
+/*
+|--------------------------------------------------------------------------
+| Internal Mobility & Succession
+|--------------------------------------------------------------------------
+|
+| Reads are open to any authenticated member of the tenant: an internal job
+| board is meant to be browsed by the people who might apply to it.
+|
+| WRITES ARE NOT. Until Sprint 1b this whole group carried no role gate at all,
+| and two of these endpoints write the HR master:
+|
+|   MobilityPromotionController::completePromotionInProfile()  -> tbluser + org_designation
+|   MobilityTransferController::completeTransferInProfile()    -> tbluser
+|
+| Both fire when a promotion or transfer is saved with status "Completed", which
+| is one click on the Mobility screen. So any authenticated employee could
+| rewrite a colleague's job role, grade, designation and department. The
+| recruitment block above was gated in Sprint 1; this group was missed.
+*/
 Route::prefix('mobility')->group(function () {
+    // ── Reads: any authenticated member of the tenant ──────────────────────
     Route::get('/overview', [App\Http\Controllers\Api\Mobility\MobilityOverviewController::class, 'index']);
     Route::get('/filters', [App\Http\Controllers\Api\Mobility\MobilityOverviewController::class, 'filters']);
 
-
     Route::get('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'index']);
-    Route::post('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'store']);
     Route::get('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'show'])->whereNumber('id');
-    Route::put('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'update'])->whereNumber('id');
-    Route::delete('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'destroy'])->whereNumber('id');
-
     Route::get('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'index']);
-    Route::post('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'store']);
-    Route::put('/applications/{id}', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'update'])->whereNumber('id');
-
     Route::get('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'index']);
-    Route::post('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'store']);
-    Route::put('/transfers/{id}', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'update'])->whereNumber('id');
-
     Route::get('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'index']);
-    Route::post('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'store']);
-    Route::put('/promotions/{id}', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'update'])->whereNumber('id');
-
     Route::get('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'index']);
-    Route::post('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'store']);
-    Route::put('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'update'])->whereNumber('id');
-    Route::delete('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'destroy'])->whereNumber('id');
-
     Route::get('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'index']);
-    Route::post('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'store']);
     Route::get('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'members'])->whereNumber('id');
-    Route::post('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'addMember'])->whereNumber('id');
-    Route::delete('/pools/{id}/members/{userId}', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'removeMember'])->whereNumber('id')->whereNumber('userId');
+
+    // ── Writes: HR and administrators only ─────────────────────────────────
+    // An employee applying to an internal job is deliberately inside this gate
+    // too: /applications POST records a decision about a person, and today the
+    // screen only exposes it to HR. If self-service application is wanted later
+    // that is a separate, deliberate route.
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'store']);
+        Route::put('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'update'])->whereNumber('id');
+        Route::delete('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'destroy'])->whereNumber('id');
+
+        Route::post('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'store']);
+        Route::put('/applications/{id}', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'update'])->whereNumber('id');
+
+        Route::post('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'store']);
+        Route::put('/transfers/{id}', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'update'])->whereNumber('id');
+
+        Route::post('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'store']);
+        Route::put('/promotions/{id}', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'update'])->whereNumber('id');
+
+        Route::post('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'store']);
+        Route::put('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'update'])->whereNumber('id');
+        Route::delete('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'destroy'])->whereNumber('id');
+
+        Route::post('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'store']);
+        Route::post('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'addMember'])->whereNumber('id');
+        Route::delete('/pools/{id}/members/{userId}', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'removeMember'])->whereNumber('id')->whereNumber('userId');
+    });
 });
 
 

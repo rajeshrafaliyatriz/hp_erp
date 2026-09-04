@@ -8,6 +8,7 @@ use App\Models\school_setup\sub_std_mapModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Services\Lms\EnrolmentWriter;
 
 /**
  * Learning Catalog API.
@@ -33,6 +34,14 @@ use Illuminate\Support\Facades\Validator;
 class LmsCourseController extends Controller
 {
     use ResolvesLmsIdentity;
+
+    /**
+     * Assigning a course has to create the enrolment too, or the learner never
+     * sees it - the same bridge every other assignment path now goes through.
+     */
+    public function __construct(private readonly EnrolmentWriter $enrolments)
+    {
+    }
 
     /** Columns a caller may sort by, mapped to their qualified SQL name. */
     private const SORTABLE = [
@@ -1073,5 +1082,208 @@ class LmsCourseController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Who is this course for.
+     *
+     * ── WHY THE EXPANSION IS SERVER-SIDE ────────────────────────────────────
+     *
+     * "Everyone in Nursing" has to become a list of people somewhere. Doing it
+     * in the browser would mean shipping the roster down first, and the
+     * learner endpoint caps at 200 rows — so a 400-person department would be
+     * silently half-assigned. It also means the number shown in the preview is
+     * computed by the same code that does the writing, so the count cannot
+     * disagree with the outcome.
+     *
+     * ── HOW A PERSON IS FOUND ───────────────────────────────────────────────
+     *
+     * By department: `tbluser.department_id`.
+     * By job role:   `tbluser.allocated_standards` -> `s_user_jobrole.id`.
+     *
+     * That second one is a numeric id held in a text column, NOT a role name.
+     * Verified before writing this: on tenant 3, joining it to the role NAME
+     * matches 0 of 108 users and joining it to the role ID matches 108 of 108.
+     * A name-based expansion would have assigned nobody, silently.
+     */
+    private function expandAudience(Request $request, int $tenant): array
+    {
+        $userIds = array_map('intval', (array) $request->input('user_ids', []));
+        $departmentIds = array_map('intval', (array) $request->input('department_ids', []));
+        $jobroleIds = array_map('intval', (array) $request->input('jobrole_ids', []));
+
+        $query = DB::table('tbluser')
+            ->where('sub_institute_id', $tenant)
+            ->where(function ($q) use ($userIds, $departmentIds, $jobroleIds) {
+                if ($userIds) {
+                    $q->orWhereIn('id', $userIds);
+                }
+                if ($departmentIds) {
+                    $q->orWhereIn('department_id', $departmentIds);
+                }
+                if ($jobroleIds) {
+                    $q->orWhereIn(DB::raw('CAST(allocated_standards AS UNSIGNED)'), $jobroleIds);
+                }
+            });
+
+        // Nothing selected means nobody, never everybody. An audience step left
+        // untouched must not assign the whole organisation by accident.
+        if (! $userIds && ! $departmentIds && ! $jobroleIds) {
+            return [];
+        }
+
+        return $query->distinct()->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * GET /api/lms/courses/{id}/audience/preview
+     *
+     * How many people the current selection would reach, and a few of them by
+     * name — so "assign to Nursing" is a decision somebody can check before
+     * they make it, rather than after.
+     */
+    public function audiencePreview(Request $request, $id)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+
+        $tenant = $this->tenantId($request);
+        $userIds = $this->expandAudience($request, (int) $tenant);
+
+        $sample = empty($userIds) ? [] : DB::table('tbluser as u')
+            ->leftJoin('hrms_departments as d', 'd.id', '=', 'u.department_id')
+            ->leftJoin('s_user_jobrole as j', 'j.id', '=', DB::raw('CAST(u.allocated_standards AS UNSIGNED)'))
+            ->whereIn('u.id', array_slice($userIds, 0, 8))
+            ->selectRaw("u.id, TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) as name, d.department, j.jobrole")
+            ->get();
+
+        // Who already has it, so the preview does not promise work it will skip.
+        $already = empty($userIds) ? 0 : DB::table('lms_course_enroll')
+            ->whereIn('user_id', $userIds)
+            ->where('course_id', $id)
+            ->whereNull('deleted_at')
+            ->distinct()
+            ->count('user_id');
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'count' => count($userIds),
+                'already_enrolled' => $already,
+                'will_assign' => max(0, count($userIds) - $already),
+                'sample' => $sample,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/lms/courses/{id}/audience
+     *
+     * Assign the course to everyone the selection resolves to. Idempotent:
+     * re-submitting the same audience assigns nobody twice.
+     */
+    public function assignAudience(Request $request, $id)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+
+        // Assigning work to other people is an admin/HR act, and the role
+        // comes from the token's owner - never from the request.
+        if ($denied = $this->guardLmsProfile($request, ['admin', 'hr'],
+            'Your profile is not permitted to assign courses.')) {
+            return $denied;
+        }
+
+        $tenant = (int) $this->tenantId($request);
+
+        $course = DB::table('sub_std_map')
+            ->where('id', $id)
+            ->where('sub_institute_id', $tenant)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $course) {
+            return response()->json(['status' => false, 'message' => 'Course not found'], 404);
+        }
+
+        $userIds = $this->expandAudience($request, $tenant);
+
+        if (empty($userIds)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Choose at least one person, department or job role.',
+            ], 422);
+        }
+
+        $assignedBy = DB::table('tbluser')
+            ->where('id', $this->contextUserId($request))
+            ->selectRaw("TRIM(CONCAT_WS(' ', first_name, last_name)) as full_name")
+            ->value('full_name') ?: 'Admin';
+
+        $type = $request->input('assignment_type', 'Mandatory');
+        $dueDate = $request->input('due_date');
+
+        $assigned = 0;
+        $alreadyHad = 0;
+
+        DB::transaction(function () use ($userIds, $id, $tenant, $type, $dueDate, $assignedBy, &$assigned, &$alreadyHad) {
+            foreach ($userIds as $userId) {
+                $exists = DB::table('lms_assignments')
+                    ->where('user_id', $userId)
+                    ->where('course_id', $id)
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                if ($exists) {
+                    $alreadyHad++;
+                } else {
+                    DB::table('lms_assignments')->insert([
+                        'user_id' => $userId,
+                        'course_id' => $id,
+                        'assignment_type' => $type,
+                        'due_date' => $dueDate,
+                        'status' => 'Not Started',
+                        'progress' => 0,
+                        'approval_status' => 'approved',
+                        'assigned_by' => $assignedBy,
+                        'assigned_on' => now(),
+                        'sub_institute_id' => $tenant,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $assigned++;
+                }
+
+                // Always — an assignment that predates the enrolment bridge has
+                // the row but not the enrolment, and that is the state every
+                // pre-existing row was in.
+                $this->enrolments->ensureEnrolment($userId, (int) $id, $tenant);
+            }
+        });
+
+        // Role-based assignment is also a fact about the course, not only about
+        // the people it reached today. `course_jobrole_map` has existed with 71
+        // rows and no writer and no route; this is the writer.
+        foreach (array_map('intval', (array) $request->input('jobrole_ids', [])) as $roleId) {
+            DB::table('course_jobrole_map')->insertOrIgnore([
+                'sub_institute_id' => $tenant,
+                'course_id' => (int) $id,
+                'jobrole_id' => $roleId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => "Assigned to {$assigned} " . ($assigned === 1 ? 'person' : 'people') . '.',
+            'data' => [
+                'assigned' => $assigned,
+                'already_had_it' => $alreadyHad,
+                'reached' => count($userIds),
+            ],
+        ]);
     }
 }
