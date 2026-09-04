@@ -91,6 +91,18 @@ class LmsCourseEnrollController extends Controller
                      ->on('e.created_at', '=', 'latest.latest_enrolled_at');
             })
             ->where('e.user_id', $userId)
+            /*
+             * SCOPED. $subInstituteId was resolved at the top of this method
+             * from the token's owner and then never used, so passing any
+             * user_id returned that person's enrolments regardless of which
+             * organisation either of you belonged to.
+             *
+             * Filtered on the COURSE's tenant: sub_std_map.sub_institute_id is
+             * NOT NULL and is the authority on ownership, while
+             * lms_course_enroll.sub_institute_id is nullable. Same reasoning,
+             * and the same ordering, as LmsLearningController::courses().
+             */
+            ->where('s.sub_institute_id', $subInstituteId)
             ->whereNull('e.deleted_at')
             ->select(
                 's.*',

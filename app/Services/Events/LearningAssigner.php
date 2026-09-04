@@ -3,6 +3,7 @@
 namespace App\Services\Events;
 
 use App\Services\Events\Concerns\DrivesFromEventStore;
+use App\Services\Lms\EnrolmentWriter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -73,6 +74,16 @@ use Illuminate\Support\Facades\Log;
 class LearningAssigner
 {
     use DrivesFromEventStore;
+
+    /**
+     * Resolved lazily rather than injected: reactors are constructed by the
+     * event runner, and this class has no constructor to thread a dependency
+     * through. Resolving on use keeps that runner untouched.
+     */
+    private function enrolments(): EnrolmentWriter
+    {
+        return app(EnrolmentWriter::class);
+    }
 
     public const CONSUMER = 'learning_assigner';
 
@@ -180,6 +191,22 @@ class LearningAssigner
                 'created_at'          => now(),
                 'updated_at'          => now(),
             ]);
+
+            /*
+             * AND THE ENROLMENT, OR THE LEARNER NEVER SEES IT.
+             *
+             * This reactor is the whole "a competency gap assigns you a
+             * course" route, and 52 of the 58 assignment rows on live came
+             * from it - every one of them stranded, because My Learning reads
+             * `lms_course_enroll` and nothing here wrote it. The gap was
+             * detected, the course was chosen, the row was written, and the
+             * employee was never told.
+             *
+             * Written even when insertOrIgnore skipped: the assignment may
+             * already exist from an earlier run while the enrolment does not,
+             * which is exactly the state every pre-existing row is in.
+             */
+            $this->enrolments()->ensureEnrolment((int) $userId, (int) $courseId, (int) $tenant);
 
             $written > 0 ? $created++ : $skipped++;
         }
