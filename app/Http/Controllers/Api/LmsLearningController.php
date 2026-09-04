@@ -873,6 +873,11 @@ class LmsLearningController extends Controller
                 'title'            => 'required|string|max:191',
                 'description'      => 'nullable|string',
                 'filename'         => 'nullable|string',
+                // Accepted because a caller sending it must not be silently
+                // ignored - which is exactly what happened to the Course
+                // Builder: it posted `url`, nothing read it, and every lesson
+                // it made was stored with no media at all.
+                'url'              => 'nullable|string|max:1000',
                 'file_type'        => 'nullable|string|max:191',
                 'content_category' => 'nullable|string|max:191',
                 'sort_order'       => 'nullable|integer',
@@ -903,7 +908,14 @@ class LmsLearningController extends Controller
             'standard_id' => $chapter->standard_id,
             'title' => $request->title,
             'description' => $request->description,
-            'filename' => $request->filename,
+            /*
+             * `filename` is the canonical media column - it is what the player
+             * reads first (`lesson.filename || lesson.url`). `url` is accepted
+             * as an alternate and written to its own column so a caller that
+             * sends either gets a playable lesson.
+             */
+            'filename' => $request->input('filename') ?: $request->input('url'),
+            'url' => $request->input('url'),
             'file_type' => $request->file_type,
             'content_category' => $request->input('content_category', 'Videos'),
             'sort_order' => $request->input('sort_order', 1),
@@ -939,6 +951,7 @@ class LmsLearningController extends Controller
                 'title'            => 'required|string|max:191',
                 'description'      => 'nullable|string',
                 'filename'         => 'nullable|string',
+                'url'              => 'nullable|string|max:1000',
                 'file_type'        => 'nullable|string|max:191',
                 'content_category' => 'nullable|string|max:191',
                 'sort_order'       => 'nullable|integer',
@@ -966,7 +979,12 @@ class LmsLearningController extends Controller
         DB::table('content_master')->where('id', $id)->update([
             'title' => $request->title,
             'description' => $request->description,
-            'filename' => $request->input('filename', $content->filename),
+            // Either key sets the media, and neither key leaves it alone -
+            // an edit that changes only the title must not blank the video.
+            'filename' => $request->input('filename')
+                ?: $request->input('url')
+                ?: $content->filename,
+            'url' => $request->input('url', $content->url),
             'file_type' => $request->input('file_type', $content->file_type),
             'content_category' => $request->input('content_category', $content->content_category),
             'sort_order' => $request->input('sort_order', $content->sort_order),
