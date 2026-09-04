@@ -9,10 +9,21 @@ use App\Models\lms\assignment\LmsAssignment;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\DB;
+use App\Services\Lms\EnrolmentWriter;
 
 class assignmentController extends Controller
 {
     use ResolvesLmsIdentity;
+
+    /**
+     * Every path that hands somebody a course writes the enrolment through
+     * here. Assigning used to write `lms_assignments` alone, which the
+     * learner's own course list never reads - so all 58 assignments on live
+     * were invisible to the people they were assigned to.
+     */
+    public function __construct(private readonly EnrolmentWriter $enrolments)
+    {
+    }
 
     /**
      * Authenticate the caller. ALWAYS - there is no opt-out.
@@ -184,24 +195,70 @@ class assignmentController extends Controller
             'course_id' => 'required|integer',
             'assignment_type' => 'required|string',
             'due_date' => 'nullable|date',
-            'sub_institute_id' => 'required|integer'
         ]);
 
         if ($validator->fails()) {
             return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
-        // Same reason as in index(): tbluser stores the name in parts, so
-        // ->value('name') returned null and assigned_by was never populated.
-        $assignedBy = $request->user_id
+        /*
+         * THE TENANT COMES FROM THE TOKEN, NOT THE BODY.
+         *
+         * This method validated `sub_institute_id` as required and wrote it
+         * straight through, while every other method in this class already
+         * resolved it from the token via tenantId(). Any caller holding any
+         * valid token could plant assignment rows in any organisation by
+         * naming it in the payload.
+         */
+        $subInstituteId = $this->tenantId($request);
+        if (! $subInstituteId) {
+            return response()->json(['message' => 'Unable to resolve your organisation', 'status' => false], 401);
+        }
+
+        /*
+         * And the assigner is whoever the token belongs to.
+         *
+         * `assigned_by` was looked up from $request->user_id, so the audit
+         * trail recorded whichever name the caller chose to send.
+         */
+        $actingUserId = $this->contextUserId($request);
+        $assignedBy = $actingUserId
             ? (DB::table('tbluser')
-                ->where('id', $request->user_id)
+                ->where('id', $actingUserId)
                 ->selectRaw("TRIM(CONCAT_WS(' ', first_name, last_name)) as full_name")
                 ->value('full_name') ?: 'Admin')
             : 'Admin';
 
+        // The course must be ours before anybody is assigned to it.
+        $courseOwned = DB::table('sub_std_map')
+            ->where('id', $request->course_id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (! $courseOwned) {
+            return response()->json(['message' => 'Course not found', 'status' => false], 404);
+        }
+
+        // Only people in this organisation. Ids that are not are dropped and
+        // reported rather than written.
+        $requested = array_values(array_unique(array_map('intval', (array) $request->user_ids)));
+        $validUserIds = DB::table('tbluser')
+            ->whereIn('id', $requested)
+            ->where('sub_institute_id', $subInstituteId)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if (empty($validUserIds)) {
+            return response()->json([
+                'message' => 'None of those employees are in your organisation',
+                'status' => false,
+            ], 422);
+        }
+
         $assignments = [];
-        foreach ($request->user_ids as $userId) {
+        foreach ($validUserIds as $userId) {
             $assignments[] = [
                 'user_id' => $userId,
                 'course_id' => $request->course_id,
@@ -211,15 +268,43 @@ class assignmentController extends Controller
                 'progress' => 0,
                 'assigned_by' => $assignedBy,
                 'assigned_on' => now(),
-                'sub_institute_id' => $request->sub_institute_id,
+                'sub_institute_id' => $subInstituteId,
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
         }
 
-        LmsAssignment::insert($assignments);
+        /*
+         * ── ASSIGNING ALSO ENROLS ───────────────────────────────────────────
+         *
+         * The assignment row alone is invisible to the learner: My Learning
+         * reads `lms_course_enroll`, and nothing used to write it here. All 58
+         * assignment rows on live were stranded that way.
+         *
+         * Both writes are one transaction. An assignment the learner cannot
+         * see is the bug being fixed; half-fixing it per row would just make
+         * the failure harder to spot.
+         */
+        DB::transaction(function () use ($assignments, $validUserIds, $request, $subInstituteId) {
+            LmsAssignment::insert($assignments);
 
-        return response()->json(['message' => 'Assignments created successfully', 'status' => true]);
+            foreach ($validUserIds as $userId) {
+                $this->enrolments->ensureEnrolment(
+                    $userId,
+                    (int) $request->course_id,
+                    $subInstituteId,
+                );
+            }
+        });
+
+        $skipped = count($requested) - count($validUserIds);
+
+        return response()->json([
+            'message' => 'Assignments created successfully',
+            'status' => true,
+            'assigned' => count($validUserIds),
+            'skipped' => $skipped,
+        ]);
     }
 
     /**
@@ -239,7 +324,27 @@ class assignmentController extends Controller
             return response()->json(['message' => 'Validation failed', 'errors' => $validator->errors()], 422);
         }
 
-        $assignment = LmsAssignment::find($id);
+        /*
+         * SCOPED TO THE CALLER'S ORGANISATION.
+         *
+         * This was `LmsAssignment::find($id)` with no tenant predicate and no
+         * soft-delete check, so guessing an id was enough to change another
+         * organisation's assignment. Its own sibling bulkUpdateStatus() has
+         * always got this right and carries a comment explaining why; the
+         * single-row version was simply missed.
+         *
+         * 404 rather than 403 - a 403 would confirm the row exists.
+         */
+        $subInstituteId = $this->tenantId($request);
+        if (! $subInstituteId) {
+            return response()->json(['message' => 'Unable to resolve your organisation', 'status' => false], 401);
+        }
+
+        $assignment = LmsAssignment::where('id', $id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->first();
+
         if (!$assignment) return response()->json(['message' => 'Not found'], 404);
 
         $assignment->status = $request->status;
@@ -435,13 +540,40 @@ class assignmentController extends Controller
             ], 422);
         }
 
-        DB::table('lms_assignments')->where('id', $id)->update([
-            'approval_status' => $request->decision,
-            'reviewed_by' => $request->user_id,
-            'reviewed_at' => now(),
-            'review_note' => $request->review_note,
-            'updated_at' => now(),
-        ]);
+        /*
+         * A DECISION HAS TO REACH THE LEARNER'S COURSE LIST.
+         *
+         * Approving only flipped `approval_status`, so the person whose
+         * request was granted still had no enrolment and still saw nothing in
+         * My Learning - the approval was a note to ourselves. Rejecting had
+         * the mirror problem if an enrolment already existed.
+         *
+         * Both writes go together: the reviewed row and its consequence.
+         */
+        DB::transaction(function () use ($id, $request, $assignment, $subInstituteId) {
+            DB::table('lms_assignments')->where('id', $id)->update([
+                'approval_status' => $request->decision,
+                // Whoever the token belongs to, not whoever the body names.
+                'reviewed_by' => $this->contextUserId($request),
+                'reviewed_at' => now(),
+                'review_note' => $request->review_note,
+                'updated_at' => now(),
+            ]);
+
+            if ($request->decision === 'approved') {
+                $this->enrolments->ensureEnrolment(
+                    (int) $assignment->user_id,
+                    (int) $assignment->course_id,
+                    (int) $subInstituteId,
+                );
+            } else {
+                $this->enrolments->revokeEnrolment(
+                    (int) $assignment->user_id,
+                    (int) $assignment->course_id,
+                    (int) $subInstituteId,
+                );
+            }
+        });
 
         return response()->json([
             'status' => true,

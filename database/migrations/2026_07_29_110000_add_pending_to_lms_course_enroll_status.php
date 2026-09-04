@@ -18,6 +18,31 @@ return new class extends Migration
 {
     public function up(): void
     {
+        /*
+         * Only where the column is still an ENUM.
+         *
+         * This migration used to run unconditionally against a table that no
+         * migration created — so on a fresh database it failed outright, and
+         * the failure read like "the LMS database is not built". The missing
+         * CREATE now exists (2026_07_28_000000) and defines `status` as
+         * VARCHAR(20), per the house rule that adding a value to an ENUM later
+         * costs an ALTER TABLE rebuild.
+         *
+         * So on a NEW database there is nothing to widen and this is a no-op.
+         * On dev and live, where the column really is an ENUM, it adds
+         * 'pending' exactly as before.
+         */
+        $column = DB::selectOne(
+            'SELECT DATA_TYPE FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
+            ['lms_course_enroll', 'status']
+        );
+
+        if (! $column || strtolower($column->DATA_TYPE) !== 'enum') {
+            return;
+        }
+
         DB::statement(
             "ALTER TABLE `lms_course_enroll`
              MODIFY `status` ENUM('in-progress','completed','enrolled','pending')

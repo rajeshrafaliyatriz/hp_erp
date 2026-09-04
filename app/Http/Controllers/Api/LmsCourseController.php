@@ -8,6 +8,7 @@ use App\Models\school_setup\sub_std_mapModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Services\Lms\EnrolmentWriter;
 
 /**
  * Learning Catalog API.
@@ -33,6 +34,14 @@ use Illuminate\Support\Facades\Validator;
 class LmsCourseController extends Controller
 {
     use ResolvesLmsIdentity;
+
+    /**
+     * Assigning a course has to create the enrolment too, or the learner never
+     * sees it - the same bridge every other assignment path now goes through.
+     */
+    public function __construct(private readonly EnrolmentWriter $enrolments)
+    {
+    }
 
     /** Columns a caller may sort by, mapped to their qualified SQL name. */
     private const SORTABLE = [
@@ -495,14 +504,60 @@ class LmsCourseController extends Controller
             // select rendered the same label twice. Grouping collapses on the
             // identity that actually matters, and course_count gives the UI a
             // way to tell same-named departments apart.
-            $departments = DB::table('sub_std_map as s')
-                ->join('hrms_departments as d', 'd.id', '=', 's.standard_id')
-                ->where('s.sub_institute_id', $subInstituteId)
-                ->whereNull('s.deleted_at')
+            /*
+             * ── EVERY DEPARTMENT, NOT ONLY THE ONES THAT ALREADY HAVE COURSES ──
+             *
+             * This joined FROM sub_std_map, so a department appeared only once
+             * it already owned a course. The consequence was circular and
+             * total: you could never create the FIRST course for a new
+             * department, because the department was not in the dropdown and
+             * standard_id is required on both sides.
+             *
+             * A department created this morning in Organization > Department
+             * Management was invisible here all afternoon, and this same
+             * response feeds four separate dropdowns.
+             *
+             * hrms_departments is the authority - the same table and the same
+             * predicate the Organization module lists from - and the join is
+             * now LEFT, so course_count still distinguishes two departments
+             * that share a name and a department with none reads "(0)".
+             */
+            $departments = DB::table('hrms_departments as d')
+                ->leftJoin('sub_std_map as s', function ($join) use ($subInstituteId) {
+                    $join->on('s.standard_id', '=', 'd.id')
+                         ->where('s.sub_institute_id', '=', $subInstituteId)
+                         ->whereNull('s.deleted_at');
+                })
+                ->where('d.sub_institute_id', $subInstituteId)
                 ->whereNull('d.deleted_at')
                 ->groupBy('d.id', 'd.department')
                 ->orderBy('d.department')
                 ->get(['d.id', 'd.department', DB::raw('COUNT(s.id) as course_count')]);
+
+            /*
+             * ── JOB ROLES FROM THE JOB-ROLE TABLE ───────────────────────────
+             *
+             * `jobroles` below is DISTINCT sub_std_map.jobrole - free text
+             * somebody typed into this same box previously. It is empty on a
+             * fresh tenant, it propagates typos ("Staff Nurse" and "staff
+             * nurse" become two permanent options), and it never consults the
+             * organisation's actual roles.
+             *
+             * `job_roles` is the real list, from the same table and the same
+             * predicate JobroleApiController@getDepartmentWise uses - so the
+             * course form and the task-assignment cascade agree by
+             * construction. department_id is included so the form can narrow
+             * roles to the chosen department.
+             *
+             * The old key stays for now: the legacy free-text datalist still
+             * reads it, and removing it would break that control before its
+             * replacement has shipped everywhere.
+             */
+            $jobRoles = DB::table('s_user_jobrole')
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereNull('deleted_at')
+                ->orderBy('jobrole')
+                ->get(['id', 'jobrole', 'department_id']);
 
             return response()->json([
                 'status' => true,
@@ -510,6 +565,7 @@ class LmsCourseController extends Controller
                     'categories' => $distinct('subject_category'),
                     'subject_types' => $distinct('subject_type'),
                     'jobroles' => $distinct('jobrole'),
+                    'job_roles' => $jobRoles,
                     'departments' => $departments,
                     // Fixed lists, but served from config rather than hardcoded
                     // in the component: adding a language or template is a
@@ -819,21 +875,52 @@ class LmsCourseController extends Controller
         }
 
         try {
-            $course->update([
-                'display_name'     => $request->display_name,
-                'standard_id'      => $request->standard_id,
-                'subject_category' => $request->subject_category,
-                'subject_code'     => $request->subject_code,
-                'subject_type'     => $request->subject_type,
-                'short_name'       => $request->short_name,
-                'jobrole'          => $request->jobrole,
-                'proficiency'      => $request->proficiency,
-                'sort_order'       => $request->sort_order,
-                'certificate_validity_months' => $request->certificate_validity_months,
-                'status'           => (int) $request->status,
-                'updated_by'       => $this->contextUserId($request),
-                'updated_at'       => now(),
-            ]);
+            /*
+             * ── WHY THIS IS A QUERY-BUILDER UPDATE AND NOT $course->update() ──
+             *
+             * sub_std_mapModel::$fillable does not list subject_code,
+             * subject_type, short_name, certificate_validity_months or
+             * updated_by. Eloquent drops unfillable keys SILENTLY, so those
+             * five were accepted by validation, sent by the form, and thrown
+             * away - while store() writes through insertGetId(), which bypasses
+             * $fillable entirely. The result: those fields saved once at
+             * creation and could never be changed again, with no error anywhere.
+             *
+             * Widening $fillable would fix it and change mass-assignment
+             * behaviour for every other consumer of sub_std_map - competency,
+             * the job-role library, enrolment - which is a much larger blast
+             * radius than this bug deserves. A query-builder update is local,
+             * cannot leak, and matches how the row was created.
+             *
+             * ── AND ONLY WHAT WAS ACTUALLY SENT ─────────────────────────────
+             *
+             * $request->x is null for a key the caller omitted, so the previous
+             * version wrote null over any field the payload did not carry. The
+             * catalogue sheet never sends `proficiency` and the builder never
+             * sends `sort_order`, and the builder saves on every "Continue" -
+             * so stepping through the wizard silently nulled sort_order each
+             * time. Building from the keys the request HAS makes a partial
+             * update a partial update.
+             */
+            $editable = [
+                'display_name', 'standard_id', 'subject_category', 'subject_code',
+                'subject_type', 'short_name', 'jobrole', 'proficiency', 'sort_order',
+                'certificate_validity_months', 'status',
+            ];
+
+            $changes = [];
+            foreach ($editable as $field) {
+                if ($request->has($field)) {
+                    $changes[$field] = $field === 'status'
+                        ? (int) $request->input($field)
+                        : $request->input($field);
+                }
+            }
+
+            $changes['updated_by'] = $this->contextUserId($request);
+            $changes['updated_at'] = now();
+
+            DB::table('sub_std_map')->where('id', $course->id)->update($changes);
 
             $this->saveSettings($request, (int) $course->id, $subInstituteId);
             $this->savePrerequisites($request, (int) $course->id, $subInstituteId);
@@ -995,5 +1082,208 @@ class LmsCourseController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Who is this course for.
+     *
+     * ── WHY THE EXPANSION IS SERVER-SIDE ────────────────────────────────────
+     *
+     * "Everyone in Nursing" has to become a list of people somewhere. Doing it
+     * in the browser would mean shipping the roster down first, and the
+     * learner endpoint caps at 200 rows — so a 400-person department would be
+     * silently half-assigned. It also means the number shown in the preview is
+     * computed by the same code that does the writing, so the count cannot
+     * disagree with the outcome.
+     *
+     * ── HOW A PERSON IS FOUND ───────────────────────────────────────────────
+     *
+     * By department: `tbluser.department_id`.
+     * By job role:   `tbluser.allocated_standards` -> `s_user_jobrole.id`.
+     *
+     * That second one is a numeric id held in a text column, NOT a role name.
+     * Verified before writing this: on tenant 3, joining it to the role NAME
+     * matches 0 of 108 users and joining it to the role ID matches 108 of 108.
+     * A name-based expansion would have assigned nobody, silently.
+     */
+    private function expandAudience(Request $request, int $tenant): array
+    {
+        $userIds = array_map('intval', (array) $request->input('user_ids', []));
+        $departmentIds = array_map('intval', (array) $request->input('department_ids', []));
+        $jobroleIds = array_map('intval', (array) $request->input('jobrole_ids', []));
+
+        $query = DB::table('tbluser')
+            ->where('sub_institute_id', $tenant)
+            ->where(function ($q) use ($userIds, $departmentIds, $jobroleIds) {
+                if ($userIds) {
+                    $q->orWhereIn('id', $userIds);
+                }
+                if ($departmentIds) {
+                    $q->orWhereIn('department_id', $departmentIds);
+                }
+                if ($jobroleIds) {
+                    $q->orWhereIn(DB::raw('CAST(allocated_standards AS UNSIGNED)'), $jobroleIds);
+                }
+            });
+
+        // Nothing selected means nobody, never everybody. An audience step left
+        // untouched must not assign the whole organisation by accident.
+        if (! $userIds && ! $departmentIds && ! $jobroleIds) {
+            return [];
+        }
+
+        return $query->distinct()->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * GET /api/lms/courses/{id}/audience/preview
+     *
+     * How many people the current selection would reach, and a few of them by
+     * name — so "assign to Nursing" is a decision somebody can check before
+     * they make it, rather than after.
+     */
+    public function audiencePreview(Request $request, $id)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+
+        $tenant = $this->tenantId($request);
+        $userIds = $this->expandAudience($request, (int) $tenant);
+
+        $sample = empty($userIds) ? [] : DB::table('tbluser as u')
+            ->leftJoin('hrms_departments as d', 'd.id', '=', 'u.department_id')
+            ->leftJoin('s_user_jobrole as j', 'j.id', '=', DB::raw('CAST(u.allocated_standards AS UNSIGNED)'))
+            ->whereIn('u.id', array_slice($userIds, 0, 8))
+            ->selectRaw("u.id, TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) as name, d.department, j.jobrole")
+            ->get();
+
+        // Who already has it, so the preview does not promise work it will skip.
+        $already = empty($userIds) ? 0 : DB::table('lms_course_enroll')
+            ->whereIn('user_id', $userIds)
+            ->where('course_id', $id)
+            ->whereNull('deleted_at')
+            ->distinct()
+            ->count('user_id');
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'count' => count($userIds),
+                'already_enrolled' => $already,
+                'will_assign' => max(0, count($userIds) - $already),
+                'sample' => $sample,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/lms/courses/{id}/audience
+     *
+     * Assign the course to everyone the selection resolves to. Idempotent:
+     * re-submitting the same audience assigns nobody twice.
+     */
+    public function assignAudience(Request $request, $id)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+
+        // Assigning work to other people is an admin/HR act, and the role
+        // comes from the token's owner - never from the request.
+        if ($denied = $this->guardLmsProfile($request, ['admin', 'hr'],
+            'Your profile is not permitted to assign courses.')) {
+            return $denied;
+        }
+
+        $tenant = (int) $this->tenantId($request);
+
+        $course = DB::table('sub_std_map')
+            ->where('id', $id)
+            ->where('sub_institute_id', $tenant)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $course) {
+            return response()->json(['status' => false, 'message' => 'Course not found'], 404);
+        }
+
+        $userIds = $this->expandAudience($request, $tenant);
+
+        if (empty($userIds)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Choose at least one person, department or job role.',
+            ], 422);
+        }
+
+        $assignedBy = DB::table('tbluser')
+            ->where('id', $this->contextUserId($request))
+            ->selectRaw("TRIM(CONCAT_WS(' ', first_name, last_name)) as full_name")
+            ->value('full_name') ?: 'Admin';
+
+        $type = $request->input('assignment_type', 'Mandatory');
+        $dueDate = $request->input('due_date');
+
+        $assigned = 0;
+        $alreadyHad = 0;
+
+        DB::transaction(function () use ($userIds, $id, $tenant, $type, $dueDate, $assignedBy, &$assigned, &$alreadyHad) {
+            foreach ($userIds as $userId) {
+                $exists = DB::table('lms_assignments')
+                    ->where('user_id', $userId)
+                    ->where('course_id', $id)
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                if ($exists) {
+                    $alreadyHad++;
+                } else {
+                    DB::table('lms_assignments')->insert([
+                        'user_id' => $userId,
+                        'course_id' => $id,
+                        'assignment_type' => $type,
+                        'due_date' => $dueDate,
+                        'status' => 'Not Started',
+                        'progress' => 0,
+                        'approval_status' => 'approved',
+                        'assigned_by' => $assignedBy,
+                        'assigned_on' => now(),
+                        'sub_institute_id' => $tenant,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $assigned++;
+                }
+
+                // Always — an assignment that predates the enrolment bridge has
+                // the row but not the enrolment, and that is the state every
+                // pre-existing row was in.
+                $this->enrolments->ensureEnrolment($userId, (int) $id, $tenant);
+            }
+        });
+
+        // Role-based assignment is also a fact about the course, not only about
+        // the people it reached today. `course_jobrole_map` has existed with 71
+        // rows and no writer and no route; this is the writer.
+        foreach (array_map('intval', (array) $request->input('jobrole_ids', [])) as $roleId) {
+            DB::table('course_jobrole_map')->insertOrIgnore([
+                'sub_institute_id' => $tenant,
+                'course_id' => (int) $id,
+                'jobrole_id' => $roleId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => "Assigned to {$assigned} " . ($assigned === 1 ? 'person' : 'people') . '.',
+            'data' => [
+                'assigned' => $assigned,
+                'already_had_it' => $alreadyHad,
+                'reached' => count($userIds),
+            ],
+        ]);
     }
 }

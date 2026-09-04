@@ -243,8 +243,13 @@ class lms_apiController extends Controller
 
             $attempted = DB::table('lms_online_exam as le')
                 ->join('question_paper as qp', function ($join) use ($sub_institute_id, $syear) {
-                    $join->whereRaw("qp.id = le.question_paper_id AND qp.sub_institute_id = '" .
-                        $sub_institute_id . "' AND qp.syear = '" . $syear . "'");
+                    // Bound, not interpolated. sub_institute_id and syear both
+                    // arrive from the request, and concatenating them into the
+                    // SQL string made this join an injection point.
+                    $join->whereRaw(
+                        'qp.id = le.question_paper_id AND qp.sub_institute_id = ? AND qp.syear = ?',
+                        [$sub_institute_id, $syear]
+                    );
                 })->selectRaw('count(le.id)+1 as count_attempted')
                 ->where('student_id', $student_id)
                 ->where('question_paper_id', $question_paper_id)->get()->toArray();
@@ -309,8 +314,13 @@ class lms_apiController extends Controller
 
             $data['attempted_data'] = DB::table('lms_online_exam as le')
                 ->join('question_paper as qp', function ($join) use ($sub_institute_id, $syear) {
-                    $join->whereRaw("qp.id = le.question_paper_id AND qp.sub_institute_id = '" .
-                        $sub_institute_id . "' AND qp.syear = '" . $syear . "'");
+                    // Bound, not interpolated. sub_institute_id and syear both
+                    // arrive from the request, and concatenating them into the
+                    // SQL string made this join an injection point.
+                    $join->whereRaw(
+                        'qp.id = le.question_paper_id AND qp.sub_institute_id = ? AND qp.syear = ?',
+                        [$sub_institute_id, $syear]
+                    );
                 })->selectRaw('le.id,le.student_id,le.question_paper_id,le.total_right,le.total_wrong,
 (le.total_right) as obtain_marks,le.start_time,le.created_at,le.id as online_exam_id,qp.paper_name')
                 ->where('student_id', $student_id)

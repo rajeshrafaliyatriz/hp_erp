@@ -84,6 +84,26 @@ class LmsLearningController extends Controller
                 ->whereNull('deleted_at')
                 ->groupBy('course_id');
 
+            /*
+             * ── THE TENANT PREDICATE GOES ON THE COURSE, NOT THE ENROLMENT ──
+             *
+             * This query had no tenant filter at all, while `course()` below
+             * has always had one - so a user whose enrolment rows spanned
+             * organisations saw another organisation's courses in their own
+             * list.
+             *
+             * It is filtered on `s.sub_institute_id` deliberately.
+             * `sub_std_map.sub_institute_id` is NOT NULL and is the authority
+             * on which organisation owns a course, and you cannot enrol in a
+             * course you cannot see. `lms_course_enroll.sub_institute_id` is
+             * NULLABLE, so filtering on it would have silently emptied the
+             * course list of every learner whose row predates that column
+             * being populated. Measured before writing this: 0 NULL and 0 zero
+             * on both dev and live, so the enrolment-side predicate below is
+             * safe today - it is the belt to the course-side braces, and it is
+             * ordered second so that if either is ever wrong, the course-side
+             * one still holds.
+             */
             $courses = DB::table('lms_course_enroll as e')
                 ->join('sub_std_map as s', 'e.course_id', '=', 's.id')
                 ->leftJoin('hrms_departments as d', 'd.id', '=', 's.standard_id')
@@ -92,7 +112,10 @@ class LmsLearningController extends Controller
                          ->on('e.created_at', '=', 'latest.latest_enrolled_at');
                 })
                 ->where('e.user_id', $userId)
+                ->where('s.sub_institute_id', $subInstituteId)
+                ->where('e.sub_institute_id', $subInstituteId)
                 ->whereNull('e.deleted_at')
+                ->whereNull('s.deleted_at')
                 ->select(
                     's.id',
                     's.display_name',
@@ -139,7 +162,28 @@ class LmsLearningController extends Controller
                 return $course;
             });
 
-            return response()->json(['status' => true, 'data' => $courses]);
+            /*
+             * ── AWAITING APPROVAL IS NOT THE SAME AS ENROLLED ──────────────
+             *
+             * A self-requested enrolment sits at `pending` until an admin
+             * reviews it. This query had no status filter, so a pending
+             * enrolment was returned alongside approved ones and was fully
+             * learnable - which made the approval step decorative, since the
+             * learner could simply start the course while waiting.
+             *
+             * They are separated rather than hidden. The learner does own that
+             * enrolment and is entitled to see that they asked for it; what
+             * they may not do is start it. Dropping it from the response
+             * entirely would look like the request had been lost.
+             */
+            $awaiting = $courses->where('enrollment_status', 'pending')->values();
+            $learnable = $courses->whereNotIn('enrollment_status', ['pending'])->values();
+
+            return response()->json([
+                'status' => true,
+                'data' => $learnable,
+                'awaiting_approval' => $awaiting,
+            ]);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -214,12 +258,28 @@ class LmsLearningController extends Controller
                 ->get()
                 ->keyBy('content_id');
 
-            // Attach progress to each item, then group by chapter.
-            //
-            // Locking is sequential: a lesson opens once every lesson before it
-            // is complete. It is computed here rather than stored, so changing
-            // the rule never needs a backfill. The first lesson is always open,
-            // and everything stays open once the course is finished.
+            /*
+             * ── SEQUENTIAL LOCKING IS NOW OPT-IN, AND OFF BY DEFAULT ────────
+             *
+             * The rule was unconditional: a lesson opened only once every
+             * lesson before it was complete. That is a defensible rule for
+             * compliance training and the wrong default for everything else -
+             * and with 2 progress rows across 1,454 enrolments on live, its
+             * real effect was that EVERY course in the product showed lesson
+             * one open and every other lesson locked. It is a large part of
+             * why "the employee cannot start a course and learn".
+             *
+             * It is a per-course setting now, defaulting to 0, so a course
+             * that genuinely must be taken in order can still say so. Still
+             * computed rather than stored, so changing the rule never needs a
+             * backfill; and a course with no settings row - which is every
+             * course on live today - takes the unlocked path.
+             */
+            $sequential = (bool) DB::table('lms_course_settings')
+                ->where('course_id', $courseId)
+                ->where('sub_institute_id', $subInstituteId)
+                ->value('sequential_unlock');
+
             $byChapter = [];
             $previousComplete = true;
 
@@ -232,7 +292,11 @@ class LmsLearningController extends Controller
                 $item->completed_at = $row->completed_at ?? null;
 
                 // Already-touched lessons never re-lock.
-                $item->is_locked = !$previousComplete && $item->status === 'not-started';
+                // Already-touched lessons never re-lock, even when sequential
+                // unlocking is on.
+                $item->is_locked = $sequential
+                    && !$previousComplete
+                    && $item->status === 'not-started';
                 $previousComplete = $item->status === 'completed';
 
                 $byChapter[$item->chapter_id][] = $item;
@@ -377,6 +441,48 @@ class LmsLearningController extends Controller
                 ->where('status', 'completed')
                 ->whereNull('deleted_at')
                 ->count();
+
+            $percent = $total > 0 ? (int) round($done / $total * 100) : 0;
+
+            /*
+             * ── OPENING A LESSON MEANS THE COURSE IS IN PROGRESS ────────────
+             *
+             * This percentage was computed, returned, and then forgotten.
+             * `lms_course_enroll.status` stayed 'enrolled' forever - the only
+             * thing that ever set 'completed' was claiming a certificate - so
+             * a course somebody was halfway through was indistinguishable
+             * from one they had never opened, and the UI showed both as
+             * "In Progress" alongside courses awaiting approval.
+             *
+             * Only from 'enrolled'. A completed course is not un-completed by
+             * revisiting a lesson, and a pending one must not quietly become
+             * active without an approval.
+             */
+            DB::table('lms_course_enroll')
+                ->where('user_id', $userId)
+                ->where('course_id', $request->course_id)
+                ->where('status', 'enrolled')
+                ->whereNull('deleted_at')
+                ->update(['status' => 'in-progress', 'updated_at' => now()]);
+
+            /*
+             * ── AND THE ASSIGNMENT HAS TO AGREE WITH MY LEARNING ────────────
+             *
+             * `lms_assignments` appeared nowhere in this controller, so its
+             * `progress` column was only ever the literal 0 or 100 somebody
+             * set by hand. The Assignments screen therefore showed 0% for a
+             * learner My Learning showed at 80% - two screens, one fact, two
+             * answers.
+             */
+            DB::table('lms_assignments')
+                ->where('user_id', $userId)
+                ->where('course_id', $request->course_id)
+                ->whereNull('deleted_at')
+                ->update([
+                    'progress' => $percent,
+                    'status' => $percent >= 100 ? 'Completed' : 'In Progress',
+                    'updated_at' => now(),
+                ]);
 
             return response()->json([
                 'status' => true,
@@ -809,6 +915,11 @@ class LmsLearningController extends Controller
                 'title'            => 'required|string|max:191',
                 'description'      => 'nullable|string',
                 'filename'         => 'nullable|string',
+                // Accepted because a caller sending it must not be silently
+                // ignored - which is exactly what happened to the Course
+                // Builder: it posted `url`, nothing read it, and every lesson
+                // it made was stored with no media at all.
+                'url'              => 'nullable|string|max:1000',
                 'file_type'        => 'nullable|string|max:191',
                 'content_category' => 'nullable|string|max:191',
                 'sort_order'       => 'nullable|integer',
@@ -839,7 +950,14 @@ class LmsLearningController extends Controller
             'standard_id' => $chapter->standard_id,
             'title' => $request->title,
             'description' => $request->description,
-            'filename' => $request->filename,
+            /*
+             * `filename` is the canonical media column - it is what the player
+             * reads first (`lesson.filename || lesson.url`). `url` is accepted
+             * as an alternate and written to its own column so a caller that
+             * sends either gets a playable lesson.
+             */
+            'filename' => $request->input('filename') ?: $request->input('url'),
+            'url' => $request->input('url'),
             'file_type' => $request->file_type,
             'content_category' => $request->input('content_category', 'Videos'),
             'sort_order' => $request->input('sort_order', 1),
@@ -875,6 +993,7 @@ class LmsLearningController extends Controller
                 'title'            => 'required|string|max:191',
                 'description'      => 'nullable|string',
                 'filename'         => 'nullable|string',
+                'url'              => 'nullable|string|max:1000',
                 'file_type'        => 'nullable|string|max:191',
                 'content_category' => 'nullable|string|max:191',
                 'sort_order'       => 'nullable|integer',
@@ -902,7 +1021,12 @@ class LmsLearningController extends Controller
         DB::table('content_master')->where('id', $id)->update([
             'title' => $request->title,
             'description' => $request->description,
-            'filename' => $request->input('filename', $content->filename),
+            // Either key sets the media, and neither key leaves it alone -
+            // an edit that changes only the title must not blank the video.
+            'filename' => $request->input('filename')
+                ?: $request->input('url')
+                ?: $content->filename,
+            'url' => $request->input('url', $content->url),
             'file_type' => $request->input('file_type', $content->file_type),
             'content_category' => $request->input('content_category', $content->content_category),
             'sort_order' => $request->input('sort_order', $content->sort_order),
@@ -1130,6 +1254,105 @@ class LmsLearningController extends Controller
      * only what a verifier needs: whether it is genuine, for whom, and whether
      * it is still in date.
      */
+    /**
+     * POST /api/lms/learning/courses/{courseId}/complete
+     *
+     * The learner says they are finished.
+     *
+     * ── WHY A DECLARATION AND NOT A CALCULATION ─────────────────────────────
+     *
+     * Completion is the employee's own statement, by decision. Some of what a
+     * course asks for happens away from the screen - a conversation, a shift,
+     * a piece of practice - and a system that only counts opened lessons
+     * cannot see any of it.
+     *
+     * So the declaration is recorded AND the real lesson count is recorded
+     * beside it, and both are returned. A report can then say "marked complete
+     * with 3 of 8 lessons opened", which is the honest sentence. Hiding the
+     * gap would make the declaration meaningless; refusing the declaration
+     * would make the feature useless.
+     *
+     * ── IT DOES NOT MINT A CERTIFICATE ──────────────────────────────────────
+     *
+     * The certificate keeps its own rule: every lesson complete. A certificate
+     * granted for 3 of 8 lessons devalues every certificate that came before
+     * it, so the two artefacts stay separate - you may declare yourself done,
+     * and the certificate still has to be earned.
+     */
+    public function completeCourse(Request $request, $courseId)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+
+        $userId = $this->requireUser($request);
+        $subInstituteId = $this->tenantId($request);
+
+        // The caller's own enrolment, in their own organisation. A pending one
+        // is not completable - it has not been approved yet.
+        $enrolment = DB::table('lms_course_enroll as e')
+            ->join('sub_std_map as s', 's.id', '=', 'e.course_id')
+            ->where('e.user_id', $userId)
+            ->where('e.course_id', $courseId)
+            ->where('s.sub_institute_id', $subInstituteId)
+            ->whereNull('e.deleted_at')
+            ->whereIn('e.status', ['enrolled', 'in-progress', 'completed'])
+            ->orderByDesc('e.created_at')
+            ->select('e.id', 'e.status')
+            ->first();
+
+        if (! $enrolment) {
+            return response()->json(['status' => false, 'message' => 'You are not enrolled in this course.'], 404);
+        }
+
+        $total = DB::table('content_master')
+            ->where('subject_id', $courseId)
+            ->whereNull('deleted_at')
+            ->count();
+
+        $done = DB::table('lms_content_progress')
+            ->where('user_id', $userId)
+            ->where('course_id', $courseId)
+            ->where('status', 'completed')
+            ->whereNull('deleted_at')
+            ->count();
+
+        DB::transaction(function () use ($enrolment, $userId, $courseId, $total, $done) {
+            DB::table('lms_course_enroll')->where('id', $enrolment->id)->update([
+                'status' => 'completed',
+                'end_date' => now()->toDateString(),
+                'updated_at' => now(),
+            ]);
+
+            // The assignment screen has to agree with My Learning. `progress`
+            // stays the REAL figure, not 100 - the declaration is in `status`,
+            // and overwriting the measurement with it would erase the evidence.
+            DB::table('lms_assignments')
+                ->where('user_id', $userId)
+                ->where('course_id', $courseId)
+                ->whereNull('deleted_at')
+                ->update([
+                    'status' => 'Completed',
+                    'progress' => $total > 0 ? (int) round($done / $total * 100) : 0,
+                    'updated_at' => now(),
+                ]);
+        });
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Marked complete.',
+            'data' => [
+                'marked_complete' => true,
+                'total_content' => $total,
+                'completed_content' => $done,
+                'progress_percent' => $total > 0 ? (int) round($done / $total * 100) : 0,
+                // So the UI can say what the certificate still needs, rather
+                // than offering a button that will be refused.
+                'certificate_available' => $total > 0 && $done >= $total,
+            ],
+        ]);
+    }
+
     public function verifyCertificate(Request $request, string $code)
     {
         $certificate = DB::table('lms_certificates as c')
