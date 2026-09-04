@@ -495,14 +495,60 @@ class LmsCourseController extends Controller
             // select rendered the same label twice. Grouping collapses on the
             // identity that actually matters, and course_count gives the UI a
             // way to tell same-named departments apart.
-            $departments = DB::table('sub_std_map as s')
-                ->join('hrms_departments as d', 'd.id', '=', 's.standard_id')
-                ->where('s.sub_institute_id', $subInstituteId)
-                ->whereNull('s.deleted_at')
+            /*
+             * ── EVERY DEPARTMENT, NOT ONLY THE ONES THAT ALREADY HAVE COURSES ──
+             *
+             * This joined FROM sub_std_map, so a department appeared only once
+             * it already owned a course. The consequence was circular and
+             * total: you could never create the FIRST course for a new
+             * department, because the department was not in the dropdown and
+             * standard_id is required on both sides.
+             *
+             * A department created this morning in Organization > Department
+             * Management was invisible here all afternoon, and this same
+             * response feeds four separate dropdowns.
+             *
+             * hrms_departments is the authority - the same table and the same
+             * predicate the Organization module lists from - and the join is
+             * now LEFT, so course_count still distinguishes two departments
+             * that share a name and a department with none reads "(0)".
+             */
+            $departments = DB::table('hrms_departments as d')
+                ->leftJoin('sub_std_map as s', function ($join) use ($subInstituteId) {
+                    $join->on('s.standard_id', '=', 'd.id')
+                         ->where('s.sub_institute_id', '=', $subInstituteId)
+                         ->whereNull('s.deleted_at');
+                })
+                ->where('d.sub_institute_id', $subInstituteId)
                 ->whereNull('d.deleted_at')
                 ->groupBy('d.id', 'd.department')
                 ->orderBy('d.department')
                 ->get(['d.id', 'd.department', DB::raw('COUNT(s.id) as course_count')]);
+
+            /*
+             * ── JOB ROLES FROM THE JOB-ROLE TABLE ───────────────────────────
+             *
+             * `jobroles` below is DISTINCT sub_std_map.jobrole - free text
+             * somebody typed into this same box previously. It is empty on a
+             * fresh tenant, it propagates typos ("Staff Nurse" and "staff
+             * nurse" become two permanent options), and it never consults the
+             * organisation's actual roles.
+             *
+             * `job_roles` is the real list, from the same table and the same
+             * predicate JobroleApiController@getDepartmentWise uses - so the
+             * course form and the task-assignment cascade agree by
+             * construction. department_id is included so the form can narrow
+             * roles to the chosen department.
+             *
+             * The old key stays for now: the legacy free-text datalist still
+             * reads it, and removing it would break that control before its
+             * replacement has shipped everywhere.
+             */
+            $jobRoles = DB::table('s_user_jobrole')
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereNull('deleted_at')
+                ->orderBy('jobrole')
+                ->get(['id', 'jobrole', 'department_id']);
 
             return response()->json([
                 'status' => true,
@@ -510,6 +556,7 @@ class LmsCourseController extends Controller
                     'categories' => $distinct('subject_category'),
                     'subject_types' => $distinct('subject_type'),
                     'jobroles' => $distinct('jobrole'),
+                    'job_roles' => $jobRoles,
                     'departments' => $departments,
                     // Fixed lists, but served from config rather than hardcoded
                     // in the component: adding a language or template is a
@@ -819,21 +866,52 @@ class LmsCourseController extends Controller
         }
 
         try {
-            $course->update([
-                'display_name'     => $request->display_name,
-                'standard_id'      => $request->standard_id,
-                'subject_category' => $request->subject_category,
-                'subject_code'     => $request->subject_code,
-                'subject_type'     => $request->subject_type,
-                'short_name'       => $request->short_name,
-                'jobrole'          => $request->jobrole,
-                'proficiency'      => $request->proficiency,
-                'sort_order'       => $request->sort_order,
-                'certificate_validity_months' => $request->certificate_validity_months,
-                'status'           => (int) $request->status,
-                'updated_by'       => $this->contextUserId($request),
-                'updated_at'       => now(),
-            ]);
+            /*
+             * ── WHY THIS IS A QUERY-BUILDER UPDATE AND NOT $course->update() ──
+             *
+             * sub_std_mapModel::$fillable does not list subject_code,
+             * subject_type, short_name, certificate_validity_months or
+             * updated_by. Eloquent drops unfillable keys SILENTLY, so those
+             * five were accepted by validation, sent by the form, and thrown
+             * away - while store() writes through insertGetId(), which bypasses
+             * $fillable entirely. The result: those fields saved once at
+             * creation and could never be changed again, with no error anywhere.
+             *
+             * Widening $fillable would fix it and change mass-assignment
+             * behaviour for every other consumer of sub_std_map - competency,
+             * the job-role library, enrolment - which is a much larger blast
+             * radius than this bug deserves. A query-builder update is local,
+             * cannot leak, and matches how the row was created.
+             *
+             * ── AND ONLY WHAT WAS ACTUALLY SENT ─────────────────────────────
+             *
+             * $request->x is null for a key the caller omitted, so the previous
+             * version wrote null over any field the payload did not carry. The
+             * catalogue sheet never sends `proficiency` and the builder never
+             * sends `sort_order`, and the builder saves on every "Continue" -
+             * so stepping through the wizard silently nulled sort_order each
+             * time. Building from the keys the request HAS makes a partial
+             * update a partial update.
+             */
+            $editable = [
+                'display_name', 'standard_id', 'subject_category', 'subject_code',
+                'subject_type', 'short_name', 'jobrole', 'proficiency', 'sort_order',
+                'certificate_validity_months', 'status',
+            ];
+
+            $changes = [];
+            foreach ($editable as $field) {
+                if ($request->has($field)) {
+                    $changes[$field] = $field === 'status'
+                        ? (int) $request->input($field)
+                        : $request->input($field);
+                }
+            }
+
+            $changes['updated_by'] = $this->contextUserId($request);
+            $changes['updated_at'] = now();
+
+            DB::table('sub_std_map')->where('id', $course->id)->update($changes);
 
             $this->saveSettings($request, (int) $course->id, $subInstituteId);
             $this->savePrerequisites($request, (int) $course->id, $subInstituteId);
