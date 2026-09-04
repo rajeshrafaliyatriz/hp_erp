@@ -84,6 +84,26 @@ class LmsLearningController extends Controller
                 ->whereNull('deleted_at')
                 ->groupBy('course_id');
 
+            /*
+             * ── THE TENANT PREDICATE GOES ON THE COURSE, NOT THE ENROLMENT ──
+             *
+             * This query had no tenant filter at all, while `course()` below
+             * has always had one - so a user whose enrolment rows spanned
+             * organisations saw another organisation's courses in their own
+             * list.
+             *
+             * It is filtered on `s.sub_institute_id` deliberately.
+             * `sub_std_map.sub_institute_id` is NOT NULL and is the authority
+             * on which organisation owns a course, and you cannot enrol in a
+             * course you cannot see. `lms_course_enroll.sub_institute_id` is
+             * NULLABLE, so filtering on it would have silently emptied the
+             * course list of every learner whose row predates that column
+             * being populated. Measured before writing this: 0 NULL and 0 zero
+             * on both dev and live, so the enrolment-side predicate below is
+             * safe today - it is the belt to the course-side braces, and it is
+             * ordered second so that if either is ever wrong, the course-side
+             * one still holds.
+             */
             $courses = DB::table('lms_course_enroll as e')
                 ->join('sub_std_map as s', 'e.course_id', '=', 's.id')
                 ->leftJoin('hrms_departments as d', 'd.id', '=', 's.standard_id')
@@ -92,7 +112,10 @@ class LmsLearningController extends Controller
                          ->on('e.created_at', '=', 'latest.latest_enrolled_at');
                 })
                 ->where('e.user_id', $userId)
+                ->where('s.sub_institute_id', $subInstituteId)
+                ->where('e.sub_institute_id', $subInstituteId)
                 ->whereNull('e.deleted_at')
+                ->whereNull('s.deleted_at')
                 ->select(
                     's.id',
                     's.display_name',
@@ -139,7 +162,28 @@ class LmsLearningController extends Controller
                 return $course;
             });
 
-            return response()->json(['status' => true, 'data' => $courses]);
+            /*
+             * ── AWAITING APPROVAL IS NOT THE SAME AS ENROLLED ──────────────
+             *
+             * A self-requested enrolment sits at `pending` until an admin
+             * reviews it. This query had no status filter, so a pending
+             * enrolment was returned alongside approved ones and was fully
+             * learnable - which made the approval step decorative, since the
+             * learner could simply start the course while waiting.
+             *
+             * They are separated rather than hidden. The learner does own that
+             * enrolment and is entitled to see that they asked for it; what
+             * they may not do is start it. Dropping it from the response
+             * entirely would look like the request had been lost.
+             */
+            $awaiting = $courses->where('enrollment_status', 'pending')->values();
+            $learnable = $courses->whereNotIn('enrollment_status', ['pending'])->values();
+
+            return response()->json([
+                'status' => true,
+                'data' => $learnable,
+                'awaiting_approval' => $awaiting,
+            ]);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -214,12 +258,28 @@ class LmsLearningController extends Controller
                 ->get()
                 ->keyBy('content_id');
 
-            // Attach progress to each item, then group by chapter.
-            //
-            // Locking is sequential: a lesson opens once every lesson before it
-            // is complete. It is computed here rather than stored, so changing
-            // the rule never needs a backfill. The first lesson is always open,
-            // and everything stays open once the course is finished.
+            /*
+             * ── SEQUENTIAL LOCKING IS NOW OPT-IN, AND OFF BY DEFAULT ────────
+             *
+             * The rule was unconditional: a lesson opened only once every
+             * lesson before it was complete. That is a defensible rule for
+             * compliance training and the wrong default for everything else -
+             * and with 2 progress rows across 1,454 enrolments on live, its
+             * real effect was that EVERY course in the product showed lesson
+             * one open and every other lesson locked. It is a large part of
+             * why "the employee cannot start a course and learn".
+             *
+             * It is a per-course setting now, defaulting to 0, so a course
+             * that genuinely must be taken in order can still say so. Still
+             * computed rather than stored, so changing the rule never needs a
+             * backfill; and a course with no settings row - which is every
+             * course on live today - takes the unlocked path.
+             */
+            $sequential = (bool) DB::table('lms_course_settings')
+                ->where('course_id', $courseId)
+                ->where('sub_institute_id', $subInstituteId)
+                ->value('sequential_unlock');
+
             $byChapter = [];
             $previousComplete = true;
 
@@ -232,7 +292,11 @@ class LmsLearningController extends Controller
                 $item->completed_at = $row->completed_at ?? null;
 
                 // Already-touched lessons never re-lock.
-                $item->is_locked = !$previousComplete && $item->status === 'not-started';
+                // Already-touched lessons never re-lock, even when sequential
+                // unlocking is on.
+                $item->is_locked = $sequential
+                    && !$previousComplete
+                    && $item->status === 'not-started';
                 $previousComplete = $item->status === 'completed';
 
                 $byChapter[$item->chapter_id][] = $item;
