@@ -1408,9 +1408,36 @@ class AJAXController extends Controller
             // Find the token in the database
             $accessToken = PersonalAccessToken::findToken($token);
             if (!$accessToken) {
-                
+
                 return response()->json(['message' => 'Invalid token'], 401);
             }
+
+            /*
+             * ── THE TOKEN'S OWNER DECIDES THE TENANT, NOT THE REQUEST ───────
+             *
+             * This route carries `web` middleware only, and the check above
+             * asks nothing more than "does this token string exist" - it never
+             * looked at WHOSE it was. Meanwhile $sub_institute_id and $user_id
+             * were read straight from the query string and used to insert into
+             * hrms_departments, academic_section and sub_std_map, and then
+             * passed down into the chapter and content controllers.
+             *
+             * So any holder of any live token, from any organisation, could
+             * create courses and content inside any other organisation by
+             * naming it in the URL - and have the rows attributed to any user
+             * they chose.
+             *
+             * The token's owner now supplies both. A token that resolves to no
+             * user is refused outright rather than falling through to whatever
+             * the caller asked for.
+             */
+            $tokenOwner = $accessToken->tokenable;
+            if (! $tokenOwner) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            $sub_institute_id = $tokenOwner->sub_institute_id ?: $sub_institute_id;
+            $user_id = $tokenOwner->id;
 
             // First, check if a course already exists for this skill and subject in sub_std_map
             $existingCourse = DB::table('sub_std_map')
