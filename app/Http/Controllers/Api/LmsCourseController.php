@@ -114,6 +114,30 @@ class LmsCourseController extends Controller
                 }
             }
         }
+
+        /*
+         * Trim the free-text identifiers before anything compares them (F-76).
+         *
+         * `display_name` is half of the duplicate-course check
+         * (sub_institute_id + display_name + standard_id), and an untrimmed
+         * value defeats it: "Fire Safety" and "Fire Safety " are different
+         * strings and both save, leaving two courses that look identical in
+         * every list and cannot be told apart. Learners then enrol on whichever
+         * the sort happened to put first, and their progress splits across two
+         * rows that were never meant to exist.
+         *
+         * Done here rather than at the write so validation sees the trimmed
+         * value too - otherwise a title of nothing but spaces passes `required`
+         * and creates a course with a blank name.
+         */
+        foreach (['display_name', 'subject_category', 'subject_code', 'subject_type',
+                  'short_name', 'jobrole', 'proficiency'] as $key) {
+            $value = $request->input($key);
+
+            if (is_string($value)) {
+                $request->merge([$key => trim($value)]);
+            }
+        }
     }
 
     /**
@@ -134,6 +158,13 @@ class LmsCourseController extends Controller
             'settings.visibility'           => 'nullable|string|in:all,restricted',
             'settings.passing_score'        => 'nullable|integer|min:0|max:100',
             'settings.max_attempts'         => 'nullable|integer|min:1|max:100',
+            // The flag that decides whether passing this course moves the
+            // learner's capability record without a person reviewing it. It has
+            // existed since 2026-09-05 and until now had no writer reachable
+            // from the product: only the `lms:seed-demo-quiz` artisan command
+            // ever set it, so the entire quiz -> competency loop was off for
+            // every course anyone could author.
+            'settings.auto_apply_rating'    => 'nullable|boolean',
             'settings.issue_certificate'    => 'nullable|boolean',
             'settings.certificate_template' => 'nullable|string|max:50',
             'settings.recert_alerts'        => 'nullable|boolean',
@@ -174,6 +205,10 @@ class LmsCourseController extends Controller
             'visibility'           => $settings['visibility'] ?? 'all',
             'passing_score'        => $settings['passing_score'] ?? null,
             'max_attempts'         => $settings['max_attempts'] ?? null,
+            // Defaults OFF, like the column. Turning it on is a deliberate act
+            // per course: reasonable for mandatory compliance training, wrong
+            // for an optional short course.
+            'auto_apply_rating'    => !empty($settings['auto_apply_rating']),
             // Unlike the other flags this defaults to true, matching the
             // wizard's pre-checked "Issue Certificate upon Completion".
             'issue_certificate'    => array_key_exists('issue_certificate', $settings)
@@ -259,7 +294,10 @@ class LmsCourseController extends Controller
         if ($settings) {
             // Booleans arrive from MySQL as 0/1 and the JSON columns as strings;
             // decode both so the client never has to.
-            foreach (['is_mandatory', 'discussion_enabled', 'issue_certificate', 'recert_alerts'] as $flag) {
+            foreach ([
+                'is_mandatory', 'discussion_enabled', 'issue_certificate',
+                'recert_alerts', 'auto_apply_rating',
+            ] as $flag) {
                 $settings->$flag = (bool) $settings->$flag;
             }
             foreach (['restrict_departments', 'restrict_roles'] as $list) {
@@ -563,7 +601,24 @@ class LmsCourseController extends Controller
                 'status' => true,
                 'data' => [
                     'categories' => $distinct('subject_category'),
-                    'subject_types' => $distinct('subject_type'),
+                    /*
+                     * DELIVERY TYPES, plus whatever is already in use.
+                     *
+                     * This returned only DISTINCT sub_std_map.subject_type -
+                     * free text somebody had typed - so tenant 6's entire
+                     * vocabulary was "E-learning" and "Mutual Fund", the second
+                     * of which is a subject rather than a type. An author had
+                     * no way to say "Workshop" without inventing it.
+                     *
+                     * The standard list comes from config; values already in
+                     * use are merged so no existing course silently loses its
+                     * type when the form is next saved.
+                     */
+                    'subject_types' => collect(config('lms.course_types', []))
+                        ->concat($distinct('subject_type'))
+                        ->filter()
+                        ->unique()
+                        ->values(),
                     'jobroles' => $distinct('jobrole'),
                     'job_roles' => $jobRoles,
                     'departments' => $departments,
@@ -767,12 +822,26 @@ class LmsCourseController extends Controller
                 $data['display_image'] = \Illuminate\Support\Facades\Storage::disk('digitalocean')->url($path);
             }
 
-            $courseId = sub_std_mapModel::insertGetId($data);
+            /*
+             * One transaction, because the three writes are one course.
+             *
+             * insertGetId committed immediately, so a failure in saveSettings or
+             * savePrerequisites left the sub_std_map row behind — a course with
+             * no settings, invisible as a failure. Worse, the obvious recovery
+             * (press Save again) then hit the duplicate-name check above and
+             * answered 422, so the author was told their course already existed
+             * while looking at a form that had never saved.
+             */
+            $courseId = DB::transaction(function () use ($request, $data, $subInstituteId) {
+                $id = sub_std_mapModel::insertGetId($data);
 
-            // Course Builder extras. Both are no-ops when the keys are absent,
-            // so the catalogue's simpler course form is unaffected.
-            $this->saveSettings($request, $courseId, $subInstituteId);
-            $this->savePrerequisites($request, $courseId, $subInstituteId);
+                // Course Builder extras. Both are no-ops when the keys are
+                // absent, so the catalogue's simpler course form is unaffected.
+                $this->saveSettings($request, $id, $subInstituteId);
+                $this->savePrerequisites($request, $id, $subInstituteId);
+
+                return $id;
+            });
 
             return response()->json([
                 'status' => true,

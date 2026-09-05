@@ -628,7 +628,8 @@ class AssessmentScoringService
                 $this->upsertRating(
                     ['sub_institute_id' => $tenantId, 'user_id' => $proposal->user_id,
                      'kasba_item_id' => $proposal->kasba_item_id],
-                    $common
+                    $common,
+                    $proposal
                 );
             }
 
@@ -638,7 +639,8 @@ class AssessmentScoringService
                 $this->upsertRating(
                     ['sub_institute_id' => $tenantId, 'user_id' => $proposal->user_id,
                      'kasba_type' => $proposal->kasba_type, 'item_id' => $proposal->item_id],
-                    $common
+                    $common,
+                    $proposal
                 );
             }
 
@@ -664,17 +666,53 @@ class AssessmentScoringService
      * @param  array<string,mixed>  $keys    identifying columns
      * @param  array<string,mixed>  $values  columns to write, WITHOUT created_at
      */
-    private function upsertRating(array $keys, array $values): void
+    private function upsertRating(array $keys, array $values, ?object $proposal = null): void
     {
-        $exists = DB::table('competency_kasba_rating')->where($keys)->exists();
+        $current = DB::table('competency_kasba_rating')->where($keys)->first(['rating']);
 
-        if ($exists) {
+        if ($current) {
             DB::table('competency_kasba_rating')->where($keys)->update($values);
+        } else {
+            DB::table('competency_kasba_rating')->insert($keys + $values + ['created_at' => now()]);
+        }
 
+        /*
+         * ── HISTORY, ADDED WITHOUT CHANGING ANY DECISION ────────────────────
+         *
+         * Nothing above this comment changed: the same rows are written, on the
+         * same conditions, by the same rules. This only records WHAT CHANGED,
+         * so an approved assessment shows up on the employee's capability
+         * history beside a course result instead of being the one kind of
+         * rating movement that leaves no trace.
+         *
+         * Writing an unchanged value is skipped for the same reason it is in
+         * RatingWriter: a history row saying nothing happened is noise on a
+         * trend line.
+         */
+        if ($current && (int) $current->rating === (int) $values['rating']) {
             return;
         }
 
-        DB::table('competency_kasba_rating')->insert($keys + $values + ['created_at' => now()]);
+        DB::table('competency_rating_history')->insert([
+            'sub_institute_id' => $keys['sub_institute_id'],
+            'user_id' => $keys['user_id'],
+            'kasba_item_id' => $keys['kasba_item_id'] ?? null,
+            'kasba_type' => $keys['kasba_type'] ?? null,
+            'item_id' => $keys['item_id'] ?? null,
+            'item_label' => $proposal->item_label ?? null,
+            'competency_id' => $proposal->competency_id ?? null,
+            // An assessment is not attached to a course, so this stays null -
+            // the history row's `source` says where it came from.
+            'course_id' => null,
+            'old_rating' => $current->rating ?? null,
+            'new_rating' => (int) $values['rating'],
+            'source' => $values['source'] ?? 'assessment',
+            'source_ref_id' => $proposal->attempt_id ?? null,
+            'assessor_id' => $values['assessor_id'] ?? null,
+            'note' => $values['note'] ?? null,
+            'changed_at' => now(),
+            'created_at' => now(),
+        ]);
     }
 
     /** Reject: the result stays on record, the rating does not change. */

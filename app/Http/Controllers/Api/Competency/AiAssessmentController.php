@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Services\Competency\AssessmentScoringService;
 use App\Services\DeepSeekService;
+use App\Services\Talent\RecruitmentAssessmentGenerator;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -599,7 +600,24 @@ class AiAssessmentController extends Controller
         $validator = Validator::make($request->all(), [
             'answers'                   => 'required|array|min:1',
             'answers.*.question_id'     => 'required|integer',
-            'answers.*.selected_option' => 'nullable|string|max:50',
+            /*
+             * 255, matching the column, because 50 made real questions
+             * unanswerable.
+             *
+             * `selected_option` carries the option's full TEXT - scoreMultipleChoice()
+             * compares it exactly against `correct_option` - and
+             * competency_assessment_response.selected_option is VARCHAR(255).
+             * The limit here was 50, while nothing constrains what the generator
+             * writes: the longest option currently on live is 96 characters. So
+             * any MCQ with a normal-length option was refused at submit with
+             * "must not be greater than 50 characters", and the assessment could
+             * not be completed at all.
+             *
+             * Truncating client-side to fit would have been worse than the
+             * error: the exact-match comparison would then mark a correct answer
+             * wrong, silently.
+             */
+            'answers.*.selected_option' => 'nullable|string|max:255',
             'answers.*.answer_text'     => 'nullable|string|max:5000',
         ]);
         if ($validator->fails()) {
@@ -646,7 +664,30 @@ class AiAssessmentController extends Controller
             ->whereNull('a.submitted_at')
             ->whereNotNull('a.started_at')
             ->whereNotNull('t.time_limit_minutes')
-            ->whereRaw('DATE_ADD(a.started_at, INTERVAL (t.time_limit_minutes * 60) + 60 SECOND) < NOW()')
+            /*
+             * ── THE APPLICATION'S CLOCK, NOT THE DATABASE'S ─────────────────
+             *
+             * This read `... < NOW()`, and on live that made EVERY timed
+             * assessment unsubmittable.
+             *
+             * `started_at` is written by PHP, and config('app.timezone') is UTC.
+             * The live MySQL server runs @@system_time_zone = IST and its NOW()
+             * is therefore 5.5 hours ahead of every timestamp this application
+             * stores. So the moment an attempt started, its deadline already
+             * looked five and a half hours past, and submit() answered
+             * "Time ran out" — on an attempt whose own countdown, computed by
+             * secondsRemaining() entirely in PHP, still read twenty minutes.
+             * The two halves of the same timer were reading different clocks.
+             *
+             * Binding the application's now() makes the comparison use the same
+             * clock that wrote the column. It also keeps working if the database
+             * is moved to a server with yet another timezone, which SET
+             * time_zone would not.
+             */
+            ->whereRaw(
+                'DATE_ADD(a.started_at, INTERVAL (t.time_limit_minutes * 60) + 60 SECOND) < ?',
+                [now()]
+            )
             ->first(['a.id', 'a.started_at', 't.title', 't.time_limit_minutes']);
 
         if ($lateAttempt) {
@@ -1189,6 +1230,29 @@ class AiAssessmentController extends Controller
             // question, it is a broken one. Dropped rather than stored unscorable.
             if ($fmt === 'mcq' && (!$options || $correct === null || !in_array($correct, $options, true))) {
                 continue;
+            }
+
+            /*
+             * AN OPTION LONGER THAN THE COLUMN IS A QUESTION NOBODY CAN ANSWER.
+             *
+             * `selected_option` carries the option's full text and
+             * scoreMultipleChoice() compares it EXACTLY against `correct_option`;
+             * both columns are VARCHAR(255). Live is not in strict mode, so an
+             * over-length option is truncated on the way in without an error, and
+             * the learner's differently-truncated answer then never matches -
+             * marking that question wrong for everybody, silently.
+             *
+             * RecruitmentAssessmentGenerator has guarded exactly this since it
+             * was written and explains the reasoning at length; this generator
+             * never did, so it could store questions its own submit endpoint
+             * would refuse. Same constant, so the two cannot drift.
+             */
+            if ($fmt === 'mcq') {
+                $longest = max(array_map('mb_strlen', array_merge($options, [$correct])));
+
+                if ($longest > RecruitmentAssessmentGenerator::MAX_OPTION_CHARS) {
+                    continue;
+                }
             }
 
             $src = $byId->get($id);
