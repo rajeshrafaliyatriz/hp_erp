@@ -403,7 +403,23 @@ class LmsCourseEnrollController extends Controller
         $objcourse->user_id = $request->user_id;
         $objcourse->course_id = $request->course_id;
         $objcourse->status = $request->status;
-        $objcourse->start_date = $request->start_date;
+        /*
+         * `start_date` is `date NOT NULL` with NO database default, so a
+         * caller that omits it makes the insert fail outright — a 500, not a
+         * validation message.
+         *
+         * That is exactly what the catalogue's Enrol button did: it sends the
+         * learner, the course and the status, because those are the only
+         * things a person choosing to take a course actually decides. The
+         * validation rule below says `nullable`, which was true of the request
+         * and untrue of the column.
+         *
+         * Today is the honest default: an enrolment starts when it is made.
+         * `end_date` really is nullable — an open-ended enrolment is the
+         * normal case, and inventing a deadline nobody set is worse than
+         * having none. Same rule as EnrolmentWriter, which hit this first.
+         */
+        $objcourse->start_date = $request->start_date ?: now()->toDateString();
         $objcourse->end_date = $request->end_date;
         $objcourse->sub_institute_id = $subInstituteId;
 
