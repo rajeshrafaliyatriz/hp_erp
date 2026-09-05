@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Lms\CourseQuizGenerator;
 use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -377,5 +378,593 @@ class LmsAssessmentController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /* ─── Questions ─────────────────────────────────────────────────────────
+     *
+     * THE MISSING HALF OF QUIZ AUTHORING.
+     *
+     * Before these, a quiz could be created, named, given a pass mark and an
+     * attempt limit — and never asked a single question. `question_paper`
+     * store/update/destroy managed the PAPER; the only question endpoint was
+     * `questions()` above, which READS a bank. No API path anywhere wrote
+     * `lms_question_master` or `answer_master`, so every quiz authored through
+     * this product had `total_ques = 0`, and the wizard rendered "0 questions"
+     * without comment.
+     *
+     * That made the whole downstream chain — QuizScoringService, the KASBA
+     * rating, the certificate gate — unreachable by any admin. The demo quiz on
+     * live exists only because it was seeded by a console command.
+     *
+     * ── WHY THE PAPER IS THE PARENT ─────────────────────────────────────────
+     *
+     * Questions are addressed under `/assessments/{paper}/questions` rather than
+     * standalone, because the paper is what carries tenancy, the course link,
+     * and `question_ids`. Writing a question without updating the paper's
+     * `question_ids` / `total_ques` / `total_marks` in the same transaction is
+     * how a paper ends up disagreeing with its own contents.
+     */
+
+    /** Shared validation for a question and its options. */
+    private function questionRules(): array
+    {
+        return [
+            'question_title'      => 'required|string|max:2000',
+            'description'         => 'nullable|string',
+            'points'              => 'nullable|integer|min:1|max:100',
+            'hint_text'           => 'nullable|string|max:1000',
+            // A written question has no options and is marked by the model.
+            'options'             => 'nullable|array|max:10',
+            'options.*.answer'    => 'required|string|max:2000',
+            'options.*.correct'   => 'nullable|boolean',
+        ];
+    }
+
+    /**
+     * The paper, if it belongs to the caller's organisation.
+     *
+     * 404 rather than 403 for another tenant's paper — saying "that is not
+     * yours" confirms it exists.
+     */
+    private function findPaper($id, $subInstituteId)
+    {
+        return DB::table('question_paper')
+            ->where('id', $id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
+    /**
+     * Recompute the paper's question list, count and total marks from what is
+     * actually attached to it.
+     *
+     * Derived from the questions rather than incremented, so a question deleted
+     * or re-pointed elsewhere cannot leave the paper claiming marks that no
+     * longer exist. `question_ids` stays comma-separated: it is the format
+     * questionpaperController writes and the player reads, and every paper
+     * already in the table uses it.
+     */
+    private function syncPaperTotals($paperId, array $orderedIds): void
+    {
+        $ids = collect($orderedIds)->map(fn ($id) => (int) $id)->filter()->unique()->values();
+
+        $marks = $ids->isEmpty() ? 0 : (int) DB::table('lms_question_master')
+            ->whereIn('id', $ids)
+            ->whereNull('deleted_at')
+            ->sum('points');
+
+        DB::table('question_paper')->where('id', $paperId)->update([
+            'question_ids' => $ids->isEmpty() ? null : $ids->implode(','),
+            'total_ques'   => $ids->count(),
+            // total_marks was never maintained by any write path; the wizard
+            // and the scorer both need it to agree with the questions.
+            'total_marks'  => $marks,
+            'updated_at'   => now(),
+        ]);
+    }
+
+    /** The paper's question_ids as an ordered array of ints. */
+    private function paperQuestionIds($paper): array
+    {
+        return collect(explode(',', (string) $paper->question_ids))
+            ->map(fn ($id) => (int) trim($id))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * GET /api/lms/assessments/{id}/questions
+     *
+     * The paper's OWN questions, with their options and — unlike the learner
+     * endpoint — which option is correct. This is the authoring view, and it is
+     * admin-gated for exactly that reason. QuizScoringService::questionsFor()
+     * remains the learner path and still never selects `correct_answer`.
+     */
+    public function paperQuestions(Request $request, $id)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+        if ($roleError = $this->guardAdmin($request)) {
+            return $roleError;
+        }
+
+        $subInstituteId = $this->tenantId($request);
+        $paper = $this->findPaper($id, $subInstituteId);
+
+        if (!$paper) {
+            return response()->json(['status' => false, 'message' => 'Assessment not found'], 404);
+        }
+
+        $ids = $this->paperQuestionIds($paper);
+
+        if ($ids === []) {
+            return response()->json(['status' => true, 'data' => [], 'total_marks' => 0]);
+        }
+
+        $questions = DB::table('lms_question_master')
+            ->whereIn('id', $ids)
+            ->whereNull('deleted_at')
+            ->get(['id', 'question_title', 'description', 'points', 'hint_text'])
+            ->keyBy('id');
+
+        $options = DB::table('answer_master')
+            ->whereIn('question_id', $ids)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->get(['id', 'question_id', 'answer', 'correct_answer'])
+            ->groupBy('question_id');
+
+        // The paper's own order, not the database's - question_ids is ordered
+        // and an author who sequenced their questions meant it.
+        $ordered = [];
+
+        foreach ($ids as $questionId) {
+            $question = $questions[$questionId] ?? null;
+            if (!$question) {
+                continue;
+            }
+
+            $ordered[] = [
+                'id'             => (int) $question->id,
+                'question_title' => $question->question_title,
+                'description'    => $question->description,
+                'points'         => (int) ($question->points ?: 1),
+                'hint_text'      => $question->hint_text,
+                'options'        => ($options[$questionId] ?? collect())->map(fn ($o) => [
+                    'id'      => (int) $o->id,
+                    'answer'  => $o->answer,
+                    'correct' => (bool) $o->correct_answer,
+                ])->values(),
+            ];
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => $ordered,
+            'total_marks' => (int) DB::table('lms_question_master')
+                ->whereIn('id', $ids)->whereNull('deleted_at')->sum('points'),
+        ]);
+    }
+
+    /** POST /api/lms/assessments/{id}/questions — add a question to the paper. */
+    public function storeQuestion(Request $request, $id)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+        if ($roleError = $this->guardAdmin($request)) {
+            return $roleError;
+        }
+
+        $subInstituteId = $this->tenantId($request);
+        $paper = $this->findPaper($id, $subInstituteId);
+
+        if (!$paper) {
+            return response()->json(['status' => false, 'message' => 'Assessment not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), $this->questionRules());
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => $validator->messages()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        if ($refusal = $this->rejectUnmarkableOptions($request)) {
+            return $refusal;
+        }
+
+        try {
+            $questionId = DB::transaction(function () use ($request, $paper, $subInstituteId, $id) {
+                $now = now();
+
+                $questionId = DB::table('lms_question_master')->insertGetId([
+                    // 1 = 'multiple' in question_type_master, the only type this
+                    // installation defines.
+                    'question_type_id' => 1,
+                    'subject_id'       => (int) $paper->subject_id,
+                    'standard_id'      => $paper->standard_id,
+                    'question_title'   => $request->input('question_title'),
+                    'description'      => $request->input('description'),
+                    'points'           => (int) $request->input('points', 1),
+                    'hint_text'        => $request->input('hint_text'),
+                    'multiple_answer'  => $this->correctCount($request) > 1 ? 1 : 0,
+                    'sub_institute_id' => $subInstituteId,
+                    'status'           => 1,
+                    'created_by'       => $this->contextUserId($request),
+                    'created_on'       => $now,
+                    'created_at'       => $now,
+                    'updated_at'       => $now,
+                ]);
+
+                $this->writeOptions($request, $questionId, $subInstituteId);
+
+                // Appended, so an author adding a question does not reorder the
+                // ones already there.
+                $this->syncPaperTotals($id, [...$this->paperQuestionIds($paper), $questionId]);
+
+                return $questionId;
+            });
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Question added',
+                'data' => ['id' => $questionId],
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to add the question',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /** PUT /api/lms/assessments/{id}/questions/{questionId} */
+    public function updateQuestion(Request $request, $id, $questionId)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+        if ($roleError = $this->guardAdmin($request)) {
+            return $roleError;
+        }
+
+        $subInstituteId = $this->tenantId($request);
+        $paper = $this->findPaper($id, $subInstituteId);
+
+        if (!$paper) {
+            return response()->json(['status' => false, 'message' => 'Assessment not found'], 404);
+        }
+
+        $question = DB::table('lms_question_master')
+            ->where('id', $questionId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$question || !in_array((int) $questionId, $this->paperQuestionIds($paper), true)) {
+            return response()->json(['status' => false, 'message' => 'Question not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), $this->questionRules());
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => $validator->messages()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        if ($refusal = $this->rejectUnmarkableOptions($request)) {
+            return $refusal;
+        }
+
+        try {
+            DB::transaction(function () use ($request, $id, $questionId, $subInstituteId, $paper) {
+                DB::table('lms_question_master')->where('id', $questionId)->update([
+                    'question_title'  => $request->input('question_title'),
+                    'description'     => $request->input('description'),
+                    'points'          => (int) $request->input('points', 1),
+                    'hint_text'       => $request->input('hint_text'),
+                    'multiple_answer' => $this->correctCount($request) > 1 ? 1 : 0,
+                    'updated_by'      => $this->contextUserId($request),
+                    'updated_at'      => now(),
+                ]);
+
+                /*
+                 * Options are replaced wholesale rather than diffed.
+                 *
+                 * They are soft-deleted, not removed: `lms_quiz_response.answer_id`
+                 * points at them, and hard-deleting an option would orphan the
+                 * record of what a learner actually chose on a past attempt.
+                 */
+                if ($request->has('options')) {
+                    DB::table('answer_master')
+                        ->where('question_id', $questionId)
+                        ->whereNull('deleted_at')
+                        ->update(['deleted_at' => now()]);
+
+                    $this->writeOptions($request, (int) $questionId, $subInstituteId);
+                }
+
+                // Points may have changed, so the paper's total marks must follow.
+                $this->syncPaperTotals($id, $this->paperQuestionIds($paper));
+            });
+
+            return response()->json(['status' => true, 'message' => 'Question updated']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to update the question',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /** DELETE /api/lms/assessments/{id}/questions/{questionId} */
+    public function destroyQuestion(Request $request, $id, $questionId)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+        if ($roleError = $this->guardAdmin($request)) {
+            return $roleError;
+        }
+
+        $subInstituteId = $this->tenantId($request);
+        $paper = $this->findPaper($id, $subInstituteId);
+
+        if (!$paper) {
+            return response()->json(['status' => false, 'message' => 'Assessment not found'], 404);
+        }
+
+        $ids = $this->paperQuestionIds($paper);
+
+        if (!in_array((int) $questionId, $ids, true)) {
+            return response()->json(['status' => false, 'message' => 'Question not found'], 404);
+        }
+
+        try {
+            DB::transaction(function () use ($request, $id, $questionId, $ids, $subInstituteId) {
+                DB::table('lms_question_master')
+                    ->where('id', $questionId)
+                    ->where('sub_institute_id', $subInstituteId)
+                    ->update([
+                        'deleted_at' => now(),
+                        'deleted_by' => $this->contextUserId($request),
+                    ]);
+
+                $this->syncPaperTotals(
+                    $id,
+                    array_values(array_filter($ids, fn ($x) => $x !== (int) $questionId))
+                );
+            });
+
+            return response()->json(['status' => true, 'message' => 'Question removed']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to remove the question',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /** How many options this request marks correct. */
+    private function correctCount(Request $request): int
+    {
+        return collect((array) $request->input('options', []))
+            ->filter(fn ($o) => filter_var($o['correct'] ?? false, FILTER_VALIDATE_BOOLEAN))
+            ->count();
+    }
+
+    /**
+     * Refuse a multiple-choice question that nothing can mark.
+     *
+     * A question WITH options but NO correct one is the failure that produced
+     * live question 1 — one option, `correct_answer = 0`, unmarkable forever.
+     * The scorer handles it by sending it to the model and then to a human, but
+     * that is a rescue, not an intention; an author should be told at the point
+     * they make the mistake.
+     *
+     * Zero options is allowed and means a written answer.
+     */
+    private function rejectUnmarkableOptions(Request $request)
+    {
+        $options = (array) $request->input('options', []);
+
+        if ($options === []) {
+            return null;
+        }
+
+        if ($this->correctCount($request) === 0) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Mark at least one option correct, or remove all options to make '
+                    . 'this a written answer.',
+            ], 422);
+        }
+
+        return null;
+    }
+
+    /**
+     * POST /api/lms/assessments/{id}/questions/generate
+     *
+     * Write this course's quiz from the course's own modules, lessons and
+     * mapped capabilities. See CourseQuizGenerator for what the model is told
+     * and why the prompt is shaped the way it is.
+     *
+     * Generated questions are APPENDED. Replacing what an author already wrote
+     * would be a destructive act triggered by a button labelled "generate", and
+     * a paper's question_ids is the only record of its ordering.
+     */
+    public function generateQuestions(Request $request, $id, CourseQuizGenerator $generator)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+        if ($roleError = $this->guardAdmin($request)) {
+            return $roleError;
+        }
+
+        $subInstituteId = $this->tenantId($request);
+        $paper = $this->findPaper($id, $subInstituteId);
+
+        if (!$paper) {
+            return response()->json(['status' => false, 'message' => 'Assessment not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'count' => 'nullable|integer|min:' . CourseQuizGenerator::MIN_QUESTIONS
+                . '|max:' . CourseQuizGenerator::MAX_QUESTIONS,
+            'formats' => 'nullable|array',
+            'formats.*' => 'string|in:mcq,short_answer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => $validator->messages()->first(),
+            ], 422);
+        }
+
+        $count = (int) $request->input('count', 5);
+        $formats = (array) $request->input('formats', ['mcq']);
+
+        try {
+            $result = $generator->generate((int) $paper->subject_id, (int) $subInstituteId, $count, $formats);
+        } catch (\RuntimeException $e) {
+            // The generator's own refusals are the caller's problem to fix -
+            // no content, no AI credit - so they are reported as such rather
+            // than as a server fault.
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'The question generator could not be reached.',
+                'detail' => $e->getMessage(),
+            ], 502);
+        }
+
+        if ($result['questions'] === []) {
+            return response()->json([
+                'status' => false,
+                'message' => $result['dropped'] > 0
+                    ? 'Every generated question was unusable, so nothing was saved. Try again, or add more detail to the lesson descriptions.'
+                    : 'The generator returned no questions.',
+            ], 422);
+        }
+
+        $actor = $this->contextUserId($request);
+
+        $written = DB::transaction(function () use ($result, $paper, $subInstituteId, $actor, $id) {
+            $now = now();
+            $ids = [];
+
+            foreach ($result['questions'] as $q) {
+                $questionId = DB::table('lms_question_master')->insertGetId([
+                    'question_type_id' => 1,
+                    'subject_id'       => (int) $paper->subject_id,
+                    // The module this question came from. Existing hand-authored
+                    // questions leave it null, so the join that attributes a
+                    // question to a module has always returned nothing.
+                    'chapter_id'       => $q['chapter_id'],
+                    // The capability it tests. This is what lets a pass move
+                    // that capability specifically rather than the competency
+                    // as a blanket - QuizScoringService::perItemRatings.
+                    'kasba_item_id'    => $q['kasba_item_id'],
+                    'standard_id'      => $paper->standard_id,
+                    'question_title'   => $q['question_title'],
+                    'points'           => $q['points'],
+                    // The reference the AI marker grades a written answer
+                    // against. The builder never wrote it, so every written
+                    // question was marked with "(none given)".
+                    'answer'           => $q['model_answer'],
+                    'multiple_answer'  => 0,
+                    'sub_institute_id' => $subInstituteId,
+                    'status'           => 1,
+                    'created_by'       => $actor,
+                    'created_on'       => $now,
+                    'created_at'       => $now,
+                    'updated_at'       => $now,
+                ]);
+
+                if ($q['options'] !== []) {
+                    DB::table('answer_master')->insert(array_map(fn ($option) => [
+                        'question_id'      => $questionId,
+                        'answer'           => $option,
+                        'correct_answer'   => $option === $q['correct_option'] ? 1 : 0,
+                        'sub_institute_id' => $subInstituteId,
+                        'created_by'       => $actor,
+                        'created_at'       => $now,
+                        'updated_at'       => $now,
+                    ], $q['options']));
+                }
+
+                $ids[] = $questionId;
+            }
+
+            $this->syncPaperTotals($id, [...$this->paperQuestionIds($paper), ...$ids]);
+
+            return $ids;
+        });
+
+        $cited = collect($result['questions'])->whereNotNull('kasba_item_id')->count();
+
+        return response()->json([
+            'status' => true,
+            'message' => sprintf(
+                '%d question(s) written from this course\'s content%s.%s',
+                count($written),
+                $cited > 0 ? ", {$cited} of them tied to a capability" : '',
+                $result['dropped'] > 0
+                    ? sprintf(' %d unusable question(s) were discarded.', $result['dropped'])
+                    : ''
+            ),
+            'data' => [
+                'created' => count($written),
+                'dropped' => $result['dropped'],
+                'cited' => $cited,
+                'modules_used' => count($result['context']['modules']),
+                'capabilities_available' => count($result['context']['capabilities']),
+            ],
+        ], 201);
+    }
+
+    /** Write a question's options, flagging the correct ones. */
+    private function writeOptions(Request $request, int $questionId, $subInstituteId): void
+    {
+        $options = (array) $request->input('options', []);
+
+        if ($options === []) {
+            return;
+        }
+
+        $now = now();
+
+        DB::table('answer_master')->insert(array_map(fn ($option) => [
+            'question_id'      => $questionId,
+            'answer'           => $option['answer'],
+            // The ONLY place correctness is recorded, and the only thing the
+            // scorer reads. It is never sent to a learner.
+            'correct_answer'   => filter_var($option['correct'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
+            'sub_institute_id' => $subInstituteId,
+            'created_by'       => $this->contextUserId($request),
+            'created_at'       => $now,
+            'updated_at'       => $now,
+        ], $options));
     }
 }

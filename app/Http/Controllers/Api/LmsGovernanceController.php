@@ -30,6 +30,40 @@ class LmsGovernanceController extends Controller
     /** Profiles permitted to administer users, roles and permissions. */
     private const ADMIN_PROFILES = ['admin', 'hr', 'super', 'principal'];
 
+    /**
+     * The shared failure response for this controller.
+     *
+     * ── IT WAS CALLED THIRTEEN TIMES AND DEFINED NOWHERE ────────────────────
+     *
+     * Every `catch` block in this class ended in `return $this->fail($e, '...')`
+     * — KPIs, the user list, create/update/deactivate user, CSV import, roles,
+     * permissions, the audit log — and no such method existed on the class, its
+     * trait, or the base Controller.
+     *
+     * So the catch blocks did not soften a failure, they replaced it with a
+     * worse one: a caught exception became an uncaught
+     * `Error: Call to undefined method ...::fail()`, which is a PHP fatal, not
+     * a JSON response. The frontend asked for JSON and received an HTML error
+     * page, so every error path on the Governance screen failed in a way its
+     * own error handling could not read.
+     *
+     * Invisible until an error actually occurred, which is why it survived: the
+     * happy paths never touch it.
+     */
+    private function fail(\Throwable $e, string $message, int $status = 500)
+    {
+        \Illuminate\Support\Facades\Log::error('LMS governance: ' . $message, [
+            'exception' => $e->getMessage(),
+            'file' => $e->getFile() . ':' . $e->getLine(),
+        ]);
+
+        return response()->json([
+            'status' => false,
+            'message' => $message,
+            'error' => $e->getMessage(),
+        ], $status);
+    }
+
     private function guardApiToken(Request $request)
     {
         // Was: `if ($request->input('type') !== 'API') return null;` followed by
@@ -147,6 +181,19 @@ class LmsGovernanceController extends Controller
     {
         if ($tokenError = $this->guardApiToken($request)) {
             return $tokenError;
+        }
+        /*
+         * Governance is an administrative surface END TO END.
+         *
+         * `users()` and `auditLogs()` were admin-guarded; this and `roles()`
+         * were not, so any authenticated employee could read the tenant's
+         * governance KPIs and its full role list straight from the API. Low
+         * sensitivity, but there is no reason an employee should have it, and
+         * a screen whose guards differ method by method is one somebody will
+         * eventually add an unguarded method to.
+         */
+        if ($roleError = $this->guardAdmin($request)) {
+            return $roleError;
         }
 
         $subInstituteId = $this->tenantId($request);
@@ -709,6 +756,10 @@ class LmsGovernanceController extends Controller
     {
         if ($tokenError = $this->guardApiToken($request)) {
             return $tokenError;
+        }
+        // Administrative, like every other method on this controller.
+        if ($roleError = $this->guardAdmin($request)) {
+            return $roleError;
         }
 
         $subInstituteId = $this->tenantId($request);

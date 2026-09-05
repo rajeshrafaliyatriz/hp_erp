@@ -73,6 +73,21 @@ class authController extends Controller
             'user_image' => $user->image,
             'user_profile_name' => $profileDetails->name,
             'user_profile_id' => $user->user_profile_id,
+            /*
+             * F-104. The frontend had only the DISPLAY NAME to work with, so it
+             * guessed the role by substring: name.includes('admin') => admin,
+             * includes('manager') => dept-head. That promoted every Reporting
+             * Manager, collapsed Auditor, Executive and Recruiter to Employee,
+             * and turned "rename a profile to contain the word admin" into a
+             * privilege escalation.
+             *
+             * role_key (D-010) is the stable identifier the backend has
+             * authorised on since RequireProfile; sending it is what lets the
+             * frontend stop guessing. Null for the 13 legacy profiles that
+             * predate role_key - mapProfileNameToRole() still resolves those by
+             * an exact name match, never a substring.
+             */
+            'role_key' => $profileDetails->role_key ?? null,
             'sub_institute_id' => $user->sub_institute_id,
             'birthdate' => $user->birthdate,
             'employee_no' => $user->employee_no,

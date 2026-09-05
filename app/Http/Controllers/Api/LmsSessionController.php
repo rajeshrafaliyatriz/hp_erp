@@ -121,6 +121,17 @@ class LmsSessionController extends Controller
             $to = $request->input('to') ?: now()->endOfMonth()->toDateString();
 
             $query = DB::table('lms_virtual_classroom as v')
+                /*
+                 * The trainer RECORD, not just the typed name.
+                 *
+                 * `trainer_id` has a column and was never written by anything,
+                 * so Governance kept a trainer directory - rates, vendor,
+                 * specialisation, session history - that no session ever
+                 * pointed at, while every session carried a free-text name
+                 * nobody could reconcile with it. LEFT joined so sessions that
+                 * only have the typed name keep working unchanged.
+                 */
+                ->leftJoin('lms_trainers as t', 't.id', '=', 'v.trainer_id')
                 ->leftJoinSub($this->registrationCounts(), 'r', fn ($join) => $join->on('r.session_id', '=', 'v.id'))
                 ->leftJoin('lms_session_registrations as mine', function ($join) use ($userId) {
                     $join->on('mine.session_id', '=', 'v.id')
@@ -148,9 +159,14 @@ class LmsSessionController extends Controller
                 ->orderBy('v.from_time')
                 ->get([
                     'v.id', 'v.room_name', 'v.session_type', 'v.description', 'v.notes',
-                    'v.trainer_name', 'v.trainer_email', 'v.venue', 'v.seats_total',
+                    'v.trainer_email', 'v.venue', 'v.seats_total',
                     'v.event_date', 'v.from_time', 'v.to_time', 'v.url', 'v.status',
-                    'v.subject_id', 'v.standard_id',
+                    'v.subject_id', 'v.course_id', 'v.standard_id',
+                    'v.trainer_id',
+                    // The linked trainer's name wins when there is one; the
+                    // typed name remains for sessions that never had a record.
+                    DB::raw('COALESCE(t.name, v.trainer_name) as trainer_name'),
+                    't.email as trainer_record_email',
                     DB::raw('COALESCE(r.registered_count, 0) as registered_count'),
                     'mine.status as my_registration_status',
                 ])
@@ -374,6 +390,10 @@ class LmsSessionController extends Controller
             ], 422);
         }
 
+        if (!$this->courseIdIsValid($request, $subInstituteId)) {
+            return response()->json(['status' => false, 'message' => 'Course not found'], 404);
+        }
+
         try {
             $id = DB::table('lms_virtual_classroom')->insertGetId($this->payload($request) + [
                 'sub_institute_id' => $subInstituteId,
@@ -420,6 +440,10 @@ class LmsSessionController extends Controller
                 'message' => $validator->messages()->first(),
                 'errors' => $validator->errors(),
             ], 422);
+        }
+
+        if (!$this->courseIdIsValid($request, $subInstituteId)) {
+            return response()->json(['status' => false, 'message' => 'Course not found'], 404);
         }
 
         $session = DB::table('lms_virtual_classroom')
@@ -641,6 +665,121 @@ class LmsSessionController extends Controller
         ]);
     }
 
+    /**
+     * POST /api/lms/sessions/{id}/attendance
+     *
+     * Record who actually turned up (admin/HR).
+     *
+     * The registrations table has carried 'attended' and 'no-show' in its
+     * status enum since it was created, and nothing in the product could ever
+     * write either one — registration and cancellation were the only two
+     * transitions that existed. So a session could be scheduled and filled but
+     * never marked, and "attendance" was a column that was always a promise
+     * (F-73).
+     *
+     * This has to exist before a session can count toward course progress:
+     * counting an unmarkable session would put an item in the denominator that
+     * nobody could ever satisfy, and claimCertificate refuses while any item is
+     * outstanding — so every learner on a course with a session would be
+     * permanently locked out of their certificate.
+     */
+    public function markAttendance(Request $request, $id)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+        if ($roleError = $this->guardAdmin($request)) {
+            return $roleError;
+        }
+
+        $subInstituteId = $this->tenantId($request);
+
+        $validator = Validator::make($request->all(), [
+            'user_ids'   => 'required|array|min:1',
+            'user_ids.*' => 'required|integer',
+            // Spelled out rather than open, so a typo cannot invent a status
+            // the rest of the module does not understand. 'registered' is
+            // included so a mistaken mark can be undone.
+            'status'     => 'required|in:attended,no-show,registered',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => $validator->messages()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $session = DB::table('lms_virtual_classroom')
+            ->where('id', $id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->first(['id', 'course_id']);
+
+        if (!$session) {
+            return response()->json(['status' => false, 'message' => 'Session not found'], 404);
+        }
+
+        /*
+         * Only people already registered can be marked.
+         *
+         * Marking someone who never signed up would create a registration as a
+         * side effect of attendance, and the seat count — which counts
+         * 'registered' and 'attended' together — would then exceed seats_total
+         * without ever passing the capacity check.
+         *
+         * Cancelled registrations are excluded too: somebody who gave up their
+         * seat did not attend, and reviving that row would take a seat back
+         * from whoever was given it.
+         */
+        $eligible = DB::table('lms_session_registrations')
+            ->where('session_id', $id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereIn('user_id', $request->user_ids)
+            ->whereIn('status', ['registered', 'attended', 'no-show'])
+            ->whereNull('deleted_at')
+            ->pluck('user_id')
+            ->all();
+
+        if ($eligible === []) {
+            return response()->json([
+                'status' => false,
+                'message' => 'None of those learners are registered for this session.',
+            ], 422);
+        }
+
+        $updated = DB::table('lms_session_registrations')
+            ->where('session_id', $id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereIn('user_id', $eligible)
+            ->whereNull('deleted_at')
+            ->update([
+                'status' => $request->status,
+                'updated_by' => $this->contextUserId($request),
+                'updated_at' => now(),
+            ]);
+
+        $skipped = count($request->user_ids) - count($eligible);
+
+        return response()->json([
+            'status' => true,
+            // Says what happened rather than claiming everything asked for was
+            // done — a learner silently skipped is a learner whose certificate
+            // never unlocks, and the marker would have no way to know.
+            'message' => $skipped > 0
+                ? "Attendance recorded for {$updated} learner(s); {$skipped} were not registered for this session."
+                : "Attendance recorded for {$updated} learner(s).",
+            'data' => [
+                'session_id' => (int) $id,
+                'course_id' => $session->course_id ? (int) $session->course_id : null,
+                'status' => $request->status,
+                'updated' => $updated,
+                'skipped' => $skipped,
+            ],
+        ]);
+    }
+
     /** Shared validation for store/update. */
     private function rules(): array
     {
@@ -661,13 +800,35 @@ class LmsSessionController extends Controller
             'url'              => 'nullable|string|max:2000',
             'status'           => 'nullable|string|max:10',
             'subject_id'       => 'nullable|integer',
+            'course_id'        => 'nullable|integer',
+            'trainer_id'       => 'nullable|integer',
         ];
     }
 
-    /** Shared write payload for store/update. */
+    /**
+     * Shared write payload for store/update.
+     *
+     * ── course_id, NOT subject_id ───────────────────────────────────────────
+     *
+     * `subject_id` on this table looks like the course link and is not one: it
+     * carries a foreign key to `subject`, a five-row legacy master list
+     * belonging to tenant 1. Writing a course id there is refused outright with
+     * errno 1452, which is how the mistake was found. `course_id` is the real
+     * link, added by 2026_09_05_100300.
+     *
+     * `subject_id` is still written when explicitly sent, so nothing that
+     * legitimately uses the legacy column breaks — but it is no longer written
+     * unconditionally. It used to be, from `$request->subject_id`, which is
+     * null for any caller that does not send the key; the session form never
+     * sent it, so every edit of a session quietly nulled the column.
+     *
+     * `has()` is true for a key present with a null value, so an admin can
+     * still deliberately clear a link by sending `course_id: null`; only
+     * omitting the key leaves it alone.
+     */
     private function payload(Request $request): array
     {
-        return [
+        $payload = [
             'room_name' => $request->room_name,
             'session_type' => $request->input('session_type', 'virtual'),
             'description' => $request->description,
@@ -681,7 +842,47 @@ class LmsSessionController extends Controller
             'to_time' => $request->to_time,
             'url' => $request->url,
             'status' => $request->input('status', '1'),
-            'subject_id' => $request->subject_id,
         ];
+
+        if ($request->has('course_id')) {
+            $payload['course_id'] = $request->course_id ?: null;
+        }
+
+        // The legacy column. Still writable when explicitly sent, so anything
+        // that genuinely uses it keeps working; no longer written by default.
+        if ($request->has('subject_id')) {
+            $payload['subject_id'] = $request->subject_id ?: null;
+        }
+
+        // trainer_id has a column and was never written at all — the session
+        // could name a trainer in free text but never point at the user record.
+        if ($request->has('trainer_id')) {
+            $payload['trainer_id'] = $request->trainer_id ?: null;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * The course this session belongs to, if one was named — refusing anything
+     * outside the caller's organisation.
+     *
+     * A session's course_id becomes part of a learner's course progress once
+     * attendance counts, so an unscoped id here would let one tenant's session
+     * alter another tenant's completion figures.
+     *
+     * Returns false when the request named a course it may not have.
+     */
+    private function courseIdIsValid(Request $request, $subInstituteId): bool
+    {
+        if (!$request->filled('course_id')) {
+            return true;
+        }
+
+        return DB::table('sub_std_map')
+            ->where('id', $request->course_id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->exists();
     }
 }

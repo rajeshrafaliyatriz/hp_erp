@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Events\AchievementAwarder;
 use App\Services\Events\CertificateIssuer;
 use App\Services\Events\LearningAssigner;
 use App\Services\Events\OnboardingLauncher;
@@ -81,6 +82,7 @@ class ReactEvents extends Command
         NotificationDispatcher::class,
         LearningAssigner::class,
         CertificateIssuer::class,
+        AchievementAwarder::class,
         RemediationRecommender::class,
         /*
          * The consumer employee.hired never had. Until this line existed the

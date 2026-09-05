@@ -73,6 +73,18 @@ class assignmentController extends Controller
         $query = DB::table('lms_assignments as a')
             ->join('sub_std_map as c', 'a.course_id', '=', 'c.id')
             ->join('tbluser as u', 'a.user_id', '=', 'u.id')
+            /*
+             * The learner's department.
+             *
+             * LEFT joined because tbluser.department_id is nullable and an
+             * assignment for somebody with no department must still appear -
+             * an inner join here would silently drop those rows from the queue.
+             *
+             * Added because the Assignments screen has always had a Department
+             * filter and this payload has never carried a department, so the
+             * control could not have worked whatever it offered.
+             */
+            ->leftJoin('hrms_departments as d', 'd.id', '=', 'u.department_id')
             ->where('a.sub_institute_id', $subInstituteId)
             ->whereNull('a.deleted_at');
 
@@ -100,6 +112,7 @@ class assignmentController extends Controller
             DB::raw("TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) as learner_name"),
             'c.display_name as course_name',
             'c.subject_type as type',
+            'd.department',
             'a.assignment_type',
             'a.due_date',
             'a.status',
@@ -427,7 +440,25 @@ class assignmentController extends Controller
         if ($authError) return $authError;
 
         $subInstituteId = $this->tenantId($request);
-        $userId = $request->user_id ?? $request->header('user_id');
+
+        /*
+         * THE REQUESTER IS THE TOKEN'S OWNER, NEVER THE REQUEST'S CLAIM.
+         *
+         * This read `$request->user_id ?? $request->header('user_id')`, so the
+         * person a request was filed for came from the caller's own body. Any
+         * authenticated learner could have requested a course ON BEHALF OF a
+         * colleague, and the row would have recorded `requested_by` as that
+         * colleague — an approval queue entry nobody asked for, attributed to
+         * somebody who never touched it.
+         *
+         * It went unnoticed because nothing ever called this endpoint: it had
+         * no service method and no button. Wiring the client is what makes the
+         * gap reachable, so it is closed in the same change.
+         *
+         * Same rule as review()/bulkReview() below, which already take the
+         * actor from contextUserId().
+         */
+        $userId = $this->contextUserId($request);
 
         $validator = Validator::make(
             array_merge($request->all(), ['user_id' => $userId, 'sub_institute_id' => $subInstituteId]),
@@ -445,6 +476,26 @@ class assignmentController extends Controller
                 'message' => $validator->messages()->first(),
                 'errors' => $validator->errors(),
             ], 422);
+        }
+
+        /*
+         * The course has to be one of ours.
+         *
+         * Without this a learner could file a request against another
+         * organisation's course id; the row would be written into their OWN
+         * tenant (sub_institute_id comes from the token), so it would surface
+         * in their admin's queue naming a course that admin cannot see.
+         * 404, not 403 — a course in another organisation does not exist as far
+         * as this caller is concerned.
+         */
+        $courseIsOurs = DB::table('sub_std_map')
+            ->where('id', $request->course_id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (!$courseIsOurs) {
+            return response()->json(['status' => false, 'message' => 'Course not found'], 404);
         }
 
         $existing = DB::table('lms_assignments')

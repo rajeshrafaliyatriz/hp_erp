@@ -130,6 +130,17 @@ class talent_jobpostingcontroller extends Controller
           $validator = Validator::make($request->all(), [
             'title'            => 'required|string|max:255',
             'department_id'    => 'required|integer',
+            /*
+             * THE COLUMN EXISTED AND NOTHING EVER WROTE IT.
+             *
+             * `talent_job_postings.jobrole_id` was NULL on all 127 postings in
+             * the installation, because neither store() nor update() accepted
+             * it. That is not cosmetic: candidate assessment resolves its exam
+             * template through this column, so every invitation failed with
+             * "No assessment blueprint matches this role" no matter how many
+             * templates HR created. Optional, so existing callers still work.
+             */
+            'jobrole_id'       => 'nullable|integer|exists:s_jobrole,id',
             'location'         => 'required|string|max:255',
             'employment_type'  => 'required|string|max:100',
             'experience'       => 'nullable|string|max:255',
@@ -157,6 +168,9 @@ class talent_jobpostingcontroller extends Controller
             $objtalent = new talent_jobposting();
             $objtalent->title = $request->title;
             $objtalent->department_id = $request->department_id;
+            // Nullable: a posting without a role still saves, it just
+            // cannot be assessed until one is chosen.
+            $objtalent->jobrole_id = $this->resolveJobroleId($request);
             $objtalent->location = $request->location; 
             $objtalent->employment_type = $request->employment_type; 
             $objtalent->experience = $request->experience;
@@ -324,6 +338,43 @@ class talent_jobpostingcontroller extends Controller
         //
     }
 
+
+    /**
+     * The catalogue job role this posting is for.
+     *
+     * Prefers an explicit jobrole_id. Falls back to matching the TITLE against
+     * the catalogue, because the posting form is already a job-role picker - it
+     * just sends the role's NAME as the title and throws the id away.
+     *
+     * ── WHY IT CANNOT SIMPLY FORWARD THE PICKER'S ID ────────────────────────
+     *
+     * The picker reads `s_user_jobrole`, this column references `s_jobrole`, and
+     * the two are different id spaces: 269 tenant rows against 3,347 catalogue
+     * rows, with ids that collide meaninglessly. Forwarding the picker's id
+     * would point every posting at an unrelated role. The NAMES do correspond -
+     * all 269 tenant role names exist in the catalogue - so the name is the only
+     * safe bridge between them.
+     *
+     * Null when nothing matches: a posting with no role still saves, it simply
+     * cannot be assessed until one is chosen.
+     */
+    private function resolveJobroleId(Request $request): ?int
+    {
+        if ($request->filled('jobrole_id')) {
+            return (int) $request->input('jobrole_id');
+        }
+
+        $title = trim((string) $request->input('title'));
+
+        if ($title === '') {
+            return null;
+        }
+
+        $id = DB::table('s_jobrole')->where('jobrole', $title)->value('id');
+
+        return $id ? (int) $id : null;
+    }
+
     /**
      * Update the specified resource in storage.
      */
@@ -358,8 +409,31 @@ class talent_jobpostingcontroller extends Controller
          * cleared to an empty string. A field that is simply absent keeps its
          * stored value.
          */
+        /*
+         * update() validated NOTHING before this - it wrote whatever it was
+         * handed. Harmless for free text, not for jobrole_id: a bad id is
+         * accepted, stored, and then silently matches no exam template, which
+         * reads on screen as "no template for this role" for a role that does
+         * not exist. Only the referential fields are checked here; widening it
+         * to every column would reject the partial updates F-69b exists to allow.
+         */
+        $validator = Validator::make($request->all(), [
+            'jobrole_id'    => 'nullable|integer|exists:s_jobrole,id',
+            'department_id' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 0,
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
         $editable = [
             'title', 'location', 'employment_type', 'experience', 'department_id',
+            // jobrole_id joins this list for the same reason it joined store():
+            // candidate assessment resolves its exam template through it.
+            'jobrole_id',
             'education', 'priority_level', 'positions', 'min_salary', 'max_salary',
             'deadline', 'skills', 'certifications', 'benefits', 'description', 'status',
         ];
@@ -369,6 +443,18 @@ class talent_jobpostingcontroller extends Controller
         foreach ($editable as $field) {
             if ($request->has($field)) {
                 $changes[$field] = $request->input($field);
+            }
+        }
+
+        /*
+         * If the caller sent a title but no jobrole_id, resolve one from the
+         * title. Only when the title is actually changing, so a status-only PUT
+         * still writes nothing else - the whole point of the $editable list.
+         */
+        if ($request->has('title') && !$request->filled('jobrole_id')) {
+            $resolved = $this->resolveJobroleId($request);
+            if ($resolved !== null) {
+                $changes['jobrole_id'] = $resolved;
             }
         }
 

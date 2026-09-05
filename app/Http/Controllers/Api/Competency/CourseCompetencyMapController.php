@@ -62,8 +62,30 @@ class CourseCompetencyMapController extends Controller
         $sid = (int) $context['sub_institute_id'];
         $courseId = $request->integer('course_id');
 
+        /*
+         * TARGET AND ACHIEVED, SIDE BY SIDE.
+         *
+         * `m.proficiency_level` is the TARGET — what HR says this course is
+         * meant to develop somebody to. What learners actually reach is
+         * measured separately, from their quiz results, in
+         * lms_course_competency_effectiveness.
+         *
+         * The two must stay in different columns. This method's own store()
+         * syncs destructively, so a measured value written into
+         * proficiency_level would be erased by the next save of the mapping;
+         * and overwriting a declared intention with an observation destroys the
+         * comparison that makes either number worth having.
+         *
+         * LEFT joined, so a course whose quiz nobody has sat yet reads exactly
+         * as it did before — a target and no measurement.
+         */
         $rows = DB::table('course_competency_map as m')
             ->join('competency as c', 'c.id', '=', 'm.competency_id')
+            ->leftJoin('lms_course_competency_effectiveness as e', function ($join) use ($sid) {
+                $join->on('e.competency_id', '=', 'm.competency_id')
+                     ->on('e.course_id', '=', 'm.course_id')
+                     ->where('e.sub_institute_id', '=', $sid);
+            })
             ->where('m.sub_institute_id', $sid)
             ->where('m.course_id', $courseId)
             ->orderByDesc('m.is_primary')
@@ -71,6 +93,7 @@ class CourseCompetencyMapController extends Controller
             ->get([
                 'm.id', 'm.competency_id', 'm.proficiency_level', 'm.is_primary',
                 'c.name as competency_name', 'c.code as competency_code',
+                'e.derived_level', 'e.mean_percent', 'e.attempts', 'e.learners',
             ]);
 
         return response()->json([
@@ -82,6 +105,11 @@ class CourseCompetencyMapController extends Controller
                 'competency_code'   => $r->competency_code,
                 'proficiency_level' => $r->proficiency_level === null ? null : (int) $r->proficiency_level,
                 'is_primary'        => (bool) $r->is_primary,
+                // Measured, not declared. Null until somebody has sat the quiz.
+                'achieved_level'    => $r->derived_level === null ? null : (int) $r->derived_level,
+                'mean_percent'      => $r->mean_percent === null ? null : (float) $r->mean_percent,
+                'quiz_attempts'     => (int) ($r->attempts ?? 0),
+                'quiz_learners'     => (int) ($r->learners ?? 0),
             ])->values(),
             // Stated, not inferred from an empty array: nothing mapped is the
             // expected state for a course nobody has mapped, and the screen

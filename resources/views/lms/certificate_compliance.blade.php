@@ -98,11 +98,42 @@
             font-size: 7.5pt;
             color: #6b7280;
         }
+    
+        /* The issuing organisation, above the document title. */
+        .issuer { text-align: center; margin-bottom: 12px; }
+        .issuer-logo { max-height: 46px; max-width: 190px; }
+        .issuer-name {
+            margin-top: 5px;
+            font-size: 11px;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
     </style>
 </head>
 <body>
 <div class="sheet">
     <div class="rule"></div>
+    {{--
+        THE ISSUER, AT THE TOP.
+
+        A compliance record in particular has to say who issued it: it is
+        evidence shown to an auditor, and evidence with no issuer is not
+        evidence. Both fields are optional so an organisation that has set
+        neither still gets a valid certificate.
+    --}}
+    @if (!empty($organisation['logo']) || !empty($organisation['name']))
+        <div class="issuer">
+            @if (!empty($organisation['logo']))
+                {{-- A data URI: dompdf runs with enable_remote off, so a remote
+                     <img> renders as nothing at all, silently. --}}
+                <img class="issuer-logo" src="{{ $organisation['logo'] }}" alt="">
+            @endif
+            @if (!empty($organisation['name']))
+                <div class="issuer-name">{{ $organisation['name'] }}</div>
+            @endif
+        </div>
+    @endif
     <div class="org">Certificate of Compliance</div>
     <div class="doc-type">{{ $certificate->name ?? $certificate->course_title }}</div>
     <div class="doc-sub">Issued as a record of completed mandatory training.</div>

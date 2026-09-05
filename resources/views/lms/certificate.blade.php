@@ -73,6 +73,17 @@
         .meta .label { text-transform: uppercase; letter-spacing: 1px; font-size: 7.5pt; }
         .meta .value { font-weight: bold; color: #111827; font-size: 10pt; }
         .expired { color: #b91c1c; }
+    
+        /* The issuing organisation, above the certificate title. */
+        .issuer { text-align: center; margin-bottom: 14px; }
+        .issuer-logo { max-height: 54px; max-width: 220px; }
+        .issuer-name {
+            margin-top: 6px;
+            font-size: 12px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: #6b7280;
+        }
     </style>
 </head>
 <body>
@@ -81,6 +92,30 @@
     <div class="frame-inner"></div>
 
     <div class="content">
+        {{--
+            THE ISSUER, AT THE TOP.
+
+            These templates named the course, the learner and the date and never
+            said WHO awarded it. A credential that does not identify its issuer
+            cannot be checked by the person holding it or by anyone they show it
+            to, which is most of the point of having one.
+
+            Both are optional: an organisation that has set neither still gets a
+            valid certificate rather than an empty box where a logo should be.
+        --}}
+        @if (!empty($organisation['logo']) || !empty($organisation['name']))
+            <div class="issuer">
+                @if (!empty($organisation['logo']))
+                    {{-- A data URI, because dompdf runs with enable_remote off
+                         and a remote <img> renders as nothing, silently. --}}
+                    <img class="issuer-logo" src="{{ $organisation['logo'] }}" alt="">
+                @endif
+                @if (!empty($organisation['name']))
+                    <div class="issuer-name">{{ $organisation['name'] }}</div>
+                @endif
+            </div>
+        @endif
+
         <div class="eyebrow">Certificate of Completion</div>
         <h1 class="title">{{ $certificate->name ?? $certificate->course_title }}</h1>
 

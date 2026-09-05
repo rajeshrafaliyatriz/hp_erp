@@ -4,8 +4,8 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\RoleKey;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -34,11 +34,14 @@ use Symfony\Component\HttpFoundation\Response;
  * tenant can edit.
  *
  * The route's arguments stay in the old vocabulary ('admin', 'hr', 'manager') so
- * no route file changes; ALIASES maps each to the role_keys it means.
+ * no route file changes; App\Support\RoleKey::ALIASES maps each to the role_keys
+ * it means, and RoleKey::LEGACY_NAMES resolves the 13 profiles that predate
+ * role_key by an EXACT name match.
  *
- * LEGACY: 13 profiles predate role_key and 4 of them have users. They are
- * resolved by an EXACT name match in LEGACY_NAMES, not by substring, so those
- * accounts keep working without reopening the hole.
+ * Both tables, and the resolution itself, moved to RoleKey in Sprint 1 of the
+ * HRIT remediation: the Leave API and the payroll routes needed the same answer,
+ * and a second copy of an authorization table is how the two drift apart. This
+ * class keeps the HTTP behaviour and delegates the question.
  *
  * A caller whose profile cannot be resolved is refused: this middleware guards
  * writes, and an unknown role is not a licence to perform one.
@@ -46,6 +49,40 @@ use Symfony\Component\HttpFoundation\Response;
 class RequireProfile
 {
     public function handle(Request $request, Closure $next, string ...$allowed): Response
+    {
+        $roleKey = $this->resolveRoleKey($request);
+
+        // A JsonResponse here is an authentication failure, returned as-is.
+        if ($roleKey instanceof Response) {
+            return $roleKey;
+        }
+
+        if (RoleKey::satisfies($roleKey, $allowed)) {
+            return $next($request);
+        }
+
+        return $this->deny($request);
+    }
+
+    /** The refusal. Overridden by RequireHritRole, which also serves browsers. */
+    protected function deny(Request $request): Response
+    {
+        return response()->json([
+            'status'  => 0,
+            'message' => 'You do not have permission to perform this action.',
+        ], 403);
+    }
+
+    /**
+     * Who is calling, as a role_key.
+     *
+     * Token only. RequireHritRole overrides this to add a session fallback for
+     * the payroll routes, which serve the token-authenticated Next.js frontend
+     * AND the session-authenticated Blade screens from the same URLs.
+     *
+     * @return string|null|Response  role_key, null if unresolvable, or a 401.
+     */
+    protected function resolveRoleKey(Request $request)
     {
         $token = trim((string) ($request->bearerToken() ?: $request->input('token')));
 
@@ -73,91 +110,7 @@ class RequireProfile
             ], 401);
         }
 
-        if ($this->profileMatches($user, $allowed)) {
-            return $next($request);
-        }
-
-        return response()->json([
-            'status'  => 0,
-            'message' => 'You do not have permission to perform this action.',
-        ], 403);
+        return RoleKey::forUser($user);
     }
 
-    /**
-     * Route-argument vocabulary -> the role_keys it authorises.
-     *
-     * Deliberately reproduces what the substring matcher granted, so this change
-     * fixes the CLASS without silently re-drawing anyone's access:
-     * 'manager' matched both "HR Manager" and "Reporting Manager", and still does.
-     */
-    private const ALIASES = [
-        'admin'      => ['administrator'],
-        'hr'         => ['hr_manager', 'hr_executive'],
-        'manager'    => ['hr_manager', 'reporting_manager'],
-        'employee'   => ['employee'],
-        'executive'  => ['executive'],
-        'auditor'    => ['auditor'],
-        'recruiter'  => ['recruiter'],
-    ];
-
-    /**
-     * Profiles that predate role_key, matched EXACTLY on lowercased name.
-     *
-     * Checked against the substring matcher across both arg-sets in routes/
-     * ('admin,hr' and 'admin,hr,manager'): only four profiles decide differently,
-     * and all four have ZERO users.
-     *
-     * Three are named exactly "HR" and are restored here.
-     *
-     * The fourth, id 38 "Deparment Administrator", is DELIBERATELY NOT restored.
-     * It passed only because "deparment administrator" contains "admin" - which
-     * is the collision this change exists to remove, and a department
-     * administrator is not an institute administrator. Zero users, so nothing
-     * breaks; recorded so the denial is a decision rather than an oversight.
-     */
-    private const LEGACY_NAMES = [
-        'admin'                      => 'administrator',
-        'organization administrator' => 'administrator',
-        'hr'                         => 'hr_manager',
-    ];
-
-    /** @param array<int, string> $allowed */
-    private function profileMatches(object $user, array $allowed): bool
-    {
-        $profileId = (int) ($user->user_profile_id ?? 0);
-
-        if ($profileId <= 0 || $allowed === []) {
-            return false;
-        }
-
-        $profile = DB::table('tbluserprofilemaster')->where('id', $profileId)
-            ->first(['role_key', 'name']);
-
-        if (!$profile) {
-            return false;
-        }
-
-        $roleKey = trim((string) ($profile->role_key ?? ''));
-
-        if ($roleKey === '') {
-            $name    = strtolower(trim((string) $profile->name));
-            $roleKey = self::LEGACY_NAMES[$name] ?? '';
-        }
-
-        if ($roleKey === '') {
-            return false;
-        }
-
-        foreach ($allowed as $permitted) {
-            $permitted = strtolower(trim($permitted));
-
-            // An alias the map does not know grants nothing, rather than
-            // falling through to a looser comparison.
-            if (in_array($roleKey, self::ALIASES[$permitted] ?? [], true)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

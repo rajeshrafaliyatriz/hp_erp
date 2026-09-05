@@ -35,3 +35,7 @@ docs/phase3/_changes/*backup*.sql
 .env.*.bak
 .env.local
 .env.*.local
+
+# Audit evidence may contain live tokens - never commit it.
+Docs/hrit-audit/_evidence/tokens.tsv
+Docs/hrit-audit/_evidence/unicode-payload.json
