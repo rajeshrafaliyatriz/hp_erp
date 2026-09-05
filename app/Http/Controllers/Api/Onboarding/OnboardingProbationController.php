@@ -24,6 +24,11 @@ class OnboardingProbationController extends Controller
 {
     use ResolvesOnboardingContext;
 
+    public function __construct(
+        private \App\Services\Talent\OffboardingCaseFactory $offboardingCases,
+    ) {
+    }
+
     private const SORTABLE = ['probation_end', 'joining_date', 'confirmation_status', 'created_at'];
 
     /**
@@ -259,14 +264,57 @@ class OnboardingProbationController extends Controller
             $journey->status = 'cancelled';
         }
 
+
         $journey->updated_by = $context['user_id'];
-        $journey->save();
 
-        if ($decision === 'confirmed') {
-            $this->closeStages($journey, $context['user_id']);
-        }
+        /*
+         * A termination has to become an exit, in the same transaction.
+         *
+         * Before this, terminating a probation set confirmation_status, cancelled
+         * the journey, and stopped. No exit case was created, so the clearance
+         * checklist, the exit interview and the final settlement never began and
+         * nobody was told. The person stayed on the books until somebody noticed.
+         *
+         * Targets the v2 offboarding shape via OffboardingCaseFactory - the v1
+         * controller writes five columns that do not exist and cannot run.
+         */
+        $exit = ['ok' => true, 'case_id' => null, 'created' => false, 'message' => ''];
 
-        $this->mirrorToEmployee($tenant, $journey);
+        DB::transaction(function () use ($journey, $decision, $context, $tenant, &$exit) {
+            $journey->save();
+
+            if ($decision === 'confirmed') {
+                $this->closeStages($journey, $context['user_id']);
+            }
+
+            $this->mirrorToEmployee($tenant, $journey);
+
+            if ($decision === 'terminated' && $journey->employee_id) {
+                $lastWorkingDay = $journey->confirmed_on ?: now()->toDateString();
+
+                $exit = $this->offboardingCases->open(
+                    (int) $tenant,
+                    (int) $journey->employee_id,
+                    $context['user_id'],
+                    [
+                        'exit_type'        => 'involuntary',
+                        // Matches the value the Offboarding filters already offer,
+                        // so the new case is findable by the existing filter.
+                        'exit_reason'      => 'Involuntary/Termination',
+                        'notice_date'      => $lastWorkingDay,
+                        'last_working_day' => $lastWorkingDay,
+                    ],
+                    'Opened automatically when probation was terminated for '
+                        . ($journey->candidate_name ?: $journey->journey_code) . '.'
+                );
+
+                if (!$exit['ok']) {
+                    // The termination and the exit belong together. Rolling back
+                    // is better than a terminated employee with no exit process.
+                    throw new \RuntimeException($exit['message']);
+                }
+            }
+        });
 
         $this->logOnboardingActivity(
             $tenant,
@@ -285,11 +333,19 @@ class OnboardingProbationController extends Controller
         ]);
 
         return $this->onboardingResponse(
-            $this->presentProbation($journey, $directory),
+            $this->presentProbation($journey, $directory) + [
+                // Tells the screen an exit case now exists, so a terminated hire
+                // is visibly handed on rather than silently dropped.
+                'offboarding_case_id' => $exit['case_id'],
+            ],
             match ($decision) {
                 'confirmed'  => 'Employee confirmed',
                 'extended'   => 'Probation extended',
-                'terminated' => 'Probation terminated',
+                'terminated' => $exit['case_id']
+                    ? ($exit['created']
+                        ? 'Probation terminated. An exit case has been opened in Offboarding.'
+                        : 'Probation terminated. ' . $exit['message'])
+                    : 'Probation terminated.',
             }
         );
     }

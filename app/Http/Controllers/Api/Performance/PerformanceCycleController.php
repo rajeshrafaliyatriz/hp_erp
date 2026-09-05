@@ -304,29 +304,40 @@ class PerformanceCycleController extends Controller
             ];
         }
 
-        if (!empty($rows)) {
+        /*
+         * One transaction for the whole launch.
+         *
+         * This is the write in the module that most needed one. It inserts a
+         * review per participant in chunks and then marks the cycle launched, so
+         * a failure part way through left a cycle that says "active" with only
+         * some of its people in it - and because the loop above skips anybody
+         * who already has a review, a re-run would top up the missing ones and
+         * hide the fact it had ever half-failed. Either everybody gets a review
+         * or nobody does.
+         */
+        DB::transaction(function () use ($rows, $cycle, $now, $context, $tenant) {
             foreach (array_chunk($rows, 500) as $chunk) {
                 DB::table('s_performance_reviews')->insert($chunk);
             }
-        }
 
-        $cycle->status = $cycle->status === 'draft' ? 'active' : $cycle->status;
-        $cycle->launched_at = $cycle->launched_at ?? $now;
-        $cycle->updated_by = $context['user_id'];
-        $cycle->save();
+            $cycle->status = $cycle->status === 'draft' ? 'active' : $cycle->status;
+            $cycle->launched_at = $cycle->launched_at ?? $now;
+            $cycle->updated_by = $context['user_id'];
+            $cycle->save();
 
-        $this->logPerformanceActivity(
-            $tenant,
-            $context['user_id'],
-            'launched_cycle',
-            'launched review cycle ' . $cycle->name . ' for ' . count($rows) . ' employee(s)',
-            'cycle',
-            $cycle->id,
-            $cycle->name,
-            null,
-            null,
-            $cycle->id
-        );
+            $this->logPerformanceActivity(
+                $tenant,
+                $context['user_id'],
+                'launched_cycle',
+                'launched review cycle ' . $cycle->name . ' for ' . count($rows) . ' employee(s)',
+                'cycle',
+                $cycle->id,
+                $cycle->name,
+                null,
+                null,
+                $cycle->id
+            );
+        });
 
         $total = DB::table('s_performance_reviews')->where('cycle_id', $cycle->id)->whereNull('deleted_at')->count();
 

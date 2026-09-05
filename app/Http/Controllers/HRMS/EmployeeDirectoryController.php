@@ -6,11 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Services\Events\EventRecorder;
+use App\Services\HRMS\EmployeeFactory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 
 /**
  * The Employee Directory's own API.
@@ -36,8 +35,10 @@ class EmployeeDirectoryController extends Controller
     use ResolvesApiIdentity;
     use ResolvesEmployeeJobRole;
 
-    public function __construct(private EventRecorder $events)
-    {
+    public function __construct(
+        private EventRecorder $events,
+        private EmployeeFactory $employees,
+    ) {
     }
 
     /**
@@ -268,73 +269,20 @@ class EmployeeDirectoryController extends Controller
             return $error;
         }
 
-        /*
-         * The password is generated, never supplied and never echoed.
-         *
-         * tbluser.password is NOT NULL, so creating an employee means creating
-         * a credential whether or not anyone intends to use it today. The
-         * employee sets their own through the existing password-reset flow;
-         * plain_password stays empty, unlike the 296 live rows that carry one
-         * in cleartext.
-         */
-        $temporaryPassword = bin2hex(random_bytes(12));
-
-        $payload = $this->writableFrom($request);
-        $payload['sub_institute_id'] = $tenantId;
-        $payload['password']         = Hash::make($temporaryPassword);
-        $payload['user_name']        = $this->uniqueUserName($request->input('email'));
-        $payload['status']           = 1;
-        $payload['created_by']       = $actorId;
-        $payload['created_at']       = now();
-        $payload['updated_at']       = now();
-
-        // Both columns, from the same role id, because the two halves of the
-        // codebase read different ones - see ROLE_ID_SQL. This is the rule
-        // DepartmentManagementController::applyEmployeeAssignment applies too;
-        // the two writers must not disagree.
-        if ($roleId = $request->input('allocated_standards')) {
-            $payload['allocated_standards'] = (string) $roleId;
-            $payload['jobtitle_id']         = (int) $roleId;
-        }
-
-        $payload = array_merge($payload, $this->scheduleColumns($request->input('schedule')));
+        // The credential, user_name, tenancy, dual role write, department arrival
+        // row and employee.hired event all live in EmployeeFactory, so that this
+        // form and TalentOfferController::accept() create an employee the same way.
+        $payload = array_merge(
+            $this->writableFrom($request),
+            $this->scheduleColumns($request->input('schedule'))
+        );
 
         try {
-            $newId = DB::transaction(function () use ($payload, $tenantId, $actorId, $request) {
-                $newId = (int) DB::table('tbluser')->insertGetId($payload);
-
-                // A new hire joining a department is an arrival like any other,
-                // and department history is read from this table.
-                if ($departmentId = $request->input('department_id')) {
-                    DB::table('s_mobility_transfers')->insert([
-                        'sub_institute_id'   => $tenantId,
-                        'user_id'            => $newId,
-                        'from_department_id' => null,
-                        'to_department_id'   => (int) $departmentId,
-                        'effective_date'     => $request->input('joined_date') ?: now()->toDateString(),
-                        'status'             => 'Completed',
-                        'remarks'            => 'Employee created in Employee Directory',
-                        'created_by'         => $actorId,
-                        'created_at'         => now(),
-                        'updated_at'         => now(),
-                    ]);
-                }
-
-                $this->events->record(
-                    'employee.hired',
-                    $tenantId,
-                    'employee',
-                    $newId,
-                    $actorId,
-                    [
-                        'email'         => $request->input('email'),
-                        'department_id' => $request->input('department_id'),
-                        'jobrole_id'    => $request->input('allocated_standards'),
-                    ]
-                );
-
-                return $newId;
-            });
+            $newId = $this->employees->create($tenantId, $actorId, $payload, [
+                'department_id'  => $request->input('department_id'),
+                'effective_date' => $request->input('joined_date'),
+                'remarks'        => 'Employee created in Employee Directory',
+            ]);
         } catch (\Illuminate\Database\QueryException $e) {
             // tbluser_email_unique is global, not per tenant. The validator
             // already checks it, but a concurrent create can still collide.
@@ -347,7 +295,7 @@ class EmployeeDirectoryController extends Controller
             throw $e;
         }
 
-        $invite = $this->issueInvite($request->input('email'));
+        $invite = $this->employees->issueInvite($request->input('email'));
 
         return response()->json([
             'status'  => 1,
@@ -524,7 +472,7 @@ class EmployeeDirectoryController extends Controller
             return response()->json(['status' => 0, 'message' => 'Employee not found'], 404);
         }
 
-        $invite = $this->issueInvite($employee->email);
+        $invite = $this->employees->issueInvite($employee->email);
 
         return response()->json([
             'status'  => $invite['sent'] ? 1 : 0,
@@ -769,52 +717,5 @@ class EmployeeDirectoryController extends Controller
         return (string) (((int) $highest) + 1);
     }
 
-    /**
-     * user_name is indexed but not unique, and login resolves on it, so a
-     * collision would be ambiguous rather than rejected. Suffix until free.
-     */
-    private function uniqueUserName(string $email): string
-    {
-        $base = Str::slug(Str::before($email, '@'), '.') ?: 'user';
-        $candidate = $base;
-        $suffix = 1;
 
-        while (DB::table('tbluser')->where('user_name', $candidate)->exists()) {
-            $candidate = $base . (++$suffix);
-        }
-
-        return $candidate;
-    }
-
-    /**
-     * Issue a password-reset token so the employee sets their own password.
-     *
-     * Reuses the flow auth/ForgotPasswordController already runs on - the same
-     * password_reset_tokens table and the same mail path - rather than
-     * inventing a second credential channel. A mail failure must not undo the
-     * employee: it is reported and recoverable through the invite endpoint.
-     *
-     * @return array{sent:bool, error:?string}
-     */
-    private function issueInvite(?string $email): array
-    {
-        if (!$email) {
-            return ['sent' => false, 'error' => 'No email address'];
-        }
-
-        try {
-            $token = Str::random(64);
-
-            DB::table('password_reset_tokens')->where('email', $email)->delete();
-            DB::table('password_reset_tokens')->insert([
-                'email'      => $email,
-                'token'      => $token,
-                'created_at' => now(),
-            ]);
-
-            return ['sent' => true, 'error' => null];
-        } catch (\Throwable $e) {
-            return ['sent' => false, 'error' => $e->getMessage()];
-        }
-    }
 }

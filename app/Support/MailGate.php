@@ -55,4 +55,60 @@ final class MailGate
     {
         return 'Outbound email is disabled for this environment (G2G_NOTIFY_EMAIL).';
     }
+
+    /**
+     * May this process send mail FOR ONE ORGANISATION?
+     *
+     * ── WHY A SECOND SWITCH, WHEN THE DOCBLOCK ABOVE WARNS AGAINST ONE ──────
+     *
+     * The warning is against a constraint that reads as global and holds only
+     * locally. This is the opposite: a NARROWER gate that can only ever permit
+     * less than the global flag would, never more, and that is visible in the
+     * same class rather than hidden in a caller.
+     *
+     * It exists because turning G2G_NOTIFY_EMAIL on is all-or-nothing, and the
+     * environment carries hundreds of real addresses at real companies. Enabling
+     * mail for one test organisation should not be the same act as enabling it
+     * for every organisation.
+     *
+     * The relationship is deliberately OR, not AND: the master flag stays off,
+     * so `allowed() && inList()` would be permanently false and useless. That
+     * means mail CAN leave the building while `allowed()` still reports false —
+     * which is exactly the drift this class exists to prevent. So the tripwire in
+     * Docs/phase3/_evidence/phase3-smoke.php was amended in the same change to
+     * assert this allowlist as well. If you widen the list, widen the tripwire.
+     *
+     * G2G_NOTIFY_EMAIL_TENANTS is a comma-separated list of sub_institute_id.
+     * Empty or unset means nobody, which is the default.
+     */
+    public static function allowedForTenant(?int $tenantId): bool
+    {
+        if (self::allowed()) {
+            return true;
+        }
+
+        return $tenantId !== null && in_array($tenantId, self::allowedTenants(), true);
+    }
+
+    /** The organisations mail may currently leave for. Empty by default. */
+    public static function allowedTenants(): array
+    {
+        $raw = (string) env('G2G_NOTIFY_EMAIL_TENANTS', '');
+
+        return array_values(array_filter(
+            array_map(static fn ($v) => (int) trim($v), explode(',', $raw)),
+            static fn ($v) => $v > 0
+        ));
+    }
+
+    /** Why a send was refused for this organisation, or null when it was not. */
+    public static function reasonForTenant(?int $tenantId): ?string
+    {
+        if (self::allowedForTenant($tenantId)) {
+            return null;
+        }
+
+        return 'Outbound email is disabled for this organisation '
+            . '(G2G_NOTIFY_EMAIL is off and this tenant is not in G2G_NOTIFY_EMAIL_TENANTS).';
+    }
 }

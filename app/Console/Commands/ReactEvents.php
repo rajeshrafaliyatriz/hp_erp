@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use App\Services\Events\CertificateIssuer;
 use App\Services\Events\LearningAssigner;
+use App\Services\Events\OnboardingLauncher;
+use App\Services\Events\OfferLetterFiler;
 use App\Services\Events\NotificationDispatcher;
 use App\Services\Events\RemediationRecommender;
 use App\Services\Events\ReplayMode;
@@ -80,6 +82,18 @@ class ReactEvents extends Command
         LearningAssigner::class,
         CertificateIssuer::class,
         RemediationRecommender::class,
+        /*
+         * The consumer employee.hired never had. Until this line existed the
+         * event was written on every hire and read by nobody, so the
+         * recruitment-to-onboarding chain stopped at the hire and a human had to
+         * restart it by hand on another screen.
+         */
+        OnboardingLauncher::class,
+        /*
+         * Files the offer letter into the new employee's own documents, so they
+         * can download it from their profile without HR attaching it by hand.
+         */
+        OfferLetterFiler::class,
     ];
 
     public function handle(): int

@@ -130,43 +130,54 @@ class PerformanceCalibrationController extends Controller
         $attach = (bool) ($validated['attach_reviews'] ?? true);
         unset($validated['attach_reviews']);
 
-        $session = PerformanceCalibrationSession::create(array_merge($validated, [
-            'sub_institute_id' => $tenant,
-            'status'           => $validated['status'] ?? 'scheduled',
-            'created_by'       => $context['user_id'],
-            'updated_by'       => $context['user_id'],
-        ]));
+        /*
+         * Creating the session and claiming its reviews is one act. Half of it
+         * is a session whose participant_count disagrees with the number of
+         * reviews actually pointing at it - and the grid reads the reviews while
+         * the list reads the count, so the two screens would contradict each
+         * other with nothing to say which was right.
+         */
+        $session = DB::transaction(function () use ($validated, $tenant, $context, $attach) {
+            $session = PerformanceCalibrationSession::create(array_merge($validated, [
+                'sub_institute_id' => $tenant,
+                'status'           => $validated['status'] ?? 'scheduled',
+                'created_by'       => $context['user_id'],
+                'updated_by'       => $context['user_id'],
+            ]));
 
-        $attached = 0;
+            $attached = 0;
 
-        if ($attach) {
-            $attached = DB::table('s_performance_reviews')
-                ->where('sub_institute_id', $tenant)
-                ->whereNull('deleted_at')
-                ->where('cycle_id', $session->cycle_id)
-                ->when($session->department_id, fn ($q) => $q->where('department_id', $session->department_id))
-                ->whereNull('calibration_session_id')
-                ->update([
-                    'calibration_session_id' => $session->id,
-                    'updated_at'             => now(),
-                ]);
-        }
+            if ($attach) {
+                $attached = DB::table('s_performance_reviews')
+                    ->where('sub_institute_id', $tenant)
+                    ->whereNull('deleted_at')
+                    ->where('cycle_id', $session->cycle_id)
+                    ->when($session->department_id, fn ($q) => $q->where('department_id', $session->department_id))
+                    ->whereNull('calibration_session_id')
+                    ->update([
+                        'calibration_session_id' => $session->id,
+                        'updated_at'             => now(),
+                    ]);
+            }
 
-        $session->participant_count = $attached;
-        $session->save();
+            $session->participant_count = $attached;
+            $session->save();
 
-        $this->logPerformanceActivity(
-            $tenant,
-            $context['user_id'],
-            'created_calibration_session',
-            'created calibration session ' . $session->name . ' with ' . $attached . ' participant(s)',
-            'calibration',
-            $session->id,
-            $session->name,
-            null,
-            null,
-            (int) $session->cycle_id
-        );
+            $this->logPerformanceActivity(
+                $tenant,
+                $context['user_id'],
+                'created_calibration_session',
+                'created calibration session ' . $session->name . ' with ' . $attached . ' participant(s)',
+                'calibration',
+                $session->id,
+                $session->name,
+                null,
+                null,
+                (int) $session->cycle_id
+            );
+
+            return $session;
+        });
 
         return $this->performanceResponse($this->presentModel($session), 'Calibration session created', 201);
     }
@@ -386,64 +397,84 @@ class PerformanceCalibrationController extends Controller
             ->get()
             ->keyBy('id');
 
-        $updated = 0;
         $skipped = [];
         $now = now();
 
-        foreach ($pairs as $pair) {
-            $review = $reviews[(int) $pair['review_id']] ?? null;
+        /*
+         * A calibration meeting submits the whole grid at once, so all of the
+         * ratings land or none of them do. Partway through leaves some people
+         * carrying a calibrated rating and the rest their pre-meeting one, with
+         * the session still marked `scheduled` - and since the calibrated value
+         * overwrites overall_rating, there is then no way to tell from the row
+         * which of the two it is.
+         *
+         * Rows the caller named that are not in this session stay in `skipped`
+         * and are reported back rather than aborting: that is a bad request for
+         * those ids, not a failure of the ones that are valid.
+         */
+        $updated = DB::transaction(function () use ($pairs, $reviews, &$skipped, $now, $context, $tenant, $session) {
+            $updated = 0;
 
-            if (!$review) {
-                $skipped[] = (int) $pair['review_id'];
-                continue;
+            foreach ($pairs as $pair) {
+                $review = $reviews[(int) $pair['review_id']] ?? null;
+
+                if (!$review) {
+                    $skipped[] = (int) $pair['review_id'];
+                    continue;
+                }
+
+                $rating = (float) $pair['rating'];
+                $previous = $review->calibrated_rating;
+
+                $review->calibrated_rating = $rating;
+                $review->calibrated_by = $context['user_id'];
+                $review->calibrated_at = $now;
+
+                // The calibrated value becomes the rating the whole screen displays.
+                $review->overall_rating = $rating;
+                $review->overall_rating_label = $this->ratingLabel($rating);
+
+                if (isset($pair['potential_rating']) && $pair['potential_rating'] !== null) {
+                    $review->potential_rating = (float) $pair['potential_rating'];
+                    $review->potential_rating_label = $this->ratingLabel((float) $pair['potential_rating']);
+                }
+
+                $review->updated_by = $context['user_id'];
+                $review->save();
+                $updated++;
+
+                $employeeName = $this->resolveActorName((int) $review->user_id) ?? 'an employee';
+
+                $this->logPerformanceActivity(
+                    $tenant,
+                    $context['user_id'],
+                    'calibrated_rating',
+                    'calibrated the rating for ' . $employeeName . ' in ' . $session->name,
+                    'calibration',
+                    $session->id,
+                    $employeeName,
+                    [[
+                        'field' => 'calibrated_rating',
+                        'label' => 'Calibrated Rating',
+                        'old'   => $previous,
+                        'new'   => $rating,
+                    ]],
+                    (int) $review->id,
+                    (int) $review->cycle_id
+                );
             }
 
-            $rating = (float) $pair['rating'];
-            $previous = $review->calibrated_rating;
-
-            $review->calibrated_rating = $rating;
-            $review->calibrated_by = $context['user_id'];
-            $review->calibrated_at = $now;
-
-            // The calibrated value becomes the rating the whole screen displays.
-            $review->overall_rating = $rating;
-            $review->overall_rating_label = $this->ratingLabel($rating);
-
-            if (isset($pair['potential_rating']) && $pair['potential_rating'] !== null) {
-                $review->potential_rating = (float) $pair['potential_rating'];
-                $review->potential_rating_label = $this->ratingLabel((float) $pair['potential_rating']);
+            // Same transaction: a session still reading `scheduled` after its
+            // ratings landed is how the Calibration screen loses track of which
+            // meetings have actually happened.
+            if ($session->status === 'scheduled' && $updated > 0) {
+                $session->status = 'in_progress';
+                $session->updated_by = $context['user_id'];
+                $session->save();
             }
 
-            $review->updated_by = $context['user_id'];
-            $review->save();
-            $updated++;
-
-            $employeeName = $this->resolveActorName((int) $review->user_id) ?? 'an employee';
-
-            $this->logPerformanceActivity(
-                $tenant,
-                $context['user_id'],
-                'calibrated_rating',
-                'calibrated the rating for ' . $employeeName . ' in ' . $session->name,
-                'calibration',
-                $session->id,
-                $employeeName,
-                [[
-                    'field' => 'calibrated_rating',
-                    'label' => 'Calibrated Rating',
-                    'old'   => $previous,
-                    'new'   => $rating,
-                ]],
-                (int) $review->id,
-                (int) $review->cycle_id
-            );
-        }
-
-        if ($session->status === 'scheduled' && $updated > 0) {
-            $session->status = 'in_progress';
-            $session->updated_by = $context['user_id'];
-            $session->save();
-        }
+            return $updated;
+        });
 
         return $this->performanceResponse([
             'updated' => $updated,
@@ -490,41 +521,55 @@ class PerformanceCalibrationController extends Controller
             );
         }
 
-        $advanced = 0;
+        $advance = $request->boolean('advance', true);
 
-        if ($request->boolean('advance', true)) {
-            $advanced = DB::table('s_performance_reviews')
-                ->where('sub_institute_id', $tenant)
-                ->whereNull('deleted_at')
-                ->where('calibration_session_id', $session->id)
-                ->whereNotNull('calibrated_rating')
-                ->where('stage', 'calibration')
-                ->update([
-                    'stage'      => 'final_review',
-                    'status'     => 'in_progress',
-                    'updated_by' => $context['user_id'],
-                    'updated_at' => now(),
-                ]);
-        }
+        /*
+         * Locking is a one-way door, so it must be all or nothing. If the
+         * reviews advanced to Final Review but the session did not lock, the
+         * next lock attempt finds nothing left in the `calibration` stage and
+         * reports advancing 0 - the work looks undone when it is already done.
+         * The reverse leaves a locked session whose reviews never moved on, and
+         * a locked session cannot be edited to fix it.
+         */
+        $advanced = DB::transaction(function () use ($advance, $tenant, $context, $session) {
+            $advanced = 0;
 
-        $session->status = 'locked';
-        $session->locked_at = now();
-        $session->updated_by = $context['user_id'];
-        $session->save();
+            if ($advance) {
+                $advanced = DB::table('s_performance_reviews')
+                    ->where('sub_institute_id', $tenant)
+                    ->whereNull('deleted_at')
+                    ->where('calibration_session_id', $session->id)
+                    ->whereNotNull('calibrated_rating')
+                    ->where('stage', 'calibration')
+                    ->update([
+                        'stage'      => 'final_review',
+                        'status'     => 'in_progress',
+                        'updated_by' => $context['user_id'],
+                        'updated_at' => now(),
+                    ]);
+            }
 
-        $this->logPerformanceActivity(
-            $tenant,
-            $context['user_id'],
-            'locked_calibration_session',
-            'locked calibration session ' . $session->name
-                . ($advanced ? ' and advanced ' . $advanced . ' review(s) to Final Review' : ''),
-            'calibration',
-            $session->id,
-            $session->name,
-            [['field' => 'status', 'label' => 'Status', 'old' => 'in_progress', 'new' => 'locked']],
-            null,
-            (int) $session->cycle_id
-        );
+            $session->status = 'locked';
+            $session->locked_at = now();
+            $session->updated_by = $context['user_id'];
+            $session->save();
+
+            $this->logPerformanceActivity(
+                $tenant,
+                $context['user_id'],
+                'locked_calibration_session',
+                'locked calibration session ' . $session->name
+                    . ($advanced ? ' and advanced ' . $advanced . ' review(s) to Final Review' : ''),
+                'calibration',
+                $session->id,
+                $session->name,
+                [['field' => 'status', 'label' => 'Status', 'old' => 'in_progress', 'new' => 'locked']],
+                null,
+                (int) $session->cycle_id
+            );
+
+            return $advanced;
+        });
 
         return $this->performanceResponse([
             'session'           => $this->presentModel($session),
@@ -551,32 +596,42 @@ class PerformanceCalibrationController extends Controller
             return $this->performanceError('A locked session cannot be deleted', 422);
         }
 
-        // Detach participants, otherwise their reviews keep pointing at a session
-        // that no longer exists and the grid count silently drifts.
-        DB::table('s_performance_reviews')
-            ->where('sub_institute_id', $tenant)
-            ->where('calibration_session_id', $session->id)
-            ->update(['calibration_session_id' => null, 'updated_at' => now()]);
-
         $name = $session->name;
         $cycleId = $session->cycle_id;
 
-        $session->deleted_by = $context['user_id'];
-        $session->save();
-        $session->delete();
+        /*
+         * Detach then delete, in one transaction.
+         *
+         * The detach existed already, for the reason in its own comment. What it
+         * lacked was atomicity, and the two halves fail in opposite directions:
+         * detach-without-delete strips every participant off a session that is
+         * still listed, and delete-without-detach leaves reviews pointing at a
+         * session that is gone, which the grid cannot show and no screen can
+         * clear. The second is unrecoverable through the UI.
+         */
+        DB::transaction(function () use ($tenant, $context, $session, $name, $cycleId, $id) {
+            DB::table('s_performance_reviews')
+                ->where('sub_institute_id', $tenant)
+                ->where('calibration_session_id', $session->id)
+                ->update(['calibration_session_id' => null, 'updated_at' => now()]);
 
-        $this->logPerformanceActivity(
-            $tenant,
-            $context['user_id'],
-            'deleted_calibration_session',
-            'deleted calibration session ' . $name,
-            'calibration',
-            (int) $id,
-            $name,
-            null,
-            null,
-            $cycleId ? (int) $cycleId : null
-        );
+            $session->deleted_by = $context['user_id'];
+            $session->save();
+            $session->delete();
+
+            $this->logPerformanceActivity(
+                $tenant,
+                $context['user_id'],
+                'deleted_calibration_session',
+                'deleted calibration session ' . $name,
+                'calibration',
+                (int) $id,
+                $name,
+                null,
+                null,
+                $cycleId ? (int) $cycleId : null
+            );
+        });
 
         return $this->performanceResponse(['id' => (int) $id], 'Calibration session deleted');
     }

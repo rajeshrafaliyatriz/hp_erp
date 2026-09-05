@@ -37,6 +37,14 @@ use RuntimeException;
 class DeepSeekService
 {
     /**
+     * Extra sends allowed when the answer comes back blank. Deliberately small:
+     * a blank still bills prompt tokens, and the one blank fully diagnosed here
+     * was a prompt fault that no number of retries would have cleared. See
+     * perturb() before raising this.
+     */
+    public const BLANK_RETRIES = 2;
+
+    /**
      * Token counts from the most recent call on THIS instance.
      *
      * @var array{prompt_tokens:int, completion_tokens:int, total_tokens:int,
@@ -147,6 +155,112 @@ class DeepSeekService
 
         $this->guardBalance($options);
 
+        $attempts = 1 + max(0, (int) ($options['blank_retries'] ?? self::BLANK_RETRIES));
+        $billed = ['prompt_tokens' => 0, 'completion_tokens' => 0, 'total_tokens' => 0];
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            $try = $attempt === 1 ? $options : $options + ['skip_balance_check' => true];
+
+            /*
+             * THE LAST ATTEMPT DROPS JSON MODE. This is the fallback that works.
+             *
+             * Measured: the blank only ever appears with
+             * response_format=json_object. Resending the SAME bytes with it
+             * removed returned usable content on every attempt. So rather than
+             * spend the last try on a mode that is the thing failing, it is
+             * spent on plain text - and chatJson() digs the object back out of
+             * whatever prose comes with it.
+             */
+            if ($attempt === $attempts && !empty($options['json'])) {
+                $try['json'] = false;
+            }
+
+            // The balance was checked once above. Re-probing per retry would add a
+            // round trip to fix a problem that costs no tokens to begin with.
+            $content = $this->sendOnce($this->perturb($messages, $attempt), $try);
+
+            // A blank answer still consumed prompt tokens, so every attempt is
+            // added up. Reporting only the last one would understate what the
+            // caller was charged.
+            foreach (array_keys($billed) as $k) {
+                $billed[$k] += (int) ($this->lastUsage[$k] ?? 0);
+            }
+            $this->lastUsage = array_merge($this->lastUsage ?? [], $billed, ['attempts' => $attempt]);
+
+            if ($content !== '') {
+                return $content;
+            }
+
+            Log::warning('DeepSeek returned an empty completion; retrying with a perturbed prompt', [
+                'attempt' => $attempt,
+                'of'      => $attempts,
+                'usage'   => $this->lastUsage,
+            ]);
+        }
+
+        throw new RuntimeException(
+            'DeepSeek returned an empty completion ' . $attempts . ' times, including with a '
+            . 'perturbed prompt.'
+        );
+    }
+
+    /*
+     * A BLANK COMPLETION IS USUALLY YOUR PROMPT, NOT A GLITCH. READ THIS FIRST.
+     *
+     * In JSON mode deepseek-chat can return HTTP 200, finish_reason=stop, and
+     * ~40 completion tokens of PURE WHITESPACE. It bills and it does not error,
+     * so the caller sees only "the model was unavailable".
+     *
+     * TWO THINGS WERE MEASURED, 2026-09-04, marking written answers.
+     *
+     *   1. Prompt wording SHIFTS it. A system message ending "and nothing else -
+     *      no prose, no markdown fences" blanked on every send; ending it at "a
+     *      single valid JSON object." answered on both formats. That is why
+     *      markingSystemPrompt() is worded the way it is.
+     *
+     *   2. Wording does NOT eliminate it. The corrected prompt marked correctly
+     *      twice and then blanked three times in a row on the same bytes. So it
+     *      is stochastic, and no phrasing can be trusted to be safe.
+     *
+     * What was never observed is a blank WITHOUT response_format=json_object.
+     * The same bytes in plain text answered every time. Hence the shape of the
+     * loop: perturb and retry for the cheap case, then spend the last attempt
+     * outside JSON mode, which is the failure's only known precondition.
+     *
+     * The perturbation is why a retry is not a pure duplicate: an ignorable
+     * marker on the LAST user message changes the sampled sequence while the
+     * system message and earlier turns stay byte-identical and still hit the
+     * prefix cache.
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @return array<int, array{role: string, content: string}>
+     */
+    private function perturb(array $messages, int $attempt): array
+    {
+        if ($attempt <= 1 || $messages === []) {
+            return $messages;
+        }
+
+        for ($i = count($messages) - 1; $i >= 0; $i--) {
+            if (($messages[$i]['role'] ?? '') === 'user') {
+                $messages[$i]['content'] .= "\n\n(request " . $attempt . ")";
+
+                return $messages;
+            }
+        }
+
+        return $messages;
+    }
+
+    /**
+     * One request. Returns '' for an empty completion so the caller can retry;
+     * every other failure still throws.
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @param  array<string, mixed>  $options
+     */
+    private function sendOnce(array $messages, array $options = []): string
+    {
         $payload = [
             'model' => $options['model'] ?? $this->model(),
             'messages' => $messages,
@@ -246,11 +360,9 @@ class DeepSeekService
 
         $content = $response->json('choices.0.message.content');
 
-        if (!is_string($content) || trim($content) === '') {
-            throw new RuntimeException('DeepSeek returned an empty completion.');
-        }
-
-        return trim($content);
+        // Blank is returned, not thrown, because chat() can clear it by retrying
+        // with a perturbed prompt - see perturb() for what was measured.
+        return is_string($content) ? trim($content) : '';
     }
 
     /**
@@ -309,11 +421,70 @@ class DeepSeekService
 
         $decoded = json_decode($cleaned, true);
 
+        // chat() spends its last attempt on PLAIN TEXT when JSON mode keeps
+        // coming back blank, so the object can arrive wrapped in a sentence.
+        // Digging it out here is what makes that fallback worth having.
+        if (!is_array($decoded)) {
+            $extracted = $this->extractJsonObject($cleaned);
+            $decoded = $extracted === null ? null : json_decode($extracted, true);
+        }
+
         if (!is_array($decoded)) {
             Log::warning('DeepSeek returned unparsable JSON', ['raw' => $raw]);
             throw new RuntimeException('DeepSeek returned a response that could not be parsed as JSON.');
         }
 
         return $decoded;
+    }
+
+    /**
+     * The first complete top-level JSON object in a string, or null.
+     *
+     * Brace-counted rather than a regex between the first `{` and the last `}`:
+     * that naive span breaks the moment the model writes anything containing a
+     * brace after the object, and it silently returns a truncated string that
+     * json_decode rejects for a reason nobody can see. Braces inside string
+     * literals are skipped, with escapes honoured, so a `{` in a feedback
+     * sentence cannot unbalance the count.
+     */
+    private function extractJsonObject(string $text): ?string
+    {
+        $start = strpos($text, '{');
+        if ($start === false) {
+            return null;
+        }
+
+        $depth = 0;
+        $inString = false;
+        $escaped = false;
+
+        for ($i = $start, $len = strlen($text); $i < $len; $i++) {
+            $ch = $text[$i];
+
+            if ($inString) {
+                if ($escaped) {
+                    $escaped = false;
+                } elseif ($ch === '\\') {
+                    $escaped = true;
+                } elseif ($ch === '"') {
+                    $inString = false;
+                }
+
+                continue;
+            }
+
+            if ($ch === '"') {
+                $inString = true;
+            } elseif ($ch === '{') {
+                $depth++;
+            } elseif ($ch === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    return substr($text, $start, $i - $start + 1);
+                }
+            }
+        }
+
+        return null;
     }
 }

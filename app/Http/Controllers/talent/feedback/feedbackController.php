@@ -237,7 +237,11 @@ class feedbackController extends Controller
         ]);
 
         // Find the feedback record
-        $evaluation = TalentEvaluationForm::find($id);
+        // Tenant predicate inside the lookup: ::find($id) alone let a caller edit
+        // another organisation's interview feedback by id.
+        $evaluation = TalentEvaluationForm::where('id', $id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->first();
         if (!$evaluation) {
             return response()->json([
                 'status' => false,
@@ -316,6 +320,60 @@ class feedbackController extends Controller
             'message' => 'Pending feedback found',
             'count' => $count,
             'data' => $data
+        ], 200);
+    }
+
+    /**
+     * Delete a piece of interview feedback.
+     *
+     * The frontend has had a destructive, confirmed Delete button wired to
+     * DELETE /api/feedback/{id} (interview-tools-drawer.tsx) since the drawer was
+     * built. No such route existed and this method did not exist either, so the
+     * user confirmed a deletion and got a 405. The choice was build it or remove
+     * the button; the button is a reasonable thing for a recruiter to want.
+     *
+     * Soft delete, because interview feedback is evidence for a hiring decision
+     * and TalentEvaluationForm carries SoftDeletes for exactly that reason.
+     */
+    public function deleteFeedback(Request $request, $id)
+    {
+        $type = $request->type;
+
+        if ($type === "API") {
+            $token = $request->bearerToken() ?? $request->input('token');
+
+            if (!$token) {
+                return response()->json(['message' => 'Token not provided'], 401);
+            }
+
+            $accessToken = PersonalAccessToken::findToken($token);
+
+            if (!$accessToken) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+        }
+
+        $subInstituteId = $this->apiTenantId($request);
+        if (!$subInstituteId) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $evaluation = TalentEvaluationForm::where('id', $id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->first();
+
+        if (!$evaluation) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Feedback not found',
+            ], 404);
+        }
+
+        $evaluation->delete();
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'Feedback deleted successfully',
         ], 200);
     }
 }
