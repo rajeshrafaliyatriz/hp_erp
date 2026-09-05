@@ -119,9 +119,13 @@ class talent_jobpostingcontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
-
-      
+        // From the token, matching index() at :68. Taking it from the request let a
+        // caller create a job posting inside another organisation's tenant, where it
+        // would be invisible to its real owner.
+        $sub_institute_id = $this->apiTenantId($request);
+        if (!$sub_institute_id) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
 
           $validator = Validator::make($request->all(), [
             'title'            => 'required|string|max:255',
@@ -339,31 +343,40 @@ class talent_jobpostingcontroller extends Controller
                 'data' => $id
             ], 404);
         }
-    
+
+        /*
+         * Only the fields the caller actually sent are written (F-69b).
+         *
+         * This used to assign every column unconditionally from $request->x, so
+         * a partial update - a status-only PUT, say - blanked the whole posting:
+         * title, salary, description and the rest all became null. Executed by
+         * accident on the 128.199 host during the live re-audit, it emptied
+         * posting 216, which then showed a blank title on the public careers
+         * page. Restored from the app-DB copy.
+         *
+         * `filled` covers the normal case; `has` lets a field be deliberately
+         * cleared to an empty string. A field that is simply absent keeps its
+         * stored value.
+         */
+        $editable = [
+            'title', 'location', 'employment_type', 'experience', 'department_id',
+            'education', 'priority_level', 'positions', 'min_salary', 'max_salary',
+            'deadline', 'skills', 'certifications', 'benefits', 'description', 'status',
+        ];
+
+        $changes = ['updated_by' => $this->g2gActorId($request), 'updated_at' => now()];
+
+        foreach ($editable as $field) {
+            if ($request->has($field)) {
+                $changes[$field] = $request->input($field);
+            }
+        }
+
         // Perform update
         $updated = talent_jobposting::where([
             'sub_institute_id' => $sub_institute_id,
             'id' => $id
-        ])->update([
-            'title' => $request->title,
-            'location' => $request->location,
-            'employment_type' => $request->employment_type,
-            'experience' => $request->experience,
-            'department_id' => $request->department_id,
-            'education' => $request->education,
-            'priority_level' => $request->priority_level,
-            'positions' => $request->positions,
-            'min_salary' => $request->min_salary,
-            'max_salary' => $request->max_salary,
-            'deadline' => $request->deadline,
-            'skills' => $request->skills,
-            'certifications' => $request->certifications,
-            'benefits' => $request->benefits,
-            'description' => $request->description,
-            'status' => $request->status,
-            'updated_by' => $this->g2gActorId($request),
-            'updated_at' => now()
-        ]);
+        ])->update($changes);
     
         return response()->json([
             'message' => $updated ? 'Updated successfully' : 'Failed to update',
@@ -391,7 +404,13 @@ class talent_jobpostingcontroller extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            // From the token, matching index() at :68. The delete below is scoped by
+            // sub_institute_id, so a request-supplied value chose which organisation's
+            // posting was deleted.
+            $sub_institute_id = $this->apiTenantId($request);
+            if (!$sub_institute_id) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
         }
 
         try {

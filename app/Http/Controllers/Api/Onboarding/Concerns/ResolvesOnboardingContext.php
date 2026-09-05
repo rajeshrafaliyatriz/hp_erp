@@ -44,6 +44,80 @@ trait ResolvesOnboardingContext
         'personal'   => 'Personal',
     ];
 
+    /**
+     * The checklist every new journey is born with, grouped by workstream.
+     *
+     * ── WHY THIS CONST DID NOT EXIST, AND WHAT THAT COST ────────────────────
+     *
+     * WORKSTREAMS above declares the five areas, OnboardingTaskController::workstreams()
+     * groups tasks into them and computes each one's status, and the frontend
+     * renders all five cards. Every piece was built. NOTHING EVER CREATED A
+     * TASK - one row exists across the whole installation - so all five cards
+     * read "No tasks yet / Not Started" forever, on every journey, in every
+     * organisation. The feature looked present and did nothing.
+     *
+     * ── day_offset IS RELATIVE TO THE JOINING DATE ─────────────────────────
+     *
+     * Negative is before someone starts, positive is after. This is the model
+     * SuccessFactors uses ("days before Start Date") and the reason it works:
+     * a laptop ordered on day one is a laptop that arrives in week two, and a
+     * bank account captured on day five is a missed first payroll run.
+     *
+     * A journey with NO joining date gets NULL due dates rather than offsets
+     * from today - an invented deadline is worse than an absent one, because it
+     * shows red on a dashboard for a reason nobody can trace.
+     *
+     * ── owner_label IS INFORMATION, NOT ASSIGNMENT ─────────────────────────
+     *
+     * It names the team accountable for the work so HR knows who to chase.
+     * `owner_id` stays null and HR completes every task: there is no IT or
+     * Finance login gate on this module, and inventing one would leave tasks
+     * stranded against roles nobody holds.
+     */
+    public const ONBOARDING_TASK_TEMPLATE = [
+        // ── Payroll: earliest, because a missed cutoff costs a month ────────
+        ['category' => 'payroll',    'day_offset' => -5, 'owner_label' => 'Finance',
+         'title' => 'Collect bank account, IFSC and cancelled cheque'],
+        ['category' => 'payroll',    'day_offset' => -5, 'owner_label' => 'Finance',
+         'title' => 'Capture PAN and Aadhaar for TDS and UAN linking'],
+        ['category' => 'payroll',    'day_offset' => -3, 'owner_label' => 'Finance',
+         'title' => 'Register or link UAN, and ESIC number if applicable'],
+        ['category' => 'payroll',    'day_offset' => -3, 'owner_label' => 'Finance',
+         'title' => 'Assign salary structure and confirm tax regime'],
+
+        // ── IT: ordered before the start date so it is there on day one ─────
+        ['category' => 'it',         'day_offset' => -3, 'owner_label' => 'IT',
+         'title' => 'Issue laptop and peripherals'],
+        ['category' => 'it',         'day_offset' => -2, 'owner_label' => 'IT',
+         'title' => 'Create email account and directory identity'],
+        ['category' => 'it',         'day_offset' => -1, 'owner_label' => 'IT',
+         'title' => 'Grant system and application access for the role'],
+        ['category' => 'it',         'day_offset' =>  0, 'owner_label' => 'IT',
+         'title' => 'Issue access card and desk phone or SIM'],
+
+        // ── Compliance: signed once they are here, and dated ────────────────
+        ['category' => 'compliance', 'day_offset' =>  1, 'owner_label' => 'HR',
+         'title' => 'Acknowledge employee handbook and code of conduct'],
+        ['category' => 'compliance', 'day_offset' =>  1, 'owner_label' => 'HR',
+         'title' => 'Acknowledge IT and data protection policy'],
+        ['category' => 'compliance', 'day_offset' =>  3, 'owner_label' => 'HR',
+         'title' => 'Verify education certificates and previous relieving letter'],
+
+        // ── Benefits: after joining, inside the enrolment window ────────────
+        ['category' => 'benefits',   'day_offset' =>  7, 'owner_label' => 'HR',
+         'title' => 'Enrol in group health cover and record nominee'],
+        ['category' => 'benefits',   'day_offset' =>  7, 'owner_label' => 'HR',
+         'title' => 'Record statutory nomination for PF and gratuity'],
+
+        // ── Learning: the role's mandatory courses are assigned by
+        //    LearningAssigner on employee.role_assigned; this task is the
+        //    human check that they were, and were started.
+        ['category' => 'learning',   'day_offset' =>  2, 'owner_label' => 'Manager',
+         'title' => 'Confirm role-mandatory courses are assigned'],
+        ['category' => 'learning',   'day_offset' => 14, 'owner_label' => 'Manager',
+         'title' => 'Review induction learning progress'],
+    ];
+
     /** The seven default steps seeded onto a new journey, in order. */
     public const DEFAULT_STAGES = [
         ['stage_key' => 'offer_accepted',   'title' => 'Offer Accepted'],

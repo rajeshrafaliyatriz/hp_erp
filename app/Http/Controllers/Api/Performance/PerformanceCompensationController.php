@@ -308,27 +308,34 @@ class PerformanceCompensationController extends Controller
             ->where('status', '!=', $target)
             ->get();
 
-        foreach ($revisions as $revision) {
-            $revision->status = $target;
+        /*
+         * Pay decisions over a selection commit once. Half an approved batch
+         * with no activity entry means nobody can tell which revisions were
+         * signed off, by whom, or when - on the table that sets salaries.
+         */
+        DB::transaction(function () use ($revisions, $target, $context, $tenant, $validated) {
+            foreach ($revisions as $revision) {
+                $revision->status = $target;
 
-            if (in_array($target, ['approved', 'rejected'], true)) {
-                $revision->approver_id = $context['user_id'];
-                $revision->approved_at = now();
+                if (in_array($target, ['approved', 'rejected'], true)) {
+                    $revision->approver_id = $context['user_id'];
+                    $revision->approved_at = now();
+                }
+
+                $revision->updated_by = $context['user_id'];
+                $revision->save();
             }
 
-            $revision->updated_by = $context['user_id'];
-            $revision->save();
-        }
-
-        $this->logPerformanceActivity(
-            $tenant,
-            $context['user_id'],
-            'bulk_' . $validated['action'] . '_compensation',
-            $this->statusLabel($target) . ' ' . $revisions->count() . ' compensation revision(s)',
-            'compensation',
-            null,
-            $revisions->count() . ' revision(s)'
-        );
+            $this->logPerformanceActivity(
+                $tenant,
+                $context['user_id'],
+                'bulk_' . $validated['action'] . '_compensation',
+                $this->statusLabel($target) . ' ' . $revisions->count() . ' compensation revision(s)',
+                'compensation',
+                null,
+                $revisions->count() . ' revision(s)'
+            );
+        });
 
         return $this->performanceResponse(
             ['affected' => $revisions->count()],

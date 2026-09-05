@@ -4,7 +4,6 @@ namespace App\Models\talent_management;
 
 
 use Illuminate\Database\Eloquent\Model;
-use App\Http\Controllers\talent_management\talentmanagement_jobpostingController;
 
 
 

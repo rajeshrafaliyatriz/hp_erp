@@ -46,8 +46,15 @@ class AiAssessmentController extends Controller
     use ResolvesEmployeeJobRole;
     use ResolvesCompetencyContext;
 
-    /** Formats this controller knows how to store and score. */
-    private const FORMATS = ['mcq', 'short_answer'];
+    /**
+     * Formats this controller knows how to store and score.
+     *
+     * `coding` marks are awarded by the model, the same route short_answer takes -
+     * see AssessmentScoringService::AI_MARKED_FORMATS, which must list any format
+     * added here that MCQ auto-scoring cannot handle. The two lists together are
+     * what guarantee every question can eventually be marked by something.
+     */
+    private const FORMATS = ['mcq', 'short_answer', 'coding'];
 
     /**
      * POST /competency/ai-assessment/generate
@@ -229,7 +236,11 @@ class AiAssessmentController extends Controller
                     'options'          => $r['options'] !== null ? json_encode($r['options']) : null,
                     'correct_option'   => $r['correct_option'],
                     'model_answer'     => $r['model_answer'],
-                    'max_score'        => 1,
+                    // The model's weighting, not a flat 1. A coding task and a
+                    // true/false are not worth the same mark, and a flat 1 made
+                    // every question equal in the attempt total and in the
+                    // per-item percent that proposes a rating.
+                    'max_score'        => $r['max_score'] ?? 1,
                     'sort_order'       => $i,
                     'created_at'       => now(),
                     'updated_at'       => now(),
@@ -598,6 +609,15 @@ class AiAssessmentController extends Controller
         $sid = (int) $context['sub_institute_id'];
         $me  = (int) $context['user_id'];
 
+        /*
+         * This endpoint is reached with an employee's Sanctum token, so the
+         * subject is always an employee. Candidates submit through their own
+         * token-less controller and never arrive here. Naming it explicitly
+         * keeps the attempt/response lookups below honest about which of the two
+         * id namespaces they are searching.
+         */
+        $subjectType = 'employee';
+
         $ids = collect($request->input('answers'))->pluck('question_id')->map('intval')->all();
 
         /*
@@ -668,18 +688,53 @@ class AiAssessmentController extends Controller
             ->first(['id', 'jobtitle_id', 'allocated_standards']);
         $myJobroleId = $user ? $this->resolveJobRoleId($user) : null;
 
-        $allowed = $myJobroleId
+        /*
+         * The tests this caller may answer questions on.
+         *
+         * ── A BUG THIS USED TO HAVE, AND WHY IT WAS INVISIBLE ───────────────
+         *
+         * The whole query used to be gated on `$myJobroleId ?`, and its only
+         * branches were "targets my job role" OR "is open". mayTake(), which
+         * guards start(), has a THIRD branch: an existing attempt row, i.e. the
+         * test was assigned to you.
+         *
+         * So an admin could assign a test outside somebody's job role -
+         * AssessmentReviewController::assign() explicitly supports that and says
+         * so - the person could open it, answer every question, press submit, and
+         * get HTTP 200 with `status: 1`. Every answer was silently counted as
+         * `dropped`. Nothing errored, nothing warned, and the attempt stayed
+         * empty. A submission that looks successful and stored nothing is worse
+         * than one that fails.
+         *
+         * The three branches now match mayTake() exactly. That also makes the
+         * path usable by a subject with no job role at all - a CANDIDATE - whose
+         * only claim on a test is the attempt row that invited them.
+         */
+        $assignedTestIds = DB::table('competency_assessment_attempt')
+            ->where('sub_institute_id', $sid)
+            ->where('user_id', $me)
+            ->where('subject_type', $subjectType)
+            ->pluck('test_id');
+
+        $allowed = ($myJobroleId || $assignedTestIds->isNotEmpty())
             ? DB::table('competency_assessment_question as q')
                 ->join('competency_assessment_test as t', 't.id', '=', 'q.test_id')
                 ->where('q.sub_institute_id', $sid)
                 ->where('t.status', 'published')
-                /*
-                 * A test is takeable when it targets your job role, OR it is
-                 * open to everyone in the tenant. `is_open` is what makes
-                 * self-serve tests possible without loosening the role rule for
-                 * assigned ones.
-                 */
-                ->where(fn ($w) => $w->where('t.jobrole_id', $myJobroleId)->orWhere('t.is_open', 1))
+                ->where(function ($w) use ($myJobroleId, $assignedTestIds) {
+                    // Open to everyone in the tenant.
+                    $w->where('t.is_open', 1);
+
+                    // Targets my job role.
+                    if ($myJobroleId) {
+                        $w->orWhere('t.jobrole_id', $myJobroleId);
+                    }
+
+                    // Or it was assigned to me - the branch that was missing.
+                    if ($assignedTestIds->isNotEmpty()) {
+                        $w->orWhereIn('t.id', $assignedTestIds);
+                    }
+                })
                 ->whereIn('q.id', $ids)
                 ->get(['q.id', 'q.test_id', 'q.format', 'q.correct_option', 'q.max_score'])
                 ->keyBy('id')
@@ -692,19 +747,34 @@ class AiAssessmentController extends Controller
                 continue;
             }
 
-            // MCQ scores itself. SHORT ANSWER IS LEFT UNSCORED - null, not zero.
-            // An unscored answer is awaiting review; a zero would be a mark.
-            $score = null; $by = null;
-            if ($q->format === 'mcq' && $q->correct_option !== null) {
-                $score = ((string) ($a['selected_option'] ?? '') === (string) $q->correct_option) ? $q->max_score : 0;
+            /*
+             * MCQ scores itself. SHORT ANSWER IS LEFT UNSCORED - null, not zero.
+             * An unscored answer is awaiting review; a zero would be a mark.
+             *
+             * The comparison lives in AssessmentScoringService, not here: the
+             * candidate magic-link path marks the same papers, and when the two
+             * held their own copies they had already drifted apart on trimming
+             * and case.
+             */
+            $score = app(AssessmentScoringService::class)
+                ->scoreMultipleChoice($q, $a['selected_option'] ?? null);
+            $by = null;
+            if ($score !== null) {
                 $by = 'auto';
                 $scored++;
             }
 
             // created_at is NOT in the update set: it was there, so changing an
             // answer rewrote when the answer was first given.
-            $exists = DB::table('competency_assessment_response')
-                ->where('question_id', $q->id)->where('user_id', $me)->exists();
+            /*
+             * The key includes subject_type, matching the widened unique
+             * car_question_user_subject_unique. Without it an employee and a
+             * candidate who happen to share an id would overwrite each other's
+             * answer to the same question.
+             */
+            $answerKey = ['question_id' => $q->id, 'user_id' => $me, 'subject_type' => $subjectType];
+
+            $exists = DB::table('competency_assessment_response')->where($answerKey)->exists();
 
             $values = [
                 'sub_institute_id' => $sid,
@@ -720,10 +790,7 @@ class AiAssessmentController extends Controller
                 $values['created_at'] = now();
             }
 
-            DB::table('competency_assessment_response')->updateOrInsert(
-                ['question_id' => $q->id, 'user_id' => $me],
-                $values
-            );
+            DB::table('competency_assessment_response')->updateOrInsert($answerKey, $values);
             $written++;
         }
 
@@ -982,10 +1049,20 @@ class AiAssessmentController extends Controller
      * An open test has no assignment step, so the row appears the first time
      * they start it. An assigned test already has one, and this finds it.
      */
-    private function attemptFor(int $testId, int $userId, int $tenantId): int
+    /**
+     * The attempt row for one subject on one test, created if absent.
+     *
+     * `$subjectType` is part of the identity, not decoration: the unique key is
+     * (test_id, user_id, subject_type), so an employee and a candidate carrying
+     * the same numeric id sit two separate attempts rather than colliding on one.
+     */
+    private function attemptFor(int $testId, int $userId, int $tenantId, string $subjectType = 'employee'): int
     {
         $existing = DB::table('competency_assessment_attempt')
-            ->where('test_id', $testId)->where('user_id', $userId)->value('id');
+            ->where('test_id', $testId)
+            ->where('user_id', $userId)
+            ->where('subject_type', $subjectType)
+            ->value('id');
 
         if ($existing) {
             return (int) $existing;
@@ -995,6 +1072,7 @@ class AiAssessmentController extends Controller
             'sub_institute_id' => $tenantId,
             'test_id'          => $testId,
             'user_id'          => $userId,
+            'subject_type'     => $subjectType,
             'status'           => 'in_progress',
             'created_at'       => now(),
             'updated_at'       => now(),
@@ -1042,7 +1120,11 @@ class AiAssessmentController extends Controller
     /** The prompt. Built from the items, never from a fixed list of subjects. */
     private function prompt(string $jobrole, $items, array $formats, int $perItem): string
     {
-        $formatList = implode(' and ', $formats);
+        // "a and b" reads fine; "a and b and c" does not. Now that there are
+        // three formats, join the list properly.
+        $formatList = count($formats) > 1
+            ? implode(', ', array_slice($formats, 0, -1)) . ' and ' . end($formats)
+            : (string) reset($formats);
         $lines = $items->map(fn ($i) =>
             "- id={$i->id} | type={$i->kasba_type} | item={$i->item_label} | competency=" . ($i->competency_name ?? 'unnamed')
         )->implode("\n");
@@ -1058,12 +1140,16 @@ class AiAssessmentController extends Controller
         - Use ONLY the ids listed. Do not invent an id.
         - mcq questions need "options" (3-5 strings) and "correct_option" (the exact option text).
         - short_answer questions need "model_answer" and no options.
+        - coding questions state the task in "question_text", name the language, and put a
+          description of what a correct solution does in "model_answer". No options.
+        - Give every question a "max_score" reflecting how much work it is: a recall
+          question is worth least, a coding task most. Whole numbers.
         - Assess the item, not general knowledge.
 
         ITEMS
         {$lines}
 
-        Return JSON: {"questions":[{"kasba_item_id":123,"format":"mcq","question_text":"...","options":["..."],"correct_option":"...","model_answer":null}]}
+        Return JSON: {"questions":[{"kasba_item_id":123,"format":"mcq","question_text":"...","options":["..."],"correct_option":"...","model_answer":null,"max_score":1}]}
         TXT;
     }
 
@@ -1116,7 +1202,24 @@ class AiAssessmentController extends Controller
                 'question_text' => $text,
                 'options'       => $fmt === 'mcq' ? $options : null,
                 'correct_option' => $fmt === 'mcq' ? $correct : null,
-                'model_answer'  => $fmt === 'short_answer' ? (string) ($q['model_answer'] ?? '') : null,
+                /*
+                 * `coding` keeps a model answer too - it is the description of
+                 * what a good solution does, which is what the marking prompt
+                 * shows the model as "WHAT A GOOD SOLUTION DOES".
+                 *
+                 * This used to name short_answer alone, so a coding question was
+                 * stored with options, correct_option AND model_answer all null:
+                 * unscorable by MCQ, unmarkable by the model for want of a
+                 * reference, and nothing errored. It would simply have sat
+                 * awaiting review forever.
+                 */
+                'model_answer'  => $fmt === 'mcq' ? null : (string) ($q['model_answer'] ?? ''),
+                /*
+                 * The model's own weighting for this question, so a coding task
+                 * is not worth the same single mark as a true/false. Clamped to a
+                 * sane band; the caller checks the total separately.
+                 */
+                'max_score'     => max(1, min(100, (int) ($q['max_score'] ?? 1))),
             ];
         }
 

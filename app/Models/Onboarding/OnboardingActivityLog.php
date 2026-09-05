@@ -3,6 +3,7 @@
 namespace App\Models\Onboarding;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 /**
  * Append-only feed behind the Lifecycle Timeline tab and the module audit trail.
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class OnboardingActivityLog extends Model
 {
+    use SkipsGuardableColumnCheck;
+
     protected $table = 'talent_onboarding_activity_log';
     protected $guarded = ['id'];
 

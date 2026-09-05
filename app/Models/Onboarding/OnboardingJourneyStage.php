@@ -5,6 +5,7 @@ namespace App\Models\Onboarding;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 /**
  * One step on the "Onboarding Journey Progress" timeline.
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class OnboardingJourneyStage extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 'talent_onboarding_journey_stages';
     protected $guarded = ['id'];

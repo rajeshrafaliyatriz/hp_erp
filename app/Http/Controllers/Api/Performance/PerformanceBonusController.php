@@ -317,32 +317,40 @@ class PerformanceBonusController extends Controller
 
         $awards = $query->get();
 
-        foreach ($awards as $award) {
-            $award->status = $target;
+        /*
+         * `mark_paid` is the reason this one matters most of the four. It stamps
+         * a payout date, and a half-applied batch leaves some awards recorded as
+         * paid and the rest merely approved, with no activity entry naming the
+         * run - so a second attempt cannot tell which were already paid out.
+         */
+        DB::transaction(function () use ($awards, $target, $context, $tenant, $validated) {
+            foreach ($awards as $award) {
+                $award->status = $target;
 
-            if (in_array($target, ['approved', 'rejected'], true)) {
-                $award->approver_id = $context['user_id'];
-                $award->approved_at = now();
+                if (in_array($target, ['approved', 'rejected'], true)) {
+                    $award->approver_id = $context['user_id'];
+                    $award->approved_at = now();
+                }
+
+                if ($target === 'paid' && !$award->payout_date) {
+                    $award->payout_date = now()->toDateString();
+                    $award->payout_month = $award->payout_month ?: now()->format('Y-m');
+                }
+
+                $award->updated_by = $context['user_id'];
+                $award->save();
             }
 
-            if ($target === 'paid' && !$award->payout_date) {
-                $award->payout_date = now()->toDateString();
-                $award->payout_month = $award->payout_month ?: now()->format('Y-m');
-            }
-
-            $award->updated_by = $context['user_id'];
-            $award->save();
-        }
-
-        $this->logPerformanceActivity(
-            $tenant,
-            $context['user_id'],
-            'bulk_' . $validated['action'] . '_bonus',
-            $this->statusLabel($target) . ' ' . $awards->count() . ' bonus award(s)',
-            'bonus',
-            null,
-            $awards->count() . ' bonus award(s)'
-        );
+            $this->logPerformanceActivity(
+                $tenant,
+                $context['user_id'],
+                'bulk_' . $validated['action'] . '_bonus',
+                $this->statusLabel($target) . ' ' . $awards->count() . ' bonus award(s)',
+                'bonus',
+                null,
+                $awards->count() . ' bonus award(s)'
+            );
+        });
 
         return $this->performanceResponse(
             ['affected' => $awards->count()],

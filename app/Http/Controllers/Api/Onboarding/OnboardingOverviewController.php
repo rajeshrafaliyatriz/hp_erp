@@ -18,6 +18,23 @@ class OnboardingOverviewController extends Controller
     /** Journeys that are still running - everything the KPIs count as "live". */
     private const OPEN_STATUSES = ['not-started', 'in-progress', 'on-hold'];
 
+    /*
+     * The stage sets behind the first two KPI tiles.
+     *
+     * They are constants so that each tile's count and its "View all" filter
+     * are built from the same list and cannot drift apart. They had drifted:
+     * "Active Onboarding" counted four stages and drilled down on
+     * `status=in-progress`, which is a different question - it both hid
+     * not-started journeys it had counted and showed preboarding ones it had
+     * not.
+     */
+
+    /** Accepted, not yet started on day one. */
+    private const PREBOARDING_STAGES = ['offer_accepted', 'preboarding'];
+
+    /** Joined, journey still running. */
+    private const ACTIVE_STAGES = ['first_day', 'orientation', 'team_integration', 'probation'];
+
     /**
      * GET /api/onboarding/overview
      *
@@ -39,14 +56,16 @@ class OnboardingOverviewController extends Controller
             ->when($departmentId, fn ($q) => $q->where('department_id', $departmentId));
 
         // 1. Preboarding Pending - accepted but not yet started on day one.
+        //    Both stages before day one count, or a hire whose "Offer Accepted"
+        //    step is still open would appear in no tile at all.
         $preboardingPending = (clone $scope())
-            ->where('stage', 'preboarding')
+            ->whereIn('stage', self::PREBOARDING_STAGES)
             ->whereIn('status', self::OPEN_STATUSES)
             ->count();
 
         // 2. Active Onboarding - joined, journey still open.
         $activeOnboarding = (clone $scope())
-            ->whereIn('stage', ['first_day', 'orientation', 'team_integration', 'probation'])
+            ->whereIn('stage', self::ACTIVE_STAGES)
             ->whereIn('status', self::OPEN_STATUSES)
             ->count();
 
@@ -105,7 +124,12 @@ class OnboardingOverviewController extends Controller
                 'value'    => (string) $preboardingPending,
                 'subtitle' => $preboardingPending === 1 ? '1 hire in preboarding' : $preboardingPending . ' hires in preboarding',
                 'icon'     => 'users',
-                'filter'   => (object) ['stage' => 'preboarding'],
+                // Same two lists the count is built from, so "View all" opens
+                // exactly the rows behind the number.
+                'filter'   => (object) [
+                    'stage'  => implode(',', self::PREBOARDING_STAGES),
+                    'status' => implode(',', self::OPEN_STATUSES),
+                ],
             ],
             [
                 'id'       => 'active-onboarding',
@@ -113,7 +137,13 @@ class OnboardingOverviewController extends Controller
                 'value'    => (string) $activeOnboarding,
                 'subtitle' => 'Joined and in progress',
                 'icon'     => 'user-check',
-                'filter'   => (object) ['status' => 'in-progress'],
+                // Was `status=in-progress`, which is a different question from
+                // the one the count asks - it hid the not-started and on-hold
+                // journeys it had counted, and showed preboarding ones it had not.
+                'filter'   => (object) [
+                    'stage'  => implode(',', self::ACTIVE_STAGES),
+                    'status' => implode(',', self::OPEN_STATUSES),
+                ],
             ],
             [
                 'id'       => 'first-day-this-week',

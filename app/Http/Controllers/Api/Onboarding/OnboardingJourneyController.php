@@ -138,7 +138,7 @@ class OnboardingJourneyController extends Controller
             'location'        => 'nullable|string|max:191',
             'position'        => 'nullable|string|max:191',
             'joining_date'    => 'nullable|date',
-            'stage'           => 'nullable|in:preboarding,first_day,orientation,team_integration,probation,confirmed,exited',
+            'stage'           => 'nullable|in:offer_accepted,preboarding,first_day,orientation,team_integration,probation,confirmed,exited',
             'status'          => 'nullable|in:not-started,in-progress,completed,on-hold,cancelled',
             'buddy_id'        => 'nullable|integer',
             'manager_id'      => 'nullable|integer',
@@ -210,7 +210,30 @@ class OnboardingJourneyController extends Controller
 
         $name = trim(($offer->first_name ?? '') . ' ' . ($offer->last_name ?? ''));
 
+        /*
+         * If accepting the offer already created the employee, link them now.
+         *
+         * This method predates the accept path. When an offer could only be
+         * "sent", a journey started from one never had an employee to point at,
+         * so employee_id was left null and somebody typed it in later. Since
+         * Sprint 2 an accepted offer produces a tbluser row, and
+         * talent_offer_acceptances records which one - so the journey can be born
+         * already attached to the person.
+         *
+         * It matters beyond tidiness: probation confirmation mirrors onto tbluser
+         * and a termination now opens an exit case, and BOTH are skipped when
+         * employee_id is null. A journey with no employee is a journey whose
+         * outcome goes nowhere.
+         */
+        $acceptedEmployeeId = DB::table('talent_offer_acceptances')
+            ->where('offer_id', $offer->id)
+            ->where('sub_institute_id', $tenant)
+            ->where('decision', 'accepted')
+            ->whereNull('deleted_at')
+            ->value('accepted_employee_id');
+
         $journey = $this->createJourney($tenant, $context['user_id'], [
+            'employee_id'     => $acceptedEmployeeId ? (int) $acceptedEmployeeId : null,
             'offer_id'        => (int) $offer->id,
             'application_id'  => $offer->application_id ? (int) $offer->application_id : null,
             'candidate_name'  => $name !== '' ? $name : 'Candidate #' . $offer->application_id,
@@ -255,7 +278,7 @@ class OnboardingJourneyController extends Controller
             'location'        => 'nullable|string|max:191',
             'position'        => 'nullable|string|max:191',
             'joining_date'    => 'nullable|date',
-            'stage'           => 'nullable|in:preboarding,first_day,orientation,team_integration,probation,confirmed,exited',
+            'stage'           => 'nullable|in:offer_accepted,preboarding,first_day,orientation,team_integration,probation,confirmed,exited',
             'status'          => 'nullable|in:not-started,in-progress,completed,on-hold,cancelled',
             'buddy_id'        => 'nullable|integer',
             'manager_id'      => 'nullable|integer',
@@ -656,7 +679,22 @@ class OnboardingJourneyController extends Controller
      * ------------------------------------------------------------------ */
 
     /** Shared by store() and storeFromOffer(): insert + seed the seven stages. */
+    /**
+     * Delegates to OnboardingJourneyFactory, which OnboardingLauncher also uses.
+     *
+     * Kept as a method so the eleven call sites in this controller are unchanged,
+     * but the logic is no longer here: the reactor that starts a journey on
+     * `employee.hired` must produce exactly the same journey as a recruiter
+     * choosing an offer, and two copies of "what a new journey looks like" is the
+     * drift EmployeeFactory exists to prevent.
+     */
     private function createJourney(int $tenant, ?int $actorId, array $attributes): OnboardingJourney
+    {
+        return app(\App\Services\Talent\OnboardingJourneyFactory::class)
+            ->create($tenant, $actorId, $attributes);
+    }
+
+    private function createJourneyLegacy(int $tenant, ?int $actorId, array $attributes): OnboardingJourney
     {
         $seedStages = $attributes['seed_stages'] ?? true;
         unset($attributes['seed_stages']);
@@ -757,8 +795,20 @@ class OnboardingJourneyController extends Controller
         // The current stage is the first one still open; all-complete means done.
         $current = $stages->first(fn ($stage) => $stage->status !== 'completed' && $stage->status !== 'skipped');
 
+        /*
+         * stage_key (a row on the timeline) -> stage (the journey's own badge).
+         *
+         * These are two vocabularies, not one: the timeline has seven steps and
+         * the journey badge has eight values, so `confirmation` (a step) maps
+         * onto `probation` (the badge you carry while that step is open).
+         *
+         * `offer_accepted` used to map onto `preboarding` because the badge
+         * column's validator would not accept it - which meant the "Offer
+         * Accepted" option in the stage filter, built from DEFAULT_STAGES,
+         * could only ever return nothing. It maps to itself now.
+         */
         $stageMap = [
-            'offer_accepted'   => 'preboarding',
+            'offer_accepted'   => 'offer_accepted',
             'preboarding'      => 'preboarding',
             'first_day'        => 'first_day',
             'orientation'      => 'orientation',
@@ -780,6 +830,27 @@ class OnboardingJourneyController extends Controller
         $journey->save();
     }
 
+    /**
+     * Match a column against one value or a comma-separated set of them.
+     *
+     * A KPI tile counts a SET of stages or statuses, so drilling into that tile
+     * has to be able to ask for the same set - otherwise the number on the card
+     * and the length of the list it opens are answers to two different
+     * questions. Neither stage keys nor status keys contain a comma, so
+     * splitting on one cannot swallow a legitimate value.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    private function onbWhereAnyOf($query, string $column, string $value)
+    {
+        $values = array_values(array_filter(array_map('trim', explode(',', $value)), 'strlen'));
+
+        return count($values) > 1
+            ? $query->whereIn($column, $values)
+            : $query->where($column, $values[0] ?? $value);
+    }
+
     /** @return \Illuminate\Database\Eloquent\Builder */
     private function filteredJourneys(Request $request, int $tenant)
     {
@@ -793,8 +864,8 @@ class OnboardingJourneyController extends Controller
         $probationDue = $this->activeOnbFilter($request->input('probation_due'));
 
         return OnboardingJourney::where('sub_institute_id', $tenant)
-            ->when($stage, fn ($q) => $q->where('stage', $stage))
-            ->when($status, fn ($q) => $q->where('status', $status))
+            ->when($stage, fn ($q) => $this->onbWhereAnyOf($q, 'stage', $stage))
+            ->when($status, fn ($q) => $this->onbWhereAnyOf($q, 'status', $status))
             ->when($departmentId, fn ($q) => $q->where('department_id', $departmentId))
             ->when($confirmation, fn ($q) => $q->where('confirmation_status', $confirmation))
             ->when($joiningFrom, fn ($q) => $q->whereDate('joining_date', '>=', $joiningFrom))

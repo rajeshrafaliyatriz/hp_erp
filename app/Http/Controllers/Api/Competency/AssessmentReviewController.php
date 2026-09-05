@@ -246,10 +246,24 @@ class AssessmentReviewController extends Controller
         }
         $sid = (int) $context['sub_institute_id'];
 
+        /*
+         * EMPLOYEE ATTEMPTS ONLY.
+         *
+         * `a.user_id` is joined to tbluser to get a name, and since candidates
+         * can now sit assessments that id is no longer guaranteed to BE a tbluser
+         * id. Without the subject filter this screen would render a candidate's
+         * attempt carrying whichever employee happens to share that number - the
+         * exact id-collision the subject_type migration exists to prevent, which
+         * the write path closes and this read path would have reopened.
+         *
+         * Candidate results belong to the application, and are read through
+         * Recruitment, not through the employee capability console.
+         */
         $rows = DB::table('competency_assessment_attempt as a')
             ->join('competency_assessment_test as t', 't.id', '=', 'a.test_id')
             ->leftJoin('tbluser as u', 'u.id', '=', 'a.user_id')
             ->where('a.sub_institute_id', $sid)
+            ->where('a.subject_type', 'employee')
             ->when($request->filled('test_id'), fn ($q) => $q->where('a.test_id', $request->integer('test_id')))
             ->when($request->filled('status'), fn ($q) => $q->where('a.status', $request->input('status')))
             ->orderByDesc('a.submitted_at')->orderByDesc('a.id')
@@ -381,11 +395,19 @@ class AssessmentReviewController extends Controller
         }
         $sid = (int) $context['sub_institute_id'];
 
+        /*
+         * Employee proposals only, for the same reason as attempts() above: the
+         * tbluser join would otherwise put an employee's name on a candidate's
+         * row. approve() already refuses to turn a candidate result into a
+         * proficiency rating, so a candidate proposal in this queue could only
+         * ever be a decision nobody is allowed to take.
+         */
         $rows = DB::table('competency_assessment_rating_proposal as p')
             ->leftJoin('tbluser as u', 'u.id', '=', 'p.user_id')
             ->leftJoin('competency as c', 'c.id', '=', 'p.competency_id')
             ->leftJoin('competency_assessment_test as t', 't.id', '=', 'p.test_id')
             ->where('p.sub_institute_id', $sid)
+            ->where('p.subject_type', 'employee')
             ->where('p.status', $request->input('status', 'pending'))
             ->orderByDesc('p.id')->limit(500)
             ->get([

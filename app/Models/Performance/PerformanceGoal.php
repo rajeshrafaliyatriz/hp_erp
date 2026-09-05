@@ -5,11 +5,12 @@ namespace App\Models\Performance;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 /** A weighted, measurable goal (KRA / KPI / OKR) - the Goals tab. */
 class PerformanceGoal extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 's_performance_goals';
     protected $guarded = ['id'];

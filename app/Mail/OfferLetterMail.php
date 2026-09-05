@@ -17,12 +17,32 @@ class OfferLetterMail extends Mailable
     public $attachmentPath;
 
     /**
-     * Create a new message instance.
+     * Everything the template needs beyond the offer itself.
+     *
+     * Public properties rather than a with() array, matching how $offer was
+     * already exposed - Laravel passes public mailable properties to the view,
+     * and mixing the two conventions in one class is how a variable ends up
+     * undefined in production but fine in a preview.
      */
-    public function __construct($offer, $attachmentPath = null)
-    {
+    public $candidateName;
+    public $organisation;
+    public $responseUrl;
+    public $expiresAt;
+
+    public function __construct(
+        $offer,
+        $attachmentPath = null,
+        ?string $candidateName = null,
+        ?string $organisation = null,
+        ?string $responseUrl = null,
+        $expiresAt = null
+    ) {
         $this->offer = $offer;
         $this->attachmentPath = $attachmentPath;
+        $this->candidateName = $candidateName;
+        $this->organisation = $organisation;
+        $this->responseUrl = $responseUrl;
+        $this->expiresAt = $expiresAt;
     }
 
     /**
@@ -30,8 +50,15 @@ class OfferLetterMail extends Mailable
      */
     public function envelope(): Envelope
     {
+        /*
+         * The subject names the role. "Talent Offer Letter" is internal
+         * vocabulary - a candidate reading their inbox sees an email about a job
+         * they applied for, not about a module of our software.
+         */
         return new Envelope(
-            subject: 'Talent Offer Letter',
+            subject: $this->offer->position
+                ? 'Your offer: ' . $this->offer->position
+                : 'Your job offer',
         );
     }
 
@@ -54,7 +81,9 @@ class OfferLetterMail extends Mailable
     {
         $attachments = [];
         if ($this->attachmentPath) {
-            $attachments[] = Attachment::fromPath($this->attachmentPath)->as('offer_letter.pdf');
+            // Named for the candidate's downloads folder, not for our storage.
+            $attachments[] = Attachment::fromPath($this->attachmentPath)
+                ->as('Offer Letter' . ($this->offer->position ? ' - ' . $this->offer->position : '') . '.pdf');
         }
         return $attachments;
     }
