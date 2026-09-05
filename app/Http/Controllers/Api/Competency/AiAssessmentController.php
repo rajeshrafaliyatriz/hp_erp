@@ -1114,7 +1114,11 @@ class AiAssessmentController extends Controller
 
         $deadline = Carbon::parse($attempt->started_at)->addMinutes((int) $test->time_limit_minutes);
 
-        return max(0, now()->diffInSeconds($deadline, false));
+        // diffInSeconds() returns a float, and the declared ?int return type
+        // narrowed it implicitly - an E_DEPRECATED on PHP 8.1+ logged on every
+        // start() and every poll of a timed attempt. Floor rather than round, so
+        // a learner is never told they have a second they do not have.
+        return max(0, (int) floor(now()->diffInSeconds($deadline, false)));
     }
 
     /** The prompt. Built from the items, never from a fixed list of subjects. */
