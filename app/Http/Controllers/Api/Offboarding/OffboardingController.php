@@ -267,6 +267,37 @@ class OffboardingController extends Controller
                 'updatedOn' => date('d M Y', strtotime($c->updated_at)),
                 'noticeDate' => $c->notice_date ? date('Y-m-d', strtotime($c->notice_date)) : null,
                 'lastWorkingDay' => $c->last_working_day ? date('d M Y', strtotime($c->last_working_day)) : 'N/A',
+
+                /*
+                 * THESE THREE ARE WHY TWO TABS WERE DEAD.
+                 *
+                 * The Clearance Tracker computes its percentage from
+                 * `clearance_tasks` on each LIST row (offboarding-center.tsx:451),
+                 * and its four department columns filter the same array (:458).
+                 * The Exit Interviews list reads `exit_interview_done` (:1102)
+                 * and `exit_interview_date` (:1106). None of the three was in
+                 * this projection - only show() returned them.
+                 *
+                 * The result was not an error. Every case read 0% cleared, each
+                 * department column rendered a green "N/A" that looks like a
+                 * pass, and every interview said "Pending" / "Not Scheduled" -
+                 * including one saved a moment earlier, because the save worked
+                 * and the list simply could not see it.
+                 *
+                 * The row already carries these columns: the query selects `*`.
+                 * They were fetched, then dropped on the way out.
+                 *
+                 * Defaults match show() EXACTLY. If they diverged, a case would
+                 * report one progress figure in the list and another in the
+                 * drawer, which is worse than reporting none.
+                 */
+                'clearance_tasks' => $c->clearance_tasks
+                    ? json_decode($c->clearance_tasks, true)
+                    : self::DEFAULT_CLEARANCE_TASKS,
+                'exit_interview_done' => (bool) $c->exit_interview_done,
+                'exit_interview_date' => $c->exit_interview_date
+                    ? date('Y-m-d', strtotime($c->exit_interview_date))
+                    : null,
             ];
         })->all();
 
@@ -434,7 +465,22 @@ class OffboardingController extends Controller
             'notice_date' => $validated['notice_date'],
             'last_working_day' => $validated['last_working_day'],
             'status' => 'Notice Period',
-            'manager_id' => $validated['manager_id'] ?? $employee->reportmanager ?? null,
+            /*
+             * `reporting_manager_id`, not `reportmanager`.
+             *
+             * `reportmanager` is a column on talent_offers, not on tbluser -
+             * this line was copied from the offer code. Because the query above
+             * selects the whole row, the undefined property read as null
+             * instead of erroring, so the fallback has never once fired.
+             *
+             * Correcting it changes nothing today: tbluser.reporting_manager_id
+             * is populated on 0 of 299 rows on live and 8 of 2372 on the app
+             * database, so the fallback still yields null for almost everyone.
+             * The manager on the three existing cases came from the request,
+             * which is why they have one. This is a latent bug being closed,
+             * not a data repair - there is nothing to back-fill.
+             */
+            'manager_id' => $validated['manager_id'] ?? $employee->reporting_manager_id ?? null,
             'clearance_tasks' => json_encode(self::DEFAULT_CLEARANCE_TASKS),
             'documents' => json_encode(self::DEFAULT_DOCUMENTS),
             'comments' => json_encode([]),

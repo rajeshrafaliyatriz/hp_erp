@@ -36,10 +36,42 @@ class MobilityJobController extends Controller
             });
         }
 
-        // Filters
+        /*
+         * DEPARTMENT ARRIVES AS AN ID AND IS STORED AS A NAME.
+         *
+         * `/mobility/filters` serves options as `id as value`, so the client
+         * sends `department=1868`, while `s_mobility_jobs.department` holds the
+         * NAME. The comparison could never match. Executed before this fix:
+         *
+         *     /mobility/jobs                        total 1
+         *     /mobility/jobs?department=1868        total 0   <- what the UI sends
+         *     /mobility/jobs?department=Accountancy total 1   <- what this wanted
+         *
+         * Every department option returned an empty list, and no error was ever
+         * raised - an empty result is a legitimate answer, so it read as "no
+         * internal openings in that department" rather than a broken filter.
+         *
+         * A numeric value is resolved through hrms_departments, TENANT-SCOPED so
+         * an id belonging to another organisation cannot name a department here.
+         * A non-numeric value is still matched directly, so any caller that
+         * always sent the name keeps working.
+         */
         if ($dept = $request->input('department')) {
             if (strtolower($dept) !== 'all') {
-                $query->where('department', $dept);
+                $name = ctype_digit((string) $dept)
+                    ? DB::table('hrms_departments')
+                        ->where('id', (int) $dept)
+                        ->where('sub_institute_id', $subInstituteId)
+                        ->value('department')
+                    : $dept;
+
+                /*
+                 * An unresolvable id filters to NOTHING rather than being
+                 * ignored. Silently dropping the filter would answer a question
+                 * nobody asked - the full unfiltered list, presented as the
+                 * contents of one department.
+                 */
+                $query->where('department', $name ?? '\0__no_such_department__');
             }
         }
         if ($loc = $request->input('location')) {
@@ -114,15 +146,27 @@ class MobilityJobController extends Controller
             return $this->mobilityError($validator->errors()->first(), 422);
         }
 
-        // Auto-generate a job_id (e.g. INT-2026-0001)
+        /*
+         * Auto-generate a job_id, e.g. INT-2026-001. Numbered per tenant, which
+         * is what the code on screen is meant to mean - and the UNIQUE that
+         * backs it is (sub_institute_id, job_id) as of the 2026_09_03_160000
+         * migration. It used to be a global unique on job_id alone, so the first
+         * tenant to post in a year took INT-<year>-001 for everybody and every
+         * other tenant's first posting died on a duplicate key.
+         *
+         * The sequence is taken as a NUMBER, not by ordering the codes as text.
+         * `orderByDesc('job_id')` sorted lexically, so with three-digit padding
+         * 'INT-2026-999' ranked above 'INT-2026-1000' and the thousandth posting
+         * of a year would have reused an existing number - which now that the
+         * constraint works would be a hard failure rather than a silent clash.
+         */
         $year = now()->year;
         $prefix = "INT-{$year}-";
-        $last = MobilityJob::where('sub_institute_id', $subInstituteId)
+        $highest = (int) MobilityJob::where('sub_institute_id', $subInstituteId)
             ->where('job_id', 'like', $prefix . '%')
-            ->orderByDesc('job_id')
-            ->value('job_id');
-        $sequence = $last ? ((int) substr($last, strlen($prefix))) + 1 : 1;
-        $jobIdCode = $prefix . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
+            ->selectRaw('MAX(CAST(SUBSTRING(job_id, ?) AS UNSIGNED)) AS seq', [strlen($prefix) + 1])
+            ->value('seq');
+        $jobIdCode = $prefix . str_pad((string) ($highest + 1), 3, '0', STR_PAD_LEFT);
 
         // Fetch department name if department_id is passed
         $deptName = null;

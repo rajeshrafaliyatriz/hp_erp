@@ -536,71 +536,7 @@ class PerformanceReviewController extends Controller
         }
 
         $now = now();
-        $affected = 0;
         $skipped = [];
-
-        foreach ($reviews as $review) {
-            switch ($action) {
-                case 'advance':
-                    $index = array_search($review->stage, PerformanceReview::STAGES, true);
-                    $index = $index === false ? 0 : $index;
-
-                    $target = $validated['stage'] ?? (PerformanceReview::STAGES[$index + 1] ?? null);
-
-                    if (!$target || $target === $review->stage) {
-                        $skipped[] = (int) $review->id;
-                        continue 2;
-                    }
-
-                    $review->stage = $target;
-                    $review->status = $target === 'completed' ? 'completed' : 'in_progress';
-
-                    if ($target === 'completed') {
-                        $review->is_draft = false;
-                        $review->finalized_at = $now;
-
-                        $effective = $review->calibrated_rating ?? $review->manager_rating ?? $review->self_rating;
-                        if ($effective !== null) {
-                            $review->overall_rating = $effective;
-                            $review->overall_rating_label = $this->ratingLabel((float) $effective);
-                        }
-                    }
-                    break;
-
-                case 'complete':
-                    if ($review->stage === 'completed') {
-                        $skipped[] = (int) $review->id;
-                        continue 2;
-                    }
-                    $review->stage = 'completed';
-                    $review->status = 'completed';
-                    $review->is_draft = false;
-                    $review->finalized_at = $now;
-
-                    $effective = $review->calibrated_rating ?? $review->manager_rating ?? $review->self_rating;
-                    if ($effective !== null) {
-                        $review->overall_rating = $effective;
-                        $review->overall_rating_label = $this->ratingLabel((float) $effective);
-                    }
-                    break;
-
-                case 'remind':
-                    $review->last_reminder_at = $now;
-                    break;
-
-                case 'assign_manager':
-                    $review->manager_id = (int) $validated['manager_id'];
-                    break;
-
-                case 'set_due_date':
-                    $review->due_date = $validated['due_date'];
-                    break;
-            }
-
-            $review->updated_by = $context['user_id'];
-            $review->save();
-            $affected++;
-        }
 
         $labels = [
             'advance'        => 'advanced the stage of',
@@ -610,18 +546,96 @@ class PerformanceReviewController extends Controller
             'set_due_date'   => 'changed the due date on',
         ];
 
-        $this->logPerformanceActivity(
-            $tenant,
-            $context['user_id'],
-            'bulk_' . $action,
-            $labels[$action] . ' ' . $affected . ' review(s)',
-            'review',
-            null,
-            $affected . ' review(s)',
-            null,
-            null,
-            $reviews->first()->cycle_id
-        );
+        /*
+         * A bulk action is one action, so it commits once.
+         *
+         * Without this, a failure part way through advanced some of the selected
+         * reviews and left the rest behind - and because the single activity log
+         * entry is written only after the loop, the trail would say nothing had
+         * happened at all. The screen reports "N updated" from a counter, so
+         * nobody would see which N.
+         */
+        $affected = DB::transaction(function () use ($reviews, $action, $validated, $now, &$skipped, $context, $tenant, $labels) {
+            $affected = 0;
+
+            foreach ($reviews as $review) {
+                switch ($action) {
+                    case 'advance':
+                        $index = array_search($review->stage, PerformanceReview::STAGES, true);
+                        $index = $index === false ? 0 : $index;
+
+                        $target = $validated['stage'] ?? (PerformanceReview::STAGES[$index + 1] ?? null);
+
+                        if (!$target || $target === $review->stage) {
+                            $skipped[] = (int) $review->id;
+                            continue 2;
+                        }
+
+                        $review->stage = $target;
+                        $review->status = $target === 'completed' ? 'completed' : 'in_progress';
+
+                        if ($target === 'completed') {
+                            $review->is_draft = false;
+                            $review->finalized_at = $now;
+
+                            $effective = $review->calibrated_rating ?? $review->manager_rating ?? $review->self_rating;
+                            if ($effective !== null) {
+                                $review->overall_rating = $effective;
+                                $review->overall_rating_label = $this->ratingLabel((float) $effective);
+                            }
+                        }
+                        break;
+
+                    case 'complete':
+                        if ($review->stage === 'completed') {
+                            $skipped[] = (int) $review->id;
+                            continue 2;
+                        }
+                        $review->stage = 'completed';
+                        $review->status = 'completed';
+                        $review->is_draft = false;
+                        $review->finalized_at = $now;
+
+                        $effective = $review->calibrated_rating ?? $review->manager_rating ?? $review->self_rating;
+                        if ($effective !== null) {
+                            $review->overall_rating = $effective;
+                            $review->overall_rating_label = $this->ratingLabel((float) $effective);
+                        }
+                        break;
+
+                    case 'remind':
+                        $review->last_reminder_at = $now;
+                        break;
+
+                    case 'assign_manager':
+                        $review->manager_id = (int) $validated['manager_id'];
+                        break;
+
+                    case 'set_due_date':
+                        $review->due_date = $validated['due_date'];
+                        break;
+                }
+
+                $review->updated_by = $context['user_id'];
+                $review->save();
+                $affected++;
+            }
+
+            $this->logPerformanceActivity(
+                $tenant,
+                $context['user_id'],
+                'bulk_' . $action,
+                $labels[$action] . ' ' . $affected . ' review(s)',
+                'review',
+                null,
+                $affected . ' review(s)',
+                null,
+                null,
+                $reviews->first()->cycle_id
+            );
+
+            return $affected;
+        });
 
         return $this->performanceResponse([
             'affected' => $affected,

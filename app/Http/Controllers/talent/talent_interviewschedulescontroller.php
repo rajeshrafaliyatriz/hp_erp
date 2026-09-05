@@ -95,9 +95,12 @@ class talent_interviewschedulescontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
-
-      
+        // From the token, matching index() at :50. Taking it from the request let a
+        // caller schedule an interview inside another organisation's tenant.
+        $sub_institute_id = $this->apiTenantId($request);
+        if (!$sub_institute_id) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
 
           // Normalize interviewer_id to array
           if (is_string($request->interviewer_id)) {
@@ -112,7 +115,9 @@ class talent_interviewschedulescontroller extends Controller
           $validator = Validator::make($request->all(), [
             'job_id'            => 'required|integer|exists:talent_job_postings,id',
             'applicant_id'      => 'required|string|max:255',
-            'round_no'          => 'nullable|string|max:255',
+            // tinyint(4) on both databases, and the backend derives it as max+1 - a
+            // string rule let 255 characters reach a column that overflows at 127.
+            'round_no'          => 'nullable|integer|min:1|max:127',
             'interview_date'    => 'nullable|date|after_or_equal:today',
             'time'              => 'nullable|string|max:255',
             'duration'          => 'nullable|integer',
@@ -211,8 +216,12 @@ class talent_interviewschedulescontroller extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-    
-            $sub_institute_id = $request->get('sub_institute_id');
+
+            // From the token, matching index() at :50.
+            $sub_institute_id = $this->apiTenantId($request);
+            if (!$sub_institute_id) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
 
             // Normalize interviewer_id to array
             if (is_string($request->interviewer_id)) {
@@ -228,7 +237,9 @@ class talent_interviewschedulescontroller extends Controller
             $validator = Validator::make($request->all(), [
                 'job_id'            => 'nullable|integer|exists:talent_job_postings,id',
                 'applicant_id'      => 'nullable|string|max:255',
-                'round_no'          => 'nullable|string|max:255',
+                // tinyint(4) on both databases, and the backend derives it as max+1 - a
+            // string rule let 255 characters reach a column that overflows at 127.
+            'round_no'          => 'nullable|integer|min:1|max:127',
                 'interview_date'    => 'nullable|date',
                 'time'              => 'nullable|string|max:255',
                 'duration'          => 'nullable|integer',
@@ -334,7 +345,11 @@ class talent_interviewschedulescontroller extends Controller
                 return response()->json(['message' => 'Invalid token'], 401);
             }
 
-            $sub_institute_id = $request->get('sub_institute_id');
+            // From the token, matching index() at :50.
+            $sub_institute_id = $this->apiTenantId($request);
+            if (!$sub_institute_id) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
 
             // Normalize interviewer_id to array
             if (is_string($request->interviewer_id)) {
@@ -349,7 +364,9 @@ class talent_interviewschedulescontroller extends Controller
             // 🧾 Validation
             $validator = Validator::make($request->all(), [
                 'id'                => 'required|integer',
-                'round_no'          => 'nullable|string|max:255',
+                // tinyint(4) on both databases, and the backend derives it as max+1 - a
+            // string rule let 255 characters reach a column that overflows at 127.
+            'round_no'          => 'nullable|integer|min:1|max:127',
                 'interview_date'    => 'nullable|date',
                 'time'              => 'nullable|string|max:255',
                 'duration'          => 'nullable|integer',

@@ -5,11 +5,12 @@ namespace App\Models\Performance;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 /** A named filter preset behind the "Saved Views" dropdown. */
 class PerformanceSavedView extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 's_performance_saved_views';
     protected $guarded = ['id'];

@@ -363,10 +363,36 @@ check('notify', 'email channel is OFF (tripwire, not a correctness test)', funct
     //
     // If this line ever flips to FAIL, someone enabled outbound mail. That must
     // be a decision somebody made, never something that drifted.
+    //
+    // ── AMENDED 2026-09-03, Sprint 4b ──────────────────────────────────────
+    //
+    // There is now a SECOND way for mail to leave: MailGate::allowedForTenant()
+    // permits a named list of organisations while the master flag stays off. It
+    // is deliberately OR, not AND - with G2G_NOTIFY_EMAIL off, an AND would be
+    // permanently false and therefore useless.
+    //
+    // Which means the old assertion could report "email is off" while mail was
+    // leaving for a tenant. That is exactly the drift MailGate was written to
+    // close, so this check now asserts BOTH switches. The allowlist is expected
+    // to hold precisely the organisations written down below; anything else is a
+    // FAIL even though the master flag is untouched.
+    $EXPECTED_TENANTS = [6];   // tenant 6, for candidate offer links. Milan, 2026-09-03.
+
     $on = app(App\Services\Notifications\NotificationSender::class)->emailEnabled();
-    return [$on ? 'FAIL' : 'PASS',
-        $on ? 'G2G_NOTIFY_EMAIL=true - REAL MAIL WILL LEAVE THE BUILDING. Three conditions apply; check all three were met.'
-            : 'G2G_NOTIFY_EMAIL unset/false'];
+    $tenants = App\Support\MailGate::allowedTenants();
+    $unexpected = array_values(array_diff($tenants, $EXPECTED_TENANTS));
+
+    if ($on) {
+        return ['FAIL', 'G2G_NOTIFY_EMAIL=true - REAL MAIL WILL LEAVE THE BUILDING FOR EVERY TENANT. Three conditions apply; check all three were met.'];
+    }
+    if ($unexpected) {
+        return ['FAIL', 'G2G_NOTIFY_EMAIL_TENANTS contains ' . implode(',', $unexpected)
+            . ' which is not in the written-down list (' . implode(',', $EXPECTED_TENANTS) . '). Mail leaves for that organisation.'];
+    }
+
+    return ['PASS', $tenants
+        ? 'G2G_NOTIFY_EMAIL unset/false; allowlist = ' . implode(',', $tenants) . ' (expected, written down above)'
+        : 'G2G_NOTIFY_EMAIL unset/false; allowlist empty'];
 });
 
 check('notify', 'no action link points at a route that does not exist', function () {

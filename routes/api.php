@@ -74,6 +74,7 @@ use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\talent\talent_screening_results_controller;
+use App\Http\Controllers\Api\Onboarding\OnboardingWorkstreamController;
 use App\Http\Controllers\Api\Talent\TalentAssessmentController;
 use App\Http\Controllers\talent\CandidateAssessmentResponseController;
 use App\Http\Controllers\talent\TalentOfferController;
@@ -1755,6 +1756,27 @@ Route::get('/onboarding/journeys/{journeyId}/timeline', [V2OnboardingJourneyCont
 // Preboarding tasks - the main table, its row actions and the Add Task sheet.
 // Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
 Route::get('/onboarding/workstreams', [V2OnboardingTaskController::class, 'workstreams']);
+
+/*
+| The DATA behind the five workstream cards.
+|
+| The cards above are a rollup of task counts; these carry what was actually
+| recorded - which laptop, which policy version, whose UAN. Three of the five
+| write to tables created for them; payroll writes the tbluser columns that
+| already existed, and learning only READS what LearningAssigner assigned.
+*/
+Route::get('/onboarding/journeys/{journeyId}/workstream-data', [OnboardingWorkstreamController::class, 'show'])
+    ->whereNumber('journeyId');
+Route::post('/onboarding/journeys/{journeyId}/assets', [OnboardingWorkstreamController::class, 'storeAsset'])
+    ->whereNumber('journeyId');
+Route::post('/onboarding/assets/{assetId}/return', [OnboardingWorkstreamController::class, 'returnAsset'])
+    ->whereNumber('assetId');
+Route::post('/onboarding/journeys/{journeyId}/benefits', [OnboardingWorkstreamController::class, 'storeBenefit'])
+    ->whereNumber('journeyId');
+Route::post('/onboarding/journeys/{journeyId}/acknowledge-policy', [OnboardingWorkstreamController::class, 'acknowledgePolicy'])
+    ->whereNumber('journeyId');
+Route::put('/onboarding/journeys/{journeyId}/payroll', [OnboardingWorkstreamController::class, 'savePayroll'])
+    ->whereNumber('journeyId');
 Route::post('/onboarding/tasks/bulk', [V2OnboardingTaskController::class, 'bulk']);
 Route::get('/onboarding/tasks', [V2OnboardingTaskController::class, 'index']);
 Route::post('/onboarding/tasks', [V2OnboardingTaskController::class, 'store']);

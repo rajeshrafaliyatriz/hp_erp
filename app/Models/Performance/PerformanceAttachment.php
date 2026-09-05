@@ -5,11 +5,12 @@ namespace App\Models\Performance;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 /** A file on a review - the "Attachments (n)" tab and the sidebar Docs tab. */
 class PerformanceAttachment extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 's_performance_attachments';
     protected $guarded = ['id'];

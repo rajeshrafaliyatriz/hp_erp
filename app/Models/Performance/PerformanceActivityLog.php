@@ -4,6 +4,7 @@ namespace App\Models\Performance;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 /**
  * The Performance module's own event feed - Activity Feed + Audit Trail tabs.
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class PerformanceActivityLog extends Model
 {
-    use HasFactory;
+    use HasFactory, SkipsGuardableColumnCheck;
 
     protected $table = 's_performance_activity_log';
     protected $guarded = ['id'];

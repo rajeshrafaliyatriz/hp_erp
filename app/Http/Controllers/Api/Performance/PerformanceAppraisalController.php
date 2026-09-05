@@ -330,27 +330,35 @@ class PerformanceAppraisalController extends Controller
             ->where('status', '!=', $target)
             ->get();
 
-        foreach ($appraisals as $appraisal) {
-            $appraisal->status = $target;
+        /*
+         * One approval decision over many rows commits once. Approving half a
+         * selection and logging none of it is the worst of both: the appraisals
+         * carry an approver and a timestamp, and the activity trail has no
+         * record of who applied it.
+         */
+        DB::transaction(function () use ($appraisals, $target, $context, $tenant, $validated) {
+            foreach ($appraisals as $appraisal) {
+                $appraisal->status = $target;
 
-            if (in_array($target, ['approved', 'rejected'], true)) {
-                $appraisal->approver_id = $context['user_id'];
-                $appraisal->approved_at = now();
+                if (in_array($target, ['approved', 'rejected'], true)) {
+                    $appraisal->approver_id = $context['user_id'];
+                    $appraisal->approved_at = now();
+                }
+
+                $appraisal->updated_by = $context['user_id'];
+                $appraisal->save();
             }
 
-            $appraisal->updated_by = $context['user_id'];
-            $appraisal->save();
-        }
-
-        $this->logPerformanceActivity(
-            $tenant,
-            $context['user_id'],
-            'bulk_' . $validated['action'] . '_appraisal',
-            $this->statusLabel($target) . ' ' . $appraisals->count() . ' appraisal(s)',
-            'appraisal',
-            null,
-            $appraisals->count() . ' appraisal(s)'
-        );
+            $this->logPerformanceActivity(
+                $tenant,
+                $context['user_id'],
+                'bulk_' . $validated['action'] . '_appraisal',
+                $this->statusLabel($target) . ' ' . $appraisals->count() . ' appraisal(s)',
+                'appraisal',
+                null,
+                $appraisals->count() . ' appraisal(s)'
+            );
+        });
 
         return $this->performanceResponse(
             ['affected' => $appraisals->count()],

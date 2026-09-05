@@ -67,6 +67,11 @@ class EventCatalogue
      */
     /** @var array<string, array<string, string>> event => consumer => kind */
     public const SHIPPED = [
+        // Consumed by OnboardingLauncher, which creates the onboarding journey
+        // from the hire's offer_id. Was in NOT_SHIPPED until that reactor existed.
+        'employee.hired' => [
+            'OnboardingLauncher' => self::REACTOR,
+        ],
         'task.rejected' => [
             'CapabilityEvidenceProjector' => self::PROJECTOR,
             'TaskStatusProjector'         => self::PROJECTOR,
@@ -168,11 +173,14 @@ class EventCatalogue
         // "CapabilityEvidenceProjector is built", and it now is. Left as a
         // comment rather than deleted so the deferral and its resolution stay
         // visible together - same treatment as certification.issued.
-        'employee.hired' => [
-            'verdict' => 'DEFERRED',
-            'trigger' => 'OnboardingLauncher is built (X-14).',
-            'reason'  => 'Its only declared consumer, OnboardingLauncher, was never written. G-EVT-01.',
-        ],
+        //
+        // 'employee.hired' WAS HERE and is now SHIPPED. Its trigger said
+        // "OnboardingLauncher is built (X-14)", and it now is:
+        // App\Services\Events\OnboardingLauncher creates the onboarding journey
+        // from the hire's offer_id and is registered in ReactEvents::REACTORS.
+        // Left as a comment rather than deleted so the deferral and its
+        // resolution stay visible together - the same treatment task.reopened
+        // and certification.issued already have.
         'readiness_gate.changed' => [
             'verdict' => 'DEFERRED',
             'trigger' => 'CORRECTED 2026-08-11. X-07 is DONE - the gates compute, the acknowledgement path works, and CompetencyGapController now ENFORCES capability_coverage. The remaining condition is not the state, it is the READER: a reactor needs someone to react FOR. Trigger is now "more features enforce gates, then X-15" - building the applier before that is building the consumer of an event before anything consumes the applier own output, which is how FeatureGateApplier became a paper reactor to begin with.',

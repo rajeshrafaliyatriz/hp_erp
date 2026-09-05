@@ -28,3 +28,10 @@ yarn-error.log
 _local-backups/
 docs/phase3/_changes/LIVE-*.sql
 docs/phase3/_changes/*backup*.sql
+
+# Any .env backup, however it is named - one of these blocked a push
+# with a full credential set in it (DB, mail, Spaces, Gemini, DeepSeek).
+.env.bak*
+.env.*.bak
+.env.local
+.env.*.local
