@@ -177,11 +177,6 @@ class AiCourseController extends Controller
 
                 /*
                  * The KASBA items underneath those competencies.
-                 *
-                 * This is the fallback the customer asked for: when a role has
-                 * no competencies mapped - true of 257 of 266 roles - the
-                 * author picks knowledge / skill / behaviour / attitude /
-                 * ability items directly instead.
                  */
                 if ($competencies->isNotEmpty()) {
                     $kasba = DB::table('competency_kasba_item')
@@ -193,6 +188,49 @@ class AiCourseController extends Controller
                 }
             }
 
+            /*
+             * ── THE MANUAL FALLBACK, WHICH USED TO BE A DEAD END ────────────
+             *
+             * The comment that stood here claimed KASBA was the answer for a
+             * role with no competencies mapped - "true of 257 of 266 roles".
+             * The code could not deliver that. KASBA items were queried BY the
+             * role's competency ids, so a role with no competencies returned
+             * competencies:[] AND kasba_items:[]. The UI's amber hint offered to
+             * "switch to individual K/S/B/A items", and switching landed on a
+             * second empty picker. competency_kasba_item has no jobrole_id, so
+             * there is no role path to KASBA at all - the fallback could never
+             * have worked as written.
+             *
+             * The honest fallback is the organisation's own library: everything
+             * this tenant has defined, for the author to choose from by hand.
+             * Sent only when the role-scoped lists are empty, so the common case
+             * stays a small payload and the client does not need a second
+             * request at the moment it discovers it needs one.
+             */
+            $library = ['competencies' => [], 'kasba_items' => []];
+
+            if ($jobroleIds->isNotEmpty() && $competencies->isEmpty()) {
+                $library['competencies'] = DB::table('competency')
+                    ->where('sub_institute_id', $tenant)
+                    ->whereNull('deleted_at')
+                    ->orderBy('name')
+                    ->limit(500)
+                    ->get(['id', 'name', 'code', 'status'])
+                    ->values();
+
+                $library['kasba_items'] = DB::table('competency_kasba_item as k')
+                    ->leftJoin('competency as c', 'c.id', '=', 'k.competency_id')
+                    ->where('k.sub_institute_id', $tenant)
+                    ->orderBy('k.kasba_type')
+                    ->orderBy('k.item_label')
+                    ->limit(2000)
+                    ->get([
+                        'k.id', 'k.competency_id', 'k.kasba_type', 'k.item_label', 'k.weight',
+                        'c.name as competency_name',
+                    ])
+                    ->values();
+            }
+
             return response()->json([
                 'status' => true,
                 'data' => [
@@ -201,6 +239,14 @@ class AiCourseController extends Controller
                     'jobroles' => $jobroles,
                     'competencies' => $competencies->values(),
                     'kasba_items' => $kasba->values(),
+                    /*
+                     * The whole organisation's library, present ONLY when the
+                     * chosen roles have nothing mapped. Its emptiness is the
+                     * signal the client uses: a non-empty library means "this
+                     * role has no capabilities defined, choose from everything".
+                     */
+                    'library_competencies' => $library['competencies'],
+                    'library_kasba_items' => $library['kasba_items'],
                     // Named here rather than hardcoded in the component, so the
                     // five types come from the enum that defines them.
                     'kasba_types' => ['knowledge', 'skill', 'behaviour', 'attitude', 'ability'],
@@ -563,42 +609,106 @@ class AiCourseController extends Controller
     {
         $departmentIds = array_values(array_filter((array) $request->input('department_ids', [])));
         $competencyIds = array_values(array_filter((array) $request->input('competency_ids', [])));
+        $kasbaItemIds = array_values(array_filter((array) $request->input('kasba_item_ids', [])));
+        $jobroleIds = array_values(array_filter((array) $request->input('jobrole_ids', [])));
+
+        /*
+         * ── A KASBA-SCOPED COURSE USED TO DEVELOP NOTHING ───────────────────
+         *
+         * kasba_item_ids reached the outline prompt and were frozen into
+         * ai_course_outlines.input_fields, and then stopped. publish() did not
+         * validate them, saveGeneratedScope() did not read them, and there is no
+         * course_kasba map table anywhere. So a course scoped by individual
+         * K/S/B/A items published with ZERO course_competency_map rows - and
+         * that table is what QuizScoringService reads to decide which competency
+         * a passing learner's rating moves. The course developed nothing,
+         * measured nothing, and said so nowhere.
+         *
+         * A KASBA item belongs to a competency, so the mapping is derivable:
+         * the competencies the chosen items sit under ARE what the course
+         * develops. Scoped to the tenant, because an id from a request is never
+         * trusted to be in the caller's own organisation.
+         */
+        if ($kasbaItemIds !== []) {
+            $derived = DB::table('competency_kasba_item')
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereIn('id', array_map('intval', $kasbaItemIds))
+                ->pluck('competency_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $competencyIds = array_values(array_unique([...array_map('intval', $competencyIds), ...$derived]));
+        }
+
+        /*
+         * Job roles were validated by publish() and then silently dropped -
+         * saveGeneratedScope read only department_ids and competency_ids. The
+         * column that carries them already exists, is written by the manual
+         * wizard and is read by the enrolment gate; the AI path just never
+         * populated it, so "this course is for these roles" was true in the
+         * prompt and false in the product.
+         *
+         * restrict_roles holds role NAMES, matched against the learner's profile
+         * name by LmsCourseEnrollController - the same shape LmsCourseController
+         * writes.
+         */
+        $roleNames = $jobroleIds === [] ? [] : DB::table('s_user_jobrole')
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereIn('id', array_map('intval', $jobroleIds))
+            ->pluck('jobrole')
+            ->filter()
+            ->values()
+            ->all();
 
         $decoded = json_decode((string) $outline->outline, true);
         $summary = is_array($decoded) ? ($decoded['summary'] ?? null) : null;
 
-        DB::table('lms_course_settings')->insert([
-            'course_id' => $courseId,
-            'sub_institute_id' => $subInstituteId,
-            'sequential_unlock' => 0,
-            'description' => $summary,
-            'language' => 'English',
-            'is_mandatory' => 0,
-            'discussion_enabled' => 0,
-            // Restricted only when the author actually named departments;
-            // otherwise the course is open, which is the sane default.
-            'visibility' => $departmentIds ? 'restricted' : 'all',
-            'restrict_departments' => $departmentIds ? json_encode($departmentIds) : null,
-            'issue_certificate' => 1,
-            'recert_alerts' => 0,
-            'enrollment_rule' => 'open',
-            'created_by' => $this->contextUserId($request),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        foreach ($competencyIds as $competencyId) {
-            DB::table('course_competency_map')->insert([
+        /*
+         * updateOrInsert, not insert: lms_course_settings.course_id is UNIQUE,
+         * so a plain insert would throw inside the publish transaction for any
+         * path that publishes onto an existing course id.
+         */
+        DB::table('lms_course_settings')->updateOrInsert(
+            ['course_id' => $courseId],
+            [
                 'sub_institute_id' => $subInstituteId,
-                'course_id' => $courseId,
-                'competency_id' => (int) $competencyId,
-                // A target the author can revise; the quiz measures what
-                // learners actually reach separately.
-                'proficiency_level' => 3,
-                'is_primary' => 1,
+                'sequential_unlock' => 0,
+                'description' => $summary,
+                'language' => 'English',
+                'is_mandatory' => 0,
+                'discussion_enabled' => 0,
+                // Restricted only when the author actually named departments;
+                // otherwise the course is open, which is the sane default.
+                'visibility' => $departmentIds ? 'restricted' : 'all',
+                'restrict_departments' => $departmentIds ? json_encode($departmentIds) : null,
+                'restrict_roles' => $roleNames ? json_encode($roleNames) : null,
+                'issue_certificate' => 1,
+                'recert_alerts' => 0,
+                'enrollment_rule' => 'open',
+                'created_by' => $this->contextUserId($request),
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ]
+        );
+
+        foreach ($competencyIds as $competencyId) {
+            // updateOrInsert against uq_ccm (course_id, competency_id): a plain
+            // insert threw on any re-publish over the same pair.
+            DB::table('course_competency_map')->updateOrInsert(
+                [
+                    'sub_institute_id' => $subInstituteId,
+                    'course_id' => $courseId,
+                    'competency_id' => (int) $competencyId,
+                ],
+                [
+                    // A target the author can revise; the quiz measures what
+                    // learners actually reach separately.
+                    'proficiency_level' => 3,
+                    'is_primary' => 1,
+                    'updated_at' => now(),
+                ]
+            );
         }
     }
 
@@ -940,6 +1050,11 @@ class AiCourseController extends Controller
                 'jobrole_ids.*'    => 'integer',
                 'competency_ids'   => 'nullable|array',
                 'competency_ids.*' => 'integer',
+                // Was absent, so Laravel's validator dropped it and a
+                // KASBA-scoped course reached saveGeneratedScope with nothing
+                // to map. See saveGeneratedScope().
+                'kasba_item_ids'   => 'nullable|array',
+                'kasba_item_ids.*' => 'integer',
             ]
         );
 
