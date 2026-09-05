@@ -74,7 +74,7 @@ class LeaveAnalyticsService
                 $join->on('hlt.id', '=', 'hel.leave_type_id')
                      ->where('hlt.sub_institute_id', '=', $subInstituteId);
             })
-            ->selectRaw('hel.user_id, hel.from_date, hel.to_date, hel.day_type, hel.status, hlt.leave_type')
+            ->selectRaw('hel.user_id, hel.from_date, hel.to_date, hel.day_type, hel.chargeable_days, hel.status, hlt.leave_type')
             ->where('hel.sub_institute_id', $subInstituteId)
             ->whereNull('hel.deleted_at')
             ->where('u.status', 1)
@@ -92,7 +92,13 @@ class LeaveAnalyticsService
                 ? self::LWP_BUCKET
                 : ($row->leave_type ?: 'Unassigned');
 
-            $days = (float) countDays($row->from_date, $row->to_date ?: $row->from_date, $row->day_type ?: 1, '');
+            // F-95: was countDays(..., '') - calendar days, ignoring the tenant's
+            // own weekly-off pattern and holidays. The corrected figure is
+            // computed once by LeaveDayCounter when the request is saved and
+            // stored on the row, so this reads it rather than re-deriving a
+            // third version of it. COALESCE only for a row whose dates could not
+            // be parsed at backfill time.
+            $days = (float) ($row->chargeable_days ?? 0);
 
             $userId = (int) $row->user_id;
             $consumed[$bucket][$userId] = round(($consumed[$bucket][$userId] ?? 0) + $days, 2);
@@ -252,9 +258,24 @@ class LeaveAnalyticsService
             ->where('hel.to_date', '<=', $to);
     }
 
-    /** Number of days a single request represents. */
-    public function requestDays(?string $fromDate, ?string $toDate, $dayType): float
+    /**
+     * Number of days a single request represents.
+     *
+     * F-95. This used to call countDays(..., '') and charge calendar days. The
+     * corrected number is computed by LeaveDayCounter at write time and stored
+     * on hrms_emp_leaves.chargeable_days; pass the row's value in and this just
+     * normalises it.
+     *
+     * The signature keeps $fromDate/$toDate/$dayType so existing callers do not
+     * change shape, but they are only used for the pre-Sprint-4 fallback - a row
+     * written before the column existed and missed the backfill.
+     */
+    public function requestDays(?string $fromDate, ?string $toDate, $dayType, $chargeableDays = null): float
     {
+        if ($chargeableDays !== null) {
+            return round((float) $chargeableDays, 2);
+        }
+
         if (!$fromDate) {
             return 0.0;
         }

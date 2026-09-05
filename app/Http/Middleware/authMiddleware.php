@@ -39,7 +39,18 @@ class authMiddleware
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        return redirect()->route('login');
+        /*
+         * F-122. This was route('login'), and there is no route NAMED 'login' -
+         * the login page is named 'login.index' (its URI is /login, which is
+         * what made the mistake look right). Every unauthenticated browser hit
+         * on any of the ~1800 routes behind this middleware therefore threw
+         *
+         *   Symfony\Component\Routing\Exception\RouteNotFoundException
+         *
+         * and rendered a 500 instead of a login page. A session timeout looked
+         * like a broken product.
+         */
+        return redirect()->route('login.index');
     }
 
     /** A session is only authenticated once login has stored the user id. */

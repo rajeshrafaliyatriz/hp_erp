@@ -1,0 +1,21 @@
+===== F-91: payroll must refuse everyone except admin/HR =====
+PASS want=403 got=403  employee  -> /employee-salary-structure        {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  auditor   -> /employee-salary-structure        {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  recruiter -> /employee-salary-structure        {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  dept_head -> /employee-salary-structure        {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  rep_mgr   -> /employee-salary-structure        {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  employee  -> /payroll-type                     {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  employee  -> /monthly-payroll/create           {"status":0,"message":"You do not have permission to perform this action."}403
+===== ...and must still SERVE admin and HR =====
+PASS want=200 got=200  admin     -> /employee-salary-structure        {"employees":[{"id":122,"user_name":"aarna.kadakia","name_suffix":"Mr.","first_name":"Aarna","m
+PASS want=200 got=200  hr_mgr    -> /payroll-type                     {"data":[{"id":9,"payroll_type":1,"payroll_name":"BASIC","amount_type":1,"status":1,"sort_order
+PASS want=200 got=200  hr_mgr    -> /hrms-salary-certificate          {"employee_id":null,"month_ids":{"1":"Jan","2":"Feb","3":"Mar","4":"Apr","5":"May","6":"Jun","7
+===== F-93: Monthly Payroll Report must OPEN (was 500 for everyone) =====
+PASS want=200 got=200  admin     -> /monthly-payroll/create           {"employee_id":"","department_id":null,"selYear":"2026","selMonth":"Apr","selected_emp":null,"h
+PASS want=200 got=200  hr_mgr    -> /monthly-payroll/create           {"employee_id":"","department_id":null,"selYear":"2026","selMonth":"Apr","selected_emp":null,"h
+===== F-100: the sample-data routes are gone =====
+PASS want=404 got=404  employee  -> /hrms/myleave/7                   {    "message": "The route hrms/myleave/7 could not be found.",    "exception": "Symfony\\Compo
+PASS want=404 got=404  employee  -> /hrms/leavehistory/7              {    "message": "The route hrms/leavehistory/7 could not be found.",    "exception": "Symfony\\
+===== F-92: no password hashes anywhere in a payroll response =====
+PASS administrator salary structure body            password keys=0  otp keys=0
+PASS hr_manager salary structure body               password keys=0  otp keys=0

@@ -1,0 +1,12 @@
+===== W1. Employee applies for their own leave (legitimate) =====
+  {"status":1,"message":"Leave applied successfully","data":{"id":229}}
+  new leave id = 229
+===== W2. The SAME employee approves their OWN leave (must be 403) =====
+employee self-approves #229                              403  {"status":0,"message":"You do not have permission to decide leave requests.","role":"Employee","permission":"approve_leave"}403
+===== W3. Employee withdraws SOMEONE ELSE's pending request #219 (must be 403) =====
+employee deletes another user's #219                     403  {"status":0,"message":"You can only withdraw your own leave request."}403
+===== W4. Employee creates a LEAVE TYPE (config write, must be 403) =====
+employee creates leave type                              403  {"status":0,"message":"You do not have permission to change leave types.","role":"Employee","permission":"configure_settings"}403
+===== W5. Employee grants THEMSELVES approve rights (must be 403) =====
+{"status":0,"message":"You do not have permission to change leave role permissions.","role":"Employee","permission":"configure_settings"}
+403

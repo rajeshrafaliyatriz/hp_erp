@@ -1,0 +1,63 @@
+================ Sprint 6 — approval chain and payroll upsert ================
+
+1. The configuration screen's switches now build a chain
+  PASS  chain for tenant 3 is reporting_manager then department_head
+
+2. A new request opens the chain it was submitted under
+     leave id 251
+  PASS  two steps: step 1 pending, step 2 waiting
+
+3. HR holds Organization scope and STILL cannot skip to the end
+  PASS  HR Manager refused at step 1
+     -> This request is waiting for Reporting Manager approval (step 1). You are not the approver for this step.
+  PASS  request untouched by the refused attempt
+
+4. Step 1 approves — and the request does NOT become approved
+  PASS  step 1 accepted
+  PASS  not final
+  PASS  now waiting on department_head
+     -> Approved at step 1 of 2. Now waiting for Department Head.
+  PASS  request still pending after one approval of two
+
+5. The same approver cannot approve twice
+  PASS  reporting manager refused at step 2
+
+6. Step 2 approves — now it is approved
+  PASS  step 2 accepted
+  PASS  final
+  PASS  request approved after BOTH approvals
+     chain as recorded:
+{"step_order":1,"approver_role":"reporting_manager","status":"approved","approver_name":"Farida Khan","comment":"ok from RM"}
+{"step_order":2,"approver_role":"department_head","status":"approved","approver_name":"Rajesh Iyer","comment":"ok from DH"}
+
+7. Escalation stamps a step that has waited too long
++------+-------+--------+-------------------+----+---------------------+
+|[32m step [39m|[32m leave [39m|[32m tenant [39m|[32m from              [39m|[32m to [39m|[32m waiting since       [39m|
++------+-------+--------+-------------------+----+---------------------+
+| 48   | 252   | 3      | Reporting Manager | HR | 2026-09-04 09:26:15 |
++------+-------+--------+-------------------+----+---------------------+
+[32m1 approval step(s) escalated.[39m
+  PASS  overdue step escalated to hr
+  PASS  HR may decide the escalated step
+     re-run: [32mNothing overdue.[39m
+
+8. F-109 — a month saved twice leaves ONE payslip
+     employee-months holding more than one payslip: 1
+
+9. F-126 — a finished request cannot be re-decided
+  PASS  an approved request cannot be re-decided
+     -> This request is already approved and cannot be decided again. Ask HR to correct it if that is wrong.
+  PASS  it is still approved, not rejected
+
+10. Sent back is not a rejection — the chain restarts
+  PASS  step 1 records sent_back, step 2 back to waiting
+  PASS  re-submitting edits the same row, no duplicate
+  PASS  request pending again, step 1 pending again
+  PASS  a sent-back request can be approved after amendment
+
+11. Restore — tenant 3 goes back to the chain it had before the probe
+     multi-level switched back off; probe requests 251, 252 and 253 removed
+
+==============================================================
+  PASS 20   FAIL 0
+==============================================================

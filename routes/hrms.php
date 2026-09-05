@@ -42,6 +42,33 @@ Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], 
 //PAYROLL SYSTEM
 Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
 
+    /*
+    |----------------------------------------------------------------------
+    | Payroll - admin and HR only. HRIT Sprint 1, closing F-91 and F-92.
+    |----------------------------------------------------------------------
+    |
+    | These routes had NO role gate. `auth` accepts any valid token, and
+    | MenuMiddleware returns early for type=API, so the only thing standing
+    | between an ordinary employee and every salary in the organisation was
+    | payroll-shell.tsx - a React component, in the caller's own browser.
+    |
+    | Proven, not assumed: with an `employee` token from tenant 3,
+    | GET /employee-salary-structure answered 200 with the full salary table,
+    | and so did department_head, reporting_manager, recruiter and auditor.
+    | The response also carried every employee's bcrypt password hash (F-92,
+    | fixed separately in the tbluser models).
+    |
+    | `hrit.role` rather than `profile` because these same URLs serve the
+    | session-authenticated Blade screens, which carry no token; see
+    | App\Http\Middleware\RequireHritRole.
+    |
+    | The attendance routes further down this file are deliberately NOT in
+    | this group: employees punch in and out through some of them. Their own
+    | over-exposure is filed as F-120 and closed in Sprint 3, where the
+    | screens that call them are being reworked anyway.
+    */
+    Route::middleware('hrit.role:admin,hr')->group(function () {
+
     Route::get('/payroll-type', [PayrollController::class, 'payrollType'])->name('payroll_type.index');
     Route::get('/payroll-type/create', [PayrollController::class, 'payrollCreate'])->name('payroll_type.create');
     Route::post('/payroll-type/store', [PayrollController::class, 'payrollStore'])->name('payroll_type.store');
@@ -87,19 +114,47 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::post('/hrms-salary-certificate-report', [PayrollController::class, 'hrmsSalaryCertificateReport'])->name('hrms_salary_certificate.report');
     Route::get('salary-certificate-pdf-download', [PayrollController::class, 'SalaryCertificatePdfDownload'])->name('salary_certificate_pdf_download');
 
+    }); // end hrit.role:admin,hr - payroll configuration and reporting
+
     Route::get('hrms-job-title', [HrmsController::class, 'hrmsJobTitle'])->name('hrms_job_title.index');
     Route::get('/hrms-job-title/create', [HrmsController::class, 'hrmsCreate'])->name('hrms_job_title.create');
     Route::get('/hrms-job-title/create/{id}', [HrmsController::class, 'hrmsCreate']);
     Route::post('/hrms-job-title/store', [HrmsController::class, 'hrmsStore'])->name('hrms_job_title.store');
     Route::delete('/hrms-job-title/destroy/{id}', [HrmsController::class, 'hrmsDestroy'])->name('hrms_job_title.destroy');
 
-    Route::get('hrms-inout-time', [HrmsController::class, 'hrmsInOutTime'])->name('hrms_inout_time.index');
-    Route::post('hrms-in-time/store', [HrmsController::class, 'hrmsInTimeStore'])->name('hrms_in_time.store');
-    Route::post('hrms-out-time/store', [HrmsController::class, 'hrmsOutTimeStore'])->name('hrms_out_time.store');
-
+    /*
+    |----------------------------------------------------------------------
+    | Attendance: self service stays open, reporting is gated. F-120.
+    |----------------------------------------------------------------------
+    |
+    | Same class as F-91, different module: these routes had no role gate, so
+    | an `employee` token returned 200 with every colleague's attendance totals
+    | (probe-reads2.out, section F).
+    |
+    | Sprint 1 deliberately did NOT gate this block, because employees punch in
+    | and out through some of it and the gate has to be drawn per route rather
+    | than per group. That is what this is.
+    |
+    | OPEN - the employee's own attendance, and their own punches:
+    |     hrms-attendance, hrms-attendance-in-time/store,
+    |     hrms-attendance-out-time/store
+    |
+    | The role list matches the REPORTING group in the frontend's
+    | gtg-nav-visibility.ts exactly - administrator, hr_manager, hr_executive,
+    | executive, auditor - so the menu and the API agree about who may read a
+    | report. Auditor and executive are read-only oversight roles; excluding
+    | them here would hide from them the one thing they exist to look at.
+    */
     Route::get('hrms-attendance', [HrmsController::class, 'hrmsAttendance'])->name('hrms_attendance.index');
     Route::post('hrms-attendance-in-time/store', [HrmsController::class, 'hrmsAttendanceInTimeStore'])->name('hrms_attendance_in_time.store');
     Route::post('hrms-attendance-out-time/store', [HrmsController::class, 'hrmsAttendanceOutTimeStore'])->name('hrms_attendance_out_time.store');
+
+    Route::middleware('hrit.role:admin,hr,executive,auditor')->group(function () {
+
+    // Shift in/out times - administrative configuration, not self service.
+    Route::get('hrms-inout-time', [HrmsController::class, 'hrmsInOutTime'])->name('hrms_inout_time.index');
+    Route::post('hrms-in-time/store', [HrmsController::class, 'hrmsInTimeStore'])->name('hrms_in_time.store');
+    Route::post('hrms-out-time/store', [HrmsController::class, 'hrmsOutTimeStore'])->name('hrms_out_time.store');
 
     Route::get('hrms-attendance-report', [HrmsController::class, 'hrmsAttendanceReportIndex'])->name('hrms_attendance_report.index');
     Route::post('/show-hrms-attendance-report', [HrmsController::class, 'hrmsAttendanceReport'])->name('hrms.show_hrms_attendance_report');
@@ -146,16 +201,26 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
     Route::get('get-absent-days', [HrmsController::class, 'getAbsentDays']);
     Route::get('get-half-day', [HrmsController::class, 'getHalfDays']);
 
-    // new monthly payroll report
-    Route::get('/monthly-payroll', [PayrollController::class, 'monthlyPayroll'])->name('monthly_payroll.index');
-    Route::get('/monthly-payroll/create', [PayrollController::class, 'monthlyPayrollCreate'])->name('monthly_payroll.create');
-    Route::post('/monthly-payroll-store', [PayrollController::class, 'monthlyPayrollStore'])->name('monthly_payroll.store');
+    }); // end hrit.role - attendance reporting and shift configuration
 
-    Route::post('/monthly-payroll-delete/{month}', [PayrollController::class, 'deleteMonthlyPayrolls'])->name('monthly_payroll.delete');
+    // new monthly payroll report - same admin/hr gate as the payroll block above.
+    Route::middleware('hrit.role:admin,hr')->group(function () {
+        Route::get('/monthly-payroll', [PayrollController::class, 'monthlyPayroll'])->name('monthly_payroll.index');
+        Route::get('/monthly-payroll/create', [PayrollController::class, 'monthlyPayrollCreate'])->name('monthly_payroll.create');
+        Route::post('/monthly-payroll-store', [PayrollController::class, 'monthlyPayrollStore'])->name('monthly_payroll.store');
 
-    Route::get('/getMonthlyData', [PayrollController::class, 'getEmpMonthlyData'])->name('getMonthlyData');
+        // F-129. The month lock. Same hrit.role:admin,hr gate as the save it
+        // guards - a lock enforced by a different gate than the write it
+        // protects is a lock with a way round it.
+        Route::match(['get', 'post'], '/monthly-payroll-lock', [PayrollController::class, 'monthlyPayrollLock'])
+            ->name('monthly_payroll.lock');
 
-    Route::get('getTotalDays', [PayrollController::class, 'getTotalDays'])->name('getTotalDays');
+        Route::post('/monthly-payroll-delete/{month}', [PayrollController::class, 'deleteMonthlyPayrolls'])->name('monthly_payroll.delete');
+
+        Route::get('/getMonthlyData', [PayrollController::class, 'getEmpMonthlyData'])->name('getMonthlyData');
+
+        Route::get('getTotalDays', [PayrollController::class, 'getTotalDays'])->name('getTotalDays');
+    });
 });
 
 Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], function () {
@@ -182,6 +247,34 @@ Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], 
     Route::post('update_user_att', [HrmsController::class, 'updateUserAttendance'])->name('update_user_att');
 });
 
-Route::get('hrms/myleave/{employeeId}', [HrmsLeaveController::class, 'getLeaveDashboard']);
-Route::get('hrms/leavehistory/{employeeId}', [HrmsLeaveController::class, 'getLeaveHistory']);
+/**
+ * F-100 - DELETED 2026-09-05 (HRIT Sprint 1), with what they MEANT recorded.
+ *
+ * Route::get('hrms/myleave/{employeeId}',      [HrmsLeaveController::class, 'getLeaveDashboard']);
+ * Route::get('hrms/leavehistory/{employeeId}', [HrmsLeaveController::class, 'getLeaveHistory']);
+ *
+ * INTENDED: a self-service leave summary and history for one employee - the
+ * mobile-shaped counterpart to the Leave Dashboard.
+ *
+ * WHY THEY WENT: neither returned an employee's leave. Both returned a
+ * hardcoded block introduced by the comment `// Sample data`:
+ *
+ *     total_leaves 20, used_leaves 5, remaining_leaves 15
+ *     Casual Leave 7/14, Medical Leave 10/14, Earn Leave 40/60, ...
+ *
+ * The same numbers for every employee, in every tenant, forever. Verified live
+ * during the audit: GET /hrms/myleave/7 answered 200 with exactly that.
+ *
+ * They also took {employeeId} straight from the URL and never compared it to
+ * the caller, so the day they were connected to real data they would have been
+ * an identity hole as well.
+ *
+ * NOTHING CALLED THEM: no reference in g2gv0 (services, hooks, components, lib,
+ * app), and none in this repo outside their own definition.
+ *
+ * THE REAL IMPLEMENTATION ALREADY EXISTS and is unrelated to these:
+ *   GET /api/leave/dashboard  App\Http\Controllers\Api\Leave\LeaveDashboardController@index
+ *   GET /api/leave/balances   App\Http\Controllers\Api\Leave\LeaveOptionsController@balances
+ * Point any mobile client at those.
+ */
 

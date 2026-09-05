@@ -1,0 +1,35 @@
+======================= Sprint 8 — the last one =======================
+
+1. F-130 — an employee can see their own payslip. There was no route at all.
+  PASS  My HR summary answers
+  PASS  the payslip list answers
+     administrator's own payslips: [{"id":22,"month":"Aug","year":2025,"gross":87500,"deductions":6200,"net":81300,"days":30,"issued_at":"2025-12-09 08:18:08","pdf_url":"http:\/\/127.0.0.1:8000\/api\/my-hr\/payslips\/Aug\/2025\/pdf"}]
+  PASS  administrator sees their own payslip
+  PASS  the employee sees theirs, which is none
+  PASS  passing employee_id=6 does NOT show employee 6's payslip
+  PASS  a month you have no payslip for is 404
+
+2. F-110 — the Salary Certificate was UNUSABLE, not unused
+  PASS  no structure gives a sentence, not a stack trace
+     -> Vikram Sethi has no salary structure for 2026, so there is no salary breakdown to certify. Add one under Salary Structure for that year, then generate the certificate again.
+  PASS  no exception key: this is a refusal, not a crash
+  PASS  and it answers 422, not 500
+  PASS  a certificate is written where a structure exists
+  PASS  the certificate uses the employee's own gender, not a hardcoded one
+
+3. F-122 — an unauthenticated browser hit was a 500 on every route
+  PASS  an unauthenticated browser hit redirects
+     -> http://127.0.0.1:8000/login
+  PASS  an unauthenticated API hit is still 401, not a redirect
+
+4. Nothing earlier regressed
+  PASS  F-87 still closed: an employee cannot decide leave
+  PASS  F-91 still closed: an employee cannot reach payroll
+  PASS  F-129 still closed: an employee cannot lock a month
+
+5. Clean up
+     certificate rows removed; nothing else was written
+
+==============================================================
+  PASS 16   FAIL 0
+==============================================================

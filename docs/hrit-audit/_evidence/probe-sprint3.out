@@ -1,0 +1,20 @@
+===== F-120: legacy attendance REPORT routes now refuse non-reporting roles =====
+PASS want=403 got=403  employee  -> departmentwise-attendance-report/create {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  recruiter -> show-early-going-...-report         {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  dept_head -> hrms-attendance-report              {"status":0,"message":"You do not have permission to perform this action."}403
+===== ...and still serve the roles the menu shows it to =====
+PASS want=200 got=200  hr_mgr    -> departmentwise-attendance-report/create {"selDepartments":"0","emp_id":null,"selectedFromDate":"2026-04-01","selectedToDate":
+PASS want=200 got=200  admin     -> show-early-going-...-report         {"employees":{"user_id":"6,7,10,11,12,19,54,66,67,68,69,70,71,72,73,74,75,76,77,78,79
+PASS want=200 got=200  auditor   -> departmentwise-attendance-report/create {"selDepartments":"0","emp_id":null,"selectedFromDate":"2026-04-01","selectedToDate":
+PASS want=200 got=200  executive -> departmentwise-attendance-report/create {"selDepartments":"0","emp_id":null,"selectedFromDate":"2026-04-01","selectedToDate":
+===== the new API report endpoints, gated the same way =====
+PASS want=403 got=403  employee  -> /api/attendance/kpi                 {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  employee  -> /api/attendance/employees           {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=403 got=403  employee  -> /api/attendance/report-filters      {"status":0,"message":"You do not have permission to perform this action."}403
+PASS want=200 got=200  hr_mgr    -> /api/attendance/kpi                 {"present_today":"0%","leave_utilization":"0.1%","active_employees":122}200
+PASS want=200 got=200  auditor   -> /api/attendance/weekly-summary      {"date_range":{"start":"2026-08-24","end":"2026-08-30"},"department_filter":"All","em
+===== SELF SERVICE must stay open - an employee punches through these =====
+PASS want=200 got=200  employee  -> /api/attendance/my-attendance       {"status":1,"message":"Success to Find Data","fromDate":"2026-09-01","toDate":"2026-0
+PASS want=200 got=200  employee  -> /api/attendance/self-summary        {"status":1,"message":"Success to Find Data","date":"2026-09-05","shift":{"is_working
+PASS want=200 got=200  employee  -> /api/attendance/regularisations     {"status":1,"message":"Regularisation requests fetched successfully","scope":"mine","
+PASS want=200 got=200  employee  -> hrms-attendance (legacy punch screen) {"status":0,"message":"The form type field is required."}200

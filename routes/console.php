@@ -110,3 +110,18 @@ Schedule::command('sync:data')
     ->dailyAt('18:00')
     ->withoutOverlapping()
     ->onOneServer();
+
+/*
+ * F-108. hrms_leave_workflow_settings has always offered "escalate after 24
+ * hours", every live tenant has it switched on, and nothing has ever escalated
+ * anything — there was no approval chain to escalate and no job to do it.
+ *
+ * Hourly, not more often: one hour is the finest granularity the configuration
+ * screen offers, so a shorter interval is work that cannot change an outcome.
+ * escalated_at is one-shot, so a re-run escalates nothing twice.
+ */
+Schedule::command('leave:escalate')
+    ->hourly()
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->runInBackground();

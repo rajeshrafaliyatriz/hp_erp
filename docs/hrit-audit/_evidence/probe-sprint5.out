@@ -1,0 +1,20 @@
+===== F-94 / F-123: the DATABASE now refuses what it used to accept =====
+  FK  {"constraint_name":"hrms_emp_leaves_leave_type_id_foreign","referenced_table_name":"hrms_leave_types"}
+  {"column_name":"user_id","is_nullable":"NO"}
+  {"column_name":"leave_type_id","is_nullable":"NO"}
+  {"column_name":"from_date","is_nullable":"NO"}
+  {"unusable_rows_still_live":0}
+===== the 'Unassigned' bucket is gone from the leave report =====
+  Annual Leave       total=2    days=11
+  Scholar Clone      total=1    days=1.5
+===== F-105 golden transaction: cancel after approval =====
+PASS want=422 got=422  cancel while still pending - refused     {"status":0,"message":"This request has not been approved yet - withdraw it instead."}422
+PASS want=200 got=200  an approver approves                     {"status":1,"message":"Leave request updated successfully","updated_count":1,"workflow":{"final"
+PASS want=200 got=200  the applicant cancels their own          {"status":1,"message":"Leave cancelled. The days have been returned to your balance."}200
+  balance after cancelling: total=10 used=0 remaining=10
+===== the approver's queue is gated by the API, not by the component =====
+PASS want=403 got=403  employee opens the review queue          {"status":0,"message":"You do not have permission to review attendance corrections.","role":"Emp
+PASS want=200 got=200  hr_manager opens the review queue        {"status":1,"message":"Regularisation requests fetched successfully","scope":"team","count":0,"d
+===== clean up =====
+  leaves removed: 1   grants removed: 1
+  tenant 3 live leaves: 13   allocations: 1

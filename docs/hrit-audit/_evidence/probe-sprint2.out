@@ -1,0 +1,19 @@
+===== F-98 / F-113: the dashboard's three widgets are served by the API =====
+PASS want=200 got=200  employee -> /attendance/self-summary         {"status":1,"message":"Success to Find Data","date":"2026-09-05","shift":{"is_working_day":false,"ex
+  hr_manager (rostered Saturday 09:00-14:00 in the database):
+    shift  : {"is_working_day":true,"expected_in":"09:00","expected_out":"14:00","expected_minutes":300,"source":"roster"}
+    alerts : 0
+    requests: ["Leave Requests:0","Regularisation:0"]
+===== F-97: the endpoints the dashboard now calls instead of fixtures =====
+PASS want=200 got=200  employee -> /leave/balances                  {"status":1,"message":"Leave balances fetched successfully","year":2026,"employee_id":7,"data":{"lea
+PASS want=200 got=200  employee -> /leave/holidays/upcoming         {"status":1,"message":"Upcoming holidays fetched successfully","data":[]}200
+===== F-107: regularisation is gated the same way leave is =====
+PASS want=403 got=403  employee -> review queue                     {"status":0,"message":"You do not have permission to review attendance corrections.","role":"Employe
+PASS want=200 got=200  hr_mgr   -> review queue                     {"status":1,"message":"Regularisation requests fetched successfully","scope":"team","count":0,"data"
+PASS want=200 got=200  employee -> my own requests                  {"status":1,"message":"Regularisation requests fetched successfully","scope":"mine","count":0,"data"
+===== validation is at the API, not just the browser =====
+PASS want=422 got=422  no times given                               {"status":0,"message":"Give a corrected punch-in time, a punch-out time, or both.","errors":{"reques
+PASS want=422 got=422  no reason given                              {"status":0,"message":"A reason is required.","errors":{"reason":["A reason is required."]}}422
+PASS want=422 got=422  out before in                                {"status":0,"message":"Punch-out must be later than punch-in.","errors":{"requested_out_time":["Punc
+PASS want=422 got=422  a future day                                 {"status":0,"message":"You can only regularise a day that has already happened.","errors":{"day":["Y
+PASS want=422 got=422  invalid work mode                            {"status":0,"message":"The selected work mode is invalid."}422

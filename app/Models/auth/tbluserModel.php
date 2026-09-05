@@ -15,6 +15,9 @@ class tbluserModel extends Model
     //
     use HasApiTokens;
     protected $table = 'tbluser';
+
+    /** Never serialised - see App\Models\user\tbluserModel. F-92, HRIT Sprint 1. */
+    protected $hidden = ['password', 'remember_token', 'otp'];
     protected $fillable = [
         'user_name',
         'password',

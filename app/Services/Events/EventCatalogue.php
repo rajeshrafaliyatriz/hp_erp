@@ -96,6 +96,9 @@ class EventCatalogue
         ],
         'course.completed' => [
             'CertificateIssuer'           => self::REACTOR,
+            // Awards the badge at the moment the course was finished, rather
+            // than leaving the read path to guess the date - see the class.
+            'AchievementAwarder'          => self::REACTOR,
         ],
         // X-06 deferred this; X-11 UN-DEFERS it. CertificateIssuer now emits it,
         // and the certificate row it announces exists before the emit happens.
@@ -122,6 +125,31 @@ class EventCatalogue
         ],
         'rights.changed' => [
             'AuditLogProjector'           => self::PROJECTOR,
+            'NotificationDispatcher'      => self::REACTOR,
+        ],
+
+        /*
+         * HRIT leave, added in Sprint 7 (F-128).
+         *
+         * These three were not in NOT_NOTIFIED, because nobody had ever taken a
+         * decision about them - the HRIT module simply had no events at all.
+         *
+         * They ship now rather than earlier for a reason worth recording.
+         * RecipientResolver's rule is that a notification whose only plausible
+         * recipient is "the employee's manager" is DEFERRED, because there is no
+         * org chart to resolve one from. That was true until Sprint 6:
+         * hrms_leave_approval_steps now names the exact role that must decide
+         * each request, so "who is waiting on this" is a stored fact rather than
+         * a guess. The chain built to ENFORCE approvals is what made approval
+         * notifications deliverable.
+         */
+        'leave.submitted' => [
+            'NotificationDispatcher'      => self::REACTOR,
+        ],
+        'leave.decided' => [
+            'NotificationDispatcher'      => self::REACTOR,
+        ],
+        'leave.escalated' => [
             'NotificationDispatcher'      => self::REACTOR,
         ],
     ];

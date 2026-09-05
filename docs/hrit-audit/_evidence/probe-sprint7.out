@@ -1,0 +1,44 @@
+================= Sprint 7 — notifications, and a month you can close =================
+
+1. The module had never sent a notification. Now the chain does.
+     leave id 272 on 2027-02-02
+  PASS  the Reporting Manager was told it is waiting on them
+
+2. Approving passes the request AND the notification to the next approver
+  PASS  the Department Head was told it is now their turn
+  PASS  the employee was told it moved on, not just when it finished
+     who was told what:
+{"who":"Farida Khan","event_type":"leave.submitted","subject":"Vikram Sethi has applied for leave","why":"leave_approver"}
+{"who":"Vikram Sethi","event_type":"leave.decided","subject":"Your leave request was approved","why":"leave_applicant"}
+{"who":"Rajesh Iyer","event_type":"leave.submitted","subject":"Vikram Sethi has applied for leave","why":"leave_approver"}
+{"who":"Vikram Sethi","event_type":"leave.decided","subject":"Your leave request was approved","why":"leave_applicant"}
+
+3. Re-running the reactor sends nothing twice
+  PASS  a second reactor run adds nothing
+
+4. An overdue step tells the people it was escalated to
+| 89   | 273   | 3      | Reporting Manager | HR | 2026-09-03 23:49:58 |
++------+-------+--------+-------------------+----+---------------------+
+[32m1 approval step(s) escalated.[39m
+  PASS  the escalation target was told (capped at 5 role holders)
+
+5. Everyone reads their OWN inbox, and only their own
+  PASS  the employee's inbox answers
+  PASS  no notification crossed a tenant boundary
+
+6. F-129 — a payroll month can be declared finished
+  PASS  saving a locked month is refused
+     -> Dec 2026 is locked by kalpesh sheth on 2026-09-05 12:49:57. Reopen the month with a reason before changing it.
+  PASS  the figures did not change
+  PASS  reopening without a reason is refused
+  PASS  after reopening, the month saves again
+     the reopen is on the record:
+{"month":"Dec","year":"2026","locked_by":6,"reopened_by":6,"reopen_reason":"PF correction from finance"}
+  PASS  an employee cannot lock a month
+
+7. Clean up — everything this probe created, it removes
+     probe leaves 272 and 273 removed; notifications, events and locks cleared
+
+==============================================================
+  PASS 12   FAIL 0
+==============================================================
