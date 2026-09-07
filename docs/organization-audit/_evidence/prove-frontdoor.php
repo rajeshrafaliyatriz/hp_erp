@@ -1,13 +1,22 @@
 <?php
 /**
- * PART A EVIDENCE — what does a tenant actually see in the sidebar?
+ * PART A EVIDENCE — what does a tenant's administrator actually see?
  *
  * Calls the real displaySidebarMenu endpoint as the administrator of each
- * tenant, and counts the modules and screens returned. READ ONLY.
+ * tenant and prints the tree. READ ONLY.
+ *
+ * NOTE ON THE RESPONSE SHAPE — this cost a false finding once. The nesting key
+ * CHANGES BY LEVEL: a module carries its children under `menus`
+ * (tblmenumasterG2gController::displaySidebarMenu), and a menu carries its
+ * children under `submenus` (buildMenuTree:311). Reading `menus` at both levels
+ * makes level 3 look empty and the product look broken when it is not.
+ *
+ *   php artisan tinker --execute="require getcwd().'/Docs/organization-audit/_evidence/prove-frontdoor.php';"
  */
 DB::setDefaultConnection('mysql');
 $db = DB::connection('mysql');
 
+/** @return array{modules:int, tree:string, rights:int}|array{error:string} */
 function sidebarFor($db, int $tenant): array
 {
     $profile = $db->table('tbluserprofilemaster')
@@ -15,10 +24,10 @@ function sidebarFor($db, int $tenant): array
         ->where(function ($q) {
             $q->where('role_key', 'administrator')->orWhere('name', 'like', '%dmin%');
         })
-        ->first(['id', 'name', 'role_key']);
+        ->first(['id', 'name']);
 
     if (!$profile) {
-        return ['error' => 'no administrator profile'];
+        return ['error' => 'no administrator profile on this tenant'];
     }
 
     $user = $db->table('tbluser')
@@ -27,11 +36,11 @@ function sidebarFor($db, int $tenant): array
         ->first(['id']);
 
     if (!$user) {
-        return ['error' => 'no user holds the administrator profile', 'profile' => $profile->name];
+        return ['error' => 'no user holds the administrator profile — nobody can sign in'];
     }
 
     $model = \App\Models\auth\tbluserModel::find($user->id);
-    $token = $model->createToken('frontdoor')->plainTextToken;
+    $token = $model->createToken('frontdoor-evidence')->plainTextToken;
 
     $request = \Illuminate\Http\Request::create('/x', 'GET', [
         'type' => 'API',
@@ -41,47 +50,62 @@ function sidebarFor($db, int $tenant): array
     ]);
     $request->headers->set('Authorization', 'Bearer ' . $token);
 
-    $response = app(\App\Http\Controllers\user\tblmenumasterG2gController::class)->displaySidebarMenu($request);
-    $body = json_decode($response->getContent(), true);
+    $body = json_decode(
+        app(\App\Http\Controllers\user\tblmenumasterG2gController::class)
+            ->displaySidebarMenu($request)->getContent(),
+        true
+    );
 
-    $model->tokens()->where('name', 'frontdoor')->delete();
+    $model->tokens()->where('name', 'frontdoor-evidence')->delete();
 
-    $modules = $body['data'] ?? $body['menu'] ?? $body ?? [];
-    if (!is_array($modules)) {
-        $modules = [];
-    }
+    $modules = $body['data'] ?? [];
+    $lines = [];
 
-    $names = [];
-    $screens = 0;
-    foreach ($modules as $m) {
-        if (!is_array($m)) {
-            continue;
+    foreach ((array) $modules as $module) {
+        $lines[] = '    ' . ($module['label'] ?? '?');
+
+        foreach ((array) ($module['menus'] ?? []) as $menu) {
+            $lines[] = '      - ' . ($menu['label'] ?? '?');
+
+            foreach ((array) ($menu['submenus'] ?? []) as $leaf) {
+                $lines[] = '          * ' . ($leaf['label'] ?? '?');
+            }
         }
-        $names[] = $m['menu_name'] ?? $m['name'] ?? '?';
-        $screens += count($m['submenu'] ?? $m['children'] ?? $m['menus'] ?? []);
     }
 
     return [
-        'profile' => $profile->name,
-        'modules' => count($names),
-        'names' => $names,
-        'children' => $screens,
+        'modules' => count((array) $modules),
+        'tree' => implode("\n", $lines),
         'rights' => $db->table('tblgroupwise_rights_g2g')->where('sub_institute_id', $tenant)->count(),
     ];
 }
 
-foreach ([6 => 'Scholar Clone (demo, set up)', 1000011 => 'xyz (fresh signup)', 1000018 => 'Fiber Valley (967 users)'] as $tenant => $label) {
-    $r = sidebarFor($db, $tenant);
+$tenants = [
+    6 => 'Scholar Clone — the prepared demo tenant',
+    1000011 => 'xyz — created through the real signup endpoint',
+    1000018 => 'Fiber Valley — 967 employees',
+];
+
+// Include the Sprint 1 test tenant when it exists.
+$sprint1 = $db->table('school_setup')->where('SchoolName', 'Sprint1 Test Org')->value('id');
+if ($sprint1) {
+    $tenants[(int) $sprint1] = 'Sprint1 Test Org — created after the Sprint 1 fix';
+}
+
+foreach ($tenants as $tenant => $label) {
+    $result = sidebarFor($db, $tenant);
+
     printf("\n== tenant %s — %s ==\n", $tenant, $label);
 
-    if (isset($r['error'])) {
-        printf("  %s\n", $r['error']);
+    if (isset($result['error'])) {
+        printf("   %s\n", $result['error']);
         continue;
     }
 
-    printf("  tenant-stamped rights rows: %d\n", $r['rights']);
-    printf("  MODULES IN SIDEBAR: %d\n", $r['modules']);
-    foreach ($r['names'] as $n) {
-        printf("    - %s\n", $n);
+    printf("   tenant-stamped rights rows: %d\n", $result['rights']);
+    printf("   MODULES IN SIDEBAR: %d\n", $result['modules']);
+
+    if ($result['tree'] !== '') {
+        echo $result['tree'] . "\n";
     }
 }
