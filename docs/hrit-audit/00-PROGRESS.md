@@ -5,7 +5,52 @@ One page. What is done, what is left, and where we are. Update this as work land
 - **Audit:** `AUDIT-HRIT-MANAGEMENT.md` — verdict **RED**. Findings **F-87 … F-141** (53 total; 20 raised during remediation, five of them against this project's own work).
 - **Module:** HRIT Solutions (m5) — 12 sub-modules.
 - **Test tenants:** tenant **3** (all nine roles have a live user) and tenant **6** (939 attendance rows).
-- **Live host:** `202.47.117.220/hp_erp`, MariaDB 10.11.9.
+- **Hosts:** the app's own database is `202.47.117.220/hp_erp` (MariaDB **10.11.9**) - this is what
+  `.env` points at and where every sprint's work was verified. A second host, `128.199.17.97/hp_erp`
+  (MariaDB **10.1.48**), is configured as the connection named `live` and is **not** the one the app
+  uses, despite the name. Both are now fully migrated; see *Deployment state* below.
+
+---
+
+## Deployment state - both hosts migrated, 2026-09-07
+
+Both databases now report **0 pending migrations**. Getting the second one there uncovered something
+worth recording, because it was not a defect in any migration:
+
+**`128.199.17.97` was 65 migrations behind and could not be migrated at all.** `php artisan migrate`
+died on the first one - *"Table `s_user_skill_application` already exists"* - and applied nothing.
+The cause was **drift, not a bad migration**: tables and columns had been added to that host by hand
+over months without the `migrations` table ever being told. Fifty-six migrations were asking to
+create things that were already there.
+
+Recording them as run asserts their schema is present, so that assertion was **checked rather than
+assumed** - every table and every column each migration would create, compared against
+`information_schema` on that host. Fifty-six matched completely and were recorded (bookkeeping only,
+no schema touched). Nine had genuinely never run and were executed. 56 + 9 = 65.
+
+**Two things had to be fixed in the repo to get there**, and both are the same bug:
+
+- `Schema::hasColumn()` selects `generation_expression`, a column MariaDB gained in **10.2**. On
+  10.1 it dies before the migration's own logic runs. This had already stopped three earlier
+  migrations on this host.
+- The workaround already in the tree - `SHOW COLUMNS FROM x LIKE ?` - **does not work either**, and
+  its docblock claimed it worked everywhere. MariaDB 10.1 refuses to *prepare* a `SHOW` statement
+  carrying a placeholder (`1064 ... near '?'`). Seven migrations carried this broken helper with a
+  comment asserting it was portable.
+
+Both are now replaced, in **11 migrations**, by a `column_name` lookup against `information_schema`,
+which binds normally and never touches `generation_expression`. The false portability claim in the
+docblocks is corrected rather than deleted.
+
+**What actually changed on `128.199.17.97`:** 296 rows of plaintext passwords cleared; 22 payslips
+collapsed to 6 with `july` canonicalised to `Jul` and the unique period index created; one
+`user_onboarding_status` table created. Leave data was untouched (41 rows before and after), and
+that host had **zero** orphaned approval steps - the 26 on the app host were created by this audit's
+own probes, which never ran here. Reversal:
+`_reversals/REVERSAL-2026-09-07-migrate-128.199.17.97.sql`, with before/after figures for every line.
+
+**Regression check after migrating:** 112 probe assertions across sprints 1, 5, 6, 7, 8, 9 and F-132
+- **0 failures**.
 
 ---
 

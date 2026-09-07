@@ -22,6 +22,24 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /**
+     * Portable column check.
+     *
+     * Schema::hasColumn() asks information_schema for `generation_expression`,
+     * which exists only on MySQL >= 5.7.6 / MariaDB >= 10.2. One deployment
+     * runs MariaDB 10.1.48, where that call dies with
+     * "1054 Unknown column 'generation_expression'" before the migration's own
+     * logic is ever reached. SHOW COLUMNS has existed in every release.
+     */
+    private function hasColumnPortable(string $table, string $column): bool
+    {
+        return DB::table('information_schema.columns')
+            ->where('table_schema', DB::getDatabaseName())
+            ->where('table_name', $table)
+            ->where('column_name', $column)
+            ->exists();
+    }
+
     private const COMMENT =
         'FK -> competency.id (a KASBA BUNDLE). NEVER a skill id: a skill is one of '
         . 'five KASBA dimensions inside a bundle (Q-A2, G-DATA-11).';
@@ -40,7 +58,7 @@ return new class extends Migration
     public function up(): void
     {
         foreach (self::TABLES as $table) {
-            if (!Schema::hasTable($table) || !Schema::hasColumn($table, 'competency_id')) {
+            if (!Schema::hasTable($table) || !$this->hasColumnPortable($table, 'competency_id')) {
                 continue;
             }
 
