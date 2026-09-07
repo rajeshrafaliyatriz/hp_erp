@@ -84,11 +84,41 @@ class RequireMenuRight
             return $this->deny($request, 'Unable to resolve profile or organization', 403);
         }
 
-        $row = DB::table('tblgroupwise_rights_g2g')
+        /*
+         * ── F-152. WHY THE TENANT CLAUSE IS A PREFERENCE, NOT A FILTER ────
+         *
+         * This was `->where('sub_institute_id', $tenant)`, and that single
+         * line is why this middleware could never be switched on.
+         *
+         * Measured on live before changing it: of twelve organisations, SEVEN
+         * hold just 4 tenant-stamped rows against ~149 menus (445 rows each,
+         * the rest NULL-stamped by the old tenant-blind seeding command). With
+         * a strict filter those tenants match no row on almost every screen,
+         * permits(null) returns false, and every one of their users is refused
+         * everywhere. That is what made menu 225 have to be rolled back: the
+         * moment a menu row existed, its endpoint returned 403 to everybody
+         * including the administrator.
+         *
+         * The clause is not protecting anything either. $profileId comes from
+         * the CALLER'S OWN tbluser row, and tbluserprofilemaster.id is a global
+         * auto-increment primary key, so a row naming that profile belongs to
+         * that caller's organisation whatever its own stamp says. The stamp is
+         * data rot, not ownership - the same conclusion reached for
+         * displaySidebarMenu.
+         *
+         * So: the correctly stamped row wins, and a legacy row applies only
+         * when there is no stamped one. Enforcement becomes possible without
+         * an outage, and a tenant whose rows are properly stamped is decided
+         * by its own rows rather than by whichever the database returned
+         * first.
+         */
+        $rows = DB::table('tblgroupwise_rights_g2g')
             ->where('menu_id', (int) $menuId)
             ->where('profile_id', $profileId)
-            ->where('sub_institute_id', $tenant)
-            ->first();
+            ->get();
+
+        $row = $rows->first(fn ($candidate) => (string) $candidate->sub_institute_id === (string) $tenant)
+            ?? $rows->first();
 
         if (!$this->permits($row, $action)) {
             // The message names the MENU, not the role. A refusal that says

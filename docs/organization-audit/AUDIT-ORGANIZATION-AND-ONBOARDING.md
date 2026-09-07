@@ -7,6 +7,10 @@ cross-tenant leak below is **demonstrated with a read**, never a write.
 Findings continue the platform sequence. Highest existing is **F-132**
 (`Docs/hrit-audit/`), so this register starts at **F-133**.
 
+> **Added after the first pass.** F-150 to F-152 were found while preparing to
+> write to `tblgroupwise_rights_g2g` for module enablement. F-150 is the most
+> severe finding in this document.
+
 ---
 
 ## 1. VERDICT — **RED**
@@ -173,6 +177,60 @@ or open a Task project.
 **Re-verify:** sign in as an administrator and open Organization Profile.
 **Fix sketch:** both components already call `useAuth()`; derive `role` there and
 drop the prop. Narrow `LazyComponent` so a required prop fails the build.
+
+#### F-150 — One organisation's admin can destroy another organisation's permissions — CRITICAL (P0)
+**What:** `storeGroupwiseRightsG2g` takes `profile_id` verbatim from the request
+and never checks it belongs to the caller's organisation, then deletes every
+rights row for that profile and re-inserts stamped with the CALLER's tenant.
+**Where:** `app/Http/Controllers/user/tblmenumasterG2gController.php:162,196,180`
+**Evidence:**
+```php
+$sub_institute_id = $this->apiTenantId($request);   // :161  correct
+$profile_id       = $request->get('profile_id');    // :162  NEVER VALIDATED
+
+$validMenuIds = tblmenumaster_g2gModel::where('status', 1)
+    ->visibleToTenant($sub_institute_id)->pluck('id')->flip();   // menus ARE checked
+
+'sub_institute_id' => $sub_institute_id,            // :180  stamped as the caller's
+...
+tblgroupwise_rights_g2gModel::where('profile_id', $profile_id)->delete();  // :196
+```
+The menu ids are validated against the tenant and the profile id is not, which
+makes the omission read as deliberate rather than forgotten.
+**Demonstrated** (dev, inside a rolled-back transaction): an ordinary
+administrator of tenant 1 POSTed `profile_id=16` — tenant 6's Admin — and
+received **HTTP 200 "Groupwise rights saved successfully"** while taking tenant
+6's administrator from **88 permission rows to 1**, with the survivor stamped
+`sub_institute_id=1`.
+**Impact:** Worse than a read leak. It is silent, destructive, and it locks the
+victim's administrator out of their own product — including out of the Role &
+Permissions screen needed to repair it. This is the same endpoint the product's
+own rights matrix calls, so no unusual tooling is required.
+**Re-verify:** `php artisan tinker --execute="require getcwd().'/Docs/organization-audit/_evidence/prove-rights-hijack.php';"`
+**Fix sketch:** verify the profile belongs to the caller's tenant; 404 if not.
+
+#### F-151 — Sidebar rights are read without a tenant filter — HIGH
+**What:** `displaySidebarMenu` resolves the tenant and then reads rights by
+`profile_id` alone, collapsing duplicates with `keyBy('menu_id')` on an unordered
+query — so where a profile has two rows for one menu, which one wins is whatever
+order MySQL returns.
+**Where:** `tblmenumasterG2gController.php:58,67-69`
+**Evidence:** 20 duplicate `(profile_id, menu_id)` pairs on dev (40 rows), 11 on
+live (22 rows). `sub_institute_id` is `text NULL` and holds three shapes: the
+tenant id, NULL (4,238 live rows), and a CSV string `'1,2,3,4,5,6,7,8,9,10,11'`
+(44 live rows).
+**Impact:** A stale row can shadow the one an admin just saved. Measured on dev
+tenant 6 while fixing F-150: a tenant-scoped delete left the CSV row behind and
+the save produced two rows for menu 300.
+
+#### F-152 — RequireMenuRight is registered and attached to nothing — MEDIUM
+**What:** The only reader that filters rights by tenant is applied to zero routes.
+**Where:** `bootstrap/app.php:56` registers the alias; every `menuright:` in
+`routes/` is inside a comment (`routes/api.php:2177,2192,2197` say "RE-ADD WITH
+THE MENU").
+**Impact:** Rights currently control the sidebar only, not the API. Menu-level
+permissions are navigation, not access control — the endpoints behind a hidden
+screen remain callable.
 
 #### F-134 — Any tenant can read another tenant's compliance records and staff list — CRITICAL (P0)
 **What:** `instituteDetailController` takes `sub_institute_id` from the request
