@@ -116,6 +116,23 @@ return new class extends Migration
         // 1. Drop the foreign key that named tbluser as the parent of a leave type.
         $this->dropForeignIfExists('hrms_emp_leaves', 'hrms_emp_leaves_leave_type_id_foreign');
 
+        /*
+         * 1b. AND THE user_id KEY, WHICH LIVE ENFORCES AND DEV DOES NOT NOTICE.
+         *
+         * MariaDB 10.1 refuses to MODIFY a column that participates in a
+         * foreign key at all - errno 1832, "Cannot change column 'user_id':
+         * used in a foreign key constraint" - even when the type is unchanged
+         * and only nullability moves. 10.11 allows it. Live is 10.1.48 and dev
+         * is 10.11.9, so this migration applied cleanly on dev and stopped
+         * halfway through on live, having already dropped the leave_type_id key
+         * and made from_date NOT NULL.
+         *
+         * It is dropped here and restored at step 4 with the definition live
+         * already had: tbluser(id), NO ACTION on both, matching every other
+         * constraint on this table.
+         */
+        $this->dropForeignIfExists('hrms_emp_leaves', 'hrms_emp_leaves_user_id_foreign');
+
         // 2. NOT NULL. A leave request without a date, an employee or a type is
         //    not a leave request, and the table should say so.
         //    Raw SQL: Schema::change() needs Doctrine DBAL, which is not installed.
@@ -130,6 +147,14 @@ return new class extends Migration
             'ALTER TABLE hrms_emp_leaves
                ADD CONSTRAINT hrms_emp_leaves_leave_type_id_foreign
                FOREIGN KEY (leave_type_id) REFERENCES hrms_leave_types (id)
+               ON DELETE NO ACTION ON UPDATE NO ACTION'
+        );
+
+        // 4. Put back the key dropped at 1b, exactly as it was.
+        DB::statement(
+            'ALTER TABLE hrms_emp_leaves
+               ADD CONSTRAINT hrms_emp_leaves_user_id_foreign
+               FOREIGN KEY (user_id) REFERENCES tbluser (id)
                ON DELETE NO ACTION ON UPDATE NO ACTION'
         );
     }

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
@@ -30,7 +31,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasColumn('hrms_attendances', 'work_mode')) {
+        if ($this->columnExists('hrms_attendances', 'work_mode')) {
             return;
         }
 
@@ -41,12 +42,31 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (!Schema::hasColumn('hrms_attendances', 'work_mode')) {
+        if (!$this->columnExists('hrms_attendances', 'work_mode')) {
             return;
         }
 
         Schema::table('hrms_attendances', function (Blueprint $table) {
             $table->dropColumn('work_mode');
         });
+    }
+
+    /**
+     * Schema::hasColumn() is unusable on the live database.
+     *
+     * It selects `generation_expression` from information_schema.columns, a
+     * column MariaDB 10.1.48 does not have - live runs 10.1.48 while dev runs
+     * 10.11.9, so this migration applied cleanly on dev and threw
+     * "Unknown column 'generation_expression' in 'field list'" on live. Every
+     * other migration in this project checks existence this way for exactly
+     * that reason.
+     */
+    private function columnExists(string $table, string $column): bool
+    {
+        return DB::selectOne(
+            'SELECT COUNT(*) AS c FROM information_schema.columns
+              WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
+            [$table, $column]
+        )->c > 0;
     }
 };
