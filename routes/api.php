@@ -596,6 +596,15 @@ Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competen
 // user_id, so there is no subject to authorise: the endpoint cannot return
 // anybody else's data because it has no way to name anybody else.
 Route::get('/competency/my-capability', [\App\Http\Controllers\Api\Competency\MyCapabilityController::class, 'index'])->middleware('api.token');
+/*
+ * How somebody's capability got to where it is - the history behind the number.
+ *
+ * Defaults to the caller and applies competencySubject(), so the employee's own
+ * profile, the HR drawer and the Talent progress record share one endpoint
+ * without any of them being able to read a record they should not.
+ */
+Route::get('/competency/capability-progress/roster', [\App\Http\Controllers\Api\Competency\CapabilityProgressController::class, 'roster'])->middleware('api.token');
+Route::get('/competency/capability-progress', [\App\Http\Controllers\Api\Competency\CapabilityProgressController::class, 'index'])->middleware('api.token');
 
 // SELF-RATING. `api.token`, like the read above and for the same reason: these
 // accept NO user_id, so there is no subject to tamper with and nothing for a
@@ -1093,6 +1102,7 @@ Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk']);
 // Who a course is for. Declared BEFORE /lms/courses/{id} so "audience" is not
 // captured as an id.
 Route::get('/lms/courses/{id}/audience/preview', [LmsCourseController::class, 'audiencePreview'])->whereNumber('id');
+Route::get('/lms/courses/{id}/audience/suggested', [LmsCourseController::class, 'suggestedAudience'])->whereNumber('id');
 Route::post('/lms/courses/{id}/audience', [LmsCourseController::class, 'assignAudience'])->whereNumber('id');
 Route::get('/lms/courses', [LmsCourseController::class, 'index']);
 Route::post('/lms/courses', [LmsCourseController::class, 'store']);

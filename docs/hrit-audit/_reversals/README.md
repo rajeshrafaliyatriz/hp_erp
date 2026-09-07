@@ -19,6 +19,8 @@ duplicated here, next to the audit that explains what each one undoes and what i
 | `…-sprint5-bad-leave-rows.sql` | the 17 soft-deleted unusable leave rows, **and** says plainly what it cannot put back |
 | `…-sprint6-approval-steps.sql` | `hrms_leave_approval_steps` and its backfill |
 | `…-sprint7-notifications-and-lock.sql` | the leave notification templates and `payroll_month_locks` |
+| `…-2026-09-07-orphaned-approval-steps.sql` | 26 approval steps closed on requests that were soft-deleted; every id and original status |
+| `…-2026-09-07-payroll-month-canonical.sql` | the `july` → `Jul` normalisation and the 17 collapsed payslips, **verbatim** |
 
 Read the header of each before running it. Several state a cost — Sprint 5's cannot restore
 `leave_type_id = 11` without first dropping the constraint that fixes the defect, and Sprint 7's

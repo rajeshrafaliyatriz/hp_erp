@@ -34,6 +34,9 @@ use App\Services\Lms\EnrolmentWriter;
 class LmsCourseController extends Controller
 {
     use ResolvesLmsIdentity;
+    // The population gap query lives beside the single-subject one it must
+    // agree with - see the trait's header on what a second implementation cost.
+    use \App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
 
     /**
      * Assigning a course has to create the enrolment too, or the learner never
@@ -1181,9 +1184,49 @@ class LmsCourseController extends Controller
         $departmentIds = array_map('intval', (array) $request->input('department_ids', []));
         $jobroleIds = array_map('intval', (array) $request->input('jobrole_ids', []));
 
+        /*
+         * ── THE FOURTH WAY TO FIND SOMEBODY: THEY HAVE THE GAP ──────────────
+         *
+         * `by_gap` means "everyone below the level their role requires on the
+         * capabilities this course develops". The course already knows what it
+         * develops - course_competency_map - so the admin does not have to
+         * restate it.
+         *
+         * This is the promise course-form-sheet has been making all along:
+         * "The competencies this course develops. This is what lets it be
+         * suggested to someone with a matching gap." Nothing delivered the
+         * admin-facing half of it.
+         *
+         * It resolves HERE, in the shared expander, so the preview count and the
+         * assignment cannot disagree - which is the property this method's own
+         * docblock was written to protect.
+         */
+        $gapUserIds = [];
+
+        if ($request->boolean('by_gap')) {
+            $courseCompetencies = DB::table('course_competency_map')
+                ->where('course_id', (int) $request->route('id'))
+                ->where('sub_institute_id', $tenant)
+                ->pluck('competency_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $gapUserIds = collect($this->employeesBelowRequired($tenant, $courseCompetencies)['below'])
+                ->pluck('user_id')
+                ->unique()
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+
+        // Nothing selected means nobody, never everybody. An audience step left
+        // untouched must not assign the whole organisation by accident.
+        if (! $userIds && ! $departmentIds && ! $jobroleIds && ! $gapUserIds) {
+            return [];
+        }
+
         $query = DB::table('tbluser')
             ->where('sub_institute_id', $tenant)
-            ->where(function ($q) use ($userIds, $departmentIds, $jobroleIds) {
+            ->where(function ($q) use ($userIds, $departmentIds, $jobroleIds, $gapUserIds) {
                 if ($userIds) {
                     $q->orWhereIn('id', $userIds);
                 }
@@ -1193,15 +1236,84 @@ class LmsCourseController extends Controller
                 if ($jobroleIds) {
                     $q->orWhereIn(DB::raw('CAST(allocated_standards AS UNSIGNED)'), $jobroleIds);
                 }
+                if ($gapUserIds) {
+                    $q->orWhereIn('id', $gapUserIds);
+                }
             });
 
-        // Nothing selected means nobody, never everybody. An audience step left
-        // untouched must not assign the whole organisation by accident.
-        if (! $userIds && ! $departmentIds && ! $jobroleIds) {
-            return [];
+        return $query->distinct()->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * GET /api/lms/courses/{id}/audience/suggested
+     *
+     * Who this course would help, and by how much.
+     *
+     * Separate from the preview because it answers a different question: the
+     * preview says how many people a SELECTION reaches, this says who has the
+     * gap the course closes. Returned with the shortfall per person so the
+     * admin is choosing on evidence rather than on a count.
+     */
+    public function suggestedAudience(Request $request, $id)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+        // Same gate as assignAudience: seeing who is behind on a capability is
+        // an admin/HR view, and the role comes from the token's owner.
+        if ($denied = $this->guardLmsProfile($request, ['admin', 'hr'],
+            'Your profile is not permitted to view course audiences.')) {
+            return $denied;
         }
 
-        return $query->distinct()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $tenant = (int) $this->tenantId($request);
+
+        $course = DB::table('sub_std_map')
+            ->where('id', $id)
+            ->where('sub_institute_id', $tenant)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (! $course) {
+            return response()->json(['status' => false, 'message' => 'Course not found'], 404);
+        }
+
+        $competencies = DB::table('course_competency_map as m')
+            ->leftJoin('competency as c', 'c.id', '=', 'm.competency_id')
+            ->where('m.course_id', $id)
+            ->where('m.sub_institute_id', $tenant)
+            ->get(['m.competency_id', 'c.name']);
+
+        if ($competencies->isEmpty()) {
+            return response()->json([
+                'status' => true,
+                'data' => [
+                    'competencies' => [],
+                    'below' => [],
+                    'unmeasured' => [],
+                    // Said plainly rather than returned as an empty list, which
+                    // reads as "nobody has this gap".
+                    'reason' => 'This course is not mapped to any capability yet, so there is no gap to match against.',
+                ],
+            ]);
+        }
+
+        $result = $this->employeesBelowRequired(
+            $tenant,
+            $competencies->pluck('competency_id')->all()
+        );
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'competencies' => $competencies->values(),
+                'below' => $result['below'],
+                // Not a gap and not a pass. Offered separately so an admin can
+                // include people nobody has assessed as a deliberate act.
+                'unmeasured' => $result['unmeasured'],
+                'reason' => null,
+            ],
+        ]);
     }
 
     /**

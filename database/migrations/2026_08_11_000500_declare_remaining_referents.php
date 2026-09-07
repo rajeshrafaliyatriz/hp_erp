@@ -35,6 +35,24 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /**
+     * Portable column check.
+     *
+     * Schema::hasColumn() asks information_schema for `generation_expression`,
+     * which exists only on MySQL >= 5.7.6 / MariaDB >= 10.2. One deployment
+     * runs MariaDB 10.1.48, where that call dies with
+     * "1054 Unknown column 'generation_expression'" before the migration's own
+     * logic is ever reached. SHOW COLUMNS has existed in every release.
+     */
+    private function hasColumnPortable(string $table, string $column): bool
+    {
+        return DB::table('information_schema.columns')
+            ->where('table_schema', DB::getDatabaseName())
+            ->where('table_name', $table)
+            ->where('column_name', $column)
+            ->exists();
+    }
+
     /** column => [referent, note] */
     private const DECLARATIONS = [
         'item_id' => ['s_users_skills',
@@ -78,7 +96,7 @@ return new class extends Migration
             if (!Schema::hasTable($table)) continue;
 
             foreach (self::DECLARATIONS as $column => [$referent, $note]) {
-                if (!Schema::hasColumn($table, $column)) continue;
+                if (!$this->hasColumnPortable($table, $column)) continue;
 
                 // Read the real type first (R15) - rewriting a column with a
                 // guessed type is how a bigint quietly becomes an int.

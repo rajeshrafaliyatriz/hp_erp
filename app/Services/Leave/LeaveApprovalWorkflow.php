@@ -467,10 +467,22 @@ class LeaveApprovalWorkflow
          * The defaults have escalation_enabled = true, so this is not a
          * theoretical gap for them.
          */
+        /*
+         * F-134. `when($onlyTenant, ...)` and not `when($onlyTenant !== null, ...)`.
+         *
+         * Laravel's when() skips its closure on any FALSY value, so a tenant id
+         * of 0 silently removed the filter and swept every organisation. The
+         * caller no longer produces a 0 - it refuses the input - but the guard
+         * belongs here too: this method is public, and the next caller will not
+         * know that its safety depends on a cast two files away.
+         *
+         * `!== null` says what is meant: "no tenant given" is the only thing
+         * that means "all tenants".
+         */
         $tenantIds = DB::table('hrms_leave_approval_steps')
             ->where('status', 'pending')
             ->whereNull('escalated_at')
-            ->when($onlyTenant, fn ($q) => $q->where('sub_institute_id', $onlyTenant))
+            ->when($onlyTenant !== null, fn ($q) => $q->where('sub_institute_id', $onlyTenant))
             ->distinct()
             ->pluck('sub_institute_id');
 
@@ -506,12 +518,40 @@ class LeaveApprovalWorkflow
             $unit   = $setting->escalation_unit === 'days' ? 'days' : 'hours';
             $cutoff = Carbon::parse($now)->sub($unit, $amount);
 
-            $due = DB::table('hrms_leave_approval_steps')
-                ->where('sub_institute_id', $setting->sub_institute_id)
-                ->where('status', 'pending')
-                ->whereNull('escalated_at')
-                ->whereNotNull('pending_since')
-                ->where('pending_since', '<=', $cutoff)
+            /*
+             * F-135. THE SWEEP MUST LOOK AT THE REQUEST, NOT ONLY AT THE STEP.
+             *
+             * This query used to read hrms_leave_approval_steps alone. The
+             * foreign key to hrms_emp_leaves is ON DELETE CASCADE, which sounds
+             * like protection and is inert here: this module SOFT-deletes
+             * everywhere, so the cascade never fires and steps outlive their
+             * request.
+             *
+             * The only thing keeping deleted requests out of the sweep was the
+             * explicit closeOpenSteps() call inside cancel() and destroy(). Any
+             * other route to a soft delete - a repair migration, a support
+             * cleanup, a probe - left the steps 'pending', and this ran over
+             * them every hour, stamping the one-shot escalated_at on requests
+             * that no longer exist and notifying five HR users about each.
+             *
+             * Observed on live: 17 escalated steps belonging to soft-deleted
+             * leaves. Nothing was corrupted, but HR was being told about
+             * requests nobody could open.
+             *
+             * The join also filters on status: an approved or rejected request
+             * has nothing left to escalate either, and reaching that state by
+             * any path other than decision() would have had the same effect.
+             */
+            $due = DB::table('hrms_leave_approval_steps as s')
+                ->join('hrms_emp_leaves as l', 'l.id', '=', 's.leave_id')
+                ->where('s.sub_institute_id', $setting->sub_institute_id)
+                ->where('s.status', 'pending')
+                ->whereNull('s.escalated_at')
+                ->whereNotNull('s.pending_since')
+                ->where('s.pending_since', '<=', $cutoff)
+                ->whereNull('l.deleted_at')
+                ->where('l.status', 'pending')
+                ->select('s.*')
                 ->get();
 
             foreach ($due as $step) {

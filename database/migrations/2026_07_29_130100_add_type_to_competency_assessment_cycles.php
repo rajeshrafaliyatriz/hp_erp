@@ -32,7 +32,11 @@ return new class extends Migration
      */
     private function hasColumnPortable(string $table, string $column): bool
     {
-        return count(DB::select("SHOW COLUMNS FROM `{$table}` LIKE ?", [$column])) > 0;
+        return DB::table('information_schema.columns')
+            ->where('table_schema', DB::getDatabaseName())
+            ->where('table_name', $table)
+            ->where('column_name', $column)
+            ->exists();
     }
 
     public function up(): void

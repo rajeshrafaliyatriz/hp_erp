@@ -251,6 +251,15 @@ echo "11. Restore — tenant 3 goes back to the chain it had before the probe"
 api PUT /api/leave/workflow "$ADMIN"   '{"reporting_manager_enabled":true,"department_head_enabled":true,"hr_enabled":false,"multi_level_enabled":false,"multi_level_count":2,"escalation_enabled":true,"escalation_time":24,"escalation_unit":"hours","escalate_to":"hr"}' >/dev/null
 api DELETE "/api/leave/requests/$LEAVE" "$EMP" >/dev/null 2>&1
 php Docs/hrit-audit/_evidence/snapshot.php   "update hrms_emp_leaves set deleted_at=now() where id in ($LEAVE,$ESC_LEAVE,$SB_LEAVE)" >/dev/null
+# Close their steps too. Soft-deleting a leave with raw SQL leaves its
+# approval steps open, because closeOpenSteps() only runs inside cancel()
+# and destroy(). The escalation sweep then chased requests that no longer
+# existed - F-141. A probe must leave the ground as it found it, and that
+# includes the rows its own writes caused somewhere else.
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "update hrms_leave_approval_steps set status='skipped', updated_at=now()
+    where leave_id in ($LEAVE,$ESC_LEAVE,$SB_LEAVE) and status in ('pending','waiting')" >/dev/null
+
 echo "     multi-level switched back off; probe requests $LEAVE, $ESC_LEAVE and $SB_LEAVE removed"
 
 echo

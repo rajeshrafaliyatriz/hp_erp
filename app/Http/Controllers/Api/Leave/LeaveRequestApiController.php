@@ -380,7 +380,31 @@ class LeaveRequestApiController extends Controller
         // employee got a second leave row and the first sat sent_back for ever,
         // with its chain going nowhere. Found by reviewing this sprint's own
         // work; no probe exercised sent_back.
+        /*
+         * F-136. AND IT IS SCOPED TO THE TENANT, which it was not.
+         *
+         * This lookup matched on user_id + from_date alone. Every other query in
+         * store() is tenant-filtered - including the overlap check above - so a
+         * leave row belonging to a DIFFERENT organisation was invisible to the
+         * overlap check but was matched here, and then rewritten by the
+         * ->update($payload) below. $payload carries the caller's own
+         * sub_institute_id, so the update MOVED somebody else's leave request
+         * into the caller's tenant, along with its dates, type and day count.
+         *
+         * There is a live row this reaches:
+         *
+         *   id=221  user_id=86  leave_tenant=1  user_tenant=3  status=pending
+         *
+         * The `sent_back` clause added just above - a fix for F-127 in this same
+         * engagement - WIDENED the set of foreign rows this could reach. A fix
+         * that makes an unnoticed hole bigger is worth recording as such.
+         *
+         * Found by the Sprint 6 review's authorization dimension, which was
+         * never verified because that review hit a session limit. The whole
+         * dimension was carried as "unverified, not refuted" for two sprints.
+         */
         $existing = DB::table('hrms_emp_leaves')
+            ->where('sub_institute_id', $context['sub_institute_id'])
             ->where('user_id', $userId)
             ->where('from_date', $fromDate)
             ->whereIn('status', ['pending', 'sent_back'])

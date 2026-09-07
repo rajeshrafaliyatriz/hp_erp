@@ -2,64 +2,114 @@
 
 One page. What is done, what is left, and where we are. Update this as work lands.
 
-- **Audit:** `AUDIT-HRIT-MANAGEMENT.md` — verdict **RED**. Findings **F-87 … F-132** (46 total; 13 raised during remediation, two of them by Sprint 6 against its own work).
+- **Audit:** `AUDIT-HRIT-MANAGEMENT.md` — verdict **RED**. Findings **F-87 … F-141** (53 total; 20 raised during remediation, five of them against this project's own work).
 - **Module:** HRIT Solutions (m5) — 12 sub-modules.
 - **Test tenants:** tenant **3** (all nine roles have a live user) and tenant **6** (939 attendance rows).
-- **Live host:** `202.47.117.220/hp_erp`, MariaDB 10.11.9.
+- **Hosts:** the app's own database is `202.47.117.220/hp_erp` (MariaDB **10.11.9**) - this is what
+  `.env` points at and where every sprint's work was verified. A second host, `128.199.17.97/hp_erp`
+  (MariaDB **10.1.48**), is configured as the connection named `live` and is **not** the one the app
+  uses, despite the name. Both are now fully migrated; see *Deployment state* below.
+
+---
+
+## Deployment state - both hosts migrated, 2026-09-07
+
+Both databases now report **0 pending migrations**. Getting the second one there uncovered something
+worth recording, because it was not a defect in any migration:
+
+**`128.199.17.97` was 65 migrations behind and could not be migrated at all.** `php artisan migrate`
+died on the first one - *"Table `s_user_skill_application` already exists"* - and applied nothing.
+The cause was **drift, not a bad migration**: tables and columns had been added to that host by hand
+over months without the `migrations` table ever being told. Fifty-six migrations were asking to
+create things that were already there.
+
+Recording them as run asserts their schema is present, so that assertion was **checked rather than
+assumed** - every table and every column each migration would create, compared against
+`information_schema` on that host. Fifty-six matched completely and were recorded (bookkeeping only,
+no schema touched). Nine had genuinely never run and were executed. 56 + 9 = 65.
+
+**Two things had to be fixed in the repo to get there**, and both are the same bug:
+
+- `Schema::hasColumn()` selects `generation_expression`, a column MariaDB gained in **10.2**. On
+  10.1 it dies before the migration's own logic runs. This had already stopped three earlier
+  migrations on this host.
+- The workaround already in the tree - `SHOW COLUMNS FROM x LIKE ?` - **does not work either**, and
+  its docblock claimed it worked everywhere. MariaDB 10.1 refuses to *prepare* a `SHOW` statement
+  carrying a placeholder (`1064 ... near '?'`). Seven migrations carried this broken helper with a
+  comment asserting it was portable.
+
+Both are now replaced, in **11 migrations**, by a `column_name` lookup against `information_schema`,
+which binds normally and never touches `generation_expression`. The false portability claim in the
+docblocks is corrected rather than deleted.
+
+**What actually changed on `128.199.17.97`:** 296 rows of plaintext passwords cleared; 22 payslips
+collapsed to 6 with `july` canonicalised to `Jul` and the unique period index created; one
+`user_onboarding_status` table created. Leave data was untouched (41 rows before and after), and
+that host had **zero** orphaned approval steps - the 26 on the app host were created by this audit's
+own probes, which never ran here. Reversal:
+`_reversals/REVERSAL-2026-09-07-migrate-128.199.17.97.sql`, with before/after figures for every line.
+
+**Regression check after migrating:** 112 probe assertions across sprints 1, 5, 6, 7, 8, 9 and F-132
+- **0 failures**.
 
 ---
 
 ## Where we are - in plain English
 
-**44 of 46 findings are closed. Two remain, and both need a decision rather than more code.**
+**All 53 findings are closed. The module is still not GREEN, and those are different statements.**
 
-**The most serious defect in the whole engagement was found after the last sprint, by trying to
-measure something else.** Monthly Payroll was showing HR **two of tenant 3's 122 employees** - and
-an administrator two, an HR Manager one. Payroll was being run for two people. The screen showed no
-error, because a short list does not look like a truncated one; you would have to know the headcount
-to notice.
+**Sprint 9 exists because Sprint 6's review never finished.** It checked its own work, found 36
+possible problems, confirmed 15 - and then ran out of budget with **18 unchecked**. Those were
+honestly labelled "unverified, not refuted" and then carried, unlisted, for two sprints.
 
-The cause: the code decides who may see the whole institute from a hardcoded list of profile
-*names*, matched exactly, while the screen sends a role *key*. They have never matched. It is not
-something this project introduced - the older value missed the list too - it has simply always been
-broken, and nobody had counted the rows.
+Recovering them was uncomfortable. **The two areas never checked were security and payroll** - the
+two that matter most - and five of the eighteen were still real. Three of those five had been
+introduced by this project's own fixes.
 
-It was found because I could not reproduce the slow-payroll case in order to re-measure it. **The
-measurement I could not get was itself the bug.**
+**The worst one:** an administrator at one organisation could create a payslip for an employee at a
+different organisation, with figures of their choosing. Proven by doing it on the live database, then
+removing the row. A second, gentler version of the same hole let the save response read out other
+organisations' staff names.
 
-**And with that fixed, the slow-payroll finding could finally be measured and closed.** The audit
-recorded this endpoint timing out at 60 seconds. It now returns the full 122-employee month in
-**under 3 seconds** - about 11x faster than it was after Sprint 2, and 22x faster than the timeout
-it started as.
+**And the documentation was wrong.** Sprint 6 claimed it had fixed the duplicate payslips. It had
+not, and could not have: the seventeen duplicate rows are stored as "july" while the screen sends
+"Jul", so the fix could never find them. The test printed the surviving duplicates on screen and
+passed anyway. *A number printed is not a number checked.* Corrected in place, and now actually
+fixed - one spelling everywhere, the duplicates collapsed, and a database constraint so they cannot
+come back.
 
-**One stale test was corrected rather than explained away.** Sprint 5's probe had HR approving a
-leave request directly, which now correctly returns 403 - tenant 3 has not put HR in its approval
-chain. The probe encoded the pre-chain world; it was updated, and the reason is written into the
-file so nobody reads the change as a regression being hidden.
+**Payroll also got an audit trail**, which it never had. Correcting a payslip now records what it
+used to say and who changed it.
+
+**Two long-standing items closed by decision rather than by building.** The broken shift screens were
+deleted - they had no tables, no views, no security gate, and the bulk update would have erased the
+Saturday half-days that 203 employees have. And the salary rule that behaved differently for one
+organisation became a per-organisation setting, seeded so that **nobody's pay changed** - proven by
+showing the new rule gives exactly the same answer as the old one for every organisation.
+
+**What is still missing is not a bug list.** Nothing has been tested at realistic volume; payroll
+arithmetic has never been checked by hand against a payslip; four of the audit's own negative tests
+have never been run; and nobody from the business has signed anything off. Those are what stand
+between "every defect found is fixed" and "this is proven to work".
 
 ## Progress
 
 | Measure | S0 | S1 | S2 | S3 | S4 | S5 | S6 | S7 | **Now** |
 |---|---|---|---|---|---|---|---|---|---|
-| Findings **closed** | 0 | 10 | 17 | 20 | 24 | 28 | 33 | 35 | **44 of 46 - 96%** |
-| Sprints complete | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | **9 of 9 - 100%** |
+| Findings **closed** | 0 | 10 | 17 | 20 | 24 | 28 | 33 | 35 | **53 of 53 - 100%** |
+| Sprints complete | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | **10 of 10** |
 | Sub-modules **GREEN** | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **0 of 12 - 0%** |
 
-**No sub-module is GREEN, after nine sprints, and that is deliberate.** Green means the whole
+**No sub-module is GREEN, and closing every finding did not change that.** Green means the whole
 lifecycle is proven - front door, business rules, validation at the API, and behaviour at realistic
-volume. Every sub-module is AMBER: they work, they are gated, and their rules bite. Calling one
-green because it works when you use it carefully is the exact claim this audit exists to catch.
+volume. The last of those has never been done.
 
-**F-132 is the argument for that caution, made concrete.** Monthly Payroll passed every check this
-project ran for eight sprints - gated correctly, no duplicate payslips, a month lock, output
-byte-identical across runs - and it was returning **two of 122 employees** the whole time. Nothing
-caught it until somebody counted the rows. Marking a sub-module green before it has been driven at
-real volume would have made exactly that mistake official.
-
-**The denominator kept moving, and that is the honest number.** 45 findings, not the 37 the audit
-opened with: twelve were raised during remediation (F-120 … F-131), including **two that Sprint 6
-introduced and closed itself** after an adversarial review of its own work, and one that had been
-fixed in Sprint 2 and wrongly carried as open until Sprint 8 checked.
+**F-132 and F-137 are the argument for that caution, and they make it twice.** Monthly Payroll
+passed every check this project ran for eight sprints - gated, no duplicate payslips, a month lock,
+byte-identical output - while returning **two of 122 employees**. And the duplicate-payslip fix was
+recorded as closed for three sprints while its own test printed the surviving duplicates. Both were
+found by counting rows, not by reading code. Marking a sub-module green before it has been driven at
+real volume would make exactly that mistake official.
 
 Sub-module status:
 
@@ -82,6 +132,7 @@ Sub-module status:
 
 | Sprint | What it closed | Write-up |
 |---|---|---|
+| **9** | **What Sprint 6's unfinished review left behind.** That review died with 18 of 36 candidates unchecked, and the two dimensions never checked were authorization and payroll. Five were still live; three had been introduced by this project. An administrator could write a payslip for **another organisation's employee** - proven on live, then removed. The response also read out foreign staff names. **F-109 was recorded as closed and was not**: the seventeen duplicates are spelled `july`, the screen posts `Jul`, and the Sprint 6 probe printed the surviving cluster and passed anyway. Now one canonical spelling, 22 rows collapsed to 6, and a UNIQUE index so they cannot return - plus payroll's **first audit trail**, because a soft delete would have defeated that index. Also closed: F-105 by deleting screens that would have erased 203 employees' Saturday half-days, and F-111 as per-tenant configuration proven to change nobody's pay. | `SPRINT-9-UNVERIFIED-REVIEW.md` |
 | **8** | **The employee's own view, and the two screens that had never worked.** An employee could not see their own payslip - no route served it. **My HR** now shows their leave, their payslips and where each pending request has got to; none of its endpoints takes an employee id, so "my payslip" cannot become "anyone's payslip". The Salary Certificate, which had written **zero rows in the life of the product**, turned out to be **unusable rather than unused** - it crashed on any employee without a salary structure, and there are eight on the whole platform. Fixed, along with the hardcoded "Her" it printed on every certificate. Every signed-out browser hit stopped being a 500. The one validation mismatch the audit named turned out to be two. **No live data changes at all** - the first sprint since the audit with none. | `SPRINT-8-SELF-SERVICE.md`, `DEMO-SPRINT-8.md` |
 | **7** | **Notifications, and a payroll month you can close.** The module had never sent a notification of any kind - approvers found out a request existed by opening the screen. Three event types added to the platform's **existing** notification stack; the bell already existed and was already wired, so there was no frontend work at all. Apply, and your manager is told; approve, and both the employee and the next approver are told. Escalation now reaches five HR users instead of nobody. And a payroll month can be declared finished: a locked month refuses the save at the server, and reopening it demands a reason that is stored with a name and a time. | `SPRINT-7-NOTIFICATIONS.md`, `DEMO-SPRINT-7.md` |
 | **6** | **The approval chain, and payroll that stops duplicating itself.** `hrms_leave_workflow_settings` was the last configuration table in this module that controlled nothing - three live rows, a working screen, no reader anywhere. It now builds a real chain, one row per required approval, frozen onto each request when it is raised. Proven live: an HR Manager with Organization scope **refused** at step 1, a request still pending after one approval of two, approved only after both. Escalation runs hourly and widens who may act rather than reassigning. Payroll stopped INSERTing blind - live data held **17 payslips for one employee-month**. Then an adversarial review of this sprint's own work found a **critical** bug it had just introduced: a finished request could be decided again, because the chain check only ran while a step was open. Closed in the same sprint, with tests. | `SPRINT-6-APPROVAL-CHAIN.md`, `DEMO-SPRINT-6.md` |
@@ -98,7 +149,7 @@ Sub-module status:
 
 | Sprint | What it closes | Findings |
 |---|---|---|
-| **What is genuinely left** | **F-111 needs your decision, not code.** Does a flat pay-head cap mean "pay the excess over it" or "clamp to it"? Tenant 47 is a live institute with 597 users and 924 salary structures; changing that arithmetic without an answer would change real salaries. **F-105 needs the shift *template* built**, which is a feature rather than a fix - and the per-employee roster it would replace already works. Plus the **18 review candidates** from Sprint 6 that could not be verified before that review hit a session limit - unverified, **not refuted**. | F-105, F-111 |
+| **What is left, and none of it is a defect** | **Scale.** The release gate has said "not reached" since Sprint 0. Read-only timings against tenant 1000000 (1001 users) and tenant 6 (939 attendance rows) - no tenant has both. **Payroll arithmetic reconciled by hand**: §E.3 has five rows and not one is a payroll figure; no PF, PT, net or Form 16 total has ever been checked against a hand-computed value, though the brief asked for it. **Q3** - cross-tenant fetch by id - is the sole qualifier on the release gate's only PASS. **Q1** needs a contract, not code. **Q6** - four duplicated controller pairs still routed. **Four negative tests** the audit itself lists and has never run. And **domain sign-off**, which cannot come from me. | none open |
 
 **Deliberately deferred, and said out loud:** statutory remittance (PF/ESI/TDS filing) and final
 settlement on exit are not in m5 today and are not in this plan. They are a separate module-sized

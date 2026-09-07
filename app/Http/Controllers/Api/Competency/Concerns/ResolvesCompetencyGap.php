@@ -180,4 +180,126 @@ trait ResolvesCompetencyGap
 
         return $ids->count() === 1 ? (int) $ids->first() : null;
     }
+
+    /**
+     * Everyone in this organisation who is BELOW the level their role requires
+     * on any of the given competencies.
+     *
+     * ── WHY THIS BELONGS HERE ───────────────────────────────────────────────
+     *
+     * The product could answer "what is this person's gap" and could not answer
+     * "who has a gap in this". Every consumer of jobrole_competency_map is
+     * single-subject or a bare count, so an admin building a course to close a
+     * capability gap had no way to find the people who have it - while the
+     * course-competency picker's own label promised exactly that: "This is what
+     * lets it be suggested to someone with a matching gap."
+     *
+     * It sits in this trait, beside competencyGapFor(), rather than in a new
+     * class. The header of this file records that a SECOND implementation of
+     * this comparison once produced an 85.9% wrong-answer rate; the states,
+     * the required-level source and the unmeasured rule are shared here by
+     * construction.
+     *
+     * ── THE THREE RULES IT KEEPS ────────────────────────────────────────────
+     *
+     * 1. UNMEASURED IS NOT A GAP. Someone nobody has assessed is not behind -
+     *    they are unknown. Treating absence as a shortfall is the documented
+     *    defect that turned 3,328 of 3,873 live gap rows into shortfalls nobody
+     *    had assessed. They are returned separately so the caller can offer them
+     *    deliberately rather than silently.
+     * 2. A REQUIREMENT WITH NO LEVEL IS NOT A BAR. required_proficiency is
+     *    nullable, and competencyGapFor casts it with (float) so NULL becomes
+     *    0.0 and everything passes. Here a null requirement is skipped outright
+     *    rather than silently satisfied.
+     * 3. THE ROLE COMES FROM BOTH COLUMNS. jobtitle_id and allocated_standards
+     *    disagree for real employees; the SQL COALESCE below is the same
+     *    resolution ResolvesEmployeeJobRole applies in PHP.
+     *
+     * @param  list<int>  $competencyIds
+     * @return array{below: array<int,array<string,mixed>>, unmeasured: array<int,array<string,mixed>>}
+     */
+    protected function employeesBelowRequired(int $subInstituteId, array $competencyIds): array
+    {
+        $competencyIds = array_values(array_filter(array_map('intval', $competencyIds)));
+
+        if ($competencyIds === []) {
+            return ['below' => [], 'unmeasured' => []];
+        }
+
+        /*
+         * Everyone whose ROLE requires one of these competencies.
+         *
+         * Somebody the course would genuinely help but whose role does not list
+         * the competency is invisible here, and deliberately so: there is no
+         * other table stating a per-person target, so including them would mean
+         * inventing a bar to judge them against.
+         */
+        $people = DB::table('tbluser as u')
+            ->join('jobrole_competency_map as m', function ($j) use ($subInstituteId) {
+                $j->on(
+                    'm.jobrole_id',
+                    '=',
+                    DB::raw("COALESCE(NULLIF(u.jobtitle_id, 0), NULLIF(SUBSTRING_INDEX(u.allocated_standards, ',', 1), ''))")
+                )->where('m.sub_institute_id', '=', $subInstituteId);
+            })
+            ->leftJoin('s_user_jobrole as r', 'r.id', '=', 'm.jobrole_id')
+            ->leftJoin('hrms_departments as d', 'd.id', '=', 'u.department_id')
+            ->leftJoin('competency as c', 'c.id', '=', 'm.competency_id')
+            ->where('u.sub_institute_id', $subInstituteId)
+            ->whereIn('m.competency_id', $competencyIds)
+            // A requirement with no level set is not a bar anyone can fall below.
+            ->whereNotNull('m.required_proficiency')
+            ->get([
+                'u.id as user_id', 'u.first_name', 'u.last_name',
+                'm.competency_id', 'm.required_proficiency', 'm.is_mandatory',
+                'c.name as competency_name', 'r.jobrole', 'd.department',
+            ]);
+
+        if ($people->isEmpty()) {
+            return ['below' => [], 'unmeasured' => []];
+        }
+
+        $levels = app(ProficiencyService::class)->rollUpMany(
+            $subInstituteId,
+            $people->pluck('user_id')->unique()->map(fn ($id) => (int) $id)->values()->all(),
+            $competencyIds
+        );
+
+        $below = [];
+        $unmeasured = [];
+
+        foreach ($people as $row) {
+            $userId = (int) $row->user_id;
+            $cid = (int) $row->competency_id;
+            $level = $levels[$userId][$cid]['level'] ?? null;
+
+            $entry = [
+                'user_id' => $userId,
+                'name' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
+                'department' => $row->department,
+                'jobrole' => $row->jobrole,
+                'competency_id' => $cid,
+                'competency_name' => $row->competency_name,
+                'required_proficiency' => (int) $row->required_proficiency,
+                'is_mandatory' => (bool) $row->is_mandatory,
+                'measured_level' => $level,
+                'coverage' => $levels[$userId][$cid]['coverage'] ?? 0.0,
+            ];
+
+            if ($level === null) {
+                $unmeasured[] = $entry;
+                continue;
+            }
+
+            if ($level < (float) $row->required_proficiency) {
+                $entry['gap'] = round((float) $row->required_proficiency - $level, 2);
+                $below[] = $entry;
+            }
+        }
+
+        // Largest shortfall first: the people the course would help most.
+        usort($below, fn ($a, $b) => $b['gap'] <=> $a['gap']);
+
+        return ['below' => $below, 'unmeasured' => $unmeasured];
+    }
 }
