@@ -285,6 +285,17 @@ class SchoolSetupController extends Controller
             300 => [1, 0, 0, 0],   // Main Dashboard
             1   => [1, 0, 0, 0],   // Organizational Management   (container)
             7   => [1, 0, 0, 0],   //   Organization Setup        (container)
+            /*
+             * Organization Profile was NOT in this list, and it is the first
+             * screen a new organisation needs: it is where the legal name,
+             * registered address, CIN, GST and PAN are recorded. Without it the
+             * admin could create departments before naming their own company,
+             * and `org_details` held 4 rows for 12 live tenants.
+             *
+             * Edit but not delete: an organisation has exactly one profile row
+             * and deleting it is not a thing anybody should do from a screen.
+             */
+            12  => [1, 1, 1, 0],   //     Organization Profile
             13  => [1, 1, 1, 1],   //     Department Management
             8   => [1, 0, 0, 0],   //   User Management           (container)
             22  => [1, 1, 1, 1],   //     Employee Directory
@@ -298,6 +309,7 @@ class SchoolSetupController extends Controller
             300 => [1, 0, 0, 0],
             1   => [1, 0, 0, 0],
             7   => [1, 0, 0, 0],
+            12  => [1, 1, 1, 0],   //     Organization Profile
             13  => [1, 1, 1, 0],
             8   => [1, 0, 0, 0],
             22  => [1, 1, 1, 0],
