@@ -1093,6 +1093,7 @@ Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk']);
 // Who a course is for. Declared BEFORE /lms/courses/{id} so "audience" is not
 // captured as an id.
 Route::get('/lms/courses/{id}/audience/preview', [LmsCourseController::class, 'audiencePreview'])->whereNumber('id');
+Route::get('/lms/courses/{id}/audience/suggested', [LmsCourseController::class, 'suggestedAudience'])->whereNumber('id');
 Route::post('/lms/courses/{id}/audience', [LmsCourseController::class, 'assignAudience'])->whereNumber('id');
 Route::get('/lms/courses', [LmsCourseController::class, 'index']);
 Route::post('/lms/courses', [LmsCourseController::class, 'store']);
