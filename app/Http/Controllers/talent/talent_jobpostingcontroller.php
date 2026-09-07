@@ -67,12 +67,22 @@ class talent_jobpostingcontroller extends Controller
 
                 $sub_institute_id = $this->apiTenantId($request);
 
-                // Auto-update expired job postings to inactive
+                /*
+                 * Auto-close postings whose deadline has PASSED.
+                 *
+                 * now() is a datetime, so comparing a DATE deadline against it
+                 * closed a posting at 00:00 on its own closing day - a role
+                 * advertised "apply by 7 September" was gone for the whole of
+                 * the 7th. The public careers page uses ,
+                 * which keeps that day open, so the two disagreed and a posting
+                 * the candidate had every right to see was already Inactive.
+                 * toDateString() makes the sweep agree with the page it feeds.
+                 */
                 DB::table('talent_job_postings')
                     ->where('sub_institute_id', $sub_institute_id)
                     ->where('status', 'active')
                     ->whereNotNull('deadline')
-                    ->where('deadline', '<', now())
+                    ->where('deadline', '<', now()->toDateString())
                     ->update(['status' => 'inactive', 'updated_at' => now()]);
 
                 // fetch jobrole data from table
@@ -230,12 +240,22 @@ class talent_jobpostingcontroller extends Controller
 
                 $sub_institute_id = $this->apiTenantId($request);
 
-                // Auto-update expired job postings to inactive
+                /*
+                 * Auto-close postings whose deadline has PASSED.
+                 *
+                 * now() is a datetime, so comparing a DATE deadline against it
+                 * closed a posting at 00:00 on its own closing day - a role
+                 * advertised "apply by 7 September" was gone for the whole of
+                 * the 7th. The public careers page uses ,
+                 * which keeps that day open, so the two disagreed and a posting
+                 * the candidate had every right to see was already Inactive.
+                 * toDateString() makes the sweep agree with the page it feeds.
+                 */
                 DB::table('talent_job_postings')
                     ->where('sub_institute_id', $sub_institute_id)
                     ->where('status', 'active')
                     ->whereNotNull('deadline')
-                    ->where('deadline', '<', now())
+                    ->where('deadline', '<', now()->toDateString())
                     ->update(['status' => 'inactive', 'updated_at' => now()]);
 
                 // Execute the query

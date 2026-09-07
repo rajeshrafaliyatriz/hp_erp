@@ -202,6 +202,17 @@ Route::middleware('throttle:30,1')->group(function () {
     Route::get('/careers/{slug}', [CareersController::class, 'organisation']);
     Route::get('/careers/{slug}/postings/{id}', [CareersController::class, 'posting'])->whereNumber('id');
 });
+/*
+| A candidate following their OWN application. Public, and the token is the
+| credential - the same contract as the offer and assessment links.
+|
+| Declared BEFORE nothing and constrained to 64 alphanumerics so it can never
+| collide with /careers/{slug}: a slug is a hyphenated name, never 64 characters
+| of [A-Za-z0-9]. Unknown, expired and malformed all answer 410 alike.
+*/
+Route::get('/careers/track/{token}', [CareersController::class, 'track'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:30,1');
 Route::post('/careers/{slug}/postings/{id}/apply', [CareersController::class, 'apply'])
     ->whereNumber('id')
     ->middleware('throttle:5,1');
