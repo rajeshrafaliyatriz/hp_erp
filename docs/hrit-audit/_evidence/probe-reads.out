@@ -1,0 +1,25 @@
+===== A. Leave API as an EMPLOYEE (tenant 3, user 7) =====
+GET  /api/leave/requests (org-wide?)                       200  {"status":1,"message":"Leave requests fetched successfully","year":2026,"data":[{"id":222,"employee_id":150,"employee_no":"","employee_name":"Alia Vin
+GET  /api/leave/leave-types                                200  {"status":1,"message":"Leave types fetched successfully","year":2026,"data":[{"id":6,"leave_type_id":"LTY001","leave_type":"Scholar Clone","sort_order
+GET  /api/leave/roles (permission matrix)                  200  {"status":1,"message":"Role permissions fetched successfully","data":[{"id":8,"role_name":"Employee","scope":"Self","approve_leave":false,"view_report
+GET  /api/leave/workflow                                   200  {"status":1,"message":"Approval workflow fetched successfully","data":{"id":2,"reporting_manager_enabled":true,"department_head_enabled":true,"hr_enab
+GET  /api/leave/reports/register                           200  {"status":1,"message":"Leave register fetched successfully","year":2026,"count":18,"data":[{"id":222,"employee_id":150,"employee_no":"","employee_name
+===== B. PAYROLL web routes as an EMPLOYEE (browser gate only) =====
+GET  /payroll-type                                         200  {"data":[{"id":9,"payroll_type":1,"payroll_name":"BASIC","amount_type":1,"status":1,"sort_order":2,"sub_institute_id":3,"payroll_percentage":"25000","
+GET  /employee-salary-structure                            200  {"employees":[{"id":122,"user_name":"aarna.kadakia","password":"$2y$12$iq4EYFhV.GLZWLzOt8iK1ecdpTkToMf3T\/FgKnv2Bk8pdBBpu325S","name_suffix":"Mr.","fi
+GET  /monthly-payroll/create                               500  {    "message": "Session store not set on request.",    "exception": "RuntimeException",    "file": "C:\\Users\\MILAN\\Downloads\\hp_erp\\vendor\\lara
+GET  /hrms-salary-certificate                              200  {"employee_id":null,"month_ids":{"1":"Jan","2":"Feb","3":"Mar","4":"Apr","5":"May","6":"Jun","7":"Jul","8":"Aug","9":"Sep","10":"Oct","11":"Nov","12":
+GET  /form16 (documented fatal)                            200  {"payrollTypes":[{"id":4,"payroll_type":2,"payroll_name":"daycount1","amount_type":2,"status":1,"sort_order":3,"sub_institute_id":3,"payroll_percentag
+===== C. AUDITOR and RECRUITER reach (should be read-only / none) =====
+auditor  GET /employee-salary-structure                    200  {"employees":[{"id":122,"user_name":"aarna.kadakia","password":"$2y$12$iq4EYFhV.GLZWLzOt8iK1ecdpTkToMf3T\/FgKnv2Bk8pdBBpu325S","name_suffix":"Mr.","fi
+auditor  GET /api/leave/requests                           200  {"status":1,"message":"Leave requests fetched successfully","year":2026,"data":[{"id":222,"employee_id":150,"employee_no":"","employee_name":"Alia Vin
+===== D. TENANT ISOLATION (tenant 6 token, tenant 3 ids) =====
+t6 emp GET /api/leave/requests                             200  {"status":1,"message":"Leave requests fetched successfully","year":2026,"data":[],"pagination":{"page":1,"per_page":10,"total":0,"last_page":1}}200
+t6 emp GET /payroll-type as tenant 3                       200  {"data":[{"id":13,"payroll_type":1,"payroll_name":"Basic","amount_type":1,"status":1,"sort_order":1,"sub_institute_id":6,"payroll_percentage":"0","day
+t6 emp GET salary-structure as tenant 3                    200  {"employees":[{"id":43,"user_name":null,"password":"$2y$12$2cl4Jz0AeFpWPMrMfabc0eOwv\/RhxC1LhIdOnUDiS8V8LygGEs8XG","name_suffix":"Mr.","first_name":"A
+===== E. NO TOKEN AT ALL =====
+anon GET /hrms/myleave/7                                   401  {"message":"Unauthorized"}401
+anon GET /hrms/leavehistory/7                              401  {"message":"Unauthorized"}401
+anon GET /api/leave/requests                               401  {"status":0,"message":"Token not provided"}401
+anon GET /payroll-type                                     401  {"message":"Unauthorized"}401
+anon GET /api/attendance/my-attendance                     401  {"status":0,"message":"Token not provided"}401

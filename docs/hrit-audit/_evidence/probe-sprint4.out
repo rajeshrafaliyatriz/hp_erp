@@ -1,0 +1,26 @@
+===== F-101: a leave type must belong to the caller's own tenant =====
+PASS want=422 got=422  tenant 3 employee uses tenant 6's type id 9 {"status":0,"message":"That leave type is not available to your organisation.","errors":{"leave_type_id":["That leave 
+===== F-102: the three the audit proved by calling the API directly =====
+PASS want=422 got=422  365-day leave (was 201)                    {"status":0,"message":"Leave must fall inside the 2026-04-01 to 2027-03-31 leave year.","errors":{"from_date":["Leave 
+PASS want=422 got=422  leave dated 1990 (was 201)                 {"status":0,"message":"Leave must fall inside the 2026-04-01 to 2027-03-31 leave year.","errors":{"from_date":["Leave 
+PASS want=422 got=422  a Sunday only - all weekly off             {"status":0,"message":"Every day in that range is a weekly off or a holiday, so there is no leave to take.","errors":{
+===== F-96: entitlement has a front door, and only HR may open it =====
+PASS want=200 got=200  hr_manager reads the grid                  {"status":1,"message":"Leave allocations fetched successfully","year":2026,"data":{"leave_types":[{"value":"6","label"
+PASS want=403 got=403  employee tries to set a grant              {"status":0,"message":"You do not have permission to set leave entitlements.","role":"Employee","permission":"configur
+PASS want=422 got=422  a grant above the 180-day cap              {"status":0,"message":"An entitlement cannot exceed 180 days.","errors":{"allocations.0.value":["An entitlement cannot
+===== the balance is zero until somebody grants one =====
+  before: Annual Leave total=0 remaining=0
+PASS want=200 got=200  hr grants 3 days to department 35          {"status":1,"message":"1 entitlement(s) saved.","saved":1,"removed":0}200
+  after:  Annual Leave total=3 remaining=3
+===== ...and now the balance rule bites =====
+PASS want=422 got=422  5 working days against a 3-day balance     {"status":0,"message":"That is 5 day(s) of Annual Leave and you have 3 remaining.","errors":{"leave_type_id":["Not eno
+PASS want=201 got=201  2 working days, within balance             {"status":1,"message":"Leave applied successfully","data":{"id":233}}201
+PASS want=422 got=422  overlapping dates                          {"status":0,"message":"You already have pending leave from 2026-11-09 to 2026-11-10.","errors":{"from_date":["These da
+===== F-95: what the accepted request was actually charged =====
+  {"from_date":"2026-11-09","to_date":"2026-11-10","day_type":"1","chargeable_days":"2.00"}
+  (2026-11-09 to 2026-11-13 is Mon-Fri = 5; the weekend is not charged)
+===== clean up everything this script created =====
+  leaves removed:     1
+  grants removed:     1
+  tenant 3 leaves:    29 (baseline 29)
+  allocation rows:    1 (baseline 1)

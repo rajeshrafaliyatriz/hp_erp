@@ -19,6 +19,31 @@ use Illuminate\Support\Facades\DB;
 use function App\Helpers\aut_token;
 
 
+/**
+ * The legacy mobile LMS API.
+ *
+ * ── student_id IS THE PARAMETER; employee_id IS THE COLUMN ──────────────────
+ *
+ * Every exam endpoint here queried `lms_online_exam.student_id` and
+ * `lms_online_exam_answer.student_id`. Neither column exists. On both databases
+ * the column is `employee_id`:
+ *
+ *   lms_online_exam         id, employee_id, question_paper_id, ...
+ *   lms_online_exam_answer  id, question_paper_id, online_exam_id, employee_id, ...
+ *
+ * So every one of these endpoints raised "Unknown column 'student_id'" — sitting
+ * an exam, resuming one, and reading a result alike. The migration that declares
+ * the table names the column `student_id`, and this controller trusted it; the
+ * databases disagree with both, and the databases are what runs.
+ *
+ * The REQUEST parameter stays `student_id`, and every SELECT still returns the
+ * key `student_id` (via `employee_id AS student_id`). Mobile clients already in
+ * the field send and read that name, and renaming it would trade one broken
+ * contract for another. Only the column references moved.
+ *
+ * Note `s.student_id` around line 435 is NOT one of these: that query is on the
+ * student-transport table, where `student_id` is genuinely the column.
+ */
 class lms_apiController extends Controller
 {
     // Was GenTux\Jwt\GetsJwtToken. That package is absent from
@@ -251,7 +276,7 @@ class lms_apiController extends Controller
                         [$sub_institute_id, $syear]
                     );
                 })->selectRaw('count(le.id)+1 as count_attempted')
-                ->where('student_id', $student_id)
+                ->where('employee_id', $student_id)
                 ->where('question_paper_id', $question_paper_id)->get()->toArray();
 
             if ($data['questionpaper_data']['open_date'] <= date('Y-m-d H:i:s') && $data['questionpaper_data']['close_date'] >= date('Y-m-d H:i:s') && ($attempted[0]->count_attempted <= $data['questionpaper_data']['attempt_allowed'] || $data['questionpaper_data']['attempt_allowed'] == 0)) {
@@ -321,9 +346,9 @@ class lms_apiController extends Controller
                         'qp.id = le.question_paper_id AND qp.sub_institute_id = ? AND qp.syear = ?',
                         [$sub_institute_id, $syear]
                     );
-                })->selectRaw('le.id,le.student_id,le.question_paper_id,le.total_right,le.total_wrong,
+                })->selectRaw('le.id,le.employee_id AS student_id,le.question_paper_id,le.total_right,le.total_wrong,
 (le.total_right) as obtain_marks,le.start_time,le.created_at,le.id as online_exam_id,qp.paper_name')
-                ->where('student_id', $student_id)
+                ->where('employee_id', $student_id)
                 ->where('question_paper_id', $question_paper_id)
                 ->orderBy('start_time')->get()->toArray();
 
@@ -344,11 +369,11 @@ FROM lms_question_mapping l
 INNER JOIN lms_mapping_type lt ON lt.id = l.mapping_value_id
 INNER JOIN lms_mapping_type plt ON plt.id = lt.parent_id
 LEFT JOIN lms_online_exam_answer e on e.question_id = l.questionmaster_id and e.question_paper_id = '" . $val['question_paper_id'] . "' AND
-e.student_id = '" . $val['student_id'] . "' and e.online_exam_id = '" . $val['id'] . "'
+e.employee_id = '" . $val['student_id'] . "' and e.online_exam_id = '" . $val['id'] . "'
 WHERE questionmaster_id IN (
 SELECT question_id
 FROM lms_online_exam_answer
-WHERE question_paper_id = '" . $val['question_paper_id'] . "' AND student_id = '" . $val['student_id'] . "'
+WHERE question_paper_id = '" . $val['question_paper_id'] . "' AND employee_id = '" . $val['student_id'] . "'
 AND online_exam_id = '".$val['id']."'
 )
 GROUP BY mapping_value_id
@@ -573,7 +598,7 @@ t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_nam
             }
             $tot_marks = $correct_ans + $wrong_ans;
             $lms_online_data = [
-                "student_id"        => $student_id,
+                "employee_id"       => $student_id,
                 "question_paper_id" => $question_paper_id,
                 "total_right"       => $correct_ans,
                 "total_wrong"       => $wrong_ans,
@@ -599,7 +624,7 @@ t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_nam
                 $lms_answer_data = array(
                     'question_paper_id' => $question_paper_id,
                     'online_exam_id'    => $online_exam_id,
-                    'student_id'        => $student_id,
+                    'employee_id'       => $student_id,
                     'question_id'       => $qval,
                     'answer_id'         => $given_ans_array[$qkey],
                     'ans_status'        => $ans_status,
@@ -643,10 +668,10 @@ t_ss.shift_title AS to_shift ,t_v.title AS to_bus ,t_st.stop_name AS to_stop_nam
 
         if ($student_id != "" && $sub_institute_id != "" && $syear != "" && $online_exam_id != "") {
 
-            $data['attempted_data'] = DB::SELECT("SELECT le.id,le.student_id,le.question_paper_id,le.total_right,le.total_wrong,(le.total_right+le.total_wrong) as obtain_marks,le.start_time,le.created_at,le.id as online_exam_id,qp.paper_name
+            $data['attempted_data'] = DB::SELECT("SELECT le.id,le.employee_id AS student_id,le.question_paper_id,le.total_right,le.total_wrong,(le.total_right+le.total_wrong) as obtain_marks,le.start_time,le.created_at,le.id as online_exam_id,qp.paper_name
 FROM lms_online_exam le
 INNER JOIN question_paper qp ON qp.id = le.question_paper_id AND qp.sub_institute_id = '" . $sub_institute_id . "' AND qp.syear = '" . $syear . "'
-WHERE student_id = '" . $student_id . "' AND le.id = '" . $online_exam_id . "'");
+WHERE le.employee_id = '" . $student_id . "' AND le.id = '" . $online_exam_id . "'");
 
 
             $online_answer_data = DB::select("SELECT a.*, GROUP_CONCAT(am.answer) AS actual_answer,q.question_type_id,q.multiple_answer,
@@ -661,7 +686,7 @@ FROM (
 SELECT loem.question_id,loem.ans_status,IFNULL(loem.narrative_answer, GROUP_CONCAT(IFNULL(lam.answer,'Not Attempted'))) AS given_answer
 FROM lms_online_exam_answer loem
 LEFT JOIN answer_master lam ON lam.question_id = loem.question_id AND lam.id = loem.answer_id
-WHERE loem.online_exam_id = '" . $online_exam_id . "' AND loem.student_id = '" . $student_id . "'
+WHERE loem.online_exam_id = '" . $online_exam_id . "' AND loem.employee_id = '" . $student_id . "'
 GROUP BY loem.question_id) AS a
 INNER JOIN lms_question_master q ON q.id = a.question_id and q.status = 1
 LEFT JOIN answer_master am ON a.question_id = am.question_id AND correct_answer = 1

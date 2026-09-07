@@ -1,0 +1,15 @@
+===== E.1 LEAVE APPLY - business rules at the API =====
+to_date BEFORE from_date                               422  {"status":0,"message":"The to date field must be a date after or equal to from date.","errors":{"to_date":["The to date field must be a date
+leave_type_id from ANOTHER tenant                      201  {"status":1,"message":"Leave applied successfully","data":{"id":224}}201
+365-day leave (no balance check?)                      201  {"status":1,"message":"Leave applied successfully","data":{"id":225}}201
+leave dated 1990 (closed period?)                      201  {"status":1,"message":"Leave applied successfully","data":{"id":226}}201
+missing comment                                        422  {"status":0,"message":"A reason is required.","errors":{"comment":["A reason is required."]}}422
+emoji + Gujarati in comment                            201  {"status":1,"message":"Leave applied successfully","data":{"id":227}}201
+===== E.1 LEAVE TYPE - as HR (the role that legitimately configures) =====
+no_of_leave = -50                                      201  {"status":1,"message":"Leave type added successfully","data":{"id":12}}201
+empty leave_type name                                  422  {"status":0,"message":"The leave type field is required.","errors":{"leave_type":["The leave type field is required."]}}422
+300-char leave_type name                               422  {"status":0,"message":"The leave type field must not be greater than 191 characters.","errors":{"leave_type":["The leave type field must not
+===== E.1 HOLIDAY =====
+holiday to_date before from_date                       422  {"status":0,"message":"The to date field must be a date after or equal to from date.","errors":{"to_date":["The to date field must be a date
+===== Part G: cross-tenant object ids =====
+decide a TENANT 6 leave with a TENANT 3 admin token    200  {"status":1,"message":"Leave request updated successfully","updated_count":1}200

@@ -47,6 +47,12 @@ return Application::configure(basePath: dirname(__DIR__))
             // Restricts a route to named user profiles, e.g. 'profile:admin,hr'.
             // Server-side role enforcement outside Task Management.
             'profile' => \App\Http\Middleware\RequireProfile::class,
+            // Same gate, but resolves the caller from the session when there is
+            // no token. The payroll routes in routes/hrms.php are reached by
+            // both the token-authenticated frontend and the session-
+            // authenticated Blade screens, so 'profile' alone would 401 the
+            // latter - see RequireHritRole.
+            'hrit.role' => \App\Http\Middleware\RequireHritRole::class,
             'menuright' => \App\Http\Middleware\RequireMenuRight::class,
         ]);
         // CSRF exemptions.

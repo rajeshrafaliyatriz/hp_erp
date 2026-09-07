@@ -45,6 +45,44 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Course types
+    |--------------------------------------------------------------------------
+    |
+    | What KIND of course this is - how it is delivered. Offered in the Course
+    | Builder and the catalogue, and stored on sub_std_map.subject_type.
+    |
+    | There was no list at all: the field was free text, so tenant 6's entire
+    | vocabulary became "E-learning" and "Mutual Fund" - and "Mutual Fund" is a
+    | SUBJECT, not a delivery type. The two ideas had collapsed into one field,
+    | which is why the values could not be used for anything.
+    |
+    | These are delivery formats, deliberately industry-agnostic: a hospital, a
+    | bank and a factory all run self-paced courses, workshops and compliance
+    | training. What the course is ABOUT belongs in subject_category, which is
+    | where "Mutual Fund" should have been.
+    |
+    | Config rather than a table, for the same reason as languages: a fixed list
+    | an administrator changes at deploy time. Values already in use are merged
+    | in by the filters endpoint, so no existing course loses its type.
+    */
+
+    'course_types' => [
+        'Self-paced course',
+        'Instructor-led (classroom)',
+        'Instructor-led (virtual)',
+        'Blended',
+        'Workshop',
+        'Certification programme',
+        'Compliance training',
+        'Induction / onboarding',
+        'Microlearning',
+        'On-the-job training',
+        'Coaching / mentoring',
+        'Assessment only',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Certificate templates
     |--------------------------------------------------------------------------
     |

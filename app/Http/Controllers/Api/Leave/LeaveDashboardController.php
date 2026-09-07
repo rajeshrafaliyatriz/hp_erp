@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Leave;
 
+use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveAuthority;
 use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveContext;
 use App\Http\Controllers\Controller;
 use App\Services\Leave\LeaveAnalyticsService;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 class LeaveDashboardController extends Controller
 {
     use ResolvesLeaveContext;
+    use ResolvesLeaveAuthority;
 
     public function __construct(private LeaveAnalyticsService $analytics)
     {
@@ -31,8 +33,7 @@ class LeaveDashboardController extends Controller
         $departmentId = $this->activeFilter($request->input('department_id'));
         $today = Carbon::today()->toDateString();
 
-        $counts = $this->analytics
-            ->requestsQuery($context['sub_institute_id'], $context['year'])
+        $counts = $this->scopedRequests($context)
             ->when($departmentId, fn ($q) => $q->where('u.department_id', $departmentId))
             ->selectRaw("
                 COUNT(*) AS total_requests,
@@ -43,8 +44,7 @@ class LeaveDashboardController extends Controller
             ")
             ->first();
 
-        $onLeaveToday = $this->analytics
-            ->requestsQuery($context['sub_institute_id'], $context['year'])
+        $onLeaveToday = $this->scopedRequests($context)
             ->when($departmentId, fn ($q) => $q->where('u.department_id', $departmentId))
             ->whereIn('hel.status', ['approved', 'approved_lwp'])
             ->where('hel.from_date', '<=', $today)
@@ -92,8 +92,7 @@ class LeaveDashboardController extends Controller
 
         $departmentId = $this->activeFilter($request->input('department_id'));
 
-        $rows = $this->analytics
-            ->requestsQuery($context['sub_institute_id'], $context['year'])
+        $rows = $this->scopedRequests($context)
             ->when($departmentId, fn ($q) => $q->where('u.department_id', $departmentId))
             ->selectRaw("
                 DATE_FORMAT(hel.from_date, '%Y-%m') AS period,
@@ -142,8 +141,7 @@ class LeaveDashboardController extends Controller
             return $context;
         }
 
-        $rows = $this->analytics
-            ->requestsQuery($context['sub_institute_id'], $context['year'])
+        $rows = $this->scopedRequests($context)
             ->selectRaw("
                 COALESCE(hd.department, 'Unassigned') AS department,
                 COALESCE(hd.id, 0) AS department_id,
@@ -187,8 +185,7 @@ class LeaveDashboardController extends Controller
 
         $departmentId = $this->activeFilter($request->input('department_id'));
 
-        $rows = $this->analytics
-            ->requestsQuery($context['sub_institute_id'], $context['year'])
+        $rows = $this->scopedRequests($context)
             ->when($departmentId, fn ($q) => $q->where('u.department_id', $departmentId))
             ->selectRaw("
                 COALESCE(hlt.leave_type, 'Unassigned') AS leave_type,
@@ -256,10 +253,26 @@ class LeaveDashboardController extends Controller
      * Activity feed derived from the leave rows themselves - a request is an
      * "application" until it is decided, at which point the decision timestamp wins.
      */
+
+    /**
+     * Every leave query on this dashboard, narrowed to the caller's scope.
+     *
+     * F-103. The KPI counts are aggregates and leak little on their own, but
+     * recentActivity() renders named rows - "<name>'s Annual Leave approved" -
+     * so a Self-scoped employee was reading a feed of their colleagues' leave.
+     * One builder so the six call sites cannot disagree.
+     */
+    private function scopedRequests(array $context)
+    {
+        return $this->applyLeaveScope(
+            $this->analytics->requestsQuery($context['sub_institute_id'], $context['year']),
+            $context
+        );
+    }
+
     private function recentActivity(array $context, ?string $departmentId): array
     {
-        $rows = $this->analytics
-            ->requestsQuery($context['sub_institute_id'], $context['year'])
+        $rows = $this->scopedRequests($context)
             ->when($departmentId, fn ($q) => $q->where('u.department_id', $departmentId))
             ->selectRaw("
                 hel.id,

@@ -133,7 +133,10 @@ class HolidayController extends Controller
             $validator = Validator::make($request->all(), [
                 'sub_institute_id' => 'required',
                 'user_id' => 'required',
-                'holiday_name'  => 'required|string|max:255',
+                // F-106, second instance. Found by auditing EVERY varchar in
+                // the module against its rule rather than fixing the one the
+                // report named: hrms_holidays.holiday_name is varchar(191).
+                'holiday_name'  => 'required|string|max:191',
                 'from_date'     => 'required|date',
                 // 'to_date'    => 'required|date|after_or_equal:from_date',
                 // 'day_type'   => 'required|in:full,half',

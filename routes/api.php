@@ -169,10 +169,12 @@ use App\Http\Controllers\Api\Leave\LeaveReportApiController;
 use App\Http\Controllers\Api\Leave\LeaveTypeApiController;
 use App\Http\Controllers\Api\Leave\HolidayApiController;
 use App\Http\Controllers\Api\Leave\LeaveWorkflowApiController;
+use App\Http\Controllers\Api\Leave\LeaveAllocationApiController;
 use App\Http\Controllers\Api\Leave\LeaveDistributionApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceTrackingApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceReportApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceRegularisationApiController;
 
 
 /*
@@ -358,6 +360,12 @@ Route::post('talent/assessment/blueprints', [TalentAssessmentController::class, 
     ->middleware('profile:admin,hr,recruiter');
 Route::delete('talent/assessment/blueprints/{id}', [TalentAssessmentController::class, 'destroyBlueprint'])
     ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+// The Assessment sub-module's own tab: every assessment sent, who sent it, and
+// how it ended. Same role gate - a candidate's score and email are both on it.
+Route::get('talent/assessment/candidates', [TalentAssessmentController::class, 'candidates'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent/assessment/applications', [TalentAssessmentController::class, 'applications'])
     ->middleware('profile:admin,hr,recruiter');
 Route::get('talent/assessment/jobroles', [TalentAssessmentController::class, 'jobroles'])
     ->middleware('profile:admin,hr,recruiter');
@@ -841,6 +849,13 @@ Route::prefix('leave')->group(function () {
     Route::post('/requests/bulk-decision', [LeaveRequestApiController::class, 'bulkDecision']);
     Route::get('/requests/{id}', [LeaveRequestApiController::class, 'show'])->whereNumber('id');
     Route::post('/requests/{id}/decision', [LeaveRequestApiController::class, 'decision'])->whereNumber('id');
+    /*
+    | Cancel APPROVED leave that has not started. The status enum has had
+    | `cancelled` since the table was created and no code path ever reached it -
+    | "cancel after approval" is a FAIL in the audit's golden transactions.
+    | Distinct from DELETE /requests/{id}, which withdraws a PENDING request.
+    */
+    Route::post('/requests/{id}/cancel', [LeaveRequestApiController::class, 'cancel'])->whereNumber('id');
     Route::delete('/requests/{id}', [LeaveRequestApiController::class, 'destroy'])->whereNumber('id');
 
     // Reports
@@ -862,6 +877,16 @@ Route::prefix('leave')->group(function () {
     Route::delete('/holidays/{id}', [HolidayApiController::class, 'destroy']);
     Route::get('/weekdays', [HolidayApiController::class, 'weekdays']);
     Route::post('/weekdays', [HolidayApiController::class, 'storeWeekdays']);
+
+    /*
+    | Configuration - leave entitlement. F-96, the module's missing front door.
+    |
+    | hrms_leave_allocation is what every balance is computed from, it holds one
+    | row for the entire platform, and nothing but a private side effect of
+    | saving a leave type has ever written to it. These two give it a screen.
+    */
+    Route::get('/allocations', [LeaveAllocationApiController::class, 'index']);
+    Route::put('/allocations', [LeaveAllocationApiController::class, 'save']);
 
     // Configuration - approval workflow and role access
     Route::get('/workflow', [LeaveWorkflowApiController::class, 'workflow']);
@@ -894,13 +919,56 @@ Route::prefix('attendance')->group(function () {
     Route::post('/punch-in', [AttendanceTrackingApiController::class, 'punchIn']);
     Route::post('/punch-out', [AttendanceTrackingApiController::class, 'punchOut']);
 
-    // Report lookups
-    Route::get('/report-filters', [AttendanceReportApiController::class, 'filters']);
-    Route::get('/employees', [AttendanceReportApiController::class, 'employees']);
+    /*
+    | Self summary - the caller's roster for today, their real alerts, and the
+    | count of their own outstanding requests. HRIT Sprint 2, closing F-98 and
+    | F-113: those three widgets rendered hardcoded arrays and a fixed date.
+    |
+    | Leave balance and upcoming holidays are deliberately NOT here. They have
+    | correct endpoints already (/api/leave/balances, /api/leave/holidays/
+    | upcoming) and the dashboard calls those - a second implementation of a
+    | number the product must agree with itself about is how they drift.
+    */
+    Route::get('/self-summary', [AttendanceTrackingApiController::class, 'selfSummary']);
 
-    // Dashboard analytics (department + employee scoped)
-    Route::get('/weekly-summary', [AttendanceDashboardApiController::class, 'weeklySummary']);
-    Route::get('/kpi', [AttendanceDashboardApiController::class, 'kpi']);
+    /*
+    | Attendance regularisation - request, review, apply. F-107.
+    |
+    | The correction itself already existed (POST update_user_att) with no
+    | caller; what was missing was the ask, the queue and the record. Approval
+    | reuses the leave permission matrix - see the controller's docblock for
+    | why that is a deliberate reuse rather than a new column no screen sets.
+    */
+    Route::get('/regularisations', [AttendanceRegularisationApiController::class, 'index']);
+    Route::post('/regularisations', [AttendanceRegularisationApiController::class, 'store']);
+    Route::post('/regularisations/{id}/decision', [AttendanceRegularisationApiController::class, 'decision'])->whereNumber('id');
+    Route::delete('/regularisations/{id}', [AttendanceRegularisationApiController::class, 'destroy'])->whereNumber('id');
+
+    /*
+    | Reporting. F-120, and it is gated here as well as on the legacy routes -
+    | closing it on one surface only would move the hole rather than shut it.
+    | These four are what the Attendance Reports screen reads; an `employee`
+    | token used to get 200 from all of them, including the full employee list
+    | and the organisation's attendance totals.
+    |
+    | The role list matches REPORTING in the frontend's gtg-nav-visibility.ts,
+    | so the menu and the API agree. `profile:` rather than `hrit.role:` because
+    | these are /api routes and always carry a token; there is no Blade surface
+    | to keep working.
+    |
+    | Everything above this - my-attendance, punch-in, punch-out, self-summary
+    | and the regularisation endpoints - stays open. It is the caller's own
+    | data, and the controllers resolve the subject as the caller.
+    */
+    Route::middleware('profile:admin,hr,executive,auditor')->group(function () {
+        // Report lookups
+        Route::get('/report-filters', [AttendanceReportApiController::class, 'filters']);
+        Route::get('/employees', [AttendanceReportApiController::class, 'employees']);
+
+        // Dashboard analytics (department + employee scoped)
+        Route::get('/weekly-summary', [AttendanceDashboardApiController::class, 'weeklySummary']);
+        Route::get('/kpi', [AttendanceDashboardApiController::class, 'kpi']);
+    });
 });
 
 
@@ -987,6 +1055,35 @@ Route::delete('/lms/governance/integrations/{id}', [LmsPartnerController::class,
 Route::get('/lms/assessments/questions', [LmsAssessmentController::class, 'questions']);
 Route::get('/lms/assessments', [LmsAssessmentController::class, 'index']);
 Route::post('/lms/assessments', [LmsAssessmentController::class, 'store']);
+/*
+ * Question authoring — the half of the quiz builder that did not exist.
+ *
+ * Declared BEFORE /lms/assessments/{id} so the static `questions` segment is
+ * never swallowed by the id parameter, and constrained with whereNumber for the
+ * same reason.
+ */
+/*
+ * LMS reports.
+ *
+ * Three menu rows have pointed at these since tblmenumaster_g2g was written,
+ * under a disabled parent with no screen. Two of the three had no data to
+ * report on until lms_quiz_attempt and quiz authoring existed.
+ */
+Route::get('/lms/reports/employee-analysis', [App\Http\Controllers\Api\LmsReportController::class, 'employeeAnalysis']);
+Route::get('/lms/reports/quiz-progress', [App\Http\Controllers\Api\LmsReportController::class, 'quizProgress']);
+Route::get('/lms/reports/question-wise', [App\Http\Controllers\Api\LmsReportController::class, 'questionWise']);
+
+Route::get('/lms/assessments/{id}/questions', [LmsAssessmentController::class, 'paperQuestions'])->whereNumber('id');
+/*
+ * Declared BEFORE the plain POST .../questions route so the static `generate`
+ * segment is matched first — Laravel takes the first match, and the two paths
+ * differ only by that trailing segment.
+ */
+Route::post('/lms/assessments/{id}/questions/generate', [LmsAssessmentController::class, 'generateQuestions'])->whereNumber('id');
+Route::post('/lms/assessments/{id}/questions', [LmsAssessmentController::class, 'storeQuestion'])->whereNumber('id');
+Route::put('/lms/assessments/{id}/questions/{questionId}', [LmsAssessmentController::class, 'updateQuestion'])->whereNumber('id')->whereNumber('questionId');
+Route::delete('/lms/assessments/{id}/questions/{questionId}', [LmsAssessmentController::class, 'destroyQuestion'])->whereNumber('id')->whereNumber('questionId');
+
 Route::put('/lms/assessments/{id}', [LmsAssessmentController::class, 'update']);
 Route::delete('/lms/assessments/{id}', [LmsAssessmentController::class, 'destroy']);
 
@@ -1017,6 +1114,16 @@ Route::post('/lms/learning/progress', [LmsLearningController::class, 'saveProgre
 // The learner declaring themselves finished. Separate from the certificate,
 // which still requires every lesson.
 Route::post('/lms/learning/courses/{courseId}/complete', [LmsLearningController::class, 'completeCourse'])->whereNumber('courseId');
+
+/*
+ * The course quiz — the gate between finishing the lessons and earning the
+ * certificate. `/quiz/{attemptId}` is declared with whereNumber so it can never
+ * shadow a future static segment under the same prefix.
+ */
+Route::get('/lms/learning/courses/{courseId}/quiz', [App\Http\Controllers\Api\LmsQuizController::class, 'show'])->whereNumber('courseId');
+Route::post('/lms/learning/courses/{courseId}/quiz/start', [App\Http\Controllers\Api\LmsQuizController::class, 'start'])->whereNumber('courseId');
+Route::post('/lms/learning/quiz/{attemptId}/submit', [App\Http\Controllers\Api\LmsQuizController::class, 'submit'])->whereNumber('attemptId');
+Route::get('/lms/learning/quiz/{attemptId}', [App\Http\Controllers\Api\LmsQuizController::class, 'result'])->whereNumber('attemptId');
 Route::get('/lms/learning/notes', [LmsLearningController::class, 'notes']);
 Route::post('/lms/learning/notes', [LmsLearningController::class, 'storeNote']);
 Route::put('/lms/learning/notes/{id}', [LmsLearningController::class, 'updateNote']);
@@ -1024,6 +1131,9 @@ Route::delete('/lms/learning/notes/{id}', [LmsLearningController::class, 'destro
 Route::post('/lms/learning/chapters', [LmsLearningController::class, 'storeChapter']);
 Route::put('/lms/learning/chapters/{id}', [LmsLearningController::class, 'updateChapter']);
 Route::delete('/lms/learning/chapters/{id}', [LmsLearningController::class, 'destroyChapter']);
+// Upload a lesson file. Until this existed a lesson could only ever be a
+// public URL, so an author with a PDF on their laptop could not make one.
+Route::post('/lms/learning/content/upload', [LmsLearningController::class, 'uploadContent']);
 Route::post('/lms/learning/content', [LmsLearningController::class, 'storeContent']);
 Route::put('/lms/learning/content/{id}', [LmsLearningController::class, 'updateContent']);
 Route::delete('/lms/learning/content/{id}', [LmsLearningController::class, 'destroyContent']);
@@ -1055,10 +1165,13 @@ Route::get('/lms/sessions', [LmsSessionController::class, 'index']);
 Route::post('/lms/sessions', [LmsSessionController::class, 'store']);
 Route::get('/lms/sessions/{id}/attendees', [LmsSessionController::class, 'attendees']);
 Route::post('/lms/sessions/{id}/register', [LmsSessionController::class, 'register']);
+Route::post('/lms/sessions/{id}/attendance', [LmsSessionController::class, 'markAttendance']);
 Route::delete('/lms/sessions/{id}/register', [LmsSessionController::class, 'cancelRegistration']);
 Route::put('/lms/sessions/{id}', [LmsSessionController::class, 'update']);
 Route::delete('/lms/sessions/{id}', [LmsSessionController::class, 'destroy']);
 
+// Everything the Build-with-AI form needs to be dropdowns rather than free text.
+Route::get('/lms/ai/scope-options', [App\Http\Controllers\Api\AiCourseController::class, 'scopeOptions']);
 Route::get('/lms/ai/status', [AiCourseController::class, 'status']);
 Route::post('/lms/ai/outline', [AiCourseController::class, 'generateOutline']);
 Route::get('/lms/ai/outlines', [AiCourseController::class, 'outlines']);
@@ -2285,4 +2398,27 @@ Route::prefix('dashboard')->group(function () {
         Route::get('/growth',  [\App\Http\Controllers\Api\Dashboard\MeDashboardController::class, 'growth']);
         Route::get('/signals', [\App\Http\Controllers\Api\Dashboard\MeDashboardController::class, 'signals']);
     });
+});
+
+/*
+|--------------------------------------------------------------------------
+| My HR — employee self-service. F-130.
+|--------------------------------------------------------------------------
+|
+| The audit's Part D gap: an employee could not see their own payslip. Not
+| "it was hard to find" — `monthlyPayrollPdf` lives inside routes/hrms.php's
+| `hrit.role:admin,hr` group, so the only path to a payslip was through the HR
+| console and an employee asking about last month's pay had to ask a person.
+|
+| NO ROLE GATE HERE, ON PURPOSE. These endpoints serve every authenticated
+| employee, and what makes them safe is not a role — it is that the SUBJECT is
+| always the caller. There is no `employee_id` parameter on any of them; the id
+| comes from the token. A gate would be the wrong tool: the point is not that
+| some roles may read a payslip, it is that everyone may read exactly one.
+*/
+Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
+    Route::get('/summary', [App\Http\Controllers\Api\MyHrController::class, 'summary']);
+    Route::get('/payslips', [App\Http\Controllers\Api\MyHrController::class, 'payslips']);
+    Route::get('/payslips/{month}/{year}/pdf', [App\Http\Controllers\Api\MyHrController::class, 'payslipPdf'])
+        ->whereNumber('year');
 });

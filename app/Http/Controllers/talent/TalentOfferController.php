@@ -4,6 +4,7 @@ namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Support\CandidateLink;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -278,12 +279,29 @@ class TalentOfferController extends Controller
                             $this->g2gActorId($request),
                             $application->email
                         );
-                        $responseUrl = rtrim((string) config('app.url'), '/') . '/offer/' . $minted['token'];
+                        // Front end origin, not this API's - see F-89.
+                        $responseUrl = CandidateLink::to('offer', $minted['token']);
                         $linkExpires = $minted['expires_at'];
                     } catch (\Throwable $e) {
                         // The offer and its letter stand without a link; the email
                         // falls back to "someone will be in touch".
                         Log::error('Offer link could not be minted: ' . $e->getMessage());
+                    }
+
+                    /*
+                     * A link that points at this API cannot open. Unlike the
+                     * assessment email - which is nothing BUT a link, so it is
+                     * held back - this one carries the offer letter itself as an
+                     * attachment. Dropping the link and sending the letter is
+                     * strictly better than sending neither: OfferLetterMail
+                     * already renders "someone will be in touch" when it has no
+                     * URL, which is the same path a failed mint takes above.
+                     */
+                    if ($responseUrl !== null && CandidateLink::pointsAtApi()) {
+                        Log::warning('Offer response link suppressed: FRONTEND_URL is not set, so '
+                            . 'the link would point at the API and not open.');
+                        $responseUrl = null;
+                        $linkExpires = null;
                     }
 
                     if (\App\Support\MailGate::allowedForTenant($sub_institute_id)) {
@@ -565,11 +583,23 @@ class TalentOfferController extends Controller
         }
 
         $minted = $this->links->mint($offer, $tenantId, $syear, $identity['user_id'], $application->email);
-        $url = rtrim((string) config('app.url'), '/') . '/offer/' . $minted['token'];
+        // Front end origin, not this API's - see F-89.
+        $url = CandidateLink::to('offer', $minted['token']);
 
         $mail = ['sent' => false, 'error' => \App\Support\MailGate::reasonForTenant($tenantId)];
 
-        if (\App\Support\MailGate::allowedForTenant($tenantId)) {
+        /*
+         * This email is nothing but the link, so an unopenable one makes the
+         * whole message pointless - and reporting "emailed to the candidate"
+         * would be false. The link is still minted and returned for HR to copy.
+         */
+        if (CandidateLink::pointsAtApi()) {
+            $mail = [
+                'sent' => false,
+                'error' => 'FRONTEND_URL is not set, so the link would point at the API and not '
+                    . 'open. Set it, or copy the link to the candidate yourself.',
+            ];
+        } elseif (\App\Support\MailGate::allowedForTenant($tenantId)) {
             try {
                 Mail::raw(
                     "Hello " . ($application->first_name ?: 'there') . ",\n\n"

@@ -61,6 +61,24 @@ class NotificationDispatcher
         'rights.changed',
         // X-11 un-defers this: CertificateIssuer now emits it.
         'certification.issued',
+
+        /*
+         * HRIT leave, Sprint 7 (F-128). The module had no events at all before
+         * this, so nothing in it had ever told anybody anything: an approver
+         * found out a request existed by opening the screen, and an employee
+         * found out it had been decided the same way.
+         *
+         * These three pass the named-recipient test on the strength of Sprint
+         * 6's approval chain, and could not have passed it before. This class's
+         * rule is that a notification whose only plausible recipient is "the
+         * employee's manager" is deferred, because there is no org chart.
+         * hrms_leave_approval_steps is not an org chart, but it is something
+         * better for this purpose: it names the exact ROLE that must decide THIS
+         * request, so the recipient is a stored fact rather than an inference.
+         */
+        'leave.submitted',
+        'leave.decided',
+        'leave.escalated',
     ];
 
     public function __construct(

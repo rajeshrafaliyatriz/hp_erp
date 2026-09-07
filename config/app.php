@@ -56,6 +56,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Front End URL
+    |--------------------------------------------------------------------------
+    |
+    | The origin serving the Next.js pages a CANDIDATE opens - /assessment/{token}
+    | and /offer/{token}. It is a different application on a different port, and
+    | Laravel has no route for either path, so a link built from APP_URL above
+    | reaches this API and 404s.
+    |
+    | Blank falls back to APP_URL, which is what every call site did before, so
+    | nothing changes for an installation that has not set it. Build these links
+    | through App\Support\CandidateLink rather than reading this directly.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', ''),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

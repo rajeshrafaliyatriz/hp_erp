@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Leave;
 
+use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveAuthority;
 use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveContext;
 use App\Http\Controllers\Controller;
 use App\Services\Leave\LeaveAnalyticsService;
@@ -11,12 +12,26 @@ use Illuminate\Support\Facades\DB;
 class LeaveReportApiController extends Controller
 {
     use ResolvesLeaveContext;
+    use ResolvesLeaveAuthority;
 
     /**
-     * days = (DATEDIFF(to, from) + 1) * day_type - the SQL equivalent of
-     * App\Helpers\countDays() with no skip-day rule.
+     * The chargeable days for a request. F-95.
+     *
+     * This was a THIRD implementation of the day count - a raw SQL copy of
+     * countDays(), calendar days and all:
+     *
+     *   ((DATEDIFF(COALESCE(hel.to_date, hel.from_date), hel.from_date) + 1)
+     *     * COALESCE(CAST(hel.day_type AS DECIMAL(4,2)), 1))
+     *
+     * so this report disagreed with nothing only because the other two were
+     * wrong in exactly the same way. LeaveDayCounter computes the figure once,
+     * at write time, onto hrms_emp_leaves.chargeable_days; summing the column
+     * means the report cannot drift from what the employee was told.
+     *
+     * The old expression survives only as the COALESCE fallback, for a row
+     * whose dates could not be parsed during the backfill.
      */
-    private const DAYS_EXPR = "((DATEDIFF(COALESCE(hel.to_date, hel.from_date), hel.from_date) + 1) * COALESCE(CAST(hel.day_type AS DECIMAL(4,2)), 1))";
+    private const DAYS_EXPR = "COALESCE(hel.chargeable_days, ((DATEDIFF(COALESCE(hel.to_date, hel.from_date), hel.from_date) + 1) * COALESCE(CAST(hel.day_type AS DECIMAL(4,2)), 1)))";
 
     public function __construct(private LeaveAnalyticsService $analytics)
     {
@@ -186,6 +201,14 @@ class LeaveReportApiController extends Controller
             ->unique()
             ->values();
 
+        // Same scope rule as the register. entitlementByType() answers for the
+        // whole tenant unless narrowed, so without this an employee reading the
+        // balance report would see every colleague's entitlement and usage.
+        $scopeIds = $this->leaveScopeUserIds($context);
+        if ($scopeIds !== null) {
+            $userIds = $userIds->filter(fn ($id) => in_array((int) $id, $scopeIds, true))->values();
+        }
+
         if ($userIds->isEmpty()) {
             return response()->json([
                 'status'  => 1,
@@ -249,7 +272,19 @@ class LeaveReportApiController extends Controller
     /** Shared filter set for every report. */
     private function filtered(array $context, Request $request)
     {
-        $query = $this->analytics->requestsQuery($context['sub_institute_id'], $context['year']);
+        /*
+         * The same scope rule as GET /api/leave/requests, and it has to be here
+         * too or F-103 is not closed - it is just moved. The register returns
+         * the identical rows (employee name, department, dates, reason) from a
+         * different URL, so an employee refused by the requests endpoint would
+         * simply have called this one.
+         *
+         * Applied before the request's own filters so a caller cannot widen it.
+         */
+        $query = $this->applyLeaveScope(
+            $this->analytics->requestsQuery($context['sub_institute_id'], $context['year']),
+            $context
+        );
 
         $departments = $this->filterList($request->input('department_id'));
         $employees   = $this->filterList($request->input('employee_id'));

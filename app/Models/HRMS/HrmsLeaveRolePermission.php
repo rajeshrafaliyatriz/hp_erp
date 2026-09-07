@@ -47,6 +47,19 @@ class HrmsLeaveRolePermission extends Model
             ['role_name' => 'HR Manager',        'scope' => 'Organization', 'approve_leave' => true,  'view_reports' => true, 'configure_settings' => true,  'bulk_operations' => true,  'escalation_rights' => true,  'user_management' => true,  'sort_order' => 5],
             ['role_name' => 'Administrator',     'scope' => 'Organization', 'approve_leave' => true,  'view_reports' => true, 'configure_settings' => true,  'bulk_operations' => true,  'escalation_rights' => true,  'user_management' => true,  'sort_order' => 6],
             ['role_name' => 'Executive',         'scope' => 'Organization', 'approve_leave' => true,  'view_reports' => true, 'configure_settings' => true,  'bulk_operations' => true,  'escalation_rights' => true,  'user_management' => false, 'sort_order' => 7],
+            // Added in HRIT Sprint 1. The platform defines nine role_keys and
+            // this matrix covered seven, so auditor and recruiter resolved to no
+            // row at all - which now means "deny everything" and would have
+            // silently locked two real roles out of their own leave.
+            //
+            // Auditor reads the organisation and changes nothing: that is what
+            // the role is for, and it is the only row here with view_reports
+            // true and approve_leave false at Organization scope.
+            //
+            // Recruiter gets the Employee row. For leave purposes a recruiter is
+            // an employee; their elevated rights are in Talent, not here.
+            ['role_name' => 'Auditor',           'scope' => 'Organization', 'approve_leave' => false, 'view_reports' => true, 'configure_settings' => false, 'bulk_operations' => false, 'escalation_rights' => false, 'user_management' => false, 'sort_order' => 8],
+            ['role_name' => 'Recruiter',         'scope' => 'Self',         'approve_leave' => false, 'view_reports' => true, 'configure_settings' => false, 'bulk_operations' => false, 'escalation_rights' => false, 'user_management' => false, 'sort_order' => 9],
         ];
     }
 }

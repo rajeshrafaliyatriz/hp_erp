@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Leave;
 
+use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveAuthority;
 use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveContext;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Validator;
 class HolidayApiController extends Controller
 {
     use ResolvesLeaveContext;
+    use ResolvesLeaveAuthority;
 
     private const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
@@ -75,6 +77,13 @@ class HolidayApiController extends Controller
             return $context;
         }
 
+        // F-89 / F-90: every write in this controller was ungated. Leave
+        // configuration is an organisation-wide setting; the matrix has always
+        // said who may change it and nothing read the matrix.
+        if ($denied = $this->denyUnlessLeaveCan($context, 'configure_settings', 'You do not have permission to change the holiday calendar.')) {
+            return $denied;
+        }
+
         $validated = $this->validatePayload($request);
         if (!is_array($validated)) {
             return $validated;
@@ -121,6 +130,13 @@ class HolidayApiController extends Controller
         $context = $this->leaveContext($request);
         if (!is_array($context)) {
             return $context;
+        }
+
+        // F-89 / F-90: every write in this controller was ungated. Leave
+        // configuration is an organisation-wide setting; the matrix has always
+        // said who may change it and nothing read the matrix.
+        if ($denied = $this->denyUnlessLeaveCan($context, 'configure_settings', 'You do not have permission to change the holiday calendar.')) {
+            return $denied;
         }
 
         $holiday = DB::table('hrms_holidays')
@@ -173,6 +189,13 @@ class HolidayApiController extends Controller
         $context = $this->leaveContext($request);
         if (!is_array($context)) {
             return $context;
+        }
+
+        // F-89 / F-90: every write in this controller was ungated. Leave
+        // configuration is an organisation-wide setting; the matrix has always
+        // said who may change it and nothing read the matrix.
+        if ($denied = $this->denyUnlessLeaveCan($context, 'configure_settings', 'You do not have permission to change the holiday calendar.')) {
+            return $denied;
         }
 
         $ids = array_values(array_filter(array_map('intval', explode(',', (string) $id))));
@@ -240,6 +263,13 @@ class HolidayApiController extends Controller
         $context = $this->leaveContext($request);
         if (!is_array($context)) {
             return $context;
+        }
+
+        // F-89 / F-90: every write in this controller was ungated. Leave
+        // configuration is an organisation-wide setting; the matrix has always
+        // said who may change it and nothing read the matrix.
+        if ($denied = $this->denyUnlessLeaveCan($context, 'configure_settings', 'You do not have permission to change the weekly-off pattern.')) {
+            return $denied;
         }
 
         $rules = [];

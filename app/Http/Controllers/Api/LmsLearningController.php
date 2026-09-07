@@ -55,6 +55,178 @@ class LmsLearningController extends Controller
         return $this->contextUserId($request);
     }
 
+    /*
+     * ── SESSIONS COUNT TOWARD A COURSE, BUT ONLY THE ONES A LEARNER IS ON ────
+     *
+     * A course can have live sessions attached (lms_virtual_classroom rows
+     * whose subject_id is the course). Attending one is part of finishing the
+     * course, so it belongs in the completion figure alongside the lessons.
+     *
+     * WHICH sessions count is the whole safety question. Counting every session
+     * linked to the course for every learner would put an item in the
+     * denominator that a learner who never signed up can never satisfy — and
+     * claimCertificate refuses while anything is outstanding, so they would be
+     * permanently locked out of a certificate by a session they were never
+     * asked to attend. The schema has no "this session is mandatory" flag, so
+     * there is no honest way to know whether it was required of them.
+     *
+     * So a session counts for a learner only once they have a live
+     * registration on it. That gives the three cases the behaviour each
+     * deserves:
+     *
+     *   registered + attended  -> numerator and denominator: progress rises.
+     *   registered + no-show   -> denominator only: correctly held back, and
+     *                             escapable by cancelling the registration.
+     *   never registered       -> counted nowhere: the course behaves exactly
+     *                             as it did before sessions were counted.
+     *
+     * Cancelled registrations are excluded throughout: giving up a seat is not
+     * attending, and it should not hold a certificate hostage either.
+     */
+
+    /** Statuses that mean "this learner is on this session". */
+    private const SESSION_ENGAGED = ['registered', 'attended', 'no-show'];
+
+    /**
+     * Per course: how many of its sessions this learner is on, and how many of
+     * those they attended. Two grouped queries regardless of how many courses.
+     *
+     * @return array{0: \Illuminate\Support\Collection, 1: \Illuminate\Support\Collection}
+     *         [course_id => required, course_id => attended]
+     */
+    private function sessionCounts($userId, array $courseIds, $subInstituteId): array
+    {
+        if (empty($courseIds)) {
+            return [collect(), collect()];
+        }
+
+        $base = fn () => DB::table('lms_session_registrations as r')
+            ->join('lms_virtual_classroom as v', 'v.id', '=', 'r.session_id')
+            ->where('r.user_id', $userId)
+            ->whereIn('v.course_id', $courseIds)
+            ->whereNull('r.deleted_at')
+            ->whereNull('v.deleted_at')
+            // The session's own tenant, not the registration's: the session is
+            // what owns the course link.
+            ->when($subInstituteId, fn ($q) => $q->where('v.sub_institute_id', $subInstituteId));
+
+        $required = $base()
+            ->whereIn('r.status', self::SESSION_ENGAGED)
+            ->select('v.course_id', DB::raw('COUNT(*) as total'))
+            ->groupBy('v.course_id')
+            ->pluck('total', 'course_id');
+
+        $attended = $base()
+            ->where('r.status', 'attended')
+            ->select('v.course_id', DB::raw('COUNT(*) as done'))
+            ->groupBy('v.course_id')
+            ->pluck('done', 'course_id');
+
+        return [$required, $attended];
+    }
+
+    /**
+     * Has this learner passed the course's quiz, if it has one?
+     *
+     * A course with no quiz is open — adding a quiz is how an author asks for
+     * the stricter rule, and imposing it on courses that never had one would
+     * lock every existing learner out of a certificate they had earned under
+     * the old rule.
+     *
+     * An attempt still `awaiting_review` does not pass: some of its answers are
+     * unmarked because a model could not reach a verdict, and issuing a
+     * certificate on a score that is not final would be certifying a guess.
+     *
+     * @return array{passed:bool, has_quiz:bool, reason:?string, best_percent:?float}
+     */
+    private function quizGate($userId, $courseId, $subInstituteId): array
+    {
+        $paper = DB::table('question_paper')
+            ->where('subject_id', $courseId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->orderByDesc('id')
+            ->first(['id']);
+
+        if (!$paper) {
+            return ['passed' => true, 'has_quiz' => false, 'reason' => null, 'best_percent' => null];
+        }
+
+        $attempts = DB::table('lms_quiz_attempt')
+            ->where('user_id', $userId)
+            ->where('paper_id', $paper->id)
+            ->where('sub_institute_id', $subInstituteId)
+            ->where('status', 'submitted')
+            ->whereNull('deleted_at')
+            ->get(['percent', 'passed', 'awaiting_review']);
+
+        $best = $attempts->max('percent');
+
+        if ($attempts->contains(fn ($a) => (bool) $a->passed && (int) $a->awaiting_review === 0)) {
+            return [
+                'passed' => true,
+                'has_quiz' => true,
+                'reason' => null,
+                'best_percent' => $best !== null ? (float) $best : null,
+            ];
+        }
+
+        if ($attempts->isEmpty()) {
+            $reason = 'Take the course quiz before claiming the certificate.';
+        } elseif ($attempts->contains(fn ($a) => (bool) $a->passed)) {
+            $reason = 'Some of your answers are still awaiting marking. '
+                . 'The certificate will be available once they are marked.';
+        } else {
+            $reason = 'You have not passed the course quiz yet.';
+        }
+
+        return [
+            'passed' => false,
+            'has_quiz' => true,
+            'reason' => $reason,
+            'best_percent' => $best !== null ? (float) $best : null,
+        ];
+    }
+
+    /**
+     * The completion figures for ONE course: lessons plus sessions.
+     *
+     * The single place that defines what "finished" means, so My Learning, the
+     * course player, the progress ping, the complete button and the certificate
+     * gate cannot drift apart on the arithmetic.
+     *
+     * @return array{total:int, done:int, content_total:int, content_done:int,
+     *               session_total:int, session_done:int}
+     */
+    private function courseCompletion($userId, $courseId, $subInstituteId): array
+    {
+        $contentTotal = DB::table('content_master')
+            ->where('subject_id', $courseId)
+            ->whereNull('deleted_at')
+            ->count();
+
+        $contentDone = DB::table('lms_content_progress')
+            ->where('user_id', $userId)
+            ->where('course_id', $courseId)
+            ->where('status', 'completed')
+            ->whereNull('deleted_at')
+            ->count();
+
+        [$required, $attended] = $this->sessionCounts($userId, [(int) $courseId], $subInstituteId);
+
+        $sessionTotal = (int) ($required[$courseId] ?? 0);
+        $sessionDone = (int) ($attended[$courseId] ?? 0);
+
+        return [
+            'total' => $contentTotal + $sessionTotal,
+            'done' => $contentDone + $sessionDone,
+            'content_total' => $contentTotal,
+            'content_done' => $contentDone,
+            'session_total' => $sessionTotal,
+            'session_done' => $sessionDone,
+        ];
+    }
+
     /**
      * GET /api/lms/learning/courses
      *
@@ -140,7 +312,7 @@ class LmsLearningController extends Controller
                 ->whereNull('deleted_at')
                 ->select('subject_id', DB::raw('COUNT(*) as total'))
                 ->groupBy('subject_id')
-                ->pluck('total', 'subject_id');
+                ->pluck('total', 'course_id');
 
             $completed = empty($courseIds) ? collect() : DB::table('lms_content_progress')
                 ->where('user_id', $userId)
@@ -151,12 +323,29 @@ class LmsLearningController extends Controller
                 ->groupBy('course_id')
                 ->pluck('done', 'course_id');
 
-            $courses->transform(function ($course) use ($totals, $completed) {
-                $total = (int) ($totals[$course->id] ?? 0);
-                $done = (int) ($completed[$course->id] ?? 0);
+            // Sessions the learner is on count alongside the lessons - see
+            // sessionCounts() for why only the ones they registered for.
+            [$sessionsRequired, $sessionsAttended] =
+                $this->sessionCounts($userId, $courseIds, $subInstituteId);
 
-                $course->total_content = $total;
-                $course->completed_content = $done;
+            $courses->transform(function ($course) use (
+                $totals, $completed, $sessionsRequired, $sessionsAttended
+            ) {
+                $sessionTotal = (int) ($sessionsRequired[$course->id] ?? 0);
+                $sessionDone = (int) ($sessionsAttended[$course->id] ?? 0);
+
+                // total_content stays LESSONS ONLY - every screen labels it
+                // "lessons", and folding sessions into it would make that label
+                // a lie. The sessions are their own pair of counts, and only
+                // the percentage combines the two.
+                $course->total_content = (int) ($totals[$course->id] ?? 0);
+                $course->completed_content = (int) ($completed[$course->id] ?? 0);
+                $course->total_sessions = $sessionTotal;
+                $course->attended_sessions = $sessionDone;
+
+                $total = $course->total_content + $sessionTotal;
+                $done = $course->completed_content + $sessionDone;
+
                 $course->progress_percent = $total > 0 ? (int) round($done / $total * 100) : 0;
 
                 return $course;
@@ -315,6 +504,20 @@ class LmsLearningController extends Controller
                 return $chapter;
             });
 
+            // Sessions this learner is on count toward the course as well, so
+            // the player's percentage agrees with My Learning and with the
+            // certificate gate. The lesson counts stay separate underneath -
+            // the chapter list is lessons only, and mixing them there would
+            // make the per-chapter figures wrong.
+            [$sessionsRequired, $sessionsAttended] =
+                $this->sessionCounts($userId, [(int) $courseId], $subInstituteId);
+
+            $sessionTotal = (int) ($sessionsRequired[$courseId] ?? 0);
+            $sessionDone = (int) ($sessionsAttended[$courseId] ?? 0);
+
+            $overallTotal = $totalContent + $sessionTotal;
+            $overallDone = $completedContent + $sessionDone;
+
             return response()->json([
                 'status' => true,
                 'data' => [
@@ -323,12 +526,40 @@ class LmsLearningController extends Controller
                     'chapters' => $chapters,
                     'total_content' => $totalContent,
                     'completed_content' => $completedContent,
-                    'progress_percent' => $totalContent > 0
-                        ? (int) round($completedContent / $totalContent * 100)
+                    'total_sessions' => $sessionTotal,
+                    'attended_sessions' => $sessionDone,
+                    'progress_percent' => $overallTotal > 0
+                        ? (int) round($overallDone / $overallTotal * 100)
                         : 0,
                     'time_spent_seconds' => (int) $progress->sum('time_spent_seconds'),
-                    'content_categories' => $content->pluck('content_category')
-                        ->filter()->unique()->values(),
+                    /*
+                     * THE MANAGED CATALOGUE, PLUS WHATEVER IS ALREADY IN USE.
+                     *
+                     * This returned only the distinct values already present on
+                     * this course's lessons, so the authoring datalist could
+                     * offer nothing on a course with no lessons yet - the first
+                     * lesson anybody added always got a typed category, and
+                     * `lms_content_category` (Technical, Functional, Soft
+                     * Skills, ...) was a managed list nothing read.
+                     *
+                     * Merged rather than replaced: the in-use values are real
+                     * even when somebody typed them, and dropping them would
+                     * make existing lessons look mis-categorised.
+                     */
+                    'content_categories' => DB::table('lms_content_category')
+                        ->where(function ($q) use ($subInstituteId) {
+                            // sub_institute_id 0 is the shared seed list.
+                            $q->where('sub_institute_id', 0)
+                              ->orWhere('sub_institute_id', $subInstituteId);
+                        })
+                        ->where('status', 1)
+                        ->whereNull('deleted_at')
+                        ->orderBy('sort_order')
+                        ->pluck('category_name')
+                        ->concat($content->pluck('content_category'))
+                        ->filter()
+                        ->unique()
+                        ->values(),
                 ],
             ]);
 
@@ -354,6 +585,7 @@ class LmsLearningController extends Controller
         }
 
         $userId = $this->requireUser($request);
+        $subInstituteId = $this->tenantId($request);
 
         $validator = Validator::make(
             array_merge($request->all(), ['user_id' => $userId]),
@@ -430,17 +662,11 @@ class LmsLearningController extends Controller
             }
 
             // Recompute the course percentage so the client does not have to.
-            $total = DB::table('content_master')
-                ->where('subject_id', $request->course_id)
-                ->whereNull('deleted_at')
-                ->count();
-
-            $done = DB::table('lms_content_progress')
-                ->where('user_id', $userId)
-                ->where('course_id', $request->course_id)
-                ->where('status', 'completed')
-                ->whereNull('deleted_at')
-                ->count();
+            // Lessons plus the sessions this learner is on - one definition of
+            // "finished", shared with the certificate gate.
+            $completion = $this->courseCompletion($userId, $request->course_id, $subInstituteId);
+            $total = $completion['total'];
+            $done = $completion['done'];
 
             $percent = $total > 0 ? (int) round($done / $total * 100) : 0;
 
@@ -490,9 +716,11 @@ class LmsLearningController extends Controller
                 'data' => [
                     'content_id' => (int) $request->content_id,
                     'status' => $status,
-                    'total_content' => $total,
-                    'completed_content' => $done,
-                    'progress_percent' => $total > 0 ? (int) round($done / $total * 100) : 0,
+                    'total_content' => $completion['content_total'],
+                    'completed_content' => $completion['content_done'],
+                    'total_sessions' => $completion['session_total'],
+                    'attended_sessions' => $completion['session_done'],
+                    'progress_percent' => $percent,
                 ],
             ]);
 
@@ -544,20 +772,76 @@ class LmsLearningController extends Controller
 
             $paperIds = $papers->pluck('id')->all();
 
-            $attempts = empty($paperIds) ? collect() : DB::table('lms_online_exam')
+            /*
+             * ── ONE ATTEMPT HISTORY, FROM BOTH PLACES IT LIVES ──────────────
+             *
+             * Attempts are recorded in two tables and this read saw only one of
+             * them:
+             *
+             *   lms_online_exam   the legacy mobile/Blade exam path (64 rows on
+             *                     live) - real history that must not vanish
+             *   lms_quiz_attempt  the course quiz, which is where every new
+             *                     attempt goes
+             *
+             * So a learner who sat the course quiz saw "0 taken" on this tab
+             * while the quiz panel beside it showed their score. Two screens,
+             * one fact, two answers - and the tab's answer was the wrong one,
+             * because it was reading a table the current quiz never writes.
+             *
+             * Merged and normalised to one shape rather than picking a winner:
+             * `source` says which path an attempt came from, so an old result
+             * is still explicable.
+             */
+            $legacy = empty($paperIds) ? collect() : DB::table('lms_online_exam')
                 ->where('employee_id', $userId)
                 ->whereIn('question_paper_id', $paperIds)
                 ->whereNull('deleted_at')
-                ->orderByDesc('created_at')
-                ->get(['id', 'question_paper_id', 'total_right', 'total_wrong', 'obtain_marks', 'start_time', 'created_at'])
+                ->get(['id', 'question_paper_id', 'total_right', 'total_wrong', 'obtain_marks', 'created_at'])
+                ->map(fn ($row) => (object) [
+                    'id' => (int) $row->id,
+                    'question_paper_id' => (int) $row->question_paper_id,
+                    'source' => 'legacy',
+                    'total_right' => (int) $row->total_right,
+                    'total_wrong' => (int) $row->total_wrong,
+                    'obtain_marks' => $row->obtain_marks,
+                    'percent' => null,
+                    'passed' => null,
+                    'created_at' => $row->created_at,
+                ]);
+
+            $quiz = empty($paperIds) ? collect() : DB::table('lms_quiz_attempt')
+                ->where('user_id', $userId)
+                ->whereIn('paper_id', $paperIds)
+                ->where('status', 'submitted')
+                ->whereNull('deleted_at')
+                ->get(['id', 'paper_id', 'score', 'max_score', 'percent', 'passed', 'questions', 'submitted_at', 'created_at'])
+                ->map(fn ($row) => (object) [
+                    'id' => (int) $row->id,
+                    'question_paper_id' => (int) $row->paper_id,
+                    'source' => 'quiz',
+                    // The quiz records a score, not a right/wrong split; the
+                    // tab renders both, so derive what can be derived and leave
+                    // the rest null rather than inventing it.
+                    'total_right' => null,
+                    'total_wrong' => null,
+                    'obtain_marks' => $row->score,
+                    'percent' => $row->percent === null ? null : (float) $row->percent,
+                    'passed' => $row->passed === null ? null : (bool) $row->passed,
+                    'created_at' => $row->submitted_at ?: $row->created_at,
+                ]);
+
+            $attempts = $legacy->concat($quiz)
+                ->sortByDesc('created_at')
                 ->groupBy('question_paper_id');
 
             $papers->transform(function ($paper) use ($attempts) {
-                $mine = $attempts[$paper->id] ?? collect();
+                $mine = ($attempts[$paper->id] ?? collect())->values();
 
-                $paper->attempts = $mine->values();
+                $paper->attempts = $mine;
                 $paper->attempt_count = $mine->count();
                 $paper->best_score = $mine->max('obtain_marks');
+                $paper->best_percent = $mine->whereNotNull('percent')->max('percent');
+                $paper->passed = $mine->contains(fn ($a) => $a->passed === true);
                 $paper->last_attempt_at = $mine->first()->created_at ?? null;
                 $paper->status = $mine->isEmpty() ? 'not-started' : 'completed';
 
@@ -896,6 +1180,145 @@ class LmsLearningController extends Controller
         ]);
     }
 
+    /**
+     * POST /api/lms/learning/content/upload
+     *
+     * Put a lesson file somewhere the player can open it.
+     *
+     * ── WHY A LESSON COULD ONLY EVER BE A LINK ──────────────────────────────
+     *
+     * Both authoring surfaces asked for a URL and nothing else: the Course
+     * Builder's media field is a bare text input, and course-authoring.tsx says
+     * out loud "Paste the file or video URL. Uploads are handled by the content
+     * library" - a content library that does not exist anywhere in this
+     * codebase.
+     *
+     * So an author with a PDF on their laptop had no way to make it a lesson.
+     * They had to publish it somewhere public first and paste the address, and
+     * anything behind a login rendered as a broken frame for every learner.
+     *
+     * ── WHAT THE PLAYER ALREADY SUPPORTS ────────────────────────────────────
+     *
+     * Nothing new is needed on the learner side. `lessonKind()` already maps
+     * mp4/pdf/jpg to native viewers and ppt/pptx/doc/docx/xls/xlsx through the
+     * Office viewer, and falls back to the file extension when file_type is
+     * blank. An uploaded file gets a public URL on the same DigitalOcean space
+     * the course thumbnails and organisation logos already use, so it plays
+     * exactly like a pasted link - which is the point.
+     *
+     * ── THE OFFICE VIEWER NEEDS A PUBLIC URL ────────────────────────────────
+     *
+     * view.officeapps.live.com fetches the file itself, so a private object
+     * would render as an error inside the course. Uploads are written with
+     * 'public' visibility for that reason, and the response says so rather than
+     * leaving the author to discover it.
+     */
+    public function uploadContent(Request $request)
+    {
+        if ($tokenError = $this->guardApiToken($request)) {
+            return $tokenError;
+        }
+        if ($roleError = $this->guardAuthoring($request)) {
+            return $roleError;
+        }
+
+        $subInstituteId = $this->tenantId($request);
+
+        $validator = Validator::make($request->all(), [
+            /*
+             * The formats the player can actually render, and nothing else.
+             *
+             * Accepting a .zip or a .exe would put a file in the course that no
+             * learner can open, and the failure would surface as a blank lesson
+             * rather than a refused upload.
+             */
+            'file' => 'required|file|max:102400|mimes:mp4,webm,mov,pdf,ppt,pptx,doc,docx,xls,xlsx,jpg,jpeg,png,gif,webp',
+            'course_id' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => $validator->messages()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        // A course id is optional (the builder uploads before the lesson row
+        // exists) but when given it must be the caller's own.
+        if ($request->filled('course_id')) {
+            $ours = DB::table('sub_std_map')
+                ->where('id', $request->course_id)
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereNull('deleted_at')
+                ->exists();
+
+            if (!$ours) {
+                return response()->json(['status' => false, 'message' => 'Course not found'], 404);
+            }
+        }
+
+        try {
+            $file = $request->file('file');
+            $extension = strtolower($file->getClientOriginalExtension());
+
+            /*
+             * Tenant-partitioned, timestamped, and NOT the original filename.
+             *
+             * Two authors uploading "training.pdf" must not overwrite each
+             * other, and a filename from a browser is attacker-controlled text
+             * that should never become a path segment.
+             */
+            $name = date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+            $path = 'public/lms_content/' . $subInstituteId . '/' . $name;
+
+            \Illuminate\Support\Facades\Storage::disk('digitalocean')
+                ->putFileAs(dirname($path), $file, basename($path), 'public');
+
+            $url = \Illuminate\Support\Facades\Storage::disk('digitalocean')->url($path);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'File uploaded',
+                'data' => [
+                    'url' => $url,
+                    // The player switches on this, so it is derived from the
+                    // real extension rather than trusted from the client.
+                    'file_type' => $this->lessonTypeFor($extension),
+                    'filename' => $file->getClientOriginalName(),
+                    'size' => $file->getSize(),
+                ],
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to upload the file',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * The `file_type` the player understands, from a real file extension.
+     *
+     * Deliberately the SAME vocabulary as lessonKind() on the client - mp4,
+     * pdf, pptx, docx, jpg, link. A value outside that set renders as "unknown"
+     * and the lesson cannot be opened, which is how three of the four original
+     * Course Builder content types used to behave.
+     */
+    private function lessonTypeFor(string $extension): string
+    {
+        return match ($extension) {
+            'mp4', 'webm', 'mov' => 'mp4',
+            'pdf' => 'pdf',
+            'ppt', 'pptx' => 'pptx',
+            'doc', 'docx' => 'docx',
+            'xls', 'xlsx' => 'docx',
+            'jpg', 'jpeg', 'png', 'gif', 'webp' => 'jpg',
+            default => 'link',
+        };
+    }
+
     public function storeContent(Request $request)
     {
         if ($tokenError = $this->guardApiToken($request)) {
@@ -1146,6 +1569,20 @@ class LmsLearningController extends Controller
                 fn ($q) => $q->where('c.user_id', $userId)
             )
             ->when($request->input('course_id'), fn ($q, $id) => $q->where('c.course_id', $id))
+            /*
+             * ONE EMPLOYEE'S CERTIFICATES, for an administrator looking at
+             * their record.
+             *
+             * Only meaningful alongside scope=all, which is already gated on
+             * guardAuthoring - so this narrows a set the caller was entitled to
+             * see rather than widening one they were not. Without it, showing
+             * certificates on an employee's profile would mean fetching every
+             * certificate in the organisation and filtering in the browser.
+             */
+            ->when(
+                $wantsAll && $request->input('user_id'),
+                fn ($q) => $q->where('c.user_id', $request->input('user_id'))
+            )
             ->when($request->input('search'), function ($q, $search) {
                 $q->where(function ($inner) use ($search) {
                     $inner->where('c.course_title', 'like', "%{$search}%")
@@ -1305,17 +1742,9 @@ class LmsLearningController extends Controller
             return response()->json(['status' => false, 'message' => 'You are not enrolled in this course.'], 404);
         }
 
-        $total = DB::table('content_master')
-            ->where('subject_id', $courseId)
-            ->whereNull('deleted_at')
-            ->count();
-
-        $done = DB::table('lms_content_progress')
-            ->where('user_id', $userId)
-            ->where('course_id', $courseId)
-            ->where('status', 'completed')
-            ->whereNull('deleted_at')
-            ->count();
+        $completion = $this->courseCompletion($userId, $courseId, $subInstituteId);
+        $total = $completion['total'];
+        $done = $completion['done'];
 
         DB::transaction(function () use ($enrolment, $userId, $courseId, $total, $done) {
             DB::table('lms_course_enroll')->where('id', $enrolment->id)->update([
@@ -1338,17 +1767,104 @@ class LmsLearningController extends Controller
                 ]);
         });
 
+        /*
+         * ── AND SAY SO, ONCE, IN THE EVENT STORE — BUT ONLY IF IT IS TRUE ───
+         *
+         * `course.completed` has been in EventCatalogue since it was written,
+         * with CertificateIssuer registered against it and a notification
+         * template waiting for it — and the event store holds ZERO of them,
+         * because nothing has ever emitted one. Three finished pieces, wired to
+         * each other, connected to nothing.
+         *
+         * ── WHY THE EMIT IS GATED AND NOT UNCONDITIONAL ─────────────────────
+         *
+         * CertificateIssuer MINTS A CERTIFICATE on this event, and its only
+         * condition is that a completed enrolment exists. It does not check
+         * lessons, sessions or the quiz — it cannot, that is claimCertificate's
+         * job, and the two reach the certificate by different doors.
+         *
+         * This method sets status='completed' on the learner's own DECLARATION,
+         * which is the whole point of it: some of what a course asks for happens
+         * away from the screen. So an unconditional emit here would mean
+         * pressing "Mark as complete" at 3 of 8 lessons issues a real
+         * certificate automatically — bypassing the lesson gate, the session
+         * gate and the quiz gate in one step, and making every certificate
+         * worthless. That is precisely what this method's own docblock promises
+         * does not happen.
+         *
+         * So the event fires only when the course is genuinely finished by the
+         * same rules claimCertificate applies. The declaration is still recorded
+         * either way — it is in lms_course_enroll and lms_assignments above.
+         * What is withheld is the ANNOUNCEMENT, because `course.completed`
+         * should mean what its name says.
+         */
+        $quizGate = $this->quizGate($userId, $courseId, $subInstituteId);
+        $genuinelyComplete = $total > 0 && $done >= $total && $quizGate['passed'];
+
+        /*
+         * OUTSIDE the transaction, deliberately: the completion is the fact,
+         * and an event-store failure must not roll it back. Idempotency-keyed
+         * on the enrolment, so pressing Complete twice records one event.
+         */
+        try {
+            if ($genuinelyComplete) {
+                app(\App\Services\Events\EventRecorder::class)->record(
+                    'course.completed',
+                    (int) $subInstituteId,
+                    'enrolment',
+                    (int) $enrolment->id,
+                    (int) $userId,
+                    [
+                        'enrollment_id' => (int) $enrolment->id,
+                        'user_id' => (int) $userId,
+                        'course_id' => (int) $courseId,
+                        'total_content' => $completion['content_total'],
+                        'completed_content' => $completion['content_done'],
+                        'total_sessions' => $completion['session_total'],
+                        'attended_sessions' => $completion['session_done'],
+                        'quiz_passed' => $quizGate['has_quiz'] ? true : null,
+                        'quiz_percent' => $quizGate['best_percent'],
+                    ],
+                    null,
+                    'course.completed:' . $enrolment->id,
+                );
+            }
+        } catch (\Throwable $e) {
+            // The learner finished the course. That is true whether or not the
+            // event store accepted the announcement, so it is logged, not
+            // raised.
+            \Illuminate\Support\Facades\Log::warning('course.completed not recorded', [
+                'enrolment_id' => $enrolment->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Marked complete.',
             'data' => [
                 'marked_complete' => true,
-                'total_content' => $total,
-                'completed_content' => $done,
+                'total_content' => $completion['content_total'],
+                'completed_content' => $completion['content_done'],
+                'total_sessions' => $completion['session_total'],
+                'attended_sessions' => $completion['session_done'],
                 'progress_percent' => $total > 0 ? (int) round($done / $total * 100) : 0,
-                // So the UI can say what the certificate still needs, rather
-                // than offering a button that will be refused.
-                'certificate_available' => $total > 0 && $done >= $total,
+                /*
+                 * So the UI can say what the certificate still needs, rather
+                 * than offering a button that will be refused.
+                 *
+                 * This has to agree with claimCertificate's rules EXACTLY, and
+                 * that now includes the quiz. Reporting availability on lesson
+                 * and session counts alone would put a Claim button in front of
+                 * a learner who has not sat the quiz, and the claim would come
+                 * back 422 — the exact "offered and then refused" that this
+                 * field exists to prevent.
+                 */
+                'certificate_available' => $genuinelyComplete,
+                'quiz_required' => $quizGate['has_quiz'],
+                'quiz_passed' => $quizGate['passed'],
+                'certificate_blocked_reason' => $genuinelyComplete ? null : ($quizGate['reason']
+                    ?: 'Finish every lesson and attend the sessions you are registered for.'),
             ],
         ]);
     }
@@ -1513,6 +2029,102 @@ class LmsLearningController extends Controller
     }
 
     /** Shared PDF rendering for download. */
+    /**
+     * The organisation a certificate is issued BY.
+     *
+     * ── WHY A CERTIFICATE NEEDED THIS ───────────────────────────────────────
+     *
+     * The templates named the course, the learner and the date, and never once
+     * said who awarded it. A credential that does not identify its issuer
+     * cannot be verified by the person holding it or by anyone they show it to,
+     * which is most of the point of having one.
+     *
+     * The name comes from `org_details.legal_name`, falling back to
+     * `institute_detail.organization_name` - tenant 6 has "Scholar Clone" in
+     * the first and "Scholar Clone Pvt. Ltd." in the second, and the legal name
+     * is the one that belongs on a certificate.
+     *
+     * ── THE LOGO IS EMBEDDED, NOT LINKED ────────────────────────────────────
+     *
+     * `org_details.logo` stores a bare filename; the file lives on DigitalOcean
+     * under public/hp_logo/. DomPDF is configured with enable_remote = false,
+     * so a plain <img src="https://..."> renders as nothing at all - silently,
+     * which is the worst way for it to fail.
+     *
+     * So it is fetched once and inlined as a data URI. Enabling remote fetching
+     * globally would let any HTML this app ever renders pull an arbitrary URL
+     * server-side, which is a much larger door than this needs.
+     *
+     * Every failure here is non-fatal: a certificate without a logo is still a
+     * valid certificate, and a network timeout must never turn a download into
+     * a 500.
+     *
+     * @return array{name:?string, logo:?string}
+     */
+    private function certificateOrganisation($subInstituteId): array
+    {
+        if (!$subInstituteId) {
+            return ['name' => null, 'logo' => null];
+        }
+
+        $org = DB::table('org_details')
+            ->where('sub_institute_id', $subInstituteId)
+            ->first(['legal_name', 'logo']);
+
+        $name = $org->legal_name ?? null;
+
+        if (!$name) {
+            $name = DB::table('institute_detail')
+                ->where('sub_institute_id', $subInstituteId)
+                ->value('organization_name');
+        }
+
+        return [
+            'name' => $name,
+            'logo' => $this->inlineLogo($org->logo ?? null),
+        ];
+    }
+
+    /** A stored logo filename as a data URI DomPDF can actually draw. */
+    private function inlineLogo(?string $filename): ?string
+    {
+        if (!$filename) {
+            return null;
+        }
+
+        try {
+            // The same disk and path organizationDetailsController uploads to.
+            $url = \Illuminate\Support\Facades\Storage::disk('digitalocean')
+                ->url('public/hp_logo/' . $filename);
+
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get($url);
+
+            if (!$response->successful()) {
+                return null;
+            }
+
+            $body = $response->body();
+
+            // A logo is a logo. Anything above a megabyte is not one, and
+            // inlining it would bloat every certificate this tenant issues.
+            if ($body === '' || strlen($body) > 1024 * 1024) {
+                return null;
+            }
+
+            $mime = $response->header('Content-Type') ?: 'image/png';
+
+            return 'data:' . $mime . ';base64,' . base64_encode($body);
+        } catch (\Throwable $e) {
+            // Logged, not raised: the certificate is still correct without it.
+            \Illuminate\Support\Facades\Log::info('Certificate logo not embedded', [
+                'file' => $filename,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
     private function renderCertificatePdf($certificate)
     {
         $tags = [];
@@ -1550,6 +2162,8 @@ class LmsLearningController extends Controller
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($view, [
             'certificate' => $certificate,
             'learnerName' => $certificate->learner_name ?? '',
+            // The issuing organisation, so a certificate says who awarded it.
+            'organisation' => $this->certificateOrganisation($certificate->sub_institute_id),
             'tags' => $tags,
             'isExpired' => $certificate->expires_at !== null
                 && \Carbon\Carbon::parse($certificate->expires_at)->isPast(),
@@ -1644,25 +2258,60 @@ class LmsLearningController extends Controller
             return response()->json(['status' => false, 'message' => 'Course not found'], 404);
         }
 
-        // A certificate is only earned once every lesson is complete. Courses
-        // with no content cannot be certified - there is nothing to finish.
-        $total = DB::table('content_master')
-            ->where('subject_id', $request->course_id)
-            ->whereNull('deleted_at')
-            ->count();
-
-        $done = DB::table('lms_content_progress')
-            ->where('user_id', $userId)
-            ->where('course_id', $request->course_id)
-            ->where('status', 'completed')
-            ->whereNull('deleted_at')
-            ->count();
+        // A certificate is only earned once every lesson is complete, and every
+        // session the learner signed up for has been attended. Courses with no
+        // content cannot be certified - there is nothing to finish.
+        $completion = $this->courseCompletion($userId, $request->course_id, $subInstituteId);
+        $total = $completion['total'];
+        $done = $completion['done'];
 
         if ($total === 0 || $done < $total) {
+            // Name the actual obstacle. "Finish every lesson" sent a learner
+            // who had finished every lesson back to look for one that was not
+            // there, when what they were missing was a session.
+            $outstandingSessions = $completion['session_total'] - $completion['session_done'];
+            $outstandingLessons = $completion['content_total'] - $completion['content_done'];
+
+            if ($total === 0) {
+                $message = 'This course has nothing to complete yet, so it cannot be certified.';
+            } elseif ($outstandingLessons > 0 && $outstandingSessions > 0) {
+                $message = "You still have {$outstandingLessons} lesson(s) and {$outstandingSessions} session(s) outstanding.";
+            } elseif ($outstandingSessions > 0) {
+                $message = "You are registered for {$outstandingSessions} session(s) on this course that have not been marked attended.";
+            } else {
+                $message = 'Finish every lesson in this course before claiming the certificate.';
+            }
+
             return response()->json([
                 'status' => false,
-                'message' => 'Finish every lesson in this course before claiming the certificate.',
-                'data' => ['total_content' => $total, 'completed_content' => $done],
+                'message' => $message,
+                'data' => [
+                    'total_content' => $completion['content_total'],
+                    'completed_content' => $completion['content_done'],
+                    'total_sessions' => $completion['session_total'],
+                    'attended_sessions' => $completion['session_done'],
+                ],
+            ], 422);
+        }
+
+        /*
+         * ── AND THE QUIZ, WHERE THE COURSE HAS ONE ──────────────────────────
+         *
+         * Before this, a certificate said only that somebody had opened every
+         * file in the course. That certifies attendance, not learning, and it
+         * is the difference between a credential and a receipt.
+         *
+         * Only courses that actually have a quiz are gated: adding one is how a
+         * course author asks for the stricter rule, and a course without one
+         * behaves exactly as it did.
+         */
+        $quizGate = $this->quizGate($userId, $request->course_id, $subInstituteId);
+
+        if (!$quizGate['passed']) {
+            return response()->json([
+                'status' => false,
+                'message' => $quizGate['reason'],
+                'data' => $quizGate,
             ], 422);
         }
 

@@ -15,6 +15,23 @@ class tbluserModel extends Model
     protected $table = "tbluser";
     protected $appends = ['full_name'];
 
+    /**
+     * Never serialised. F-92, HRIT Sprint 1.
+     *
+     * employeeDetails() (app/Helpers/helpers.php) selects `tbluser.*` and its
+     * result is returned verbatim by GET /employee-salary-structure and
+     * GET /payroll-deduction, so every caller of those endpoints received every
+     * employee's bcrypt hash - 122 of them per request on tenant 3 - plus the
+     * live login OTP. Hiding them here fixes every consumer of the model at
+     * once, which an explicit column list in one helper would not.
+     *
+     * $hidden affects array/JSON output only. authController still compares
+     * Hash::check($password, $user->password) as an attribute, and the mobile
+     * login still returns `otp` because it reads through DB::table(), not this
+     * model. Both verified before this was added.
+     */
+    protected $hidden = ['password', 'remember_token', 'otp'];
+
     protected $fillable = [
         'id',
         'user_name',

@@ -347,6 +347,47 @@ class LmsCourseEnrollController extends Controller
         ];
     }
 
+    /**
+     * Does this course belong to the caller's organisation?
+     *
+     * `exists:sub_std_map,id` — which is what both write methods used to rely
+     * on — asks whether the course exists ANYWHERE. On a shared table that is
+     * not a check, it is a formality: every tenant's courses satisfy it. A
+     * caller holding a valid tenant-A token could post a tenant-B course_id and
+     * the enrolment was written, carrying the caller's own sub_institute_id, so
+     * the row looked entirely legitimate afterwards (F-71).
+     *
+     * Answered separately from validation because the answer is 404, not 422:
+     * a course in another organisation does not exist as far as this caller is
+     * concerned, and saying "that course is not yours" confirms it is real.
+     * Same reasoning, and the same shape, as assignAudience().
+     */
+    private function courseInTenant($courseId, $subInstituteId): bool
+    {
+        return DB::table('sub_std_map')
+            ->where('id', $courseId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->exists();
+    }
+
+    /**
+     * Is this learner one of ours?
+     *
+     * The class comment says user_id is "bounded by the tenant instead" — it
+     * was not. store() accepts an arbitrary user_id so an administrator can
+     * enrol somebody else, which is a real requirement, but nothing confined
+     * that somebody to the caller's organisation. Both halves of the pair have
+     * to be checked or the pair is still cross-tenant.
+     */
+    private function userInTenant($userId, $subInstituteId): bool
+    {
+        return DB::table('tbluser')
+            ->where('id', $userId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->exists();
+    }
+
      public function store(Request $request)
     {
     $identity = $this->resolveApiIdentity($request);
@@ -370,6 +411,17 @@ class LmsCourseEnrollController extends Controller
             'status' => 0,
             'message' => $validator->messages()->first()
         ], 422);
+    }
+
+    // F-71. Both ends of the pair must be inside the caller's organisation.
+    // Checked before eligibility, because eligibility reads the course's own
+    // settings and there is no reason to read another tenant's rules at all.
+    if (!$this->courseInTenant($request->course_id, $subInstituteId)) {
+        return response()->json(['status' => 0, 'message' => 'Course not found'], 404);
+    }
+
+    if (!$this->userInTenant($request->user_id, $subInstituteId)) {
+        return response()->json(['status' => 0, 'message' => 'User not found'], 404);
     }
 
     /*
@@ -475,13 +527,27 @@ class LmsCourseEnrollController extends Controller
         ], 422);
     }
 
-    // Find existing course enrollment record, scoped to the requesting user.
-    // Looking it up by id alone let any caller mutate another learner's
-    // enrolment by guessing the id; user_id is already validated as required.
+    // F-71, the same hole on the update path: without this, an enrolment could
+    // be *moved* onto another tenant's course after the fact.
+    if (!$this->courseInTenant($request->course_id, $subInstituteId)) {
+        return response()->json(['message' => 'Course not found'], 404);
+    }
+
+    if (!$this->userInTenant($request->user_id, $subInstituteId)) {
+        return response()->json(['message' => 'User not found'], 404);
+    }
+
+    // Find existing course enrollment record, scoped to the requesting user
+    // AND to the caller's tenant. Looking it up by id alone let any caller
+    // mutate another learner's enrolment by guessing the id; user_id is
+    // already validated as required, and the row's own sub_institute_id keeps
+    // an id from another organisation out of reach even when the guesser also
+    // knows whose it is.
     $courseEnroll = LmsCourseEnroll::where([
         'id'      => $id,
         'user_id' => $request->user_id,
-    ])->whereNull('deleted_at')->first();
+    ])->where('sub_institute_id', $subInstituteId)
+      ->whereNull('deleted_at')->first();
 
     if (!$courseEnroll) {
         return response()->json([

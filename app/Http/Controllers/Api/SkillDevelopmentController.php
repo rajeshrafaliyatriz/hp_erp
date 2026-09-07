@@ -263,16 +263,40 @@ class SkillDevelopmentController extends Controller
                 ], 422);
             }
 
-            // Get all attendance days for the user where they punched in, ordered by day desc
-            $attendanceDays = DB::table('hrms_attendances')
+            /*
+             * ── A LEARNING STREAK MEASURES LEARNING ─────────────────────────
+             *
+             * This counted days the employee PUNCHED IN, from
+             * `hrms_attendances`. So the "learning streak" on the LMS dashboard
+             * rewarded turning up: somebody who badged in every day for a month
+             * and never opened a course had a 30-day learning streak, and
+             * somebody who studied all weekend had none.
+             *
+             * A learning day is now a day this person did something in the LMS:
+             * completed or progressed a lesson, or submitted a quiz. Both are
+             * dated per learner, which is what a streak needs and attendance
+             * only appeared to provide.
+             */
+            $progressDays = DB::table('lms_content_progress')
                 ->where('user_id', $userId)
-                ->whereNotNull('punchin_time')
                 ->whereNull('deleted_at')
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
-                    return $query->where('sub_institute_id', $subInstituteId);
-                })
-                ->orderBy('day', 'desc')
-                ->pluck('day')
+                ->when($subInstituteId, fn ($q) => $q->where('sub_institute_id', $subInstituteId))
+                ->selectRaw('DATE(COALESCE(updated_at, created_at)) as day')
+                ->pluck('day');
+
+            $quizDays = DB::table('lms_quiz_attempt')
+                ->where('user_id', $userId)
+                ->where('status', 'submitted')
+                ->whereNull('deleted_at')
+                ->when($subInstituteId, fn ($q) => $q->where('sub_institute_id', $subInstituteId))
+                ->selectRaw('DATE(COALESCE(submitted_at, created_at)) as day')
+                ->pluck('day');
+
+            $attendanceDays = $progressDays->concat($quizDays)
+                ->filter()
+                ->unique()
+                ->sortDesc()
+                ->values()
                 ->toArray();
 
             // Calculate current streak
@@ -281,7 +305,14 @@ class SkillDevelopmentController extends Controller
             // Calculate best streak
             $bestStreak = $this->calculateBestStreak($attendanceDays);
 
-            // Fixed goal
+            /*
+             * The streak goal.
+             *
+             * Still a constant, and deliberately left as one rather than
+             * invented into a setting nobody asked for - but it is now a goal
+             * for a real quantity. Moving it to per-tenant configuration is a
+             * product decision, not a bug fix.
+             */
             $goal = 30;
 
             // Calculate progress percentage
@@ -400,28 +431,43 @@ class SkillDevelopmentController extends Controller
             $startOfWeek = now()->startOfWeek(); // Monday
             $endOfWeek = now()->endOfWeek(); // Sunday
 
-            // Calculate total learning hours for the current week
-            // Assuming learning hours are based on attendance hours (punch in/out time)
-            $weeklyAttendance = DB::table('hrms_attendances')
+            /*
+             * ── "LEARNING HOURS" WERE ATTENDANCE HOURS ──────────────────────
+             *
+             * This summed punch-in to punch-out spans from `hrms_attendances`,
+             * as its own comment admitted: "Assuming learning hours are based
+             * on attendance hours". So the weekly LEARNING goal was met by
+             * sitting at a desk. Anyone present for two full days hit a 12-hour
+             * target without opening a single course, and somebody who studied
+             * intensively from home recorded nothing.
+             *
+             * `lms_content_progress.time_spent_seconds` is the real measure -
+             * time the player recorded against a lesson, per learner, dated.
+             * Quiz time is not added: an attempt records when it was submitted,
+             * not how long it took, and inventing a duration for it would put
+             * the old guesswork back in a new place.
+             */
+            $secondsThisWeek = (int) DB::table('lms_content_progress')
                 ->where('user_id', $userId)
-                ->whereNotNull('punchin_time')
-                ->whereNotNull('punchout_time')
                 ->whereNull('deleted_at')
-                ->whereBetween('day', [$startOfWeek->format('Y-m-d'), $endOfWeek->format('Y-m-d')])
-                ->when($subInstituteId, function($query) use ($subInstituteId) {
-                    return $query->where('sub_institute_id', $subInstituteId);
-                })
-                ->get();
+                ->whereBetween(
+                    DB::raw('DATE(COALESCE(updated_at, created_at))'),
+                    [$startOfWeek->format('Y-m-d'), $endOfWeek->format('Y-m-d')]
+                )
+                ->when($subInstituteId, fn ($q) => $q->where('sub_institute_id', $subInstituteId))
+                ->sum('time_spent_seconds');
 
-            $totalHours = 0;
-            foreach ($weeklyAttendance as $attendance) {
-                $punchIn = \Carbon\Carbon::parse($attendance->punchin_time);
-                $punchOut = \Carbon\Carbon::parse($attendance->punchout_time);
-                $hours = $punchOut->diffInHours($punchIn);
-                $totalHours += $hours;
-            }
+            // Rounded to one decimal, because a 20-minute study session is 0.3
+            // hours and reporting it as 0 makes the widget look broken.
+            $totalHours = round($secondsThisWeek / 3600, 1);
 
-            // Weekly goal (can be configurable, for now fixed at 12 hours)
+            /*
+             * The goal is still a constant.
+             *
+             * Left as one deliberately rather than invented into a setting
+             * nobody asked for - but it is now a target for a real quantity
+             * instead of a number compared against a clock.
+             */
             $weeklyGoal = 12;
             $currentHours = min($totalHours, $weeklyGoal); // Cap at goal
             $remainingHours = max(0, $weeklyGoal - $currentHours);
@@ -473,8 +519,41 @@ class SkillDevelopmentController extends Controller
                     'message' => 'user_id is required'
                 ], 422);
             }
-            // Fetch all achievements from database
-            $achievementDefinitions = DB::table('lms_achievements')->get();
+            /*
+             * Definitions available to this organisation.
+             *
+             * `sub_institute_id` is nullable and NULL means "every
+             * organisation", which is what the pre-existing definitions are.
+             */
+            $achievementDefinitions = DB::table('lms_achievements')
+                ->where(function ($q) use ($subInstituteId) {
+                    $q->whereNull('sub_institute_id')
+                      ->orWhere('sub_institute_id', $subInstituteId);
+                })
+                ->get();
+
+            /*
+             * ── WHEN A BADGE WAS EARNED IS A FACT, NOT A RECOMPUTATION ──────
+             *
+             * This method used to report `now()` as the earned date for
+             * anything whose criteria currently held. Two consequences, both
+             * wrong:
+             *
+             *   - a badge earned in January displayed today's date, forever;
+             *   - a badge with a rolling criterion ("5 courses THIS MONTH" is
+             *     the one definition that exists) silently disappeared when the
+             *     window moved past it, un-earning something already won.
+             *
+             * AchievementAwarder now records the award at the moment
+             * `course.completed` fires. A persisted row is authoritative; the
+             * live computation below stays, because it is what drives PROGRESS
+             * toward a badge not yet earned.
+             */
+            $earnedRows = DB::table('lms_user_achievement')
+                ->where('user_id', $userId)
+                ->when($subInstituteId, fn ($q) => $q->where('sub_institute_id', $subInstituteId))
+                ->get(['achievement_id', 'earned_at'])
+                ->keyBy('achievement_id');
 
             $achievements = [];
 
@@ -527,8 +606,27 @@ class SkillDevelopmentController extends Controller
                     // Add more criteria types as needed
                 }
 
-                if ($earned) {
-                    $earnedDate = now()->format('d/m/Y');
+                /*
+                 * A recorded award wins over the live computation, and can
+                 * never be taken back by it.
+                 */
+                $record = $earnedRows[$achievement->id] ?? null;
+
+                if ($record) {
+                    $earned = true;
+                    $earnedDate = $record->earned_at
+                        ? \Carbon\Carbon::parse($record->earned_at)->format('d/m/Y')
+                        : null;
+                    $progress = 'Achieved';
+                } elseif ($earned) {
+                    /*
+                     * Criteria met but no award recorded - the learner earned
+                     * this before the awarder existed, or through a path that
+                     * does not emit course.completed. Shown as earned, with no
+                     * date, rather than stamped with today's: an honest blank
+                     * beats a fabricated fact.
+                     */
+                    $earnedDate = null;
                 }
 
                 $achievements[] = [
@@ -540,7 +638,9 @@ class SkillDevelopmentController extends Controller
                     'timestamps' => [
                         'created_at' => $achievement->created_at,
                         'updated_at' => $achievement->updated_at,
-                        'deleted_at' => $achievement->deleted_at ?? null
+                        // lms_achievements has no deleted_at column; kept as
+                        // an explicit null so the response shape is stable.
+                        'deleted_at' => null,
                     ]
                 ];
             }
@@ -801,9 +901,17 @@ class SkillDevelopmentController extends Controller
                     'description' => $event->description,
                     'current_datetime' => now()->format('M d \a\t g:i A'),
                     'school_date' => $event->school_date,
-                    'priority' => $event->event_type ?? 'medium', // Assuming event_type maps to priority
+                    /*
+                     * `event_type` is a KIND, not a priority - "holiday",
+                     * "exam" - and mapping one onto the other, as the old
+                     * comment admitted it was "assuming", produced a priority
+                     * field the UI colour-codes from values that were never
+                     * priorities. Reported as unset rather than guessed.
+                     */
+                    'priority' => null,
                     'event_type' => $event->event_type,
                     'standard' => $event->standard,
+                    'source' => 'calendar',
                     'timestamps' => [
                         'created_at' => $event->created_at,
                         'updated_at' => $event->updated_at,
@@ -811,6 +919,52 @@ class SkillDevelopmentController extends Controller
                     ]
                 ];
             }
+
+            /*
+             * ── AND THIS LEARNER'S OWN DEADLINES ────────────────────────────
+             *
+             * The query above filters `calendar_events` by tenant and month
+             * with NO user_id filter and no course-deadline join, so every
+             * learner's "learning calendar" was the same organisation-wide
+             * events calendar - a personal screen showing nothing personal.
+             *
+             * A learner's calendar should carry the dates that are about them:
+             * when their courses are due. Added rather than replacing the
+             * organisation events, which are still relevant to everyone.
+             */
+            $deadlines = DB::table('lms_course_enroll as e')
+                ->join('sub_std_map as c', 'c.id', '=', 'e.course_id')
+                ->where('e.user_id', $userId)
+                ->whereNotNull('e.end_date')
+                ->whereIn('e.status', ['enrolled', 'in-progress'])
+                ->whereNull('e.deleted_at')
+                ->whereYear('e.end_date', $year)
+                ->whereMonth('e.end_date', $month)
+                ->when($subInstituteId, fn ($q) => $q->where('e.sub_institute_id', $subInstituteId))
+                ->orderBy('e.end_date')
+                ->get(['e.end_date', 'c.display_name']);
+
+            foreach ($deadlines as $deadline) {
+                $formattedEvents[] = [
+                    'title' => 'Due: ' . $deadline->display_name,
+                    'description' => 'This course is due to be completed.',
+                    'current_datetime' => now()->format('M d \a\t g:i A'),
+                    'school_date' => $deadline->end_date,
+                    // A real priority this time: a deadline already past is
+                    // the one thing on this calendar that needs acting on.
+                    'priority' => $deadline->end_date < now()->toDateString() ? 'high' : 'medium',
+                    'event_type' => 'course-deadline',
+                    'standard' => null,
+                    'source' => 'course',
+                    'timestamps' => [
+                        'created_at' => null,
+                        'updated_at' => null,
+                        'deleted_at' => null,
+                    ],
+                ];
+            }
+
+            usort($formattedEvents, fn ($a, $b) => strcmp((string) $a['school_date'], (string) $b['school_date']));
 
             return response()->json([
                 'status' => true,

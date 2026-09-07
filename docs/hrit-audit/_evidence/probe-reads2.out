@@ -1,0 +1,20 @@
+===== F. ATTENDANCE API =====
+emp GET /api/attendance/my-attendance                    200  {"status":1,"message":"Success to Find Data","fromDate":"2026-04-01","toDate":"2026-04-30","daysInMonth":30,"workingDays":22,"holidays":0,"presentDays":0,"lateDays":0,"le
+emp GET /api/attendance/kpi                              200  {"present_today":"0%","leave_utilization":"0.1%","active_employees":122}200
+emp GET /api/attendance/weekly-summary                   200  {"date_range":{"start":"2026-04-01","end":"2026-04-30"},"department_filter":"All","employee_filter":"All","labels":["Mon","Tue","Wed","Thu","Fri","Sat"],"present":[0,0,0,
+emp GET /api/attendance/report-filters                   200  {"status":1,"message":"Success to Find Data","employee_id":null,"department_id":null,"from_date_formatted":"2026-09-05","to_date_formatted":"2026-09-05","departments":{"5
+emp GET /api/attendance/employees                        200  {"status":1,"message":"Success to Find Data","employees":[{"id":122,"employee_no":"","first_name":"Aarna","middle_name":"Hitesh","last_name":"Kadakia","department_id":81,
+emp GET /departmentwise-attendance-report/create         200  {"selDepartments":"0","emp_id":null,"selectedFromDate":"2026-04-01","selectedToDate":"2026-04-30","message":"Success","empData":[{"user_id":122,"employee_no":"","full_nam
+emp GET /show-early-going-hrms-attendance-report         200  {"employees":{"user_id":"6,7,10,11,12,19,54,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,
+emp GET /hrms/myleave/7 (sample data?)                   200  {"status":"1","message":"Success","data":{"leave_summary":{"total_leaves":"20","used_leaves":"5","remaining_leaves":"15"},"leave_types":[{"leave_type":"Casual Leave","use
+emp GET /hrms/leavehistory/7                             200  {"status":"1","message":"Success","data":[{"from_date":"2025-01-15","to_date":"2025-01-16","leave_type":"Medical Leave","status":"Approved","status_color":"#009900","day_
+===== G. PAYROLL as HR / ADMIN (does the screen even load?) =====
+hr  GET /monthly-payroll/create                          500  {    "message": "Session store not set on request.",    "exception": "RuntimeException",    "file": "C:\\Users\\MILAN\\Downloads\\hp_erp\\vendor\\laravel\\framework\\src\
+adm GET /monthly-payroll/create                          500  {    "message": "Session store not set on request.",    "exception": "RuntimeException",    "file": "C:\\Users\\MILAN\\Downloads\\hp_erp\\vendor\\laravel\\framework\\src\
+adm GET /getMonthlyData                                  200  {"status_code":0,"message":"Salary Structure Not Found !!"}200
+adm GET /payroll-deduction                               200  {"selMonth":"Apr","selYear":"2026","selDeduction":"9","selType":null,"all_emp":[{"id":122,"user_name":"aarna.kadakia","password":"$2y$12$iq4EYFhV.GLZWLzOt8iK1ecdpTkToMf3T
+adm GET /hrms-salary-certificate                         200  {"employee_id":null,"month_ids":{"1":"Jan","2":"Feb","3":"Mar","4":"Apr","5":"May","6":"Jun","7":"Jul","8":"Aug","9":"Sep","10":"Oct","11":"Nov","12":"Dec"},"departments"
+===== H. ROLES WITH NO BUSINESS IN PAYROLL =====
+department_head GET /employee-salary-structure           200  {"employees":[{"id":122,"user_name":"aarna.kadakia","password":"$2y$12$iq4EYFhV.GLZWLzOt8iK1ecdpTkToMf3T\/FgKnv2Bk8pdBBpu325S","name_suffix":"Mr.","first_name":"Aarna","m
+reporting_manager GET /employee-salary-structure         200  {"employees":[{"id":122,"user_name":"aarna.kadakia","password":"$2y$12$iq4EYFhV.GLZWLzOt8iK1ecdpTkToMf3T\/FgKnv2Bk8pdBBpu325S","name_suffix":"Mr.","first_name":"Aarna","m
+recruiter GET /employee-salary-structure                 200  {"employees":[{"id":122,"user_name":"aarna.kadakia","password":"$2y$12$iq4EYFhV.GLZWLzOt8iK1ecdpTkToMf3T\/FgKnv2Bk8pdBBpu325S","name_suffix":"Mr.","first_name":"Aarna","m

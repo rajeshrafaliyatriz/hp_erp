@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Leave;
 
+use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveAuthority;
 use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Validator;
 class LeaveTypeApiController extends Controller
 {
     use ResolvesLeaveContext;
+    use ResolvesLeaveAuthority;
 
     /**
      * GET /api/leave/leave-types
@@ -90,10 +92,27 @@ class LeaveTypeApiController extends Controller
             return $context;
         }
 
+        // F-89 / F-90: every write in this controller was ungated. Leave
+        // configuration is an organisation-wide setting; the matrix has always
+        // said who may change it and nothing read the matrix.
+        if ($denied = $this->denyUnlessLeaveCan($context, 'configure_settings', 'You do not have permission to change leave types.')) {
+            return $denied;
+        }
+
         $id = $id ?: $request->input('id');
 
         $validator = Validator::make(array_merge($request->all(), ['id' => $id]), [
-            'leave_type'    => 'required|string|max:191',
+            /*
+             * F-106. max:191 against a varchar(30) column. Under
+             * STRICT_TRANS_TABLES the mismatch is not a truncation - it is a
+             * 500 whose body carries the database host, port and schema:
+             *
+             *   SQLSTATE[22001] 1406 Data too long for column 'leave_type'
+             *   (Connection: mysql, Host: 202.47.117.220, Port: 3306, Database: hp_erp, SQL: ...)
+             *
+             * The number here must be the column's, not a habit. 30.
+             */
+            'leave_type'    => 'required|string|max:30',
             'sort_order'    => 'nullable|integer|min:0',
             'status'        => 'nullable|boolean',
             'carry_forward' => 'nullable|boolean',
@@ -178,6 +197,13 @@ class LeaveTypeApiController extends Controller
             return $context;
         }
 
+        // F-89 / F-90: every write in this controller was ungated. Leave
+        // configuration is an organisation-wide setting; the matrix has always
+        // said who may change it and nothing read the matrix.
+        if ($denied = $this->denyUnlessLeaveCan($context, 'configure_settings', 'You do not have permission to change leave types.')) {
+            return $denied;
+        }
+
         $leaveType = DB::table('hrms_leave_types')
             ->where('id', $id)
             ->where('sub_institute_id', $context['sub_institute_id'])
@@ -211,6 +237,13 @@ class LeaveTypeApiController extends Controller
         $context = $this->leaveContext($request);
         if (!is_array($context)) {
             return $context;
+        }
+
+        // F-89 / F-90: every write in this controller was ungated. Leave
+        // configuration is an organisation-wide setting; the matrix has always
+        // said who may change it and nothing read the matrix.
+        if ($denied = $this->denyUnlessLeaveCan($context, 'configure_settings', 'You do not have permission to delete leave types.')) {
+            return $denied;
         }
 
         $leaveType = DB::table('hrms_leave_types')

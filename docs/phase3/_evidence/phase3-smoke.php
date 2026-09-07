@@ -586,6 +586,72 @@ check('org', 'working tree matches its baseline (50 foreign files, LISTED)', fun
         . 'of mine is uncommitted: ' . implode(', ', $sample)];
 });
 
+check('notify', 'NO CANDIDATE LINK IS BUILT FROM THIS API ORIGIN', function () {
+    // F-89. Three links emailed to people with no account here - the assessment
+    // paper and two offer links - were all built from config('app.url'). That is
+    // THIS application; the pages are Next.js pages on another origin, and
+    // Laravel has no route for either, so every one of those emails carried a
+    // 404. The API returned 200 and HR was told the candidate had been contacted.
+    //
+    // Same shape as the mail-gate check above: assert the INVARIANT, not the
+    // three call sites, because the next candidate-facing link would otherwise
+    // make the identical mistake with nothing to catch it.
+    // Matches BOTH forms: the old concatenation ('/assessment/' . $token) and
+    // the fixed call (CandidateLink::to('assessment', $token)). A pattern that
+    // only knew the old shape would find nothing after the fix and then report a
+    // spotless scan of zero files.
+    $PATHS = '#[\'"]/?(?:assessment|offer|careers)/?[\'"]#';
+    $APPURL = '/config\(\s*[\'"]app\.url[\'"]\s*\)/';
+
+    $offenders = [];
+    $checked = 0;
+
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(app_path()));
+    foreach ($it as $f) {
+        if (!$f->isFile() || $f->getExtension() !== 'php') continue;
+        $src = stripComments(file_get_contents($f->getPathname()));
+        if (!preg_match($PATHS, $src)) continue;
+        $checked++;
+        if ($f->getFilename() === 'CandidateLink.php') continue;
+
+        // Only the LINES that carry a candidate path matter; a file may legally
+        // use app.url elsewhere for a page Laravel itself serves.
+        foreach (explode("\n", $src) as $line) {
+            if (preg_match($PATHS, $line) && preg_match($APPURL, $line)) {
+                $offenders[] = $f->getFilename();
+                break;
+            }
+        }
+    }
+
+    // The instrument must be able to find the thing it is looking for...
+    $positive = '$url = rtrim(config(\'app.url\'), \'/\') . \'/assessment/\' . $t;';
+    if (!(preg_match($PATHS, $positive) && preg_match($APPURL, $positive))) {
+        return ['SKIPPED', 'the pattern cannot match the original defect - it proves nothing'];
+    }
+    // ...and must not fire on the fixed form, or it reports on nothing.
+    $negative = '$url = CandidateLink::to(\'assessment\', $t);';
+    if (preg_match($APPURL, $negative)) {
+        return ['SKIPPED', 'the pattern fires on the FIXED form - it would over-report'];
+    }
+    if ($checked === 0) {
+        return ['SKIPPED', 'no candidate-path files found at all - the scan is broken, not the code clean'];
+    }
+
+    if ($offenders) {
+        return ['FAIL', count(array_unique($offenders)) . ' file(s) build a candidate link from the API origin: '
+            . implode(', ', array_unique($offenders)) . '. Use App\Support\CandidateLink.'];
+    }
+
+    $base = App\Support\CandidateLink::base();
+    if (App\Support\CandidateLink::pointsAtApi()) {
+        return ['PASS', $checked . ' file(s) scanned, all routed through CandidateLink - but FRONTEND_URL '
+            . 'is unset, so links fall back to ' . $base . ' and the emails carrying them are held back'];
+    }
+
+    return ['PASS', $checked . ' file(s) scanned, all routed through CandidateLink; links resolve to ' . $base];
+});
+
 check('org', 'NO SEND SITE BYPASSES THE MAIL GATE', function () {
     // "Email is off" was a property of ONE FILE out of seven for the whole of
     // this engagement: only NotificationSender consulted G2G_NOTIFY_EMAIL, and

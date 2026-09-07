@@ -2,6 +2,7 @@
 
 namespace App\Services\Notifications;
 
+use App\Services\Leave\LeaveApprovalWorkflow;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -39,6 +40,15 @@ use Illuminate\Support\Facades\DB;
 class RecipientResolver
 {
     /**
+     * How many holders of a role one notification may reach.
+     *
+     * An escalation to "HR" in an institute with forty HR users must not become
+     * forty notifications about one leave request. Bounded and repeatable beats
+     * unbounded; an on-call rota is a product decision nobody has taken.
+     */
+    private const MAX_ROLE_RECIPIENTS = 5;
+
+    /**
      * @return array<int, array{user_id:int, reason:string}>
      */
     public function forEvent(object $event): array
@@ -57,6 +67,14 @@ class RecipientResolver
             // certificate row exists before the event is emitted, so this
             // user_id is our record, not a caller's claim.
             'certification.issued'      => $this->subjectOfEvent($payload, 'certificate_holder'),
+
+            // HRIT leave, Sprint 7 (F-128). See the three methods at the bottom
+            // of this class for why these can be resolved and a line manager
+            // still cannot.
+            'leave.submitted'           => $this->approversOfOpenStep($event, $payload, $tenant),
+            'leave.decided'             => $this->leaveApplicant($event, $payload, $tenant),
+            'leave.escalated'           => $this->escalationTargets($event, $payload, $tenant),
+
             default                     => [],
         };
 
@@ -149,6 +167,101 @@ class RecipientResolver
         $userId = (int) ($payload['user_id'] ?? $payload['subject_user_id'] ?? 0);
 
         return $userId > 0 ? [['user_id' => $userId, 'reason' => $reason]] : [];
+    }
+
+    // ── HRIT leave, Sprint 7 ────────────────────────────────────────────────
+
+    /**
+     * THE PEOPLE WHOSE TURN IT IS. Not "the manager", which is why this ships.
+     *
+     * The rule at the top of this class stands: a notification whose only
+     * plausible recipient is a line manager is deferred, because there is no org
+     * chart to resolve one from. This is not that. hrms_leave_approval_steps
+     * records the exact ROLE that must decide THIS request, frozen when it was
+     * submitted, and role_key resolves that role to real users in this tenant.
+     * The recipient is read from our own record of who is being waited on.
+     *
+     * ONE SOURCE OF TRUTH FOR "WHOSE TURN". This reads the same pending step
+     * that LeaveRequestApiController::decision() reads to decide who may act.
+     * Two answers to that question would eventually disagree, and the version
+     * that told the wrong person is the one nobody would notice.
+     */
+    private function approversOfOpenStep(object $event, array $payload, int $tenant): array
+    {
+        $leaveId = (int) ($payload['leave_id'] ?? $event->entity_id ?? 0);
+
+        if ($leaveId <= 0) {
+            return [];
+        }
+
+        $step = DB::table('hrms_leave_approval_steps')
+            ->where('leave_id', $leaveId)
+            ->where('sub_institute_id', $tenant)
+            ->where('status', 'pending')
+            ->orderBy('step_order')
+            ->first();
+
+        if (!$step) {
+            return [];
+        }
+
+        return $this->holdersOfChainRole($step->approver_role, $tenant, 'leave_approver');
+    }
+
+    /** The person who asked for the leave, and is waiting to hear. */
+    private function leaveApplicant(object $event, array $payload, int $tenant): array
+    {
+        $userId = (int) ($payload['employee_id'] ?? 0);
+
+        if ($userId === 0 && $event->entity_id) {
+            $userId = (int) DB::table('hrms_emp_leaves')
+                ->where('id', (int) $event->entity_id)
+                ->where('sub_institute_id', $tenant)
+                ->value('user_id');
+        }
+
+        return $userId > 0 ? [['user_id' => $userId, 'reason' => 'leave_applicant']] : [];
+    }
+
+    /**
+     * Whoever escalate_to resolves to - the people who can now act on it.
+     *
+     * Escalating without telling them is a row in a table, not an escalation.
+     */
+    private function escalationTargets(object $event, array $payload, int $tenant): array
+    {
+        $role = (string) ($payload['to_role'] ?? '');
+
+        return $role === '' ? [] : $this->holdersOfChainRole($role, $tenant, 'leave_escalation_target');
+    }
+
+    /**
+     * Everyone in this tenant who holds a chain role.
+     *
+     * Capped, and the cap is deliberate: an escalation to "HR" in an institute
+     * with forty HR users should not become forty notifications about one leave
+     * request. The first few by id is arbitrary but bounded and repeatable;
+     * a proper on-call rota is a product decision nobody has taken.
+     */
+    private function holdersOfChainRole(string $chainRole, int $tenant, string $reason): array
+    {
+        $roleKeys = LeaveApprovalWorkflow::roleKeysFor($chainRole);
+
+        if ($roleKeys === []) {
+            return [];
+        }
+
+        $ids = DB::table('tbluser as u')
+            ->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
+            ->where('u.sub_institute_id', $tenant)
+            ->where('u.status', 1)
+            ->whereIn('p.role_key', $roleKeys)
+            ->orderBy('u.id')
+            ->limit(self::MAX_ROLE_RECIPIENTS)
+            ->pluck('u.id')
+            ->all();
+
+        return array_map(fn ($id) => ['user_id' => (int) $id, 'reason' => $reason], $ids);
     }
 
     // ── plumbing ────────────────────────────────────────────────────────────

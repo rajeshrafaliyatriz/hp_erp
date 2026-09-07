@@ -749,9 +749,47 @@ if (!function_exists('SearchChainSubject')) {
                 $empData->where('tbluser.status', 1);
             }
 
+            /*
+             * F-132. WHO IS ALLOWED TO SEE THE WHOLE INSTITUTE.
+             *
+             * This was a hardcoded list of PROFILE DISPLAY NAMES, and anyone not
+             * on it was narrowed to getSubCordinates() - which returns the caller
+             * plus anyone whose tbluser.employee_id points at them.
+             *
+             * The list is the same class of defect as F-104: it keys on a label a
+             * tenant can edit, and it is matched case-sensitively, so it missed
+             * almost everyone it was meant to admit. Measured on live before this
+             * change, Monthly Payroll returned:
+             *
+             *   administrator  ->   2 of tenant 3's 122 employees
+             *   hr_manager     ->   1
+             *
+             * Payroll was being run for two people. The screen showed no error,
+             * because a short list is not obviously a truncated one.
+             *
+             * The list is KEPT - other callers and older sessions still pass those
+             * names, and removing it would narrow people it currently admits. What
+             * is added is the stable identifier: an administrator or an HR role
+             * sees the institute, which is what the payroll routes' own
+             * `hrit.role:admin,hr` gate already says they may.
+             *
+             * ONLY ONE CALL SITE reaches this branch - PayrollController's
+             * monthlyPayrollCreate is the only caller that passes both
+             * $userProfileName and $profileUserId; every other caller passes four
+             * arguments or fewer, so $SubCordinates stays empty for them and their
+             * behaviour is untouched.
+             */
             $profileArr = ["Admin","Super Admin","School Admin","Assistant Admin"];
-            $SubCordinates = [];    
-            if($userProfileName!='' && !in_array($userProfileName,$profileArr) && $profileUserId!=''){
+
+            $callerRoleKey = $profileUserId !== '' && $profileUserId !== null
+                ? \App\Support\RoleKey::forUserId((int) $profileUserId)
+                : null;
+
+            $seesWholeInstitute = in_array($userProfileName, $profileArr, true)
+                || in_array($callerRoleKey, ['administrator', 'hr_manager', 'hr_executive'], true);
+
+            $SubCordinates = [];
+            if($userProfileName!='' && !$seesWholeInstitute && $profileUserId!=''){
                 $SubCordinates = getSubCordinates($sub_institute_id,$profileUserId);
             }
             $empData = $empData->when($employee_id!='',function($query) use($employee_id){
@@ -769,11 +807,34 @@ if (!function_exists('SearchChainSubject')) {
             ->get()
             ->toArray();
 
+            /*
+             * F-121. ONE QUERY FOR THE DEPARTMENT NAMES, not one per employee.
+             *
+             * This loop ran a separate SELECT against hrms_departments for each
+             * employee it returned. For tenant 3's 122 active employees that is
+             * 122 round trips to a database on another host - measured at
+             * 39.7 ms each - for a lookup table with a handful of rows.
+             *
+             * It matters more than the count suggests because this helper is
+             * SHARED: monthly payroll, the payroll register and several HRMS
+             * screens all call it, so the same waste was paid on each of them.
+             * Sprint 2 collapsed monthly payroll's ~3,172-query attendance loop
+             * and Sprint 8 collapsed its per-employee payslip lookup; this is
+             * the same defect one layer down, in code neither of those touched.
+             *
+             * Behaviour is unchanged, including the fallback: an employee whose
+             * department is missing, inactive, or belongs to another tenant
+             * still reads '-' rather than a name they should not see.
+             */
+            $departmentNames = DB::table('hrms_departments')
+                ->where('sub_institute_id', $sub_institute_id)
+                ->where('status', 1)
+                ->pluck('department', 'id');
+
             $empDatas=[];
             foreach($empData as $key => $value){
-                $dep = DB::table('hrms_departments')->where('sub_institute_id',$sub_institute_id)->where('id',$value['department_id'])->where('status',1)->first();
                 $empDatas[$key] = $value;
-                $empDatas[$key]['department'] = (isset($dep->department)) ? $dep->department : '-';
+                $empDatas[$key]['department'] = $departmentNames[$value['department_id']] ?? '-';
             }
             return $empDatas;
         }

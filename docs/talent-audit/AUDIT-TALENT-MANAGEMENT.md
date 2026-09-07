@@ -1209,3 +1209,200 @@ asset and benefit types are `VARCHAR` + PHP const, so adding a type is never an 
   F-80/F-85).
 - Asset **return** is recorded here but offboarding does not yet read it — the exit checklist still
   says "collect equipment" without listing what was issued. The data now exists for it to.
+
+---
+
+## F-87 — no job posting anywhere had a job role, so no candidate could ever be assessed
+
+**Severity: critical.** 0 of 127 postings, across every organisation.
+
+`talent_job_postings.jobrole_id` existed as a column and **nothing ever wrote it**. Neither
+`store()` nor `update()` on `talent_jobpostingcontroller` accepted the field.
+
+That is not a cosmetic gap. Candidate assessment resolves its exam template through exactly this
+column — `blueprintFor()` reads the posting's `jobrole_id` and matches a blueprint on it. With the
+column NULL everywhere, **every invitation failed** with *"No assessment blueprint matches this
+role"* no matter how many blueprints HR created. The whole assessment round was unreachable, and the
+error message pointed at the wrong cause.
+
+### The id-space trap underneath it
+
+The posting form is *already* a job-role picker. It just throws the id away and sends the role's
+**name** as `title`.
+
+It could not have done otherwise. The picker reads **`s_user_jobrole`** (269 tenant rows); the column
+references **`s_jobrole`** (3,347 catalogue rows). The ids collide meaninglessly — forwarding the
+picker's id would have pointed every posting at an unrelated role. The **names** do correspond: all
+269 tenant role names exist in the catalogue, so the name is the only safe bridge.
+
+**Fixed** by resolving it server-side in `resolveJobroleId()`: an explicit `jobrole_id` wins,
+otherwise the title is matched against `s_jobrole`. On tenant 6, **10 of 11 posting titles resolve**,
+so almost every existing posting acquires its role on the next save with no backfill and no form
+change.
+
+`update()` also **validated nothing at all** — it wrote whatever it was handed. Harmless for free
+text, not for a foreign key: a nonexistent role id was accepted, stored, and then silently matched no
+template, reading on screen as *"no template for this role"* for a role that does not exist. It now
+validates the referential fields only, so the partial-update rule F-69b exists to protect is
+untouched.
+
+**Proved 7/7** on a real tenant-6 posting, restored afterwards:
+
+```
+the form sends the role NAME and no id      -> catalogue id 1057 resolved and stored   PASS
+it is the GLOBAL s_jobrole id                                                          PASS
+a status-only save does not touch it (F-69b)                                           PASS
+an explicit jobrole_id still wins over the title                                       PASS
+a job role that does not exist is refused                              422, was 200    PASS
+```
+
+---
+
+## F-88 — the assessment round had no screen, so a working feature was unreachable
+
+**Severity: critical.** Reported by the user: *"there is not any separate assessment option in the
+assessment page where HR can generate exam for special candidates."*
+
+Everything behind the round existed and was correct: paper generation from a blueprint, the
+64-character magic link, the AI marking, the marks-not-percent pass decision, the automatic move to
+`Interview Scheduled`. The **setup** had no UI. `/talent/assessment/blueprints` existed as an API and
+even as a typed TypeScript service — and `grep Blueprint` across the entire frontend hit only
+`services/talent/recruitment.ts` and `types/recruitment.ts`. **No component.**
+
+So: **0 blueprints in the installation**, and the *Invite to assessment* button on the candidate card
+failed every single time it was pressed, everywhere, since it shipped.
+
+HR also looked in a reasonable place and found nothing. The Competency **Assessment** screens are for
+existing employees; candidate assessment was reachable only from a candidate card in Recruitment.
+
+### Built: a Candidate Assessments tab on the Assessment sub-module
+
+Placed where HR looked for it. Two halves, leading with the one that unblocks the other:
+
+- **Results** — every assessment sent, with **who sent it**, the exam and its question types, stage,
+  score against the qualifying mark, outcome, and the sent/marked dates. Six tiles above it.
+- **Exam templates** — the blueprint each role's exam is built from: which kinds of question
+  (aptitude, coding, domain knowledge, written, situational), how many, out of how many marks, the
+  qualifying mark, and a time limit.
+
+Three decisions worth naming:
+
+**The tiles are counted server-side over the filtered set.** Narrowing by status narrows the tiles
+too. A tile that disagrees with the table under it is worse than no tile.
+
+**Blockers are named before the button is pressed.** The picker reports, per candidate, whether their
+application has an email, a posting, a job role and a template — in the order an invite actually
+fails. `no_jobrole` is kept distinct from `no_blueprint` because they need different fixes, and while
+F-87 was live they were indistinguishable: HR would have been told to create a template they had
+already created.
+
+**A template can be chosen by hand.** `invite` already accepted an explicit `blueprint_id` and
+nothing used it. The picker now offers it whenever the posting cannot name the exam itself, which is
+what makes the 127 role-less postings usable without a backfill.
+
+The result view **reuses `CandidateAssessmentBlock`** — the same component the candidate card
+renders — rather than a second copy of the result view that would drift from it.
+
+**Proved 31/31** over HTTP on tenant 6, through the real path, every row restored:
+
+```
+the picker names the real blocker                             no_jobrole      PASS
+a second template for the same role is refused                naming the first PASS
+a pass mark above the total is refused                                        PASS
+the invitation is created, and a real paper written           3 questions     PASS
+a 64-character token is minted, only its hash stored                          PASS
+the report names WHO sent it                                                  PASS
+outcome is NULL, not false, before marking                                    PASS
+the tiles agree with the rows, and with the filtered rows                     PASS
+the token opens the paper with NO login                       200             PASS
+an unknown token is refused uniformly                         410             PASS
+another tenant sees none of it, and cannot delete a template  404             PASS
+```
+
+### Still open
+
+- **One template per job role.** A database constraint. There is no concept of a *round*, so an
+  aptitude round and a separate technical round for the same role cannot both exist.
+- **No per-candidate paper.** Papers are generated per role; a one-off exam for a named candidate is
+  not possible.
+- **The emailed link points at the API host.** `config('app.url')` is Laravel; `/assessment/{token}`
+  is a Next.js page. Every emailed assessment and offer link 404s. One front-end-origin config value
+  fixes both. **Not fixed here.**
+
+---
+
+## F-89 — every link emailed to a candidate pointed at the API and 404'd
+
+**Severity: critical.** Three links, all of them, since they shipped.
+
+The assessment invitation and both offer links were built the same way:
+
+```php
+$url = rtrim((string) config('app.url'), '/') . '/assessment/' . $minted['token'];
+```
+
+`app.url` is **this** application — Laravel, `http://127.0.0.1:8000`. But `/assessment/{token}` and
+`/offer/{token}` are **Next.js pages on a separate origin**, and Laravel has no route for either:
+`grep` over `routes/web.php` returns nothing for both paths, and there was no front-end-origin
+setting anywhere in `config/`.
+
+**The failure was silent in the worst possible way.** The API returned 200. The row was written. The
+token was valid for seven days. HR read *"Assessment created and emailed to the candidate"* — and the
+candidate received a dead link. Nothing in the system knew the difference, and nothing ever would
+have.
+
+### Fixed with one gate, not three string edits
+
+`App\Support\CandidateLink`, modelled on `MailGate` for the same reason that class exists: a
+per-call-site fix leaves the next candidate-facing link free to repeat the mistake, with no moment at
+which anyone would notice.
+
+`FRONTEND_URL` when set; otherwise `app.url`, which reproduces the previous behaviour exactly — an
+installation that has not set the variable is no worse off than before, and one that has is fixed.
+
+### When the origin is still wrong, the system says so
+
+`pointsAtApi()` lets each caller tell HR the truth rather than report a success. The two cases are
+handled differently on purpose:
+
+| Email | Behaviour | Why |
+|---|---|---|
+| Assessment invitation | **Held back.** Link still returned for HR to copy. | The email is nothing *but* the link. |
+| Offer letter | **Sent, with the link dropped.** | It carries the letter as an attachment; sending the letter beats sending neither, and `OfferLetterMail` already renders "someone will be in touch" without a URL. |
+| Offer link re-issue | **Held back.** Link still returned. | Also nothing but a link. |
+
+### Proved 21/21, `.env` restored byte-for-byte
+
+Through the **offer** path, which mints the same kind of link and calls no model — the assessment
+path needs DeepSeek to write a paper first and that account is at its balance floor.
+
+```
+FRONTEND_URL wins when set                                              PASS
+a trailing slash is trimmed; whitespace counts as unset                 PASS
+blank falls back to APP_URL, exactly as before this existed             PASS
+the emailed link points at localhost:3000, not 127.0.0.1:8000           PASS
+with FRONTEND_URL unset: link still minted, NOT reported as emailed,
+  and the reason names FRONTEND_URL                                     PASS
+re-issuing updates the same row rather than piling up                   PASS
+```
+
+### The invariant is now asserted, not the three call sites
+
+`phase3-smoke.php` gained **"NO CANDIDATE LINK IS BUILT FROM THIS API ORIGIN"**, beside the
+mail-gate check and built the same way — it scans `app/` for any line carrying a candidate path
+*and* `config('app.url')`.
+
+It carries its own known-positive and known-negative, and was verified by **reintroducing the defect
+in a throwaway file**: `FAIL — 1 file(s) build a candidate link from the API origin:
+ZzRegressionProbe.php`. Removing the file returned it to `PASS — 14 file(s) scanned, all routed
+through CandidateLink`.
+
+One detail worth recording: the guard's first pattern only matched the **old** shape
+(`'/assessment/'`), so after the fix it found zero files and reported *"the scan is broken, not the
+code clean"* — the SKIPPED branch doing its job. The pattern now matches both shapes.
+
+### Not covered
+
+`/verify/certificate/{code}` in `LmsLearningController` is also built from `app.url`, but that page
+exists on **neither** side — it is a dangling link, a separate defect, and changing its origin would
+not make it work.
