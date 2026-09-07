@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\school_setupModel;
 use App\Models\settings\instituteDetailModel;
 use Illuminate\Http\Request;
@@ -16,6 +17,37 @@ use Illuminate\Support\Facades\DB;
 
 class instituteDetailController extends Controller
 {
+    /**
+     * G-SEC-29. THE TENANT COMES FROM THE TOKEN.
+     *
+     * ── WHAT THIS CONTROLLER WAS DOING ──────────────────────────────────────
+     *
+     * Every API branch read `$request->get('sub_institute_id')`, so the caller
+     * chose whose data they received. DEMONSTRATED before the change, with a
+     * read and never a write: user #1 of tenant 1, holding a valid tenant-1
+     * token, asked for `sub_institute_id=3` and got HTTP 200 with all three of
+     * tenant 3's compliance records AND 122 of tenant 3's employees, usernames
+     * included - because index() also passes the same value to
+     * employeeDetails().
+     *
+     * `update()` and `destroy()` were worse in a quieter way: they never read a
+     * tenant at all and filtered `master_compliance` on `id` alone, so any
+     * authenticated user could edit or soft-delete any organisation's
+     * compliance record by guessing an id.
+     *
+     * This is the `session() ?? $request` shape the sibling controller's note
+     * describes: it leaks only when there is no session - which is every API
+     * call, i.e. every call the product's own frontend makes.
+     *
+     * The session path is left alone. Blade still serves the old admin UI with a
+     * real session, and there the tenant is already the signed-in user's.
+     *
+     * ONE IMPLEMENTATION, NOT THIRTEEN - apiTenantId() is called directly from
+     * ResolvesApiIdentity rather than wrapped per controller. See
+     * organizationDetailsController, hardened the same way.
+     */
+    use ResolvesApiIdentity;
+
 
     public function index(Request $request)
     {
@@ -32,7 +64,12 @@ class instituteDetailController extends Controller
                 'formName' => 'required',
             ]);
 
-            $sub_institute_id = $request->get('sub_institute_id');
+            // The caller's own organisation, from their token. A different
+            // sub_institute_id in the request is ignored rather than refused:
+            // a stale value in localStorage is common and must not lock a
+            // legitimate user out, and ignoring it is equally safe because it
+            // never reaches a query.
+            $sub_institute_id = $this->apiTenantId($request);
             $syear = $request->get('syear');
             $user_id = $request->get('user_id');
 
@@ -96,7 +133,9 @@ class instituteDetailController extends Controller
 
         if(in_array($type,["API","JSON"])){
             try {
-                $sub_institute_id = $request->get('sub_institute_id');
+                // The caller's own organisation, from their token. See the
+                // class docblock.
+                $sub_institute_id = $this->apiTenantId($request);
                 $syear = $request->get('syear');
                 $user_id = $request->get('user_id');
 
@@ -223,7 +262,13 @@ class instituteDetailController extends Controller
             
         }else{
               $insertData = [
-            'sub_institute_id' => $request->sub_institute_id,
+            /*
+             * The resolved tenant, not a form field. This is the web branch, so
+             * $sub_institute_id came from the session at the top of store() -
+             * but it took the value from the request body instead, which a
+             * posted form can carry whatever the session says.
+             */
+            'sub_institute_id' => $sub_institute_id,
             'organization_name' => $request->organization_name,
             'organization_code' => $request->organization_code,
             'organization_type' => $request->organization_type,
@@ -278,7 +323,9 @@ class instituteDetailController extends Controller
 
         if(in_array($type,["API","JSON"])){
             try {
-                $sub_institute_id = $request->get('sub_institute_id');
+                // The caller's own organisation, from their token. See the
+                // class docblock.
+                $sub_institute_id = $this->apiTenantId($request);
                 $syear = $request->get('syear');
                 $user_id = $request->get('user_id');
 
@@ -351,7 +398,19 @@ class instituteDetailController extends Controller
                     
                     // echo "<pre>";print_r($complainceData);exit; 
 
-                    $i = DB::table('master_compliance')->where('id',$id)->update($complainceData);
+                    /*
+                     * SCOPED BY TENANT. This filtered on `id` alone, so any
+                     * authenticated caller could rewrite another organisation's
+                     * compliance record by guessing an id. A row belonging to
+                     * somebody else now matches nothing and $i stays 0, which
+                     * the caller sees as "Failed to Update" - the same answer a
+                     * non-existent id gives, so the response cannot be used to
+                     * discover whether another tenant's record exists.
+                     */
+                    $i = DB::table('master_compliance')
+                        ->where('id', $id)
+                        ->where('sub_institute_id', $sub_institute_id)
+                        ->update($complainceData);
                 }
         }
 
@@ -375,6 +434,20 @@ class instituteDetailController extends Controller
         $syear = session()->get('syear'); 
         $i=0;
 
+        /*
+         * This method read the SESSION only, which is null on every API call -
+         * and then deleted from master_compliance by id alone. So the delete
+         * was both unscoped and, once scoped, would have matched nothing.
+         *
+         * Resolved from the token for API callers, session for Blade. If
+         * neither yields a tenant the queries below match no rows and the
+         * caller is told the delete failed, which is the correct outcome for a
+         * request that could not be attributed to an organisation.
+         */
+        if (in_array($type, ["API", "JSON"])) {
+            $sub_institute_id = $this->apiTenantId($request) ?? $sub_institute_id;
+        }
+
         if($request->has('formName')){
              // get data from department controller
              if($request->formName=="addDepartment"){
@@ -385,7 +458,11 @@ class instituteDetailController extends Controller
                 $i=1;
              }
              if($request->formName=="complaince_library"){
-                $i = DB::table('master_compliance')->where('id',$id)->update(['deleted_at'=>now()]);
+                // Scoped by tenant - see update(). This deleted by id alone.
+                $i = DB::table('master_compliance')
+                    ->where('id', $id)
+                    ->where('sub_institute_id', $sub_institute_id)
+                    ->update(['deleted_at' => now()]);
              }
             
         }

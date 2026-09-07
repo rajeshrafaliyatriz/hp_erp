@@ -57,7 +57,22 @@ if (is_array($compliance)) {
             mb_substr((string) ($row['standard_name'] ?? $row['compliance_name'] ?? ''), 0, 50));
     }
     $foreign = collect($compliance)->where('sub_institute_id', $victimTenant)->count();
-    printf("\n  -> %d of them belong to tenant %d, which the caller is NOT a member of.\n", $foreign, $victimTenant);
+    /*
+     * WHAT THIS SHOULD PRINT.
+     *
+     * Before the fix: all of tenant 3's compliance records plus 122 of its
+     * employees, usernames included - the caller chose whose data they got.
+     *
+     * After the fix: 0 foreign rows, and the caller's OWN tenant instead. The
+     * request's sub_institute_id is ignored rather than refused, which is the
+     * platform convention: a stale value in somebody's localStorage must not
+     * lock them out, and ignoring it is equally safe because it never reaches a
+     * query.
+     */
+    printf("
+  rows belonging to tenant %d (the tenant asked for): %d  ->  %s
+",
+        $victimTenant, $foreign, $foreign === 0 ? 'NO LEAK' : 'LEAK');
 } else {
     echo "\ncomplainceData not in the response. Raw keys: " . implode(', ', array_keys((array) $body)) . "\n";
     echo mb_substr($response->getContent(), 0, 400) . "\n";
