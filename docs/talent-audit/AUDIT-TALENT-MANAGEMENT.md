@@ -1406,3 +1406,106 @@ code clean"* — the SKIPPED branch doing its job. The pattern now matches both 
 `/verify/certificate/{code}` in `LmsLearningController` is also built from `app.url`, but that page
 exists on **neither** side — it is a dangling link, a separate defect, and changing its origin would
 not make it work.
+
+---
+
+## F-90 — a role advertised "apply by 7 September" was gone all of the 7th
+
+**Severity: medium.** The two halves of the same rule disagreed.
+
+The auto-close sweep in `talent_jobpostingcontroller` compared a **DATE** column against a
+**DATETIME**:
+
+```php
+->where('deadline', '<', now())      // 2026-09-07 00:00:00 < 2026-09-07 13:41:02  -> TRUE
+```
+
+So a posting closing today was marked `inactive` the moment anyone loaded the list on its closing
+day. The public careers page uses `deadline >= today`, which correctly keeps that day open — so the
+page said the role was open and the sweep had already closed it. Fixed with `now()->toDateString()`
+in **both** places the sweep appears.
+
+**Proved 3/3**: closing today stays on the page and survives the sweep; a deadline of yesterday
+still closes. The first version of this check was **vacuous** — the sweep only runs when
+`type=API` is sent and the test omitted it, so nothing ran and the assertion passed for the wrong
+reason. It was the *failing* half that exposed it.
+
+---
+
+## F-91 — the careers page had nothing for the candidate after they applied
+
+**Severity: high.** Reported by the user: *"frontend is not featuristic for the candidates,
+candidates tracking their applications"*.
+
+The public careers page listed roles, took an application, and then ended. A candidate had no way to
+learn anything afterwards except by emailing the recruiter — and the page was hand-rolled with bare
+`div`s and its own colours, so it did not read as the same product as the rest of G2G. `grep` for
+`@/components/ui/` across both careers pages returned **zero**.
+
+### Why it showed "0 open roles" — the page was right
+
+Worth recording, because it looked like a bug and was not. On production, tenant 6 has **13
+postings, every one of them `Inactive`, and every deadline already passed**. `openPostings()` requires
+`status = active` AND a deadline that has not passed, so 0 was the correct answer. The proof asserts
+the invariant rather than a number: *the page shows exactly the live postings, no more and no fewer.*
+
+### Built
+
+**A tracking link, minted on application.** `talent_application_tracking` — one row per application,
+`Str::random(64)` with only the sha256 stored, 90-day expiry.
+
+**It is deliberately NOT single-use.** The offer and assessment links are consumed because each opens
+a decision taken once. This one opens a *status*, which the candidate has every reason to re-read
+next week; burning it would push them straight back to phoning the recruiter, which is the thing it
+exists to stop. Views are counted, not consumed.
+
+**The link is returned as well as emailed.** If mail is off for the organisation, or slow, or lands
+in spam, the confirmation screen still shows it with a copy button. Hiding a candidate's only route
+back behind "check your inbox" would be the whole point missed.
+
+### What the tracking page will not say
+
+| Shown | Withheld |
+|---|---|
+| A coarse stage — Applied / Screening / Assessment / Interview / Offer | The internal status. "Pending Review" and "Shortlisted" both read as *Screening* |
+| That an assessment is **waiting** | Its **score**. A candidate must not read a mark before the recruiter has decided what to do with it |
+| That an offer exists, and its start date | The letter, which stays behind its own single-use link |
+| Their own application | Any other application, recruiter name, or interview feedback |
+
+The stage map covers all nine of `talent_jobapplicationcontroller::STATUSES` exactly, so a real
+status can never fall through to the default and show "Applied" while a recruiter is looking at
+"Offered". `Rejected` is deliberately absent from the map: it is not a stage, it is an end, and
+`timeline()` renders it as closed with **no current step** rather than placing it on the track.
+
+### Redesigned on the design system
+
+Both careers pages now use `Card`, `Badge`, `Button`, `Input` and `Select` from `components/ui`, so
+the page a candidate sees is recognisably the same product HR uses. Added: a proper company header
+with initials, industry, address and website; open-role, team and location counts; and search plus
+department / location / employment-type filters, which appear only once there are more than three
+roles and are built **from the postings themselves**, so no filter is ever offered that would return
+an empty list.
+
+### Proved 27/27 (tracking) and 19/19 (the whole journey)
+
+```
+the link opens with NO login, and again on a second read   PASS  view_count=2, not consumed
+unknown, expired and malformed all answer 410 alike        PASS  same message, no probing
+re-issuing kills the previous link                         PASS  still exactly one row
+no internal status, no score, no other application ids     PASS
+publishing a role puts it on the page                      PASS  count went up by exactly one
+moving the candidate moves their timeline                  PASS  Screening -> Interview
+a rejection closes it with no current step                 PASS
+```
+
+Migration ran one file at a time on **both** hosts and was proved equal: 12 columns, 4 indexes,
+widest index 256 bytes, no `json`, no `ENUM`. `down()` refuses to drop the table while it holds
+links candidates are using. Every test row removed, and the real posting restored by a shutdown
+handler after an earlier run died mid-test and left a closed role advertised.
+
+### Still open
+
+- **Nothing surfaces the tracking link to HR.** A candidate who loses the email has to be sent a new
+  one, and there is no screen that does it.
+- The **`/verify/certificate/{code}`** link in `LmsLearningController` still points at a page that
+  exists on neither side (carried from F-89).

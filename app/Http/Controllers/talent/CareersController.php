@@ -3,8 +3,13 @@
 namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
+use App\Services\Talent\ApplicationTrackingService;
+use App\Support\CandidateLink;
+use App\Support\MailGate;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 
@@ -219,10 +224,50 @@ class CareersController extends Controller
             'updated_at'       => now(),
         ]);
 
+        /*
+         * The candidate's only way back to their own application.
+         *
+         * Minted even when the email cannot go out, and returned in the
+         * response, so the page can show the link on screen rather than leaving
+         * somebody with no route at all if mail is off for this organisation.
+         */
+        $tracking = app(ApplicationTrackingService::class)
+            ->mint((int) $applicationId, (int) $org->sub_institute_id, $candidateId);
+
+        $trackUrl = CandidateLink::to('careers/track', $tracking['token']);
+
+        $emailed = false;
+        if (!CandidateLink::pointsAtApi() && MailGate::allowedForTenant((int) $org->sub_institute_id)) {
+            try {
+                Mail::raw(
+                    'Hello ' . $request->input('first_name') . ",\n\n"
+                    . 'Thank you for applying for ' . $posting->title . ' at '
+                    . $org->organization_name . ".\n\n"
+                    . "You can follow your application here at any time:\n\n"
+                    . $trackUrl . "\n\n"
+                    . 'This link is personal to you and works until '
+                    . $tracking['expires_at']->format('j M Y') . ".\n",
+                    function ($m) use ($request, $posting) {
+                        $m->to($request->input('email'))
+                          ->subject('We have your application: ' . $posting->title);
+                    }
+                );
+                $emailed = true;
+            } catch (\Throwable $e) {
+                // A failed send must never lose the application or the link.
+                Log::error('Application tracking email failed: ' . $e->getMessage());
+            }
+        }
+
         return response()->json([
             'status'  => 1,
             'message' => 'Thank you. Your application has been received.',
-            'data'    => ['application_id' => $applicationId],
+            'data'    => [
+                'application_id' => $applicationId,
+                'track_url'      => $trackUrl,
+                'track_expires'  => $tracking['expires_at']->toDateString(),
+                'emailed'        => $emailed,
+            ],
         ], 201);
     }
 
@@ -314,6 +359,128 @@ class CareersController extends Controller
             })
             ->orderByDesc('p.created_at')
             ->select(array_merge(self::POSTING_PUBLIC, [DB::raw('d.department as department_name')]));
+    }
+
+
+    /**
+     * GET /api/careers/track/{token}
+     *
+     * One candidate's own application. PUBLIC and unauthenticated - the token IS
+     * the credential, exactly as it is for the offer and assessment links.
+     *
+     * ── WHAT IT DELIBERATELY DOES NOT RETURN ────────────────────────────────
+     *
+     * No internal status string, no recruiter names, no interview feedback, no
+     * other applications by the same person, and no assessment SCORE. The
+     * candidate is shown a coarse stage and whether an assessment is waiting -
+     * enough to know where they stand, nothing that belongs to the hiring team's
+     * private deliberation.
+     */
+    public function track(Request $request, string $token)
+    {
+        $tracking = app(ApplicationTrackingService::class);
+        $resolved = $tracking->resolve($token);
+
+        if (!$resolved['row']) {
+            // 410 and one message for unknown, expired and malformed alike, so
+            // the endpoint cannot be used to test whether a token ever existed.
+            return response()->json([
+                'status'  => 0,
+                'message' => 'This tracking link is no longer valid. '
+                    . 'Links expire, and a new one replaces the last. '
+                    . 'Ask the hiring team to send you a fresh one.',
+            ], 410);
+        }
+
+        $link = $resolved['row'];
+
+        $application = DB::table('talent_job_applications as a')
+            ->leftJoin('talent_job_postings as p', function ($join) use ($link) {
+                $join->on('p.id', '=', 'a.job_id')
+                     ->where('p.sub_institute_id', '=', $link->sub_institute_id);
+            })
+            ->leftJoin('hrms_departments as d', function ($join) use ($link) {
+                $join->on('d.id', '=', 'p.department_id')
+                     ->where('d.sub_institute_id', '=', $link->sub_institute_id);
+            })
+            ->where('a.id', $link->application_id)
+            ->where('a.sub_institute_id', $link->sub_institute_id)
+            ->whereNull('a.deleted_at')
+            ->first([
+                'a.id', 'a.first_name', 'a.last_name', 'a.email', 'a.status', 'a.applied_date',
+                'p.id as job_id', 'p.title as job_title', 'p.location', 'p.employment_type',
+                'd.department as department_name',
+            ]);
+
+        if (!$application) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'This tracking link is no longer valid.',
+            ], 410);
+        }
+
+        $org = DB::table('institute_detail')
+            ->where('sub_institute_id', $link->sub_institute_id)
+            ->whereNull('deleted_at')
+            ->first(['organization_name', 'careers_slug', 'organization_website']);
+
+        $tracking->noteView((int) $link->id);
+
+        /*
+         * Whether an assessment is WAITING - never the score.
+         *
+         * A candidate who has been marked but not told the outcome must not read
+         * it here before the recruiter has decided what to do with it.
+         */
+        $assessment = DB::table('talent_candidate_assessments')
+            ->where('application_id', $application->id)
+            ->where('sub_institute_id', $link->sub_institute_id)
+            ->whereNull('deleted_at')
+            ->first(['status', 'token_expires_at', 'submitted_at']);
+
+        // Whether an offer is out. The letter itself stays behind its own link.
+        $offer = DB::table('talent_offers')
+            ->where('application_id', $application->id)
+            ->where('sub_institute_id', $link->sub_institute_id)
+            ->orderByDesc('id')
+            ->first(['id', 'position', 'start_date', 'status']);
+
+        return response()->json([
+            'status' => 1,
+            'data' => [
+                'candidate' => [
+                    'name'  => trim($application->first_name . ' ' . $application->last_name),
+                    'email' => $application->email,
+                ],
+                'organisation' => [
+                    'name'    => $org->organization_name ?? null,
+                    'slug'    => $org->careers_slug ?? null,
+                    'website' => $org->organization_website ?? null,
+                ],
+                'application' => [
+                    'reference'    => 'APP-' . str_pad((string) $application->id, 6, '0', STR_PAD_LEFT),
+                    'job_id'       => $application->job_id ? (int) $application->job_id : null,
+                    'job_title'    => $application->job_title,
+                    'department'   => $application->department_name,
+                    'location'     => $application->location,
+                    'employment_type' => $application->employment_type,
+                    'applied_date' => $application->applied_date,
+                ],
+                'timeline' => $tracking->timeline($application->status),
+                'assessment' => $assessment ? [
+                    // 'waiting' is the only state that asks anything of them.
+                    'waiting'    => in_array($assessment->status, ['invited', 'started'], true),
+                    'submitted'  => $assessment->submitted_at !== null,
+                    'expires_at' => $assessment->token_expires_at,
+                ] : null,
+                'offer' => $offer ? [
+                    'position'   => $offer->position,
+                    'start_date' => $offer->start_date,
+                    'responded'  => in_array((string) $offer->status, ['accepted', 'declined'], true),
+                ] : null,
+                'expires_at' => $link->expires_at,
+            ],
+        ], 200);
     }
 
     /** Shape a posting for public consumption. */
