@@ -7,8 +7,6 @@ use App\Http\Controllers\Payroll\PayrollController;
 use App\Http\Controllers\AJAXController;
 use App\Http\Controllers\leave\leaveEncashmentController;
 use App\Http\Controllers\HRMS\departmentController;
-use App\Http\Controllers\HRMS\shiftMasterController;
-use App\Http\Controllers\HRMS\bulkUserShiftUpdateController;
 use App\Http\Controllers\leave\HolidayController;
 
 /*
@@ -227,8 +225,41 @@ Route::group(['prefix' => 'hrms', 'middleware' => ['auth', 'session', 'menu']], 
     Route::resource('designation_leave', HrmsLeaveController::class);
     Route::resource('leave_encashment', leaveEncashmentController::class);
     // Removed duplicate route declaration - exact duplicate of line 27.
-    Route::resource('user_shift_master', shiftMasterController::class);
-    Route::resource('user_bulk_shift_update', bulkUserShiftUpdateController::class);
+    /*
+     * F-105. REMOVED: user_shift_master, user_bulk_shift_update.
+     *
+     * Two registered admin screens that returned 500 on every call since before
+     * this audit began, because `tbluser_shift_master` and
+     * `tbluser_shift_records` have no migration and do not exist on either
+     * hp_erp deployment. Their Blade views do not exist either -
+     * resources/views/HRMS/ holds only `department/` - so creating the tables
+     * would not have un-broken them.
+     *
+     * DELETED RATHER THAN BUILT, and the reasons compound:
+     *
+     *   - they sat in THIS group, which carries ['auth','session','menu'] and no
+     *     hrit.role. Once the tables existed, any authenticated employee could
+     *     rewrite everyone's roster;
+     *   - bulkUserShiftUpdateController::store took sub_institute_id AND user_id
+     *     from the request body and updated tbluser with no tenant filter - a
+     *     cross-tenant roster writer;
+     *   - it wrote ONE start/end pair to monday..saturday, omitting Sunday. On
+     *     live, 203 active employees have a Saturday out-time that differs from
+     *     their Monday one. One call would have erased all of them;
+     *   - shiftMasterController validated `shift_title` and then read
+     *     `shift_name`, so a caller that satisfied its own validator crashed.
+     *
+     * WHAT REPLACES THEM: nothing, because nothing was lost. The per-employee
+     * roster - fourteen `time` columns on `tbluser` - is the real source, is
+     * populated for 102 of 122 active users in tenant 3, is read by
+     * AttendanceTrackingApiController::rosterForDay(), and is edited per day in
+     * the Organization module's Attendance & Schedule grid. The template layer
+     * these screens managed would have been a bulk-apply over data whose whole
+     * value is that it varies per person.
+     *
+     * Q2 asked which table was the intended shift source. Answered in Sprint 2:
+     * tbluser_shift_master. This closes F-105 by deciding not to build it.
+     */
     // Removed duplicate route declaration - exact duplicate of line 29.
     // Removed duplicate route declaration - exact duplicate of line 30.
     // Removed duplicate route declaration - exact duplicate of line 31.

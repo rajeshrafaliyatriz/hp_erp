@@ -420,7 +420,7 @@ if($type=="API"){
                        // same arithmetic - the id now lives in config/payroll.php
                        // where it can be read and changed. See Q1 before touching
                        // either branch; both are somebody's payslip.
-                       if($amount_type==1 && $Per_Flat!=0 && $value[1] > $Per_Flat && in_array((int) $sub_institute_id, config('payroll.excess_over_flat_amount_tenants', []), true)){
+                       if($amount_type==1 && $Per_Flat!=0 && $value[1] > $Per_Flat && app(\App\Services\Payroll\FlatCapRule::class)->paysExcessOverCap((int) $sub_institute_id)){
                         $amount = ($value[1]-$Per_Flat);
                        }
                        elseif($amount_type==1 && $Per_Flat!=0){ // added for another institutes on 14-05-2025
@@ -2167,10 +2167,19 @@ public function payrollTypeReport(Request $request)
 
     public function payrollTypeReportCreate(Request $request){
         $type=$request->type;
-        $sub_institute_id=session()->get('sub_institute_id');
 
-        // echo "<pre>";print_r($request->all());exit;
-        $res['selectedMonth']=$month=$request->month;
+        /*
+         * F-139. Tenant from the token first, session second.
+         *
+         * This read `session()->get('sub_institute_id')` alone, so an API caller
+         * - who has no session - resolved null. Combined with the missing tenant
+         * predicate below, the report then returned EVERY organisation's payroll
+         * to anyone who asked. payrollTenantId() is the resolver every other
+         * method in this controller already uses.
+         */
+        $sub_institute_id = $this->payrollTenantId($request);
+
+        $res['selectedMonth']=$month=\App\Traits\Helpers::canonicalMonth($request->month) ?? $request->month;
         $res['selectedYear']=$year=$request->year;
         $res['selectedPayrollType']=$payrollTypes=$request->payroll_type;
         $res['payrollHeads'] =PayrollType::where('sub_institute_id',$sub_institute_id)->orderBy('sort_order')
@@ -2184,6 +2193,23 @@ public function payrollTypeReport(Request $request)
             })
             ->join('tbluserprofilemaster as up','up.id','=','u.user_profile_id')
             ->selectRaw('emsd.*,concat_ws(" ",COALESCE(u.first_name,"-"),COALESCE(u.last_name,"-")) as emp_name,u.employee_no,up.name as profile_name')
+            /*
+             * F-139. THE TENANT PREDICATE THAT WAS NOT HERE.
+             *
+             * This filtered on month and year alone, so Payroll Type Report
+             * showed every organisation's payslip figures - names, employee
+             * numbers, gross, deductions - to any tenant that opened it. The
+             * join to tbluser is filtered on status only, not on tenant, so it
+             * did not narrow anything either.
+             *
+             * Filtered on BOTH sides: emsd for the payslip's tenant, u for the
+             * employee's. They should never disagree - and after F-133 closed
+             * the write that made them disagree, nothing new can create a row
+             * where they do. Checking both is what makes that a guarantee here
+             * rather than an assumption about somewhere else.
+             */
+            ->where('emsd.sub_institute_id', $sub_institute_id)
+            ->where('u.sub_institute_id', $sub_institute_id)
             ->where(['emsd.month'=>$month,'emsd.year'=>$year])->get()->toArray();
 
             if(empty($res['payrollData'])){
@@ -2684,10 +2710,36 @@ public function monthlyPayrollStore(Request $request)
         $sub_institute_id = $this->payrollTenantId($request);
     }
 
-    $searchedYearForLock = $request->year;
-    if (isset($request->month) && in_array($request->month, ['Jan', 'Feb', 'Mar'])) {
-        $searchedYearForLock = ($request->year + 1);
+    /*
+     * F-137. ONE SPELLING OF THE MONTH, decided here, before anything reads it.
+     *
+     * `month` is a free-form varchar and live data holds two formats - 'Aug' and
+     * 'july'. Everything downstream matches on it exactly: the duplicate-
+     * collapsing upsert below, the lock, the payslip delete, the PDF lookup and
+     * My HR's ordering. The seventeen rows stored as 'july' were invisible to
+     * every one of them, which is why F-109's fix never collapsed the duplicates
+     * it was written for.
+     *
+     * Refused rather than guessed: a month this system cannot name is not a
+     * month it should file a payslip under.
+     */
+    $month = \App\Traits\Helpers::canonicalMonth($request->month);
+
+    if ($month === null) {
+        $res = [
+            'status_code' => 0,
+            'message'     => 'Unrecognised month "' . $request->month . '". Expected one of '
+                . implode(', ', \App\Traits\Helpers::getMonths()) . '.',
+        ];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
     }
+
+    // Case-insensitive now: `in_array($request->month, ['Jan','Feb','Mar'])`
+    // filed a lowercase 'january' under the wrong payroll year.
+    $searchedYearForLock = \App\Traits\Helpers::isNextCalendarYearMonth($month)
+        ? ($request->year + 1)
+        : $request->year;
 
     /*
      * F-129. A LOCKED MONTH IS NOT WRITABLE, and this is where that is decided.
@@ -2700,12 +2752,12 @@ public function monthlyPayrollStore(Request $request)
      */
     $lock = app(\App\Services\Payroll\PayrollMonthLock::class);
 
-    if ($lock->isLocked($sub_institute_id, $request->month, (int) $searchedYearForLock)) {
-        $state = $lock->state($sub_institute_id, $request->month, (int) $searchedYearForLock);
+    if ($lock->isLocked($sub_institute_id, $month, (int) $searchedYearForLock)) {
+        $state = $lock->state($sub_institute_id, $month, (int) $searchedYearForLock);
 
         $res = [
             'status_code' => 0,
-            'message'     => $request->month . ' ' . $searchedYearForLock . ' is locked'
+            'message'     => $month . ' ' . $searchedYearForLock . ' is locked'
                 . ($state['locked_by'] ? ' by ' . $state['locked_by'] : '')
                 . ($state['locked_at'] ? ' on ' . $state['locked_at'] : '')
                 . '. Reopen the month with a reason before changing it.',
@@ -2716,6 +2768,61 @@ public function monthlyPayrollStore(Request $request)
     }
 
     $payrollVal = $request->payrollVal;
+
+    if (!is_array($payrollVal) || $payrollVal === []) {
+        $res = ['status_code' => 0, 'message' => 'No payroll rows were submitted.'];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
+    }
+
+    /*
+     * F-133, THE HALF THAT MATTERED MORE.
+     *
+     * The first fix for this finding scoped the "no payslip" NAME lookup to the
+     * tenant, which stopped the response disclosing other organisations' staff.
+     * It did not touch the write, and the write is worse: `payrollVal`'s keys
+     * are employee ids taken straight from the request and never validated,
+     * while tbluser ids are globally unique across tenants.
+     *
+     * So a tenant-3 administrator could POST payrollVal={"1":{...}} - employee 1
+     * belongs to tenant 1 - and the loop below would INSERT a payslip for that
+     * employee, filed under tenant 3, with figures the caller chose. Verified on
+     * live before this fix: it created row 34 for employee 1 under tenant 3, and
+     * the row was removed by hand.
+     *
+     * Not a disclosure. A forged payroll record for somebody else's employee.
+     *
+     * The caller's own tenant decides who may appear in the payload. Ids that do
+     * not belong to it are dropped and reported, not written - the same shape as
+     * bulkDecision()'s scope filter, which drops what the caller may not act on
+     * and reports the count so a partial application stays visible.
+     */
+    $submittedIds = array_map('intval', array_keys($payrollVal));
+
+    $ownIds = DB::table('tbluser')
+        ->whereIn('id', $submittedIds)
+        ->where('sub_institute_id', $sub_institute_id)
+        ->pluck('id')
+        ->map(fn ($id) => (int) $id)
+        ->all();
+
+    $foreignIds = array_values(array_diff($submittedIds, $ownIds));
+
+    $payrollVal = array_filter(
+        $payrollVal,
+        fn ($id) => in_array((int) $id, $ownIds, true),
+        ARRAY_FILTER_USE_KEY
+    );
+
+    if ($payrollVal === []) {
+        $res = [
+            'status_code' => 0,
+            'message'     => 'None of the submitted employees belong to this organisation.',
+        ];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
+    }
+
     $jsonVal = [];
 
     /** Employees whose month saved but whose payslip could not be produced. F-125. */
@@ -2723,20 +2830,19 @@ public function monthlyPayrollStore(Request $request)
 
     // make json for payroll head
     foreach ($payrollVal as $employee_id => $value) {
-        $jsonVal[$employee_id] = json_encode($value['payrollHead']);
+        $jsonVal[$employee_id] = json_encode($value['payrollHead'] ?? []);
     }
 
     $i = 0;
 
-      $searchedYear = $request->year;
-        if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
-            $searchedYear = ($request->year+1);
-        }
+    // Already computed above from the canonical month; kept as its own name
+    // because the loop below reads it many times.
+    $searchedYear = $searchedYearForLock;
 
     // insert payroll data
     foreach ($payrollVal as $employee_id => $value) {
         $dataArr = [
-            'month' => $request->month,
+            'month' => $month,
             'year' => $searchedYear,
             'employee_id' => $employee_id,
             'sub_institute_id' => $sub_institute_id,
@@ -2764,7 +2870,10 @@ public function monthlyPayrollStore(Request $request)
          */
         $key = [
             'employee_id'      => $employee_id,
-            'month'            => $request->month,
+            // F-137: the canonical spelling, not the raw request. This is the
+            // line that made F-109's collapse unreachable for the seventeen
+            // rows stored as 'july'.
+            'month'            => $month,
             'year'             => $searchedYear,
             'sub_institute_id' => $sub_institute_id,
         ];
@@ -2776,37 +2885,116 @@ public function monthlyPayrollStore(Request $request)
             'total_day'            => $dataArr['total_day'],
             'employee_salary_data' => $dataArr['employee_salary_data'],
             'updated_at'           => now(),
+            // WHO overwrote these figures. payrollActorId() exists for exactly
+            // this and the original write did not use it, so a corrected payslip
+            // recorded when it changed and never by whom.
+            'updated_by'           => $this->payrollActorId($request),
         ];
 
-        // The month's rows are read back here, not just the first: tenant 1 has
-        // seventeen rows for employee 1 / july 2026 on live, made by exactly the
-        // re-save this fixes. Keep the earliest (it holds the original
-        // created_at) and remove the rest, so the corrected month leaves ONE
-        // payslip behind rather than seventeen with the newest one right.
-        $existingRows = DB::table('employee_monthly_salary_data')
-            ->where($key)
-            ->orderBy('id')
-            ->pluck('id')
-            ->all();
+        /*
+         * F-138. ONE TRANSACTION, AND NOTHING IS DESTROYED.
+         *
+         * Three defects in the original block, all in the same eight lines:
+         *
+         *   - the update and the delete were not wrapped, so a failure between
+         *     them left the month with new figures on one row and stale
+         *     duplicates on the rest. deleteMonthlyPayrolls in this same file
+         *     already uses DB::transaction; this did not.
+         *   - the delete was a HARD delete of a payslip. deleted_at/deleted_by
+         *     exist on this table and were unused, so the superseded figures
+         *     were gone with no trace that they had ever been different.
+         *   - nothing recorded who did it.
+         *
+         * Money is not something to overwrite silently. The superseded rows are
+         * soft-deleted and attributed, so "what did this payslip say before, and
+         * who changed it" is answerable from the table.
+         */
+        DB::transaction(function () use ($key, $figures, $dataArr, $request) {
+            $existingRows = DB::table('employee_monthly_salary_data')
+                ->where($key)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->pluck('id')
+                ->all();
 
-        if ($existingRows !== []) {
+            if ($existingRows === []) {
+                DB::table('employee_monthly_salary_data')->insert(array_merge($key, $figures, [
+                    'created_at' => $dataArr['created_at'],
+                ]));
+
+                return;
+            }
+
+            // Keep the earliest - it holds the original created_at, so the
+            // payslip's identity survives a correction to its figures.
             $keepId = array_shift($existingRows);
 
             DB::table('employee_monthly_salary_data')->where('id', $keepId)->update($figures);
 
             if ($existingRows !== []) {
+                /*
+                 * SUPERSESSION IS RECORDED AS AN EVENT, NOT AS A TOMBSTONE ROW.
+                 *
+                 * A soft delete was the obvious answer and it is the wrong one
+                 * here: MariaDB has no partial indexes and NULLs are DISTINCT in
+                 * a UNIQUE key, so tombstoned rows would either collide with the
+                 * survivor or force deleted_at into the key - which would leave
+                 * the live rows unconstrained and defeat the index entirely.
+                 *
+                 * The before-image goes to the event store instead. g2g_event is
+                 * append-only by design (EventRecorder: "no UPDATE, no DELETE"),
+                 * AuditLogProjector::handles() returns true for every type, and
+                 * events:project runs every five minutes - so this lands in
+                 * g2g_audit_log with no new wiring.
+                 *
+                 * That closes three things at once: the "no trace" half of this
+                 * finding, the audit trail payroll never had (leave got one in
+                 * Sprint 7; attendance and payroll emit nothing), and the clean
+                 * table the unique index needs.
+                 */
+                $superseded = DB::table('employee_monthly_salary_data')
+                    ->whereIn('id', $existingRows)
+                    ->get();
+
+                try {
+                    app(\App\Services\Events\EventRecorder::class)->record(
+                        'payroll.payslip.superseded',
+                        (int) $key['sub_institute_id'],
+                        'employee_monthly_salary_data',
+                        (int) $keepId,
+                        $this->payrollActorId($request),
+                        [
+                            'employee_id' => (int) $key['employee_id'],
+                            'month'       => $key['month'],
+                            'year'        => (int) $key['year'],
+                            'kept_id'     => (int) $keepId,
+                            // The complete before-image, so the removal is
+                            // recoverable from the record rather than only from
+                            // a backup taken at the right moment.
+                            'superseded'  => $superseded->map(fn ($r) => (array) $r)->all(),
+                        ],
+                        null,
+                        'payroll.payslip.superseded:' . $key['sub_institute_id'] . ':'
+                            . $key['employee_id'] . ':' . $key['month'] . ':' . $key['year']
+                            . ':' . implode(',', $existingRows)
+                    );
+                } catch (\Throwable $e) {
+                    // The event is the trace, not the transaction. Losing it must
+                    // not lose the payroll correction - but it must be loud.
+                    Log::warning('Payslip supersession not recorded in the event store', [
+                        'kept_id' => $keepId, 'superseded' => $existingRows, 'error' => $e->getMessage(),
+                    ]);
+                }
+
                 DB::table('employee_monthly_salary_data')->whereIn('id', $existingRows)->delete();
             }
-        } else {
-            DB::table('employee_monthly_salary_data')->insert(array_merge($key, $figures, [
-                'created_at' => $dataArr['created_at'],
-            ]));
-        }
+        });
+
         $i++;
 
         // generate PDF if total_day is not 0
         if ($dataArr['total_day'] != 0) {
-            $pdfName = $this->monthlyPayrollPdf($request, $employee_id, $request->month, $searchedYear, 'storeDoc');
+            $pdfName = $this->monthlyPayrollPdf($request, $employee_id, $month, $searchedYear, 'storeDoc');
 
             // F-125. null now means "this employee has no salary structure, so no
             // payslip could be produced" rather than a fatal. Collected and
@@ -2862,22 +3050,65 @@ public function monthlyPayrollStore(Request $request)
         $res['status_code'] = 1;
         // F-109: "Inserted" was inaccurate as well as duplicating - re-saving a
         // month replaces its figures, and the message should say so.
-        $res['message'] = $i . " employee(s) saved for " . $request->month . " " . $searchedYear . ".";
+        // The canonical month, not the raw input: "saved for september 2026"
+        // when the row says 'Sep' invites exactly the confusion F-137 was about.
+        $res['message'] = $i . " employee(s) saved for " . $month . " " . $searchedYear . ".";
     }
 
-    // F-125. Named, not counted: "3 employees have no payslip" sends someone
-    // hunting; naming them is the difference between a warning and a task.
+    /*
+     * F-125. Named, not counted: "3 employees have no payslip" sends someone
+     * hunting; naming them is the difference between a warning and a task.
+     *
+     * F-133 - AND THE NAME LOOKUP IS TENANT SCOPED, which it was not when this
+     * was written in Sprint 8.
+     *
+     * The ids in $noPayslip come from $request->payrollVal, whose keys are never
+     * validated, and tbluser ids are globally unique across tenants. So the
+     * lookup below was an employee-name oracle: an HR user in tenant 1 posting
+     * payrollVal={"582":{...}} - employee 582 belongs to tenant 3 - got back
+     * "no payslip was generated for them: Vikram Sethi". Iterating ids
+     * enumerated staff names across every organisation on the platform.
+     *
+     * This sprint introduced that. The response used to be the constant
+     * "Inserted Successfully"; making it useful made it leak.
+     *
+     * Two changes, and the first is the one that matters:
+     *   - the query is filtered by tenant, so a foreign id resolves to nothing;
+     *   - ids that are not this tenant's are dropped from the reported list
+     *     entirely, so the count cannot disagree with the names either (which
+     *     was a second, cosmetic defect in the same block).
+     */
     if ($noPayslip !== []) {
-        $names = DB::table('tbluser')
+        $ownEmployees = DB::table('tbluser')
             ->whereIn('id', $noPayslip)
-            ->selectRaw("TRIM(CONCAT_WS(' ', first_name, last_name)) AS n")
-            ->pluck('n')
-            ->all();
+            ->where('sub_institute_id', $sub_institute_id)
+            ->selectRaw("id, TRIM(CONCAT_WS(' ', first_name, last_name)) AS n")
+            ->get();
 
+        // Rebuilt from what the tenant actually owns, not from what was posted.
+        $noPayslip = $ownEmployees->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        // A blank name column would otherwise render as an empty entry in the
+        // sentence - "have no payslip: , Vikram Sethi" - so fall back to the id.
+        $names = $ownEmployees
+            ->map(fn ($row) => trim((string) $row->n) !== '' ? $row->n : 'Employee #' . $row->id)
+            ->all();
+    }
+
+    if ($noPayslip !== []) {
         $res['no_payslip']     = $noPayslip;
         $res['warning']        = count($noPayslip) . ' employee(s) have no salary structure, so no payslip was '
             . 'generated for them: ' . implode(', ', $names) . '. Add a salary structure and save the month again.';
         $res['message']       .= ' ' . $res['warning'];
+    }
+
+    // F-133. Reported, not silently dropped - a save that quietly skipped rows
+    // would look like it had done more than it did. The ids are echoed back but
+    // NOT the names: naming them is the disclosure this finding is about.
+    if ($foreignIds !== []) {
+        $res['not_your_employees'] = $foreignIds;
+        $res['message'] .= ' ' . count($foreignIds) . ' submitted employee(s) do not belong to this '
+            . 'organisation and were ignored.';
     }
 
     return is_mobile($type, 'monthly_payroll.index', $res);

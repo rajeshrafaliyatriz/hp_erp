@@ -129,6 +129,25 @@ class EventCatalogue
         ],
 
         /*
+         * HRIT payroll. The module's first event of any kind - leave gained
+         * three in Sprint 7 and payroll had none, so a corrected payslip left
+         * no trace of what it used to say.
+         *
+         * Emitted when a re-save collapses duplicate rows for one employee-month,
+         * carrying the complete before-image of every row it removes. A soft
+         * delete would have been the obvious trace and is unusable here: NULLs
+         * are distinct in a MariaDB UNIQUE key, so tombstones would defeat the
+         * index that stops the duplicates recurring.
+         *
+         * AuditLogProjector is the consumer - it handles() every type, so this
+         * reaches g2g_audit_log with no new wiring. Listed explicitly anyway,
+         * because "which consumer" is the question this file exists to answer.
+         */
+        'payroll.payslip.superseded' => [
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
          * HRIT leave, added in Sprint 7 (F-128).
          *
          * These three were not in NOT_NOTIFIED, because nobody had ever taken a

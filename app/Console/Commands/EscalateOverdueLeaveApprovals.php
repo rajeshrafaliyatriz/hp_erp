@@ -36,7 +36,41 @@ class EscalateOverdueLeaveApprovals extends Command
 
     public function handle(LeaveApprovalWorkflow $workflow, LeaveNotifier $notifier): int
     {
-        $tenant = $this->option('tenant') !== null ? (int) $this->option('tenant') : null;
+        /*
+         * F-134. `(int) $this->option('tenant')` was the whole bug.
+         *
+         * (int)'abc' and (int)'0' are both 0, and 0 is not null, so it was
+         * passed through as if it were a real tenant. escalateOverdue() then
+         * applied the filter with ->when($onlyTenant, ...), and Laravel's
+         * when() skips its closure on ANY falsy value - so the tenant predicate
+         * was dropped and the sweep ran across every organisation.
+         *
+         * That is not a cosmetic mis-scope. escalateOverdue() only considers
+         * steps whereNull('escalated_at'), so the stamp is ONE-SHOT: every step
+         * it touched can never be escalated again. An operator typing
+         * `--tenant=03x` intending one institute would permanently widen HR's
+         * rights over steps in all three, with no way to undo it.
+         *
+         * Refuse the input instead of guessing at it. A tenant id is a positive
+         * integer; anything else is a typo, and a typo on an irreversible
+         * command should stop.
+         */
+        $tenant = null;
+
+        if ($this->option('tenant') !== null) {
+            $raw = trim((string) $this->option('tenant'));
+
+            if (!ctype_digit($raw) || (int) $raw < 1) {
+                $this->error(
+                    "--tenant must be a positive integer; got \"{$raw}\". "
+                    . 'Refusing rather than sweeping every tenant, because escalation cannot be undone.'
+                );
+
+                return self::FAILURE;
+            }
+
+            $tenant = (int) $raw;
+        }
 
         if ($this->option('dry-run')) {
             // A dry run must not stamp escalated_at, which is one-shot. So it asks

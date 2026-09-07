@@ -4,7 +4,7 @@
 **Auditor:** independent re-audit, module scope
 **Repos:** `hp_erp` (Laravel 12) · `g2gv0` (Next.js 16)
 **Module:** HRIT Solutions — Attendance Management, Leave Management, Payroll Management (12 sub-modules)
-**Findings:** F-87 … F-132 (continues the sequence in `FIX-PLAN-v2.md`; highest prior id was F-86)
+**Findings:** F-87 … F-141 (continues the sequence in `FIX-PLAN-v2.md`; highest prior id was F-86)
 **Status:** AUDIT ONLY. No application code was changed. Five probe rows were written to the live
 database to prove authorization holes and were removed the same session — see §9.
 
@@ -817,8 +817,35 @@ older generation of `hrms_attendances`. It belongs in the duplicate-generations 
 here.
 **Fix sketch:** the dashboard can read the `tbluser` roster today — no table needed. Create
 `tbluser_shift_master` separately so the two template screens stop 500ing.
-**Status:** Sprint 2 — dashboard now reads the real per-employee roster. The template table and its
-two screens remain broken and are **still open**.
+**Status (Sprint 2):** dashboard now reads the real per-employee roster. The template table and its
+two screens remained broken.
+
+**Status:** ✅ **CLOSED in Sprint 9 — by deletion, which is the answer here.**
+`shiftMasterController`, `bulkUserShiftUpdateController`, their two models and their routes are
+gone, with the reasoning left in a tombstone at `routes/hrms.php`. Four reasons compounded, any one
+sufficient:
+
+- their **Blade views do not exist either** (`resources/views/HRMS/` holds only `department/`), so
+  creating the tables would not have un-broken the screens;
+- they sat in a route group carrying `['auth','session','menu']` and **no `hrit.role`** — once the
+  tables existed, any authenticated employee could rewrite everyone's roster;
+- `bulkUserShiftUpdateController::store` took `sub_institute_id` **and** `user_id` from the request
+  body and updated `tbluser` with no tenant filter — a cross-tenant roster writer;
+- it wrote one start/end pair to `monday..saturday`, omitting Sunday. On live, **203 active
+  employees have a Saturday out-time that differs from their Monday one.** One call would have
+  erased every one of them.
+
+**Nothing was lost.** The per-employee roster — fourteen `time` columns on `tbluser`, populated for
+102 of 122 active users in tenant 3 — is the real source, is read by
+`AttendanceTrackingApiController::rosterForDay()`, and is edited per day in the Organization
+module's Attendance & Schedule grid. The template layer would have been a bulk-apply over data
+whose whole value is that it varies per person.
+
+> **CORRECTION (Sprint 9).** §E.0 of this audit records `Migration | no` for `hrms_in_out_times`
+> and `hrms_job_titles`. **Both migrations exist in this tree** —
+> `2025_09_11_053302_hrms_in_out_times.php` and `2025_09_11_053312_hrms_job_titles.php`. The audit
+> was describing the live host, not the repository, and did not say so. Only
+> `tbluser_shift_master` / `tbluser_shift_records` genuinely have none.
 
 #### F-106 — Validation allows 191 characters into a `varchar(30)`, returning a raw SQL error — HIGH
 **What:** the rule and the column disagree; with `STRICT_TRANS_TABLES` the result is a 500 whose body contains the database host, port and schema.
@@ -872,7 +899,33 @@ two screens remain broken and are **still open**.
 > the frontend's warning comment instead of counting the rows, which is exactly the step its
 > own ground rules require. Counting takes one query.
 
-**Status:** ✅ **CLOSED in Sprint 6.** `monthlyPayrollStore` now matches on `(employee_id, month, year, sub_institute_id)` and updates in place; where duplicates already exist the earliest row is kept (it holds the original `created_at`) and the rest removed, so a corrected month leaves **one** payslip. Proven through the real endpoint: three saves → 1 row, `40000 → 45000 → 45000`. A unique index was **not** added: the 17 pre-existing duplicates would have to be destroyed to create one, and they are only collapsed when that month is deliberately re-saved.
+**Status (Sprint 6, and it was WRONG):** ~~CLOSED in Sprint 6. `monthlyPayrollStore` now matches on `(employee_id, month, year, sub_institute_id)` and updates in place; where duplicates already exist the earliest row is kept and the rest removed, so a corrected month leaves **one** payslip.~~
+
+> **CORRECTION (Sprint 9). THE FIX COULD NEVER HAVE COLLAPSED THE 17 ROWS IT WAS WRITTEN FOR.**
+>
+> The key matched `month` as an exact string against a free-form varchar holding two formats:
+> ```
+> SELECT DISTINCT month FROM employee_monthly_salary_data  ->  'May'  'Aug'  'july'
+> the screen posts 'Jul'   (Helpers::getMonths)            'Jul' != 'july'
+> ```
+> `utf8mb4_unicode_ci` ignores case but not length, so no collation makes those equal. The
+> seventeen duplicates were spelled `july`; every query keyed on month — this upsert, the payslip
+> delete, the PDF lookup, the annual Form 16 report, the month lock, and My HR's ordering — was
+> blind to them. A save would have written an **eighteenth** row.
+>
+> **The Sprint 6 probe printed `employee-months holding more than one payslip: 1` and passed.** It
+> observed the surviving cluster and asserted nothing about it. A number printed is not a number
+> checked, and that is the lesson worth keeping from this one.
+>
+> The three-saves-to-one-row demonstration was real, but it ran on a *canonically spelled* month
+> the probe had created itself. It proved the mechanism and said nothing about the data the
+> finding was about.
+
+**Status:** ✅ **CLOSED in Sprint 9**, properly this time — see **F-137** and **F-138**. One
+canonical spelling at every boundary, a repair migration that normalised `july` → `Jul` and
+collapsed 22 rows to 6, and a **UNIQUE index** on `(sub_institute_id, employee_id, year, month)` so
+the duplicates are now impossible rather than merely unwritten. Proven: `Sep`, `september` and
+`SEP` all land on one row, correcting it each time.
 
 #### F-110 — Salary Certificate has never written a row — HIGH
 **What:** `hrms_salary_certificate` holds 0 rows across the whole live platform.
@@ -916,7 +969,32 @@ two screens remain broken and are **still open**.
 > ```
 
 **Fix sketch:** **do not change the arithmetic.** Move the id out of the expression into named configuration so the rule is visible and settable, then take the domain decision separately — see Q1, now sharpened. Sprint 1 does the first half only.
-**Status:** Sprint 1 — id extracted to `config/payroll.php`, arithmetic byte-identical. Q1 still open.
+**Status (Sprint 1):** id extracted to `config/payroll.php`, arithmetic byte-identical.
+
+**Status:** ✅ **CLOSED in Sprint 9 — as configuration, not as an answer to Q1.**
+
+`App\Services\Payroll\FlatCapRule` resolves the behaviour per organisation from `tenant_setting`
+(reused, not a new table — it already exists as `(sub_institute_id, setting_key, setting_value)` and
+`ReportingLineValidator` reads it the same way), falling back to the Sprint 1 config list, and
+finally to **clamp**.
+
+**Nobody's pay changed, and that is the whole design constraint.** Absence resolves to `clamp`,
+which is what an unconfigured tenant does today — an unset setting must never be the reason a
+payslip moves. The seeding migration writes an explicit `excess` row only for tenants already on
+the list, and only on a deployment where they exist.
+
+Proven by **equivalence rather than by improvement**: the probe asserts the new rule returns exactly
+what the old `in_array` returned, for every listed tenant plus 1, 3, 6, 7 and 999. Zero mismatches.
+
+**Q1 is still open, and this does not answer it.** Which behaviour *should* be the default is a
+domain question about somebody's contract. What changed is that it is now askable of a tenant
+instead of of a constant — and the arithmetic is untouched, exactly as this finding's own fix
+sketch required.
+
+**Not wired to a screen**, deliberately, and said out loud: HR has nowhere to change this yet.
+`setBehaviour()` exists so the setting has one writer when a screen arrives. Shipping a screen that
+silently controlled pay would be the "configuration that controls nothing" defect this module has
+already been through twice (F-89, F-124) — inverted, and worse.
 
 ---
 
@@ -974,6 +1052,53 @@ GET /monthly-payroll/create   tenant 3, 122 active employees
 **Re-verify:** `GET /monthly-payroll/create?...&user_profile_name=administrator` as each role; expect 122 for admin/hr, 403 for everyone else.
 **Status:** ✅ **CLOSED in Sprint 8.** Two changes. The controller **resolves the profile name from the caller's own record** instead of reading it from the request — "which profile am I" is an identity claim, and sending `Admin` would previously have widened the result set. And the helper now also admits `administrator`, `hr_manager` and `hr_executive` **by `role_key`**, which is what the payroll routes' own `hrit.role:admin,hr` gate already says they may see. The display-name list is **kept**, not replaced: other callers and older sessions still pass those names, and removing it would narrow people it currently admits.
 **Blast radius, checked rather than assumed:** of twelve call sites, **only this one** passes both `$userProfileName` and `$profileUserId`, so no other screen's results change. Verified after: administrator, hr_manager and hr_executive all see **122**; department_head, reporting_manager, employee and auditor all get **403** from the route gate, as before.
+
+#### F-133 — Payroll wrote and named employees of other tenants — CRITICAL
+**What:** `monthlyPayrollStore` had **no validation of any kind**, and `payrollVal`'s keys are employee ids taken straight from the request. `tbluser` ids are globally unique across tenants.
+**Where:** [PayrollController.php](../../app/Http/Controllers/Payroll/PayrollController.php) `monthlyPayrollStore` — the write loop, and the name lookup Sprint 8 added beside it.
+**Two halves, and the second is the worse one:**
+- *Disclosure* — the "no payslip" warning resolved names with an unfiltered `whereIn('id', $noPayslip)`, turning the save endpoint into an employee-name oracle across every organisation. **Sprint 8 introduced this**: the response used to be the constant `"Inserted Successfully"`, so making it useful made it leak.
+- *Forgery* — the write loop never checked whose employees these were. **Executed on live:** a tenant-3 administrator POSTed `payrollVal={"1":{…}}` — employee 1 belongs to tenant 1 — and it created row 34, a real payslip for another organisation's employee, filed under tenant 3, with figures the caller chose. Removed by hand.
+**How it was found:** the Sprint 6 review's payroll dimension, which was **never verified** — that review hit a session limit and the whole dimension was carried as "unverified, not refuted" for two sprints.
+**Re-verify:** `bash Docs/hrit-audit/_evidence/probe-sprint9.sh` — section 1.
+**Status:** ✅ **CLOSED in Sprint 9.** `payrollVal`'s keys are intersected against `tbluser` in the caller's tenant before the write loop; foreign ids are dropped and their **count** reported without their names. The name lookup is tenant-scoped. Proven: the forged write is refused, no row is created, no foreign name appears.
+
+#### F-134 — `leave:escalate --tenant=0` swept every tenant, irreversibly — HIGH
+**What:** `(int) $this->option('tenant')` — `(int)'abc'` and `(int)'0'` are both `0`, and `0` is not `null`, so it passed through as a real tenant. `escalateOverdue()` then applied the filter with `->when($onlyTenant, …)`, and Laravel's `when()` skips its closure on **any falsy value**, dropping the predicate entirely.
+**Where:** [EscalateOverdueLeaveApprovals.php:39](../../app/Console/Commands/EscalateOverdueLeaveApprovals.php#L39); `LeaveApprovalWorkflow::escalateOverdue`.
+**Impact:** not a mis-scope but an **irreversible** one. The sweep only considers steps `whereNull('escalated_at')`, so the stamp is one-shot: every step it touched can never be escalated again. An operator typing `--tenant=03x` for one institute would permanently widen HR's rights across all of them.
+**Status:** ✅ **CLOSED in Sprint 9.** The command refuses anything that is not a positive integer rather than guessing; the service tests `!== null` rather than truthiness, because the next caller will not know its safety depends on a cast in another file. Proven for `0`, `abc`, `-1`, `03x`, with the escalated count unmoved.
+
+#### F-136 — A leave request in another tenant could be hijacked by date — HIGH
+**What:** `store()`'s re-apply lookup matched `user_id` + `from_date` + status with **no `sub_institute_id`**. Every other query in the method is tenant-filtered, including the overlap check — so a foreign row was invisible to that check but was matched here and rewritten by `->update($payload)`, which carries the caller's own tenant.
+**Where:** [LeaveRequestApiController.php](../../app/Http/Controllers/Api/Leave/LeaveRequestApiController.php) `store()`.
+**Evidence — a live row this reached:**
+```
+id=221  user_id=86  leave_tenant=1  user_tenant=3  status=pending
+comment "i am not feeling well"
+```
+**And this engagement made it worse.** Sprint 6's F-127 fix added `'sent_back'` to the matched statuses, widening the set of foreign rows reachable. A fix that enlarges an unnoticed hole is worth recording as one.
+**Status:** ✅ **CLOSED in Sprint 9.** Tenant filter added. Proven: a tenant-3 caller posting user 86's date now creates a **new** row, and leave 221 is byte-identical — tenant, type, dates, comment.
+
+#### F-137 — Two spellings of the same month, and no query could see both — HIGH
+**What:** `employee_monthly_salary_data.month` is a free-form varchar holding `'May'`, `'Aug'` and `'july'`. The screen posts `'Jul'`. Length, not case, so no collation reconciles them.
+**Impact:** the mechanism behind F-109's false closure — and it reached further than the upsert: the payslip delete, the PDF lookup, the annual Form 16 report, the month lock (a lock taken as `Jul` was bypassable by posting `july`), and My HR's ordering, where `FIELD(month, 'Dec', …)` scored `'july'` as **0**. The Jan–Mar payroll-year rule was separately case-sensitive, so a lowercase `january` filed under the wrong year.
+**Status:** ✅ **CLOSED in Sprint 9.** `Helpers::canonicalMonth()` decides one spelling and **returns null rather than guessing**; the year rule moved to `isNextCalendarYearMonth()`. Migration `2026_09_07_110000` normalised the data and collapsed 22 rows to 6. Proven: `Sep`/`september`/`SEP` converge on one row; `Smarch` is refused, not filed; `january` files under 2027 exactly as `Jan` does.
+
+#### F-138 — Payslips hard-deleted with no index, no transaction and no attribution — HIGH
+**What:** the upsert's read-then-write had no unique index behind it, no transaction around its update+delete pair, a **hard** delete although `deleted_at`/`deleted_by` exist, and set `updated_at` but not `updated_by` — despite `payrollActorId()` existing for exactly that.
+**Impact:** two concurrent saves could both insert — the duplicate the change was written to stop — and a correct re-save destroyed superseded financial rows with no trace of what they said or who changed them.
+**Status:** ✅ **CLOSED in Sprint 9.** `DB::transaction` with `lockForUpdate`, `updated_by` from `payrollActorId()`, a **UNIQUE index** on `(sub_institute_id, employee_id, year, month)`, and supersession recorded as a `payroll.payslip.superseded` **event** carrying the complete before-image. A tombstone was the obvious answer and is unusable here: NULLs are distinct in a MariaDB UNIQUE key, so soft-deleted rows would have defeated the very index that stops duplicates recurring. The event route also gives **payroll its first audit trail** — `AuditLogProjector` consumes every type, so it reaches `g2g_audit_log` with no new wiring.
+
+#### F-139 — Payroll Type Report returned every tenant's payslips — HIGH
+**What:** `payrollTypeReportCreate` read `employee_monthly_salary_data` filtered on month and year alone. The join to `tbluser` filtered on `status`, not tenant, so it narrowed nothing either. It also resolved its tenant from `session()` only, so an API caller resolved `null`.
+**Impact:** names, employee numbers, gross and deductions for every organisation, to any tenant that opened the report.
+**Status:** ✅ **CLOSED in Sprint 9.** Filtered on both sides — the payslip's tenant and the employee's — with the tenant from `payrollTenantId()` (token, then session) like every other method in the controller.
+
+#### F-141 — The escalation sweep chased requests that no longer existed — MEDIUM
+**What:** `escalateOverdue()` read `hrms_leave_approval_steps` alone. The FK to `hrms_emp_leaves` is `ON DELETE CASCADE`, which sounds like protection and is **inert** — this module soft-deletes everywhere, so the cascade never fires and steps outlive their request.
+**Impact:** the only thing keeping deleted requests out of the sweep was the explicit `closeOpenSteps()` inside `cancel()` and `destroy()`. Any other route to a soft delete left steps `pending`, and the hourly sweep stamped the one-shot `escalated_at` on them and notified five HR users about requests nobody could open. **26 such steps were found on live**, every one created by this audit's own probes.
+**Status:** ✅ **CLOSED in Sprint 9.** The sweep joins the parent and skips steps whose leave is soft-deleted or no longer pending; migration `2026_09_07_100000` closed the 26. And the cause was fixed, not the symptom: probes 6 and 7 now close their steps when they soft-delete — the same probe-hygiene lesson Sprint 6 learned about consuming production data.
 
 #### F-130 — An employee cannot see their own payslip — HIGH
 **What:** not "it is hard to find" — **no route serves it**. `monthlyPayrollPdf` is registered inside `routes/hrms.php`'s `hrit.role:admin,hr` group, so the only path to a payslip is through the HR console.
