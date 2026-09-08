@@ -1509,3 +1509,185 @@ handler after an earlier run died mid-test and left a closed role advertised.
   one, and there is no screen that does it.
 - The **`/verify/certificate/{code}`** link in `LmsLearningController` still points at a page that
   exists on neither side (carried from F-89).
+
+---
+
+## F-92 — the careers slug on the live host is not the one on the app host
+
+**Severity: medium**, and it cost two rounds of the user looking at the wrong page.
+
+`institute_detail.careers_slug` differs between the two databases:
+
+| Host | Tenant | Slug | Live roles |
+|---|---|---|---|
+| app `202.47.117.220` | 6 | `scholar-clone-pvt-ltd` | 1 |
+| live `128.199.17.97` | **1** | `scholar-clone-pvt-ltd` | **0** |
+| live `128.199.17.97` | 6 | `scholar-clone-pvt-ltd-6` | 1 |
+
+The production API reads the **live** host, where **two organisations share the name "Scholar Clone
+Pvt. Ltd."** and tenant 6's slug carries a `-6` suffix because the plain one was already taken by
+tenant 1. Opening `/careers/scholar-clone-pvt-ltd` on production therefore resolved tenant 1 — right
+company name, no postings — which is exactly why it read as broken rather than as wrong.
+
+**I caused the confusion**: I read the slug off the app database and gave it out without checking it
+against the host production actually reads. The query was never at fault; `openPostings()` run
+against the live host returns Cyber Risk Manager correctly.
+
+**Not code-fixed.** The duplicate organisation name is a data question for the operator, not
+something to resolve by editing rows. Recorded so the next person checks the right host first.
+
+---
+
+## F-93 — a closing date with no opening date, and a contract type doing two jobs
+
+**Severity: medium.** Three gaps in the same form, all reported together.
+
+### The opening date field did not exist
+
+`talent_job_postings` had `deadline` and nothing else — yet the job-opening detail sheet has rendered
+`DetailField label="Opening Date" value={job.start_date}` for as long as it has existed, against a
+column that was never there. The field was permanently blank and neither the create nor the edit form
+could offer it.
+
+Added `start_date` (nullable DATE) on both hosts, with **Applications Open** on both forms, the two
+date inputs bounded against each other, and `after_or_equal` validation on create and edit. A role
+dated in the future stays off the public careers page until then while HR still sees it; NULL means
+"open on publication", so all 128 existing postings behave exactly as before.
+
+### Remote was unrepresentable
+
+`employment_type` already held Full-Time (38), Part-Time (32), Contract (29) and Internship (27) on
+the live host. There was **no remote/hybrid/on-site anywhere** — no column, under any name.
+
+Adding 'Remote' to the employment-type list would have been the obvious move and the wrong one: a
+role has a contract **and** a place, and merging the two questions makes *remote internship*
+unrepresentable. `work_mode` is therefore its own `VARCHAR(20)` + PHP const — never `ENUM`, because
+adding a fourth mode must be a deploy and not an `ALTER` on a live table. NULL reads as "not stated",
+never as On-site: guessing would put a claim on 128 adverts that nobody made.
+
+### The public form asked in free text what HR answered from a list
+
+The candidate apply form used plain text inputs for **highest education**, **experience** and
+**skills**, while `job-posting-form` and `candidate-application-form` both had dropdowns — with the
+same six education levels written out by hand in each. A third copy was about to appear.
+
+- One `lib/recruitment-vocabulary.ts` now holds employment types, work modes, education and
+  experience levels; both forms import it. The value and the label are the same string on purpose —
+  every one of these columns already stores the display text, so introducing codes now would orphan
+  126 postings.
+- Education and experience became dropdowns on the public form, so a candidate's answer and a
+  recruiter's filter share one vocabulary.
+- **Skills became multiple choice**, seeded from the skills *that advert* asks for: one tap for the
+  common case, free entry for anything else, de-duplicated case-insensitively so "React" and "react"
+  cannot both be added. It was one comma-separated box, which is how a recruiter ended up with
+  "React.js", "ReactJS" and "react" as three different skills.
+
+### Proved 13/13 (opening date) and 16/16 (work mode)
+
+```
+opening AFTER closing is refused                     422, create and edit
+a role scheduled for later is NOT public yet         HR still sees it
+a REMOTE INTERNSHIP saves                            both facts kept, not merged
+an unknown mode is refused                           422
+no work mode reads as null, never "On-site"          128 postings unaffected
+the TypeScript list matches the PHP const exactly    On-site, Hybrid, Remote
+```
+
+Both migrations ran one file at a time on **both** hosts and were verified identical. `down()` on
+each refuses to run while any posting uses the column — dropping `work_mode` would silently remove
+"Remote" from adverts that promise it.
+
+### Still open
+
+- **`FRONTEND_URL` is not set on the production server**, so every candidate link — offer, assessment
+  and now tracking — is built from `APP_URL` and points at `hp.triz.co.in`, which has no page routes.
+  The fallback is behaving as designed (F-89) and the emails are held back, but the link shown on
+  screen is unopenable until that variable is set.
+
+### F-93 amended — the application form, and the careers page redesign
+
+Two follow-ups from the same report.
+
+**`employment_type` was on the applications table from the beginning and the
+public form never sent it.** The controller accepted it, the column existed, and
+every public application stored it empty — a candidate had no way to say what
+they were looking for. Added as a dropdown, together with `work_mode` (a new
+nullable column on `talent_job_applications`, both hosts) so the pair is
+symmetric with the posting, which now states both.
+
+Both are now validated against the **same PHP consts the posting form offers** —
+`talent_jobpostingcontroller::EMPLOYMENT_TYPES` and `::WORK_MODES` — so a
+candidate's "Part-Time" and a recruiter's filter are one string. `Freelance
+Ninja` is refused 422 rather than stored. `EMPLOYMENT_TYPES` had to be extracted
+into a const to make that possible; it existed only as a hardcoded array in a
+`<Select>`.
+
+**The careers listing was redesigned around what a candidate scans for**, on the
+product's own tokens rather than a second palette — someone hired through it
+should recognise the software they applied in. The masthead is the one place
+anything extra is spent, because it is the only moment that has to say "a real
+company, hiring".
+
+Every badge on that page is a fact, not decoration: **New** at 14 days or less
+since posting, **Closing soon** at 7 days or fewer, **Remote** only when the
+posting says so. A badge that fires on nothing teaches a reader to ignore all
+badges. The four counters (roles, teams, locations, remote) hide themselves at
+zero for the same reason. Filters now appear at more than one role rather than
+more than three, and gained a work-mode filter.
+
+**Proved 12/12** — the advert's own skills reach the form as suggestions; type,
+mode, education, experience and skills all store; an unlisted type is refused;
+and the TypeScript list matches the PHP const exactly.
+
+One measurement worth recording: repo-wide eslint read 103 rather than the
+baseline 102, and **none of it is in any file changed here** — checked
+mechanically, file by file. The extra problem is in
+`components/settings/module-configuration-page.tsx`, written during this session
+by other in-flight work.
+
+---
+
+## F-94 — every search in the Employee Directory failed
+
+**Severity: high.** Typing anything into the search box returned a red SQL error.
+
+```
+SQLSTATE[42S22]: Unknown column 'u.full_name' in 'where clause'
+```
+
+`EmployeeDirectoryController` searched `u.full_name` as though it were a column. It is not — and the
+docblock four lines above says so in as many words:
+
+> *full_name is not a column on either database - it is an Eloquent accessor appended by tbluserModel,
+> so a query-builder select cannot produce it. The frontend reads it, so it is built in SQL here.*
+
+It is a **SELECT alias**, and MySQL evaluates `WHERE` before the select list, so the alias never
+resolves. The constant that builds the expression and the clause that searched it sat in the same
+file, and nothing tied them together.
+
+**Fixed** by splitting the constant: `FULL_NAME_EXPR` is the expression, `FULL_NAME_SQL` is that same
+expression with `as full_name` appended. The search now uses `orWhereRaw(self::FULL_NAME_EXPR ...)`,
+so the two cannot drift apart again.
+
+### The clause is not redundant, which is why it was there
+
+Deleting it would have been the smaller fix and the wrong one — `first_name` and `last_name` each
+hold half of a full name, so neither `LIKE` can match a two-word search on its own. Measured on
+tenant 6 against the real row (first `Milan`, last `Baldaniya`):
+
+```
+searching "milan baldaniya"
+  first_name OR last_name alone     0 rows
+  the full-name expression          1 row
+```
+
+**Proved over HTTP** on `GET /api/employees-management`:
+
+```
+q=<empty>            200   23 rows      the whole tenant
+q=milan              200    1 row
+q=milan baldaniya    200    1 row       only the expression can match this
+q=clone pvt          200    0 rows      no false positives
+```
+
+A sweep of `app/Http/Controllers` found no other place searching a select alias in a where clause.
