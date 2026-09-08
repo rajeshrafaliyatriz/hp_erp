@@ -301,6 +301,54 @@ if($type=="API"){
         $res['message'] = "Failed to Delete";
         if ($id > 0) {
             // PayrollType::where('id', $id)->delete();
+            /*
+             * F-150. REFUSE TO DELETE A HEAD THAT SALARIES STILL DEPEND ON.
+             *
+             * Deleting a pay head removes it from the Payroll Type list (:131
+             * filters deleted_at) but NOT from the calculation, which selects
+             * on status alone. So a deleted head keeps being applied to pay,
+             * invisibly, forever.
+             *
+             * Six of the eight salary structures on live already reference
+             * soft-deleted heads, and they are load-bearing: excluding them
+             * would take tenant 1's employees 1, 2 and 3 from a net of 3500 to
+             * 1000 - a 71% cut - because heads 1 and 5 are deleted ALLOWANCES
+             * their structures still depend on.
+             *
+             * So the calculation is deliberately NOT changed here: that would
+             * move real salaries and is Q10, for the customer. What is fixed is
+             * the cause - a head that live structures reference can no longer
+             * be deleted, so the situation cannot get worse while they decide.
+             *
+             * Checked in PHP rather than with a JSON query: employee_salary_data
+             * is keyed by head id, and one deployment runs MariaDB 10.1, which
+             * has no JSON functions.
+             */
+            $dependent = 0;
+
+            foreach (DB::table('employee_salary_structures')
+                        ->where('sub_institute_id', $sub_institute_id)
+                        ->whereNull('deleted_at')
+                        ->pluck('employee_salary_data') as $json) {
+                $heads = json_decode((string) $json, true) ?: [];
+                if (array_key_exists((string) $id, $heads)) {
+                    $dependent++;
+                }
+            }
+
+            if ($dependent > 0) {
+                $res['status_code'] = 0;
+                $res['message'] = 'This pay head is still used by ' . $dependent
+                    . ' salary structure(s). Remove it from those structures first - '
+                    . 'deleting it here would leave it silently applied to their pay.';
+
+                if ($type == "API") {
+                    return response()->json($res, 409);
+                }
+
+                return redirect('payroll-type')->with($res);
+            }
+
             // F-146: without the tenant clause any admin or HR user could
             // soft-delete another organisation's pay head by id.
             $delete = PayrollType::where('id', $id)
@@ -1345,6 +1393,35 @@ if($type=="API"){
         $year = $request->year;
         $deductAmt = $request->deductAmt;
         $i=0;
+        /*
+         * F-143. The calculation matches this table's `month` EXACTLY, against
+         * the spelling the screen posts ('Aug'). Eleven of the twelve rows on
+         * live are spelled "8", "2" or "3" and can therefore never be found -
+         * adjustments worth up to 50,000 each, entered on a screen that
+         * reported success and silently ignored by every payroll run since.
+         *
+         * That is F-137's defect in a second table, and F-137's repair did not
+         * reach it. This is the same guard F-137 put on the payslip: one
+         * canonical spelling, and a month this system cannot name is not a
+         * month it will file an adjustment under.
+         *
+         * The eleven existing rows are NOT repaired here. "3" could be March or
+         * a March-year convention and only the tenant knows which; guessing at
+         * money is the one thing this audit does not do (Q9).
+         */
+        $canonicalMonth = \App\Traits\Helpers::canonicalMonth($month);
+
+        if ($canonicalMonth === null) {
+            $res = [
+                'status_code' => 0,
+                'message'     => 'Choose a month before saving. "' . $month . '" is not one this system can file under.',
+            ];
+
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        $month = $canonicalMonth;
+
         foreach ($deductAmt as $employee_id => $amount) {
             $checkArr = [
                 "month"=>$month,
@@ -2530,11 +2607,25 @@ public function payrollTypeReport(Request $request)
 
                 $checkDeduction = DB::table('hrms_emp_payroll_deduction')->where('employee_id',$request->emp_id)->where(['sub_institute_id'=>$sub_institute_id,'month'=>$request->month,'year'=>$searchedYear,'deduction_type'=>$payrollType->id])->first();
                 // echo "<pre>";print_r($checkDeduction);exit;
-                if($request->month=="Feb" && $payrollType->id==2){
-                    $payrollAmount=300;
-                }else{
-                    $payrollAmount=$employeeSalaryDetails[$payrollType->id];
-                }
+                /*
+                 * F-144. Deleted: a hardcoded February rule that forced pay head
+                 * id 2 to 300 for EVERY organisation on the platform.
+                 *
+                 *     if ($request->month == "Feb" && $payrollType->id == 2) { $payrollAmount = 300; }
+                 *
+                 * Head ids are global and carry no tenant, so this fired for
+                 * whoever happened to own head 2 - which is tenant 3's
+                 * 'daycount gg', soft-deleted since 2025-09-18. The branch was
+                 * dead only because a customer deleted a pay head, not because
+                 * anyone disabled the rule.
+                 *
+                 * Removing it changes nobody's pay: the calculation filters
+                 * status = 1, and no active head has id 2. If an organisation
+                 * genuinely needs a February override, that is FlatCapRule's
+                 * pattern - a tenant_setting resolved per organisation, which
+                 * Sprint 9 already built for F-111.
+                 */
+                $payrollAmount = $employeeSalaryDetails[$payrollType->id];
                 if(isset($checkDeduction->deduction_amount)){
                     $payrollAmount = ($payrollAmount + $checkDeduction->deduction_amount);
                 }
@@ -2915,6 +3006,95 @@ public function monthlyPayrollStore(Request $request)
         $res = [
             'status_code' => 0,
             'message'     => 'None of the submitted employees belong to this organisation.',
+        ];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
+    }
+
+    /*
+     * F-142. THE SERVER RECOMPUTES, AND THE POSTED TOTALS ARE A CHECKSUM.
+     *
+     * This method used to file total_payment, total_deduction and total_day
+     * exactly as posted. The arithmetic existed only to DRAW the screen
+     * (getEmpMonthlyData): the figures travelled to the browser and back, and
+     * whatever came back was stored. Reconciling the live rows found that NO
+     * payslip agreed with its own stored components - six of six - because
+     * nothing recomputed on either side of the wire.
+     *
+     * The fix deliberately does NOT silently replace the caller's numbers with
+     * the server's. It recomputes, compares, and REFUSES the whole save when
+     * they disagree, naming the difference. Two reasons:
+     *
+     *   - a payslip that changes when you press save, without saying so, is a
+     *     worse failure than one that is refused; and
+     *
+     *   - existing payslips are untouched either way, so this closes the hole
+     *     without answering Q8, which is about what to do with the six already
+     *     on file and belongs to the customer.
+     *
+     * getEmpMonthlyData is CALLED rather than reimplemented. A second copy of
+     * this arithmetic would drift from the first, which is exactly what F-149
+     * found in getEmployeeLists - two copies of one method, only one correct.
+     */
+    $mismatches = [];
+
+    foreach ($payrollVal as $employee_id => $value) {
+        $verify = new Request([
+            'type'             => 'API',
+            // bearerToken() FIRST. This request may have authenticated by
+            // Authorization header rather than a token field, and a synthetic
+            // Request carries no headers - so reading input('token') alone left
+            // the sub-request anonymous, payrollTenantId() returned null, no
+            // structure was found and the verification below silently skipped.
+            // It passed a forged payslip once before this line was right.
+            'token'            => $request->bearerToken() ?: $request->input('token'),
+            'sub_institute_id' => $sub_institute_id,
+            'user_id'          => $request->input('user_id'),
+            'emp_id'           => $employee_id,
+            'month'            => $month,
+            'year'             => $request->input('year'),
+            'totalDay'         => $value['total_day'] ?? 0,
+        ]);
+        $verify->setLaravelSession($request->hasSession() ? $request->session() : app('session.store'));
+
+        $computed = $this->getEmpMonthlyData($verify)['salaryData'] ?? [];
+
+        // No structure means there is nothing to compute against. That employee
+        // is already reported through $noPayslip below; leaving the existing
+        // behaviour alone here rather than turning a warning into a refusal.
+        if (!isset($computed['total_payment'], $computed['total_deduction'])) {
+            continue;
+        }
+
+        $postedPay = round((float) ($value['total_payment'] ?? 0), 2);
+        $postedDed = round((float) ($value['total_deduction'] ?? 0), 2);
+        $realPay   = round((float) $computed['total_payment'], 2);
+        $realDed   = round((float) $computed['total_deduction'], 2);
+
+        if (abs($postedPay - $realPay) >= 0.01 || abs($postedDed - $realDed) >= 0.01) {
+            $mismatches[] = [
+                'employee_id'      => (int) $employee_id,
+                'sent_payment'     => $postedPay,
+                'computed_payment' => $realPay,
+                'sent_deduction'   => $postedDed,
+                'computed_deduction' => $realDed,
+            ];
+            continue;
+        }
+
+        // Agreed - so store the SERVER's figures. Identical by definition here,
+        // and it means the stored row can never be the client's number.
+        $payrollVal[$employee_id]['total_payment']   = $realPay;
+        $payrollVal[$employee_id]['total_deduction'] = $realDed;
+    }
+
+    if ($mismatches !== []) {
+        $res = [
+            'status'      => '0',
+            'status_code' => 0,
+            'message'     => count($mismatches) . ' employee(s) had figures that do not match '
+                . 'the salary structure held for that employee and month. Nothing was saved.',
+            'mismatches'  => $mismatches,
         ];
 
         return is_mobile($type, 'monthly_payroll.index', $res);

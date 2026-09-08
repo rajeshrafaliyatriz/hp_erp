@@ -69,6 +69,16 @@ class EmployeeDirectoryController extends Controller
 
     private const FULL_NAME_SQL = self::FULL_NAME_EXPR . ' as full_name';
 
+    /**
+     * The most rows index() will return in one uncapped response (F-145).
+     *
+     * 2000 clears every organisation on the platform today - the largest has
+     * 1001 - so no existing caller sees a behaviour change. It exists so the
+     * response size is bounded by the CODE rather than by the customer's
+     * headcount.
+     */
+    private const MAX_ROWS = 2000;
+
     /** Fields a caller may set on create or update. Nothing else is written. */
     private const WRITABLE = [
         'name_suffix', 'first_name', 'middle_name', 'last_name',
@@ -161,14 +171,66 @@ class EmployeeDirectoryController extends Controller
             $query->where('u.status', (int) $request->input('status'));
         }
 
+        /*
+         * F-145. This returned EVERY employee in the organisation - no
+         * pagination, no LIMIT, no cap. At the largest organisation on the
+         * platform (1001 employees) that measured 28.9 ms and a large payload:
+         * not a failure, but a cost set by the customer's headcount rather than
+         * by anything in the code. The first organisation to arrive with 10,000
+         * staff would have found out in production.
+         *
+         * Paginated, but OPT-IN and backward compatible, because the frontend
+         * reads `data` as a plain array and changing that shape unasked would
+         * break the screen:
+         *
+         *   - `per_page` given -> that page is returned, meta carries the rest.
+         *   - absent           -> previous behaviour, EXCEPT that the result is
+         *                         capped at MAX_ROWS and meta.truncated says so.
+         *
+         * A silent cap would be worse than none, so the cap always announces
+         * itself: `truncated` is a fact the caller can act on, not a number
+         * quietly missing from a list.
+         */
+        $total = (clone $query)->count();
+
+        $perPage = $request->filled('per_page') ? (int) $request->input('per_page') : null;
+        $page    = max(1, (int) $request->input('page', 1));
+
+        if ($perPage !== null && $perPage > 0) {
+            $perPage = min($perPage, self::MAX_ROWS);
+            $query->forPage($page, $perPage);
+        } else {
+            $query->limit(self::MAX_ROWS + 1);   // +1 so truncation is detectable
+        }
+
         $rows = $query->orderBy('u.first_name')->orderBy('u.last_name')->get();
+
+        $truncated = false;
+
+        if ($perPage === null && $rows->count() > self::MAX_ROWS) {
+            $rows      = $rows->take(self::MAX_ROWS)->values();
+            $truncated = true;
+        }
 
         return response()->json([
             'status'  => 1,
             'message' => 'Success',
             'data'    => $rows,
             'meta'    => [
-                'total'             => $rows->count(),
+                // `total` still means what it always did: how many employees
+                // match, NOT how many were returned. Changing that silently
+                // would make every existing caller's count wrong.
+                'total'             => $total,
+                'returned'          => $rows->count(),
+                'per_page'          => $perPage,
+                'page'              => $perPage !== null ? $page : 1,
+                'max_rows'          => self::MAX_ROWS,
+                'truncated'         => $truncated,
+                'truncated_reason'  => $truncated
+                    ? 'This organisation has ' . $total . ' employees; the first ' . self::MAX_ROWS
+                        . ' are shown. Use per_page and page, or filter with q, department_id, '
+                        . 'jobrole_id or status.'
+                    : null,
                 'empty_is_expected' => $rows->isEmpty() && !$request->hasAny(['q', 'department_id', 'jobrole_id', 'status']),
                 'empty_reason'      => $rows->isEmpty()
                     ? ($request->hasAny(['q', 'department_id', 'jobrole_id', 'status'])
