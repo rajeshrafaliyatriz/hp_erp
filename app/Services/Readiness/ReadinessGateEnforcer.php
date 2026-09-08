@@ -23,7 +23,9 @@ use Illuminate\Support\Facades\DB;
  *   at_risk  ALLOW. The whole point of §4.1's asymmetry: falling below the
  *            threshold starts a warning, it does not switch anything off. Only a
  *            human acknowledgement moves a gate to blocked.
- *   blocked  REFUSE, with the reason and the remedy.
+ *   blocked  REFUSE, with the reason and the remedy - UNLESS the measurement
+ *            passes its enable threshold, which means the gate is waiting out
+ *            its sustained period rather than failing. See check().
  *
  *   NO ROW, or value IS NULL  ->  ALLOW.
  *
@@ -67,6 +69,44 @@ class ReadinessGateEnforcer
             $allow['state'] = $row->state;
             $allow['value'] = (float) $row->value;
             $allow['threshold'] = (float) $row->enable_threshold;
+            return $allow;
+        }
+
+        /*
+         * ── BLOCKED BUT PASSING: THE WARM-UP ────────────────────────────────
+         *
+         * `blocked` carries two different claims and this one is not a failure.
+         *
+         * A gate needs `sustained_periods` CONSECUTIVE passes before the
+         * recomputer will call it ready, and the schedule runs once a day - so a
+         * gate whose measurement is ABOVE its enable threshold still reads
+         * `blocked` for the first three days. FIRST_RUN_NOTE says exactly that
+         * about the display, and nobody followed it here: this method was
+         * refusing the feature for those three days.
+         *
+         * The consequence was invisible only because the nightly job skipped
+         * every tenant that had no gates. The moment that was fixed, ANY tenant
+         * measured for the first time would have had gap reporting, role
+         * assignment and course recommendations SWITCHED OFF FOR THREE DAYS -
+         * including one whose data passes every threshold.
+         *
+         *     TURNING A CAPABILITY OFF IS NEVER AUTOMATIC. That is the design's
+         *     own asymmetry, and a warm-up counter is not a customer decision.
+         *
+         * So the distinction is drawn on the measurement, not the label: a value
+         * at or above the enable threshold has met the standard and is allowed
+         * while it waits out the sustained period. A value below it is genuinely
+         * short and is refused, with the remedy, exactly as before.
+         */
+        if ((float) $row->value >= (float) $row->enable_threshold) {
+            $allow['state'] = $row->state;
+            $allow['value'] = (float) $row->value;
+            $allow['threshold'] = (float) $row->enable_threshold;
+            $allow['reason'] = sprintf(
+                'gate passes its threshold and is waiting out %d consecutive computations before it reads ready (%d so far)',
+                (int) $row->sustained_periods,
+                (int) $row->consecutive_passes
+            );
             return $allow;
         }
 

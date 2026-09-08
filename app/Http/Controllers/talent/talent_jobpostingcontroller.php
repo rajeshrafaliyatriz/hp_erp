@@ -18,6 +18,22 @@ use App\Models\talent\feedback\TalentEvaluationForm;
 
 class talent_jobpostingcontroller extends Controller
 {
+    /**
+     * Where the work happens. VARCHAR + const, never ENUM: adding a fourth mode
+     * must be a deploy, not an ALTER on a live table.
+     */
+    public const WORK_MODES = ['On-site', 'Hybrid', 'Remote'];
+
+    /**
+     * The contract types, matching what the live host already holds as text:
+     * Full-Time 38, Part-Time 32, Contract 29, Internship 27.
+     *
+     * Named here so the public apply form can be validated against the SAME
+     * list the posting form offers - a candidate picking "Part-Time" and a
+     * recruiter filtering on "Part Time" is how a filter quietly returns zero.
+     */
+    public const EMPLOYMENT_TYPES = ['Full-Time', 'Part-Time', 'Contract', 'Temporary', 'Internship'];
+
     use ResolvesApiIdentity;
     use \App\Http\Controllers\Concerns\ResolvesG2gActor;
 
@@ -153,13 +169,27 @@ class talent_jobpostingcontroller extends Controller
             'jobrole_id'       => 'nullable|integer|exists:s_jobrole,id',
             'location'         => 'required|string|max:255',
             'employment_type'  => 'required|string|max:100',
+            /*
+             * WHERE the work happens, which is a separate question from the
+             * contract - a role can be Full-Time AND Remote. Kept out of
+             * employment_type so "remote internship" stays representable.
+             * Optional: NULL reads as "not stated", never as On-site.
+             */
+            'work_mode'        => 'nullable|string|in:' . implode(',', self::WORK_MODES),
             'experience'       => 'nullable|string|max:255',
             'education'        => 'nullable|string|max:255',
             'priority_level'   => 'nullable|string|max:100',
             'positions'        => 'required|integer|min:1',
             'min_salary'       => 'nullable|numeric|min:0',
             'max_salary'       => 'nullable|numeric|min:0',
-            'deadline'         => 'nullable|date',
+            /*
+             * The application window. start_date is when applications OPEN;
+             * deadline is when they close, so one cannot follow the other.
+             * Both nullable: a posting with neither is open from the moment it
+             * is published, which is how all 127 existing ones behave.
+             */
+            'start_date'       => 'nullable|date',
+            'deadline'         => 'nullable|date|after_or_equal:start_date',
             'skills'           => 'nullable|string',
             'certifications'   => 'nullable|string',
             'benefits'         => 'nullable|string',
@@ -182,13 +212,15 @@ class talent_jobpostingcontroller extends Controller
             // cannot be assessed until one is chosen.
             $objtalent->jobrole_id = $this->resolveJobroleId($request);
             $objtalent->location = $request->location; 
-            $objtalent->employment_type = $request->employment_type; 
+            $objtalent->employment_type = $request->employment_type;
+            $objtalent->work_mode = $request->filled('work_mode') ? $request->input('work_mode') : null;
             $objtalent->experience = $request->experience;
             $objtalent->education = $request->education;
             $objtalent->priority_level = $request->priority_level;
             $objtalent->positions = $request->positions;
             $objtalent->min_salary = $request->min_salary;
             $objtalent->max_salary = $request->max_salary;
+            $objtalent->start_date = $request->filled('start_date') ? $request->input('start_date') : null;
             $objtalent->deadline = $request->deadline;
             $objtalent->skills = $request->skills;
             $objtalent->certifications = $request->certifications;
@@ -440,6 +472,11 @@ class talent_jobpostingcontroller extends Controller
         $validator = Validator::make($request->all(), [
             'jobrole_id'    => 'nullable|integer|exists:s_jobrole,id',
             'department_id' => 'nullable|integer',
+            // Same window rule as store(). Only checked when BOTH are sent, so a
+            // partial update that touches one of them still works (F-69b).
+            'start_date'    => 'nullable|date',
+            'deadline'      => 'nullable|date|after_or_equal:start_date',
+            'work_mode'     => 'nullable|string|in:' . implode(',', self::WORK_MODES),
         ]);
 
         if ($validator->fails()) {
@@ -450,12 +487,12 @@ class talent_jobpostingcontroller extends Controller
         }
 
         $editable = [
-            'title', 'location', 'employment_type', 'experience', 'department_id',
+            'title', 'location', 'employment_type', 'work_mode', 'experience', 'department_id',
             // jobrole_id joins this list for the same reason it joined store():
             // candidate assessment resolves its exam template through it.
             'jobrole_id',
             'education', 'priority_level', 'positions', 'min_salary', 'max_salary',
-            'deadline', 'skills', 'certifications', 'benefits', 'description', 'status',
+            'start_date', 'deadline', 'skills', 'certifications', 'benefits', 'description', 'status',
         ];
 
         $changes = ['updated_by' => $this->g2gActorId($request), 'updated_at' => now()];

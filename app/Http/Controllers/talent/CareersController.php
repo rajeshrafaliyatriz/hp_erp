@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\talent\talent_jobpostingcontroller as JobPostings;
 use App\Services\Talent\ApplicationTrackingService;
 use App\Support\CandidateLink;
 use App\Support\MailGate;
@@ -53,10 +54,10 @@ class CareersController extends Controller
 
     /** Columns a stranger may see. An allow-list, so a column added later stays private until named. */
     private const POSTING_PUBLIC = [
-        'p.id', 'p.title', 'p.location', 'p.employment_type', 'p.experience',
+        'p.id', 'p.title', 'p.location', 'p.employment_type', 'p.work_mode', 'p.experience',
         'p.education', 'p.skills', 'p.certifications', 'p.benefits',
         'p.description', 'p.min_salary', 'p.max_salary', 'p.positions',
-        'p.deadline', 'p.priority_level', 'p.created_at',
+        'p.start_date', 'p.deadline', 'p.priority_level', 'p.created_at',
     ];
 
     /**
@@ -139,7 +140,12 @@ class CareersController extends Controller
             'email'            => 'required|email|max:255',
             'mobile'           => 'required|string|max:15',
             'current_location' => 'nullable|string|max:255',
-            'employment_type'  => 'nullable|string|max:100',
+            // What the CANDIDATE wants, beside what the posting offers. The
+            // column has always existed; the public form never sent it.
+            'employment_type'  => 'nullable|string|in:'
+                . implode(',', JobPostings::EMPLOYMENT_TYPES),
+            'work_mode'        => 'nullable|string|in:'
+                . implode(',', JobPostings::WORK_MODES),
             'experience'       => 'nullable|string|max:100',
             'education'        => 'nullable|string|max:255',
             'expected_salary'  => 'nullable|numeric|min:0',
@@ -208,6 +214,7 @@ class CareersController extends Controller
             'mobile'           => $request->input('mobile'),
             'current_location' => $request->input('current_location'),
             'employment_type'  => $request->input('employment_type'),
+            'work_mode'        => $request->input('work_mode'),
             'experience'       => $request->input('experience'),
             'education'        => $request->input('education'),
             'expected_salary'  => $request->input('expected_salary'),
@@ -357,6 +364,16 @@ class CareersController extends Controller
             ->where(function ($q) {
                 $q->whereNull('p.deadline')->orWhere('p.deadline', '>=', now()->toDateString());
             })
+            /*
+             * A role scheduled to open later is not public yet.
+             *
+             * NULL means "already open", which is every posting that predates
+             * the column - so nothing that is public today stops being public.
+             * HR still sees it in the admin list; only the careers page waits.
+             */
+            ->where(function ($q) {
+                $q->whereNull('p.start_date')->orWhere('p.start_date', '<=', now()->toDateString());
+            })
             ->orderByDesc('p.created_at')
             ->select(array_merge(self::POSTING_PUBLIC, [DB::raw('d.department as department_name')]));
     }
@@ -492,8 +509,10 @@ class CareersController extends Controller
             'department'      => $p->department_name,
             'location'        => $p->location,
             'employment_type' => $p->employment_type,
+            'work_mode'       => $p->work_mode,
             'experience'      => $p->experience,
             'positions'       => $p->positions !== null ? (int) $p->positions : null,
+            'opens_on'        => $p->start_date,
             'deadline'        => $p->deadline,
             'posted_at'       => $p->created_at,
             'skills'          => array_values(array_filter(array_map('trim', explode(',', (string) $p->skills)))),

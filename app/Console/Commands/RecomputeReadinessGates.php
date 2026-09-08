@@ -37,6 +37,16 @@ use Illuminate\Support\Facades\DB;
  *
  * So the schedule is not housekeeping. It is what makes the sustained-period
  * design work at all.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * "EVERY TENANT" NOW MEANS EVERY TENANT
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * The heading above was written before the code matched it. The tenant list came
+ * from `tenant_readiness_gate` - the table this command WRITES - so the only
+ * organisations it skipped were the ones that had never been measured, and they
+ * stayed skipped forever. See the comment in handle() and
+ * ReadinessGateRecomputer::tenantsToRecompute().
  */
 class RecomputeReadinessGates extends Command
 {
@@ -50,18 +60,32 @@ class RecomputeReadinessGates extends Command
     {
         $only = $this->option('tenant');
 
+        /*
+         * ── THE TENANT LIST IS NOT tenant_readiness_gate ────────────────────
+         *
+         * It used to be. This command read the table it was about to write, so
+         * A TENANT WITH NO GATES COULD NEVER GET ANY - the nightly job skipped
+         * precisely the organisations nobody had ever measured. On live that was
+         * tenants 13 and 14, the only two ever created through the product's own
+         * signup; on dev it was five, including one with 967 employees.
+         *
+         * The rule now lives in the recomputer beside the measurements, so this
+         * command and recomputeAll() cannot drift onto different tenant lists
+         * again - which they had.
+         */
         $tenants = $only !== null
             ? [(int) $only]
-            : DB::table('tenant_readiness_gate')->distinct()->pluck('sub_institute_id')->all();
+            : $recomputer->tenantsToRecompute();
 
         if (!$tenants) {
-            $this->warn('No tenants have readiness gates. Nothing to recompute.');
+            $this->warn('No tenants found. Nothing to recompute.');
             return self::SUCCESS;
         }
 
         $ok = 0;
         $failed = 0;
         $changed = [];
+        $firstRun = [];
 
         foreach ($tenants as $tenant) {
             // Read the state BEFORE, so a change can be reported rather than
@@ -87,6 +111,15 @@ class RecomputeReadinessGates extends Command
                 ->where('sub_institute_id', $tenant)
                 ->pluck('state', 'gate_key')->all();
 
+            // A tenant measured for the first time is reported SEPARATELY from a
+            // tenant whose gates moved. Folding the two together would list five
+            // "new" transitions per first-time tenant among the real changes and
+            // bury the one line that matters on the night this ships.
+            if (!$before) {
+                $firstRun[] = sprintf('tenant %d · first computation · %d gate(s)', $tenant, count($after));
+                continue;
+            }
+
             foreach ($after as $gate => $state) {
                 if (($before[$gate] ?? null) !== $state) {
                     $changed[] = sprintf('tenant %d · %s · %s -> %s', $tenant, $gate, $before[$gate] ?? 'new', $state);
@@ -95,14 +128,22 @@ class RecomputeReadinessGates extends Command
         }
 
         if (!$this->option('quiet-summary')) {
+            foreach ($firstRun as $line) {
+                $this->info('  ' . $line);
+            }
+
             foreach ($changed as $line) {
                 $this->info('  ' . $line);
+            }
+
+            if ($firstRun) {
+                $this->line('  ' . ReadinessGateRecomputer::FIRST_RUN_NOTE);
             }
         }
 
         $this->info(sprintf(
-            'readiness:recompute - %d tenant(s) ok, %d failed, %d gate state change(s)',
-            $ok, $failed, count($changed)
+            'readiness:recompute - %d tenant(s) ok, %d failed, %d first computation(s), %d gate state change(s)',
+            $ok, $failed, count($firstRun), count($changed)
         ));
 
         // A failure in any tenant is a non-zero exit, so a scheduler or CI notices.

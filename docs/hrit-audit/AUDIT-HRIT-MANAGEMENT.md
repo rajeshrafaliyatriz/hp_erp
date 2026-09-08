@@ -4,13 +4,55 @@
 **Auditor:** independent re-audit, module scope
 **Repos:** `hp_erp` (Laravel 12) · `g2gv0` (Next.js 16)
 **Module:** HRIT Solutions — Attendance Management, Leave Management, Payroll Management (12 sub-modules)
-**Findings:** F-87 … F-141 (continues the sequence in `FIX-PLAN-v2.md`; highest prior id was F-86)
+**Findings:** F-87 … F-149 (continues the sequence in `FIX-PLAN-v2.md`; highest prior id was F-86). **57 closed, 4 open.** F-142 … F-145 came from Phase 10's payroll reconciliation and scale work and are open by choice — three touch money and want the customer's word first. F-146 … F-149 came from Phase 11 driving every sub-module through its WRITES rather than its reads, and are all closed: a cross-tenant payroll-type takeover, two defects that between them explain why no salary certificate had ever been generated, and a Form 16 picker that returned nobody.
 **Status:** AUDIT ONLY. No application code was changed. Five probe rows were written to the live
 database to prove authorization holes and were removed the same session — see §9.
 
 ---
 
 ## 1. VERDICT
+
+**Sprint 0: RED. After eleven phases of remediation: AMBER.**
+
+> The original RED verdict and its evidence are kept **verbatim below**, because a remediation log
+> that quietly rewrites the finding it started from cannot be checked. What follows the rule is what
+> changed.
+
+**Why AMBER and not GREEN.** Every one of the 53 findings the audit raised is closed and
+probe-backed — **222 assertions across 12 probes, 0 failures**. Authorization exists now, and the
+five requests in the paragraph below finally have a **standing** assertion rather than a one-off
+hand check: `probe-sprint10` section 7 replays all five, and the four that had to be 403s are, with
+the permission matrix, the colleague's request and the leave-type list each verified unchanged
+afterwards. That gap was worth finding on its own — the audit's headline claim had rested for ten
+phases on a check nobody re-ran. But Phase 10 reconciled payroll
+arithmetic for the first time and found that **no payslip on the live host agrees with its own
+stored components** — 6 of 6 — because the server files the browser's totals without recomputing
+them (**F-142**). A module whose payslips cannot be derived from their own inputs is not green,
+however many findings are closed.
+
+**Why AMBER and not RED.** The disqualifying conditions below are gone, each proven rather than
+asserted: leave authorization is enforced at the API (`probe-sprint1`, `probe-sprint5`), payroll is
+gated and leaks no password hash (`probe-sprint1` — `password keys=0`), Monthly Payroll Report
+loads, and tenant isolation is now proven **by id as well as by list** (`probe-q3`, 9/9), which was
+the one qualifier on the audit's only original PASS.
+
+**Phase 11 changed the method and it mattered.** Ten sprints proved these screens *open*; Phase 11
+drove ten of the twelve through their **writes**. Four defects were sitting behind the first write
+each screen had never been asked to perform — including **F-146**, where another organisation's
+administrator did not merely edit a pay head but **took ownership of it**, silently breaking every
+salary structure that referenced it. Also closed: the two defects that between them explain why
+**no salary certificate had ever been generated in the life of the product**, and a Form 16 employee
+picker that returned nobody to any API caller.
+
+**What stands between AMBER and GREEN** is four things, and only one of them is code: F-142 needs
+the customer's answer to **Q8** before anyone changes what a payslip says; leave, payroll and
+approvals have **no volume anywhere on this deployment** to measure scale against; two golden
+transactions (mid-month joiner, LWP) cannot be honestly proven while F-142 stands; and **domain
+sign-off has not been sought and cannot be given by me**.
+
+---
+
+### The original Sprint 0 verdict, unedited
 
 **RED.**
 
@@ -1325,7 +1367,145 @@ const retry = () => { setError(null); punch(todayRecord?.punchIn && !todayRecord
 **Impact:** one import away from a screen rendering invented departments again. The page's own comment at :336 — *"API rows only - the report never falls back to sample data"* — is true and is one line away from ceasing to be.
 **Status:** ✅ **CLOSED in Sprint 3** — `services/report-data.ts` deleted outright. The three fixture datasets had no importer; `savedReports` did, and its control is gone. The one type worth keeping, `EarlyGoingRecord`, moved to `attendance-reports/types.ts`, where nothing can accidentally import a fixture beside it.
 
+
+#### F-142 — Payroll totals are whatever the browser posts; no stored payslip agrees with its own figures — CRITICAL
+**What:** `monthlyPayrollStore` stores `total_payment`, `total_deduction`, `total_day` and the pay-head JSON **straight from the request**. The server performs no salary arithmetic on write and never recomputes what it is given.
+**Where:** [PayrollController.php:2846-2856](../../app/Http/Controllers/Payroll/PayrollController.php#L2846)
+```php
+'total_deduction' => $value['total_deduction'] ?? 0,
+'total_payment'   => $value['total_payment']   ?? 0,
+'total_day'       => $value['total_day']       ?? 0,
+'employee_salary_data' => $jsonVal[$employee_id],
+```
+The arithmetic exists, but only to **draw the screen** — `getEmployeeSalaryData` computes allowances, pro-rating, PF and PT at [:2455-2520](../../app/Http/Controllers/Payroll/PayrollController.php#L2455) and returns them for display. The figures then travel to the browser and back, and whatever returns is filed.
+
+**Evidence — every payslip on the live host, recomputed from its own stored inputs:**
+```
+id  tenant emp month days | stored data      | stored pay  stored ded | derived pay derived ded
+1   1      1   May  10    | {"6":"15000"}    |   25000.00      100.00 |    15000.00       0.00
+2   1      1   Aug  25    | {"6":"1000"}     |    3306.00        0.00 |     1000.00       0.00
+3   1      2   Aug  28    | {"6":"1000"}     |    3403.00        0.00 |     1000.00       0.00
+4   1      3   Aug  31    | {"6":"1000"}     |    3500.00        0.00 |     1000.00       0.00
+5   1      1   Jul  10    | {"6":"7000"}     |   35000.00      100.00 |     7000.00       0.00
+22  3      6   Aug  30    | {"1":50000,...}  |   81300.00     6200.00 |    23211.00   33876.00
+
+  payslips reconciled : 6      agree with own data : 0      DISAGREE : 6
+```
+Rows 1-5 carry a **single allowance head** worth 1000-15000 and a stored total three to five times larger. Row 1 records a deduction of 100.00 while its own pay-head JSON contains no deduction head at all.
+
+**Impact:** this is the §E.3 gap the brief asked about, and the answer is worse than "unreconciled". A payslip is not a computed document here; it is a number the client chose. It cannot be audited, because there is nothing to audit it against — the inputs it stores do not produce the output it stores. F-133 closed the *tenant* half of this in Sprint 9 (an administrator can no longer write a payslip for another organisation's employee); within their own organisation any figure is still accepted, and `monthlyPayrollStore` still has no validation rules.
+
+**Searches run:** `grep -n "total_payment" PayrollController.php` (16 hits, all display or read); traced the frontend through `hooks/use-monthly-payroll.ts:54,183` and `services/hrms/payroll.ts:704` — the hook echoes `salaryData.total_payment` from the API response and posts it back unchanged. No client-side computation either: **nothing recomputes on either side of the wire.**
+
+**Re-verify:** `php artisan tinker --execute="require '<repo>/Docs/hrit-audit/_evidence/reconcile-payroll.php';"`
+
+**Fix sketch:** recompute server-side inside `monthlyPayrollStore` by calling the same `getEmployeeSalaryData` path the screen used, and store the computed figures — treating the posted totals as a *checksum to compare against*, not as the source. Where they differ, refuse and say so, rather than filing the client's number. That is a behavioural change to a money path and needs the customer's agreement first (see Q8).
+
+**Status:** ⛔ **OPEN.** Raised by this phase's reconciliation. Not fixed: silently changing what a payslip says is not a decision this audit can take alone.
+
+#### F-143 — Eleven of twelve payroll adjustments can never be applied — HIGH
+**What:** `hrms_emp_payroll_deduction` holds per-employee, per-month adjustments that the calculation adds on top of the salary structure. It matches `month` **exactly**, against the spelling the screen posts (`Aug`). Eleven of the twelve stored rows are spelled `"8"`, `"2"` or `"3"`.
+
+**Where:** reader [PayrollController.php:2421](../../app/Http/Controllers/Payroll/PayrollController.php#L2421) and [:2440](../../app/Http/Controllers/Payroll/PayrollController.php#L2440); writer [:1247,1265](../../app/Http/Controllers/Payroll/PayrollController.php#L1247) stores `$request->month` with no canonicalisation at either end.
+
+**Evidence:**
+```
+row 1   month="Mar"  emp=10  amt=20       reachable
+row 2   month="8"    emp=6   amt=50000    UNREACHABLE
+row 3   month="8"    emp=7   amt=50000    UNREACHABLE
+...
+reachable: 1    UNREACHABLE: 11        (amounts up to 50,000 each)
+```
+
+**Impact:** this is F-137's defect in a second table, and F-137's migration did not touch it. Someone entered these adjustments on a screen that reported success; the payroll run silently ignores them. Nobody is told — there is no warning, because from the calculation's point of view the row simply does not exist.
+
+**Classification — this is data debt, not a live code defect.** The current frontend takes its month options from the server (`Helpers::getMonths()`) and posts `Aug`, so today's writes and reads agree: [payroll-deduction/page.tsx:101-104](../../../g2gv0/components/domain/hrms/hrit/payroll-management/payroll-deduction/page.tsx#L101). The eleven rows are legacy, written by an earlier screen. The same file's own docblock records the previous instalment of this bug — *"The legacy screen sent the 1/2 category here, which is why its saved amounts never reappeared."*
+
+**Fix sketch:** two parts. (a) Repair the eleven rows to the canonical spelling, as `2026_09_07_110000` did for payslips — but only after the tenant confirms which month each numeric value meant, since `"3"` could be March or a March-*year* convention. (b) Apply `Helpers::canonicalMonth()` at both ends of this table so the split cannot recur; F-137 built the helper for exactly this and this table never adopted it.
+
+**Status:** ⛔ **OPEN — referred to the tenant**, the same treatment Q4, Q7 and leave 221 received. Repairing money rows on a guess is the one thing this audit does not do.
+
+#### F-144 — A hardcoded February rule sits in shared payroll arithmetic — LOW
+**What:** `if($request->month=="Feb" && $payrollType->id==2){ $payrollAmount=300; }` — in February, pay head id **2** is forced to 300 for every organisation on the platform.
+
+**Where:** [PayrollController.php:2436](../../app/Http/Controllers/Payroll/PayrollController.php#L2436)
+
+**Evidence — currently unreachable, and only by luck:**
+```
+payroll_types id=2  name='daycount gg'  tenant=3  status=0  deleted_at=2025-09-18 07:28:36
+$payrollTypes = PayrollType::where('sub_institute_id',..)->where('status', 1)   :2402
+active heads with id=2 visible to the calculation: 0
+```
+Head 2 is soft-deleted and inactive, so the branch is dead code today. It is dead because a tenant deleted a pay head, not because anyone disabled the rule.
+
+**Impact:** the same class as F-111 — a customer-specific constant baked into arithmetic every tenant shares — but inverted and worse: F-111's hardcoded id at least named the tenant. This one names a *head id*, which is global and carries no tenant, so it would fire for whoever happened to own head 2.
+
+**Fix sketch:** delete it. If some organisation genuinely needs a February override on one head, that is `FlatCapRule`'s pattern — a `tenant_setting`, resolved per organisation — which Sprint 9 already built for F-111.
+
+**Status:** ⛔ **OPEN.** Left in place deliberately: it currently changes nobody's pay, and removing a payroll rule whose origin is unknown deserves the same customer confirmation F-111 got.
+
+#### F-145 — The employee directory is unbounded — MEDIUM
+**What:** `index()` returns **every** employee in the organisation. No pagination, no `LIMIT`, no cap.
+
+**Where:** [EmployeeDirectoryController.php](../../app/Http/Controllers/HRMS/EmployeeDirectoryController.php) — the query ends `->orderBy('u.first_name')->orderBy('u.last_name')->get();` and the result is serialised straight into the response with `'total' => $rows->count()`.
+
+**Evidence — measured, read-only, median of 5:**
+```
+tenant 6           23 rows     3.2 ms
+tenant 3          122 rows     4.5 ms
+tenant 1000018    967 rows    20.3 ms
+tenant 1000000   1001 rows    28.9 ms
+```
+Cost is linear and the query itself is healthy: one statement, two left joins, **no N+1** — the rows are returned directly with no per-employee follow-up query.
+
+**Impact:** at today's largest organisation (1001 employees) this is 29 ms and a large JSON payload — not a failure. It is recorded because the endpoint has no ceiling at all, so the cost is set by the customer's headcount rather than by anything in the code, and the first organisation to arrive with 10,000 staff finds out in production.
+
+**Fix sketch:** paginate, or cap with an explicit `LIMIT` and tell the caller the result was truncated. The frontend already filters server-side (`q`, `department_id`, `jobrole_id`, `status`), so pagination fits the existing contract.
+
+**Status:** ⛔ **OPEN** — a latent scale risk, not a live defect. Recorded rather than fixed because changing the directory's response shape is a frontend contract change.
 ---
+
+#### F-146 — Payroll Type had no tenant boundary on any by-id operation — CRITICAL
+**What:** every by-id operation on `payroll_types` — edit, delete, and the edit form — looked the record up globally. The update path is the worst of the three, because `payrollStore` **reassigns `sub_institute_id` from the caller** a few lines after the lookup: the pay head was not merely edited across the tenant boundary, it was **moved**.
+**Where:** [PayrollController.php:195](../../app/Http/Controllers/Payroll/PayrollController.php#L195) (`PayrollType::find($request->id)`), [:~285](../../app/Http/Controllers/Payroll/PayrollController.php#L285) (`PayrollType::where('id',$id)->update([...])` in `payrollDestroy`), [:142](../../app/Http/Controllers/Payroll/PayrollController.php#L142) (`payrollCreate`).
+**Reachable by:** any `admin` or `hr` user of **any** organisation — the routes sit inside `Route::middleware('hrit.role:admin,hr')` at [routes/hrms.php:68](../../routes/hrms.php#L68), which proves the caller's *role*, never their *tenant*. `PayrollType` has no global scope.
+**Evidence — the probe run against the unfixed code:**
+```
+tenant 3 creates pay head id 14 'lifecycle-probe-renamed'
+tenant 6 administrator POSTs /payroll-type/store  id=14  payroll_name=STOLEN
+
+  another tenant cannot edit this pay head - expected [404] got [200]
+  the name is untouched   - expected [lifecycle-probe-renamed] got [STOLEN]
+  and it did NOT move organisation - expected [3] got [6]      <- the head CHANGED OWNER
+  another tenant cannot delete it either - expected [0] got [1]
+```
+**Impact:** an administrator at one organisation could rename, re-price and finally delete another organisation's pay heads — and because the head changes owner, **every salary structure in the original organisation that references that head id loses it**. `employee_salary_data` is keyed by head id, so the structures do not error; they silently stop resolving a component of somebody's pay.
+**Why it was not found earlier:** ten sprints proved this screen *opens*. Nobody had driven it through create → edit → delete at the API, which is the only way this surfaces — the audit's own tracker recorded Payroll Type as *"gated server-side; validation not yet tested at the API"*.
+**Re-verify:** `bash Docs/hrit-audit/_evidence/probe-lifecycle.sh` section 7 — **12 assertions**, five of which fail without the fix.
+**Status:** ✅ **CLOSED.** All three lookups scoped to the caller's organisation. The update path **refuses with 404** rather than falling through to creating a new head — a save that quietly does something other than what was asked is how F-109 survived three sprints.
+
+#### F-147 — Salary Certificate returned HTTP 500 for a missing field — HIGH
+**What:** `month_id` and `payroll_type_id` were read straight into `implode()` and `whereIn()`. Omitting either produced `count(): Argument #1 ($value) must be of type Countable|array, null given` — a `TypeError`, rendered as **HTTP 500**.
+**Where:** [PayrollController.php:971](../../app/Http/Controllers/Payroll/PayrollController.php#L971), reached from [:811](../../app/Http/Controllers/Payroll/PayrollController.php#L811).
+**Impact:** this is **why `hrms_salary_certificate` still held zero rows platform-wide**. F-110 was closed in Sprint 8 having fixed the *no-salary-structure* crash; this second crash sat in front of the writer and nobody had generated a certificate to find it. A required field missing is a 422, not a stack trace — the same correction F-106 made for leave.
+**Status:** ✅ **CLOSED.** Validated before the arrays are touched, with messages that say what to do (*"Choose at least one month for the certificate."*). Proven: **422**, and the first certificate this product has ever produced now exists.
+
+#### F-148 — the salary certificate recorded neither who issued it nor when — MEDIUM
+**What:** the insert set `'created_by' => session()->get('user_id')` — **null under `type=API`**, where there is no session — and set no `created_at` at all. The update branch set neither `updated_by` nor `updated_at`.
+**Where:** [PayrollController.php:~880](../../app/Http/Controllers/Payroll/PayrollController.php#L880).
+**Evidence:** the first certificate generated came back `created_by = (empty), created_at = (empty)`.
+**Impact:** a salary certificate is a document an employee hands to a bank, on the institution's letterhead. There was no record of which HR user issued it or on what date — and the document itself prints a date drawn from `now()`, so the file and the record could not even be reconciled after the fact. Same class as F-138, which found the payslip upsert setting `updated_at` and never `updated_by`.
+**Status:** ✅ **CLOSED.** `payrollActorId($request)` on both branches, plus timestamps — the resolver F-138 introduced for exactly this. Proven: `created_by = 67, created_at = 2026-09-08 10:46:49`.
+
+#### F-149 — Form 16 could not list a single employee — HIGH
+**What:** `getEmployeeLists`, the employee picker behind Form 16, read the tenant from `$request->session()` with **no `type=API` branch**. A token caller has no session, so `sub_institute_id` resolved to **null**, the query filtered on null, and the response was `{"employees":[]}` with **HTTP 200**.
+**Where:** [PayrollController.php:671](../../app/Http/Controllers/Payroll/PayrollController.php#L671), routed at [routes/hrms.php:89](../../routes/hrms.php#L89).
+**Correction to the audit's own record.** This method was filed as *"dead but broken — nothing calls it."* **It is not dead.** `POST /form16-get-employees-list` is its caller and Form 16 is a shipped sub-module; the searches behind that claim looked for callers of the *name* and missed the route registration. The method was live and returning nothing.
+**A silent failure, which is why it lasted:** HTTP 200 with an empty array. The screen showed an empty picker and no error, so it read as "this department has no employees" rather than as a fault.
+**And the cause is Q6 made concrete.** `HrmsController::getEmployeeLists` — the *other* copy of this same method — **already had the `type=API` branch** ([HrmsController.php:984](../../app/Http/Controllers/HRMS/HrmsController.php#L984)). Two copies of one method drifted, and only one of them worked. That is precisely the hazard Q6 raises about the duplicated controller pairs still routed.
+**Impact:** Form 16 is a statutory document. Its employee picker returning nobody makes the sub-module unusable through the API, which is the only surface the current frontend has.
+**Re-verify:** `bash Docs/hrit-audit/_evidence/probe-lifecycle.sh` section 12.
+**Status:** ✅ **CLOSED.** Resolved through `payrollTenantId()`, matching every other method in this controller. **Note on the probe:** two of that section's three assertions pass *vacuously* on the broken endpoint — "no foreign employees" is trivially true of an empty list. Only "the picker returns anybody at all" fails without the fix, and the probe now says so in a comment. An assertion that cannot fail is not a test; that lesson is F-109's.
 
 ## 10. WORKFLOW GAPS, RANKED BY STRANDED WORK
 
@@ -1355,9 +1535,11 @@ const retry = () => { setError(null); punch(todayRecord?.punchIn && !todayRecord
   somebody's payslip.
 - **Q2. Which table is the intended shift source** — `hrms_in_out_times` (0 rows, no migration) or
   `tbluser_shift_master` (absent, has controllers)? (F-105) A product decision, not a code one.
-- **Q3. Cross-tenant fetch by id.** Isolation passed on list endpoints. Fetching tenant B's record
-  by id was not conclusively tested — the tenant 6 ids available fall outside tenant 3's leave-year
-  window, so a 404 would be ambiguous. Needs a seeded pair of comparable rows in two tenants.
+- ~~**Q3. Cross-tenant fetch by id.**~~ ✅ **CLOSED in Phase 10.** The ambiguity it worried about —
+  *"a 404 would be ambiguous"* — was resolved by asserting the **positive** case alongside the
+  negative: each tenant fetches its own record successfully in the same run, so a 404 on the other
+  tenant's id is isolation rather than breakage. Every m5 by-id lookup was also read statically and
+  every one is tenant-scoped. `probe-q3.sh`, **9/9**, and the 404 body names nothing.
 - **Q4. The 15 mis-typed leave rows** (F-94). Repair to a real leave type, or quarantine? Only the
   tenant knows what those 15 requests were meant to be. They were bulk-created on 2026-06-19.
 - **Q7. The two dateless leave requests** (F-123, ids 12 and 18). Cancel them, or ask the two
@@ -1367,6 +1549,24 @@ const retry = () => { setError(null); punch(todayRecord?.punchIn && !todayRecord
   attempt with a real HR user on a tenant that has salary structures.
 - **Q6. Which of the five duplicated controller pairs (§E.0) are still called by anything** — a
   mobile app or integration outside these two repos would not appear in either codebase.
+  **Partly answered, the hard way.** `getEmployeeLists` exists in both `PayrollController` and
+  `HrmsController`. Both are routed. They had **drifted**: the `HrmsController` copy resolved the
+  tenant under `type=API`, the `PayrollController` copy did not, and Form 16 — which calls the
+  second — could not list a single employee (**F-149**). So the question is no longer hypothetical:
+  at least one pair is live, divergent, and had a defect in exactly one half. The remaining four
+  pairs have not been checked this way.
+- **Q8. Should the server recompute a payslip, or keep filing the browser's figures?** (F-142)
+  Today `monthlyPayrollStore` stores `total_payment`, `total_deduction` and `total_day` exactly as
+  posted, and **no payslip on the live host agrees with its own stored components** — 6 of 6.
+  Recomputing server-side is the obvious answer and it is **not a safe unilateral change**: every
+  existing payslip would then disagree with what the system would now produce for it, and somebody
+  has already been paid against those figures. Needs the customer's decision on what happens to the
+  payslips already filed — recompute, freeze, or annotate. **Do not silently change what a payslip
+  says.**
+- **Q9. What month did the eleven numeric payroll adjustments mean?** (F-143) `hrms_emp_payroll_deduction`
+  holds rows spelled `"8"`, `"2"`, `"3"` that the calculation can never match, worth up to 50,000
+  each. `"3"` could be March or a March-year convention. Only the tenant knows, and repairing money
+  rows on a guess is the one thing this audit does not do.
 
 ---
 
@@ -1374,49 +1574,129 @@ const retry = () => { setError(null); punch(todayRecord?.punchIn && !todayRecord
 
 | Module | Front door | Lifecycle | Roles | External | Data live | API | CRUD | Validation | Rules | RBAC/Tenant | Integration | Calc | Scale | Errors | Audit | Verdict |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| HRIT Management (m5) | 🟠 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🟠 | 🔴 | 🔴 | 🔴 / 🟢 | 🔴 | 🔴 | 🟠 | 🟠 | 🟠 | **RED** |
+| HRIT Management (m5) — Sprint 0 | 🟠 | 🔴 | 🔴 | 🔴 | 🔴 | 🔴 | 🟠 | 🔴 | 🔴 | 🔴 / 🟢 | 🔴 | 🔴 | 🟠 | 🟠 | 🟠 | **RED** |
+| HRIT Management (m5) — **now** | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 / 🟢 | 🟠 | 🔴 | 🟠 | 🟢 | 🟢 | **AMBER** |
+
+**Sprint 0's row is kept so the movement is legible.** Ten columns went green on work that is
+probe-backed; the four that did not are the four this phase could not honestly close:
+
+- **Integration 🟠** — attendance → payroll is wired (`getTotalDays()` at `:1697` and `:2354`, LWP
+  derived at `:1701`), but the figure it produces reaches the browser and the browser's number is
+  what gets stored. Wired is not the same as trustworthy while F-142 stands.
+- **Calc 🔴** — reconciled for the first time, and it **failed**: 6 of 6 payslips disagree with
+  their own stored components (F-142). This is the one column that got *worse*, and only because
+  somebody finally looked.
+- **Scale 🟠** — measured at 1001 employees and 939 attendance rows; leave, payroll and approvals
+  have no volume anywhere on this deployment to measure against.
+- **Verdict AMBER, not GREEN.** Green needs Calc green, and Calc cannot go green until the customer
+  answers Q8.
 
 ---
 
 ## 13. RELEASE GATE
 
+Re-run and re-marked in Phase 10. It had not been touched since Sprint 0, when every line but one
+was a cross.
+
 ```
-Front door reachable by the role that starts it   ✗  leave entitlement has no screen (F-96)
-360° lifecycle complete, every handoff wired      ✗  6 NOT-WIRED
-Every role journey walks end to end               ✗  5 of 9 roles absent from the frontend model
-External actors can do what the module needs      ✗  no employee self-service half
-Live data — no fixtures rendered                  ✗  F-97, F-98, F-100
-API + CRUD complete                               ✗  monthly payroll 500s (F-93)
-Validation at API and DB, not only the browser    ✗  F-101, F-102, F-106
-Business rules correct                            ✗  F-95, F-96
-Tenant isolation proven with two tenants          ✓  PASS (list endpoints; see Q3)
-RBAC proven at the API, not the menu              ✗  five holes executed
-Cross-module data flow proven                     ✗  attendance→payroll dead
-Calculations independently reconciled             ✗  3 of 5 FAIL
-Error handling + audit trail                      ✗  raw SQL leaked; no before/after trail
-Scale tested at realistic volume                  —  not reached
-Golden transactions pass                          ✗  see §14
-Domain sign-off                                   —  not sought
+Front door reachable by the role that starts it   ✓  F-96 closed - Entitlements tab      probe-sprint4
+360° lifecycle complete, every handoff wired      ✓  the 6 NOT-WIRED closed, Sprints 2-8
+Every role journey walks end to end               ✓  all nine role_keys adopted          probe-sprint5,6
+External actors can do what the module needs      ✓  My HR shipped (F-130)               probe-sprint8
+Live data - no fixtures rendered                  ✓  F-97, F-98, F-100 closed            probe-sprint1,2,3
+API + CRUD complete                               ✓  CRUD now DRIVEN, not just opened     probe-lifecycle 51/51
+Validation at API and DB, not only the browser    ✓  F-101, F-102, F-106 closed          probe-sprint4,8
+Business rules correct                            ✓  F-95, F-96 closed                    probe-sprint4
+Tenant isolation proven with two tenants          ✓  PASS - and now UNQUALIFIED           probe-q3  9/9
+RBAC proven at the API, not the menu              ✓  five holes closed                    probe-sprint1,5
+Cross-module data flow proven                     ~  attendance -> payroll is wired, but see F-142
+Calculations independently reconciled             ✗  DONE this phase, and it FAILED - F-142
+Error handling + audit trail                      ✓  leave, payroll AND attendance    probe-sprint10 18/18
+Scale tested at realistic volume                  ~  measured where volume exists; leave/payroll have none
+Golden transactions pass                          ~  re-run: 9 of 12 pass, 1 partial, 2 unproven  §14
+Domain sign-off                                   -  not sought, and cannot be given by me
 ```
+
+**Four lines moved, and one of them moved the wrong way.**
+
+**`Tenant isolation` is now unqualified.** It was the gate's only PASS and carried the caveat
+*"(list endpoints; see Q3)"* — list endpoints were proven isolated, fetch-by-id never was.
+`probe-q3.sh` closes it: every m5 by-id endpoint was read statically (`LeaveRequestApiController`,
+`HolidayApiController`, `LeaveTypeApiController`, `AttendanceRegularisationApiController`,
+`EmployeeDirectoryController`, `MyHrController`) and every lookup is tenant-scoped, then proven
+live in both directions with two tenants - **9/9**. The cross-tenant answer is `404`, deliberately
+rather than `403`, and the body names nothing.
+
+**`Calculations independently reconciled` was finally done, and the answer is a new CRITICAL.**
+§E.3 had five reconciled figures and not one was a payroll figure. Reconciling them found that
+**no payslip on the live host agrees with its own stored components** - 6 of 6 - because
+`monthlyPayrollStore` files the browser's totals without recomputing them. That is F-142. The line
+stays a cross, but it is now a cross with evidence behind it rather than an unanswered question.
+
+**`Golden transactions` were re-run for the first time since Sprint 0** and stand at **9 of 12
+passing**, one partial, two unproven - against 2 of 12 at Sprint 0. The two unproven are both
+payroll arithmetic, and F-142 is the reason not to rush them: driving a mid-month joiner or an LWP
+month would show what the *screen* computes, and the screen's figure is not what gets stored. §14
+carries the evidence per story.
+
+**`Scale` is partially closed, and the honest word is partially.** What was measured, read-only:
+the employee directory at **1001 employees** (28.9 ms, linear, no N+1) and attendance at
+**939 rows** (11.5 ms). What could **not** be measured: leave, payroll and the approval queue at
+volume, because *no tenant on this deployment has any* - the largest leave register is 13 rows and
+the largest payroll month is 6 payslips. Endpoint timings sit on a **~600 ms floor** that is
+framework and network overhead rather than query cost, so the query-level figures are the ones that
+discriminate by data size. **One endpoint stands clear of that floor:** `monthly-payroll/create` at
+**1.24 s** for tenant 6, roughly double everything else, with `dashboard/hr/workforce` (a six-month
+attendance scan) next at 0.84 s. Marking this
+line closed on a 13-row sample would be exactly the mistake F-132 taught - Monthly Payroll passed
+every check for eight sprints while returning two of 122 rows.
+
+**`Error handling + audit trail` closed in this phase.** Leave got a trail in Sprint 7 and payroll
+in Sprint 9; attendance emitted nothing, and it was the write that most needed one. An approved
+regularisation **overwrites `punchin_time` and `punchout_time` on an existing row**, and payroll
+reads `timestamp_diff` off that same row - so a corrected day could change somebody's pay with no
+record of what the day used to say.
+
+Two events now, both PROJECTOR-only: `attendance.regularisation.decided` (every decision) and
+`attendance.corrected` (approvals only, carrying the **before-image**). Proven end to end -
+`probe-sprint10`, 18/18: the trail names the old punch-in `10:30:00` and the new `09:00:00`,
+distinguishes amending a row from creating one, and a rejection records the decision while touching
+no attendance row.
+
+Two things were deliberately *not* done. No `NotificationDispatcher` - telling the applicant their
+correction landed is a reasonable thing to want and a separate decision with its own recipient
+question, and it is not smuggled in behind an audit-trail change. And the correction path itself was
+left alone: `probe-sprint2` had only ever proven the endpoint **refuses** bad input (four 422s), so
+approve -> correct -> attendance-rewritten had never been executed at all before this probe.
 
 ---
 
 ## 14. PART F — GOLDEN TRANSACTIONS
 
-| Story | Expected | Actual | Verdict |
+Re-marked in Phase 10 against the probes that actually execute. The Sprint-0 column is kept so the
+movement is visible, and **the evidence column names the probe** — a verdict with no probe behind it
+is marked as such rather than inferred from a closed finding.
+
+| Story | Sprint 0 | Now | Evidence |
 |---|---|---|---|
-| Apply → approve → balance falls | balance decrements by the working days taken | applied ✓, approved by **the applicant** ✓, balance unchanged (entitlement 0) | **FAIL** |
-| Half-day leave | 0.5 deducted | `day_type='0.5'`, `to_date` forced to `from_date` — correct | PASS |
-| Leave spanning a holiday | holiday excluded | counted as a working day (F-95) | **FAIL** |
-| Leave beyond balance | refused | 365 days accepted (F-102) | **FAIL** |
-| Leave in a closed period | refused | 1990 accepted (F-102) | **FAIL** |
-| Cancel after approval | status `cancelled`, balance returned | no path exists | **FAIL** |
-| Punch in → punch out → hours | duration recorded | works; `timestamp_diff` correct | PASS |
-| Missing punch-out → regularise | employee raises, manager approves | no path (F-107) | **FAIL** |
-| Run a month's payroll | payslips created | **HTTP 500** (F-93) | **FAIL** |
-| Mid-month joiner | pro-rated | unreachable behind F-93 | not reached |
-| Unpaid leave → payslip | LWP reduces net | unreachable behind F-93 | not reached |
-| Employee downloads payslip | PDF | no employee surface | **FAIL** |
+| Apply → approve → balance falls | FAIL | **PASS** | `probe-sprint6` walks the whole two-step chain (20 assertions); `probe-sprint5` shows the balance moving — `total=10 used=0 remaining=10` after a cancel returns the days |
+| Half-day leave | PASS | **PASS** | unchanged — `day_type='0.5'`, `to_date` forced to `from_date` |
+| Leave spanning a holiday | FAIL | **PARTIAL** | `probe-sprint4` proves weekly-off exclusion (*"a Sunday only — all weekly off"* → 422). F-95 closed and `LeaveDayCounter` reads the tenant's holiday table, but **no probe asserts a public holiday specifically** |
+| Leave beyond balance | FAIL | **PASS** | `probe-sprint4`: *"5 working days against a 3-day balance"* → **422**, and *"2 working days, within balance"* → **201** |
+| Leave in a closed period | FAIL | **PASS** | `probe-sprint4`: *"leave dated 1990"* → **422**; *"365-day leave"* → **422** |
+| Cancel after approval | FAIL | **PASS** | `probe-sprint5`: refused while pending (422), allowed after approval (200), *"the days have been returned"*, balance verified |
+| Punch in → punch out → hours | PASS | **PASS** | unchanged — `timestamp_diff` correct |
+| Missing punch-out → regularise | FAIL | **PASS** | `probe-sprint2` drives the lifecycle and its gating (F-107) |
+| Run a month's payroll | FAIL | **PASS**, with F-142 | `probe-sprint9` writes payslips and reads them back. **Payslips are created; that they are correct is F-142** |
+| Mid-month joiner | not reached | **NOT PROVEN** | pro-rating exists (`day_count = 0` → `round(amount / daysInMonth × totalDay)`, `:2458`) and was read, but no probe drives a mid-month joiner |
+| Unpaid leave → payslip | not reached | **NOT PROVEN** | LWP is derived from attendance at `:1701` (`$totalMonthDays - $emp_att['totalDays']`) and was read, but no probe drives an LWP month |
+| Employee downloads payslip | FAIL | **PASS** | `probe-sprint8` — My HR (F-130); the endpoint takes no `employee_id` at all |
+
+**Nine of twelve pass, one is partial, two are unproven.** The two unproven ones are both payroll
+arithmetic, and F-142 is the reason not to rush them: driving a mid-month joiner or an LWP month
+would show what the *screen* computes, and the screen's figure is not what gets stored. Proving
+those properly means fixing F-142 first — otherwise the test would pass while the payslip on file
+said something else.
 
 ---
 
@@ -1427,21 +1707,35 @@ Domain sign-off                                   —  not sought
 | Missing required field (`comment`) | **422** with a usable message ✓ |
 | `to_date` before `from_date` | **422** ✓ |
 | Empty `leave_type` | **422** ✓ |
-| Very long text (300 chars) | **422** ✓ … but 40 chars → **500** (F-106) |
+| Very long text (300 chars) | **422** ✓ … 40 chars → 500 **fixed in Sprint 8** (F-106) |
 | Emoji + Gujarati + combining diacritic | **stored byte-identical** ✓ |
-| Another tenant's `leave_type_id` | **201 accepted** ✗ (F-101) |
+| Another tenant's `leave_type_id` | **422** ✓ — was 201; closed Sprint 4 (F-101), re-proven `probe-sprint4` |
 | Another tenant's data by `sub_institute_id` | **ignored, own tenant returned** ✓ |
-| Reference to a non-existent leave type | **already in production**, 15 rows ✗ (F-94) |
+| Another tenant's record **by id** | **404**, body leaks nothing ✓ — `probe-q3`, 9/9 (Q3) |
+| Reference to a non-existent leave type | closed Sprint 4 (F-94) |
 | No token | **401** on every HRIT endpoint ✓ |
 | Wrong `syear` | silently normalised to the current leave year — no error, no warning |
-| Double-click Save | leave apply is idempotent on `(user_id, from_date, pending)`; payroll save is **not** (F-109) |
+| Double-click Save | leave: idempotent, re-submit **edits the same row** (`probe-sprint6`). Payroll: **fixed** — `UNIQUE (sub_institute_id, employee_id, year, month)` + `DB::transaction` + `lockForUpdate` (F-138) |
 | Expired token | rejected — `ResolvesApiIdentity` checks `expires_at`, unlike `authMiddleware` |
+| Unrecognised month | **refused, not filed** — `Helpers::canonicalMonth()` returns null rather than guessing (F-137) |
 
-*Not run: refresh-during-save, network drop mid-save, two users editing one row, back button after
-submit. These need a browser session and belong with the Sprint 8 hardening suite.*
+**The four browser-session negatives — the honest status.**
 
----
+Sprint 0 recorded them as *"not run … these need a browser session"*. That framing was half wrong,
+and the half that was wrong is now covered:
 
+- **refresh-during-save** and **back button after submit** are double-submit in disguise, and both
+  write paths now defend against it: leave re-submits into the same row (asserted, `probe-sprint6`);
+  payroll cannot write a second payslip for an employee-month because the database refuses it
+  (F-138's unique index).
+- **two users editing one row** — payroll is safe by construction: the upsert runs inside
+  `DB::transaction` with `lockForUpdate`, so the second writer waits and its supersession is
+  recorded as an event. **Leave has no such lock** and has not been raced.
+- **network drop mid-save** genuinely needs a client that abandons the connection, and
+  **remains unrun**.
+
+So: **two covered by existing assertions, one covered for payroll but not for leave, one still not
+run.** They are no longer four unknowns, and they are not four passes either.
 ## 16. EVIDENCE INDEX
 
 | File | What it holds |
@@ -1452,6 +1746,12 @@ submit. These need a browser session and belong with the Sprint 8 hardening suit
 | `_evidence/probe-reads2.sh` / `.out` | attendance + payroll across roles; the 500s |
 | `_evidence/probe-writes.sh` / `.out` | the five executed authorization holes |
 | `_evidence/probe-validation.sh` / `.out` | E.1 validation matrix, Part G negatives |
+| `_evidence/reconcile-payroll.php` | recomputes every stored payslip from its own inputs — the §E.3 reconciliation, and how F-142 was found |
+| `_evidence/probe-q3.sh` | cross-tenant fetch **by id**, both directions, two tenants — closes Q3 (9/9) |
+| `_evidence/probe-scale.sh` | HRIT read timings - 30+ endpoint medians for tenants 3 and 6, all GET |
+| `_evidence/probe-scale-query.php` | the same at QUERY level, so tenant 1000000 (1001 users, no token) can be measured without minting one |
+| `_evidence/probe-sprint10.sh` | the attendance correction lifecycle and its new audit trail, plus the verdict's own five headline requests (28/28) |
+| `_evidence/probe-lifecycle.sh` | **every sub-module driven through its writes** — create/read/update/delete per screen, both tenant boundaries (51/51). How F-146 … F-149 were found |
 | `_evidence/snapshot.php` | read-only SQL against the `.env` host, `SET NAMES utf8mb4` |
 | `_evidence/before-219.json` | pre-probe state of the row F-88 deleted |
 | `_local-backups/REVERSAL-2026-09-05-hrit-audit-probes.sql` | the reversal, already applied |

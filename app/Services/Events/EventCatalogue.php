@@ -162,6 +162,30 @@ class EventCatalogue
          * a guess. The chain built to ENFORCE approvals is what made approval
          * notifications deliverable.
          */
+        /*
+         * HRIT attendance, added in Phase 10.
+         *
+         * Attendance was the last HRIT area emitting nothing: leave got a trail in
+         * Sprint 7 and payroll in Sprint 9, so the release gate's
+         * "Error handling + audit trail" line could not close on attendance alone.
+         *
+         * PROJECTOR-only, and that is the deliberate part. An approved
+         * regularisation OVERWRITES punchin_time and punchout_time on an existing
+         * row, and payroll reads timestamp_diff off that row - so before this,
+         * a corrected day changed somebody's pay with no record of what it used to
+         * say. attendance.corrected carries the before-image for exactly that.
+         *
+         * No NotificationDispatcher. Telling the applicant their correction landed
+         * is a reasonable thing to want and a separate decision with its own
+         * recipient question; it is not smuggled in behind an audit-trail change.
+         */
+        'attendance.regularisation.decided' => [
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+        'attendance.corrected' => [
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
         'leave.submitted' => [
             'NotificationDispatcher'      => self::REACTOR,
         ],

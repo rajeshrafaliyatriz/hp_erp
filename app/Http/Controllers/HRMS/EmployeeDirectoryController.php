@@ -65,7 +65,9 @@ class EmployeeDirectoryController extends Controller
      * CONCAT_WS with NULLIF rather than the accessor's plain concatenation,
      * which yields a double space whenever middle_name is empty.
      */
-    private const FULL_NAME_SQL = "TRIM(CONCAT_WS(' ', NULLIF(u.first_name, ''), NULLIF(u.middle_name, ''), NULLIF(u.last_name, ''))) as full_name";
+    private const FULL_NAME_EXPR = "TRIM(CONCAT_WS(' ', NULLIF(u.first_name, ''), NULLIF(u.middle_name, ''), NULLIF(u.last_name, '')))";
+
+    private const FULL_NAME_SQL = self::FULL_NAME_EXPR . ' as full_name';
 
     /** Fields a caller may set on create or update. Nothing else is written. */
     private const WRITABLE = [
@@ -124,9 +126,22 @@ class EmployeeDirectoryController extends Controller
         if ($q = trim((string) $request->input('q'))) {
             $like = '%' . $q . '%';
             $query->where(function ($w) use ($like) {
+                /*
+                 * THE EXPRESSION, NOT THE ALIAS.
+                 *
+                 * `u.full_name` was searched here as though it were a column.
+                 * It is not - the docblock above says so - it is a SELECT alias,
+                 * and MySQL evaluates WHERE before the select list, so it never
+                 * resolves: every search in the Employee Directory failed with
+                 * "Unknown column 'u.full_name' in 'where clause'".
+                 *
+                 * Repeating the expression is what makes a search for
+                 * "milan baldaniya" work at all: first_name and last_name each
+                 * hold half of it, so neither LIKE can match the pair on its own.
+                 */
                 $w->where('u.first_name', 'like', $like)
                     ->orWhere('u.last_name', 'like', $like)
-                    ->orWhere('u.full_name', 'like', $like)
+                    ->orWhereRaw(self::FULL_NAME_EXPR . ' like ?', [$like])
                     ->orWhere('u.email', 'like', $like)
                     ->orWhere('u.employee_no', 'like', $like);
             });

@@ -1113,6 +1113,40 @@ Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk']);
 // Who a course is for. Declared BEFORE /lms/courses/{id} so "audience" is not
 // captured as an id.
 Route::get('/lms/courses/{id}/audience/preview', [LmsCourseController::class, 'audiencePreview'])->whereNumber('id');
+/*
+ * Which modules this organisation uses.
+ *
+ * Gated profile:admin - it writes the rights rows that decide what every role
+ * can see. The tenant comes from the token; the request cannot name another.
+ */
+/*
+ * How far this organisation has got with setting itself up.
+ *
+ * status is readable by any authenticated member - it is a checklist of the
+ * organisation's own configuration, and an HR user needs to see what is
+ * outstanding. Creating the standard roles writes to tbluserprofilemaster, so
+ * that one is admin-only.
+ */
+Route::get('/organization/setup-status', [\App\Http\Controllers\Api\Organization\OrganizationSetupController::class, 'status'])->middleware('api.token');
+Route::post('/organization/setup/roles', [\App\Http\Controllers\Api\Organization\OrganizationSetupController::class, 'createRoles'])->middleware('profile:admin');
+
+Route::get('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'index'])->middleware('profile:admin');
+Route::post('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'store'])->middleware('profile:admin');
+
+/*
+ * FIRST-RUN GUIDANCE - what THIS person should do next.
+ *
+ * `api.token` and no profile guard, unlike everything above it. That is the
+ * point: an employee's next step is as real as an administrator's, and all nine
+ * roles get an answer. The role is read from the TOKEN'S OWNER and decides the
+ * content, so there is nothing a caller can send to see somebody else's list -
+ * and the per-step permission check (does this profile have can_view on the
+ * screen the step links to?) is finer than any route guard could be.
+ */
+Route::get('/onboarding/next-steps', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'index'])->middleware('api.token');
+Route::post('/onboarding/next-steps/dismiss', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'dismiss'])->middleware('api.token');
+Route::post('/onboarding/next-steps/restore', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'restore'])->middleware('api.token');
+
 Route::get('/lms/courses/{id}/audience/suggested', [LmsCourseController::class, 'suggestedAudience'])->whereNumber('id');
 Route::post('/lms/courses/{id}/audience', [LmsCourseController::class, 'assignAudience'])->whereNumber('id');
 Route::get('/lms/courses', [LmsCourseController::class, 'index']);
@@ -2185,7 +2219,34 @@ Route::post('/competency/catalogue-adopt/commit', [\App\Http\Controllers\Api\Com
 // X-07d - readiness gates, admin surface. The guard is the EXISTING
 // profile:admin,hr middleware (exact role_key match, alias map for legacy
 // profiles); the controller deliberately does not re-implement it.
-Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware('profile:admin,hr');   // menuright:225,view RE-ADD WITH THE MENU
+/*
+ * ── THE FIRST ROUTES TO ENFORCE A MENU RIGHT ────────────────────────────
+ *
+ * `menuright:` was registered in bootstrap/app.php and attached to nothing -
+ * every occurrence in this file was a comment saying RE-ADD WITH THE MENU.
+ * So menu rights drove the sidebar and nothing else: the endpoint behind a
+ * hidden screen stayed callable by anyone holding a token.
+ *
+ * Two things had to be true before it could be switched on anywhere, and both
+ * now are:
+ *
+ *   1. THE MENU EXISTS. Readiness Gates is menu 304 on both databases, and
+ *      the migration that created it granted view to administrator and HR
+ *      in the same step - so the row and its grant arrived together. Menu 225
+ *      was rolled back precisely because it did not.
+ *   2. THE LOOKUP TOLERATES LEGACY ROWS. RequireMenuRight filtered strictly
+ *      on sub_institute_id, and seven of twelve live tenants hold only 4
+ *      stamped rows against ~149 menus - enforcing that would have refused
+ *      those tenants on nearly every screen. It now prefers the stamped row
+ *      and falls back to a legacy one.
+ *
+ * Deliberately only these two routes. Attaching menuright across the API is a
+ * separate piece of work with its own blast radius; this is the beachhead
+ * that proves the mechanism on a screen whose rights were created correctly.
+ * `edit` is not used for acknowledge: the migration grants view only, and the
+ * controller gates the acknowledgement itself.
+ */
+Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware(['profile:admin,hr', 'menuright:304,view']);
 // ⚠ THE MATRIX GUARD IS TEMPORARILY UNWIRED FROM THESE TWO ROUTES.
 //
 // They carried menuright:225,view / :225,edit. Menu 225 was created to prove the
@@ -2205,7 +2266,7 @@ Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGat
 // can_edit=0 there, so HR is refused BY THE ROW - flip the row and the answer
 // flips. profile:admin,hr STAYS as the outer coarse guard; the menu right is the
 // finer one inside it.
-Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware('profile:admin,hr');   // menuright:225,edit RE-ADD WITH THE MENU
+Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware(['profile:admin,hr', 'menuright:304,view']);
 
 // ── AI-generated capability assessment ────────────────────────────────────────
 // GENERATE is admin/hr: it creates content for a whole job role.

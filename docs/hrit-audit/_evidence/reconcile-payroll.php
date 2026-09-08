@@ -33,6 +33,23 @@
 
 $heads = DB::table('payroll_types')->get()->keyBy('id');
 
+/*
+ * The per-employee, per-month adjustment the calculation adds on top of the
+ * structure amount (:2421 for allowances, :2440 for deductions):
+ *
+ *   ->where('employee_id', ..)->where(['sub_institute_id'=>.., 'month'=>$request->month,
+ *                                      'year'=>.., 'deduction_type'=>$payrollType->id])
+ *
+ * Keyed here EXACTLY as that query matches, so a row stored under a month
+ * spelling the screen never posts simply does not join - which is the point.
+ */
+$overrides = [];
+foreach (DB::table('hrms_emp_payroll_deduction')->get() as $o) {
+    $overrides[implode('|', [$o->sub_institute_id, $o->employee_id, $o->month, $o->year, $o->deduction_type])]
+        = (float) $o->deduction_amount;
+}
+$overrideHits = 0;
+
 $rows = DB::table('employee_monthly_salary_data')->orderBy('id')->get();
 
 $monthDays = [
@@ -59,6 +76,12 @@ foreach ($rows as $r) {
         if ($head === null) { $unknown[] = $headId; continue; }
 
         $amt  = (float) $amount;
+
+        // The structure amount plus this month's adjustment, before pro-rating -
+        // the order the controller applies them in.
+        $okey = implode('|', [$r->sub_institute_id, $r->employee_id, $r->month, $r->year, $headId]);
+        if (isset($overrides[$okey])) { $amt += $overrides[$okey]; $overrideHits++; }
+
         $flat = ((int) ($head->day_count ?? 0)) === 1;   // day_count=1 -> not pro-rated
 
         if (!$flat && $worked > 0 && $days > 0) {
@@ -109,6 +132,17 @@ printf("\n  payslips reconciled : %d\n", count($rows));
 printf("  agree with own data : %d\n", $agree);
 printf("  DISAGREE            : %d\n", $disagree);
 printf("  underivable         : %d\n", $underivable);
+
+printf("\n  per-month adjustments applied : %d hit(s) across %d stored rows\n",
+    $overrideHits, count($overrides));
+// Helpers::getMonths(), inlined: calling a trait method statically warns.
+$canonicalMonths = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+$unreachable = 0;
+foreach (DB::table('hrms_emp_payroll_deduction')->get() as $o) {
+    if (!in_array($o->month, $canonicalMonths, true)) { $unreachable++; }
+}
+printf("  adjustment rows stored under a month spelling the screen never posts : %d\n", $unreachable);
+printf("  (the calculation matches month exactly, so those are silently ignored)\n");
 
 echo "\n";
 echo "  A payslip that disagrees with its own stored components is not a rounding question.\n";

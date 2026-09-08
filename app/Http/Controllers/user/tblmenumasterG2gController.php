@@ -64,9 +64,41 @@ class tblmenumasterG2gController extends Controller
 
         $menusByParent = $allMenus->groupBy('parent_id');
 
+        /*
+         * ── F-151. WHICH ROW WINS WHEN A MENU HAS TWO ──────────────────────
+         *
+         * This was `->get()->keyBy('menu_id')` over an unordered query. keyBy
+         * keeps the LAST occurrence, so where a profile holds two rows for one
+         * menu the winner was whatever order MySQL happened to return: 20 such
+         * pairs on dev, 11 on live. A stale row could silently shadow the one an
+         * admin had just saved.
+         *
+         * NOT FIXED BY FILTERING ON THE TENANT, and that is the important part.
+         * 4,238 of live's 4,759 rows carry a NULL sub_institute_id - 89% - so
+         * adding `where('sub_institute_id', $sub_institute_id)` would empty the
+         * sidebar for most organisations on the platform. Measured first.
+         *
+         * Filtering is also unnecessary: tbluserprofilemaster.id is a global
+         * auto-increment primary key, so every row naming this profile belongs to
+         * this profile's organisation whatever its own stamp says. The stamp is
+         * data rot, not ownership.
+         *
+         * So all rows are still read and the collapse is made deliberate: the row
+         * stamped with THIS tenant wins, and a NULL or legacy row applies only
+         * when there is no stamped one.
+         */
         $rightsByMenuId = tblgroupwise_rights_g2gModel::where('profile_id', $profile_id)
             ->get()
-            ->keyBy('menu_id');
+            ->reduce(function ($carry, $right) use ($sub_institute_id) {
+                $existing = $carry->get($right->menu_id);
+                $isExact = (string) $right->sub_institute_id === (string) $sub_institute_id;
+
+                if (!$existing || $isExact) {
+                    $carry->put($right->menu_id, $right);
+                }
+
+                return $carry;
+            }, collect());
 
         $data = [];
 
@@ -120,9 +152,22 @@ class tblmenumasterG2gController extends Controller
 
         $menusByParent = $allMenus->groupBy('parent_id');
 
+        // Same deliberate collapse as displaySidebarMenu - see F-151 there.
+        // This is the matrix an admin reads BEFORE saving, so it must agree
+        // with what the sidebar will show, or they edit against a row that is
+        // not the one in effect.
         $rightsByMenuId = tblgroupwise_rights_g2gModel::where('profile_id', $profile_id)
             ->get()
-            ->keyBy('menu_id');
+            ->reduce(function ($carry, $right) use ($sub_institute_id) {
+                $existing = $carry->get($right->menu_id);
+                $isExact = (string) $right->sub_institute_id === (string) $sub_institute_id;
+
+                if (!$existing || $isExact) {
+                    $carry->put($right->menu_id, $right);
+                }
+
+                return $carry;
+            }, collect());
 
         $data = [];
 
@@ -162,6 +207,39 @@ class tblmenumasterG2gController extends Controller
         $profile_id = $request->get('profile_id');
         $rights = $request->input('rights', []);
 
+        /*
+         * ── THE PROFILE MUST BELONG TO THE CALLER'S ORGANISATION ────────────
+         *
+         * F-150. `profile_id` arrived verbatim from the request and was never
+         * checked against the caller's tenant, while the menu ids below WERE
+         * validated - which made the omission read as deliberate rather than
+         * forgotten.
+         *
+         * The consequence, demonstrated on dev and rolled back: an ordinary
+         * administrator of tenant 1 POSTed profile_id=16 (tenant 6's Admin) and
+         * the endpoint answered "Groupwise rights saved successfully" while
+         * taking tenant 6's administrator from 88 permission rows to 1 - and
+         * stamping the survivor sub_institute_id=1.
+         *
+         * That is worse than a read leak: it is silent, destructive, and it
+         * locks the victim out of their own product. The delete below is scoped
+         * by profile_id alone, so this check is the only thing standing between
+         * a customer and another customer's access control.
+         *
+         * 404, not 403: a 403 would confirm that profile id exists in some other
+         * organisation. Same reasoning as everywhere else in this codebase.
+         */
+        $ownsProfile = tbluserprofilemasterModel::where('id', $profile_id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->exists();
+
+        if (! $ownsProfile) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'Profile not found',
+            ], 404);
+        }
+
         $validMenuIds = tblmenumaster_g2gModel::where('status', 1)
             ->visibleToTenant($sub_institute_id)
             ->pluck('id')
@@ -193,6 +271,29 @@ class tblmenumasterG2gController extends Controller
         }
 
         DB::transaction(function () use ($profile_id, $rows) {
+            /*
+             * ── DELETED BY PROFILE, AND THAT IS NOW CORRECT ─────────────────
+             *
+             * A row naming this profile IS this tenant's row: the check above
+             * has already established that the profile belongs to the caller's
+             * organisation, and that check is what makes the unscoped delete
+             * safe. Before it, this line was the destructive half of F-150.
+             *
+             * I tried scoping it by sub_institute_id as well, and that is WORSE
+             * here, because the column is `text NULL` and holds three shapes:
+             * the tenant id, NULL (4,238 rows on live), and a CSV string like
+             * '1,2,3,4,5,6,7,8,9,10,11' (44 rows on live). A scoped delete
+             * leaves the NULL and CSV rows behind, and the re-insert then adds a
+             * second row for the same menu - measured on dev tenant 6, where
+             * saving produced two rows for menu 300. displaySidebarMenu does
+             * keyBy('menu_id') on an unordered query, so which of the two wins
+             * is whatever order MySQL returns: a stale row can shadow the one
+             * the admin just saved.
+             *
+             * Deleting by profile therefore both preserves the save's meaning -
+             * this is the complete set of rights for this role - and clears the
+             * legacy rows for that profile as it goes.
+             */
             tblgroupwise_rights_g2gModel::where('profile_id', $profile_id)->delete();
 
             foreach (array_chunk($rows, 200) as $chunk) {

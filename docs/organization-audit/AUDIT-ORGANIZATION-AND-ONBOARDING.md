@@ -7,6 +7,10 @@ cross-tenant leak below is **demonstrated with a read**, never a write.
 Findings continue the platform sequence. Highest existing is **F-132**
 (`Docs/hrit-audit/`), so this register starts at **F-133**.
 
+> **Added after the first pass.** F-150 to F-152 were found while preparing to
+> write to `tblgroupwise_rights_g2g` for module enablement. F-150 is the most
+> severe finding in this document.
+
 ---
 
 ## 1. VERDICT — **RED**
@@ -174,6 +178,60 @@ or open a Task project.
 **Fix sketch:** both components already call `useAuth()`; derive `role` there and
 drop the prop. Narrow `LazyComponent` so a required prop fails the build.
 
+#### F-150 — One organisation's admin can destroy another organisation's permissions — CRITICAL (P0)
+**What:** `storeGroupwiseRightsG2g` takes `profile_id` verbatim from the request
+and never checks it belongs to the caller's organisation, then deletes every
+rights row for that profile and re-inserts stamped with the CALLER's tenant.
+**Where:** `app/Http/Controllers/user/tblmenumasterG2gController.php:162,196,180`
+**Evidence:**
+```php
+$sub_institute_id = $this->apiTenantId($request);   // :161  correct
+$profile_id       = $request->get('profile_id');    // :162  NEVER VALIDATED
+
+$validMenuIds = tblmenumaster_g2gModel::where('status', 1)
+    ->visibleToTenant($sub_institute_id)->pluck('id')->flip();   // menus ARE checked
+
+'sub_institute_id' => $sub_institute_id,            // :180  stamped as the caller's
+...
+tblgroupwise_rights_g2gModel::where('profile_id', $profile_id)->delete();  // :196
+```
+The menu ids are validated against the tenant and the profile id is not, which
+makes the omission read as deliberate rather than forgotten.
+**Demonstrated** (dev, inside a rolled-back transaction): an ordinary
+administrator of tenant 1 POSTed `profile_id=16` — tenant 6's Admin — and
+received **HTTP 200 "Groupwise rights saved successfully"** while taking tenant
+6's administrator from **88 permission rows to 1**, with the survivor stamped
+`sub_institute_id=1`.
+**Impact:** Worse than a read leak. It is silent, destructive, and it locks the
+victim's administrator out of their own product — including out of the Role &
+Permissions screen needed to repair it. This is the same endpoint the product's
+own rights matrix calls, so no unusual tooling is required.
+**Re-verify:** `php artisan tinker --execute="require getcwd().'/Docs/organization-audit/_evidence/prove-rights-hijack.php';"`
+**Fix sketch:** verify the profile belongs to the caller's tenant; 404 if not.
+
+#### F-151 — Sidebar rights are read without a tenant filter — HIGH
+**What:** `displaySidebarMenu` resolves the tenant and then reads rights by
+`profile_id` alone, collapsing duplicates with `keyBy('menu_id')` on an unordered
+query — so where a profile has two rows for one menu, which one wins is whatever
+order MySQL returns.
+**Where:** `tblmenumasterG2gController.php:58,67-69`
+**Evidence:** 20 duplicate `(profile_id, menu_id)` pairs on dev (40 rows), 11 on
+live (22 rows). `sub_institute_id` is `text NULL` and holds three shapes: the
+tenant id, NULL (4,238 live rows), and a CSV string `'1,2,3,4,5,6,7,8,9,10,11'`
+(44 live rows).
+**Impact:** A stale row can shadow the one an admin just saved. Measured on dev
+tenant 6 while fixing F-150: a tenant-scoped delete left the CSV row behind and
+the save produced two rows for menu 300.
+
+#### F-152 — RequireMenuRight is registered and attached to nothing — MEDIUM
+**What:** The only reader that filters rights by tenant is applied to zero routes.
+**Where:** `bootstrap/app.php:56` registers the alias; every `menuright:` in
+`routes/` is inside a comment (`routes/api.php:2177,2192,2197` say "RE-ADD WITH
+THE MENU").
+**Impact:** Rights currently control the sidebar only, not the API. Menu-level
+permissions are navigation, not access control — the endpoints behind a hidden
+screen remain callable.
+
 #### F-134 — Any tenant can read another tenant's compliance records and staff list — CRITICAL (P0)
 **What:** `instituteDetailController` takes `sub_institute_id` from the request
 body, so a valid token from tenant A returns tenant B's data.
@@ -317,6 +375,101 @@ fetched and used only for `SkillsPanel` (`:188`).
 **Where:** `module-configuration-page.tsx:118` says "STEP 1 OF 5" while its own
 `SETUP_STEPS` has 8 and the layout is passed `currentStep={2}`;
 `app/organization/setup/page.tsx:81` has 6. Source contains `â€"`, `ðŸ‘‹`, `â˜‘`.
+
+---
+
+> **Added in the readiness/guidance pass.** F-153 to F-156 were found while
+> making readiness gates cover every tenant. F-154 is the one that would have
+> caused visible harm the first night the coverage fix ran.
+
+#### F-153 — The nightly recompute could only ever measure tenants it had already measured — HIGH
+**What:** `readiness:recompute` took its tenant list from
+`tenant_readiness_gate` — the table it writes. A tenant with no gate rows could
+therefore never acquire any, permanently. `ReadinessGateRecomputer::recomputeAll()`
+used a third list (`tbluser`), so the command and the method it mirrors covered
+different organisations.
+**Where:** `app/Console/Commands/RecomputeReadinessGates.php:54`;
+`app/Services/Readiness/ReadinessGateRecomputer.php:224`
+**Measured:**
+
+```
+dev    5 of 15 tenants had no gate rows — including Fiber Valley (967 employees)
+live   13 and 14 — THE ONLY TWO EVER CREATED THROUGH THE PRODUCT'S OWN SIGNUP
+```
+
+**Impact:** Every gate-fed screen ("My Capability", gap reporting) reads a
+measurement that, for these tenants, does not exist. The organisations the gate
+system was meant to guide were the exact ones it never looked at.
+**Fixed:** one rule in `ReadinessGateRecomputer::tenantsToRecompute()` — the
+registry (`school_setup`, not soft-deleted) unioned with anything that already
+has gates, so nothing currently covered is dropped. Both callers use it.
+*Re-verify:* `_evidence/prove-readiness-covers-new-tenants.php`
+
+#### F-154 — A gate that PASSES its threshold switched the capability off for three days — HIGH
+**What:** A gate needs `sustained_periods` (3) consecutive passes before the
+recomputer calls it `ready`, and the schedule runs daily — so a passing gate
+reads `blocked` for its first three days. `FIRST_RUN_NOTE` says exactly that
+about the *display*. `ReadinessGateEnforcer::check()` did not know it, and
+refused the feature for those three days.
+**Where:** `app/Services/Readiness/ReadinessGateEnforcer.php:66`
+**Why it was invisible:** F-153 hid it. The nightly job never measured a tenant
+for the first time, so no gate ever sat in the warm-up window. Fixing F-153
+alone would have shipped this to every uncovered tenant at once. Measured on
+live, on tenants 13 and 14, with the coverage fix in place and the enforcer
+fix removed:
+
+```
+tenant 13  jobrole_definition  138 roles (threshold 10)  -> REFUSED
+tenant 13  course_mapping      100%      (threshold 50)  -> REFUSED
+tenant 14  jobrole_definition  276 roles (threshold 10)  -> REFUSED
+```
+
+Gap analysis, automatic role assignment and course recommendations would have
+been switched off for an organisation with 138 job roles and 100% course
+mapping — **by the system, with no human decision**, which is the one thing this
+subsystem's asymmetry exists to prevent.
+**Fixed:** the enforcer draws the line on the MEASUREMENT, not the label. A
+value at or above the enable threshold is allowed while it settles; a value
+below it is refused with its remedy, exactly as before.
+*Re-verify:* `_evidence/prove-readiness-covers-new-tenants.php`
+
+#### F-155 — A gate that could not be measured was reported as a failure, with no remedy — MEDIUM
+**What:** When a population is empty (`no courses`, `no tasks`) the value is
+correctly left NULL — and the row was then written with `state = blocked` and
+`remedy = null`. A brand-new organisation therefore opened Readiness Gates and
+read five red rows, two of them with no number and no sentence explaining
+anything.
+**Where:** `ReadinessGateRecomputer::recompute()` (the `$value === null` branch);
+`organization-readiness.tsx` rendered `{g.state}` verbatim.
+**Fixed:** the remedy is written in that branch too, and the API now sends
+`measurable` and `warming_up` derived from the same row as the value, so the
+badge can read "not measured" and "passing · settling" instead of "BLOCKED".
+The stored `state` is unchanged — this adds a reading, it does not rewrite the
+record.
+
+#### F-156 — 537 authored tour steps address an application that no longer exists — MEDIUM (not fixed; recorded)
+**What:** `Onboarding_tour_details` holds 537 rows of real, written guidance and
+is read by nothing. It cannot simply be switched on:
+
+```
+35 distinct access_link values in the tour table
+ 0 of them match ANY access_link in tblmenumaster_g2g
+```
+
+They address the Blade application (`content/organization-dashboard`,
+`content/HRMS/Payroll/Salary-Structure`) and the product is now Next.js under
+`/module/...`. Their `on_click` values are Shepherd.js anchors from that UI
+(`edit-org-btn`, `apply-leave-submit`); **none of those strings appear anywhere
+in `g2gv0`**, and no tour library is installed.
+**Decision:** the rows are left untouched — they are somebody's work, and
+deleting a customer's content is not a remediation. Replaying them would produce
+a tour highlighting nothing on pages that do not exist, which is the fixture
+problem wearing the costume of real data. First-run guidance is built from
+measured state instead (`NextStepsService`), and the OTHER unused table,
+`user_onboarding_status`, is used for what it is shaped for: per-user dismissal.
+**Open:** whether to re-author the 537 steps against the current UI is a content
+decision, not an engineering one.
+*Re-verify:* `_evidence/prove-next-steps.php`
 
 ---
 

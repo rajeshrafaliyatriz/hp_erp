@@ -70,9 +70,39 @@ class ReadinessGateController extends Controller
                     $daysLeft = max(0, (int) ceil(now()->diffInHours($ends, false) / 24));
                 }
 
+                /*
+                 * WHAT `blocked` ACTUALLY MEANS ON THIS ROW.
+                 *
+                 * The stored state has three values and carries three different
+                 * claims under one of them, which a screen cannot untangle from
+                 * the label alone:
+                 *
+                 *   value IS NULL      nothing to measure - the tenant has no
+                 *                      courses, no tasks. Not a failure, and the
+                 *                      enforcer allows it. Rendering "BLOCKED"
+                 *                      here tells a new organisation it has
+                 *                      failed a test that was never run.
+                 *   value >= enable    passing, waiting out its sustained
+                 *                      period. Also allowed. Also not a failure.
+                 *   value <  enable    genuinely short. The remedy applies.
+                 *
+                 * Both flags are DERIVED from the row rather than stored, so
+                 * they cannot disagree with the measurement, and the raw `state`
+                 * is still sent unchanged - this adds a reading, it does not
+                 * overwrite the record.
+                 */
+                $measurable = $g->value !== null;
+                $warmingUp = $measurable
+                    && $g->state === 'blocked'
+                    && (float) $g->value >= (float) $g->enable_threshold;
+
                 return [
                     'gate_key'          => $g->gate_key,
                     'state'             => $g->state,
+                    'measurable'        => $measurable,
+                    'warming_up'        => $warmingUp,
+                    'sustained_periods' => (int) $g->sustained_periods,
+                    'consecutive_passes' => (int) $g->consecutive_passes,
                     'unit'              => $g->unit,
                     // NULL is NEVER COMPUTED, not zero. The screen must render
                     // these differently or it asserts a measurement nobody took.
