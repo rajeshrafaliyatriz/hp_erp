@@ -1133,6 +1133,20 @@ Route::post('/organization/setup/roles', [\App\Http\Controllers\Api\Organization
 Route::get('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'index'])->middleware('profile:admin');
 Route::post('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'store'])->middleware('profile:admin');
 
+/*
+ * FIRST-RUN GUIDANCE - what THIS person should do next.
+ *
+ * `api.token` and no profile guard, unlike everything above it. That is the
+ * point: an employee's next step is as real as an administrator's, and all nine
+ * roles get an answer. The role is read from the TOKEN'S OWNER and decides the
+ * content, so there is nothing a caller can send to see somebody else's list -
+ * and the per-step permission check (does this profile have can_view on the
+ * screen the step links to?) is finer than any route guard could be.
+ */
+Route::get('/onboarding/next-steps', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'index'])->middleware('api.token');
+Route::post('/onboarding/next-steps/dismiss', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'dismiss'])->middleware('api.token');
+Route::post('/onboarding/next-steps/restore', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'restore'])->middleware('api.token');
+
 Route::get('/lms/courses/{id}/audience/suggested', [LmsCourseController::class, 'suggestedAudience'])->whereNumber('id');
 Route::post('/lms/courses/{id}/audience', [LmsCourseController::class, 'assignAudience'])->whereNumber('id');
 Route::get('/lms/courses', [LmsCourseController::class, 'index']);

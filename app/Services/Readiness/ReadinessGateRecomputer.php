@@ -143,17 +143,27 @@ class ReadinessGateRecomputer
             $was = $row->state ?? null;          // NULL = never computed
             $passes = (int) ($row->consecutive_passes ?? 0);
 
+            $remedy = str_replace([':num', ':den'], [$num, $den], $spec['remedy']);
+
             if ($value === null) {
-                // Not computable. The row records the attempt and leaves value
-                // NULL - never-computed, which is not the same claim as zero.
-                $this->write($tenant, $key, $spec, null, $was ?? 'blocked', 0, $row, null);
+                /*
+                 * Not computable. The row records the attempt and leaves value
+                 * NULL - never-computed, which is not the same claim as zero.
+                 *
+                 * THE REMEDY IS STILL WRITTEN. It used to be passed as null
+                 * here, which meant a brand-new tenant - the one case where the
+                 * population is empty on every gate - saw a gate reading
+                 * "blocked", no number, and NOTHING SAYING WHAT TO DO. The
+                 * measurement being impossible is not a reason to withhold the
+                 * one sentence that would let somebody make it possible.
+                 */
+                $this->write($tenant, $key, $spec, null, $was ?? 'blocked', 0, $row, $remedy);
                 continue;
             }
 
             $passes = $value >= $spec['enable'] ? $passes + 1 : 0;
             $next = $this->nextState($was, $value, $passes, $spec, $row);
 
-            $remedy = str_replace([':num', ':den'], [$num, $den], $spec['remedy']);
             $this->write($tenant, $key, $spec, $value, $next, $passes, $row, $remedy);
 
             if ($was !== null && $was !== $next) {
@@ -220,15 +230,76 @@ class ReadinessGateRecomputer
         );
     }
 
-    /** Every tenant with employees. Gates are per tenant. */
+    /**
+     * EVERY TENANT THAT EXISTS — not every tenant that already has gates.
+     *
+     * ── THE BUG THIS REPLACES ───────────────────────────────────────────────
+     *
+     * Three different tenant lists were in use for one feature. The scheduled
+     * command read `tenant_readiness_gate` — the very table it was about to
+     * write — so A TENANT WITH NO GATES COULD NEVER GET ANY. It is the
+     * unmeasured-as-zero error in its purest form: the only organisations the
+     * nightly job skipped were the ones that had never been measured.
+     *
+     * Measured, not assumed:
+     *
+     *     dev   5 of 15 tenants had no gate rows, including Fiber Valley
+     *           (967 employees) and both tenants created since August.
+     *     live  13 and 14 — THE ONLY TWO EVER CREATED THROUGH THE PRODUCT'S
+     *           OWN SIGNUP ENDPOINT — had none, and never would have.
+     *
+     * And `recomputeAll()` read a third list (`tbluser`), so the method and the
+     * command that were meant to do the same thing covered different tenants.
+     * One rule now, here, used by both.
+     *
+     * ── WHY THE UNION ───────────────────────────────────────────────────────
+     *
+     * `school_setup` is the registry: on both databases every tenant with users
+     * has a row in it, so it is the authoritative list. But live carries a gate
+     * row for tenant 11, which is NOT in its registry — orphaned data from
+     * before. Enumerating the registry alone would silently stop recomputing a
+     * tenant that IS being recomputed today, so anything with existing gates is
+     * unioned in and keeps its measurement.
+     *
+     * A soft-deleted tenant is excluded either way: `deleted_at` is a decision
+     * somebody took, and a nightly job should not keep measuring past it.
+     *
+     * @return array<int,int>
+     */
+    public function tenantsToRecompute(): array
+    {
+        $registry = DB::table('school_setup')
+            ->whereNull('deleted_at')
+            ->pluck('id');
+
+        $withGates = DB::table('tenant_readiness_gate')
+            ->distinct()
+            ->pluck('sub_institute_id');
+
+        // Soft-deleted registry rows are excluded from BOTH sides - otherwise an
+        // existing gate row would resurrect a tenant somebody deleted.
+        $deleted = DB::table('school_setup')
+            ->whereNotNull('deleted_at')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->flip();
+
+        return collect($registry)->merge($withGates)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0 && !$deleted->has($id))
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    /** Recompute every tenant. Gates are per tenant. */
     public function recomputeAll(): array
     {
         $out = [];
-        $tenants = DB::table('tbluser')->where('sub_institute_id', '>', 0)
-            ->distinct()->pluck('sub_institute_id');
 
-        foreach ($tenants as $t) {
-            $out[(int) $t] = $this->recompute((int) $t);
+        foreach ($this->tenantsToRecompute() as $t) {
+            $out[$t] = $this->recompute($t);
         }
 
         return $out;

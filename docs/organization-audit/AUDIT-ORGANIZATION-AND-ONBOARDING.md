@@ -378,6 +378,101 @@ fetched and used only for `SkillsPanel` (`:188`).
 
 ---
 
+> **Added in the readiness/guidance pass.** F-153 to F-156 were found while
+> making readiness gates cover every tenant. F-154 is the one that would have
+> caused visible harm the first night the coverage fix ran.
+
+#### F-153 — The nightly recompute could only ever measure tenants it had already measured — HIGH
+**What:** `readiness:recompute` took its tenant list from
+`tenant_readiness_gate` — the table it writes. A tenant with no gate rows could
+therefore never acquire any, permanently. `ReadinessGateRecomputer::recomputeAll()`
+used a third list (`tbluser`), so the command and the method it mirrors covered
+different organisations.
+**Where:** `app/Console/Commands/RecomputeReadinessGates.php:54`;
+`app/Services/Readiness/ReadinessGateRecomputer.php:224`
+**Measured:**
+
+```
+dev    5 of 15 tenants had no gate rows — including Fiber Valley (967 employees)
+live   13 and 14 — THE ONLY TWO EVER CREATED THROUGH THE PRODUCT'S OWN SIGNUP
+```
+
+**Impact:** Every gate-fed screen ("My Capability", gap reporting) reads a
+measurement that, for these tenants, does not exist. The organisations the gate
+system was meant to guide were the exact ones it never looked at.
+**Fixed:** one rule in `ReadinessGateRecomputer::tenantsToRecompute()` — the
+registry (`school_setup`, not soft-deleted) unioned with anything that already
+has gates, so nothing currently covered is dropped. Both callers use it.
+*Re-verify:* `_evidence/prove-readiness-covers-new-tenants.php`
+
+#### F-154 — A gate that PASSES its threshold switched the capability off for three days — HIGH
+**What:** A gate needs `sustained_periods` (3) consecutive passes before the
+recomputer calls it `ready`, and the schedule runs daily — so a passing gate
+reads `blocked` for its first three days. `FIRST_RUN_NOTE` says exactly that
+about the *display*. `ReadinessGateEnforcer::check()` did not know it, and
+refused the feature for those three days.
+**Where:** `app/Services/Readiness/ReadinessGateEnforcer.php:66`
+**Why it was invisible:** F-153 hid it. The nightly job never measured a tenant
+for the first time, so no gate ever sat in the warm-up window. Fixing F-153
+alone would have shipped this to every uncovered tenant at once. Measured on
+live, on tenants 13 and 14, with the coverage fix in place and the enforcer
+fix removed:
+
+```
+tenant 13  jobrole_definition  138 roles (threshold 10)  -> REFUSED
+tenant 13  course_mapping      100%      (threshold 50)  -> REFUSED
+tenant 14  jobrole_definition  276 roles (threshold 10)  -> REFUSED
+```
+
+Gap analysis, automatic role assignment and course recommendations would have
+been switched off for an organisation with 138 job roles and 100% course
+mapping — **by the system, with no human decision**, which is the one thing this
+subsystem's asymmetry exists to prevent.
+**Fixed:** the enforcer draws the line on the MEASUREMENT, not the label. A
+value at or above the enable threshold is allowed while it settles; a value
+below it is refused with its remedy, exactly as before.
+*Re-verify:* `_evidence/prove-readiness-covers-new-tenants.php`
+
+#### F-155 — A gate that could not be measured was reported as a failure, with no remedy — MEDIUM
+**What:** When a population is empty (`no courses`, `no tasks`) the value is
+correctly left NULL — and the row was then written with `state = blocked` and
+`remedy = null`. A brand-new organisation therefore opened Readiness Gates and
+read five red rows, two of them with no number and no sentence explaining
+anything.
+**Where:** `ReadinessGateRecomputer::recompute()` (the `$value === null` branch);
+`organization-readiness.tsx` rendered `{g.state}` verbatim.
+**Fixed:** the remedy is written in that branch too, and the API now sends
+`measurable` and `warming_up` derived from the same row as the value, so the
+badge can read "not measured" and "passing · settling" instead of "BLOCKED".
+The stored `state` is unchanged — this adds a reading, it does not rewrite the
+record.
+
+#### F-156 — 537 authored tour steps address an application that no longer exists — MEDIUM (not fixed; recorded)
+**What:** `Onboarding_tour_details` holds 537 rows of real, written guidance and
+is read by nothing. It cannot simply be switched on:
+
+```
+35 distinct access_link values in the tour table
+ 0 of them match ANY access_link in tblmenumaster_g2g
+```
+
+They address the Blade application (`content/organization-dashboard`,
+`content/HRMS/Payroll/Salary-Structure`) and the product is now Next.js under
+`/module/...`. Their `on_click` values are Shepherd.js anchors from that UI
+(`edit-org-btn`, `apply-leave-submit`); **none of those strings appear anywhere
+in `g2gv0`**, and no tour library is installed.
+**Decision:** the rows are left untouched — they are somebody's work, and
+deleting a customer's content is not a remediation. Replaying them would produce
+a tour highlighting nothing on pages that do not exist, which is the fixture
+problem wearing the costume of real data. First-run guidance is built from
+measured state instead (`NextStepsService`), and the OTHER unused table,
+`user_onboarding_status`, is used for what it is shaped for: per-user dismissal.
+**Open:** whether to re-author the 537 steps against the current UI is a content
+decision, not an engineering one.
+*Re-verify:* `_evidence/prove-next-steps.php`
+
+---
+
 ## 6. WORKFLOW GAPS, RANKED BY WORK STRANDED
 
 1. **Rights are never granted per module** — strands 54 screens across 5 modules.
