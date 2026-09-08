@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -270,7 +271,9 @@ class AttendanceRegularisationApiController extends Controller
 
         $decision = $request->input('status');
 
-        DB::transaction(function () use ($row, $decision, $request, $context) {
+        $correction = null;
+
+        DB::transaction(function () use ($row, $decision, $request, $context, &$correction) {
             DB::table('hrms_attendance_regularisations')->where('id', $row->id)->update([
                 'status'           => $decision,
                 'reviewer_comment' => $request->input('reviewer_comment'),
@@ -281,9 +284,25 @@ class AttendanceRegularisationApiController extends Controller
             ]);
 
             if ($decision === 'approved') {
-                $this->applyCorrection($row, (int) $context['user_id']);
+                $correction = $this->applyCorrection($row, (int) $context['user_id']);
             }
         });
+
+        /*
+         * The attendance audit trail. Leave got one in Sprint 7 and payroll in
+         * Sprint 9; attendance emitted nothing, so the release gate's
+         * "Error handling + audit trail" line could not close.
+         *
+         * PROJECTOR-only, deliberately. AuditLogProjector::handles() returns true
+         * for everything, so this reaches g2g_audit_log with no new wiring and
+         * NotificationDispatcher is not involved - nobody's inbox changes. Telling
+         * the applicant their correction landed is a separate decision with its own
+         * recipient question, and is not smuggled in behind an audit-trail change.
+         *
+         * Recorded AFTER the transaction commits: an event describing a write that
+         * rolled back would be a lie, and the event is the trace, not the write.
+         */
+        $this->recordDecisionEvents($row, $decision, $request, $context, $correction);
 
         return response()->json([
             'status'  => 1,
@@ -338,13 +357,93 @@ class AttendanceRegularisationApiController extends Controller
     }
 
     /**
+     * Record the decision, and - when it changed an attendance row - what that
+     * row used to say.
+     *
+     * Two events rather than one because they answer different questions.
+     * "Who decided this request, and when" is true of every decision; "this
+     * person's recorded hours changed from X to Y" is only true of approvals,
+     * and it is the one payroll depends on.
+     *
+     * Failure here is logged and swallowed. The correction is already committed
+     * and must not be undone because its trace could not be written - but a
+     * missing trace has to be loud, or the trail is quietly incomplete.
+     */
+    private function recordDecisionEvents(object $row, string $decision, Request $request, array $context, ?array $correction): void
+    {
+        $recorder = app(\App\Services\Events\EventRecorder::class);
+        $tenantId = (int) $row->sub_institute_id;
+
+        try {
+            $recorder->record(
+                'attendance.regularisation.decided',
+                $tenantId,
+                'hrms_attendance_regularisations',
+                (int) $row->id,
+                (int) $context['user_id'],
+                [
+                    'employee_id'      => (int) $row->user_id,
+                    'day'              => Carbon::parse($row->day)->toDateString(),
+                    'decision'         => $decision,
+                    'reviewer_comment' => $request->input('reviewer_comment'),
+                    'requested_in'     => $row->requested_in_time,
+                    'requested_out'    => $row->requested_out_time,
+                ],
+                null,
+                'attendance.regularisation.decided:' . $row->id . ':' . $decision
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Regularisation decision not recorded in the event store', [
+                'regularisation_id' => $row->id, 'decision' => $decision, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        if ($correction === null) {
+            return;   // rejected: no attendance row was touched
+        }
+
+        try {
+            $recorder->record(
+                'attendance.corrected',
+                $tenantId,
+                'hrms_attendances',
+                $correction['attendance_id'],
+                (int) $context['user_id'],
+                [
+                    'employee_id'       => (int) $row->user_id,
+                    'day'               => Carbon::parse($row->day)->toDateString(),
+                    'regularisation_id' => (int) $row->id,
+                    // null before-image means the day had no attendance row at
+                    // all and this correction created it - a different fact from
+                    // "the times changed", and worth being able to tell apart.
+                    'before'            => $correction['before'],
+                    'after'             => [
+                        'punchin_time'   => $correction['after']['punchin_time'] ?? null,
+                        'punchout_time'  => $correction['after']['punchout_time'] ?? null,
+                        'timestamp_diff' => $correction['after']['timestamp_diff'] ?? null,
+                    ],
+                    'created_row'       => $correction['before'] === null,
+                ],
+                null,
+                'attendance.corrected:' . $row->id . ':' . $correction['attendance_id']
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Attendance correction not recorded in the event store', [
+                'regularisation_id' => $row->id,
+                'attendance_id'     => $correction['attendance_id'],
+                'error'             => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Write the approved correction onto the attendance row.
      *
      * Creates the row when the day has none - a wholly missed punch is the
      * commonest reason to regularise, and refusing it would leave the employee
      * with an approved request and an absent day.
      */
-    private function applyCorrection(object $row, int $actorId): void
+    private function applyCorrection(object $row, int $actorId): array
     {
         $day = Carbon::parse($row->day)->toDateString();
 
@@ -371,18 +470,36 @@ class AttendanceRegularisationApiController extends Controller
             'updated_by'     => $actorId,
         ];
 
+        /*
+         * The before-image, captured BEFORE the write. This correction overwrites
+         * somebody's recorded hours; without this the old punch times are gone and
+         * "what did this row say yesterday" has no answer. Payroll reads
+         * timestamp_diff, so an unrecorded correction is an unexplained pay change.
+         */
+        $before = $existing
+            ? [
+                'attendance_id'  => (int) $existing->id,
+                'punchin_time'   => $existing->punchin_time,
+                'punchout_time'  => $existing->punchout_time,
+                'timestamp_diff' => $existing->timestamp_diff,
+            ]
+            : null;   // no row existed - the correction CREATES the day
+
         if ($existing) {
             DB::table('hrms_attendances')->where('id', $existing->id)->update($update);
-            return;
+
+            return ['before' => $before, 'after' => $update, 'attendance_id' => (int) $existing->id];
         }
 
-        DB::table('hrms_attendances')->insert(array_merge($update, [
+        $newId = DB::table('hrms_attendances')->insertGetId(array_merge($update, [
             'user_id'          => $row->user_id,
             'sub_institute_id' => $row->sub_institute_id,
             'day'              => $day,
             'created_at'       => now(),
             'created_by'       => $actorId,
         ]));
+
+        return ['before' => null, 'after' => $update, 'attendance_id' => (int) $newId];
     }
 
     /** HH:MM:SS between two datetimes, or null when the day is still open. */

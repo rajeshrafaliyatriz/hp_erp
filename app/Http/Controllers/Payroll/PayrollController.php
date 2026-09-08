@@ -139,8 +139,18 @@ class PayrollController extends Controller
         $sub_institute_id = session()->get('sub_institute_id');
 
         if ($id) {
-            $payrollType = PayrollType::find($id);
-            // echo "<pre>";print_r($payrollType);exit;
+            // F-146: the legacy edit form read any pay head by id regardless of
+            // which organisation owned it. Web-session only - there is no
+            // type=API branch here - but scoped for the same reason as the
+            // write paths, and so the three cannot drift apart.
+            $payrollType = PayrollType::where('id', $id)
+                ->where('sub_institute_id', $sub_institute_id)
+                ->first();
+
+            if (!$payrollType) {
+                return redirect('payroll-type');
+            }
+
             return view('payroll.payroll_type.create', compact('payrollType'));
         }
         $payrollType['payroll_type'] = 1;
@@ -193,7 +203,31 @@ if($type=="API"){
 
         }
         if ($request->id > 0) {
-            $payrollType = PayrollType::find($request->id);
+            /*
+             * F-146. find() is global and this method reassigns sub_institute_id
+             * a few lines below, so an unscoped lookup did not merely let an
+             * administrator EDIT another organisation's pay head - it MOVED it
+             * into the caller's tenant, and every salary structure referencing
+             * that head id in the original organisation lost it.
+             *
+             * Refused rather than falling through to a new head: a save that
+             * quietly does something other than what was asked is how F-109 went
+             * unnoticed for three sprints.
+             */
+            $payrollType = PayrollType::where('id', $request->id)
+                ->where('sub_institute_id', $sub_institute_id)
+                ->first();
+
+            if (!$payrollType) {
+                $res = [
+                    'status_code' => 0,
+                    'message'     => 'That pay head does not belong to this organisation.',
+                ];
+
+                return $type === 'API'
+                    ? response()->json($res, 404)
+                    : redirect('payroll-type')->with($res);
+            }
         } else {
             $payrollType = new PayrollType();
         }
@@ -267,7 +301,11 @@ if($type=="API"){
         $res['message'] = "Failed to Delete";
         if ($id > 0) {
             // PayrollType::where('id', $id)->delete();
-            $delete = PayrollType::where('id', $id)->update(['deleted_at'=>now(),'deleted_by'=>$user_id]);
+            // F-146: without the tenant clause any admin or HR user could
+            // soft-delete another organisation's pay head by id.
+            $delete = PayrollType::where('id', $id)
+                ->where('sub_institute_id', $sub_institute_id)
+                ->update(['deleted_at'=>now(),'deleted_by'=>$user_id]);
             if($delete){
                 $res['status_code'] = 1;
                 $res['message'] = "Data Deleted Successfully";
@@ -630,9 +668,32 @@ if($type=="API"){
         return is_mobile($type, "payroll.form16.index", $res, "view");       
     }
 
+    /**
+     * The employee picker behind Form 16 (POST /form16-get-employees-list).
+     *
+     * F-149. This read the tenant from the SESSION with no type=API branch. A
+     * token caller has no session, so sub_institute_id resolved to null, the
+     * query filtered on null, and the response was
+     * {"employees":[]} with HTTP 200 - an empty picker and no error to explain
+     * it. Form 16 could not list a single employee through the API.
+     *
+     * The audit recorded this method as "dead but broken - nothing calls it".
+     * It is routed at routes/hrms.php:89 and Form 16 is its caller, so it was
+     * live and broken. HrmsController::getEmployeeLists - the other copy of
+     * this same method - already had the branch, which is exactly the hazard
+     * Q6 raises about duplicated controller pairs: the two drifted, and only
+     * one of them worked.
+     *
+     * payrollTenantId() is used rather than the request's sub_institute_id,
+     * for the same reason every other method here does: the caller's own
+     * organisation is an identity, not a parameter.
+     */
     public function getEmployeeLists(Request $request)
     {
-        $sub_institute_id = $request->session()->get('sub_institute_id');
+        $sub_institute_id = $request->input('type') === 'API'
+            ? $this->payrollTenantId($request)
+            : $request->session()->get('sub_institute_id');
+
         $department_id = $request->input('department_id');
 	    $employee_id = $request->get('employee_id');
 	
@@ -766,6 +827,32 @@ if($type=="API"){
 	    $payroll_type_ids = $request->get('payroll_type_id');
 	    $reason = $request->get('reason');
         
+        /*
+         * F-147. month_id and payroll_type_id are read straight into implode()
+         * and whereIn() further down, so omitting either produced
+         * "count(): Argument #1 must be Countable|array, null given" - a
+         * TypeError rendered as HTTP 500. A missing required field is a 422,
+         * which is the same correction F-106 made for leave and F-110's own
+         * guard made a few lines below.
+         */
+        $certValidator = Validator::make($request->all(), [
+            'employee_id'       => 'required|integer',
+            'year'              => 'required',
+            'month_id'          => 'required|array|min:1',
+            'payroll_type_id'   => 'required|array|min:1',
+        ], [
+            'month_id.required'        => 'Choose at least one month for the certificate.',
+            'payroll_type_id.required' => 'Choose at least one pay head to state on the certificate.',
+        ]);
+
+        if ($certValidator->fails()) {
+            $res = ['status_code' => 0, 'message' => $certValidator->errors()->first()];
+
+            return $type === 'API'
+                ? response()->json($res, 422)
+                : redirect()->back()->withErrors($certValidator);
+        }
+
         $get_salaray_certificate = DB::table('hrms_salary_certificate')->where(['department_id' => $department_id, 'employee_id' => $employee_id, 'sub_institute_id' => $sub_institute_id, 'year' => $year])->first();
 
         $res['pdfName'] = $filename = 'SC' . '_' . $year . '_' . $employee_id.'.pdf';
@@ -806,7 +893,13 @@ if($type=="API"){
                     'payroll_type_id' => implode(',', $request->get('payroll_type_id')),
                     'reason' => $reason ?? '',
                     'pdf_file_name' => $filename,
-                    'pdf_html' => $get_salary_certificate_html
+                    'pdf_html' => $get_salary_certificate_html,
+                    // F-148. A certificate an employee takes to a bank recorded
+                    // neither who issued it nor when. payrollActorId() resolves
+                    // the caller under type=API, where session() is empty -
+                    // the same correction F-138 made for the payslip upsert.
+                    'updated_by' => $this->payrollActorId($request),
+                    'updated_at' => now(),
                 ]);
 
             $request->session()->flash('success', 'Salary Certificate Updated Successfully.');
@@ -824,7 +917,11 @@ if($type=="API"){
                 'sub_institute_id' => $sub_institute_id,
                 'pdf_file_name' => $filename,
                 'pdf_html' => $get_salary_certificate_html,
-                'created_by' => session()->get('user_id')
+                // F-148. session()->get('user_id') is NULL under type=API, so
+                // every certificate generated through the API was filed with no
+                // author at all. created_at was never set either.
+                'created_by' => $this->payrollActorId($request),
+                'created_at' => now(),
             ]);
 
             $request->session()->flash('success', 'Salary Certificate Generated Successfully.');

@@ -56,7 +56,41 @@ own probes, which never ran here. Reversal:
 
 ## Where we are - in plain English
 
-**All 53 findings are closed. The module is still not GREEN, and those are different statements.**
+**Phase 10 took the module from RED to AMBER, and found the reason it is not GREEN.**
+
+The audit's 53 findings were all closed after nine sprints. What was left was the audit's own
+unfinished homework: a release gate untouched since Sprint 0, a golden-transaction table whose every
+failure cited a finding that had since been fixed, and an integrity checklist that asked for
+calculations to be reconciled and **contained no payroll figure at all**.
+
+Doing that reconciliation is what changed the verdict - in both directions.
+
+**The good half.** Cross-tenant isolation is now proven for fetching a record *by its id*, not just
+for lists - that was the single caveat on the audit's only original pass. Attendance got an audit
+trail, which it never had, and it was the write that most needed one: approving a correction
+overwrites somebody's recorded hours, and payroll reads those hours. Golden transactions were re-run
+for the first time since Sprint 0 and now stand at **9 of 12 passing**, against 2 of 12.
+
+**The bad half, and it is the headline.** Nobody had ever checked a payslip's arithmetic. Doing it
+found that **no payslip in the system agrees with its own stored figures** - six out of six. The
+cause is a single line: when payroll is saved, the server files the totals the browser sent it and
+never recalculates them. The sums it computes are only ever used to draw the screen.
+
+That is not fixed, on purpose. Recalculating would be the obvious answer and is not safe to do
+unilaterally: every payslip already issued would then disagree with what the system would produce
+for it, and people have been paid against those numbers. **It needs the customer's decision**, and
+it is the one thing standing between AMBER and GREEN that is not simply "we have no data big enough
+to test with".
+
+**Something else worth admitting.** The verdict at the top of the audit opens with five things an
+ordinary employee was able to do in Sprint 0 - including approving their own leave and granting
+themselves organisation-wide rights. Those were fixed and checked once, by hand. **No repeatable
+test had re-checked them since.** The headline claim of the whole audit had gone ten phases on a
+check nobody re-ran. There is one now.
+
+---
+
+**All 53 original findings are closed. The module is still not GREEN, and those are different statements.**
 
 **Sprint 9 exists because Sprint 6's review never finished.** It checked its own work, found 36
 possible problems, confirmed 15 - and then ran out of budget with **18 unchecked**. Those were
@@ -87,22 +121,33 @@ Saturday half-days that 203 employees have. And the salary rule that behaved dif
 organisation became a per-organisation setting, seeded so that **nobody's pay changed** - proven by
 showing the new rule gives exactly the same answer as the old one for every organisation.
 
-**What is still missing is not a bug list.** Nothing has been tested at realistic volume; payroll
-arithmetic has never been checked by hand against a payslip; four of the audit's own negative tests
-have never been run; and nobody from the business has signed anything off. Those are what stand
-between "every defect found is fixed" and "this is proven to work".
+**What is still missing - updated after Phase 10, because three of these four moved.** Payroll
+arithmetic **has now been checked by hand**, and that is exactly how F-142 was found. Of the four
+negative tests that had never been run, **two are now covered** by existing assertions and one is
+covered for payroll but not for leave; only "network drop mid-save" genuinely remains, and it needs
+a client that abandons a connection. Scale is **measured where volume exists** - 1001 employees,
+939 attendance rows - and unmeasurable where it does not: no organisation on this deployment has
+more than 13 leave requests or 6 payslips. And nobody from the business has signed anything off.
+That last one has not moved at all, and cannot be moved by me.
 
 ## Progress
 
 | Measure | S0 | S1 | S2 | S3 | S4 | S5 | S6 | S7 | **Now** |
 |---|---|---|---|---|---|---|---|---|---|
 | Findings **closed** | 0 | 10 | 17 | 20 | 24 | 28 | 33 | 35 | **53 of 53 - 100%** |
-| Sprints complete | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | **10 of 10** |
+| Findings **closed** (Phase 11) | - | - | - | - | - | - | - | - | **+4** - F-146..F-149 |
+| Findings **open** | - | - | - | - | - | - | - | - | **4** - F-142..F-145 |
+| Probe assertions | - | - | - | - | - | - | - | - | **222, 0 failures** |
+| Verdict | RED | RED | RED | RED | RED | RED | RED | RED | **AMBER** |
+| Sprints complete | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | **10, plus Phases 10 and 11** |
 | Sub-modules **GREEN** | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **0 of 12 - 0%** |
 
 **No sub-module is GREEN, and closing every finding did not change that.** Green means the whole
 lifecycle is proven - front door, business rules, validation at the API, and behaviour at realistic
-volume. The last of those has never been done.
+volume. Phase 10 measured what could be measured and the numbers are healthy, but the volume that
+matters most for this module - many leave requests, many payslips - **does not exist on this
+deployment to test against**. And payroll now has a reason of its own: a sub-module whose payslips
+cannot be derived from their own inputs (F-142) cannot be called green whatever else passes.
 
 **F-132 and F-137 are the argument for that caution, and they make it twice.** Monthly Payroll
 passed every check this project ran for eight sprints - gated, no duplicate payslips, a month lock,
@@ -113,25 +158,36 @@ real volume would make exactly that mistake official.
 
 Sub-module status:
 
-| Sub-module | Sprint 0 | **Now** | Why |
-|---|---|---|---|
-| Attendance Tracking | RED | AMBER | fixtures gone, buttons wired, correction lifecycle complete **including the approver's queue** |
-| Attendance Reports | RED | AMBER | Export and Print work, mocks deleted, reporting gated; paging deferred to Sprint 6 |
-| Leave Dashboard | AMBER | AMBER | scoped; balances real; **"View" now opens the detail panel** |
-| Leave Requests | RED | AMBER | rules bite, cancel-after-approval works, multi-stage approval with escalation, **and every party is now notified at every stage**; untested at scale |
-| Leave Reports | AMBER | AMBER | scoped; day counts corrected; **"Unassigned" bucket gone**; Saved tab now persists |
-| Leave Configuration | RED | AMBER | gated and enforced; Entitlements tab exists; **the workflow tab now builds a real approval chain and shows what it will do** |
-| Payroll Type | AMBER | AMBER | gated server-side; validation not yet tested at the API |
-| Salary Structure | RED | AMBER | gated; no password hashes - tenant-47 pay rule still open (Q1) |
-| Payroll Deduction | RED | AMBER | gated; no password hashes |
-| Monthly Payroll Report | RED | AMBER | opens reliably; saving twice no longer duplicates payslips; **a month can be locked and reopened with a reason**; still 31-59s at 122 employees (F-121) |
-| Salary Certificate | AMBER | AMBER | gated; still zero rows ever written (F-110) |
-| Form 16 | AMBER | AMBER | gated; only 2 salary structures exist for 122 employees |
+| Sub-module | Sprint 0 | **Now** | Driven end to end? | Why |
+|---|---|---|---|---|
+| Attendance Tracking | RED | AMBER | **yes** | punch in -> punch out -> hours recorded, proven; correction lifecycle complete with the approver's queue; Phase 10 gave it an **audit trail** carrying the before-image |
+| Attendance Reports | RED | AMBER | **yes** | the report runs, is gated against an employee (403) and returns only the caller's organisation |
+| Leave Dashboard | AMBER | AMBER | read-only surface | scoped; balances real; "View" opens the detail panel |
+| Leave Requests | RED | AMBER | **yes** | apply -> two-step approval -> balance falls -> cancel returns the days, all asserted; escalation and notifications live |
+| Leave Reports | AMBER | AMBER | read-only surface | scoped; day counts corrected; Saved tab persists |
+| Leave Configuration | RED | AMBER | **yes** | leave types and holidays driven create -> rename -> toggle -> delete, each refused across the tenant boundary and refused to an employee |
+| Payroll Type | AMBER | AMBER | **yes** | full CRUD **and** validation now tested at the API - which is how **F-146** was found: every by-id operation was cross-tenant, and the edit path *moved* the pay head to the attacker's organisation |
+| Salary Structure | RED | AMBER | read + gate | gated, no password hashes, every listed employee in the caller's organisation; tenant-47 pay rule still open (Q1) |
+| Payroll Deduction | RED | AMBER | **yes** | an adjustment saves and reads back under the canonical month; **11 of 12 legacy rows remain unreachable** (F-143), referred to the tenant |
+| Monthly Payroll Report | RED | **RED** | **yes** | opens, no duplicates, month lock works - but **no payslip agrees with its own stored figures** (F-142). Back to RED on the one thing a payroll screen is for |
+| Salary Certificate | AMBER | AMBER | **yes** | **the first certificate this product has ever produced now exists.** It had written zero rows platform-wide because a second crash (F-147) sat in front of the writer; it also recorded neither author nor date (F-148) |
+| Form 16 | AMBER | AMBER | **yes** | **the employee picker returned nobody** to any API caller (F-149) - a silent 200 with an empty list. Fixed; the picker and the screen both work |
+
+**Ten of twelve are now driven through their writes, not just their reads.** The two marked
+"read-only surface" are dashboards and report views that have no writes of their own - they render
+what the other sub-modules store.
+
+**That change of method is what found F-146 to F-149.** Ten sprints proved these screens *open*.
+Four defects were sitting behind the first write each screen had never been asked to perform, and
+one of them - a pay head changing owner across the tenant boundary - is as serious as anything in
+this audit.
 
 ## Done
 
 | Sprint | What it closed | Write-up |
 |---|---|---|
+| **Phase 11** | **Every sub-module driven through its WRITES, not just its reads** - and four defects were waiting behind the first write each screen had never been asked to perform. **F-146 is the serious one:** every by-id operation on Payroll Type looked the record up globally, and because the save reassigns the organisation from the caller, another tenant's administrator did not merely edit a pay head - they **took ownership of it**, silently breaking every salary structure that referenced it. Proven by doing it, then fixed. **Salary Certificate produced the first document in the product's life:** the table held zero rows platform-wide because a second crash (F-147) sat in front of the writer, and it recorded neither who issued it nor when (F-148) - on a document employees hand to banks. **Form 16's employee picker returned nobody** to any API caller (F-149), a silent HTTP 200 with an empty list; the audit had recorded that method as "dead, nothing calls it" and it was live, its own duplicate copy in another controller having drifted into working correctly. | `PHASE-11-SUBMODULE-LIFECYCLES.md` |
+| **Phase 10** | **The audit's own unfinished homework - and the reason this module is not GREEN.** The release gate had not been touched since Sprint 0 and the golden-transaction table still failed on findings that were long since fixed. Re-run: **9 of 12 golden transactions pass**, against 2 of 12. **Q3 closed** - cross-tenant fetch *by id*, the one caveat on the audit's only original pass, proven in both directions. **Attendance got an audit trail**, the write that most needed one: approving a correction overwrites somebody's recorded hours and payroll reads those hours; the before-image is now kept. And driving it revealed that approve-correct-rewrite had **never been executed at all** - the existing probe only ever proved the endpoint refuses bad input. Then the reconciliation the brief asked for in Sprint 0 and nobody had done: **no payslip agrees with its own stored figures, 6 of 6** (F-142), because the server files the browser's totals and never recalculates them. Left unfixed on purpose - it needs the customer (Q8). Also found: the verdict's own five headline requests **had no repeatable test** in ten phases. There is one now. | `PHASE-10-CLOSING-THE-GATE.md` |
 | **9** | **What Sprint 6's unfinished review left behind.** That review died with 18 of 36 candidates unchecked, and the two dimensions never checked were authorization and payroll. Five were still live; three had been introduced by this project. An administrator could write a payslip for **another organisation's employee** - proven on live, then removed. The response also read out foreign staff names. **F-109 was recorded as closed and was not**: the seventeen duplicates are spelled `july`, the screen posts `Jul`, and the Sprint 6 probe printed the surviving cluster and passed anyway. Now one canonical spelling, 22 rows collapsed to 6, and a UNIQUE index so they cannot return - plus payroll's **first audit trail**, because a soft delete would have defeated that index. Also closed: F-105 by deleting screens that would have erased 203 employees' Saturday half-days, and F-111 as per-tenant configuration proven to change nobody's pay. | `SPRINT-9-UNVERIFIED-REVIEW.md` |
 | **8** | **The employee's own view, and the two screens that had never worked.** An employee could not see their own payslip - no route served it. **My HR** now shows their leave, their payslips and where each pending request has got to; none of its endpoints takes an employee id, so "my payslip" cannot become "anyone's payslip". The Salary Certificate, which had written **zero rows in the life of the product**, turned out to be **unusable rather than unused** - it crashed on any employee without a salary structure, and there are eight on the whole platform. Fixed, along with the hardcoded "Her" it printed on every certificate. Every signed-out browser hit stopped being a 500. The one validation mismatch the audit named turned out to be two. **No live data changes at all** - the first sprint since the audit with none. | `SPRINT-8-SELF-SERVICE.md`, `DEMO-SPRINT-8.md` |
 | **7** | **Notifications, and a payroll month you can close.** The module had never sent a notification of any kind - approvers found out a request existed by opening the screen. Three event types added to the platform's **existing** notification stack; the bell already existed and was already wired, so there was no frontend work at all. Apply, and your manager is told; approve, and both the employee and the next approver are told. Escalation now reaches five HR users instead of nobody. And a payroll month can be declared finished: a locked month refuses the save at the server, and reopening it demands a reason that is stored with a name and a time. | `SPRINT-7-NOTIFICATIONS.md`, `DEMO-SPRINT-7.md` |
@@ -149,7 +205,7 @@ Sub-module status:
 
 | Sprint | What it closes | Findings |
 |---|---|---|
-| **What is left, and none of it is a defect** | **Scale.** The release gate has said "not reached" since Sprint 0. Read-only timings against tenant 1000000 (1001 users) and tenant 6 (939 attendance rows) - no tenant has both. **Payroll arithmetic reconciled by hand**: §E.3 has five rows and not one is a payroll figure; no PF, PT, net or Form 16 total has ever been checked against a hand-computed value, though the brief asked for it. **Q3** - cross-tenant fetch by id - is the sole qualifier on the release gate's only PASS. **Q1** needs a contract, not code. **Q6** - four duplicated controller pairs still routed. **Four negative tests** the audit itself lists and has never run. And **domain sign-off**, which cannot come from me. | none open |
+| **What is left after Phase 10** | **F-142 needs the customer, not code (Q8).** Payroll totals are filed as the browser sends them; recomputing them server-side would make every payslip already issued disagree with what the system would now produce, and people have been paid against those numbers. **Scale is measured where volume exists** - 1001 employees, 939 attendance rows, both healthy - and there is **no volume anywhere on this deployment** for leave, payroll or approvals to measure against (13 rows and 6 payslips at most). **Two golden transactions** (mid-month joiner, LWP) cannot be honestly proven while F-142 stands, because they would test what the screen computes rather than what gets stored. **F-143 and F-144** are referred to the tenant (Q9) rather than guessed at - they touch money. **F-145**, the unbounded employee directory, is a latent risk at 29 ms today. **Q1** needs a contract; **Q6** - duplicated controller pairs - still open. **One negative test** genuinely remains: network drop mid-save. And **domain sign-off**, which cannot come from me. | F-142 … F-145 |
 
 **Deliberately deferred, and said out loud:** statutory remittance (PF/ESI/TDS filing) and final
 settlement on exit are not in m5 today and are not in this plan. They are a separate module-sized
