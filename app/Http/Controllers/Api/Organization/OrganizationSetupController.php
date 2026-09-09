@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Organization;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
+use App\Services\Organization\StandardRoles;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -39,34 +40,11 @@ class OrganizationSetupController extends Controller
 {
     use ResolvesApiIdentity;
 
-    /**
-     * The nine roles the platform's own permission model is written against.
-     *
-     * Lifted from Phase3RoleSeeder, which loops every tenant and has never been
-     * run on live - 10 of 12 organisations are missing six of these, which
-     * breaks `profile:` route gates, hrms_leave_role_permissions and the
-     * navigation visibility rules alike.
-     *
-     * role_key => [display name, data_scope]
+    /*
+     * The nine roles moved to App\Services\Organization\StandardRoles, because
+     * TenantProvisioner needs the identical list when it creates a brand-new
+     * organisation. Read StandardRoles::ROLES for what they are and why.
      */
-    private const STANDARD_ROLES = [
-        'employee'          => ['Employee',          'self'],
-        'reporting_manager' => ['Reporting Manager', 'team'],
-        'department_head'   => ['Department Head',   'department'],
-        'hr_executive'      => ['HR Executive',      'department'],
-        'hr_manager'        => ['HR',                'organization'],
-        'administrator'     => ['Admin',             'organization'],
-        'executive'         => ['Executive',         'organization'],
-        'auditor'           => ['Auditor',           'organization'],
-        'recruiter'         => ['Recruiter',         'organization'],
-    ];
-
-    /** The display names the three original profiles ship with. */
-    private const LEGACY_NAMES = [
-        'Employee' => 'employee',
-        'HR'       => 'hr_manager',
-        'Admin'    => 'administrator',
-    ];
 
     /** GET /api/organization/setup-status */
     public function status(Request $request)
@@ -126,59 +104,16 @@ class OrganizationSetupController extends Controller
 
         $tenant = (int) $identity['sub_institute_id'];
 
-        $stamped = 0;
-        $created = 0;
-
-        DB::transaction(function () use ($tenant, &$stamped, &$created) {
-            /*
-             * Stamp the originals first, so the existence check below sees them
-             * and does not create a duplicate under the canonical name.
-             *
-             * The condition is "role_key OR data_scope is missing", not
-             * "role_key is missing". Signup already sets role_key on the three
-             * profiles it creates but leaves data_scope NULL, so keying only on
-             * role_key skipped them and left the originals without a scope while
-             * every role created below had one - visible immediately on a fresh
-             * tenant as three roles reading "scope=-" beneath six that did not.
-             */
-            foreach (self::LEGACY_NAMES as $name => $key) {
-                $stamped += DB::table('tbluserprofilemaster')
-                    ->where('sub_institute_id', $tenant)
-                    ->where('name', $name)
-                    ->where(function ($q) {
-                        $q->whereNull('role_key')->orWhereNull('data_scope');
-                    })
-                    ->update([
-                        'role_key' => $key,
-                        'data_scope' => self::STANDARD_ROLES[$key][1],
-                        'is_system' => 1,
-                        'updated_at' => now(),
-                    ]);
-            }
-
-            foreach (self::STANDARD_ROLES as $key => [$name, $scope]) {
-                $exists = DB::table('tbluserprofilemaster')
-                    ->where('sub_institute_id', $tenant)
-                    ->where('role_key', $key)
-                    ->exists();
-
-                if ($exists) {
-                    continue;
-                }
-
-                DB::table('tbluserprofilemaster')->insert([
-                    'name' => $name,
-                    'role_key' => $key,
-                    'data_scope' => $scope,
-                    'is_system' => 1,
-                    'sub_institute_id' => $tenant,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                $created++;
-            }
-        });
+        /*
+         * The rule itself lives in StandardRoles, because a NEW organisation
+         * needs exactly the same nine roles created inside the transaction that
+         * brings it into existence. Two copies of "what the nine roles are" is
+         * how a tenant created today ends up with a different role model from
+         * one repaired tomorrow.
+         */
+        ['created' => $created, 'stamped' => $stamped] = DB::transaction(
+            fn () => app(StandardRoles::class)->ensureFor($tenant)
+        );
 
         return response()->json([
             'status' => true,
@@ -241,7 +176,7 @@ class OrganizationSetupController extends Controller
             ->map(fn ($key) => (string) $key)
             ->unique();
 
-        $missing = collect(array_keys(self::STANDARD_ROLES))->diff($present);
+        $missing = collect(array_keys(StandardRoles::ROLES))->diff($present);
 
         return [
             'key' => 'roles',
@@ -251,7 +186,7 @@ class OrganizationSetupController extends Controller
                 ? 'All nine standard roles exist.'
                 : sprintf(
                     '%d of 9 exist. Missing: %s.',
-                    $present->intersect(array_keys(self::STANDARD_ROLES))->count(),
+                    $present->intersect(array_keys(StandardRoles::ROLES))->count(),
                     $missing->implode(', ')
                 ),
             // The only step completed in place - see createRoles().

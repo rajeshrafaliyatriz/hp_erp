@@ -280,7 +280,7 @@ class SchoolSetupController extends Controller
      * the admin widens them from screen 23. Guessing generously on a customer's
      * behalf is how the 4,625 inert rows on live happened.
      */
-    private const DEFAULT_MENU_RIGHTS = [
+    public const DEFAULT_MENU_RIGHTS = [
         'administrator' => [
             300 => [1, 0, 0, 0],   // Main Dashboard
             1   => [1, 0, 0, 0],   // Organizational Management   (container)
@@ -300,6 +300,18 @@ class SchoolSetupController extends Controller
             8   => [1, 0, 0, 0],   //   User Management           (container)
             22  => [1, 1, 1, 1],   //     Employee Directory
             23  => [1, 1, 1, 1],   //     Role & Permissions
+            /*
+             * Readiness Gates. Added here because it was NOT here, and that was
+             * a drift bug with a date on it: 2026_09_07_100000 created menu 304
+             * and granted it to every tenant that already had rights rows, but
+             * nothing added it to this list - so every organisation created
+             * AFTER that migration would have been the only ones without it.
+             *
+             * View only, matching the migration and the route's own
+             * `profile:admin,hr`: acknowledging a gate is a POST the controller
+             * gates itself, and there is nothing on the screen to create.
+             */
+            304 => [1, 0, 0, 0],   //     Readiness Gates
             2   => [1, 0, 0, 0],   // Capability Intelligence     (container)
             223 => [1, 1, 1, 1],   //   Capability Library
             34  => [1, 1, 1, 1],   //   Competency Library
@@ -313,6 +325,7 @@ class SchoolSetupController extends Controller
             13  => [1, 1, 1, 0],
             8   => [1, 0, 0, 0],
             22  => [1, 1, 1, 0],
+            304 => [1, 0, 0, 0],   //     Readiness Gates
             2   => [1, 0, 0, 0],
             223 => [1, 1, 1, 0],
             34  => [1, 1, 1, 0],

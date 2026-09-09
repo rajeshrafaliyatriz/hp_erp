@@ -56,6 +56,19 @@ own probes, which never ran here. Reversal:
 
 ## Where we are - in plain English
 
+**The module is AMBER and close to green: 13 of 16 release-gate lines pass, 11 of 12 golden
+transactions, 60 findings closed, 253 checks with no failures.**
+
+**Phases 10-12, in one paragraph.** Phase 10 closed the audit's own unfinished homework and found the
+reason the module was not green: nobody had ever checked a payslip's arithmetic, and when someone
+did, **no payslip agreed with its own figures**. Phase 11 changed the method from reading each screen
+to writing to it, and four defects were waiting behind the first write each screen had never been
+asked to perform. Phase 12 closed the four findings Phase 10 had deliberately refused to fix - and
+driving the last golden transaction uncovered the worst one of the lot: **a pay head deleted from the
+screen in September 2025 that every payslip has been applying ever since.**
+
+---
+
 **Phase 10 took the module from RED to AMBER, and found the reason it is not GREEN.**
 
 The audit's 53 findings were all closed after nine sprints. What was left was the audit's own
@@ -134,12 +147,13 @@ That last one has not moved at all, and cannot be moved by me.
 
 | Measure | S0 | S1 | S2 | S3 | S4 | S5 | S6 | S7 | **Now** |
 |---|---|---|---|---|---|---|---|---|---|
-| Findings **closed** | 0 | 10 | 17 | 20 | 24 | 28 | 33 | 35 | **53 of 53 - 100%** |
-| Findings **closed** (Phase 11) | - | - | - | - | - | - | - | - | **+4** - F-146..F-149 |
-| Findings **open** | - | - | - | - | - | - | - | - | **4** - F-142..F-145 |
-| Probe assertions | - | - | - | - | - | - | - | - | **222, 0 failures** |
+| Findings **closed** | 0 | 10 | 17 | 20 | 24 | 28 | 33 | 35 | **67** - F-87..F-157 |
+| Findings **open** | - | - | - | - | - | - | - | - | **F-150's consequence only** (Q10) |
+| Probe assertions | - | - | - | - | - | - | - | - | **264 across 14 probes, 0 failures** |
 | Verdict | RED | RED | RED | RED | RED | RED | RED | RED | **AMBER** |
-| Sprints complete | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | **10, plus Phases 10 and 11** |
+| Release gate lines passing | 1 | - | - | - | - | - | - | - | **13 of 16** |
+| Golden transactions | 2 | - | - | - | - | - | - | - | **11 of 12** |
+| Sprints complete | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | **10, plus Phases 10-13** |
 | Sub-modules **GREEN** | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **0 of 12 - 0%** |
 
 **No sub-module is GREEN, and closing every finding did not change that.** Green means the whole
@@ -166,10 +180,10 @@ Sub-module status:
 | Leave Requests | RED | AMBER | **yes** | apply -> two-step approval -> balance falls -> cancel returns the days, all asserted; escalation and notifications live |
 | Leave Reports | AMBER | AMBER | read-only surface | scoped; day counts corrected; Saved tab persists |
 | Leave Configuration | RED | AMBER | **yes** | leave types and holidays driven create -> rename -> toggle -> delete, each refused across the tenant boundary and refused to an employee |
-| Payroll Type | AMBER | AMBER | **yes** | full CRUD **and** validation now tested at the API - which is how **F-146** was found: every by-id operation was cross-tenant, and the edit path *moved* the pay head to the attacker's organisation |
+| Payroll Type | AMBER | AMBER | **yes** | full CRUD **and** validation tested at the API - which found **F-146** (every by-id operation cross-tenant; the edit path *moved* the head to the attacker's organisation) and **F-150** (a deleted head is still applied to pay; deleting a depended-on head is now refused) |
 | Salary Structure | RED | AMBER | read + gate | gated, no password hashes, every listed employee in the caller's organisation; tenant-47 pay rule still open (Q1) |
 | Payroll Deduction | RED | AMBER | **yes** | an adjustment saves and reads back under the canonical month; **11 of 12 legacy rows remain unreachable** (F-143), referred to the tenant |
-| Monthly Payroll Report | RED | **RED** | **yes** | opens, no duplicates, month lock works - but **no payslip agrees with its own stored figures** (F-142). Back to RED on the one thing a payroll screen is for |
+| Monthly Payroll Report | RED | AMBER | **yes** | opens, no duplicates, month lock works - and since Phase 12 the server **recomputes and refuses** figures it did not produce (F-142). The six payslips filed before that are untouched (Q8) |
 | Salary Certificate | AMBER | AMBER | **yes** | **the first certificate this product has ever produced now exists.** It had written zero rows platform-wide because a second crash (F-147) sat in front of the writer; it also recorded neither author nor date (F-148) |
 | Form 16 | AMBER | AMBER | **yes** | **the employee picker returned nobody** to any API caller (F-149) - a silent 200 with an empty list. Fixed; the picker and the screen both work |
 
@@ -186,6 +200,8 @@ this audit.
 
 | Sprint | What it closed | Write-up |
 |---|---|---|
+| **Phase 13** | **The screens, which twelve phases of probes had never opened.** The customer looked at the product and said many buttons were still static. They were right, and the first two checks I ran were wrong in the same way - a scan for buttons with no handler found 2 of 161, because the dead handlers are passed down as **props**; an orphan-component scan found 0, because a **barrel re-export counts as a reference**. A proper re-audit found ~75 findings. The worst were figures **invented and rendered as measurements**: four hardcoded KPI deltas on every tenant and filter, a leave calendar **pinned to June 2026** while the button opening it showed today, and head-counts printed with a % sign. Four controls could not work at all, including two wired to `() => {}` and a Refresh button that by construction could never refetch. **My HR had no menu row**, so the one screen showing an employee their own payslip was unreachable - and a menu row alone would not have fixed it, because a menu with no rights row is invisible. And **F-157: this audit's own probe suite was lying** - probe-sprint6's dates depended on the day of the week it ran, and one empty id turned its teardown into a SQL syntax error that cleaned nothing, so the same code reported 253/253 in Phase 12 and 250/253 today. | `PHASE-13-THE-FRONTEND-REAUDIT.md` |
+| **Phase 12** | **The four findings Phase 10 refused to fix, plus the one they were hiding.** Those four were left open because three touched money and one changed a frontend contract; the customer asked twice for the module completed, so each is now closed in a way that fixes the **defect** without answering the **question** that is genuinely theirs. Payroll totals are no longer whatever the browser sends - the server recomputes and **refuses** figures it did not produce, naming the difference, while the six payslips already filed stay untouched. Then driving the last golden transaction found **F-150**: net pay went **up** as days worked went **down**, because the only pay head that pro-rated had been **deleted in September 2025 and was still being applied to every payslip**. Six of the eight live salary structures reference a deleted head, and they are load-bearing - excluding them would cut three employees' pay by **71%**. So the calculation was left alone and the **cause** fixed instead: a head that salaries depend on can no longer be deleted. | `PHASE-12-CLOSING-THE-OPEN-FOUR.md` |
 | **Phase 11** | **Every sub-module driven through its WRITES, not just its reads** - and four defects were waiting behind the first write each screen had never been asked to perform. **F-146 is the serious one:** every by-id operation on Payroll Type looked the record up globally, and because the save reassigns the organisation from the caller, another tenant's administrator did not merely edit a pay head - they **took ownership of it**, silently breaking every salary structure that referenced it. Proven by doing it, then fixed. **Salary Certificate produced the first document in the product's life:** the table held zero rows platform-wide because a second crash (F-147) sat in front of the writer, and it recorded neither who issued it nor when (F-148) - on a document employees hand to banks. **Form 16's employee picker returned nobody** to any API caller (F-149), a silent HTTP 200 with an empty list; the audit had recorded that method as "dead, nothing calls it" and it was live, its own duplicate copy in another controller having drifted into working correctly. | `PHASE-11-SUBMODULE-LIFECYCLES.md` |
 | **Phase 10** | **The audit's own unfinished homework - and the reason this module is not GREEN.** The release gate had not been touched since Sprint 0 and the golden-transaction table still failed on findings that were long since fixed. Re-run: **9 of 12 golden transactions pass**, against 2 of 12. **Q3 closed** - cross-tenant fetch *by id*, the one caveat on the audit's only original pass, proven in both directions. **Attendance got an audit trail**, the write that most needed one: approving a correction overwrites somebody's recorded hours and payroll reads those hours; the before-image is now kept. And driving it revealed that approve-correct-rewrite had **never been executed at all** - the existing probe only ever proved the endpoint refuses bad input. Then the reconciliation the brief asked for in Sprint 0 and nobody had done: **no payslip agrees with its own stored figures, 6 of 6** (F-142), because the server files the browser's totals and never recalculates them. Left unfixed on purpose - it needs the customer (Q8). Also found: the verdict's own five headline requests **had no repeatable test** in ten phases. There is one now. | `PHASE-10-CLOSING-THE-GATE.md` |
 | **9** | **What Sprint 6's unfinished review left behind.** That review died with 18 of 36 candidates unchecked, and the two dimensions never checked were authorization and payroll. Five were still live; three had been introduced by this project. An administrator could write a payslip for **another organisation's employee** - proven on live, then removed. The response also read out foreign staff names. **F-109 was recorded as closed and was not**: the seventeen duplicates are spelled `july`, the screen posts `Jul`, and the Sprint 6 probe printed the surviving cluster and passed anyway. Now one canonical spelling, 22 rows collapsed to 6, and a UNIQUE index so they cannot return - plus payroll's **first audit trail**, because a soft delete would have defeated that index. Also closed: F-105 by deleting screens that would have erased 203 employees' Saturday half-days, and F-111 as per-tenant configuration proven to change nobody's pay. | `SPRINT-9-UNVERIFIED-REVIEW.md` |
@@ -205,7 +221,7 @@ this audit.
 
 | Sprint | What it closes | Findings |
 |---|---|---|
-| **What is left after Phase 10** | **F-142 needs the customer, not code (Q8).** Payroll totals are filed as the browser sends them; recomputing them server-side would make every payslip already issued disagree with what the system would now produce, and people have been paid against those numbers. **Scale is measured where volume exists** - 1001 employees, 939 attendance rows, both healthy - and there is **no volume anywhere on this deployment** for leave, payroll or approvals to measure against (13 rows and 6 payslips at most). **Two golden transactions** (mid-month joiner, LWP) cannot be honestly proven while F-142 stands, because they would test what the screen computes rather than what gets stored. **F-143 and F-144** are referred to the tenant (Q9) rather than guessed at - they touch money. **F-145**, the unbounded employee directory, is a latent risk at 29 ms today. **Q1** needs a contract; **Q6** - duplicated controller pairs - still open. **One negative test** genuinely remains: network drop mid-save. And **domain sign-off**, which cannot come from me. | F-142 … F-145 |
+| **What is left after Phase 12** | **Three things, and none is a defect left unfixed.** **Scale** cannot be measured where the data does not exist - no organisation on this deployment has more than 13 leave rows or 6 payslips, though employee count (1001) and attendance (939) were measured and are healthy. **Q10** - should the six salary structures stop applying their deleted pay heads? - puts real money either way: leaving it means paying a head nobody can see, correcting it cuts three employees' pay by 71%. **Q8 and Q9** remain open but are no longer urgent: new payslips can no longer diverge, and the month split can no longer recur. And **domain sign-off**, which cannot come from me. | Q8, Q9, Q10 |
 
 **Deliberately deferred, and said out loud:** statutory remittance (PF/ESI/TDS filing) and final
 settlement on exit are not in m5 today and are not in this plan. They are a separate module-sized

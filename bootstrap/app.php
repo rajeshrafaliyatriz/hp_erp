@@ -54,6 +54,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // latter - see RequireHritRole.
             'hrit.role' => \App\Http\Middleware\RequireHritRole::class,
             'menuright' => \App\Http\Middleware\RequireMenuRight::class,
+            // Acting ABOVE the tenants - creating an organisation. No role_key
+            // can authorise this: every role the platform defines is scoped to
+            // one organisation. Membership is a row in `platform_owners`.
+            'platform.owner' => \App\Http\Middleware\RequirePlatformOwner::class,
         ]);
         // CSRF exemptions.
         //
