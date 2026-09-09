@@ -46,8 +46,10 @@ use Illuminate\Support\Facades\Mail;
  */
 class NotificationSender
 {
-    public function __construct(private NotificationComposer $composer)
-    {
+    public function __construct(
+        private NotificationComposer $composer,
+        private \App\Services\Account\UserPreferences $preferences,
+    ) {
     }
 
     public function emailEnabled(): bool
@@ -67,7 +69,29 @@ class NotificationSender
             $delivered[] = 'inapp';
         }
 
-        if ($this->emailEnabled() && $this->sendEmail($event, $recipient, $tenant)) {
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * THE FIRST TIME THIS METHOD HAS ASKED ANYBODY WHAT THEY WANT
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `send()` consulted no preference of any kind: no mute, no channel
+         * choice, no opt-out. Once `G2G_NOTIFY_EMAIL` is switched on, every one
+         * of the ten notifiable events would email every resolved recipient,
+         * for ever, with no way for any of them to stop it.
+         *
+         * `wantsEmail()` defaults to TRUE - a preference nobody has expressed is
+         * not consent to silence, and somebody who has never opened Settings
+         * should still be told their leave was approved. So this changes nothing
+         * for anybody who has not asked, which is why it is safe to add to a
+         * live send path.
+         *
+         * IN-APP IS DELIBERATELY NOT GATED. It is the product telling you
+         * something happened in your own workspace, and a silent inbox is how an
+         * approval sits unseen for a week.
+         */
+        if ($this->emailEnabled()
+            && $this->preferences->wantsEmail((int) $recipient['user_id'], $event->type)
+            && $this->sendEmail($event, $recipient, $tenant)) {
             $delivered[] = 'email';
         }
 

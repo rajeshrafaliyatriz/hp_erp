@@ -196,6 +196,30 @@ class GoogleAuthController extends Controller
         session()->put($sessionData);
 
         $token = $user->createToken('api-token')->plainTextToken;
+
+        /*
+         * Signing in through Google is still signing in.
+         *
+         * `tbluser.last_login` had no writer anywhere in this product, and the
+         * People & access screen reads it to decide who has never got in. If
+         * only the password path recorded it, everybody who uses Google would
+         * sit permanently on a list titled "has never signed in".
+         *
+         * VARCHAR(20) on both databases, so it is formatted, and a failure is
+         * swallowed - the person is already authenticated by this point and a
+         * bookkeeping write must not undo that.
+         */
+        try {
+            DB::table('tbluser')
+                ->where('id', $user->id)
+                ->update(['last_login' => now()->format('Y-m-d H:i:s')]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('last_login write failed (google)', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         $sessionData['APP_URL'] = env('APP_URL');
         $sessionData['token'] = $token;
 

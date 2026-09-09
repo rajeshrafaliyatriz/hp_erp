@@ -4,7 +4,7 @@
 **Auditor:** independent re-audit, module scope
 **Repos:** `hp_erp` (Laravel 12) · `g2gv0` (Next.js 16)
 **Module:** HRIT Solutions — Attendance Management, Leave Management, Payroll Management (12 sub-modules)
-**Findings:** F-87 … F-150 (continues the sequence in `FIX-PLAN-v2.md`; highest prior id was F-86). **60 closed; F-150's cause closed and its consequence referred (Q10).** F-142 … F-145 came from Phase 10's payroll reconciliation and scale work and were closed in Phase 12 once the customer asked for the module completed — each in a way that answers the defect without answering the question that is genuinely theirs. F-146 … F-149 came from Phase 11 driving every sub-module through its WRITES. **F-150 is the one to read:** a pay head deleted from the screen keeps being applied to salaries, and the deleted heads on live are load-bearing — excluding them would cut three employees' pay by 71%.
+**Findings:** F-87 … F-157 (continues the sequence in `FIX-PLAN-v2.md`; highest prior id was F-86). **67 closed; F-150's cause closed and its consequence referred (Q10).** **F-151 … F-157 are the frontend**, found by a re-audit the customer asked for after looking at the actual screens - twelve phases of probes had all talked to the API. They include invented KPI deltas, a leave calendar pinned to June 2026, buttons wired to `() => {}` passed down as props, and **F-153: My HR had no menu row at all**, so the one screen showing an employee their own payslip could not be reached by navigating. F-157 is this audit's own probe suite: probe-sprint6 was not re-runnable and had gone red without anyone noticing. F-142 … F-145 came from Phase 10's payroll reconciliation and scale work and were closed in Phase 12 once the customer asked for the module completed — each in a way that answers the defect without answering the question that is genuinely theirs. F-146 … F-149 came from Phase 11 driving every sub-module through its WRITES. **F-150 is the one to read:** a pay head deleted from the screen keeps being applied to salaries, and the deleted heads on live are load-bearing — excluding them would cut three employees' pay by 71%.
 **Status:** AUDIT ONLY. No application code was changed. Five probe rows were written to the live
 database to prove authorization holes and were removed the same session — see §9.
 
@@ -1574,6 +1574,97 @@ structure  emp tenant | net now  | net if excluded | change
 **Re-verify:** `bash Docs/hrit-audit/_evidence/probe-open-findings.sh` — the F-150 section.
 **Status:** ⚠️ **CAUSE CLOSED, CONSEQUENCE OPEN (Q10).** Deleting a head that salaries depend on is now refused; whether the six existing structures should stop applying their deleted heads is the customer's call, and it is worth real money either way.
 
+#### F-151 — invented figures rendered as real data on three screens — HIGH
+**What:** four categories of number that no endpoint supplies, printed as though measured.
+**Where and what each was:**
+```
+attendance-kpi-cards.tsx:60,69,78,87   trendValue: '+2.5%' / '-1.2%' / '+0.8%' / '0.0%'
+                                       constants inside getEnhancedSummaryCards; KPICard renders
+                                       them under every KPI, on every tenant, filter and date range
+attendance-reports/page.tsx:770-778    latePercentage: dist.late, absentPercentage: dist.absent
+                                       - head-counts passed into fields rendered with unit '%',
+                                       so "3 late employees" printed as "3%"
+attendance-reports/page.tsx:103,581,724  earlyGoing: 0 on the branch that actually runs, while
+                                       getEarlyGoingAttendanceReport is already called and the
+                                       fallback branch computes the real count correctly at :733
+LeaveCalendarDrawer.tsx:29,38,51        getDaysInMonth(2026, 6), the literal caption "June 2026",
+                                       and leave dots matched against `2026-06-${day}`
+leave-mappers.ts:88-129 +               percentageChange: 0 on all six stats; DashboardStats read
+DashboardStats.tsx:44-45               `0 >= 0` as positive and drew a green TrendingUp "0%" on
+                                       every card, unconditionally
+attendance-history-drawer.tsx:117,129   a "Break" column; breakTime is declared on the type and
+                                       assigned by nothing, so it could only ever print "--"
+```
+**Impact:** worse than a dead button, which announces itself. A user reads "+2.5%" as this month against last, and the leave calendar contradicted the button that opened it — that button showed today's real date while the grid was pinned to a month that had passed.
+**Fix:** where no endpoint supplies the figure, the control or column is **removed**, not filled with a placeholder. `trend`/`trendValue` stay on the interface so a real comparison can be passed the day one exists. Early Going now uses the count already fetched, with a comment stating it is the single day the endpoint was asked for rather than an average across the range. The stat badge renders only when there is a real change.
+**Re-verify:** `bash Docs/hrit-audit/_evidence/probe-frontend-wiring.sh` section 4.
+**Status:** ✅ **CLOSED in Phase 13.**
+
+#### F-152 — controls wired to handlers that do nothing — HIGH
+**What:** four visibly interactive controls that could not work.
+```
+AttendanceReportTable.tsx:52-53   onColumnVisibilityChange={() => {}}  onFilterClick={() => {}}
+                                  behind two labelled, hover-styled buttons ("Columns", "Filter")
+RecentLeaveRequests.tsx:39        "View All" with no onClick, no href, no asChild
+attendance-history-drawer.tsx:92  <Button disabled title="Export is not available yet">
+LeaveReportsSections.tsx:291      "Refresh" wired to onApplyFilters, which only re-applies the
+                                  same filter values - and useLeaveReports keys its fetch on
+                                  JSON.stringify(filters), so an identical key means NO refetch
+```
+**Why a scan missed these, which is the part worth keeping:** the no-ops are passed **down as props**, not written inline on the button. A grep over `<Button ...>` finds a clean tag. The first pass at this re-audit reported "2 dead buttons in 161 interactive tags" for exactly that reason, and was wrong.
+**And the Columns button was dead twice over:** its own handler looked for a column *not* in `visibleColumns`, while the caller passed **every** column as visible — so `columnId` was always `undefined` and the no-op was never even reached.
+**Fix:** Columns is a real per-column toggle with the last column locked (a table with no columns is unrecoverable); "Filter" is **deleted** rather than wired, because the same screen already renders a full filter panel above the table — the F-99 precedent, where a duplicate of a working control was removed rather than fixed. "View All" calls the `navigate()` helper three sibling cards on the same dashboard already use. Export calls `downloadCsv`, which the same screen's "Download Timesheet" already used. Refresh receives `retry`, which the hook returned and the page dropped.
+**Status:** ✅ **CLOSED in Phase 13.**
+
+#### F-153 — My HR shipped with no front door — HIGH
+**What:** `tblmenumaster_g2g` held **zero rows** for `/module/hrit-solutions/my-hr`. The only screen where an employee can see their own payslip was unreachable by navigating.
+**Correction to the record.** F-130 was closed in Sprint 8 as "My HR shipped", and `content-map-m5.ts:15-17` said it was "reachable by URL and from the leave screens until HR adds the menu row". Both halves were untrue in practice: a repo-wide search finds no navigation to it from anywhere, and a typed URL only resolves when the user's first module happens to be HRIT, because `gtg-app-shell` falls back to `modules[0]` for a path the menu does not contain.
+**The trap that made this two inserts, not one.** `tblmenumasterG2gController::canView()` reads `($rights->can_view ?? 0) == 1`, so a menu with **no rights row is invisible** — absence is how revocation is expressed here. Menu 102 carries 72 such rows. A menu row on its own would have left My HR exactly as unreachable as before.
+**Fix:** migration `2026_09_08_100000_add_my_hr_menu_row.php` — one menu row (id 305, free on both hosts) plus one `can_view` rights row per profile, applied to **both** databases. Read-only rights: My HR takes no writes and resolves its subject from the token.
+**Verified:** it now appears in the sidebar for administrator, employee, hr_manager, team_employee and auditor. It does **not** appear for recruiter, and that is correct and untouched — that profile has no rights row for module 5 itself, so the whole HRIT module is dropped before My HR is reached. Granting it would be a silent permission change.
+**Reversal:** `_reversals/REVERSAL-2026-09-08-my-hr-menu.sql`.
+**Status:** ✅ **CLOSED in Phase 13.**
+
+#### F-154 — a second, drifted generation of live panels sat in the tree — MEDIUM
+**What:** eight components exported from the attendance barrel and rendered nowhere, plus three never-called factories.
+```
+today-status-card, today-summary-card, monthly-summary-card, leave-balance-card,
+leave-balance-modal, recent-attendance-card, upcoming-events-card, attendance-summary-cards
++ getEarlyGoingCards, getDepartmentWiseCards, getEmployeeWiseCards
+```
+**Why the first orphan scan found none:** the barrel `components/index.ts` re-exports them, and a re-export counts as a reference. Searching for "is this name used anywhere else" returns yes for all eight.
+**Why it mattered beyond dead weight:** they were a drifted duplicate of the panels `page.tsx` implements inline, and they disagreed with the live code. `today-status-card.tsx:116` rendered an unrecognised status as **"Absent"**, contradicting the live page's `undefined → "Unknown"` rule, and `:115` hardcoded the badge to the success palette — so "Absent" rendered green. Anyone importing them would have shipped that.
+**Fix:** all eight deleted with their barrel exports, plus three dead date helpers in `attendance-tracking/page.tsx` and 56 lines of commented-out duplicate above the live `PendingApprovalCard`.
+**Status:** ✅ **CLOSED in Phase 13.**
+
+#### F-155 — input accepted and discarded — MEDIUM
+**What:** three controls that took what the user typed and dropped it.
+```
+LeaveApplyDrawer.tsx:332-340   an attachment FileUpload; absent from the submit payload,
+                               absent from LeaveApplyPayload, no column on hrms_emp_leaves
+LeaveApplyDrawer.tsx:342-353   an emergency contact field, the same
+LeaveReportsSections.tsx:410   "Include Subordinate Data"; ticks, updates local state, and is
+                               not in apiFilters, not in LeaveReportFilters, not in
+                               leaveReportParams - a repo-wide search for "subordinate" finds it
+                               only in this component and its own local types file
+```
+**Impact:** each disclosed the truth in hint text, which is more honest than most — and still left a file picker that accepts a file, an emergency phone number somebody would fill in during an emergency, and a filter that visibly changes and returns byte-identical numbers. A filter that does nothing teaches the user to distrust the filters that work.
+**Fix:** all three removed, with the condition for their return recorded in place.
+**Status:** ✅ **CLOSED in Phase 13.**
+
+#### F-156 — two controls that did the opposite of their label — MEDIUM
+**What:** (a) `RolesAccessTab.tsx:59-72,104-116` — a button reading **"Select All"** wired to a *toggle*: `shouldSelectAll` is false once every permission is already on, so on a fully-permitted role it silently **revoked every permission**, on the matrix that decides who may approve leave. (b) `EntitlementsTab.tsx:116-141` — Save skipped invalid cells and, if that left nothing to send, returned with no message, no error and no toast; the button is enabled whenever the draft is dirty, so the user pressed Save and the screen did nothing, indistinguishable from a save that worked.
+**Also fixed here:** `attendance-table-toolbar.tsx:41` read `Showing 1–{pageSize} of {total}` and `page` was not even a prop, so page 3 of a paginated table still said "Showing 1–10".
+**Fix:** the label now says what the click will do ("Select All" / "Clear All"); Save says why nothing was saved and how many cells were rejected; the range is computed from the real page.
+**Status:** ✅ **CLOSED in Phase 13.**
+
+#### F-157 — probe-sprint6 was not re-runnable, and had been red without anyone noticing — HIGH
+**What:** the approval-chain probe created three leave requests per run and tore them down **by id**: `where id in ($LEAVE,$ESC_LEAVE,$SB_LEAVE)`.
+**Two faults compounding.** Its dates were plain `+45/+70/+95 days`, so whether one landed on a weekly off depended on the day of the week it was run. When one did, apply was correctly refused — *"Every day in that range is a weekly off"* — the id came back empty, and `id in (424,425,)` is a **SQL syntax error**, so the teardown deleted **nothing at all**, including the other two requests. The leftovers then collided with the next run's dates, which failed for a different reason, which left more leftovers. A self-perpetuating failure: leave 414 sat `approved` on user 582 and made the file permanently red.
+**Impact on this audit's own evidence:** the suite reported 253/253 in Phase 12 and 250/253 today, from the same code. A probe whose result depends on the calendar is not evidence.
+**Fix:** a `workday()` helper advances each date past a weekly off; the teardown ids are prefixed with `0,` so one empty variable cannot invalidate the statement; and the probe now **clears its own ground at the start** by its own marker comments as well as by id, so a leftover from a crashed run cannot block it. Proven re-runnable: 20/20 twice in succession, zero rows left behind.
+**Status:** ✅ **CLOSED in Phase 13.**
+
 ## 10. WORKFLOW GAPS, RANKED BY STRANDED WORK
 
 1. **Leave entitlement → balance → every rule downstream** (F-96). No screen creates an entitlement,
@@ -1677,7 +1768,7 @@ Front door reachable by the role that starts it   ✓  F-96 closed - Entitlement
 360° lifecycle complete, every handoff wired      ✓  the 6 NOT-WIRED closed, Sprints 2-8
 Every role journey walks end to end               ✓  all nine role_keys adopted          probe-sprint5,6
 External actors can do what the module needs      ✓  My HR shipped (F-130)               probe-sprint8
-Live data - no fixtures rendered                  ✓  F-97, F-98, F-100 closed            probe-sprint1,2,3
+Live data - no fixtures rendered                  ✓  and no INVENTED figures either      probe-frontend-wiring
 API + CRUD complete                               ✓  CRUD now DRIVEN, not just opened     probe-lifecycle 51/51
 Validation at API and DB, not only the browser    ✓  F-101, F-102, F-106 closed          probe-sprint4,8
 Business rules correct                            ✓  F-95, F-96 closed                    probe-sprint4
@@ -1838,6 +1929,8 @@ run.** They are no longer four unknowns, and they are not four passes either.
 | `_evidence/probe-scale.sh` | HRIT read timings - 30+ endpoint medians for tenants 3 and 6, all GET |
 | `_evidence/probe-scale-query.php` | the same at QUERY level, so tenant 1000000 (1001 users, no token) can be measured without minting one |
 | `_evidence/probe-sprint10.sh` | the attendance correction lifecycle and its new audit trail, plus the verdict's own five headline requests (28/28) |
+| `_evidence/probe-frontend-wiring.sh` | **the layer 253 API assertions could not see** - the menu/route contract, dead-control patterns, invented figures, orphaned components (11/11) |
+| `_evidence/frontend-wiring-check.php` | its engine: reads content-map-m5, queries the menu tables, scans the component tree with **comments stripped** so a comment about a defect is not counted as one |
 | `_evidence/probe-lifecycle.sh` | **every sub-module driven through its writes** — create/read/update/delete per screen, both tenant boundaries (51/51). How F-146 … F-149 were found |
 | `_evidence/snapshot.php` | read-only SQL against the `.env` host, `SET NAMES utf8mb4` |
 | `_evidence/before-219.json` | pre-probe state of the row F-88 deleted |

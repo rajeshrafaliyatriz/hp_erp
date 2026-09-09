@@ -41,10 +41,47 @@ api() { # api <method> <path> <token> [body]
   fi
 }
 
+# The next NON-SUNDAY on or after +N days.
+#
+# The three dates below were plain "+45/+70/+95 days". Whether they landed on a
+# weekly off depended on the day of the week the probe happened to be run, and
+# when one did, apply was correctly refused - "Every day in that range is a
+# weekly off" - the id came back empty, and three assertions failed for a reason
+# that had nothing to do with the code under test. Sunday is the weekly off in
+# tenant 3; Saturday is a working half-day.
+workday() { php -r '$d = strtotime("+" . $argv[1] . " days"); while ((int) date("w", $d) === 0) { $d = strtotime("+1 day", $d); } echo date("Y-m-d", $d);' "$1"; }
+
 jq_() { php -r '$d=json_decode(stream_get_contents(STDIN),true); $k=explode(".",$argv[1]); foreach($k as $s){ if(!is_array($d)||!array_key_exists($s,$d)){echo ""; exit;} $d=$d[$s]; } echo is_scalar($d)?$d:json_encode($d);' "$1"; }
 
 echo "================ Sprint 6 — approval chain and payroll upsert ================"
 echo
+
+# ---------------------------------------------------------------------------
+# CLEAR THIS PROBE'S OWN GROUND FIRST.
+#
+# The teardown at the end deletes by id ($LEAVE, $ESC_LEAVE, $SB_LEAVE). If a
+# run fails BEFORE those ids are assigned - which is exactly what happens when a
+# previous run left a request behind - the teardown deletes nothing, the
+# leftover survives, and every later run is refused by the overlap check with
+# "You already have approved leave from ...". One failure then blocks the probe
+# forever. That happened: leave 414 sat approved on user 582 and made this file
+# permanently red.
+#
+# So clear by the probe's OWN MARKER as well as by id. Only rows this file
+# wrote can match these comments - it never touches anyone else's data.
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "update hrms_leave_approval_steps set status='skipped', updated_at=now()
+     where leave_id in (select id from hrms_emp_leaves
+                         where user_id=582
+                           and comment in ('sprint6 chain probe','sprint6 escalation probe',
+                                           'sprint6 sent-back probe','amended with handover note'))
+       and status in ('pending','waiting')" >/dev/null
+
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from hrms_emp_leaves
+     where user_id=582
+       and comment in ('sprint6 chain probe','sprint6 escalation probe',
+                       'sprint6 sent-back probe','amended with handover note')" >/dev/null
 
 # ---------------------------------------------------------------------------
 echo "1. The configuration screen's switches now build a chain"
@@ -66,7 +103,7 @@ LT=$(php Docs/hrit-audit/_evidence/snapshot.php \
   "select id from hrms_leave_types where sub_institute_id=3 and deleted_at is null order by id limit 1" \
   | jq_ id)
 
-FROM=$(php -r 'echo date("Y-m-d", strtotime("+45 days"));')
+FROM=$(workday 45)
 TO=$FROM
 
 CREATED=$(api POST /api/leave/requests "$EMP" \
@@ -144,7 +181,7 @@ echo "7. Escalation stamps a step that has waited too long"
 # They were restored by hand (leaves 4, 5, 7, 8 back to pending, their steps
 # back to pending, escalated_at cleared). A probe must never consume production
 # work to prove a point.
-ESC_FROM=$(php -r 'echo date("Y-m-d", strtotime("+70 days"));')
+ESC_FROM=$(workday 70)
 ESC_CREATED=$(api POST /api/leave/requests "$EMP" \
   "{\"leave_type_id\":$LT,\"from_date\":\"$ESC_FROM\",\"to_date\":\"$ESC_FROM\",\"day_type\":\"full\",\"comment\":\"sprint6 escalation probe\"}")
 ESC_LEAVE=$(echo "$ESC_CREATED" | jq_ data.id)
@@ -209,7 +246,7 @@ echo "10. Sent back is not a rejection — the chain restarts"
 # rejection and skip every remaining step, so a sent-back request could never be
 # approved again: its chain was closed and nothing reopened it. And store()
 # matched only 'pending' rows, so re-submitting made a SECOND leave row.
-SB_FROM=$(php -r 'echo date("Y-m-d", strtotime("+95 days"));')
+SB_FROM=$(workday 95)
 SB=$(api POST /api/leave/requests "$EMP" \
   "{\"leave_type_id\":$LT,\"from_date\":\"$SB_FROM\",\"to_date\":\"$SB_FROM\",\"day_type\":\"full\",\"comment\":\"sprint6 sent-back probe\"}")
 SB_LEAVE=$(echo "$SB" | jq_ data.id)
@@ -250,7 +287,10 @@ echo "11. Restore — tenant 3 goes back to the chain it had before the probe"
 # ---------------------------------------------------------------------------
 api PUT /api/leave/workflow "$ADMIN"   '{"reporting_manager_enabled":true,"department_head_enabled":true,"hr_enabled":false,"multi_level_enabled":false,"multi_level_count":2,"escalation_enabled":true,"escalation_time":24,"escalation_unit":"hours","escalate_to":"hr"}' >/dev/null
 api DELETE "/api/leave/requests/$LEAVE" "$EMP" >/dev/null 2>&1
-php Docs/hrit-audit/_evidence/snapshot.php   "update hrms_emp_leaves set deleted_at=now() where id in ($LEAVE,$ESC_LEAVE,$SB_LEAVE)" >/dev/null
+# "0," prefix so an empty $SB_LEAVE cannot produce "id in (424,425,)", which is
+# a SQL syntax error - and therefore cancelled the cleanup of the other two as
+# well. One failed section used to poison the whole teardown.
+php Docs/hrit-audit/_evidence/snapshot.php   "update hrms_emp_leaves set deleted_at=now() where id in (0,$LEAVE,$ESC_LEAVE,$SB_LEAVE)" >/dev/null
 # Close their steps too. Soft-deleting a leave with raw SQL leaves its
 # approval steps open, because closeOpenSteps() only runs inside cancel()
 # and destroy(). The escalation sweep then chased requests that no longer
@@ -258,7 +298,7 @@ php Docs/hrit-audit/_evidence/snapshot.php   "update hrms_emp_leaves set deleted
 # includes the rows its own writes caused somewhere else.
 php Docs/hrit-audit/_evidence/snapshot.php \
   "update hrms_leave_approval_steps set status='skipped', updated_at=now()
-    where leave_id in ($LEAVE,$ESC_LEAVE,$SB_LEAVE) and status in ('pending','waiting')" >/dev/null
+    where leave_id in (0,$LEAVE,$ESC_LEAVE,$SB_LEAVE) and status in ('pending','waiting')" >/dev/null
 
 echo "     multi-level switched back off; probe requests $LEAVE, $ESC_LEAVE and $SB_LEAVE removed"
 

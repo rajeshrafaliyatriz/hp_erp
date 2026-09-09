@@ -13,6 +13,71 @@ use App\Models\easy_com\manage_sms_api\manage_sms_api;
 
 class authController extends Controller
 {
+    /**
+     * What the login response's `data` may contain.
+     *
+     * Taken from the frontend's own `LaravelLoginUser` interface
+     * (g2gv0/services/auth/index.ts:14-31) — the caller's published contract,
+     * not a guess. Everything outside this list was being sent and none of it
+     * was being read: see the note at the assignment.
+     *
+     * An ALLOW-list, so a column added to `tbluser` tomorrow is not published
+     * to every browser by default. That is the same reason
+     * tbluserController::API_DETAIL_COLUMNS exists.
+     */
+    private const LOGIN_RESPONSE_FIELDS = [
+        'id', 'user_name', 'first_name', 'middle_name', 'last_name',
+        'email', 'mobile', 'image',
+        'user_profile_id', 'user_profile', 'sub_institute_id', 'client_id',
+        'is_admin', 'status', 'employee_no', 'department_id',
+    ];
+
+    /**
+     * Record that somebody actually signed in.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * NOTHING IN THIS PRODUCT HAS EVER WRITTEN THIS COLUMN
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `tbluser.last_login` is READ in three places - the account screen, the
+     * LMS governance list, and the new "who has never signed in" list - and a
+     * repository-wide search for a write finds none. It appears in
+     * `tbluserModel::$fillable` and in tbluserController's guarded list, and no
+     * code path assigns it. 200 of 299 live rows hold a value, so something
+     * historic set it; nothing has for as long as this codebase has existed.
+     *
+     * That made every reader of it wrong, and one of them dangerously so: the
+     * People & access screen lists everybody with a NULL `last_login` as
+     * "has never signed in and cannot get in". Without this write, a person who
+     * is invited, sets a password and signs in stays on that list for ever, and
+     * an administrator would keep re-inviting somebody who is already working.
+     *
+     * ── WHY IT IS A STRING, AND WHY FAILURE IS SWALLOWED ────────────────────
+     *
+     * The column is VARCHAR(20) on BOTH databases, not a timestamp, so it is
+     * formatted rather than handed a Carbon instance - 'Y-m-d H:i:s' is 19
+     * characters and fits. And a bookkeeping write must never be the reason a
+     * valid sign-in fails, so a failure is logged and swallowed: the person is
+     * already authenticated by the time this runs.
+     */
+    private function recordSignIn($userId): void
+    {
+        try {
+            DB::table('tbluser')
+                ->where('id', $userId)
+                ->update(['last_login' => now()->format('Y-m-d H:i:s')]);
+        } catch (\Throwable $e) {
+            // Fully qualified deliberately: this namespace imports no Log
+            // facade, so a bare `Log::` would resolve inside the controller's own
+            // namespace and fatal - inside a catch block, where it would be
+            // hardest to notice.
+            \Illuminate\Support\Facades\Log::error('last_login write failed', [
+                'user_id' => $userId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     //
     public function index(Request $request)
     {
@@ -44,6 +109,40 @@ class authController extends Controller
                 'status' => 0,
                 'message' => 'Invalid User Id And Password'
             ]);
+        }
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * A SUSPENDED OR REMOVED ACCOUNT CANNOT SIGN IN
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * Login checked the password and nothing else. `status` and
+         * `deleted_at` were written by "Suspend Access" and by the legacy
+         * delete, and then consulted by NO authentication path - so suspending
+         * somebody removed them from the directory listing and left them able
+         * to sign in and keep working.
+         *
+         * `setStatus` now revokes their live tokens, and without this gate that
+         * would be worse than useless: they would be signed out and could
+         * immediately sign back in, so the suspension would LOOK like it worked
+         * and then silently not.
+         *
+         * ── THE MESSAGE IS DELIBERATELY DIFFERENT FROM A BAD PASSWORD ───────
+         *
+         * The password was already correct at this point, so saying "invalid
+         * password" would send somebody to reset a password that is fine. This
+         * is not an enumeration leak: the caller has already proved they hold
+         * the credential for this account.
+         *
+         * BLAST RADIUS ON LIVE: 11 accounts have status 0 and 101 are
+         * soft-deleted. Every one of them can sign in today and cannot after
+         * this. That is the intended meaning of both flags.
+         */
+        if ((int) $user->status !== 1 || $user->deleted_at !== null) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'This account is no longer active. Please contact your administrator or HR.',
+            ], 403);
         }
 
         // Get organization details through the relationship
@@ -278,12 +377,47 @@ class authController extends Controller
             // return session()->all();
             $sessionData['APP_URL'] = env('APP_URL');
             $token = $user->createToken('api-token')->plainTextToken;
+            $this->recordSignIn($user->id);
             $sessionData['token'] = $token;
 
             $res['status'] = 1;
             $res['message'] = "User Successfully Login";
             $user['user_profile'] = $userprofiledetails[0]->name;
-            $res['data'] = $user;
+
+            /*
+             * ── THE LOGIN RESPONSE USED TO BE THE WHOLE tbluser ROW ─────────
+             *
+             * `$res['data'] = $user;` serialised all 99 columns to the browser
+             * on every single sign-in, including:
+             *
+             *     pan_no, aadhar_no, account_no, ifsc_code, plain_password,
+             *     bank_name, branch_name, pf_no, esic_no, uan_no, salary
+             *     amount, termination_reason, relieving_reason
+             *
+             * PAN and Aadhaar are national identity numbers. `plain_password`
+             * reads as a credential even though the column is now NULL
+             * everywhere - and it will be read that way by whoever finds it in
+             * a browser's network tab or a logged response body.
+             *
+             * The frontend needs SIXTEEN fields. Its own `LaravelLoginUser`
+             * type (services/auth/index.ts:14-31) declares exactly these, so
+             * this is not a guess about what is safe to remove - it is the
+             * contract the caller already published.
+             *
+             * tbluserController solved this months ago with API_LIST_COLUMNS /
+             * API_DETAIL_COLUMNS; the login controller was simply never given
+             * the same treatment.
+             */
+            /*
+             * `toArray()`, not `(array) $user`. Casting an Eloquent model with
+             * (array) yields its INTERNAL properties - attributes, original,
+             * relations, casts - so `only()` over it matched nothing and the
+             * first version of this shipped an empty `data`. Caught by the
+             * check below, which counts the fields rather than trusting them.
+             */
+            $res['data'] = collect($user->toArray())
+                ->only(self::LOGIN_RESPONSE_FIELDS)
+                ->all();
             $res['academicTerms'] = $getAcademicTerms;
             $res['academicYears'] = $getAcademicYear;
             $res['sessionData'] = $sessionData;
@@ -351,46 +485,97 @@ class authController extends Controller
             // return $data;
             if (isset($data['id']) && $data['id'] != '') {
 
-                // send otp
-                $otp = rand(100000, 999999);
+                /*
+                 * ── THREE WAYS TO SKIP THE OTP USED TO LIVE HERE ────────────
+                 *
+                 * 1. A HARDCODED MOBILE NUMBER:
+                 *
+                 *        if ($_REQUEST['mobile'] == '9979176562') { $otp = "123456"; }
+                 *
+                 *    That number belongs to a REAL, ACTIVE ACCOUNT ON LIVE -
+                 *    user #11, rajesh@gmail.com, tenant 3. Anybody who knew the
+                 *    number signed in as them with 123456. A developer's
+                 *    convenience that shipped.
+                 *
+                 * 2. THE DATE OF BIRTH AS THE OTP, for tenants 328-333:
+                 *
+                 *        $otp = date('dmy', strtotime($data['birthdate']));
+                 *
+                 *    A six-digit code derived from a fact colleagues know. Dead
+                 *    in practice - none of those tenants exist on either
+                 *    database - but it is a design nobody should reach for.
+                 *
+                 * 3. A FIXED OTP WHEN SMS IS UNCONFIGURED. Only tenant 3 has a
+                 *    row in sms_api_details, so this was the path for 11 of 12
+                 *    live organisations. It is unreachable TODAY only by
+                 *    accident: the guard was
+                 *
+                 *        if ($res["error"] === 1) { if ($res["error"] == "Please add api details first.") { $otp = "123456"; } }
+                 *
+                 *    and PHP 8 changed int-to-string comparison, so `1 ==
+                 *    "Please add..."` became false. On PHP 7 it was true. An
+                 *    upgrade is not a security control.
+                 *
+                 * The OTP is now always random. If SMS cannot be sent, the
+                 * caller is told so and no code is stored - a login that cannot
+                 * deliver a code must fail closed, not fall back to a constant.
+                 */
+                $otp = (string) random_int(100000, 999999);
                 $sub_institute_id = $data['sub_institute_id'];
-                $sub_Array = [328, 329, 330, 331, 333];
-                if ($_REQUEST['mobile'] == '9979176562') {
-                    $otp = "123456";
-                } else if (in_array($sub_institute_id, $sub_Array)) {
-                    $otp = date('dmy', strtotime($data['birthdate']));
-                } else {
-                    //$text = "Dear Parent, Your OTP is ".$otp;
-                    if ($sub_institute_id == 49 || $sub_institute_id == 232 || $sub_institute_id == 233) {
-                        $text = "Dear Teacher your OTP is " . $otp;
-                    } else if ($sub_institute_id == 47) {
-                        $text = "Dear Parent, Your OTP is " . $otp . " MULJIM";
-                    } else {
-                        $text = "OTP for login is " . $otp . " and is valid for 5 minutes";
-                    }
 
-                    $res = $this->sendSMS($request->mobile, $text, $sub_institute_id);
-                    if (!empty($res)) {
-                        $res = json_decode(json_encode($res), true);
-                        if (isset($res["error"]) && $res["error"] === 1) {
-                            // return "hello";
-                            $errorMessage = "Please add api details first.";
-                            if ($res["error"] == $errorMessage) {
-                                $otp = "123456";
-                            }
-                        }
-                    }
+                if ($sub_institute_id == 49 || $sub_institute_id == 232 || $sub_institute_id == 233) {
+                    $text = "Dear Teacher your OTP is " . $otp;
+                } elseif ($sub_institute_id == 47) {
+                    $text = "Dear Parent, Your OTP is " . $otp . " MULJIM";
+                } else {
+                    $text = "OTP for login is " . $otp . " and is valid for 5 minutes";
                 }
-                //DB::enableQueryLog();
-                $data = DB::table("tbluser AS tu")
-                    ->join('tbluserprofilemaster AS tpm', 'tpm.id', '=', 'tu.user_profile_id')
-                    ->where('tu.status', 1) // 23-04-24 by uma
-                    ->where(["tu.mobile" => $_REQUEST['mobile']])
-                    ->update(["tu.otp" => $otp]);
-                //dd(DB::getQueryLog($data));                    
-                //echo "<pre>";
-                //print_r($data);
-                //exit();
+
+                $res = $this->sendSMS($request->mobile, $text, $sub_institute_id);
+
+                /*
+                 * sendSMS() returns a JsonResponse, so the payload is under
+                 * `original` - NOT at the top level. The old code read
+                 * `$res["error"]` after a json round-trip, which is
+                 *
+                 *     {"headers":{},"original":{"error":1,...},"exception":null}
+                 *
+                 * so `isset($res["error"])` was ALWAYS FALSE and the branch it
+                 * guarded never ran. That is the same shape bug that made the
+                 * hardcoded-123456 fallback unreachable - and reproducing it
+                 * here would have made this fail OPEN instead of closed.
+                 *
+                 * Measured: tenant 3 (configured) -> original.error = 0
+                 *           tenant 6 (no config)  -> original.error = 1
+                 */
+                $payload = $res instanceof \Symfony\Component\HttpFoundation\JsonResponse
+                    ? (array) $res->getData(true)
+                    : (array) json_decode(json_encode($res), true);
+
+                $smsError = (int) ($payload['error'] ?? $payload['original']['error'] ?? 0);
+
+                if ($smsError !== 0) {
+                    // Nothing was delivered, so nothing is stored. Answering
+                    // "OTP sent" here is exactly what let a fixed code hide.
+                    return json_encode([
+                        'status'  => '0',
+                        'message' => 'Could not send the code. Ask your administrator to configure SMS for this organisation.',
+                    ]);
+                }
+
+                /*
+                 * SCOPED TO THE ORGANISATION.
+                 *
+                 * This UPDATE matched on mobile alone, across every tenant - so
+                 * one code was written onto every account sharing that number,
+                 * in organisations the caller has nothing to do with.
+                 */
+                DB::table("tbluser")
+                    ->where('status', 1)
+                    ->where('mobile', $request->input('mobile'))
+                    ->where('sub_institute_id', $sub_institute_id)
+                    ->update(["otp" => $otp]);
+
                 $response['status'] = '1';
                 $response['message'] = ' OTP sent successfully';
             }
@@ -424,12 +609,43 @@ class authController extends Controller
                     if(u.image = '','',concat('https://" . $_SERVER['SERVER_NAME'] . "/storage/user/',u.image)) as image,
                     p.name as user_profile_name,u.user_profile_id,ss.syear,ss.SchoolName,ss.Logo")
                 ->where('u.status', '1')
-                ->where('u.otp', $_REQUEST['otp'])
-                ->where('u.mobile', $_REQUEST['mobile'])->get()->toArray();
+                /*
+                 * THE VALIDATED REQUEST, NOT $_REQUEST.
+                 *
+                 * The validator above declares `otp` and `mobile` numeric and
+                 * then the query read $_REQUEST anyway - so the rules were
+                 * decoration. Laravel's own input is bound as a parameter
+                 * either way, but reading around your own validation is how a
+                 * rule quietly stops applying.
+                 */
+                ->where('u.otp', $request->input('otp'))
+                ->where('u.mobile', $request->input('mobile'))
+                // An empty or null otp must never match. A row whose code was
+                // already consumed has otp = NULL, and `WHERE otp = ''` on a
+                // caller-supplied empty string would sail straight through.
+                ->whereNotNull('u.otp')
+                ->where('u.otp', '!=', '')
+                ->get()->toArray();
 
             $data = json_decode(json_encode($data), true);
             if (!empty($data)) {
                 $data = $data[0];
+
+                /*
+                 * ONE CODE, ONE USE.
+                 *
+                 * The OTP used to stay on the row after a successful login,
+                 * indefinitely - so it was a permanent second password for that
+                 * account until the next login attempt overwrote it. Cleared
+                 * here, before the token is issued.
+                 *
+                 * There is still no EXPIRY: tbluser.otp has no timestamp beside
+                 * it, and adding one is a migration rather than a fix to this
+                 * method. Single-use closes the larger hole; the clock is
+                 * tracked as follow-up work.
+                 */
+                DB::table('tbluser')->where('id', $data['id'])->update(['otp' => null]);
+
                 $payload = array();
 
                 $time = time() + (60 * 60 * 24 * 30);
@@ -445,6 +661,7 @@ class authController extends Controller
                     ->where('mobile', $data['mobile'])
                     ->first();
                 $token = $user->createToken('api-token')->plainTextToken;
+                $this->recordSignIn($user->id);
 
                 $school_logo = 'https://' . $_SERVER['SERVER_NAME'] . '/admin_dep/images/' . $data['Logo'];
 

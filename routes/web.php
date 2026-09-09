@@ -9,7 +9,15 @@ use App\Http\Controllers\dashboardController;
 use App\Http\Controllers\loginController;
 use App\Http\Controllers\leave\HrmsDepartment;
 use App\Http\Controllers\school_setup\batchController;
-use App\Http\Controllers\school_setup\changePasswordController;
+/*
+ * `use App\Http\Controllers\school_setup\changePasswordController;` was here.
+ *
+ * THAT CLASS DOES NOT EXIST - app/Http/Controllers/school_setup/ holds only
+ * masterSetupController and sub_std_mapController - and no route referenced it.
+ * An import of a missing class is harmless until somebody reads this file
+ * looking for where passwords are changed and concludes there is a controller
+ * for it. There is not; that is what this work is building.
+ */
 use App\Http\Controllers\school_setup\classteacherController;
 use App\Http\Controllers\school_setup\classteacherReportController;
 use App\Http\Controllers\easy_com\send_birthday_notification\send_birthday_notification_controller;
@@ -168,7 +176,15 @@ Route::middleware(['auth','session','menu'])->group(function () {
 
 // Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']]), function () {
 // route::resource('forget_password',ForgotPasswordController::class);
-Route::get('forget-password', [ForgotPasswordController::class, 'showForgetPasswordForm'])->name('forget.password.get');
+/*
+ * The GET route is gone. It pointed at `showForgetPasswordForm()`, which is
+ * COMMENTED OUT in the controller - so `GET /forget-password` raised
+ * BadMethodCallException and returned a 500 to anybody who reached it. That
+ * broken entry point is why the login screen could not offer a working
+ * "Forgot password?" link.
+ *
+ * The form now lives in the Next.js app, which posts to the route below.
+ */
 Route::post('forget-password', [ForgotPasswordController::class, 'submitForgetPasswordForm'])->name('forget.password.post');
 Route::get('reset-password/{token}/{email}', [ForgotPasswordController::class, 'showResetPasswordForm'])->name('reset.password.get');
 Route::post('reset-password', [ForgotPasswordController::class, 'submitResetPasswordForm'])->name('reset.password.post');

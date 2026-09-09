@@ -34,7 +34,19 @@ class UserSignupController extends Controller
         $user_profile_id = intval($data['user_profile_id'] ?? 0);
         $sub_institute_id = intval($data['sub_institute_id'] ?? 0);
         // $client_id = intval($data['client_id'] ?? 0); // Removed - not in tbluser table
-        $is_admin = intval($data['is_admin'] ?? 0);
+        /*
+         * `is_admin` IS NO LONGER READ FROM THE REQUEST.
+         *
+         * It used to be `intval($data['is_admin'] ?? 0)` on a route that carried
+         * no middleware, so any caller could create an account and mark it an
+         * administrator in the same breath. A permission a caller can grant
+         * themselves is not a permission.
+         *
+         * It is derived instead, from the profile the account is being given:
+         * `is_admin` means "the administrator of this organisation", and whether
+         * that is true is already recorded on tbluserprofilemaster.role_key. One
+         * fact, one place, and nothing for a request to assert.
+         */
         $status = intval($data['status'] ?? 1);
         $allocated_standard = $data['allocated_standards'] ?? null;
         $department_id = intval($data['department_id'] ?? 0);
@@ -48,6 +60,14 @@ class UserSignupController extends Controller
                 'message' => 'Missing required fields'
             ], 422);
         }
+
+        // Derived, not asserted. See the note above.
+        $is_admin = DB::table('tbluserprofilemaster')
+            ->where('id', $user_profile_id)
+            ->where(function ($q) {
+                $q->where('role_key', 'administrator')->orWhere('name', 'Admin');
+            })
+            ->exists() ? 1 : 0;
 
         try {
             // ✅ Insert using DB directly

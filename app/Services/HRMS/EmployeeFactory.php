@@ -155,8 +155,23 @@ class EmployeeFactory
     /**
      * A free user_name derived from the email local part.
      *
-     * `user_name` is indexed but not unique and login resolves on it, so a collision
-     * would let one person's credentials reach another's account.
+     * ── THE REASON GIVEN HERE WAS WRONG ─────────────────────────────────────
+     *
+     * It used to read: *"`user_name` is indexed but not unique and login
+     * resolves on it, so a collision would let one person's credentials reach
+     * another's account."*
+     *
+     * Login does NOT resolve on it. `authController::index()` matches on
+     * `email`, which is the table's only unique key; `tbluser.user_name` is
+     * written by four code paths and read by none. The alarming premise made
+     * this loop look like a security control when it is housekeeping.
+     *
+     * And the loop does not hold anyway - it is a check-then-insert race with
+     * no unique index behind it. Live already carries eight duplicate
+     * `user_name` groups in exactly this `first.last` shape.
+     *
+     * Kept because legacy Blade screens display the value, not because anything
+     * depends on it being unique.
      */
     public function uniqueUserName(string $email): string
     {
@@ -172,35 +187,36 @@ class EmployeeFactory
     }
 
     /**
-     * Mint a password-reset token so the new employee can set their own credential.
+     * Get a set-password link to a new employee.
      *
-     * Never throws: an employee that exists but was not invited is recoverable, an
-     * exception thrown after the transaction committed is not. Outbound email is
-     * gated separately (see MailGate), so this only creates the token - the caller
-     * reports whether anything was actually delivered.
+     * ── THIS METHOD USED TO LIE ─────────────────────────────────────────────
      *
-     * @return array{sent:bool, error:string|null}
+     * It inserted a `password_reset_tokens` row and returned
+     *
+     *     ['sent' => true, 'error' => null]
+     *
+     * with no mail call anywhere in it. The token was written and read by
+     * nothing. Combined with `create()` minting a random password nobody knows,
+     * that meant EVERY EMPLOYEE EVER CREATED HERE COULD NOT LOG IN - while the
+     * Add Employee sheet told them an invite had been emailed.
+     *
+     * The work now lives in InviteService, which reports one of three states
+     * and never claims a send it did not make. This wrapper stays so existing
+     * callers keep working, and returns the fuller shape.
+     *
+     * @return array{delivered:string, link:?string, error:?string, expires_hours:int, sent:bool}
      */
-    public function issueInvite(?string $email): array
+    public function issueInvite(?string $email, ?int $tenantId = null, string $purpose = 'invite'): array
     {
-        if (!$email) {
-            return ['sent' => false, 'error' => 'No email address'];
-        }
+        $result = app(\App\Services\Auth\InviteService::class)->issue($email, $tenantId, $purpose);
 
-        try {
-            $token = Str::random(64);
-
-            DB::table('password_reset_tokens')->where('email', $email)->delete();
-            DB::table('password_reset_tokens')->insert([
-                'email'      => $email,
-                'token'      => $token,
-                'created_at' => now(),
-            ]);
-
-            return ['sent' => true, 'error' => null];
-        } catch (\Throwable $e) {
-            return ['sent' => false, 'error' => $e->getMessage()];
-        }
+        /*
+         * `sent` is kept for callers that have not moved to `delivered` yet -
+         * and it is now TRUE ONLY WHEN SOMETHING WAS ACTUALLY SENT. A link the
+         * administrator must hand over is not a send, and the old code calling
+         * it one is the entire defect.
+         */
+        return $result + ['sent' => $result['delivered'] === 'email'];
     }
 
     /**

@@ -1130,8 +1130,77 @@ Route::get('/lms/courses/{id}/audience/preview', [LmsCourseController::class, 'a
 Route::get('/organization/setup-status', [\App\Http\Controllers\Api\Organization\OrganizationSetupController::class, 'status'])->middleware('api.token');
 Route::post('/organization/setup/roles', [\App\Http\Controllers\Api\Organization\OrganizationSetupController::class, 'createRoles'])->middleware('profile:admin');
 
+/*
+ * ORGANISATION SETTINGS and the AUDIT TRAIL.
+ *
+ * The settings are `profile:admin` - they change how the product behaves for
+ * everybody in the organisation, and raising the password minimum is a security
+ * decision, not an HR one.
+ *
+ * The audit reader is deliberately OUTSIDE that group. An auditor must be able
+ * to read the trail and must not be able to change a setting, and that is two
+ * different answers to two different questions - so the method carries its own
+ * role check rather than borrowing this one.
+ */
+Route::middleware(['api.token', 'profile:admin'])->group(function () {
+    Route::get('/organization/settings', [\App\Http\Controllers\Api\Organization\OrganizationSettingsController::class, 'show']);
+    Route::put('/organization/settings', [\App\Http\Controllers\Api\Organization\OrganizationSettingsController::class, 'update']);
+});
+
+/*
+ * ROLES & ACCESS. `profile:admin` - a role's data scope and landing page are
+ * organisation-wide decisions, and one of them is nominally about who can see
+ * whose records.
+ *
+ * WHICH SCREENS a role reaches is NOT here. That is the rights matrix, edited in
+ * Role & Permissions, and two screens writing the same rows with no rule about
+ * which wins is how permissions drift.
+ */
+Route::middleware(['api.token', 'profile:admin'])->group(function () {
+    Route::get('/organization/roles', [\App\Http\Controllers\Api\Organization\RoleSettingsController::class, 'index']);
+    Route::put('/organization/roles/{id}', [\App\Http\Controllers\Api\Organization\RoleSettingsController::class, 'update'])
+        ->whereNumber('id');
+});
+
+Route::get('/organization/audit', [\App\Http\Controllers\Api\Organization\OrganizationSettingsController::class, 'audit'])
+    ->middleware('api.token');
+
+/*
+ * DELIVERY — how this organisation sends email.
+ *
+ * `profile:admin,hr`, matching the Settings rail: HR is who chases people who
+ * have not signed in, so HR is who needs to be able to make the invite actually
+ * arrive rather than hand out a link.
+ *
+ * The test send is throttled. It is the one endpoint here that causes an
+ * outbound message, and an unlimited "send me a test" button is a way to have
+ * the organisation's own mailbox rate-limited by its provider.
+ */
+Route::middleware(['api.token', 'profile:admin,hr'])->group(function () {
+    Route::get('/organization/delivery', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'show']);
+    Route::put('/organization/delivery', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'update']);
+    Route::post('/organization/delivery/test', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'test'])
+        ->middleware('throttle:4,1');
+});
+
 Route::get('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'index'])->middleware('profile:admin');
 Route::post('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'store'])->middleware('profile:admin');
+
+/*
+ * THE ORGANISATION'S OWN DETAILS, on the API stack.
+ *
+ * settings\organizationDetailsController serves the same data from
+ * routes/settings.php under ['auth','session','menu'] - the WEB stack - and then
+ * reads a Sanctum token out of the body. It therefore needs a browser session
+ * AND a token, and the Next.js frontend has only the token. That is why
+ * Organization Profile is a finished screen nobody can save from, and why
+ * org_details holds 4 rows for 12 live organisations.
+ *
+ * Reading is open to any authenticated member (an employee may see who they
+ * work for); writing is admin and HR, matching the rights the menu grants.
+ */
+Route::get('/organization/profile', [\App\Http\Controllers\Api\Organization\OrganizationProfileController::class, 'show'])->middleware('api.token');
+Route::post('/organization/profile', [\App\Http\Controllers\Api\Organization\OrganizationProfileController::class, 'save'])->middleware('profile:admin,hr');
 
 /*
  * FIRST-RUN GUIDANCE - what THIS person should do next.
@@ -1290,6 +1359,14 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
         Route::put('/{id}', [EmployeeDirectoryController::class, 'update'])->whereNumber('id');
         Route::patch('/{id}/status', [EmployeeDirectoryController::class, 'setStatus'])->whereNumber('id');
         Route::post('/{id}/invite', [EmployeeDirectoryController::class, 'invite'])->whereNumber('id');
+
+        /*
+         * Who holds an account they have never been able to open. Declared
+         * BEFORE `/{id}` so a literal path is never read as an id - `whereNumber`
+         * already prevents that collision, but relying on the order of two
+         * separate route groups to keep it that way is how it comes back.
+         */
+        Route::get('/pending-access', [EmployeeDirectoryController::class, 'pendingAccess']);
     });
 
     Route::get('/', [EmployeeDirectoryController::class, 'index']);
@@ -1658,11 +1735,110 @@ Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills
 Route::post('/user-journey-logs', [UserJourneyLogController::class, 'store']);
 Route::post('/user-journey-logs/bulk', [UserJourneyLogController::class, 'storeBulk']);
 
-// School Setup API Routes
-Route::post('/school-setup', [SchoolSetupController::class, 'store']);
+/*
+ * YOUR OWN ACCOUNT.
+ *
+ * `api.token` and no role guard, deliberately: the subject is always the
+ * token's owner, so there is nothing a caller can send to reach somebody else's
+ * record. Every one of these was missing - the only self-service write in the
+ * whole product was POST /update-fcm-token.
+ *
+ * Not attached to tbluserController, whose route chain (`auth` + `menu`) has no
+ * role check at all for a `type=API` caller and can write most of the table.
+ */
+Route::middleware('api.token')->group(function () {
+    Route::get('/account/me', [\App\Http\Controllers\Api\Account\AccountController::class, 'me']);
+    Route::put('/account/profile', [\App\Http\Controllers\Api\Account\AccountController::class, 'updateProfile']);
+    Route::post('/account/profile', [\App\Http\Controllers\Api\Account\AccountController::class, 'updateProfile']);
+    Route::put('/account/preferences', [\App\Http\Controllers\Api\Account\AccountController::class, 'updatePreferences']);
+    /*
+     * THROTTLED, unlike the rest of the group.
+     *
+     * The only secret this endpoint checks is the plaintext current password,
+     * and this application never calls `$middleware->throttleApi()` in
+     * bootstrap/app.php - so without an explicit limiter there is nothing at all
+     * between a stolen session and an unlimited guessing loop against the one
+     * credential that would let it be made permanent.
+     *
+     * 6 a minute matches the limiter already used on the auth routes.
+     */
+    Route::post('/account/password', [\App\Http\Controllers\Api\Account\AccountController::class, 'changePassword'])
+        ->middleware('throttle:6,1');
+    Route::get('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'sessions']);
+    Route::delete('/account/sessions/{id}', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions'])->whereNumber('id');
+    Route::delete('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions']);
+});
 
+/*
+ * SETTING A PASSWORD - deliberately unauthenticated.
+ *
+ * Somebody who cannot log in is the whole audience, so a token guard here would
+ * defeat the purpose. The credential is the one-time token in the URL.
+ *
+ * The equivalents on routes/web.php stay for the Blade screens; they sit behind
+ * session + CSRF middleware, which is why the Next.js frontend could never
+ * reach them and why "Forgot password?" has been a dead link.
+ *
+ * Rate limiting matters more than usual on these three: `throttle` caps how fast
+ * an address list can be walked or a token guessed. 6 a minute is generous for a
+ * person and useless for a script.
+ */
+Route::middleware('throttle:6,1')->group(function () {
+    Route::get('/auth/invite/{token}', [\App\Http\Controllers\Api\Auth\PasswordController::class, 'check'])
+        ->where('token', '[A-Za-z0-9]{16,128}');
+    Route::post('/auth/set-password', [\App\Http\Controllers\Api\Auth\PasswordController::class, 'setPassword']);
+    Route::post('/auth/forgot-password', [\App\Http\Controllers\Api\Auth\PasswordController::class, 'forgot']);
+});
 
-Route::post('/user-signup', [UserSignupController::class, 'store']);
+/*
+ * THE INTERNAL OPERATOR'S SURFACE — creating an organisation.
+ *
+ * One transactional call that does what /school-setup and /user-signup did in
+ * two uncorrelated ones, plus the four things neither did: all nine roles, an
+ * org_details row, an academic year, and an administrator who can actually sign
+ * in. `platform.owner` because this is an act above the tenants, and no
+ * tenant-scoped role_key can authorise it.
+ */
+// Answers "may I create organisations?" for anybody signed in, so the avatar
+// menu can decide whether to show the entry. Not a guard - the guard is on the
+// routes below, which still refuse everyone else with a 404.
+Route::get('/platform/me', [\App\Http\Controllers\Api\Platform\PlatformOrganizationController::class, 'me'])
+    ->middleware('api.token');
+
+Route::get('/platform/organizations', [\App\Http\Controllers\Api\Platform\PlatformOrganizationController::class, 'index'])
+    ->middleware(['api.token', 'platform.owner']);
+
+Route::post('/platform/organizations', [\App\Http\Controllers\Api\Platform\PlatformOrganizationController::class, 'store'])
+    ->middleware(['api.token', 'platform.owner']);
+
+/*
+ * CREATING AN ORGANISATION, AND ITS FIRST USER.
+ *
+ * ── BOTH OF THESE WERE ANONYMOUS ────────────────────────────────────────────
+ *
+ * `/school-setup` creates a tenant, a client, three role profiles and 24 rights
+ * rows. `/user-signup` creates a user with a hashed password - and reads
+ * `is_admin` STRAIGHT OFF THE REQUEST BODY, so the caller decided whether the
+ * account they were creating was an administrator.
+ *
+ * Neither carried any middleware at all. Anybody who could reach the host could
+ * create organisations in this database indefinitely, and hand themselves the
+ * admin flag while doing it.
+ *
+ * They are now `platform.owner` - membership in `platform_owners`, which is
+ * deliberately not any tenant role, because creating an organisation is not an
+ * act inside one. `api.token` first so an unauthenticated caller gets 401 rather
+ * than the deliberately vague 404 the owner gate returns.
+ *
+ * Nothing breaks: a sweep of g2gv0 finds no caller for either. The real client
+ * of tenant creation is POST /api/platform/organizations, which does in one
+ * transaction what these two do in two uncorrelated calls.
+ */
+Route::post('/school-setup', [SchoolSetupController::class, 'store'])
+    ->middleware(['api.token', 'platform.owner']);
+
+Route::post('/user-signup', [UserSignupController::class, 'store'])
+    ->middleware(['api.token', 'platform.owner']);
 Route::get('/user-signup/{id}', [UserSignupController::class, 'show'])->middleware('api.token');
 Route::put('/user-signup/{id}', [UserSignupController::class, 'update'])->middleware('api.token');
 Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy'])->middleware('api.token');
