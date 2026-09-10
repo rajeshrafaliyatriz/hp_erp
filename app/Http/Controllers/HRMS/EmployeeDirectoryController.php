@@ -729,7 +729,8 @@ class EmployeeDirectoryController extends Controller
         return response()->json([
             'status'  => $ok ? 1 : 0,
             'message' => match ($invite['delivered']) {
-                'email' => 'A set-password link was emailed to ' . $employee->email . '.',
+                'email' => 'A set-password link was emailed to ' . $employee->email
+                    . '. The same link is below if it does not arrive.',
                 'link'  => 'Email is not set up for your organisation, so copy this link and send it to them.',
                 default => 'The invite could not be created: ' . $invite['error'],
             },
