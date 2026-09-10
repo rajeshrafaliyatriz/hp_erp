@@ -218,11 +218,47 @@ try {
     // ── 7. THE AUDIT TRAIL ──────────────────────────────────────────────────
     echo "\n══ 6. the audit trail reads, and an auditor is exactly who can read it ══\n";
 
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE TRANSPORT MARKER IS SENT, DELIBERATELY
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `$call` puts `type => 'API'` in the request, exactly as every real
+     * frontend call does. That is what broke this screen: the audit filter used
+     * to be called `type`, so `?type=api` became `where a.type = 'api'` and the
+     * trail was permanently empty while looking perfectly wired.
+     *
+     * The first version of this check only asserted that `entries` was SET,
+     * which an empty array satisfies - so it passed while the screen was dead.
+     * It now asserts against the row count in the table, which is the only
+     * assertion that can tell the two apart.
+     */
+    $auditRows = $db->table('g2g_audit_log')->where('sub_institute_id', $tenant)->count();
+
     $audit = json_decode($call('GET', '/api/organization/audit', $auditorToken)->getContent(), true);
 
-    printf("  auditor reading it             : %d entries of %d total  %s\n",
-        count($audit['data']['entries'] ?? []), $audit['data']['total'] ?? 0,
-        isset($audit['data']['entries']) ? 'CORRECT' : 'WRONG - refused');
+    printf("  rows in g2g_audit_log          : %d\n", $auditRows);
+    printf("  auditor reading it             : %d entries of %d total\n",
+        count($audit['data']['entries'] ?? []), $audit['data']['total'] ?? 0);
+    printf("  the total matches the table    : %s\n",
+        (int) ($audit['data']['total'] ?? -1) === $auditRows
+            ? 'CORRECT - the transport marker no longer filters the trail away'
+            : 'WRONG - reported ' . ($audit['data']['total'] ?? 'nothing') . ' of ' . $auditRows);
+
+    // And the filter itself still works, under its new name.
+    if ($auditRows > 0) {
+        $someType = $db->table('g2g_audit_log')->where('sub_institute_id', $tenant)->value('type');
+        $filtered = json_decode($call('GET', '/api/organization/audit', $auditorToken,
+            ['event_type' => $someType])->getContent(), true);
+        $expected = $db->table('g2g_audit_log')->where('sub_institute_id', $tenant)
+            ->where('type', $someType)->count();
+
+        printf("  filtering on '%s'%s: %d of %d  %s\n", $someType,
+            str_repeat(' ', max(1, 18 - strlen($someType))),
+            $filtered['data']['total'] ?? -1, $auditRows,
+            (int) ($filtered['data']['total'] ?? -1) === $expected
+                ? 'CORRECT - event_type filters, and narrows' : 'WRONG');
+    }
     printf("  filter offers real types       : %s\n",
         implode(', ', array_slice($audit['data']['types'] ?? [], 0, 4)) ?: '(none recorded)');
 

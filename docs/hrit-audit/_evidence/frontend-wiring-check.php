@@ -112,6 +112,48 @@ foreach ($files as $file) {
     $letterIcon  += preg_match_all('#place-items-center[^>]*>\s*[A-Za-z]\s*</span>#s', $src);
 }
 
+// --------------------------------------------- offered vs actually backed
+/*
+ * A catalogue that offers more than the API can serve.
+ *
+ * Leave Reports listed FIFTEEN reports against THREE endpoints. Nine had no
+ * backing at all, the preview rendered the same leave-type summary whichever
+ * was chosen, and Export wrote that summary under the selected report's
+ * filename - so "Holiday Calendar Report" downloaded a file whose own name
+ * asserted what it did not contain.
+ */
+$reportsFile = $hrit . '/leave-management/leave-reports/services/leave-reports-data.ts';
+$reportsSrc  = $code($reportsFile);
+$offered     = preg_match_all("/^\s{4}id: '/m", $reportsSrc);
+
+// Columns that can only ever render a constant dash, because the dataset behind
+// the grouping carries no such field.
+$dashColumns = 0;
+foreach ($files as $file) {
+    $dashColumns += preg_match_all("/(punchIn|punchOut|expectedIn|expectedOut|earlyBy):\s*'--'/", $code($file));
+}
+
+// A Print button with no print stylesheet emits the whole application - sidebar,
+// tabs, filter panel and every button - rather than the report (F-99).
+$printNoStyles = 0;
+foreach ($files as $file) {
+    $src = $code($file);
+    if (strpos($src, 'window.print()') === false) {
+        continue;
+    }
+    $dir = dirname($file);
+    $hasRules = false;
+    foreach (array_merge($walk($dir), $walk(dirname($dir))) as $sibling) {
+        if (strpos($code($sibling), '@media print') !== false) {
+            $hasRules = true;
+            break;
+        }
+    }
+    if (!$hasRules) {
+        $printNoStyles++;
+    }
+}
+
 // The eight drifted duplicates of live panels.
 $drifted = 0;
 foreach ([
@@ -135,6 +177,9 @@ printf("fake_trend=%d\n", $fakeTrend);
 printf("pinned_month=%d\n", $pinnedMonth);
 printf("letter_icon=%d\n", $letterIcon);
 printf("drifted_duplicates=%d\n", $drifted);
+printf("reports_offered=%d\n", $offered);
+printf("dash_only_columns=%d\n", $dashColumns);
+printf("print_without_styles=%d\n", $printNoStyles);
 printf("files_scanned=%d\n", count($files));
 
 foreach ($routedWithoutMenu as $x) { printf("detail_no_menu=%s\n", $x); }

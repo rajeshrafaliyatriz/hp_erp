@@ -4,7 +4,7 @@
 **Auditor:** independent re-audit, module scope
 **Repos:** `hp_erp` (Laravel 12) · `g2gv0` (Next.js 16)
 **Module:** HRIT Solutions — Attendance Management, Leave Management, Payroll Management (12 sub-modules)
-**Findings:** F-87 … F-157 (continues the sequence in `FIX-PLAN-v2.md`; highest prior id was F-86). **67 closed; F-150's cause closed and its consequence referred (Q10).** **F-151 … F-157 are the frontend**, found by a re-audit the customer asked for after looking at the actual screens - twelve phases of probes had all talked to the API. They include invented KPI deltas, a leave calendar pinned to June 2026, buttons wired to `() => {}` passed down as props, and **F-153: My HR had no menu row at all**, so the one screen showing an employee their own payslip could not be reached by navigating. F-157 is this audit's own probe suite: probe-sprint6 was not re-runnable and had gone red without anyone noticing. F-142 … F-145 came from Phase 10's payroll reconciliation and scale work and were closed in Phase 12 once the customer asked for the module completed — each in a way that answers the defect without answering the question that is genuinely theirs. F-146 … F-149 came from Phase 11 driving every sub-module through its WRITES. **F-150 is the one to read:** a pay head deleted from the screen keeps being applied to salaries, and the deleted heads on live are load-bearing — excluding them would cut three employees' pay by 71%.
+**Findings:** F-87 … F-163 (continues the sequence in `FIX-PLAN-v2.md`; highest prior id was F-86). **73 closed; F-150's cause closed and its consequence referred (Q10).** **F-151 … F-157 are the frontend**, found by a re-audit the customer asked for after looking at the actual screens - twelve phases of probes had all talked to the API. They include invented KPI deltas, a leave calendar pinned to June 2026, buttons wired to `() => {}` passed down as props, and **F-153: My HR had no menu row at all**, so the one screen showing an employee their own payslip could not be reached by navigating. F-157 is this audit's own probe suite: probe-sprint6 was not re-runnable and had gone red without anyone noticing. **F-158 … F-163** finished the frontend list rather than stopping at the worst of it - chief among them a Leave Reports catalogue offering **fifteen reports against three endpoints**, where Export wrote the summary under the selected report's filename. F-142 … F-145 came from Phase 10's payroll reconciliation and scale work and were closed in Phase 12 once the customer asked for the module completed — each in a way that answers the defect without answering the question that is genuinely theirs. F-146 … F-149 came from Phase 11 driving every sub-module through its WRITES. **F-150 is the one to read:** a pay head deleted from the screen keeps being applied to salaries, and the deleted heads on live are load-bearing — excluding them would cut three employees' pay by 71%.
 **Status:** AUDIT ONLY. No application code was changed. Five probe rows were written to the live
 database to prove authorization holes and were removed the same session — see §9.
 
@@ -1664,6 +1664,51 @@ LeaveReportsSections.tsx:410   "Include Subordinate Data"; ticks, updates local 
 **Impact on this audit's own evidence:** the suite reported 253/253 in Phase 12 and 250/253 today, from the same code. A probe whose result depends on the calendar is not evidence.
 **Fix:** a `workday()` helper advances each date past a weekly off; the teardown ids are prefixed with `0,` so one empty variable cannot invalidate the statement; and the probe now **clears its own ground at the start** by its own marker comments as well as by id, so a leftover from a crashed run cannot block it. Proven re-runnable: 20/20 twice in succession, zero rows left behind.
 **Status:** ✅ **CLOSED in Phase 13.**
+
+#### F-158 — Leave Reports offered fifteen reports against three endpoints — HIGH
+**What:** the catalogue listed **15** reports. `leaveService` exposes exactly three: `getReportSummary`, `getReportRegister`, `getReportBalance`.
+**Three separate failures stacked on that.**
+1. **Nine had no backing at all** — Holiday Calendar, Monthly Leave Trend, Absenteeism, Policy Exception, Leave Encashment, Carry Forward, Leave Usage, Department Summary, Custom Report.
+2. **The preview ignored the selection.** `page.tsx` passed `summary?.rows` unconditionally, so selecting any report rendered the same leave-type summary table. The *only* thing choosing a report changed on screen was the title string.
+3. **Export wrote the wrong file under an asserting name.** The filename is built from the report id (`page.tsx:307`), so "Holiday Calendar Report" downloaded `holiday-calendar-<dates>.csv` containing leave-type totals. `carry-forward` and `encashment` sat in `BALANCE_REPORTS` and downloaded a plain balance CSV — **no carry-forward column, no encashment column**. A file whose own name asserts what it does not contain is worse than no export.
+**And three more were duplicates rather than unbacked:** Employee Leave History, Long Leave and Pending Approvals carried **no filter of any kind** — a `ReportDefinition` is title, description, category, icon and tone, nothing else — so all three were labels over the same unfiltered register.
+**Fix:** the catalogue is now the three reports that exist, and **the preview renders the dataset each one names** — a row-level register table for Leave Register, an employee × leave-type table for Leave Balance, the summary for Leave Summary. `register` and `balance` were already fetched and already used by the export; only the preview ignored them. Three categories that were left holding zero reports are removed too, since the sidebar renders one filter row per category with a count beside it.
+**The three removed duplicates come back the day they carry the filter their name implies** — the API already accepts `status` and dates.
+**Re-verify:** `probe-frontend-wiring.sh` section 5 asserts the catalogue matches the endpoint count.
+**Status:** ✅ **CLOSED in Phase 14.**
+
+#### F-159 — five columns that could only ever print a dash — MEDIUM
+**What:** Group By Department and Group By Employee rendered Punch In, Punch Out, Expected In, Expected Out and Early By as hardcoded `'--'` — 5 of 11 columns constant on every row.
+**Where:** `attendance-reports/page.tsx:611-617` built the rows; `attendance-grouped-table.tsx:106-128` declared the columns.
+**Why they could never be filled:** those groupings are built from `departmentReport`, a day-count summary carrying no punch times. Per-punch data exists only for a **single date** (`getEarlyGoingAttendanceReport`) and for the **signed-in user** (`getMyAttendance`); no endpoint returns other employees' punch times across a range.
+**Impact:** a permanent `--` reads as "still loading", not as "this view does not have that field" — the same misreading a spinner that never resolves invites.
+**Fix:** the columns are removed from those two groupings and the constants dropped from the row builder. They return with an endpoint that can fill them.
+**Status:** ✅ **CLOSED in Phase 14.**
+
+#### F-160 — Generate Payroll stayed enabled on a locked month — MEDIUM
+**What:** the month lock lived **only** in `MonthLockCard`'s local state and was reported to the page solely from `act()` — after a lock or reopen. On load the page never learned the month was already locked, so "Generate Payroll (N)" stayed enabled and the save came back refused by the server.
+**Impact:** a refusal the user reads as a broken button rather than as the lock doing its job. F-129 built the lock and enforced it server-side; the screen never reflected it.
+**And the controls vanished exactly when they were wanted:** `MonthLockCard` was rendered only inside the populated-table branch, so on a month with `rows.length === 0` the Lock and Reopen buttons disappeared entirely — and an empty month is precisely the one an administrator may want to declare finished, or reopen to find out why it is empty.
+**Fix:** the card reports its state on load as well as after an action; the page holds it and disables the button with a reason in the tooltip ("This month is locked. Reopen it to change payroll."); and the card now renders in the empty branch too.
+**Status:** ✅ **CLOSED in Phase 14.**
+
+#### F-161 — a page refresh permanently orphaned an issued salary certificate — MEDIUM
+**What:** "Download PDF" was `disabled={!lastResult || !downloadUrl}`, and `pdfUrl()` returned null unless the in-memory `lastQuery` was set. Both are plain `useState`.
+**Impact:** the certificate is upserted into `hrms_salary_certificate` and survives, but after a reload there was **no control anywhere** to retrieve it. The only route back to a document that already existed was to generate it again — on a document an employee hands to a bank.
+**Fix:** the URL needs nothing but employee and year, and both sit in the form the user is looking at, so `pdfUrl()` now accepts the current selection and `lastQuery` is only the fallback for the moment straight after a generate.
+**Said plainly:** there is still **no endpoint that lists previously issued certificates** — `GET /hrms-salary-certificate` returns dropdown options only — so a history panel is not something this can honestly offer yet.
+**Status:** ✅ **CLOSED in Phase 14.**
+
+#### F-162 — three controls that misdescribed themselves — LOW
+**What:** (a) **Print** on Leave Reports called `window.print()` with **no print stylesheet anywhere in the module**, so the sidebar, tabs, filter panel and every button went on the paper — a screenshot of an application rather than a report. F-99 fixed exactly this on the sibling attendance screen and the fix never reached here. (b) **Export** carried a trailing `ChevronDown`, advertising a format picker (CSV/XLSX/PDF) that has never existed; one click downloads a CSV. (c) **"Rows per page: 10"** rendered the caption and the value as two plain `<span>`s, sitting where a select normally sits, with `pageSize` a constant on the page — a control that could not be operated.
+**Fix:** print rules scoped to this page with the same `-no-print` / `-print-area` shape attendance-reports uses; the chevron removed and the button relabelled "Export CSV"; the pagination caption phrased as the statement it is.
+**Status:** ✅ **CLOSED in Phase 14.**
+
+#### F-163 — a failed payslip fetch was reported as "no payslips" — LOW
+**What:** `my-hr/page.tsx` collapsed a rejected `/my-hr/payslips` to `[]`, which renders the empty state: *"Payslips appear here once your organisation has run payroll."*
+**Impact:** a network failure told the employee a fact about their **payroll** rather than about the request — on the one screen built so an employee can see their own pay. The summary half of the same `Promise.allSettled` already set an error; this half silently did not.
+**Fix:** a rejected payslip fetch sets an error and does not claim the absence is real.
+**Status:** ✅ **CLOSED in Phase 14.**
 
 ## 10. WORKFLOW GAPS, RANKED BY STRANDED WORK
 
