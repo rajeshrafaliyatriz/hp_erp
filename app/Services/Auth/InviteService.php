@@ -103,13 +103,37 @@ class InviteService
 
         $link = $base . '/set-password/' . $token . '?email=' . rawurlencode($email);
 
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * A LINK NOBODY ELSE CAN OPEN IS NOT A WORKING INVITE
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `FRONTEND_URL` defaults to `http://localhost:3000`. Every invite built
+         * from it points at the RECIPIENT'S OWN MACHINE, where nothing is
+         * running - so the link is dead on arrival for everybody except the
+         * developer who generated it.
+         *
+         * The invite still gets created and sent, because refusing would be
+         * worse: the token is real and an administrator on the same machine can
+         * use it. But the caller is TOLD, so "the invite does not work" stops
+         * being a mystery and becomes one line of configuration.
+         */
+        $unreachable = null;
+        $host = parse_url($base, PHP_URL_HOST) ?: '';
+
+        if (in_array(strtolower($host), ['localhost', '127.0.0.1', '::1', '0.0.0.0'], true)) {
+            $unreachable = 'This link points at ' . $base . ', which only works on the machine '
+                . 'that generated it. Set FRONTEND_URL to the address people actually use, or '
+                . 'nobody you invite will be able to open their link.';
+        }
+
         if (!MailGate::allowedForTenant($tenantId)) {
             // Not a failure. The link exists and works; it just has to travel by
             // hand. Saying so plainly is the whole point of this class.
             return [
                 'delivered' => 'link',
                 'link' => $link,
-                'error' => null,
+                'error' => $unreachable,
                 'expires_hours' => self::TOKEN_HOURS,
             ];
         }
@@ -136,11 +160,31 @@ class InviteService
             ];
         }
 
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * THE LINK IS RETURNED EVEN WHEN THE EMAIL WENT
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * It used to be withheld here, reasoning that an administrator who can
+         * read somebody's reset link can take their account. That reasoning does
+         * not survive contact with the two guards `invite()` now has: the target
+         * must have NEVER SIGNED IN, and must rank below the caller. An
+         * administrator who can invite this account can already credential it -
+         * withholding the link protects nothing and costs a great deal.
+         *
+         * What it cost: `Mail::send` returning without throwing is not proof of
+         * delivery. It means the message reached the transport. When the mailbox
+         * is misconfigured, the address bounces, or the link host is unreachable,
+         * the screen said "emailed" and handed back NOTHING - so the invite had
+         * visibly failed and the administrator had no way to finish the job.
+         *
+         * Now they always have a link to fall back on, and the screen says the
+         * email went as well.
+         */
         return [
             'delivered' => 'email',
-            // Withheld on purpose - see the class note.
-            'link' => null,
-            'error' => null,
+            'link' => $link,
+            'error' => $unreachable,
             'expires_hours' => self::TOKEN_HOURS,
         ];
     }

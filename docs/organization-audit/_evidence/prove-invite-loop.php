@@ -127,30 +127,66 @@ try {
         ($data['invite'] ?? '') === 'email' ? 'CORRECT - mail is permitted here' : 'unexpected');
 
     /*
-     * The link is deliberately WITHHELD once it has been emailed: a one-time
-     * credential already delivered to its owner should not also sit in an
-     * administrator's browser tab, a screenshot, or a log.
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE LINK IS RETURNED EVEN ON THE EMAIL PATH - THIS ASSERTION REVERSED
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * It used to assert the opposite, reasoning that a one-time credential
+     * already delivered to its owner should not also sit in an administrator's
+     * browser tab.
+     *
+     * That did not survive use. Mail::raw() returning without throwing is NOT
+     * proof of delivery - it means the message reached the transport. When the
+     * mailbox is misconfigured, the address bounces, or the link host is
+     * unreachable, the screen said "emailed" and handed back nothing, so the
+     * invite had visibly failed and the administrator had no way to finish the
+     * job. That is what "send invite is not working" turned out to be.
+     *
+     * What makes returning it safe is not secrecy but the two guards invite()
+     * gained: the target must have NEVER SIGNED IN and must rank below the
+     * caller. See prove-credential-guards.php - that is the real protection.
      */
-    printf("  link withheld after an email? %s  %s\n",
-        $data['invite_link'] ? 'NO' : 'yes',
-        $data['invite_link'] ? 'WRONG - a delivered credential was echoed back' : 'CORRECT');
+    printf("  a usable link comes back even when emailed: %s  %s
+",
+        $data['invite_link'] ? 'yes' : 'NO',
+        $data['invite_link']
+            ? 'CORRECT - a silently undelivered email is no longer a dead end'
+            : 'WRONG - the administrator has nothing to fall back on');
 
     /*
-     * `delivered === 'email'` IS the proof that a send happened.
+     * `error` is now a WARNING channel, not only a failure channel. A non-null
+     * error beside `delivered => 'email'` no longer means the send failed - it
+     * means something still needs attention, and today that is the link host.
      *
-     * InviteService only returns 'email' after Mail::raw() has returned without
-     * throwing; any failure falls through to 'link' WITH an error attached. So
-     * this value cannot be reached by a code path that sent nothing - which is
-     * precisely what the old `['sent' => true]` could, and did, every time.
-     *
-     * (`Mail::sent()` is not used here: it matches Mailable classes, and this
-     * path sends a raw message, so it would report nothing either way.)
+     * So this checks the invariant that still holds: 'email' is unreachable
+     * without Mail::raw() returning, because every throw falls through to the
+     * 'link' branch.
      */
-    printf("  could 'email' be reported without a send? %s  %s\n",
-        'no',
-        ($data['invite_error'] ?? null) === null
-            ? "CORRECT - 'email' is only returned after Mail::raw() succeeds"
-            : 'WRONG - an error came back alongside it');
+    $warning = $data['invite_error'] ?? null;
+
+    printf("  could 'email' be reported without a send? %s  %s
+", 'no',
+        ($data['invite'] ?? '') === 'email'
+            ? "CORRECT - a throw becomes 'link', so 'email' implies Mail::raw() returned"
+            : 'WRONG');
+
+    /*
+     * AND THE WARNING IS NOT DECORATIVE. FRONTEND_URL defaults to
+     * http://localhost:3000, which makes every link dead for its recipient, and
+     * nothing anywhere said so. Set to a real host, this reports no warning.
+     */
+    $host = parse_url((string) config('app.frontend_url'), PHP_URL_HOST);
+    $localhost = in_array(strtolower((string) $host), ['localhost', '127.0.0.1', '::1'], true);
+
+    printf("  link host '%s' %s
+", $host,
+        $localhost ? '- unreachable for a recipient' : '- a real address');
+    printf("  the warning tracks that: %s  %s
+",
+        $warning ? 'warned' : 'silent',
+        $localhost === ($warning !== null)
+            ? 'CORRECT'
+            : 'WRONG - the warning and the configuration disagree');
 
     // ── 1b. THE CASE THAT COVERS ELEVEN OF THE TWELVE LIVE TENANTS ──────────
     echo "\n══ 1b. an organisation with no email gets a usable link ══\n";
