@@ -219,8 +219,28 @@ class OrganizationSettingsController extends Controller
 
         $tenantId = (int) $identity['sub_institute_id'];
 
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * THE FILTER IS `event_type`, NOT `type` - AND THAT IS NOT COSMETIC
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `type=API` is this product's transport marker. Every frontend service
+         * sends it on every call, and a dozen controllers read it. So an
+         * endpoint with a FILTER called `type` is a landmine: the audit screen's
+         * own auth helper sent `type: 'api'` in the query string, the filter
+         * matched it, and every default page load ran `where a.type = 'api'`.
+         *
+         * `g2g_audit_log.type` holds dotted event names copied from the event
+         * stream - `rights.changed`, `leave.decided` - so 'api' matches nothing.
+         * The screen reported "Nothing recorded yet" on an organisation with a
+         * full history, which is the most misleading failure an audit trail can
+         * have: it under-reports, and it looks correctly wired while doing it.
+         *
+         * Renaming the filter fixes it for every caller at once, rather than
+         * relying on each one remembering not to send a reserved word.
+         */
         $request->validate([
-            'type' => ['sometimes', 'string', 'max:64'],
+            'event_type' => ['sometimes', 'string', 'max:64'],
             'actor_id' => ['sometimes', 'integer'],
             'from' => ['sometimes', 'date'],
             'to' => ['sometimes', 'date'],
@@ -232,7 +252,7 @@ class OrganizationSettingsController extends Controller
         $query = DB::table('g2g_audit_log as a')
             ->leftJoin('tbluser as u', 'u.id', '=', 'a.actor_id')
             ->where('a.sub_institute_id', $tenantId)
-            ->when($request->filled('type'), fn ($q) => $q->where('a.type', $request->input('type')))
+            ->when($request->filled('event_type'), fn ($q) => $q->where('a.type', $request->input('event_type')))
             ->when($request->filled('actor_id'), fn ($q) => $q->where('a.actor_id', (int) $request->input('actor_id')))
             ->when($request->filled('from'), fn ($q) => $q->where('a.occurred_at', '>=', $request->input('from')))
             ->when($request->filled('to'), fn ($q) => $q->where('a.occurred_at', '<=', $request->input('to') . ' 23:59:59'));

@@ -61,7 +61,19 @@ check "no calendar pinned to a fixed month" "0" "$(v pinned_month)"
 check "no placeholder letter where an icon belongs" "0" "$(v letter_icon)"
 
 echo
-echo "5. Components reachable, not merely exported"
+echo "5. Nothing offered that the API cannot serve"
+# Leave Reports listed FIFTEEN reports against THREE endpoints; the preview
+# showed the same summary whichever was chosen, and Export wrote that summary
+# under the selected report's filename.
+check "the report catalogue matches the endpoints that exist" "3" "$(v reports_offered)"
+# Columns that can only ever be a constant dash read as "still loading", not as
+# "this view does not carry that field".
+check "no column hardcoded to a dash" "0" "$(v dash_only_columns)"
+# A Print button with no print stylesheet prints the application, not the report.
+check "every Print button has a print stylesheet" "0" "$(v print_without_styles)"
+
+echo
+echo "6. Components reachable, not merely exported"
 # A barrel re-export counts as a reference, which is why the first orphan scan
 # found none while eight drifted duplicates of live panels sat in the tree.
 check "the drifted attendance duplicates are gone" "0" "$(v drifted_duplicates)"
