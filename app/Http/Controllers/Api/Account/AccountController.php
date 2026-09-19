@@ -68,6 +68,36 @@ class AccountController extends Controller
         'address', 'address_2', 'city', 'state', 'pincode',
     ];
 
+    /**
+     * The calling browser's device id, or the account scope.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * VALIDATED HERE, ONCE, BECAUSE IT REACHES A UNIQUE INDEX
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * The browser mints a ULID and keeps it in localStorage. It is not a secret
+     * and not an identity - it says nothing about WHO is calling, only WHICH of
+     * their machines, and the user is always resolved from the token. Somebody
+     * who sends a made-up device id scopes their own preferences to a device
+     * they invented, which harms nobody.
+     *
+     * What it must not be is malformed. It lands in a `VARCHAR(40)` that is part
+     * of `(user_id, device_id, pref_key)`, so anything longer is a truncation
+     * away from colliding with a different row. Anything not matching is treated
+     * as ABSENT rather than rejected: an old client that has never heard of
+     * device ids must keep working, and it does - it writes the account default.
+     */
+    private function deviceId(Request $request): string
+    {
+        $raw = trim((string) $request->input('device_id', ''));
+
+        if ($raw === '' || strlen($raw) > 40 || !preg_match('/^[A-Za-z0-9_-]+$/', $raw)) {
+            return UserPreferences::ACCOUNT_SCOPE;
+        }
+
+        return $raw;
+    }
+
     /** GET /api/account/me */
     public function me(Request $request, UserPreferences $preferences)
     {
@@ -99,7 +129,17 @@ class AccountController extends Controller
             'status' => true,
             'data' => [
                 'profile' => $user,
-                'preferences' => $preferences->all((int) $identity['user_id']),
+                'preferences' => $preferences->all((int) $identity['user_id'], $this->deviceId($request)),
+                /*
+                 * Echoed back so the screen can say "this laptop" rather than
+                 * guessing, and can offer "use on all my devices" only when
+                 * there is a device to promote FROM.
+                 */
+                'device_scope' => [
+                    'device_id' => $this->deviceId($request),
+                    'is_device' => $this->deviceId($request) !== UserPreferences::ACCOUNT_SCOPE,
+                    'device_scoped_keys' => UserPreferences::DEVICE_SCOPED,
+                ],
                 /*
                  * The role is reported so the settings screen knows which
                  * sections to show. It is a PRESENTATION hint - every endpoint
@@ -224,13 +264,91 @@ class AccountController extends Controller
         $saved = $preferences->save(
             (int) $identity['user_id'],
             (int) $identity['sub_institute_id'],
-            $request->all()
+            $request->all(),
+            $this->deviceId($request)
         );
 
         return response()->json([
             'status' => true,
             'message' => 'Saved.',
             'data' => ['preferences' => $saved],
+        ]);
+    }
+
+    /**
+     * POST /api/account/preferences/promote
+     *
+     * "Use these on all my devices." Copies this device's appearance choices up
+     * to the account default, so a machine that has never been configured
+     * inherits them. Devices that HAVE been configured keep what they have -
+     * that is the point of per-device storage, and silently overwriting it would
+     * make the feature untrustworthy.
+     */
+    public function promotePreferences(Request $request, UserPreferences $preferences)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $deviceId = $this->deviceId($request);
+
+        if ($deviceId === UserPreferences::ACCOUNT_SCOPE) {
+            return response()->json([
+                'status' => false,
+                'message' => 'These are already your defaults on every device.',
+            ], 422);
+        }
+
+        $saved = $preferences->promoteToAccount(
+            (int) $identity['user_id'],
+            (int) $identity['sub_institute_id'],
+            $deviceId
+        );
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Saved. Your other devices will use these unless they have their own.',
+            'data' => ['preferences' => $saved],
+        ]);
+    }
+
+    /**
+     * DELETE /api/account/preferences/device
+     *
+     * Forget what THIS device has chosen and fall back to the account default.
+     * The honest answer to "I set this on a machine that is not mine".
+     */
+    public function forgetDevicePreferences(Request $request, UserPreferences $preferences)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $deviceId = $this->deviceId($request);
+
+        if ($deviceId === UserPreferences::ACCOUNT_SCOPE) {
+            /*
+             * Refused rather than treated as a no-op. An empty device id here
+             * would mean "delete my account defaults", which is the opposite of
+             * what this endpoint is for, and `forgetDevice()` guards it a second
+             * time for the same reason.
+             */
+            return response()->json([
+                'status' => false,
+                'message' => 'This browser has no settings of its own to forget.',
+            ], 422);
+        }
+
+        $preferences->forgetDevice((int) $identity['user_id'], $deviceId);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'This browser now follows your account settings.',
+            'data' => ['preferences' => $preferences->all((int) $identity['user_id'], $deviceId)],
         ]);
     }
 

@@ -376,7 +376,7 @@ class authController extends Controller
             session()->put($sessionData);
             // return session()->all();
             $sessionData['APP_URL'] = env('APP_URL');
-            $token = $user->createToken('api-token')->plainTextToken;
+            $token = $user->createToken(\App\Support\DeviceLabel::from($request->userAgent()))->plainTextToken;
             $this->recordSignIn($user->id);
             $sessionData['token'] = $token;
 
@@ -660,7 +660,7 @@ class authController extends Controller
                 $user = tbluserModel::with(['organization', 'client', 'yearData', 'userProfile'])
                     ->where('mobile', $data['mobile'])
                     ->first();
-                $token = $user->createToken('api-token')->plainTextToken;
+                $token = $user->createToken(\App\Support\DeviceLabel::from($request->userAgent()))->plainTextToken;
                 $this->recordSignIn($user->id);
 
                 $school_logo = 'https://' . $_SERVER['SERVER_NAME'] . '/admin_dep/images/' . $data['Logo'];

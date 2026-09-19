@@ -37,31 +37,185 @@ $kernel = app(\Illuminate\Contracts\Http\Kernel::class);
 
 $tenant = 6;
 
-/**
- * The rail's own rules, transcribed from lib/settings-sections.ts.
+/*
+ * The rail's own rules, READ OUT OF lib/settings-sections.ts.
  *
- * Kept here so the check compares the SERVER against the frontend's stated
- * intent, rather than against itself.
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THIS WAS A TRANSCRIPTION, AND IT LIED
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * It used to be a hand-copied table, with a comment saying it was kept here so
+ * the check compared the server against the frontend's stated intent. It did no
+ * such thing: the frontend changed `organization` from ADMIN to ADMIN_ONLY - with
+ * a comment in that very file explaining that HR got "a rail entry whose only
+ * content was a refusal" - and this copy stayed as it was.
+ *
+ * So this script reported four WRONG results against a product that was already
+ * correct: hr_manager and hr_executive "refused a role the rail offers it to" on
+ * both the read and the write, when the rail had stopped offering it.
+ *
+ * A check that carries its own copy of the thing it is checking tests the copy.
+ * The same mistake, in the same session, produced a phantom `PUT /account/password`
+ * failure in check-settings-wiring.py and a phantom required-field failure in
+ * check-settings-guards.sh. Three times is a pattern, so this reads the file.
+ *
+ * ── THE PARSE, AND WHY IT IS ALLOWED TO BE SIMPLE ───────────────────────────
+ *
+ * The section table is a flat literal - `id: 'x'` ... `roles: Y` per entry, with
+ * `Y` one of `null`, `ADMIN`, `ADMIN_ONLY`, or a spread of one of those plus
+ * extra keys. A regex is enough for that shape, and `assertParsed()` below makes
+ * a parse that stops matching fail loudly instead of quietly approving nothing.
  */
-$SECTIONS = [
-    'profile'       => null,                                       // everybody
-    'security'      => null,
-    'preferences'   => null,
-    'notifications' => null,
-    'saved-views'   => null,
-    'people'        => ['administrator', 'hr_manager', 'hr_executive'],
-    'delivery'      => ['administrator', 'hr_manager', 'hr_executive'],
-    'modules'       => ['administrator'],
-    'organization'  => ['administrator', 'hr_manager', 'hr_executive'],
-    'roles'         => ['administrator'],
-    'policy'        => ['administrator'],
-    'audit'         => ['administrator', 'auditor'],
+$sectionsFile = 'C:/Users/MILAN/Downloads/g2gv0/lib/settings-sections.ts';
+
+if (!is_readable($sectionsFile)) {
+    echo "WRONG - cannot read $sectionsFile, so the rail's rules are unknown\n";
+    return;
+}
+
+$ts = file_get_contents($sectionsFile);
+
+// The two shared constants the entries refer to.
+$named = [];
+if (preg_match("/const ADMIN = \[([^\]]*)\]/", $ts, $m)) {
+    $named['ADMIN'] = array_map(
+        fn ($x) => trim($x, " '\"\n\r\t"),
+        array_filter(explode(',', $m[1]), fn ($x) => trim($x) !== '')
+    );
+}
+if (preg_match("/const ADMIN_ONLY = \[([^\]]*)\]/", $ts, $m)) {
+    $named['ADMIN_ONLY'] = array_map(
+        fn ($x) => trim($x, " '\"\n\r\t"),
+        array_filter(explode(',', $m[1]), fn ($x) => trim($x) !== '')
+    );
+}
+
+$SECTIONS = [];
+
+// Each entry: `id: 'name',` ... then the first `roles: ...,` that follows it.
+preg_match_all("/id:\s*'([a-z-]+)'/", $ts, $ids, PREG_OFFSET_CAPTURE);
+
+foreach ($ids[1] as $idMatch) {
+    [$sectionId, $offset] = $idMatch;
+    $rest = substr($ts, $offset);
+
+    /*
+     * TO THE END OF THE LINE, NOT TO THE FIRST COMMA.
+     *
+     * This was `([^,\n]+)`, which stops at a comma - so `[...ADMIN_ONLY,
+     * 'auditor']` was captured as `[...ADMIN_ONLY` and the auditor vanished.
+     * The audit section then read as administrator-only, and this script would
+     * have reported the auditor as "refused a role the rail offers it to" on the
+     * one section that exists for them.
+     */
+    if (!preg_match("/roles:\s*([^\n]+)/", $rest, $rm)) {
+        continue;
+    }
+
+    $expr = rtrim(trim($rm[1]), ',');
+
+    if ($expr === 'null') {
+        $SECTIONS[$sectionId] = null;                       // everybody
+        continue;
+    }
+
+    $roles = [];
+
+    // `[...ADMIN_ONLY, 'auditor']` and plain `ADMIN` / `ADMIN_ONLY` alike.
+    foreach (['ADMIN_ONLY', 'ADMIN'] as $constant) {
+        if (str_contains($expr, $constant)) {
+            $roles = array_merge($roles, $named[$constant] ?? []);
+            break;                                          // ADMIN_ONLY first
+        }
+    }
+
+    foreach (preg_split("/[,\[\]]/", $expr) as $piece) {
+        $piece = trim($piece, " '\".\n\r\t");
+        if ($piece !== '' && !str_contains($piece, 'ADMIN')) {
+            $roles[] = $piece;
+        }
+    }
+
+    $SECTIONS[$sectionId] = array_values(array_unique($roles));
+}
+
+/*
+ * A PARSE THAT MATCHES NOTHING MUST FAIL, NOT PASS.
+ *
+ * Twelve sections exist. If the literal is reshaped and the regex stops
+ * matching, an empty or short table would make every "refused" result look
+ * correct - the vacuous pass this directory exists to prevent.
+ */
+if (count($SECTIONS) < 12) {
+    printf("WRONG - parsed only %d sections from settings-sections.ts, expected 12\n", count($SECTIONS));
+    printf("        the parser has broken; nothing below would mean anything\n");
+    return;
+}
+
+if (!isset($SECTIONS['organization'], $SECTIONS['audit']) || $SECTIONS['profile'] !== null) {
+    echo "WRONG - the parsed table does not look right; check the parser\n";
+    return;
+}
+
+/*
+ * `audit` IS THE CANARY, and it earned the job.
+ *
+ * It is the only entry whose roles are a spread plus an extra key
+ * (`[...ADMIN_ONLY, 'auditor']`), so it breaks first when the capture is too
+ * narrow - which is exactly what happened: the regex stopped at the first comma
+ * and silently dropped the auditor. Asserted explicitly, because a parser that
+ * loses one role out of nine still parses twelve sections and sails past every
+ * count-based guard above.
+ */
+if (!in_array('auditor', $SECTIONS['audit'] ?? [], true)) {
+    echo "WRONG - the parse lost 'auditor' from the audit section; the capture is too narrow\n";
+    return;
+}
+
+printf("read the rail's rules from settings-sections.ts: %d sections\n", count($SECTIONS));
+foreach ($SECTIONS as $id => $allowed) {
+    printf("  %-14s %s\n", $id, $allowed === null ? 'everybody' : implode(', ', $allowed));
+}
+echo "\n";
+
+/*
+ * The endpoint each gated section actually depends on.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THIS LIST HELD TWO OF THE SEVEN GATED SECTIONS
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `people` and `modules` were checked. `delivery`, `organization`, `roles`,
+ * `policy` and `audit` were not - five sections times nine roles, forty-five
+ * role/endpoint pairs nothing had ever exercised. The header of this very file
+ * says the endpoint behind a hidden button is what a browser pass is worst at
+ * finding, and then it checked two of them.
+ */
+$GATED_ENDPOINTS = [
+    'people'       => ['GET', '/api/employees-management/pending-access', []],
+    'modules'      => ['GET', '/api/organization/modules', []],
+    'delivery'     => ['GET', '/api/organization/delivery', []],
+    'organization' => ['GET', '/api/organization/settings', []],
+    'roles'        => ['GET', '/api/organization/roles', []],
+    'audit'        => ['GET', '/api/organization/audit', []],
 ];
 
-/** The endpoint each gated section actually depends on. */
-$GATED_ENDPOINTS = [
-    'people'  => ['GET', '/api/employees-management/pending-access'],
-    'modules' => ['GET', '/api/organization/modules'],
+/*
+ * The WRITES, which are where a missing role check actually costs something.
+ *
+ * `policy` is the one that matters most: `PasswordController::rule()` reads
+ * `security.password_min_length` live on every password path in the product, so
+ * whoever can write it sets the password rules for the whole organisation.
+ */
+$GATED_WRITES = [
+    'organization' => ['PUT', '/api/organization/settings', ['currency' => 'USD']],
+    'policy'       => ['PUT', '/api/organization/settings', ['password_require_symbol' => '0']],
+    'delivery'     => ['PUT', '/api/organization/delivery', [
+        'from_address' => 'probe@example.test',
+        'server' => 'smtp.example.test',
+        'port' => 465,
+        'password' => 'probe-secret',
+    ]],
 ];
 
 $profiles = $db->table('tbluserprofilemaster')
@@ -177,7 +331,7 @@ try {
     // ── 3. THE GATED ENDPOINTS REFUSE THE ROLES THAT SHOULD NOT HAVE THEM ───
     echo "\n══ 3. hidden sections are not merely hidden ══\n";
 
-    foreach ($GATED_ENDPOINTS as $section => [$method, $uri]) {
+    foreach ($GATED_ENDPOINTS as $section => [$method, $uri, $body]) {
         $allowed = $SECTIONS[$section];
 
         printf("\n  %s  (%s %s)\n", $section, $method, $uri);
@@ -185,7 +339,7 @@ try {
 
         foreach ($actors as $roleKey => $actor) {
             $shouldPass = in_array($roleKey, $allowed, true);
-            $code = $call($method, $uri, $actor['token'])->getStatusCode();
+            $code = $call($method, $uri, $actor['token'], $body)->getStatusCode();
             $didPass = $code === 200;
 
             printf("    %-20s HTTP %-4d %s\n", $roleKey, $code,
@@ -193,6 +347,40 @@ try {
                     ? ($shouldPass ? 'CORRECT - allowed, as the rail says' : 'CORRECT - refused')
                     : ($didPass
                         ? 'WRONG - REACHABLE by a role the rail hides it from'
+                        : 'WRONG - refused a role the rail offers it to'));
+        }
+    }
+
+    // ── 3a. AND THE WRITES BEHIND THOSE SECTIONS ────────────────────────────
+    //
+    // A read that leaks an organisation's currency is untidy. A WRITE that lets
+    // any employee change the password policy for everybody is a different kind
+    // of thing, and it is what this section exists for.
+    //
+    // Two sections share ONE endpoint: Organisation defaults and Security policy
+    // are both `/api/organization/settings`, while the rail gates them
+    // differently - HR may see the defaults, only an administrator the policy.
+    // A single route cannot honour two answers, so the write is what matters.
+    echo "\n== 3a. and the writes behind those sections ==\n";
+
+    foreach ($GATED_WRITES as $section => [$method, $uri, $body]) {
+        $allowed = $SECTIONS[$section];
+
+        printf("\n  %s  (%s %s)\n", $section, $method, $uri);
+        printf("  the rail shows it to: %s\n", implode(', ', $allowed));
+
+        foreach ($actors as $roleKey => $actor) {
+            $shouldPass = in_array($roleKey, $allowed, true);
+            $code = $call($method, $uri, $actor['token'], $body)->getStatusCode();
+            // A 422 refuses THIS BODY, not the role, so it still counts as
+            // reaching the endpoint - which is the only question being asked.
+            $didPass = in_array($code, [200, 422], true);
+
+            printf("    %-20s HTTP %-4d %s\n", $roleKey, $code,
+                $didPass === $shouldPass
+                    ? ($shouldPass ? 'CORRECT - allowed, as the rail says' : 'CORRECT - refused')
+                    : ($didPass
+                        ? 'WRONG - CAN WRITE, and the rail hides this from them'
                         : 'WRONG - refused a role the rail offers it to'));
         }
     }
