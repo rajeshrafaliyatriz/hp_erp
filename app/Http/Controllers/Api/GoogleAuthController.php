@@ -46,10 +46,14 @@ class GoogleAuthController extends Controller
             ], 404);
         }
 
-        return $this->buildLoginResponse($user);
+        // The request is threaded through so the token can be named after the
+        // device that created it. It was not, and `buildLoginResponse` reached
+        // for an undefined `$request` - a fatal that `php -l` cannot see,
+        // because scope is a runtime property.
+        return $this->buildLoginResponse($user, $request);
     }
 
-    private function buildLoginResponse(tbluserModel $user)
+    private function buildLoginResponse(tbluserModel $user, Request $request)
     {
         $orgDetails = $user->organization;
         $clientDetails = $orgDetails->client ?? null;
@@ -195,7 +199,7 @@ class GoogleAuthController extends Controller
 
         session()->put($sessionData);
 
-        $token = $user->createToken('api-token')->plainTextToken;
+        $token = $user->createToken(\App\Support\DeviceLabel::from($request->userAgent()))->plainTextToken;
 
         /*
          * Signing in through Google is still signing in.

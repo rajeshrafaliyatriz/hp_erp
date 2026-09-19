@@ -123,8 +123,9 @@ class InviteService
 
         if (in_array(strtolower($host), ['localhost', '127.0.0.1', '::1', '0.0.0.0'], true)) {
             $unreachable = 'This link points at ' . $base . ', which only works on the machine '
-                . 'that generated it. Set FRONTEND_URL to the address people actually use, or '
-                . 'nobody you invite will be able to open their link.';
+                . 'that generated it - so nobody you invite can open it. Set FRONTEND_URL on '
+                . 'the server to the address people actually use (for this installation: '
+                . 'https://g2g.scholarclone.com) and send the invite again.';
         }
 
         if (!MailGate::allowedForTenant($tenantId)) {

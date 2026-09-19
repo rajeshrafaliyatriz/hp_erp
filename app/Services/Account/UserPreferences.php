@@ -77,23 +77,81 @@ class UserPreferences
         'notify_email' => true,
     ];
 
-    /** Read everything for one person, defaults filled in. */
-    public function all(int $userId): array
+    /**
+     * The preferences that belong to a MACHINE rather than to a person.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY THIS IS A SHORT LIST AND NOT EVERYTHING
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * These three describe how a particular screen should look: a bright office
+     * monitor and a laptop in the evening genuinely want different answers, and
+     * a sidebar that suits a 27-inch display does not suit a 13-inch one.
+     *
+     * Everything else is a property of the PERSON. Somebody's date format,
+     * language, time zone and notification choices do not change because they
+     * picked up a different laptop - making those per-device would mean setting
+     * them again on every machine, which is not a feature.
+     *
+     * A key not listed here is always stored at `device_id = ''`, whatever
+     * device asked to change it.
+     */
+    public const DEVICE_SCOPED = ['theme', 'sidebar_collapsed', 'density'];
+
+    /** The account-wide scope. Not a magic string - see the migration's note. */
+    public const ACCOUNT_SCOPE = '';
+
+    /**
+     * Read everything for one person, as seen FROM ONE DEVICE.
+     *
+     * ── THE RESOLUTION ORDER IS DEVICE, THEN ACCOUNT, THEN DEFAULT ──────────
+     *
+     * A device row wins where it exists; otherwise the account default applies;
+     * otherwise the product's own default. That is what makes clearing site data
+     * survivable: the device id is gone, so every device-scoped key falls through
+     * to the account row the person already has, rather than to a factory value.
+     *
+     * Both scopes are read in ONE query. Two queries would be simpler and would
+     * also double the cost of the single most-called endpoint in the settings
+     * area - `/account/me` runs on every page load.
+     */
+    public function all(int $userId, string $deviceId = self::ACCOUNT_SCOPE): array
     {
-        $stored = DB::table(self::TABLE)
+        $rows = DB::table(self::TABLE)
             ->where('user_id', $userId)
-            ->pluck('pref_value', 'pref_key');
+            ->whereIn('device_id', array_unique([self::ACCOUNT_SCOPE, $deviceId]))
+            ->get(['device_id', 'pref_key', 'pref_value']);
+
+        $account = [];
+        $device = [];
+
+        foreach ($rows as $row) {
+            if ($row->device_id === self::ACCOUNT_SCOPE) {
+                $account[$row->pref_key] = $row->pref_value;
+            } else {
+                $device[$row->pref_key] = $row->pref_value;
+            }
+        }
 
         $out = [];
 
         foreach (self::DEFAULTS as $key => $default) {
-            $out[$key] = $stored->has($key)
-                ? $this->cast($stored[$key], $default)
-                : $default;
+            if (array_key_exists($key, $device)) {
+                $out[$key] = $this->cast($device[$key], $default);
+            } elseif (array_key_exists($key, $account)) {
+                $out[$key] = $this->cast($account[$key], $default);
+            } else {
+                $out[$key] = $default;
+            }
         }
 
-        // Per-event opt-outs, one boolean each, defaulting to on.
-        $out['notify_events'] = $this->eventPreferences($stored);
+        /*
+         * Notification choices are never device-scoped - being emailed is about
+         * the person, not the laptop - so they are read from the account rows
+         * alone. Passing `$device` here would let one browser mute an event
+         * everywhere else it is not muted.
+         */
+        $out['notify_events'] = $this->eventPreferences(collect($account));
 
         return $out;
     }
@@ -101,16 +159,29 @@ class UserPreferences
     /**
      * Write the keys present in $values. Anything else is ignored.
      *
-     * @return array the preferences as they now stand
+     * ── WHERE EACH KEY LANDS IS DECIDED HERE, NOT BY THE CALLER ─────────────
+     *
+     * A device-scoped key goes to `$deviceId`; everything else goes to the
+     * account scope regardless of which device asked. That choice being made in
+     * one place is what stops a caller - a future screen, a script - from
+     * accidentally writing somebody's date format against one laptop and leaving
+     * them to wonder why it did not follow them.
+     *
+     * When `$deviceId` is empty the two scopes coincide, which is exactly right:
+     * a caller that does not know its device is setting the account default.
+     *
+     * @return array the preferences as they now stand, seen from $deviceId
      */
-    public function save(int $userId, ?int $tenantId, array $values): array
+    public function save(int $userId, ?int $tenantId, array $values, string $deviceId = self::ACCOUNT_SCOPE): array
     {
         foreach (self::DEFAULTS as $key => $default) {
             if (!array_key_exists($key, $values)) {
                 continue;
             }
 
-            $this->put($userId, $tenantId, $key, $this->encode($values[$key], $default));
+            $scope = in_array($key, self::DEVICE_SCOPED, true) ? $deviceId : self::ACCOUNT_SCOPE;
+
+            $this->put($userId, $tenantId, $key, $this->encode($values[$key], $default), $scope);
         }
 
         /*
@@ -118,6 +189,10 @@ class UserPreferences
          * the flat defaults - and only keys the dispatcher actually knows are
          * accepted, so a caller cannot fill the table with rows for events that
          * do not exist.
+         *
+         * Always the ACCOUNT scope. Being emailed about a leave decision is a
+         * fact about the person; muting it on a phone must not leave it unmuted
+         * on their laptop.
          */
         if (isset($values['notify_events']) && is_array($values['notify_events'])) {
             foreach ($values['notify_events'] as $event => $wanted) {
@@ -129,12 +204,69 @@ class UserPreferences
                     $userId,
                     $tenantId,
                     $this->eventKey($event),
-                    filter_var($wanted, FILTER_VALIDATE_BOOLEAN) ? '1' : '0'
+                    filter_var($wanted, FILTER_VALIDATE_BOOLEAN) ? '1' : '0',
+                    self::ACCOUNT_SCOPE
                 );
             }
         }
 
-        return $this->all($userId);
+        return $this->all($userId, $deviceId);
+    }
+
+    /**
+     * "Use these on all my devices."
+     *
+     * ── WHY THIS EXISTS AS AN EXPLICIT ACTION ───────────────────────────────
+     *
+     * Per-device settings are right until somebody sets up a new machine and has
+     * to redo the work. This copies the current device's device-scoped rows up to
+     * the account scope, so every OTHER device that has no opinion of its own
+     * inherits them - and any device that does have an opinion keeps it, which is
+     * the whole point of having device rows.
+     *
+     * It deliberately does not delete the device rows. Pressing this should not
+     * change anything about the machine you pressed it on.
+     *
+     * @return array the preferences as they now stand
+     */
+    public function promoteToAccount(int $userId, ?int $tenantId, string $deviceId): array
+    {
+        if ($deviceId === self::ACCOUNT_SCOPE) {
+            // Already the account default; nothing to copy.
+            return $this->all($userId, $deviceId);
+        }
+
+        $rows = DB::table(self::TABLE)
+            ->where('user_id', $userId)
+            ->where('device_id', $deviceId)
+            ->whereIn('pref_key', self::DEVICE_SCOPED)
+            ->pluck('pref_value', 'pref_key');
+
+        foreach ($rows as $key => $value) {
+            $this->put($userId, $tenantId, $key, $value, self::ACCOUNT_SCOPE);
+        }
+
+        return $this->all($userId, $deviceId);
+    }
+
+    /**
+     * Forget what this device has chosen, falling back to the account default.
+     *
+     * The counterpart to promoting, and the honest answer to "I set this by
+     * mistake on a machine I do not own".
+     */
+    public function forgetDevice(int $userId, string $deviceId): void
+    {
+        if ($deviceId === self::ACCOUNT_SCOPE) {
+            // Refusing rather than wiping: an empty device id here would delete
+            // the account defaults, which is the opposite of what is being asked.
+            return;
+        }
+
+        DB::table(self::TABLE)
+            ->where('user_id', $userId)
+            ->where('device_id', $deviceId)
+            ->delete();
     }
 
     /**
@@ -150,8 +282,18 @@ class UserPreferences
      */
     public function wantsEmail(int $userId, string $event): bool
     {
+        /*
+         * ACCOUNT SCOPE ONLY, explicitly.
+         *
+         * Notification preferences are never written per device (see `save()`),
+         * but without this filter the query would also pick up device rows if
+         * one ever appeared - and a background job deciding whether to email
+         * somebody has no device to ask about anyway. Being emailed is a fact
+         * about the person.
+         */
         $stored = DB::table(self::TABLE)
             ->where('user_id', $userId)
+            ->where('device_id', self::ACCOUNT_SCOPE)
             ->whereIn('pref_key', ['notify_email', $this->eventKey($event)])
             ->pluck('pref_value', 'pref_key');
 
@@ -256,10 +398,24 @@ class UserPreferences
      * The closure form is given the existence flag, so the insert can carry
      * `created_at` and the update can leave it alone.
      */
-    private function put(int $userId, ?int $tenantId, string $key, ?string $value): void
-    {
+    private function put(
+        int $userId,
+        ?int $tenantId,
+        string $key,
+        ?string $value,
+        string $deviceId = self::ACCOUNT_SCOPE
+    ): void {
+        /*
+         * `device_id` IS PART OF THE MATCH, not part of the payload.
+         *
+         * The unique index is `(user_id, device_id, pref_key)`. Matching on only
+         * two of those three would find the account row when writing a device
+         * row and overwrite it - so setting a dark theme on one laptop would
+         * silently change every other machine that had no opinion of its own,
+         * which is the exact behaviour per-device storage exists to prevent.
+         */
         DB::table(self::TABLE)->updateOrInsert(
-            ['user_id' => $userId, 'pref_key' => $key],
+            ['user_id' => $userId, 'device_id' => $deviceId, 'pref_key' => $key],
             fn (bool $exists) => $exists
                 ? [
                     'sub_institute_id' => $tenantId,
