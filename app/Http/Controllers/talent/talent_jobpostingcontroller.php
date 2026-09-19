@@ -154,8 +154,21 @@ class talent_jobpostingcontroller extends Controller
         }
 
           $validator = Validator::make($request->all(), [
+            /*
+             * EVERY FIELD IS OPTIONAL EXCEPT THIS ONE.
+             *
+             * A posting can now be saved as a draft with almost nothing filled
+             * in - department, location, type, positions and status were all
+             * `required` and blocked that. talent_job_postings allows NULL on
+             * every one of them, so nothing here was protecting the database.
+             *
+             * `title` stays required because the COLUMN is NOT NULL with no
+             * default: an empty one is rejected by MySQL, and a posting with no
+             * title cannot be found or advertised anyway. That is a constraint,
+             * not a preference.
+             */
             'title'            => 'required|string|max:255',
-            'department_id'    => 'required|integer',
+            'department_id'    => 'nullable|integer',
             /*
              * THE COLUMN EXISTED AND NOTHING EVER WROTE IT.
              *
@@ -167,8 +180,8 @@ class talent_jobpostingcontroller extends Controller
              * templates HR created. Optional, so existing callers still work.
              */
             'jobrole_id'       => 'nullable|integer|exists:s_jobrole,id',
-            'location'         => 'required|string|max:255',
-            'employment_type'  => 'required|string|max:100',
+            'location'         => 'nullable|string|max:255',
+            'employment_type'  => 'nullable|string|max:100',
             /*
              * WHERE the work happens, which is a separate question from the
              * contract - a role can be Full-Time AND Remote. Kept out of
@@ -179,7 +192,7 @@ class talent_jobpostingcontroller extends Controller
             'experience'       => 'nullable|string|max:255',
             'education'        => 'nullable|string|max:255',
             'priority_level'   => 'nullable|string|max:100',
-            'positions'        => 'required|integer|min:1',
+            'positions'        => 'nullable|integer|min:1',
             'min_salary'       => 'nullable|numeric|min:0',
             'max_salary'       => 'nullable|numeric|min:0',
             /*
@@ -194,7 +207,7 @@ class talent_jobpostingcontroller extends Controller
             'certifications'   => 'nullable|string',
             'benefits'         => 'nullable|string',
             'description'      => 'nullable|string',
-            'status'           => 'required|in:active,inactive',
+            'status'           => 'nullable|in:active,inactive',
         ]);
 
         if ($validator->fails()) {
@@ -207,7 +220,7 @@ class talent_jobpostingcontroller extends Controller
         try {
             $objtalent = new talent_jobposting();
             $objtalent->title = $request->title;
-            $objtalent->department_id = $request->department_id;
+            $objtalent->department_id = $this->resolveDepartmentId($request, (int) $sub_institute_id);
             // Nullable: a posting without a role still saves, it just
             // cannot be assessed until one is chosen.
             $objtalent->jobrole_id = $this->resolveJobroleId($request);
@@ -226,7 +239,8 @@ class talent_jobpostingcontroller extends Controller
             $objtalent->certifications = $request->certifications;
             $objtalent->benefits = $request->benefits;
             $objtalent->description = $request->description;
-            $objtalent->status = $request->status;
+            // Omitted means a live posting, which is what Create means here.
+            $objtalent->status = $request->filled('status') ? $request->status : 'active';
             $objtalent->sub_institute_id = $sub_institute_id;
             $objtalent->created_by = $request->user_id;
 
@@ -392,6 +406,66 @@ class talent_jobpostingcontroller extends Controller
 
 
     /**
+     * The department row this posting really belongs to.
+     *
+     * ── WHY THE SENT ID CANNOT BE TRUSTED ───────────────────────────────────
+     *
+     * The posting form builds its department dropdown from `s_user_jobrole`
+     * grouped by department, and falls back to the ROLE ROW'S id when a role
+     * carries no department_id. So `department_id` has been receiving job-role
+     * ids: measured on tenant 6, 12 of 13 postings point at a row that is not a
+     * department of that organisation at all - ids 131-144, which resolve to
+     * another tenant's "Manufacturing" roles. The Careers page and the openings
+     * table both render the department by joining on it, so they render blank.
+     *
+     * ── HOW IT IS RESOLVED INSTEAD ──────────────────────────────────────────
+     *
+     * A valid id wins. Otherwise the TITLE - which is a job role name chosen
+     * from the same dropdown - is matched against this tenant's roles to get a
+     * department NAME, and that name against hrms_departments. All 13 tenant-6
+     * postings resolve this way.
+     *
+     * Falls back to whatever was sent rather than nulling it: this is a repair,
+     * and a posting that saved yesterday must still save today.
+     */
+    private function resolveDepartmentId(Request $request, int $subInstituteId): ?int
+    {
+        $sent = $request->filled('department_id') ? (int) $request->input('department_id') : null;
+
+        if ($sent && DB::table('hrms_departments')
+            ->where('id', $sent)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereNull('deleted_at')
+            ->exists()) {
+            return $sent;
+        }
+
+        $title = trim((string) $request->input('title'));
+
+        if ($title !== '') {
+            $department = DB::table('s_user_jobrole')
+                ->where('sub_institute_id', $subInstituteId)
+                ->whereNull('deleted_at')
+                ->where('jobrole', $title)
+                ->value('department');
+
+            if ($department) {
+                $resolved = DB::table('hrms_departments')
+                    ->where('sub_institute_id', $subInstituteId)
+                    ->where('department', $department)
+                    ->whereNull('deleted_at')
+                    ->value('id');
+
+                if ($resolved) {
+                    return (int) $resolved;
+                }
+            }
+        }
+
+        return $sent;
+    }
+
+    /**
      * The catalogue job role this posting is for.
      *
      * Prefers an explicit jobrole_id. Falls back to matching the TITLE against
@@ -513,6 +587,12 @@ class talent_jobpostingcontroller extends Controller
             if ($resolved !== null) {
                 $changes['jobrole_id'] = $resolved;
             }
+        }
+
+        // Same repair on edit, and only when department_id is in the payload -
+        // a status-only PUT still writes nothing else (F-69b).
+        if ($request->has('department_id')) {
+            $changes['department_id'] = $this->resolveDepartmentId($request, (int) $sub_institute_id);
         }
 
         // Perform update
