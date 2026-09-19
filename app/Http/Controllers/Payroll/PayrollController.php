@@ -637,9 +637,12 @@ if($type=="API"){
 
     public function salaryStructureReport(Request $request)
     {
-        $sub_institute_id = session()->get('sub_institute_id');
+        // F-160. session() only, so under type=API this was null. The variable is
+        // unused in this method, but it is left resolved the same way as its POST
+        // sibling so the two cannot drift apart again.
+        $sub_institute_id = $this->payrollTenantId($request);
         $type = $request->type;
-     
+
         $res['years'] = Helpers::getPairYears();
         return is_mobile($type, "payroll/salary_structure_report/index", $res, "view");
     }
@@ -653,7 +656,11 @@ if($type=="API"){
         $emp_id = ($request->emp_id!=0) ? implode(',',$request->emp_id) : 0;
         $department_id = ($request->department_id!=0) ? implode(',',$request->department_id) : 0;
 
-        $sub_institute_id = session()->get('sub_institute_id');
+        // F-160. This read session() with no type=API branch, so an API caller
+        // resolved to null, every `where sub_institute_id = null` matched nothing,
+        // and the report came back empty however it was filtered. It is not that
+        // the screen was never built - the endpoint could not have fed one.
+        $sub_institute_id = $this->payrollTenantId($request);
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->orderBy('sort_order')->get();
 
         $header = [];
@@ -1458,6 +1465,182 @@ if($type=="API"){
         return is_mobile($type, "payroll_deduction.index", $res);
     }
 
+    /**
+     * Q9 / F-173. The payroll adjustments the calculation has never been able
+     * to find.
+     *
+     * hrms_emp_payroll_deduction.month is matched EXACTLY against the spelling
+     * the screen posts ('Aug'). Eleven of the twelve live rows are spelled
+     * "8", "2" or "3", so every payroll run since they were entered has
+     * skipped them - 343,001 in adjustments that the person who typed them
+     * watched succeed.
+     *
+     * F-143 stopped new ones being written. It deliberately did NOT repair the
+     * existing eleven, because "3" could be March, or a March-year convention,
+     * and only the tenant knows which. Guessing at money is the one thing this
+     * audit does not do.
+     *
+     * So this lists them for a human to resolve, and resolveDeductionOrphan()
+     * below applies only what that human chooses.
+     */
+    public function payrollDeductionOrphans(Request $request)
+    {
+        $type = $request->type;
+        $sub_institute_id = $this->payrollTenantId($request);
+
+        $valid = \App\Traits\Helpers::getMonths();
+
+        $rows = DB::table('hrms_emp_payroll_deduction as d')
+            ->leftJoin('tbluser as u', 'u.id', '=', 'd.employee_id')
+            ->leftJoin('payroll_types as p', 'p.id', '=', 'd.deduction_type')
+            ->whereNull('d.deleted_at')
+            ->where('d.sub_institute_id', $sub_institute_id)
+            ->whereNotIn('d.month', $valid)
+            ->orderBy('d.id')
+            ->get([
+                'd.id',
+                'd.month',
+                'd.year',
+                'd.employee_id',
+                'd.deduction_type',
+                'd.deduction_amount',
+                /*
+                 * When the row was ENTERED, which is the evidence that decides
+                 * what its month meant.
+                 *
+                 * On this deployment the eleven orphans were all created in
+                 * December 2025: four spelled "8" (entered 2025-12-01), four
+                 * spelled "2" with year 2020 (also 2025-12-01), and three
+                 * spelled "3" (2025-12-09). A 2020 adjustment entered in
+                 * December 2025 is not August, and not March either - it tells
+                 * whoever owns this data far more than the month field does.
+                 */
+                'd.created_at',
+                'd.updated_at',
+                DB::raw('TRIM(CONCAT_WS(" ", u.first_name, u.last_name)) as employee_name'),
+                'u.employee_no',
+                'p.payroll_name',
+                'p.status as head_status',
+                'p.deleted_at as head_deleted_at',
+                'p.sub_institute_id as head_tenant',
+            ]);
+
+        $res = [
+            'status_code' => 200,
+            'orphans'     => $rows,
+            'months'      => $valid,
+            'total'       => (float) $rows->sum('deduction_amount'),
+        ];
+
+        return is_mobile($type, 'payroll_deduction.index', $res);
+    }
+
+    /**
+     * Apply one explicit decision to one orphaned adjustment.
+     *
+     * Two actions only, both named by the caller:
+     *   set-month  - file it under a month the caller has chosen
+     *   delete     - soft-delete it
+     *
+     * There is no "repair all". The whole reason these rows are still here is
+     * that no rule can derive the right month from "3", and a bulk action
+     * would be that guess wearing a button.
+     */
+    public function resolveDeductionOrphan(Request $request)
+    {
+        $type = $request->type;
+        $sub_institute_id = $this->payrollTenantId($request);
+        $actorId = $this->payrollActorId($request);
+
+        $id     = (int) $request->input('id');
+        $action = (string) $request->input('action');
+
+        // Tenant-scoped by id, the F-146 rule: a by-id operation that does not
+        // name the tenant is a cross-tenant write waiting to happen.
+        $row = DB::table('hrms_emp_payroll_deduction')
+            ->where('id', $id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            $res = ['status_code' => 0, 'message' => 'That adjustment was not found.'];
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        if ($action === 'delete') {
+            DB::table('hrms_emp_payroll_deduction')->where('id', $id)->update([
+                'deleted_at' => now(),
+                'deleted_by' => $actorId,
+                'updated_at' => now(),
+            ]);
+
+            $res = [
+                'status_code' => 200,
+                'message'     => 'Adjustment removed. It was never applied to a payslip.',
+            ];
+
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        if ($action !== 'set-month') {
+            $res = ['status_code' => 0, 'message' => 'Choose whether to re-date this adjustment or remove it.'];
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        // The SAME guard new writes go through (F-143). A month this system
+        // cannot name is not a month it will file an adjustment under, however
+        // it arrives.
+        $month = \App\Traits\Helpers::canonicalMonth($request->input('month'));
+
+        if ($month === null) {
+            $res = [
+                'status_code' => 0,
+                'message'     => 'Choose a month. "' . $request->input('month') . '" is not one this system can file under.',
+            ];
+
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        // Re-dating onto a month that already has an adjustment for the same
+        // employee and head would create the duplicate payrollDeductionStore
+        // upserts away from. Refused rather than merged: which amount wins is
+        // the caller's decision, not this method's.
+        $clash = DB::table('hrms_emp_payroll_deduction')
+            ->where('sub_institute_id', $sub_institute_id)
+            ->where('employee_id', $row->employee_id)
+            ->where('deduction_type', $row->deduction_type)
+            ->where('month', $month)
+            ->where('year', $row->year)
+            ->whereNull('deleted_at')
+            ->where('id', '!=', $id)
+            ->exists();
+
+        if ($clash) {
+            $res = [
+                'status_code' => 0,
+                'message'     => 'There is already an adjustment for that employee, head and month. '
+                               . 'Remove one of them, or choose a different month.',
+            ];
+
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        DB::table('hrms_emp_payroll_deduction')->where('id', $id)->update([
+            'month'      => $month,
+            'updated_by' => $actorId,
+            'updated_at' => now(),
+        ]);
+
+        $res = [
+            'status_code' => 200,
+            'message'     => 'Filed under ' . $month . ' ' . $row->year
+                           . '. It will be applied the next time that month is generated.',
+        ];
+
+        return is_mobile($type, 'payroll_deduction.index', $res);
+    }
+
     public function rollOver(Request $request)
     {
         $sub_institute_id = session()->get('sub_institute_id');
@@ -1757,11 +1940,30 @@ if($type=="API"){
             ->whereNotNull('total_payment')
             ->get();//->toArray();
         
-            //$employeeData = [];
+            /*
+             * F-207. This called employeeDetails() ONCE PER PAYSLIP.
+             *
+             * employeeDetails() runs a joined query against tbluser and
+             * tbluserprofilemaster, so a 500-employee month issued 500
+             * sequential round-trips to the database. Measured on the app's own
+             * host with a seeded 500-employee tenant: 2,085 ms for the loop
+             * alone, against 16 ms for the payslip query it decorates. The
+             * screen was over two seconds slower than it needed to be, and the
+             * cost grows linearly - a 1,000-employee month would be four.
+             *
+             * It was invisible until now because the largest tenant on this
+             * deployment had ONE payslip.
+             *
+             * One call, keyed by employee_id. employeeDetails() already accepts
+             * an empty $employee_id to mean "everyone in the tenant", and it
+             * applies the same status and visibility rules either way, so this
+             * returns exactly the same rows - it just stops asking 500 times.
+             */
+            $allUsers = collect(employeeDetails($sub_institute_id))->keyBy('id');
+
             foreach ($employeeSalaryData as $key => $value) {
                 $employeeData[$key] = $value;
-                $getUserData = employeeDetails($sub_institute_id, $value->employee_id);
-                $employeeData[$key]->usersDetails = isset($getUserData[0]) ? $getUserData[0] : [];
+                $employeeData[$key]->usersDetails = $allUsers->get($value->employee_id, []);
             }
         }
         $currentYear = date('Y');
@@ -2049,7 +2251,16 @@ if ($pdfType == 'storeDoc') {
                     $q->whereIn('u.department_id',$request->department_id);
                 });
             })
-            ->selectRaw('employee_monthly_salary_data.*,u.id,CONCAT_WS(" ",COALESCE(u.first_name, "-"),COALESCE(u.middle_name, "-"),COALESCE(u.last_name, "-")) as full_name,u.employee_no,u.department_id as department_ids')
+            /*
+             * F-172. `u.id` was selected bare, AFTER
+             * employee_monthly_salary_data.*, so it overwrote the payslip's own
+             * `id`: the Aug 2025 row is payslip 22 and this reported id 6, the
+             * user id. Same class as F-168 on employee-payroll-history, and the
+             * value was redundant either way - the join is `u.id =
+             * employee_id`, so employee_id already carries it. Aliased rather
+             * than deleted, in case a Blade view reads it.
+             */
+            ->selectRaw('employee_monthly_salary_data.*,u.id as user_id,CONCAT_WS(" ",COALESCE(u.first_name, "-"),COALESCE(u.middle_name, "-"),COALESCE(u.last_name, "-")) as full_name,u.employee_no,u.department_id as department_ids')
             ->where([['employee_monthly_salary_data.month',$request->month],['employee_monthly_salary_data.year',$searchedYear],['employee_monthly_salary_data.sub_institute_id',$sub_institute_id]])
             ->get()->toArray();
             // dd(DB::getQueryLog($empData));
@@ -2218,6 +2429,26 @@ if ($pdfType == 'storeDoc') {
                     $q->where('u.department_id',$request->department_id);
                     });
                 })
+                /*
+                 * F-168. An explicit select, because tbluser has its OWN
+                 * `employee_id` column - a staff code - and with no select the
+                 * join let it shadow employee_monthly_salary_data.employee_id.
+                 * Payslip 22 belongs to employee 6 and this endpoint reported
+                 * employee_id 11, which is tbluser.employee_id for that person.
+                 * Anything following that id - a drill-through, a payslip PDF
+                 * link - lands on the wrong employee or on nothing.
+                 *
+                 * The payslip's columns come first so its employee_id wins; the
+                 * four name columns are the only ones the mapping below reads
+                 * from tbluser.
+                 */
+                ->select(
+                    'employee_monthly_salary_data.*',
+                    'u.employee_no',
+                    'u.first_name',
+                    'u.middle_name',
+                    'u.last_name'
+                )
                 ->when($request->emp_id!=0,function($q) use($request){
                     $q->where('employee_monthly_salary_data.employee_id',$request->emp_id);
                 })

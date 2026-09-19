@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\RoleKey;
 use Carbon\Carbon;
 
 class AttendanceApiController extends Controller
@@ -287,23 +288,11 @@ class AttendanceApiController extends Controller
      */
     public function employeeMonthlyReport(Request $request)
     {
-        $type = $request->input('type');
-
-        // Token validation (same pattern as other APIs)
-        if ($type === "API") {
-            $token = $request->input('token');
-
-            if (!$token) {
-                return response()->json(['message' => 'Token not provided'], 401);
-            }
-
-            $accessToken = PersonalAccessToken::findToken($token);
-
-            if (!$accessToken) {
-                return response()->json(['message' => 'Invalid token'], 401);
-            }
-        }
-
+        // F-159. The `if ($type === "API")` block that used to stand here was not
+        // a gate. It only ran when the CALLER said it should - omit `type` and the
+        // whole check was skipped - and even when it did run it validated the
+        // token without ever asking who owned it. The route now carries
+        // 'api.token', which is not optional, so that block is gone.
         $subInstituteId = $this->apiTenantId($request);
         $userId         = $request->user_id;
         $month          = $request->month; // Expected format: YYYY-MM
@@ -319,6 +308,30 @@ class AttendanceApiController extends Controller
                 'status'  => 0,
                 'message' => $validator->errors()->first()
             ], 422);
+        }
+
+        // F-159. HR-or-self.
+        //
+        // apiTenantId() already bounds this to the caller's own organisation, so
+        // the old code could not read ACROSS tenants. What it could do is read
+        // any COLLEAGUE: user_id is a request parameter, and the response carries
+        // punch times, lateness, and the free-text reason on every leave day.
+        // Leave reasons are frequently medical. "Same company" is not a licence
+        // to read them.
+        //
+        // Roles come from RoleKey rather than tbluserprofilemaster.name, because
+        // the name is a label a tenant can edit (D-010). The list matches the one
+        // the HR attendance screens are gated on; anybody else gets their own row
+        // and only their own.
+        $callerId = $this->apiUserId($request);
+        $roleKey  = RoleKey::forUserId($callerId);
+
+        if (!RoleKey::satisfies($roleKey, ['admin', 'hr', 'executive', 'auditor'])
+            && (int) $userId !== (int) $callerId) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'You may only view your own attendance.',
+            ], 403);
         }
 
         // Month range
@@ -447,9 +460,27 @@ class AttendanceApiController extends Controller
                     $status = 'present';
                     $presentCount++;
 
-                    // Working hours
-                    $diffMinutes = Carbon::parse($record->punchout_time)->diffInMinutes(Carbon::parse($record->punchin_time));
-                    $hours = floor($diffMinutes / 60);
+                    /*
+                     * F-170. This read
+                     *
+                     *     Carbon::parse($punchout)->diffInMinutes(Carbon::parse($punchin))
+                     *
+                     * with no second argument. Under Carbon 3 (composer.json
+                     * allows ^2.71 || ^3.0) diffInMinutes is SIGNED, and the
+                     * operands are the wrong way round, so a normal day came
+                     * back negative: for 09:59:16 -> 18:20:15 the difference is
+                     * -501, floor(-501/60) is -9, -501 % 60 is -21 in PHP, and
+                     * the sprintf produced "-9:-21" as the working hours.
+                     *
+                     * The rest of this codebase already knows: every other call
+                     * site passes `true` for the absolute value, and three of
+                     * them (HrmsController 523/529, 886/888, 912/916) still
+                     * carry the un-absolute line commented out directly above
+                     * the fixed one. This is the site that was missed.
+                     */
+                    $diffMinutes = (int) Carbon::parse($record->punchin_time)
+                        ->diffInMinutes(Carbon::parse($record->punchout_time), true);
+                    $hours = intdiv($diffMinutes, 60);
                     $mins  = $diffMinutes % 60;
                     $workingHours = sprintf('%02d:%02d', $hours, $mins);
 

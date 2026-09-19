@@ -91,6 +91,14 @@ Route::group(['middleware' => ['auth', 'session', 'menu']], function () {
 
     Route::get('/payroll-deduction', [PayrollController::class, 'payrollDeduction'])->name('payroll_deduction.index');
     Route::post('/payroll-deduction/store', [PayrollController::class, 'payrollDeductionStore'])->name('payroll_deduction.store');
+    /*
+     * Q9 / F-173. The adjustments the calculation has never found - month
+     * spelled "8" or "3" instead of "Aug"/"Mar", so every payroll run since has
+     * skipped them. Listed for a human, resolved one at a time, never guessed.
+     * Same admin/hr gate as the screen they appear on.
+     */
+    Route::get('/payroll-deduction/orphans', [PayrollController::class, 'payrollDeductionOrphans'])->name('payroll_deduction.orphans');
+    Route::post('/payroll-deduction/orphans/resolve', [PayrollController::class, 'resolveDeductionOrphan'])->name('payroll_deduction.orphans.resolve');
 
     Route::get('/monthly-payroll-report', [PayrollController::class, 'monthlyPayrollReport'])->name('monthly_payroll_report.index');
     Route::post('/monthly-payroll-report', [PayrollController::class, 'monthlyPayrollReport'])->name('payroll.store_monthly_payroll_report');

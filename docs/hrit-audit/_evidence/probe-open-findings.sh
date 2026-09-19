@@ -167,13 +167,22 @@ DELETED_APPLIED=$(one "select count(*) c from payroll_types p where p.deleted_at
 check "soft-deleted heads that the calculation would still apply" "1" \
   "$(if [ "${DELETED_APPLIED:-0}" -gt 0 ]; then echo 1; else echo 0; fi)"
 
-# The impact, measured rather than asserted: six of eight live structures
-# reference a deleted head, and they are LOAD-BEARING. Excluding them would take
-# tenant 1's employees 1/2/3 from a net of 3500 to 1000 - a 71% cut - because
-# heads 1 and 5 are deleted ALLOWANCES. That is why the calculation is NOT
-# changed here; it is Q10, and it belongs to the customer.
+# The impact, measured rather than asserted: the live structures reference a
+# head the calculation would still apply, and they are LOAD-BEARING. Excluding
+# them would take tenant 1's employees 1/2/3 from a net of 3500 to 1000 - a 71%
+# cut - because heads 1 and 5 are deleted ALLOWANCES. That is why the
+# calculation is NOT changed here; it is Q10, and it belongs to the customer.
+#
+# The count was pinned at 8 and is now 10: Q8 created two structures that were
+# missing, so getEmpMonthlyData could compute payslips 5 and 22 at all rather
+# than refusing them with "Salary Structure Not Found !!". Each was built from
+# its own payslip's stored components, verbatim.
+#
+# Asserting "> 0" rather than a fixed number, because the point of this line is
+# that there is something for Q10 to act on - not that the total never moves.
+# A hard 8 turned a deliberate, recorded change into a red suite.
 STRUCTS=$(one "select count(*) c from employee_salary_structures where deleted_at is null" c)
-check "live salary structures still exist to be affected" "8" "$STRUCTS"
+check "live salary structures still exist to be affected (found $STRUCTS)" "yes"   "$(if [ "${STRUCTS:-0}" -gt 0 ]; then echo yes; else echo no; fi)"
 
 # What IS fixed: the cause. A head live structures depend on cannot be deleted,
 # so the situation cannot get worse while the customer decides.

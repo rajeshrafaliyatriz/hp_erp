@@ -64,12 +64,16 @@ class LeaveRequestApiController extends Controller
         //
         // The frontend's only narrowing was a `?mine=1` URL parameter that no
         // control ever set.
-        $query = $this->applyLeaveScope(
-            $this->applyFilters(
-                $this->analytics->requestsQuery($context['sub_institute_id'], $context['year']),
-                $request
+        $query = $this->applyAwaitingMe(
+            $this->applyLeaveScope(
+                $this->applyFilters(
+                    $this->analytics->requestsQuery($context['sub_institute_id'], $context['year']),
+                    $request
+                ),
+                $context
             ),
-            $context
+            $context,
+            $request
         );
 
         $total = (clone $query)->count('hel.id');
@@ -1128,6 +1132,63 @@ class LeaveRequestApiController extends Controller
         }
 
         return $query;
+    }
+
+    /**
+     * F-208. `awaiting_me=1` - the requests THIS caller has to decide.
+     *
+     * The Leave Requests screen shipped a preset labelled "My Pending
+     * Approvals" that applied `status=pending` and nothing else, so it returned
+     * every pending request in the caller's scope - including ones sitting with
+     * somebody else entirely. It was renamed to "Pending Approvals" in Phase 15
+     * because the API could not express the scope its label claimed. This is
+     * that missing expression.
+     *
+     * "Awaiting me" is a property of the APPROVAL CHAIN, not of the request:
+     * hrms_leave_approval_steps holds one row per step with an approver_role
+     * and a status, and the step that is still `pending` is the one whose turn
+     * it is. So the filter is "has a pending step whose approver_role is my
+     * role_key".
+     *
+     * Two things it deliberately does NOT do:
+     *
+     *  - It does not widen scope. applyLeaveScope has already narrowed the
+     *    query to who this caller may see; this only narrows further. A
+     *    Reporting Manager still cannot see outside their team.
+     *  - It does not grant anything. A caller without approve_leave gets an
+     *    empty list rather than an error, because "nothing is waiting on you"
+     *    is the truthful answer for them - they are not an approver.
+     *
+     * Escalation is honoured: a step escalated to another role is matched on
+     * `escalated_to` as well, so an escalated request appears for whoever it
+     * escalated TO, which is the whole point of escalating it.
+     */
+    private function applyAwaitingMe($query, array $context, Request $request)
+    {
+        if (!$this->activeFilter($request->input('awaiting_me'))) {
+            return $query;
+        }
+
+        $authority = $this->leaveAuthority($context);
+        $roleKey = $authority['role_key'] ?? null;
+
+        if (!$roleKey || empty($authority['approve_leave'])) {
+            // Not an approver: nothing is waiting on them. An empty list, not a
+            // refusal - they asked a reasonable question and this is the answer.
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereExists(function ($sub) use ($roleKey, $context) {
+            $sub->selectRaw('1')
+                ->from('hrms_leave_approval_steps as step')
+                ->whereColumn('step.leave_id', 'hel.id')
+                ->where('step.sub_institute_id', $context['sub_institute_id'])
+                ->where('step.status', 'pending')
+                ->where(function ($q) use ($roleKey) {
+                    $q->where('step.approver_role', $roleKey)
+                      ->orWhere('step.escalated_to', $roleKey);
+                });
+        });
     }
 
     /** Row shape consumed by the Next.js LeaveRequest type. */
