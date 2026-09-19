@@ -379,6 +379,35 @@ have "$CROP" "touch-none"   && ok "the frame claims the touch gesture, so draggi
 # `have "$CROP" "onKeyDown"` matched `function onKeyDown(...)` as well as the JSX
 # attribute, so deleting the attribute - which disconnects the keyboard entirely -
 # left this check passing against a dead handler.
+# THE ZOOM FLOOR. Reported as "the image is too big to fit in the position photo".
+#
+# `zoom` multiplies the COVER scale, so a floor of 1 means the image opens already
+# cropped with no way to pull back - which is exactly what shipped. The floor has
+# to stay below 1, and a fit control has to exist, because a slider that CAN reach
+# 0.3x is useless when nobody knows 0.3x is this particular file's fitting number.
+have "$MATH" "export function containZoom"   && ok "containZoom exists, so 'fit the whole image' is computable"   || bad "no containZoom - the whole-image zoom cannot be found"
+
+if strip "$CROP" | grep -qE "MIN_ZOOM = 0\."; then
+  ok "the zoom floor is below 1, so a big image can be made to fit"
+else
+  bad "the zoom floor is back at or above 1 - a wide image cannot be fitted"
+fi
+
+# BOTH SITES, because there are two and they do different jobs: one opens a logo
+# at its fitting zoom, the other is the button that returns to it. A mutation test
+# replaced the first and left the second, and a check wanting only one passed.
+fitsites=$(strip "$CROP" | grep -c "setZoom(fitZoom)")
+fitsites=${fitsites//[^0-9]/}
+if [ "${fitsites:-0}" -ge 2 ]; then
+  ok "a control jumps to the fitting zoom, and a logo opens there ($fitsites sites)"
+else
+  bad "only ${fitsites:-0} fit site - either the button or the open-at-fit is gone"
+fi
+
+# Zoomed out, the area around the image is empty. Exported as JPEG that area is
+# BLACK, which would make the fix worse than the bug it replaced.
+have "$CROP" "outputType(file.type, framefilled)"   && ok "an uncovered frame exports with alpha, not a black surround"   || bad "the export ignores whether the frame is filled - a zoomed-out logo goes black"
+
 have "$CROP" "onKeyDown={onKeyDown}"   && ok "the frame takes arrow keys, so it works without a mouse"   || bad "the key handler is not attached - a keyboard user cannot position the image"
 
 # Both pickers must hand off rather than stage the raw file.

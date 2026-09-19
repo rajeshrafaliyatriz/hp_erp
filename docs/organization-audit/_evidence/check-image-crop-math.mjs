@@ -23,7 +23,7 @@
  * Run:  node Docs/organization-audit/_evidence/check-image-crop-math.mjs
  */
 
-import { coverScale, panLimit, clampOffset, placement, outputType }
+import { coverScale, containZoom, covers, panLimit, clampOffset, placement, outputType }
   from '../../../../g2gv0/lib/image-crop.ts'
 
 let correct = 0
@@ -107,47 +107,138 @@ console.log('══════════════════════�
 
 console.log()
 console.log('════════════════════════════════════════════════════════════════')
-console.log('2. The frame is ALWAYS covered - no empty corner, ever')
+console.log('2. Two regimes: covered above zoom 1, contained below it')
 console.log('════════════════════════════════════════════════════════════════')
 {
-  // The original complaint is a logo that does not fit. The opposite failure -
-  // a frame with a transparent wedge in one corner - would be worse, because it
-  // looks like a rendering bug rather than a framing choice.
+  /*
+   * THIS SECTION USED TO ASSERT THE WRONG INVARIANT.
+   *
+   * It required the frame to be covered at EVERY zoom, and it passed, because the
+   * cropper would not go below zoom 1. That made the test agree with a cropper
+   * that could not do the one thing it was most needed for: a 1000x300 logo opened
+   * showing its middle square and there was no way to fit the whole thing. The
+   * report was "the image is too big to fit".
+   *
+   * The real property has two halves, and asserting only the first is what hid the
+   * defect:
+   *
+   *   zoom >= 1   the frame is fully covered - no empty corner, whatever the pan
+   *   zoom < 1    the image is fully INSIDE the frame - it can never be pushed out
+   */
   const images = [[4032, 3024], [3024, 4032], [1000, 1000], [6000, 1200], [200, 640]]
-  let breaches = 0
+  const absurd = [
+    { x: 0, y: 0 }, { x: 5, y: 5 }, { x: -5, y: -5 },
+    { x: 0.49, y: -0.49 }, { x: -12.7, y: 3.3 },
+  ]
+  const frame = 512
+
+  let coveredBreaches = 0
+  let containedBreaches = 0
   let tested = 0
 
   for (const [nw, nh] of images) {
-    for (let zoom = 1; zoom <= 4.01; zoom += 0.25) {
-      // Deliberately absurd offsets: the clamp inside `placement` must absorb them.
-      for (const offset of [
-        { x: 0, y: 0 }, { x: 5, y: 5 }, { x: -5, y: -5 },
-        { x: 0.49, y: -0.49 }, { x: -12.7, y: 3.3 },
-      ]) {
-        const frame = 512
+    // Deliberately spans both regimes, including the 0.1 floor the UI now allows.
+    for (let zoom = 0.1; zoom <= 4.01; zoom += 0.1) {
+      for (const offset of absurd) {
         const p = placement(nw, nh, frame, zoom, offset)
         tested += 1
 
-        // Covered means: left edge at or left of 0, right edge at or right of
-        // the frame, and the same vertically. A 1e-9 slack for float noise.
-        const covered =
-          p.x <= 1e-9 &&
-          p.y <= 1e-9 &&
-          p.x + p.width >= frame - 1e-9 &&
-          p.y + p.height >= frame - 1e-9
+        if (covers(zoom)) {
+          const covered =
+            p.x <= 1e-9 && p.y <= 1e-9 &&
+            p.x + p.width >= frame - 1e-9 && p.y + p.height >= frame - 1e-9
 
-        if (!covered) {
-          breaches += 1
-          if (breaches <= 3) {
-            bad(`${nw}x${nh} zoom ${zoom.toFixed(2)} offset ${JSON.stringify(offset)} leaves a gap: ${JSON.stringify(p)}`)
+          if (!covered) {
+            coveredBreaches += 1
+            if (coveredBreaches <= 2) {
+              bad(`${nw}x${nh} zoom ${zoom.toFixed(2)} leaves a gap: ${JSON.stringify(p)}`)
+            }
+          }
+        } else {
+          // Below cover the image is smaller than the frame in at least one axis.
+          // It must stay inside: no part of it drawn beyond the frame's edges.
+          const inside =
+            p.x >= -1e-9 - Math.max(0, p.width - frame) &&
+            p.y >= -1e-9 - Math.max(0, p.height - frame) &&
+            p.x + p.width <= frame + 1e-9 + Math.max(0, p.width - frame) &&
+            p.y + p.height <= frame + 1e-9 + Math.max(0, p.height - frame)
+
+          if (!inside) {
+            containedBreaches += 1
+            if (containedBreaches <= 2) {
+              bad(`${nw}x${nh} zoom ${zoom.toFixed(2)} escapes the frame: ${JSON.stringify(p)}`)
+            }
           }
         }
       }
     }
   }
 
-  check(breaches === 0, `${tested} placements across 5 aspect ratios, every one covers the frame`,
-    `${breaches} left a gap`)
+  check(coveredBreaches === 0,
+    `at zoom >= 1, every placement covers the frame (${tested} tested across both regimes)`,
+    `${coveredBreaches} left a gap`)
+
+  check(containedBreaches === 0,
+    'at zoom < 1, the image never escapes the frame however hard it is dragged',
+    `${containedBreaches} escaped`)
+}
+
+console.log()
+console.log('════════════════════════════════════════════════════════════════')
+console.log('2b. THE WHOLE IMAGE FITS - the thing that was impossible')
+console.log('════════════════════════════════════════════════════════════════')
+{
+  /*
+   * The direct regression test for the report. At `containZoom` the longest side
+   * exactly fills the frame, so every pixel of the source is inside it.
+   */
+  for (const [nw, nh, name] of [
+    [1000, 300, 'a wide logo 10:3'],
+    [4032, 3024, 'a 4:3 photo'],
+    [3024, 4032, 'a portrait photo'],
+    [6000, 1200, 'a panorama 5:1'],
+    [800, 800, 'a square'],
+  ]) {
+    const zoom = containZoom(nw, nh)
+    const p = placement(nw, nh, 512, zoom, { x: 0, y: 0 })
+
+    const whollyVisible =
+      p.x >= -1e-6 && p.y >= -1e-6 &&
+      p.x + p.width <= 512 + 1e-6 && p.y + p.height <= 512 + 1e-6
+
+    const touches =
+      near(Math.max(p.width, p.height), 512, 1e-6)
+
+    check(whollyVisible && touches,
+      `${name}: at containZoom ${zoom.toFixed(3)} the whole image fits and fills one axis`,
+      JSON.stringify(p))
+  }
+
+  // And a square is the only shape where fitting and covering are the same thing.
+  check(near(containZoom(500, 500), 1), 'a square image has containZoom exactly 1')
+  check(containZoom(1000, 300) < 1, 'a non-square image has containZoom below 1 - which the old floor forbade')
+
+  /*
+   * A ZOOMED-OUT IMAGE CAN STILL BE MOVED.
+   *
+   * A mutation test found this missing: restoring the old `Math.max(0, ...)` pan
+   * clamp - which pins anything smaller than the frame to the centre - broke
+   * nothing, because every other assertion here only ever checks that the image
+   * stays INSIDE the frame, and a centred image trivially does.
+   *
+   * Being able to place a logo off-centre inside the frame is the whole point of
+   * the second regime, so it is asserted directly.
+   */
+  const small = panLimit(1000, 300, 512, 0.2)
+  check(small.x > 0 && small.y > 0,
+    'below cover there is room to move the image inside the frame',
+    JSON.stringify(small))
+
+  const centred = placement(1000, 300, 512, 0.2, { x: 0, y: 0 })
+  const shifted = placement(1000, 300, 512, 0.2, { x: 0.1, y: -0.1 })
+  check(!near(centred.x, shifted.x) && !near(centred.y, shifted.y),
+    'and an offset actually moves it, rather than being clamped away',
+    `centred ${centred.x},${centred.y} vs shifted ${shifted.x},${shifted.y}`)
 }
 
 console.log()
@@ -240,6 +331,24 @@ console.log('══════════════════════�
   check(all.every((m) => ACCEPTED.includes(m)),
     'every output type is one the server accepts',
     all.join(', '))
+
+  /*
+   * AN UNCOVERED FRAME IS ALWAYS PNG.
+   *
+   * Another gap a mutation test found: deleting the `!frameFilled` branch entirely
+   * broke nothing here, because every case above passed the default `true`. Zoomed
+   * out, the space around the image is genuinely empty - exported as JPEG it comes
+   * back BLACK, so the crop that was meant to stop a logo being cut off would
+   * instead return a black square with the logo floating in the middle of it.
+   */
+  const unfilled = ['image/jpeg', 'image/webp', 'image/png', 'image/gif', '']
+    .map((t) => outputType(t, false).mime)
+  check(unfilled.every((m) => m === 'image/png'),
+    'with bare frame, every input exports as PNG so the space stays transparent',
+    unfilled.join(', '))
+
+  check(outputType('image/jpeg', true).mime === 'image/jpeg',
+    'and a filled frame still keeps JPEG, which is much smaller for a photograph')
 }
 
 console.log()
