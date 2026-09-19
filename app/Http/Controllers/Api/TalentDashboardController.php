@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Talent\Concerns\ResolvesTalentContext;
-use App\Models\talent\MobilityRequest;
 use App\Models\talent\OffboardingCase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -135,7 +134,32 @@ class TalentDashboardController extends Controller
             ->where('sub_institute_id', $sid)
             ->whereNull('deleted_at');
 
-        $mobility = fn () => DB::table('talent_mobility_requests')
+        /*
+         * THE TABLES THE MOBILITY MODULE ACTUALLY WRITES.
+         *
+         * This read `talent_mobility_requests`, which has NEVER been written by
+         * anything: the v1 mobility routes were deleted and the live Internal
+         * Mobility & Succession Center writes s_mobility_* instead. Measured on
+         * the live host - talent_mobility_requests 0 rows, s_mobility_transfers
+         * 9. So the tile read 0 however many moves HR recorded, and no number
+         * on it could ever change. Not a wrong count: a wrong source.
+         *
+         * Statuses are Title Case here (Pending / Approved / Completed /
+         * Cancelled, per MobilityTransferController's own validation), where the
+         * old constant held lowercase - which would have kept the tile at 0 even
+         * if the table had been right.
+         */
+        $activeMove = ['Pending', 'Approved'];
+
+        $transfers = fn () => DB::table('s_mobility_transfers')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at');
+
+        $promotions = fn () => DB::table('s_mobility_promotions')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at');
+
+        $mobilityApplications = fn () => DB::table('s_mobility_applications')
             ->where('sub_institute_id', $sid)
             ->whereNull('deleted_at');
 
@@ -158,8 +182,10 @@ class TalentDashboardController extends Controller
             'performance'           => $reviews()->count(),
             'pending_reviews'       => $reviews()->where('status', 'pending')->count(),
 
-            'mobility'              => $mobility()->whereIn('status', MobilityRequest::ACTIVE_STATUSES)->count(),
-            'mobility_applications' => $mobility()->where('request_type', 'internal-application')->count(),
+            // A move in flight is a transfer or a promotion not yet finished.
+            'mobility'              => $transfers()->whereIn('status', $activeMove)->count()
+                                     + $promotions()->whereIn('status', $activeMove)->count(),
+            'mobility_applications' => $mobilityApplications()->count(),
 
             'offboarding'           => $offboarding()->whereIn('status', OffboardingCase::ACTIVE_STATUSES)->count(),
             'clearances_pending'    => $this->pendingClearances($sid),
@@ -403,16 +429,44 @@ class TalentDashboardController extends Controller
         ];
     }
 
-    /** Open clearance sign-offs, excluding any whose case was deleted. */
+    /**
+     * Open clearance sign-offs, counted where they are actually stored.
+     *
+     * This joined `talent_offboarding_clearances`, a table nothing has ever
+     * written - 0 rows on the live host while three real exit cases carry eight
+     * clearance tasks each. The Offboarding Center keeps them as a JSON column
+     * on the case (OffboardingController::updateClearance), with Title Case
+     * statuses, so the old lowercase filter would have excluded every row even
+     * if the table had existed. Two independent reasons the tile read 0.
+     *
+     * Decoded in PHP rather than with JSON_EXTRACT: the live host is MariaDB
+     * 10.1, which has no JSON functions, and the row count here is small.
+     */
     private function pendingClearances(int $sid): int
     {
-        return DB::table('talent_offboarding_clearances as cl')
-            ->join('talent_offboarding_cases as c', 'c.id', '=', 'cl.case_id')
-            ->where('cl.sub_institute_id', $sid)
-            ->whereNull('cl.deleted_at')
-            ->whereNull('c.deleted_at')
-            ->whereIn('cl.status', ['pending', 'in-progress'])
-            ->count();
+        $open = 0;
+
+        DB::table('talent_offboarding_cases')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->whereNotNull('clearance_tasks')
+            ->orderBy('id')
+            ->chunk(200, function ($cases) use (&$open) {
+                foreach ($cases as $case) {
+                    $tasks = json_decode((string) $case->clearance_tasks, true);
+                    if (!is_array($tasks)) {
+                        continue;
+                    }
+                    foreach ($tasks as $task) {
+                        // 'N/A' is a deliberate decision, not an outstanding one.
+                        if (($task['status'] ?? null) === 'Pending') {
+                            $open++;
+                        }
+                    }
+                }
+            });
+
+        return $open;
     }
 
     /**
@@ -509,26 +563,56 @@ class TalentDashboardController extends Controller
             ];
         }
 
-        $mobility = DB::table('talent_mobility_requests as m')
-            ->leftJoin('tbluser as u', 'u.id', '=', 'm.employee_id')
-            ->where('m.sub_institute_id', $sid)
-            ->whereNull('m.deleted_at')
-            ->orderByDesc('m.updated_at')
-            ->limit($limit)
-            ->get([
-                'm.id', 'm.request_type', 'm.status', 'm.updated_at',
-                DB::raw("TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) as employee_name"),
-            ]);
+        /*
+         * Same correction as the KPI above: the feed read
+         * `talent_mobility_requests`, which nothing writes, so no move ever
+         * appeared here however many were recorded. Transfers and promotions
+         * are separate tables with the same shape, so both are read and merged
+         * - the feed is sorted and trimmed by the caller afterwards.
+         */
+        $moves = collect();
 
-        foreach ($mobility as $row) {
-            $feed[] = [
-                'id'      => 'mob-' . $row->id,
-                'type'    => 'mobility',
-                'text'    => ($row->employee_name ?: 'An employee') . ' - ' . str_replace('-', ' ', (string) $row->request_type) . ' ' . $row->status,
-                'context' => 'Mobility',
-                'tone'    => $row->status === 'rejected' ? 'danger' : ($row->status === 'approved' ? 'success' : 'neutral'),
-                'at'      => $row->updated_at,
-            ];
+        /*
+         * The two tables do NOT share a shape - a transfer moves a department,
+         * a promotion moves a grade - so each names its own "to" column rather
+         * than assuming one. Reading m.to_department off promotions is what this
+         * corrects; it threw 1054 and took the whole dashboard down with it.
+         */
+        foreach ([
+            ['table' => 's_mobility_transfers',  'verb' => 'transfer',  'to' => 'to_department'],
+            ['table' => 's_mobility_promotions', 'verb' => 'promotion', 'to' => 'proposed_designation'],
+        ] as $source) {
+            $rows = DB::table($source['table'] . ' as m')
+                ->leftJoin('tbluser as u', 'u.id', '=', 'm.user_id')
+                ->where('m.sub_institute_id', $sid)
+                ->whereNull('m.deleted_at')
+                ->orderByDesc('m.updated_at')
+                ->limit($limit)
+                ->get([
+                    'm.id', 'm.status', 'm.updated_at',
+                    DB::raw('m.' . $source['to'] . ' as moved_to'),
+                    DB::raw("TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) as employee_name"),
+                ]);
+
+            foreach ($rows as $row) {
+                $moves->push([
+                    'id'      => 'mob-' . $source['verb'] . '-' . $row->id,
+                    'type'    => 'mobility',
+                    'text'    => ($row->employee_name ?: 'An employee') . ' - ' . $source['verb']
+                                 . ' ' . strtolower((string) $row->status)
+                                 . ($row->moved_to ? ' to ' . $row->moved_to : ''),
+                    'context' => 'Mobility',
+                    // Title Case here, matching what the module validates against.
+                    'tone'    => $row->status === 'Cancelled'
+                        ? 'danger'
+                        : ($row->status === 'Completed' ? 'success' : 'neutral'),
+                    'at'      => $row->updated_at,
+                ]);
+            }
+        }
+
+        foreach ($moves as $move) {
+            $feed[] = $move;
         }
 
         $exits = DB::table('talent_offboarding_cases as c')

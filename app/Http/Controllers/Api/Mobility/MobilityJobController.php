@@ -127,19 +127,31 @@ class MobilityJobController extends Controller
         $actorId = $context['user_id'];
 
         $validator = Validator::make($request->all(), [
+            /*
+             * ONLY THE TITLE IS REQUIRED.
+             *
+             * location, grade, job_type, vacancies, relocation_required and
+             * status were all `required`, so an internal vacancy could not be
+             * drafted before every one was decided. Four of them carry a
+             * database default and the other two accept an empty string, so
+             * none of that was protecting the table.
+             *
+             * title is NOT NULL with no default - a vacancy nobody can name
+             * cannot be posted or applied to.
+             */
             'title' => 'required|string|max:191',
             'department_id' => 'nullable|integer',
-            'location' => 'required|string|max:191',
-            'grade' => 'required|string|max:50',
-            'job_type' => 'required|string|in:Permanent,Contract,Temporary',
+            'location' => 'nullable|string|max:191',
+            'grade' => 'nullable|string|max:50',
+            'job_type' => 'nullable|string|in:Permanent,Contract,Temporary',
             'posted_on' => 'nullable|date',
             'deadline' => 'nullable|date',
             'hiring_manager_id' => 'nullable|integer',
             'current_incumbent' => 'nullable|string|max:191',
-            'vacancies' => 'required|integer|min:1',
-            'relocation_required' => 'required|string|in:Yes,No,Case-by-case',
+            'vacancies' => 'nullable|integer|min:1',
+            'relocation_required' => 'nullable|string|in:Yes,No,Case-by-case',
             'description' => 'nullable|string',
-            'status' => 'required|string|in:Open,In Review,Closed',
+            'status' => 'nullable|string|in:Open,In Review,Closed',
         ]);
 
         if ($validator->fails()) {
@@ -185,7 +197,27 @@ class MobilityJobController extends Controller
 
         $postedOn = $request->input('posted_on') ?: now()->toDateString();
 
-        $job = MobilityJob::create(array_merge($validator->validated(), [
+        /*
+         * location and grade are NOT NULL with no default, so an omitted one
+         * becomes an empty string rather than a rejected save. The rest
+         * (job_type, vacancies, relocation_required, status) have column
+         * defaults and are simply left out when absent.
+         */
+        $values = $validator->validated();
+
+        foreach (['location', 'grade'] as $field) {
+            if (!isset($values[$field]) || $values[$field] === null) {
+                $values[$field] = '';
+            }
+        }
+
+        foreach (['job_type', 'vacancies', 'relocation_required', 'status'] as $field) {
+            if (array_key_exists($field, $values) && $values[$field] === null) {
+                unset($values[$field]);
+            }
+        }
+
+        $job = MobilityJob::create(array_merge($values, [
             'sub_institute_id' => $subInstituteId,
             'job_id' => $jobIdCode,
             'department' => $deptName,

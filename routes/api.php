@@ -2049,10 +2049,21 @@ Route::get('/talent/dashboard/filters', [TalentDashboardController::class, 'filt
 */
 Route::get('/talent/admin/audit-logs', [AdminWorkflowController::class, 'auditLogs']);
 Route::get('/talent/admin/workflows', [AdminWorkflowController::class, 'index']);
-// The detail route was never registered, so opening a workflow in Administration
-// & Governance 404'd. The controller method has existed all along.
+/*
+| The detail route was never registered, so opening a workflow in Administration
+| & Governance 404'd. The controller method has existed all along.
+|
+| ── WHY THERE IS NO whereNumber HERE ────────────────────────────────────────
+|
+| It had one, and that reintroduced the very 404 the line above says was fixed.
+| index() hands the list PREFIXED ids - AdminWorkflowController@index builds
+| 'wf-' . $w->id - so the screen requests /talent/admin/workflows/wf-12, which a
+| numeric constraint refuses at the router. show() already strips the prefix
+| itself, and was simply never reached. Constrained to the shape the client
+| actually sends instead: wf-12 or 12, nothing else.
+*/
 Route::get('/talent/admin/workflows/{id}', [AdminWorkflowController::class, 'show'])
-    ->whereNumber('id');
+    ->where('id', '(wf-)?[0-9]+');
 /*
 |--------------------------------------------------------------------------
 | Talent Management -> Onboarding & Employee Lifecycle Center
@@ -2233,6 +2244,10 @@ Route::prefix('offboarding')->group(function () {
     Route::post('/cases/{id}/status', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateStatus'])->whereNumber('id');
     Route::post('/cases/{id}/clearance', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateClearance'])->whereNumber('id');
     Route::post('/cases/{id}/documents', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateDocuments'])->whereNumber('id');
+    // The real file. The screen's upload dialog had no file input at all, so a
+    // document reached 'Submitted' on a typed string - see uploadDocument().
+    Route::post('/cases/{id}/documents/{docId}/upload', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'uploadDocument'])
+        ->whereNumber('id')->where('docId', '[A-Za-z0-9_-]{1,40}');
     Route::post('/cases/{id}/comments', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'addComment'])->whereNumber('id');
     Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
     Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');

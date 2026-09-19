@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\Offboarding\Concerns\ResolvesOffboardingContext;
 use App\Models\talent\TalentOffboardingCase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class OffboardingController extends Controller
 {
@@ -25,8 +27,17 @@ class OffboardingController extends Controller
         ['id' => 'c8', 'department' => 'Admin', 'item' => 'Desk Keys Return', 'status' => 'Pending'],
     ];
 
+    /**
+     * The exit paperwork every case starts with.
+     *
+     * 'Resignation Letter' used to be seeded as fileName 'resignation.pdf',
+     * status 'Submitted' - a file that was never uploaded, on every case in
+     * every tenant, marked received before the person had sent anything. A
+     * checklist that starts one item pre-ticked teaches people to trust the
+     * other three less.
+     */
     private const DEFAULT_DOCUMENTS = [
-        ['id' => 'd1', 'title' => 'Resignation Letter', 'fileName' => 'resignation.pdf', 'status' => 'Submitted', 'isMandatory' => true],
+        ['id' => 'd1', 'title' => 'Resignation Letter', 'fileName' => null, 'status' => 'Pending', 'isMandatory' => true],
         ['id' => 'd2', 'title' => 'Clearance Certificate', 'fileName' => null, 'status' => 'Pending', 'isMandatory' => true],
         ['id' => 'd3', 'title' => 'Exit Survey Form', 'fileName' => null, 'status' => 'Pending', 'isMandatory' => false],
         ['id' => 'd4', 'title' => 'Signed NDA', 'fileName' => null, 'status' => 'Pending', 'isMandatory' => true],
@@ -657,6 +668,94 @@ class OffboardingController extends Controller
     /**
      * POST /api/offboarding/cases/{id}/documents
      */
+    /**
+     * POST /api/offboarding/cases/{id}/documents/{docId}/upload
+     *
+     * The real thing. The screen's "Upload Exit Document" dialog had no file
+     * input at all - one text box bound to state named `mockFileName` - so a
+     * document was marked Submitted on the strength of a typed string.
+     *
+     * Same storage path, disk and limits as the candidate CV upload in
+     * CareersController::apply(), so there is one way to accept a file in this
+     * product rather than two that drift.
+     */
+    public function uploadDocument(Request $request, $id, $docId)
+    {
+        $context = $this->offboardingContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $tenant = $context['sub_institute_id'];
+        $actorId = $context['user_id'];
+
+        $case = TalentOffboardingCase::where('sub_institute_id', $tenant)->findOrFail($id);
+
+        $request->validate([
+            // Matches the CV upload: the formats HR actually receives, and a cap
+            // that is generous for a signed scan without inviting a 40MB TIFF.
+            'file' => 'required|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:5120',
+        ]);
+
+        $documents = $case->documents ? json_decode($case->documents, true) : self::DEFAULT_DOCUMENTS;
+
+        $index = null;
+        foreach ($documents as $i => $doc) {
+            if ((string) $doc['id'] === (string) $docId) {
+                $index = $i;
+                break;
+            }
+        }
+
+        if ($index === null) {
+            return $this->offboardingError('That document is not on this exit case.', 404);
+        }
+
+        $file = $request->file('file');
+        $stored = 'exit_' . $tenant . '_' . $case->id . '_' . $docId . '_' . time()
+            . '.' . $file->getClientOriginalExtension();
+
+        try {
+            Storage::disk('digitalocean')->putFileAs('public/hp_offboarding_document/', $file, $stored, 'public');
+            $url = Storage::disk('digitalocean')->url('public/hp_offboarding_document/' . $stored);
+        } catch (\Throwable $e) {
+            /*
+             * A failed upload must fail the request. Recording the document as
+             * Submitted with no file behind it is the exact defect this endpoint
+             * exists to remove.
+             */
+            Log::error('Exit document upload failed: ' . $e->getMessage());
+
+            return $this->offboardingError('The file could not be uploaded. Please try again.', 503);
+        }
+
+        $actor = $actorId ? DB::table('tbluser')->where('id', $actorId)->first() : null;
+        $actorName = $actor ? trim($actor->first_name . ' ' . $actor->last_name) : 'HR Specialist';
+
+        // The name the person recognises, not the one on disk.
+        $documents[$index]['fileName'] = $file->getClientOriginalName();
+        $documents[$index]['fileUrl'] = $url;
+        $documents[$index]['status'] = 'Submitted';
+        $documents[$index]['uploadedAt'] = now()->toDateTimeString();
+        $documents[$index]['uploadedBy'] = $actorName;
+
+        $activityLog = $case->activity_log ? json_decode($case->activity_log, true) : [];
+        $activityLog[] = [
+            'id' => uniqid(),
+            'action' => 'Document Uploaded',
+            'description' => "'{$documents[$index]['title']}' uploaded ({$documents[$index]['fileName']}).",
+            'timestamp' => date('d M Y, h:i A'),
+            'actor' => $actorName,
+        ];
+
+        $case->documents = json_encode($documents);
+        $case->activity_log = json_encode($activityLog);
+        $case->updated_by = $actorId;
+        $case->save();
+
+        return $this->offboardingResponse($documents, 'Document uploaded.');
+    }
+
     public function updateDocuments(Request $request, $id)
     {
         $context = $this->offboardingContext($request);
@@ -684,6 +783,36 @@ class OffboardingController extends Controller
         $docMap = [];
         foreach ($validated['documents'] as $d) {
             $docMap[$d['id']] = $d;
+        }
+
+        /*
+         * SUBMITTED AND VERIFIED REQUIRE A FILE.
+         *
+         * This endpoint used to accept any status with a typed fileName, and the
+         * screen sent exactly that - a text box, no file input. A whole exit
+         * clearance could be marked Submitted and then Verified with nothing
+         * uploaded anywhere, which is the kind of trail an audit asks to see.
+         *
+         * Uploading is now the only route to Submitted (see uploadDocument
+         * below); this refuses the shortcut rather than trusting the caller.
+         */
+        $byId = [];
+        foreach ($existingDocs as $doc) {
+            $byId[$doc['id']] = $doc;
+        }
+
+        foreach ($validated['documents'] as $d) {
+            if (!in_array($d['status'], ['Submitted', 'Verified'], true)) {
+                continue;
+            }
+            $current = $byId[$d['id']] ?? null;
+            if (!$current || empty($current['fileUrl'])) {
+                return $this->offboardingError(
+                    'A document cannot be marked ' . $d['status'] . ' before a file has been '
+                    . 'uploaded against it. Upload the file first.',
+                    422
+                );
+            }
         }
 
         $activityLog = $case->activity_log ? json_decode($case->activity_log, true) : [];
