@@ -389,6 +389,21 @@ class LibraryController extends Controller
      *
      * @return array<string, mixed>
      */
+    /**
+     * The industry label this organisation's job roles are filed under.
+     *
+     * Read from school_setup.institute_type, which is the same value
+     * authController puts in the session as `org_type` and the Job Opening form
+     * sends back as filters[industries]. Reading it here rather than trusting
+     * the client keeps the two ends on one source.
+     */
+    private function tenantIndustry(int $subInstituteId): ?string
+    {
+        $value = DB::table('school_setup')->where('id', $subInstituteId)->value('institute_type');
+
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
+    }
+
     private function payload(array $resource, Request $request, int $subInstituteId): array
     {
         $data = [];
@@ -718,6 +733,32 @@ class LibraryController extends Controller
         if ($resource['tenant']) {
             $data['sub_institute_id'] = $context['sub_institute_id'];
         }
+
+        /*
+         * A NEW JOB ROLE INHERITS ITS ORGANISATION'S INDUSTRY.
+         *
+         * `s_user_jobrole.industries` is not decoration - the Job Opening form
+         * filters the job-title dropdown on it, sending the tenant's own
+         * institute_type (school_setup.institute_type, which reaches the client
+         * as session.org_type). A role saved with industries = NULL therefore
+         * matches nothing and is invisible on the very screen it was created to
+         * be used on: the Capability Library's job-role form has no industry
+         * field, so EVERY role added there was unreachable from Recruitment.
+         *
+         * Reported from tenant 6: "Pre Sale Education AI Solution Consultant"
+         * was added under Sales and Marketing and never appeared in the
+         * dropdown, while 149 sibling roles carrying 'Information Technology'
+         * did.
+         *
+         * Only filled when the caller did not send one, so an importer that
+         * knows better still wins. Null when the organisation has no
+         * institute_type - a wrong guess would hide the role just as
+         * effectively, in a way nobody could trace.
+         */
+        if ($type === 'jobrole' && empty($data['industries'])) {
+            $data['industries'] = $this->tenantIndustry((int) $context['sub_institute_id']);
+        }
+
         $data = $this->stamp($data, $context['user_id'], true);
 
         $id = DB::table($resource['table'])->insertGetId($data);
