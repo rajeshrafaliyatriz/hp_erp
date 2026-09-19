@@ -51,7 +51,14 @@ class TalentAssessmentController extends Controller
         $sid = (int) $context['sub_institute_id'];
 
         $rows = DB::table('talent_assessment_blueprints as b')
-            ->leftJoin('s_jobrole as r', 'r.id', '=', 'b.jobrole_id')
+            /*
+             * s_user_jobrole, not s_jobrole. A blueprint's jobrole_id names a
+             * role in THIS organisation's library, because that is what it has
+             * to match: the invitation query below joins it to
+             * talent_job_postings.jobrole_id, and postings carry tenant-library
+             * ids. See the comment on the validation in store().
+             */
+            ->leftJoin('s_user_jobrole as r', 'r.id', '=', 'b.jobrole_id')
             ->leftJoin('hrms_departments as d', function ($join) use ($sid) {
                 $join->on('d.id', '=', 'b.department_id')->where('d.sub_institute_id', '=', $sid);
             })
@@ -122,8 +129,35 @@ class TalentAssessmentController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
-        if (!DB::table('s_jobrole')->where('id', $request->integer('jobrole_id'))->exists()) {
-            return response()->json(['status' => 0, 'message' => 'That job role is not in the catalogue.'], 422);
+        /*
+         * THE BLUEPRINT'S ROLE IS A TENANT ROLE, NOT A CATALOGUE ROLE.
+         *
+         * This checked s_jobrole - the global catalogue - while the invitation
+         * query joins b.jobrole_id to talent_job_postings.jobrole_id, and
+         * postings carry s_user_jobrole ids. Two id spaces on one join: a
+         * blueprint created against the catalogue could never match a posting,
+         * so no candidate would ever be offered an assessment however many
+         * blueprints HR built.
+         *
+         * It was latent rather than broken - there are 0 blueprints on either
+         * host, so nothing has hit it yet, and aligning it now costs nothing.
+         * Doing it after the first blueprint exists would mean migrating rows
+         * whose id space is ambiguous.
+         *
+         * Scoped to the tenant so a blueprint cannot be built against another
+         * organisation's role.
+         */
+        $roleExists = DB::table('s_user_jobrole')
+            ->where('id', $request->integer('jobrole_id'))
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (!$roleExists) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'That job role is not in your organisation\'s library.',
+            ], 422);
         }
 
         $values = [
