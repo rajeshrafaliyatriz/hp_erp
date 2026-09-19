@@ -417,8 +417,14 @@ Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::cl
 Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications'])
     ->middleware('profile:admin,hr,recruiter');
 // Removed duplicate route declaration - exact duplicate.
-Route::post('designation_leave', [HrmsController::class, 'store']);
-Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
+// F-158. `Route::post('designation_leave', [HrmsController::class, 'store'])` was
+// here. HrmsController has no `store` method at all, and because this line came
+// AFTER the real registration on line 400, Laravel resolved THIS one - so every
+// call to designation_leave 500'd on a missing method. The earlier dedup pass
+// missed it precisely because it is not an *exact* duplicate: same URI and verb,
+// different controller. That difference is what made it harmful rather than inert.
+// The token-gated HrmsLeaveController@store on line 400 is the real one.
+// Removed duplicate route declaration - exact duplicate of line 402.
 // Removed duplicate route declaration - exact duplicate.
 // Removed duplicate route declaration - exact duplicate.
 // Removed duplicate route declaration - exact duplicate.
@@ -835,9 +841,23 @@ Route::middleware('profile:admin,hr')->group(function () {
 });
 
 //HRIT dashboard
+// weeklySummary and KPI carry no route gate, and that is survivable: both resolve
+// the tenant with apiTenantId(), which reads the TOKEN, so a caller without one
+// gets null and a 400 rather than another organisation's rows. They are dead
+// (superseded by /api/attendance/*) but not dangerous, so they stay - deleting
+// them would reverse a deliberate earlier decision recorded in
+// AttendanceDashboardApiController and LeaveDistributionApiController, and could
+// break a consumer outside this repo.
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
 Route::get('/KPI-HRITDashboard', [AttendanceApiController::class, 'KPI']);
-Route::get('/employee-attendance-monthly-report', [AttendanceApiController::class, 'employeeMonthlyReport']);
+// F-159. employeeMonthlyReport is NOT in that category. It takes user_id from the
+// request and returns that person's punch times, lateness and leave *reasons*, so
+// it needs an identity gate, not just a tenant one. Its own `if ($type === "API")`
+// check is skipped entirely by a caller who omits `type`; api.token is not
+// optional. The HR-or-self rule lives in the controller, because "or self" is
+// about which row is asked for and middleware cannot see that.
+Route::get('/employee-attendance-monthly-report', [AttendanceApiController::class, 'employeeMonthlyReport'])
+    ->middleware('api.token');
 
 Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise'])->middleware('api.token');
 Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution']);
@@ -1751,6 +1771,12 @@ Route::middleware('api.token')->group(function () {
     Route::put('/account/profile', [\App\Http\Controllers\Api\Account\AccountController::class, 'updateProfile']);
     Route::post('/account/profile', [\App\Http\Controllers\Api\Account\AccountController::class, 'updateProfile']);
     Route::put('/account/preferences', [\App\Http\Controllers\Api\Account\AccountController::class, 'updatePreferences']);
+    /*
+     * PER-DEVICE APPEARANCE. Both take the device id from the request body and
+     * the person from the token, so neither can reach another account.
+     */
+    Route::post('/account/preferences/promote', [\App\Http\Controllers\Api\Account\AccountController::class, 'promotePreferences']);
+    Route::delete('/account/preferences/device', [\App\Http\Controllers\Api\Account\AccountController::class, 'forgetDevicePreferences']);
     /*
      * THROTTLED, unlike the rest of the group.
      *

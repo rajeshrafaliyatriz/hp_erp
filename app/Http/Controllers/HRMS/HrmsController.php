@@ -1651,12 +1651,22 @@ class HrmsController extends Controller
             $sub_institute_id = $this->apiTenantId($request);
             
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
-        $employee_id = ($request->employee_id != 0) ? implode(',', $request->employee_id) : 0;
+        // F-162. This read `employee_id`. Nothing sends that: the frontend sends
+        // `emp_id[]` (services/hrms/index.ts:369) and the Blade branch below
+        // reads `emp_id` too. So under type=API $employee_id was ALWAYS 0 and
+        // the employee filter on this report was silently ignored - the report
+        // answered for the whole department however the user narrowed it.
+        //
+        // `emp_id` first because that is what every caller actually sends;
+        // `employee_id` still honoured so that any caller outside this repo
+        // which did send it keeps working.
+        $emp_param = $request->emp_id ?? $request->employee_id;
+        $employee_id = ($emp_param != 0) ? implode(',', (array) $emp_param) : 0;
         }
         else{
-            
+
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
-        $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : 0;
+        $employee_id = ($request->emp_id != 0) ? implode(',', (array) $request->emp_id) : 0;
         }
        
         // echo "<pre>";print_r($request->all());exit; 
@@ -1677,7 +1687,14 @@ class HrmsController extends Controller
         $hrmsList = HrmsAttendance::join('tbluser as u', 'u.id', '=', 'hrms_attendances.user_id')->where('hrms_attendances.sub_institute_id', $sub_institute_id);
 
         if ($employee_id != 0) {
-            echo $employee_id;
+            // F-161. `echo $employee_id;` stood here - left-over debugging. It
+            // wrote the id into the response body BEFORE is_mobile() returned the
+            // JSON, so the body was `12{"employees":...}` and response.json()
+            // threw a SyntaxError on the client. Because the Attendance Report
+            // loads its four datasets in one Promise.all whose catch clears all
+            // four, selecting any single employee blanked the entire screen -
+            // KPIs, charts, table and highlights - while three of the four
+            // endpoints had answered perfectly.
             $hrmsList = $hrmsList->when(isset($employee_id), function ($q) use ($employee_id) {
                 $q->whereRaw('user_id in (' . $employee_id . ')');
             });

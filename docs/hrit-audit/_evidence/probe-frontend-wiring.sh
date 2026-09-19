@@ -33,7 +33,14 @@ echo "=============================================================="
 
 echo
 echo "1. The menu/route contract - the check nobody was running"
-check "content-map-m5 routes the 12 sub-modules plus My HR" "13" "$(v routed)"
+# The count is deliberate, not incidental: it catches a route SILENTLY
+# DISAPPEARING, which the two checks below cannot - they only ever look at the
+# routes that are present. Raise it when a screen is added, and say which.
+#   13 -> 14  F-166, Bank-wise Payment Advice     (menu 307)
+#   14 -> 15  F-169, Employee Payroll History    (menu 308)
+#   15 -> 16  F-171, Monthly Attendance Report  (menu 309)
+#   16 -> 18  F-172, Payroll Register (310) + Salary Structure Report (311)
+check "content-map-m5 routes the 12 sub-modules, My HR and the five new reports" "18" "$(v routed)"
 check "every routed screen has a menu row" "0" "$(v routed_without_menu)"
 # A live leaf under a live parent with no route falls through to
 # ComingSoonFallback and renders "Application Shell Ready" - a developer
@@ -50,6 +57,37 @@ check "My HR has a live menu row" "1" "$(v myhr_menu)"
 check "and every profile can view it" "0" "$(v myhr_rights_gap)"
 
 echo
+echo
+echo "2b. Bank-wise Payment Advice is reachable, and NOT by everyone (F-166)"
+check "it has a live menu row" "1" "$(v bank_menu)"
+# The inverse of the My HR check directly above, on purpose. My HR must be
+# viewable by EVERY profile; this one lists every employee's salary and bank
+# account, so it must be viewable by admin/hr and nobody else.
+check "some profiles can view it" "yes" "$([ "$(v bank_rights)" -gt 0 ] 2>/dev/null && echo yes || echo no)"
+check "and it is granted to exactly the admin/hr set" "$(v bank_rights_expected)" "$(v bank_rights)"
+check "no profile outside that set was granted it" "0" "$(v bank_rights_leaked)"
+# The one that would actually catch a too-generous migration: strictly fewer
+# than ALL profiles. The first version of this line compared bank_rights against
+# bank_rights_expected, which are equal by construction two lines above - it
+# passed for a reason that had nothing to do with what it claimed to check.
+check "restricted - not granted to every profile ($(v bank_rights) of $(v profiles_total))" "yes" \
+      "$([ "$(v bank_rights)" -lt "$(v profiles_total)" ] 2>/dev/null && echo yes || echo no)"
+
+echo
+echo "2d. Monthly Attendance Report - every profile, because it is self-service (F-171)"
+check "it has a live menu row" "1" "$(v monthly_att_menu)"
+# Deliberately the SAME shape as My HR and the OPPOSITE of 307/308. The
+# controller enforces HR-or-self, so a rights row grants an employee their own
+# month only. If this ever narrows, the controller check went with it.
+check "and every profile can view it" "0" "$(v monthly_att_rights_gap)"
+
+echo
+echo "2c. A menu item named 'Report' must not mount a data-entry grid (F-167)"
+# Menu 140 mounts MonthlyPayrollPage - editable day inputs, Generate Payroll,
+# per-row Delete. It was called "Monthly Payroll Report", so someone clicking a
+# Report could delete a filed payslip.
+check "menu 140 is named for what it actually opens" "Monthly Payroll" "$(v menu140_name)"
+
 echo "3. No control wired to a handler that does nothing"
 check "no () => {} handler props" "0" "$(v noop_handlers)"
 check "no href=\"#\"" "0" "$(v hash_href)"
@@ -59,6 +97,14 @@ echo "4. No invented figures rendered as real data"
 check "no hardcoded KPI trend deltas" "0" "$(v fake_trend)"
 check "no calendar pinned to a fixed month" "0" "$(v pinned_month)"
 check "no placeholder letter where an icon belongs" "0" "$(v letter_icon)"
+# F-175. A named metric assigned a literal 0. `earlyGoing: 0` fed a table column
+# AND a charted series with its own legend entry - a flat zero line labelled as
+# a measurement, on every tenant and every date range. A column of zeros is a
+# claim ("nobody left early"), not an absence.
+check "no metric hardcoded to zero" "0" "$(v constant_zero_metric)"
+# F-175. Two Group By options sharing one branch: "Date" grouped by DEPARTMENT
+# and differed only by a column holding the same string on every row.
+check "no two Group By options share a branch" "0" "$(v merged_group_branch)"
 
 echo
 echo "5. Nothing offered that the API cannot serve"

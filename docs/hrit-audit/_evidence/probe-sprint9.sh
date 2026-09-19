@@ -143,10 +143,20 @@ check "no employee-month holds more than one payslip" "0" \
   "$(one "select count(*) c from (select employee_id from employee_monthly_salary_data group by sub_institute_id, employee_id, year, month having count(*)>1) d" c)"
 check "the database enforces it" "employee_monthly_salary_data_period_unique" \
   "$(one "select INDEX_NAME k from information_schema.statistics where table_schema=database() and table_name='employee_monthly_salary_data' and INDEX_NAME='employee_monthly_salary_data_period_unique' limit 1" k)"
+# Both lines below are pinned to the ONE event F-138 created - the Jul 2026
+# deduplication - by its idempotency key.
+#
+# They used to say `limit 1` and `count(*) = 1`, which held only while that was
+# the sole supersession event in the store. Q8 later emitted four more (payslips
+# 1 and 5, across two hosts) and the count went red while nothing had regressed.
+# An unpinned `limit 1` is the worse of the two: it does not go red, it silently
+# starts asserting about a different event.
+SUPERSEDE_KEY="payroll.month.canonicalised:1:1:Jul:2026"
+
 check "the supersession is on the record, with its before-image" "16" \
-  "$(one "select json_length(json_extract(payload,'\$.superseded')) c from g2g_event where type='payroll.payslip.superseded' limit 1" c)"
+  "$(one "select json_length(json_extract(payload,'\$.superseded')) c from g2g_event where idempotency_key='$SUPERSEDE_KEY'" c)"
 check "and it reached the audit log" "1" \
-  "$(one "select count(*) c from g2g_audit_log where type='payroll.payslip.superseded'" c)"
+  "$(one "select count(*) c from g2g_audit_log a join g2g_event e on e.id=a.event_id where e.idempotency_key='$SUPERSEDE_KEY'" c)"
 
 # ---------------------------------------------------------------------------
 echo
