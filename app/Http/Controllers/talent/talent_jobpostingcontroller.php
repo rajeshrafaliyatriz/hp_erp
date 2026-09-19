@@ -179,7 +179,14 @@ class talent_jobpostingcontroller extends Controller
              * "No assessment blueprint matches this role" no matter how many
              * templates HR created. Optional, so existing callers still work.
              */
-            'jobrole_id'       => 'nullable|integer|exists:s_jobrole,id',
+            /*
+             * s_user_jobrole, NOT s_jobrole. See resolveJobroleId() below - the
+             * whole point of this column is to join jobrole_competency_map,
+             * and RoleCompetencyMapController validates ITS jobrole_id against
+             * s_user_jobrole. A global-catalogue id passes `exists` and then
+             * matches nothing.
+             */
+            'jobrole_id'       => 'nullable|integer|exists:s_user_jobrole,id',
             'location'         => 'nullable|string|max:255',
             'employment_type'  => 'nullable|string|max:100',
             /*
@@ -496,7 +503,40 @@ class talent_jobpostingcontroller extends Controller
             return null;
         }
 
-        $id = DB::table('s_jobrole')->where('jobrole', $title)->value('id');
+        /*
+         * THE TENANT'S OWN LIBRARY FIRST, AND IT IS THE ONLY ONE THAT COUNTS.
+         *
+         * This resolved against `s_jobrole` - the global catalogue - and that
+         * is the wrong table for what this column is for. The id written here
+         * exists to join `jobrole_competency_map`, and
+         * RoleCompetencyMapController validates that table's jobrole_id
+         * against `s_user_jobrole` (line 122). A catalogue id therefore stores
+         * cleanly, passes `exists`, looks right in the row, and matches
+         * nothing - so the assessment lookup returns no competencies and the
+         * invitation fails with "no blueprint matches this role".
+         *
+         * Measured on live before this change: 125 postings carried a
+         * jobrole_id, all 125 were catalogue ids, and 0 of them had a
+         * competency mapping. Not one posting in the installation could be
+         * assessed.
+         *
+         * It worked by coincidence for most roles because 266 of tenant 6's
+         * 270 roles happen to share a NAME with a catalogue row. The four that
+         * do not are the ones somebody authored in the Capability Library -
+         * exactly the case that gets reported as "I added the role and it does
+         * not work".
+         *
+         * Scoped to the tenant, because two organisations may both have a
+         * "Sales Manager" and they are different roles with different
+         * competencies.
+         */
+        $subInstituteId = $this->apiTenantId($request);
+
+        $id = DB::table('s_user_jobrole')
+            ->where('sub_institute_id', $subInstituteId)
+            ->where('jobrole', $title)
+            ->whereNull('deleted_at')
+            ->value('id');
 
         return $id ? (int) $id : null;
     }
@@ -544,7 +584,8 @@ class talent_jobpostingcontroller extends Controller
          * to every column would reject the partial updates F-69b exists to allow.
          */
         $validator = Validator::make($request->all(), [
-            'jobrole_id'    => 'nullable|integer|exists:s_jobrole,id',
+            // s_user_jobrole for the same reason as store().
+            'jobrole_id'    => 'nullable|integer|exists:s_user_jobrole,id',
             'department_id' => 'nullable|integer',
             // Same window rule as store(). Only checked when BOTH are sent, so a
             // partial update that touches one of them still works (F-69b).

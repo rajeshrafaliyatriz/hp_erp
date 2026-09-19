@@ -84,12 +84,46 @@ class RecruitmentAssessmentGenerator
             throw new RuntimeException('AI assessment generation is not configured. DEEPSEEK_API_KEY is not set.');
         }
 
-        $role = DB::table('s_jobrole')->where('id', $blueprint->jobrole_id)->first([
-            'id', 'sector', 'track', 'jobrole', 'description', 'education', 'experience',
-        ]);
+        /*
+         * THE BLUEPRINT NAMES A TENANT ROLE; THIS NEEDS THE CATALOGUE ROW.
+         *
+         * A blueprint's jobrole_id is an s_user_jobrole id, because it has to
+         * match talent_job_postings.jobrole_id for an invitation to find it.
+         * But the material below - sector, track, skills, tasks - lives in the
+         * catalogue, which is the whole reason this generator prefers
+         * s_jobrole over jobrole_competency_map (see the file header).
+         *
+         * s_user_jobrole.catalogue_jobrole_id is the bridge between the two.
+         * It existed and was NULL on all 4,886 rows until
+         * 2026_09_19_190000 filled it; 90% of roles are linked, and the rest
+         * are either names that match several catalogue roles or roles a
+         * tenant authored that have no catalogue counterpart at all.
+         *
+         * When there is no link the generation is REFUSED with a message that
+         * says what to do, rather than generating an exam from whichever
+         * same-named catalogue role happened to sort first. An assessment for
+         * the wrong job is worse than no assessment.
+         */
+        $tenantRole = DB::table('s_user_jobrole')
+            ->where('id', $blueprint->jobrole_id)
+            ->first(['id', 'jobrole', 'catalogue_jobrole_id']);
+
+        if (!$tenantRole) {
+            throw new RuntimeException('That job role no longer exists in your organisation\'s library.');
+        }
+
+        $role = $tenantRole->catalogue_jobrole_id
+            ? DB::table('s_jobrole')->where('id', $tenantRole->catalogue_jobrole_id)->first([
+                'id', 'sector', 'track', 'jobrole', 'description', 'education', 'experience',
+            ])
+            : null;
 
         if (!$role) {
-            throw new RuntimeException('That job role is not in the catalogue.');
+            throw new RuntimeException(
+                '"' . $tenantRole->jobrole . '" is not linked to a role in the skills catalogue, '
+                . 'so there is no source material to generate questions from. Link it in the '
+                . 'Capability Library, or build the assessment from the role\'s own competencies instead.'
+            );
         }
 
         $material = $this->roleMaterial($role);
