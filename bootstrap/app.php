@@ -28,6 +28,13 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->group(base_path('routes/settings.php'));
             Route::middleware(['web','auth','session','menu'])
                 ->group(base_path('routes/hrms.php'));
+
+            // AI & Intelligence. Declares its own prefix and its own middleware
+            // stack (see routes/ai.php), so it is registered bare rather than
+            // wrapped in the web/session group above - those routes are reached by
+            // the token-authenticated frontend and a session guard would 401 them,
+            // which is the same reason user-api.php is registered bare.
+            Route::group([], base_path('routes/ai.php'));
         }
     )
     // ... rest of configuration
