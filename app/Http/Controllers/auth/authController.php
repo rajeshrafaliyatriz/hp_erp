@@ -60,6 +60,151 @@ class authController extends Controller
      * valid sign-in fails, so a failure is logged and swallowed: the person is
      * already authenticated by the time this runs.
      */
+    /**
+     * TELL SOMEBODY WHEN A DEVICE THEY HAVE NEVER USED SIGNS IN AS THEM.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE ONE ALERT WORTH SENDING
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * Every comparable product sends this, and it is the only security email that
+     * reliably reaches the right person before damage is done: a stolen password
+     * is silent, and the first observable consequence is a sign-in from somewhere
+     * the owner has never been.
+     *
+     * ── "NEW" MEANS A DEVICE LABEL NOT SEEN BEFORE ──────────────────────────
+     *
+     * Compared against the labels already on this account's tokens, not against
+     * an IP or a fingerprint. `DeviceLabel` collapses a User-Agent to
+     * "Chrome on Windows 10 or 11", so the SECOND sign-in from the same browser is
+     * not new and does not mail anybody. That is deliberately coarse: an alert
+     * that fires on every sign-in is an alert people filter, and then it warns
+     * nobody about anything.
+     *
+     * A brand-new account's first ever sign-in is not alerted either - there is
+     * nothing suspicious about the first device, and mailing somebody about their
+     * own first login is how a product teaches them to ignore these.
+     */
+    private function alertOnNewDevice(int $userId, ?string $label, int $tenantId): void
+    {
+        try {
+            if (!$label || $tenantId <= 0) {
+                return;
+            }
+
+            $tokens = DB::table('personal_access_tokens')
+                ->where('tokenable_type', \App\Models\auth\tbluserModel::class)
+                ->where('tokenable_id', $userId)
+                ->pluck('name');
+
+            // The token for THIS sign-in already exists by now, so its own label is
+            // present once. Seen twice or more means the device is not new.
+            $seen = $tokens->filter(fn ($name) => $name === $label)->count();
+
+            if ($tokens->count() <= 1 || $seen > 1) {
+                return;
+            }
+
+            app(\App\Services\Events\EventRecorder::class)->record(
+                'account.new_device',
+                $tenantId,
+                'tbluser',
+                $userId,
+                $userId,
+                ['device' => $label]
+            );
+        } catch (\Throwable $e) {
+            /*
+             * Never blocks a sign-in. Somebody being unable to log in because the
+             * notification machinery failed would be a far worse outcome than a
+             * missed alert, and this runs on the critical path of every sign-in.
+             */
+            \Illuminate\Support\Facades\Log::error('new-device alert failed', [
+                'user_id' => $userId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Stop a sign-in until the second factor is satisfied. Null means proceed.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * CALLED BEFORE ANY TOKEN EXISTS
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * The password has already been accepted when this runs. Returning a response
+     * here means no token is minted, no session is written, and the caller gets a
+     * challenge instead of a credential.
+     *
+     * Ordering is the entire feature: mint first and ask after, and the password
+     * alone has already produced something that works.
+     *
+     * ── A CODE OR A RECOVERY CODE, BOTH ACCEPTED HERE ───────────────────────
+     *
+     * The recovery code path is not a convenience - it is what stops a lost phone
+     * from becoming a lost account, and without it the recovery route is "ask HR",
+     * which across twelve tenants means twelve people improvising identity checks.
+     * A recovery code is spent when it is used and cannot be replayed.
+     *
+     * ── AND IT IS THROTTLED ─────────────────────────────────────────────────
+     *
+     * Six digits is a million possibilities, reachable in about a day at HTTP
+     * speed. Keyed on the ACCOUNT rather than the IP: an office behind one address
+     * would otherwise throttle each other, and an attacker with a few proxies
+     * would not be throttled at all.
+     */
+    private function twoFactorChallenge(Request $request, $user)
+    {
+        $twoFactor = app(\App\Services\Account\TwoFactor::class);
+        $userId = (int) $user->id;
+
+        if (!$twoFactor->isEnabled($userId)) {
+            return null;
+        }
+
+        $code = trim((string) $request->input('two_factor_code', ''));
+        $recovery = trim((string) $request->input('recovery_code', ''));
+
+        if ($code === '' && $recovery === '') {
+            return response()->json([
+                'status' => false,
+                'two_factor_required' => true,
+                'message' => 'Enter the code from your authenticator app.',
+            ], 401);
+        }
+
+        $key = '2fa:signin:' . $userId;
+
+        if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($key, 6)) {
+            return response()->json([
+                'status' => false,
+                'two_factor_required' => true,
+                'message' => 'Too many attempts. Wait a minute and try again.',
+            ], 429);
+        }
+
+        \Illuminate\Support\Facades\RateLimiter::hit($key, 60);
+
+        $passed = $code !== ''
+            ? $twoFactor->verifyFor($userId, $code)
+            : $twoFactor->useRecoveryCode($userId, $recovery);
+
+        if (!$passed) {
+            return response()->json([
+                'status' => false,
+                'two_factor_required' => true,
+                'message' => $code !== ''
+                    ? 'That code is not right. Codes change every 30 seconds - try the current one.'
+                    : 'That recovery code is not right, or it has already been used.',
+            ], 401);
+        }
+
+        \Illuminate\Support\Facades\RateLimiter::clear($key);
+
+        return null;
+    }
+
     private function recordSignIn($userId): void
     {
         try {
@@ -143,6 +288,55 @@ class authController extends Controller
                 'status' => 0,
                 'message' => 'This account is no longer active. Please contact your administrator or HR.',
             ], 403);
+        }
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * THE SECOND FACTOR, BEFORE ANYTHING IS WRITTEN TO THE SESSION
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * The password has been accepted and the account is active. If this
+         * account has two-step verification on, the sign-in stops HERE.
+         *
+         * ── WHY THIS IS NOT 230 LINES FURTHER DOWN, WHERE IT WAS ────────────
+         *
+         * It used to sit immediately before `createToken`, which looked correct -
+         * no token is minted until the code is right - and was a COMPLETE BYPASS
+         * of the whole feature. Between here and there, the controller runs:
+         *
+         *     session()->put('user_id', $user->id);
+         *     session()->put('user_profile_id', $user->user_profile_id);
+         *
+         * and `authMiddleware::hasSession()` is, in full,
+         * `session()->has('user_id') && session()->get('user_id')`. So the 401
+         * challenge went back to the caller with the session cookie ALREADY
+         * carrying a logged-in identity: the person typed their correct password,
+         * was told to enter a code, ignored it, opened any Blade route, and was
+         * in. `RequireHritRole` would have resolved their role from that same
+         * session key and authorised them.
+         *
+         * A second factor is only a factor if NOTHING usable exists before it
+         * passes. The ordering is the feature; the token was never the only
+         * credential this controller hands out.
+         *
+         * ── WHAT THIS COSTS ────────────────────────────────────────────────
+         *
+         * The tenant, academic-year and rights lookups below no longer run for a
+         * challenged sign-in. That is a saving, not a loss - it was work done on
+         * behalf of somebody who had not finished authenticating.
+         *
+         * ── AND WHY IT ANSWERS JSON ON BOTH PATHS ──────────────────────────
+         *
+         * Deliberately NOT routed through `is_mobile()`, which returns HTTP 200 -
+         * the frontend distinguishes a challenge from a rejection by the status
+         * code plus `two_factor_required`, and a 200 would read as neither. The
+         * Blade login form has no code field, so an enrolled account signs in
+         * through the product frontend; see docs on this.
+         */
+        $challenge = $this->twoFactorChallenge($request, $user);
+
+        if ($challenge !== null) {
+            return $challenge;
         }
 
         // Get organization details through the relationship
@@ -373,11 +567,42 @@ class authController extends Controller
                     ->get()
                     ->toArray();
             }
+            /*
+             * The second factor was checked BEFORE any of the work above, and
+             * before `user_id` reached the session - see the block after the
+             * account-active gate. Nothing usable for authentication exists between
+             * the password being accepted and the code being right.
+             */
             session()->put($sessionData);
             // return session()->all();
             $sessionData['APP_URL'] = env('APP_URL');
-            $token = $user->createToken(\App\Support\DeviceLabel::from($request->userAgent()))->plainTextToken;
+            $token = $user->createToken(
+                \App\Support\DeviceLabel::from($request->userAgent()),
+                ['*'],
+                /*
+                 * AN EXPIRY AT CREATION, not only once the token is used.
+                 *
+                 * `TouchTokenActivity` slides this forward on every use, so an
+                 * active session never ends. Setting it here as well closes the
+                 * window between signing in and the first authenticated request:
+                 * without it a token that is created and then abandoned - a
+                 * failed automation, somebody who signs in and closes the tab -
+                 * would be immortal, which is how the 4,960 on live came to be.
+                 */
+                now()->addDays(\App\Http\Middleware\TouchTokenActivity::IDLE_DAYS),
+            )->plainTextToken;
             $this->recordSignIn($user->id);
+
+            /*
+             * AFTER the token exists, because "is this device new" is answered by
+             * comparing against the labels already on this account - and this
+             * sign-in's own label has to be among them for the count to work.
+             */
+            $this->alertOnNewDevice(
+                (int) $user->id,
+                \App\Support\DeviceLabel::from($request->userAgent()),
+                (int) $user->sub_institute_id
+            );
             $sessionData['token'] = $token;
 
             $res['status'] = 1;
@@ -660,8 +885,53 @@ class authController extends Controller
                 $user = tbluserModel::with(['organization', 'client', 'yearData', 'userProfile'])
                     ->where('mobile', $data['mobile'])
                     ->first();
-                $token = $user->createToken(\App\Support\DeviceLabel::from($request->userAgent()))->plainTextToken;
+
+                /*
+                 * THE SAME CHALLENGE ON THE SMS PATH.
+                 *
+                 * This is the sign-in-with-a-one-time-code flow, and the plan said
+                 * to leave it alone - meaning do not rewire how SMS works. This
+                 * does not: it applies the SECOND factor wherever a token is
+                 * minted.
+                 *
+                 * Without it, anybody with two-step verification on could skip it
+                 * by signing in through SMS instead. A second factor that one of
+                 * two sign-in paths ignores is not a second factor; it is a
+                 * setting that sometimes applies.
+                 */
+                $challenge = $this->twoFactorChallenge($request, $user);
+
+                if ($challenge !== null) {
+                    return $challenge;
+                }
+
+                $token = $user->createToken(
+                \App\Support\DeviceLabel::from($request->userAgent()),
+                ['*'],
+                /*
+                 * AN EXPIRY AT CREATION, not only once the token is used.
+                 *
+                 * `TouchTokenActivity` slides this forward on every use, so an
+                 * active session never ends. Setting it here as well closes the
+                 * window between signing in and the first authenticated request:
+                 * without it a token that is created and then abandoned - a
+                 * failed automation, somebody who signs in and closes the tab -
+                 * would be immortal, which is how the 4,960 on live came to be.
+                 */
+                now()->addDays(\App\Http\Middleware\TouchTokenActivity::IDLE_DAYS),
+            )->plainTextToken;
                 $this->recordSignIn($user->id);
+
+            /*
+             * AFTER the token exists, because "is this device new" is answered by
+             * comparing against the labels already on this account - and this
+             * sign-in's own label has to be among them for the count to work.
+             */
+            $this->alertOnNewDevice(
+                (int) $user->id,
+                \App\Support\DeviceLabel::from($request->userAgent()),
+                (int) $user->sub_institute_id
+            );
 
                 $school_logo = 'https://' . $_SERVER['SERVER_NAME'] . '/admin_dep/images/' . $data['Logo'];
 

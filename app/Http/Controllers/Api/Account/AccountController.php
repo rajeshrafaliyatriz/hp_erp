@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Auth\PasswordController;
 use App\Http\Controllers\Controller;
 use App\Services\Account\UserPreferences;
+use App\Services\Events\EventRecorder;
 use App\Support\RoleKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,45 @@ class AccountController extends Controller
 {
     use ResolvesApiIdentity;
 
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * A PERSON COULD NOT SEE THEIR OWN SECURITY HISTORY
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `g2g_audit_log` has recorded organisation events since it was built, and
+     * every screen that reads it is an ADMINISTRATOR's screen. Nothing showed
+     * somebody the events about themselves - no "password changed on the 3rd", no
+     * "a new device signed in". Those are exactly the events a person is best
+     * placed to recognise as wrong, and they were the ones nobody could see.
+     *
+     * Worse, the account's own actions were not recorded at all: changing a
+     * password, replacing a photo and ending a session left no trace anywhere.
+     * The recorder existed; this controller simply never used it.
+     */
+    /*
+     * TwoFactor is a CONSTRUCTOR dependency, not a method parameter, and that is
+     * a correction rather than a preference.
+     *
+     * It was a third argument on `me()`, which Laravel resolves fine when the
+     * router calls the method - and `update()` calls `$this->me($request,
+     * $preferences)` DIRECTLY, with two. PHP raised ArgumentCountError and every
+     * profile save returned 500. tsc cannot see it, the linter cannot see it, and
+     * the route that is actually exercised by evidence - GET /account/me - worked
+     * perfectly, because the router filled the argument in.
+     *
+     * On the constructor there is no call site left that can get it wrong.
+     */
+    public function __construct(
+        private EventRecorder $events,
+        private \App\Services\Account\TwoFactor $twoFactor,
+    ) {
+    }
+
+    /** Event types this controller records. Named so a reader is not hunting. */
+    private const EVENT_PASSWORD_CHANGED = 'account.password_changed';
+    private const EVENT_PHOTO_CHANGED = 'account.photo_changed';
+    private const EVENT_SESSIONS_ENDED = 'account.sessions_ended';
+
     /**
      * What a person may change about themselves.
      *
@@ -98,6 +138,125 @@ class AccountController extends Controller
         return $raw;
     }
 
+    /**
+     * Who this person is AT WORK: job title, department, manager, employee number.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE JOB TITLE DOES NOT LIVE WHERE IT LOOKS LIKE IT LIVES
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `tbluser.jobtitle_id` resolves against `s_user_jobrole`, NOT `s_jobrole`.
+     * Both tables exist, both have an `id` and a `jobrole` column, and the ids
+     * overlap - so joining the wrong one does not error, it returns a DIFFERENT
+     * PERSON'S JOB TITLE. Measured on live: 293 of 293 ids resolve against
+     * `s_user_jobrole`; only 101 resolve against `s_jobrole`, and the rest of
+     * those are coincidental collisions.
+     *
+     * ── IT MUST NOT BE ABLE TO BREAK /account/me ────────────────────────────
+     *
+     * Every screen in the product depends on this endpoint - the theme, the
+     * sidebar, the header avatar, the whole settings rail. A join against a
+     * table that is missing on some deployment would turn one cosmetic field
+     * into a total outage, so the lookup is wrapped and degrades to nulls. A
+     * profile missing its job title is a small problem; a product that will not
+     * load is not.
+     *
+     * ── THE JOINING DATE IS REAL BUT SPARSE ─────────────────────────────────
+     *
+     * `tbluser.joined_date` exists and is populated on 14 of 299 live people. It
+     * is returned as-is, null where it is unset, and the screen omits an empty
+     * one rather than printing a dash - a field that says nothing is worse than
+     * a field that is not there.
+     *
+     * What is NOT used for this is `created_at`: that is when the ROW was made,
+     * which for anybody migrated in is not when they joined, and presenting it
+     * as a joining date would be a confident lie.
+     *
+     * `reporting_manager_id` IS returned, and is currently null for all 299 live
+     * users because nothing populates it yet. It is included so the field starts
+     * working the day HR fills it in, and the screen omits it while it is empty.
+     */
+    private function workIdentity(object $user, int $tenantId): array
+    {
+        $work = [
+            'job_title' => null,
+            'department' => null,
+            'reporting_manager' => null,
+            'employee_no' => $user->employee_no ?? null,
+            // Sparse - 14 of 299 live people have one. Null where unset; the
+            // screen omits it rather than printing an empty row.
+            'joined_date' => ($user->joined_date ?? null) ?: null,
+        ];
+
+        try {
+            if (!empty($user->jobtitle_id)) {
+                $work['job_title'] = DB::table('s_user_jobrole')
+                    ->where('id', $user->jobtitle_id)
+                    ->value('jobrole');
+            }
+
+            if (!empty($user->department_id)) {
+                $work['department'] = DB::table('hrms_departments')
+                    ->where('id', $user->department_id)
+                    ->value('department');
+            }
+
+            if (!empty($user->reporting_manager_id)) {
+                /*
+                 * Tenant-scoped, even though the id comes from this person's own
+                 * row. An id that points across tenants is a data fault, and the
+                 * answer to a data fault is to show nothing rather than to name
+                 * somebody from another organisation.
+                 */
+                $manager = DB::table('tbluser')
+                    ->where('id', $user->reporting_manager_id)
+                    ->where('sub_institute_id', $tenantId)
+                    ->first(['first_name', 'last_name']);
+
+                if ($manager) {
+                    $work['reporting_manager'] = trim(
+                        ($manager->first_name ?? '') . ' ' . ($manager->last_name ?? '')
+                    ) ?: null;
+                }
+            }
+        } catch (\Throwable $caught) {
+            report($caught);
+        }
+
+        return $work;
+    }
+
+    /**
+     * Record something that happened to this account.
+     *
+     * ── IT MUST NEVER FAIL THE ACTION IT DESCRIBES ──────────────────────────
+     *
+     * Every caller records AFTER the change is committed. A password is already
+     * written by the time this runs, so an exception here would report a failure
+     * for something that succeeded - and would do it for the most alarming action
+     * on the screen. Swallowed and reported, like the other bookkeeping in this
+     * codebase.
+     *
+     * `entity_type` is `tbluser` and `entity_id` the person themselves: these are
+     * events ABOUT an account, so the account is the subject, and that is what
+     * lets `activity()` find them with one indexed lookup.
+     */
+    private function recordSecurityEvent(string $type, array $identity, array $payload = []): void
+    {
+        try {
+            $this->events->record(
+                $type,
+                (int) $identity['sub_institute_id'],
+                'tbluser',
+                (int) $identity['user_id'],
+                (int) $identity['user_id'],
+                $payload
+            );
+        } catch (\Throwable $caught) {
+            report($caught);
+        }
+    }
+
     /** GET /api/account/me */
     public function me(Request $request, UserPreferences $preferences)
     {
@@ -109,7 +268,13 @@ class AccountController extends Controller
 
         $user = DB::table('tbluser')
             ->where('id', $identity['user_id'])
-            ->first(array_merge(self::EDITABLE, ['id', 'email', 'image', 'employee_no', 'last_login']));
+            ->first(array_merge(self::EDITABLE, [
+                'id', 'email', 'image', 'employee_no', 'last_login',
+                // Read-only, for `workIdentity()`. Selected here rather than in a
+                // second query because this row is already being fetched, and
+                // these three ids are what the work identity is resolved FROM.
+                'jobtitle_id', 'department_id', 'reporting_manager_id', 'joined_date',
+            ]));
 
         if (!$user) {
             return response()->json(['status' => false, 'message' => 'Account not found.'], 404);
@@ -124,6 +289,27 @@ class AccountController extends Controller
          * changed by moving the bucket.
          */
         $user->image_url = $user->image ? $this->avatarUrl($user->image) : null;
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * WHAT A PERSON MAY SEE IS NOT WHAT THEY MAY CHANGE
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `EDITABLE` was doing two jobs: the write allow-list AND the read
+         * payload. Keeping job title and department out of what somebody may
+         * CHANGE is right - moving your own department is a promotion, not a
+         * settings change. Keeping them out of what somebody may SEE was an
+         * accident of using one list for both, and it is why this product ended
+         * up with TWO profile screens: `/profile` had to fetch the HRMS
+         * endpoints separately to show a job title, while `/settings?s=profile`
+         * was the only place anything could be edited. Two screens, two data
+         * sources, and no reason for either to agree with the other.
+         *
+         * This is the read side. Nothing here is writable: `updateProfile()`
+         * intersects the request with `EDITABLE`, so a PUT naming `jobtitle_id`
+         * is discarded exactly as an invented field would be.
+         */
+        $user->work = $this->workIdentity($user, (int) $identity['sub_institute_id']);
 
         return response()->json([
             'status' => true,
@@ -147,6 +333,35 @@ class AccountController extends Controller
                  * who lies to their own browser gains nothing.
                  */
                 'role' => RoleKey::forUserId((int) $identity['user_id']),
+                /*
+                 * Whether the second factor is on, and how many recovery codes are
+                 * left.
+                 *
+                 * The COUNT and not the codes: they exist in readable form exactly
+                 * once, in the response that issues them. A running total is what
+                 * lets the screen warn somebody who is down to their last one -
+                 * which is the moment before a lost phone becomes a lost account.
+                 */
+                'two_factor' => [
+                    'enabled' => $this->twoFactor->isEnabled((int) $identity['user_id']),
+                    'recovery_codes_left' => $this->twoFactor->recoveryCodesLeft((int) $identity['user_id']),
+                    /*
+                     * WHETHER THE ORGANISATION OBLIGES THIS PERSON TO HAVE IT ON.
+                     *
+                     * The reason the screen can explain the 403s rather than leaving
+                     * somebody staring at a product that has stopped working. When
+                     * this is true and `enabled` is false, every other endpoint is
+                     * refused by `RequireTwoFactorEnrolment` - and this payload is on
+                     * its allow-list precisely so the explanation is still reachable.
+                     *
+                     * Through the same reader the refusal uses, so the sentence on the
+                     * screen and the decision on the server cannot drift apart.
+                     */
+                    'required' => \App\Http\Controllers\Api\Account\TwoFactorController::policyRequired(
+                        (int) $identity['user_id'],
+                        (int) $identity['sub_institute_id'],
+                    ),
+                ],
                 'notifiable_events' => UserPreferences::notifiableEvents(),
                 /*
                  * Of those, the ones an email can actually be built for. Three
@@ -218,6 +433,11 @@ class AccountController extends Controller
         if ($request->hasFile('image')) {
             try {
                 $this->storeAvatar($request, (int) $identity['user_id']);
+
+                // Only on success. Recording a photo change that failed to upload
+                // would put an event on the person's history for something that
+                // did not happen.
+                $this->recordSecurityEvent(self::EVENT_PHOTO_CHANGED, $identity);
             } catch (\Throwable $e) {
                 // The object store being unreachable must not lose the details
                 // that were typed alongside the picture. Those are already
@@ -259,6 +479,32 @@ class AccountController extends Controller
             'notify_email' => ['sometimes', 'boolean'],
             'notify_events' => ['sometimes', 'array'],
             'notify_events.*' => ['boolean'],
+
+            /*
+             * HOW SOMEBODY PRESENTS THEMSELVES, AND WHO SEES WHAT.
+             *
+             * Length caps rather than a free-for-all: `about` lands in a TEXT
+             * column read by the directory, and a control with no limit is a
+             * control somebody eventually pastes a novel into. 300 is about four
+             * lines on screen, which is what the field is for.
+             *
+             * `nullable` on all three because clearing one is a legitimate
+             * choice - "I no longer want pronouns shown" has to be expressible,
+             * and without `nullable` an empty string fails `string`.
+             */
+            'display_name' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'pronouns' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'about' => ['sometimes', 'nullable', 'string', 'max:300'],
+
+            /*
+             * Visibility is an enum and is validated as one. Without this a
+             * client could store `visible_mobile = 'yes'`, which the directory
+             * would not recognise - and an unrecognised visibility is the one
+             * case that must never silently mean "show it".
+             */
+            'visible_mobile' => ['sometimes', Rule::in(UserPreferences::VISIBILITY)],
+            'visible_birthdate' => ['sometimes', Rule::in(UserPreferences::VISIBILITY)],
+            'visible_address' => ['sometimes', Rule::in(UserPreferences::VISIBILITY)],
         ]);
 
         $saved = $preferences->save(
@@ -394,16 +640,179 @@ class AccountController extends Controller
         // changing your password would log you out of the screen you did it on.
         $currentTokenId = $this->currentTokenId($request);
 
-        DB::table('personal_access_tokens')
+        $endedCount = DB::table('personal_access_tokens')
             ->where('tokenable_type', \App\Models\auth\tbluserModel::class)
             ->where('tokenable_id', $user->id)
             ->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))
             ->delete();
 
+        /*
+         * RECORDED, because this is the event somebody most needs to see.
+         *
+         * A password change nobody asked for is the clearest sign an account has
+         * been taken, and until now it left no trace: no audit row, no email, no
+         * entry on any screen. The row carries how many other sessions ended, so
+         * the entry reads as something that happened rather than a bare label.
+         */
+        $this->recordSecurityEvent(
+            self::EVENT_PASSWORD_CHANGED,
+            $identity,
+            ['other_sessions_ended' => $endedCount]
+        );
+
         return response()->json([
             'status' => true,
             'message' => 'Your password is changed. Any other signed-in devices have been signed out.',
         ]);
+    }
+
+    /**
+     * GET /api/account/activity — what has happened to THIS account.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * ONE PERSON'S HISTORY, AND NEVER ANOTHER'S
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * There is no id parameter. The subject is the token's owner, resolved the
+     * same way every other method here resolves it, so there is nothing for a
+     * caller to tamper with. The tenant is filtered too - belt and braces, since
+     * `actor_id` is already unique across the platform, but an audit reader that
+     * can be talked across a tenant boundary is the last place to save a clause.
+     *
+     * ── TWO SOURCES, ONE LIST ───────────────────────────────────────────────
+     *
+     * `g2g_audit_log` holds what the person DID. `personal_access_tokens` holds
+     * when they SIGNED IN and from what - which is nowhere in the audit log,
+     * because signing in was never recorded as an event. Merging them is what
+     * makes this a security history rather than half of one.
+     *
+     * Sign-ins are derived from `created_at` on each token: one token per
+     * sign-in, named with its `DeviceLabel`. Tokens deleted by "sign out
+     * everywhere" take their sign-in row with them, so old sign-ins disappear
+     * over time - honest, if imperfect, and the audit row for the sign-out
+     * remains to explain the gap.
+     */
+    public function activity(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenantId = (int) $identity['sub_institute_id'];
+
+        /*
+         * Capped. A long-serving account could hold thousands of rows, and a
+         * security history is read from the top - nobody scrolls to last year.
+         * `limit` is clamped rather than trusted: a caller asking for 100000 is
+         * asking the database to build a response nobody will read.
+         */
+        $limit = min(200, max(10, (int) $request->input('limit', 50)));
+
+        /*
+         * `g2g_event`, NOT `g2g_audit_log`, and the difference is visible to the
+         * person using this.
+         *
+         * `g2g_audit_log` is a PROJECTION, built by the scheduled `events:project`
+         * command. Reading it would mean somebody changes their password, opens
+         * their own security history, and does not see it - because the projector
+         * has not run yet. For an administrator querying last quarter that lag is
+         * irrelevant; for "did that just happen?" it is the entire question.
+         *
+         * `g2g_event` is the source `EventRecorder` writes to, so it is immediate
+         * and cannot disagree with the projection. It carries everything needed:
+         * `type`, `actor_id`, `sub_institute_id`, `payload` and `occurred_at`.
+         */
+        $audit = DB::table('g2g_event')
+            ->where('actor_id', $userId)
+            ->where('sub_institute_id', $tenantId)
+            ->orderByDesc('occurred_at')
+            ->limit($limit)
+            ->get(['id', 'type', 'entity_type', 'entity_id', 'payload', 'occurred_at']);
+
+        $entries = [];
+
+        foreach ($audit as $row) {
+            $entries[] = [
+                'kind' => 'event',
+                'type' => $row->type,
+                'at' => $row->occurred_at,
+                'device' => null,
+                'detail' => $this->activityDetail($row),
+            ];
+        }
+
+        $signIns = DB::table('personal_access_tokens')
+            ->where('tokenable_type', \App\Models\auth\tbluserModel::class)
+            ->where('tokenable_id', $userId)
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get(['id', 'name', 'created_at']);
+
+        foreach ($signIns as $row) {
+            $entries[] = [
+                'kind' => 'sign_in',
+                'type' => 'account.signed_in',
+                'at' => $row->created_at,
+                'device' => $row->name,
+                'detail' => null,
+            ];
+        }
+
+        /*
+         * Merged in PHP rather than with a UNION.
+         *
+         * The two tables share no column names, no types and no time precision -
+         * `occurred_at` is `datetime(3)`, `created_at` a plain `timestamp`. A
+         * UNION would need a cast list per column and would still be sorted by a
+         * string. Two capped queries and one sort is clearer and bounded.
+         */
+        usort($entries, fn ($a, $b) => strcmp((string) $b['at'], (string) $a['at']));
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'entries' => array_slice($entries, 0, $limit),
+                /*
+                 * So the screen can say "this is everything we have" rather than
+                 * implying a complete history. The audit log began partway through
+                 * this product's life and sign-in rows vanish with their tokens.
+                 */
+                'since' => $signIns->last()->created_at ?? null,
+            ],
+        ]);
+    }
+
+    /**
+     * A human sentence for one audit row, or null.
+     *
+     * `detail` is a JSON payload written by whatever recorded the event, so it is
+     * decoded defensively: a row whose payload is malformed should lose its
+     * detail, not break the whole list.
+     */
+    private function activityDetail(object $row): ?string
+    {
+        // `payload` on `g2g_event`; the projection renames it `detail`. Reading the
+        // event table means reading the event table's column name.
+        $payload = json_decode((string) ($row->payload ?? $row->detail ?? ''), true);
+
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        if (isset($payload['other_sessions_ended']) && $payload['other_sessions_ended'] > 0) {
+            return $payload['other_sessions_ended'] . ' other device(s) were signed out';
+        }
+
+        if (isset($payload['sessions_ended'])) {
+            return ($payload['one_device'] ?? false)
+                ? 'One device was signed out'
+                : $payload['sessions_ended'] . ' device(s) were signed out';
+        }
+
+        return null;
     }
 
     /** GET /api/account/sessions */
@@ -469,6 +878,18 @@ class AccountController extends Controller
         } else {
             $ended = $query->when($currentTokenId, fn ($q) => $q->where('id', '!=', $currentTokenId))->delete();
         }
+
+        /*
+         * Recorded whether one session or twenty ended.
+         *
+         * "Signed out 14 other devices" is a line somebody scanning their own
+         * history needs, and it is also the trace left behind if SOMEBODY ELSE
+         * did it - an attacker ending the real owner's sessions to keep them out.
+         */
+        $this->recordSecurityEvent(self::EVENT_SESSIONS_ENDED, $identity, [
+            'sessions_ended' => $ended,
+            'one_device' => $id !== null,
+        ]);
 
         return response()->json([
             'status' => true,

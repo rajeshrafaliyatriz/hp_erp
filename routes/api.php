@@ -1790,6 +1790,41 @@ Route::middleware('api.token')->group(function () {
      */
     Route::post('/account/password', [\App\Http\Controllers\Api\Account\AccountController::class, 'changePassword'])
         ->middleware('throttle:6,1');
+    /*
+     * A person's OWN security history. No id parameter: the subject is the
+     * token's owner, so there is nothing for a caller to point at somebody else.
+     * Alongside `sessions` because the two answer one question together - where am
+     * I signed in, and what has happened to this account.
+     */
+    /*
+     * TWO-STEP VERIFICATION.
+     *
+     * `start` and `confirm` need only a session: asking for a password to ADD
+     * protection discourages people from adding it. `recovery-codes` and the
+     * DELETE both take the current password, because each hands somebody who has
+     * borrowed a session a way PAST the second factor - which is the one thing it
+     * exists to prevent.
+     */
+    Route::post('/account/2fa/start', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'start']);
+    Route::post('/account/2fa/confirm', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'confirm']);
+    Route::post('/account/2fa/recovery-codes', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'recoveryCodes']);
+    /*
+     * POST, NOT DELETE, and the reason is the password.
+     *
+     * `apiClient.delete()` puts its parameters in the QUERY STRING - it has no
+     * body. This codebase already documents why that is unacceptable for a
+     * credential, in `api-client.ts`: "A URL is not a private place: it is written
+     * to web server access logs, browser history, proxy and CDN logs, and leaks
+     * through the Referer header." A password there is worse than the token that
+     * note was written about.
+     *
+     * A DELETE route is not offered at all, so there is no path a future caller
+     * could reach with the password in the URL.
+     */
+    Route::post('/account/2fa/disable', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'destroy']);
+
+    Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
+
     Route::get('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'sessions']);
     Route::delete('/account/sessions/{id}', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions'])->whereNumber('id');
     Route::delete('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions']);

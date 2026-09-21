@@ -36,6 +36,7 @@
 set -u
 
 FE="/c/Users/MILAN/Downloads/g2gv0"
+HP="/c/Users/MILAN/Downloads/hp_erp"
 SEC="$FE/components/settings/sections"
 SHELL_FILE="$FE/components/settings/settings-shell.tsx"
 HOOK="$FE/hooks/use-unsaved-guard.ts"
@@ -74,9 +75,69 @@ bad()  { echo "  WRONG    $1"; wrong=$((wrong+1)); }
 # paragraph explaining why it mattered. Spanning lines is what sed is bad at, so
 # it is a small Python script instead.
 strip() { python "$(dirname "$0")/strip-comments.py" "$1" 2>/dev/null; }
-have() { strip "$1" | grep -q "$2"; }
+# `--` before the pattern, so a pattern that BEGINS with a dash is matched rather
+# than parsed as an option. `->where('actor_id', ...)` produced
+# "grep: unknown option -- >" and the check reported the product as broken. Fixed
+# here rather than at the call site, because the next such pattern would hit it too.
+have() { strip "$1" | grep -q -- "$2"; }
 code() { have "$1" "$2"; }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 0. EVERY FILE THIS SCRIPT READS ACTUALLY EXISTS
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# `have()` is `strip "$1" | grep -q -- "$2"`, and `strip` on a missing file prints
+# NOTHING with stderr suppressed. So a mistyped path does not error - it fails the
+# grep, and the check reports THE PRODUCT as broken.
+#
+# That is not hypothetical. `SEC` is assigned a DIRECTORY at the top of this file
+# and reassigned to a FILE PATH further down, so a later `"$SEC/foo.tsx"` resolves
+# to `.../security-section.tsx/foo.tsx`. Two checks reported real, present code as
+# missing, and the only reason it was caught is that both failed at once.
+#
+# Renaming the variable would fix that one instance. This catches the whole class,
+# including the next one: every path passed to `have` is extracted and stat-ed.
+echo "════════════════════════════════════════════════════════════════"
+echo "0. This script is checking files that exist"
+echo "════════════════════════════════════════════════════════════════"
+blind=0
+unresolved=0
+
+# Loop-scoped variables ($P inside a `for f in ...`) cannot be expanded from here,
+# and under `set -u` the attempt ABORTS the subshell - which is how the first
+# version of this preflight printed "P: unbound variable" and then declared every
+# path fine. So expansion is done with `set +u` and an unexpandable path is COUNTED
+# rather than skipped: "I could not check this" is a different statement from
+# "this is fine", and conflating them is the bug this section exists to prevent.
+while IFS= read -r target; do
+  case "$target" in
+    ''|*'$'*)
+      # Still contains a sigil, or expanded to nothing: a loop variable.
+      unresolved=$((unresolved+1))
+      continue
+      ;;
+  esac
+
+  [ -f "$target" ] && continue
+  bad "GUARD IS BLIND: no such file '$target' - every check on it reports the product as broken"
+  blind=$((blind+1))
+done < <(
+  grep -oE '^(have|code) "[^"]+"' "$0" \
+    | sed -E 's/^(have|code) "//; s/"$//' \
+    | ( set +u; while IFS= read -r raw; do eval "printf '%s\n' \"$raw\"" 2>/dev/null || printf '\n'; done ) \
+    | sort -u
+)
+
+if [ "$blind" -eq 0 ]; then
+  ok "every statically resolvable path this script greps is a real file"
+fi
+
+# Named out loud. A preflight that quietly covered 60% while reading as complete
+# would be worse than none, because it would license trusting the paths.
+[ "$unresolved" -eq 0 ] \
+  || echo "           ($unresolved path(s) built from loop variables - not checkable from here)"
+
+echo
 echo "════════════════════════════════════════════════════════════════"
 echo "1. Every section with an explicit Save warns before losing a draft"
 echo "════════════════════════════════════════════════════════════════"
@@ -258,8 +319,13 @@ have "$P" "<DataTable"   && ok "the session list is a table, so the dates align"
 
 have "$P" "<ProgressBar"   && ok "password strength uses the shared bar (with role=progressbar)"   || bad "the hand-rolled strength bar is back - no accessible role"
 
-# The avatar bug: branching on whether a URL EXISTS rather than whether it LOADS.
-for f in "$SEC/profile-section.tsx" "$FE/components/shell/gtg-user-menu.tsx"; do
+# THE AVATAR BUG: branching on whether a URL EXISTS rather than whether it LOADS.
+#
+# Checked where each avatar is actually DRAWN. Both profile screens draw theirs
+# through `profile-photo-picker.tsx` now, so asserting `<AvatarImage` in
+# `profile-section.tsx` would fail on a refactor that changed nothing about the
+# behaviour - which is what it did, and is why it points at the picker instead.
+for f in "$FE/components/settings/profile-photo-picker.tsx" "$FE/components/shell/gtg-user-menu.tsx"; do
   n=$(basename "$f" .tsx)
   have "$f" "<AvatarImage"     && ok "$n falls back to initials when the photo fails to load"     || bad "$n renders a bare <img>, so a dead photo URL shows an empty circle"
 done
@@ -411,13 +477,484 @@ have "$CROP" "outputType(file.type, framefilled)"   && ok "an uncovered frame ex
 have "$CROP" "onKeyDown={onKeyDown}"   && ok "the frame takes arrow keys, so it works without a mouse"   || bad "the key handler is not attached - a keyboard user cannot position the image"
 
 # Both pickers must hand off rather than stage the raw file.
-have "$SEC/profile-section.tsx" "setPending(file)"   && ok "the profile picker sends the file to the cropper"   || bad "the profile picker stages the raw file again - it will arrive cropped by the browser"
+# In the PICKER, which owns the hand-off for both screens now. `setPending(file)`
+# in profile-section was the old inline control; asserting it there survived the
+# extraction as a false failure.
+have "$FE/components/settings/profile-photo-picker.tsx" "setPending(file)"   && ok "the picker sends the chosen file to the cropper, never straight to upload"   || bad "the picker stages the raw file again - it will arrive cropped by the browser"
 
-have "$SEC/profile-section.tsx" "<ImageCropper"   && ok "and the profile section RENDERS the cropper"   || bad "ImageCropper is imported but not rendered - the ThemeProvider bug again"
+have "$FE/components/settings/profile-photo-picker.tsx" "<ImageCropper"   && ok "and the picker RENDERS the cropper (not merely imports it)"   || bad "ImageCropper is imported but not rendered - the ThemeProvider bug again"
 
 have "$ORG" "<ImageCropper"   && ok "the organisation logo renders it too"   || bad "the organisation logo still uploads unframed and unpreviewed"
 
+# EVERY AVATAR READS THE SAME image_url.
+#
+# /profile - the screen somebody goes to when they want their profile - rendered
+# AvatarFallback and nothing else. No AvatarImage, no reference to image_url in
+# the whole file. So a photo set in Settings never appeared there, reported as the
+# profile image not being theirs.
+#
+# All three avatar sites must read image_url off the ONE app-wide /account/me
+# response, or two of them can disagree about whose photo it is.
+DASH="$FE/components/profile/profile-dashboard.tsx"
+
+# /profile draws its avatar through the picker, so that is where AvatarImage is.
+# What matters here is that this screen passes the stored URL in at all - without
+# it the picker would render initials forever and the original bug would be back.
+have "$DASH" "imageUrl={accountProfile?.image_url}"   && ok "/profile hands the stored photo to the picker, so it is shown"   || bad "/profile shows initials only - a photo set in Settings never appears there"
+
+have "$DASH" "useAppPreferences()"   && ok "and reads it from the shared response, so it matches the header"   || bad "/profile fetches its own copy, which can disagree with the header"
+
+for avatar in "$SEC/profile-section.tsx" "$FE/components/shell/gtg-user-menu.tsx" "$DASH"; do
+  n=$(basename "$avatar" .tsx)
+  if strip "$avatar" | grep -q "image_url"; then
+    ok "$n sources its avatar from image_url"
+  else
+    bad "$n renders an avatar from something other than image_url"
+  fi
+done
+
 have "$ORG" "logoPreview ? ("   && ok "the organisation logo previews the picked file, not the monogram"   || bad "the monogram is shown as the answer to 'which logo did I pick'"
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "10. One photo control, two screens, and the organisation is gated"
+echo "════════════════════════════════════════════════════════════════"
+# ONE COPY OF THE PICKER.
+#
+# `/profile` had a camera button that navigated to Settings - two screens for one
+# job, on the screen somebody opens when they want their profile. Copying the
+# control across instead would have meant two copies of the `accept` list, the
+# size and type refusals, the cropper hand-off and the object-URL lifecycle. The
+# `accept` list has to match the server's five formats or the upload fails after
+# the work, so a second copy that missed a change to it is a silent defect.
+PICKER="$FE/components/settings/profile-photo-picker.tsx"
+
+have "$PICKER" "ACCEPTED = \['image/jpeg', 'image/png', 'image/gif', 'image/webp'\]"   && ok "the picker carries the server's own accepted-format list"   || bad "the accept list has drifted from what AccountController accepts"
+
+for parent in "$SEC/profile-section.tsx" "$DASH"; do
+  n=$(basename "$parent" .tsx)
+  have "$parent" "<ProfilePhotoPicker"     && ok "$n renders the shared picker"     || bad "$n does not use the shared picker - a second copy will drift"
+done
+
+# And no second cropper: the picker owns it now.
+if strip "$SEC/profile-section.tsx" | grep -q "<ImageCropper"; then
+  bad "profile-section renders its own ImageCropper again - two croppers, one screen"
+else
+  ok "profile-section leaves the cropper to the picker"
+fi
+
+# THE TWO SAVE MODES, which is the one thing the parents must NOT share.
+have "$SEC/profile-section.tsx" "setPhoto({ file: picked.file"   && ok "Settings STAGES the photo, so a form saves as one unit"   || bad "Settings no longer stages - a photo would commit half a form"
+
+have "$DASH" "accountService.updatePhoto("   && ok "/profile UPLOADS immediately, because it has no Save button"   || bad "/profile stages a photo it has no way to commit"
+
+have "$DASH" "await refreshAccount()"   && ok "and refreshes the shared response, so the header avatar follows at once"   || bad "the header keeps the old photo until a full page load"
+
+# A 200 with an image_error means the row was written and the object was not.
+# THE FALSE BRANCH, not the bare identifier. `response.image_error` appears twice
+# - the test and the message - so a mutation that removed only the test left this
+# check passing while a rejected upload reported "Photo saved". grep is
+# line-based, so the assertion is the single line that carries both.
+have "$DASH" "ok: false, message: response.image_error"   && ok "an image_error is surfaced rather than read as success"   || bad "a rejected upload would report Photo saved"
+
+echo
+echo "  -- and the organisation is administrator-only --"
+GATE="$HP/routes/settings.php"
+
+have "$GATE" "hrit.role:admin"   && ok "organization_data carries a role gate"   || bad "organization_data is back to any-valid-token, which is writable by an employee"
+
+# `profile:` would 401 a session caller where 403 is the honest answer.
+if strip "$GATE" | grep -q "middleware('profile:"; then
+  bad "the gate uses profile: on a web route - a session caller gets 401, not 403"
+else
+  ok "it uses hrit.role, which resolves a session caller too"
+fi
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "11. One profile: the work identity is read, never written"
+echo "════════════════════════════════════════════════════════════════"
+# THE READ/WRITE SPLIT.
+#
+# `EDITABLE` was the write allow-list AND the read payload, which is why this
+# product had TWO profile screens: `/profile` had to fetch the HRMS endpoints
+# separately just to show a job title. The projection must exist, and it must not
+# leak into what a person can change.
+AC="$HP/app/Http/Controllers/Api/Account/AccountController.php"
+PROF="$FE/components/settings/sections/profile-section.tsx"
+VIS="$HP/app/Services/Account/ProfileVisibility.php"
+DIR="$HP/app/Http/Controllers/HRMS/EmployeeDirectoryController.php"
+
+# WITH THE OPENING PAREN. Without it "function workIdentity" substring-matches
+# "function workIdentityX", so a rename that breaks every caller still passed.
+have "$AC" "function workIdentity("   && ok "the account payload projects the work identity"   || bad "no workIdentity() - /profile is back to a second fetch for a job title"
+
+# s_jobrole and s_user_jobrole both have id and jobrole, and the ids OVERLAP, so
+# the wrong join silently returns another person's job title.
+if strip "$AC" | grep -q "table('s_user_jobrole')"; then
+  ok "job title resolves against s_user_jobrole (293/293), not s_jobrole (101)"
+else
+  bad "the job-title join is not s_user_jobrole - it will show the wrong title"
+fi
+
+# The projection must never become writable.
+if strip "$AC" | grep -qE "EDITABLE = \[" && ! strip "$AC" | grep -qE "'jobtitle_id'|'department_id'"    || ! strip "$AC" | sed -n '/EDITABLE = \[/,/\];/p' | grep -qE "jobtitle_id|department_id|employee_no"; then
+  ok "EDITABLE still excludes the work identity, so it cannot be self-edited"
+else
+  bad "the work identity is in EDITABLE - a person could change their own job title"
+fi
+
+have "$PROF" "work?.job_title"   && ok "Settings shows the job title it used to only promise"   || bad "the work block names fields it does not display, as before"
+
+echo
+echo "  -- and who can see what --"
+# A control that only hides fields in React is privacy-shaped decoration.
+# Same substring trap: "function redact" matches "redactX".
+have "$VIS" "function redact("   && ok "ProfileVisibility can redact a result set"   || bad "no redaction - visibility would be cosmetic"
+
+have "$DIR" "visibility->redact("   && ok "the Employee Directory APPLIES it (not merely imports it)"   || bad "the directory returns every mobile number again"
+
+# One query for a 2000-row page, not 2000.
+have "$VIS" "whereIn('user_id', \$userIds)"   && ok "visibility for a whole page resolves in one query"   || bad "per-row preference lookups - 2000 queries on one directory page"
+
+# HR maintains the record; redacting them blanks fields on their next save.
+have "$VIS" "'administrator', 'hr_manager', 'hr_executive'"   && ok "HR and administrators are exempt, so the edit form round-trips"   || bad "HR is redacted - their next save would blank the field"
+
+# An unrecognised value must never mean "show it".
+have "$VIS" "in_array(\$value, UserPreferences::VISIBILITY, true)"   && ok "an unrecognised visibility falls back rather than opening the field"   || bad "a bad stored value could be read as permission"
+
+have "$PROF" "VISIBILITY_FIELDS.map"   && ok "and the person has controls for all three fields"   || bad "the visibility settings are unreachable from the UI"
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "12. Sessions record activity, and abandoned ones end"
+echo "════════════════════════════════════════════════════════════════"
+TOUCH="$HP/app/Http/Middleware/TouchTokenActivity.php"
+BOOT="$HP/bootstrap/app.php"
+# RENAMED from SEC, which is the sections DIRECTORY at the top of this file.
+# Shadowing it here silently broke every later "$SEC/<file>.tsx": such a path
+# resolves to .../security-section.tsx/<file>.tsx, never matches, and the check
+# then reports present, correct code as missing. Two checks did exactly that.
+SECFILE="$FE/components/settings/sections/security-section.tsx"
+
+# `$` anchored: "class TouchTokenActivity" substring-matches
+# "class TouchTokenActivityX", so a rename that breaks every reference passed.
+# The third time this exact trap has appeared in this file.
+have "$TOUCH" "class TouchTokenActivity$"   && ok "the activity middleware exists"   || bad "nothing writes last_used_at - every session reads 'Never used'"
+
+# Appended to BOTH groups: 167 routes are role-gated with neither api.token nor
+# auth, so adding the touch to those two middlewares would miss all of them.
+# Matched with `.*` across the brackets rather than escaping them. The first
+# version wrote the pattern as `appendToGroup('api', \[\App\Http...` and
+# failed on BOTH groups while the middleware was demonstrably working - the
+# evidence had already proved `last_used_at` gets written. A bracket starts a
+# character class in grep and the backslashes were being eaten by the shell, so
+# it was a pattern bug reported as a product defect.
+for grp in api web; do
+  if strip "$BOOT" | grep -q "appendToGroup('$grp'.*TouchTokenActivity"; then
+    ok "it is appended to the '$grp' group"
+  else
+    bad "not in the '$grp' group - those routes record nothing"
+  fi
+done
+
+# THE BUG THE EVIDENCE CAUGHT, and the reason this assertion exists.
+#
+# This middleware runs in the GROUP, so before RequireApiToken. Without an expiry
+# check of its own it slid an EXPIRED token's expires_at thirty days forward, and
+# the gate then saw a valid expiry and let it through - so no token could ever
+# expire. Strictly worse than the original bug: it looked like expiry existed.
+have "$TOUCH" "expires_at->isPast()"   && ok "it refuses to touch an already-expired token, so expiry still works"   || bad "an expired token gets renewed on the request that should refuse it"
+
+# Without the throttle this becomes the most-written table in the database.
+# THE COMPARISON, not the constant's name. Grepping `THROTTLE_SECONDS` matched
+# the declaration AND the usage, so renaming either one left the check passing.
+# What matters is that the elapsed time is actually compared before writing.
+have "$TOUCH" "diffInSeconds(\$now) < self::THROTTLE_SECONDS"   && ok "writes are throttled, so a busy screen is not a write per request"   || bad "every authenticated request writes to personal_access_tokens"
+
+# Bookkeeping must never be able to lock somebody out.
+have "$TOUCH" "report(\$caught)"   && ok "a failed write is reported and swallowed, not turned into a 500"   || bad "a locked table could 500 every authenticated request"
+
+# An expiry at creation closes the window before the first request.
+# BOTH call sites. `authController` mints a token in two places (password
+# sign-in and the second path below it); grepping for one occurrence passed while
+# the other was reverted to an immortal token.
+sites=$(strip "$HP/app/Http/Controllers/auth/authController.php" | grep -c "IDLE_DAYS")
+sites=${sites//[^0-9]/}
+if [ "${sites:-0}" -ge 2 ]; then
+  ok "both sign-in paths create the token WITH an expiry ($sites sites)"
+else
+  bad "only ${sites:-0} of 2 sign-in paths set an expiry - the other is immortal"
+fi
+
+# The UI must not claim a history it does not have.
+have "$SECFILE" "Not recorded yet"   && ok "the list says 'not recorded yet' rather than 'Never used'"   || bad "the session list still reports the old defect as a fact about the person"
+
+have "$SECFILE" "id: 'expires_at' as const"   && ok "and shows when each session expires"   || bad "no expiry column - a session that never ends looks like any other"
+
+echo
+echo "  -- and no two table columns share an id --"
+# `DataTable` renders `key={String(column.id)}`, and `Column.id` is typed
+# `keyof T` - so an action column has to BORROW a real field name. Twice now two
+# columns have ended up borrowing the same one: duplicate React keys in one list,
+# which React resolves by keeping one and discarding the other.
+#
+# The second time was found only because a mutation test looked blind. Checked
+# directly from now on, comment-stripped so a comment quoting an id cannot mask a
+# real collision.
+for f in "$FE/components/settings/sections/security-section.tsx"          "$FE/components/settings/sections/roles-access-section.tsx"          "$FE/components/settings/sections/audit-section.tsx"; do
+  n=$(basename "$f" -section.tsx)
+  total=$(strip "$f" | grep -cE "id: '[a-z_]+' as const")
+  uniq=$(strip "$f" | grep -oE "id: '[a-z_]+' as const" | sort -u | wc -l)
+  total=${total//[^0-9]/}; uniq=$(echo "$uniq" | tr -d ' ')
+
+  if [ "${total:-0}" -eq 0 ]; then
+    continue
+  elif [ "${total:-0}" -eq "${uniq:-0}" ]; then
+    ok "$n: all $total column ids are distinct"
+  else
+    bad "$n: $total columns but only $uniq distinct ids - duplicate React keys"
+  fi
+done
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "13. A person can see their own security history"
+echo "════════════════════════════════════════════════════════════════"
+AUTH="$HP/app/Http/Controllers/auth/authController.php"
+SECT="$FE/components/settings/sections/security-section.tsx"
+
+have "$AC" "function activity("   && ok "the account exposes its own activity"   || bad "no activity endpoint - a person cannot see what happened to them"
+
+# g2g_audit_log is a PROJECTION built by the scheduled events:project command, so
+# reading it means somebody changes their password and does not see it until the
+# scheduler runs. g2g_event is what EventRecorder writes.
+have "$AC" "DB::table('g2g_event')"   && ok "it reads the event source, so an action appears immediately"   || bad "it reads the projection - your own change lags behind the scheduler"
+
+# The subject is the token owner. An id parameter here would be the whole bug.
+have "$AC" "->where('actor_id', \$userId)"   && ok "scoped to the token owner, with no id to tamper with"   || bad "the activity feed is not scoped by actor - it could show another person"
+
+# A caller must not be able to ask for an unbounded response.
+have "$AC" "min(200, max(10,"   && ok "the limit is clamped rather than trusted"   || bad "a caller can request an unbounded history"
+
+# The three account events that previously left no trace at all.
+# The BARE name, not `self::$ev`. The `self::` prefix appears only at USE sites,
+# never on the `private const` line, so requiring two matches of it demanded two
+# uses of each constant - which no event has. Counting the bare name gets the
+# declaration plus its uses, which is what "declared and recorded" means.
+for ev in EVENT_PASSWORD_CHANGED EVENT_PHOTO_CHANGED EVENT_SESSIONS_ENDED; do
+  n=$(strip "$AC" | grep -c -- "$ev")
+  n=${n//[^0-9]/}
+  # Declaration plus at least one use.
+  [ "${n:-0}" -ge 2 ]     && ok "$ev is declared and recorded"     || bad "$ev is declared but never recorded (or vice versa)"
+done
+
+# Recording runs AFTER the change is committed, so it must not be able to fail it.
+have "$AC" "private function recordSecurityEvent("   && ok "recording goes through one helper that swallows and reports"   || bad "each call site handles its own failure - one will throw and fail the action"
+
+echo
+echo "  -- and a new device is announced --"
+have "$AUTH" "private function alertOnNewDevice("   && ok "the new-device alert exists"   || bad "a stolen password produces no alert at all"
+
+# BOTH sign-in paths. authController mints a token in two places; wiring one and
+# not the other means half of all sign-ins are silent.
+paths=$(strip "$AUTH" | grep -c "alertOnNewDevice(")
+paths=${paths//[^0-9]/}
+# One declaration plus two call sites.
+[ "${paths:-0}" -ge 3 ]   && ok "both sign-in paths call it ($paths references)"   || bad "only ${paths:-0} references - one sign-in path is silent"
+
+# An alert on every sign-in is an alert people filter.
+have "$AUTH" "\$tokens->count() <= 1 || \$seen > 1"   && ok "a familiar device and a first-ever login stay silent"   || bad "every sign-in would alert, which trains people to ignore these"
+
+have "$SECT" "accountService.activity("   && ok "Sign-in & security shows the history"   || bad "the endpoint exists but nothing displays it"
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "14. Two-step verification is enforced, not merely offered"
+echo "════════════════════════════════════════════════════════════════"
+TF="$HP/app/Services/Account/TwoFactor.php"
+TFC="$HP/app/Http/Controllers/Api/Account/TwoFactorController.php"
+
+# The trade for hand-rolling instead of pragmarx/google2fa is that the RFC
+# publishes vectors. If those stop being checked, the trade is no longer defensible.
+have "$HP/docs/organization-audit/_evidence/prove-two-factor.php" "94287082"   && ok "the RFC 6238 vectors are still asserted"   || bad "the hand-rolled TOTP is no longer checked against the published vectors"
+
+# A short-circuiting compare leaks how many leading digits were right.
+have "$TF" "hash_equals("   && ok "codes are compared in constant time"   || bad "a timing comparison leaks the code digit by digit"
+
+# Enabling on the secret alone locks people out of their own accounts.
+have "$TF" "whereNotNull('confirmed_at')"   && ok "only a CONFIRMED enrolment protects an account"   || bad "a pending secret would lock somebody out of their own account"
+
+# A reusable recovery code is a permanent bypass.
+# No brackets in the pattern: `unset($hashes[$index])` made grep read
+# `[$index]` as a CHARACTER CLASS, so it searched for one of $,i,n,d,e,x and
+# never matched - reporting reusable recovery codes while the evidence was
+# simultaneously proving they are single-use.
+have "$TF" "unset("   && ok "a recovery code is removed when spent, so it cannot be replayed"   || bad "recovery codes are reusable - a written-down list becomes a skeleton key"
+
+have "$TF" "Hash::make(\$value)"   && ok "and they are stored hashed"   || bad "recovery codes are readable in the database"
+
+# Weakening needs the password; strengthening does not.
+pw=$(strip "$TFC" | grep -c "passwordMatches(")
+pw=${pw//[^0-9]/}
+[ "${pw:-0}" -ge 3 ]   && ok "turning it off and re-issuing codes both require the password ($pw references)"   || bad "only ${pw:-0} references - one of the weakening paths is unguarded"
+
+# Six digits is reachable by brute force without a limit.
+have "$TFC" "RateLimiter::tooManyAttempts"   && ok "code attempts are rate limited"   || bad "a million codes can be tried at HTTP speed"
+
+echo
+echo "  -- and the sign-in actually stops --"
+# A second factor that one of two sign-in paths ignores is not a second factor.
+paths=$(strip "$AUTH" | grep -c "twoFactorChallenge(")
+paths=${paths//[^0-9]/}
+# One declaration plus both token-minting paths.
+[ "${paths:-0}" -ge 3 ]   && ok "both sign-in paths are challenged ($paths references)"   || bad "only ${paths:-0} references - a sign-in path mints a token without the second factor"
+
+# The ordering IS the feature: mint first and the password alone already worked.
+#
+# NOTE ON WHAT THIS ONE IS WORTH. It passed while the feature was completely
+# bypassable, because a token was never the only credential the controller hands
+# out. It is kept because it is true and cheap; the assertion that actually closes
+# the hole is the next one.
+if strip "$AUTH" | grep -B 30 "createToken(" | grep -q "twoFactorChallenge"; then
+  ok "the challenge runs BEFORE a token is minted"
+else
+  bad "a token is created before the code is checked - the password alone suffices"
+fi
+
+# ── AND BEFORE THE SESSION, WHICH IS THE OTHER CREDENTIAL ───────────────────
+#
+# `authMiddleware::hasSession()` is, in full:
+#
+#     return session()->has('user_id') && session()->get('user_id');
+#
+# So `session()->put('user_id', ...)` IS a completed login for every Blade route
+# and for `RequireHritRole`'s session fallback. It used to run 230 lines before the
+# challenge: the 401 went back with a logged-in cookie, and the code could simply
+# be ignored.
+#
+# Line numbers rather than a `grep -B` window, because the distance between the two
+# was what made it invisible - a window wide enough to see it would be wide enough
+# to match almost anything.
+cline=$(strip "$AUTH" | grep -n "twoFactorChallenge(\$request, \$user)" | head -1 | cut -d: -f1)
+sline=$(strip "$AUTH" | grep -n "put('user_id'" | head -1 | cut -d: -f1)
+cline=${cline//[^0-9]/}
+sline=${sline//[^0-9]/}
+
+if [ -z "$cline" ] || [ -z "$sline" ]; then
+  # Neither found means the pattern rotted, not that the code is safe. Named as a
+  # failure rather than silently passing, which is how a guard becomes decoration.
+  bad "cannot locate the challenge or the session write (challenge='$cline' session='$sline') - this guard has gone blind"
+elif [ "$cline" -lt "$sline" ]; then
+  ok "and BEFORE user_id reaches the session (line $cline before $sline), so no Blade route accepts a challenged caller"
+else
+  bad "user_id is written to the session at line $sline, BEFORE the challenge at $cline - the challenge can be ignored entirely"
+fi
+
+have "$AUTH" "two_factor_required"   && ok "and the response tells the client to ask for a code"   || bad "the sign-in fails with nothing the frontend can act on"
+
+# ── THE CLIENT HALF: A CHALLENGE MUST NOT ARRIVE AS A FAILURE ───────────────
+echo
+echo "  -- and the sign-in screen can act on it --"
+
+have "$FE/services/core/api-client.ts" "two_factor_required"   && ok "the transport carries two_factor_required off the body"   || bad "buildApiError drops the flag, so the screen only sees a 401 with a message"
+
+have "$FE/components/auth/gtg-auth.tsx" "class TwoFactorRequiredError"   && ok "and a challenge is thrown as its own type, not as a generic Error"   || bad "the challenge is flattened into an Error - the screen cannot tell it from a rejection"
+
+have "$FE/components/auth/login-page.tsx" "err instanceof TwoFactorRequiredError"   && ok "and the sign-in screen branches on that type"   || bad "the login screen does not handle the challenge - the code field is never shown"
+
+# Both credentials, or the authenticator becomes the only one that matters.
+have "$FE/components/auth/login-page.tsx" "setChallenge(err.message)"   && ok "showing the server's own sentence, so a wrong code says so"   || bad "the challenge message is discarded"
+
+have "$FE/components/auth/login-page.tsx" "recovery_code\|recoveryCode"   && ok "and a recovery code can be given instead, for somebody without their phone"   || bad "no recovery path at sign-in - a lost phone is a lost account"
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "15. The organisation can REQUIRE it, and cannot lock itself out"
+echo "════════════════════════════════════════════════════════════════"
+GATE="$HP/app/Http/Middleware/RequireTwoFactorEnrolment.php"
+TS="$HP/app/Services/Organization/TenantSettings.php"
+OSC="$HP/app/Http/Controllers/Api/Organization/OrganizationSettingsController.php"
+
+# ── OFF BY DEFAULT IS WHAT MAKES THIS SAFE TO SHIP ──────────────────────────
+#
+# This middleware runs on every API and web request for eleven live tenants. A
+# default of anything but `off` changes all of their behaviour the moment the code
+# is pulled, with no migration and no warning.
+have "$TS" "'security.require_two_factor' => 'off'" \
+  && ok "the policy ships as off, so no live tenant changes on deploy" \
+  || bad "the default is not off - pulling this would change eleven tenants at once"
+
+# A closed list: this value authorises, so free text would leave the gate deciding
+# what "Administrators" means.
+have "$OSC" "Rule::in(TenantSettings::REQUIRE_TWO_FACTOR)" \
+  && ok "and only the three known values can be saved" \
+  || bad "any string can be stored as the policy - the gate would have to guess"
+
+# ── ENFORCED ON THE SERVER, WHICH IS THE WHOLE POINT ────────────────────────
+#
+# `can_view` was honoured only by MenuMiddleware, which returns early on type=API
+# and never aborts. That is what a policy looks like when only the UI respects it.
+if have "$HP/bootstrap/app.php" "RequireTwoFactorEnrolment"; then
+  groups=$(strip "$HP/bootstrap/app.php" | grep -c "RequireTwoFactorEnrolment")
+  groups=${groups//[^0-9]/}
+  # Both groups: api AND web. Enforcing only on /api leaves every Blade screen
+  # reachable, which is half-enforcement, which is none.
+  [ "${groups:-0}" -ge 2 ] \
+    && ok "the gate is registered on both middleware groups (api and web)" \
+    || bad "only ${groups:-0} group - the other half of the product is ungated"
+else
+  bad "the gate is never registered - the policy is stored and read by nothing"
+fi
+
+have "$GATE" "], 403)" \
+  && ok "and it refuses with 403, not 401" \
+  || bad "no 403 - a 401 sends people to the sign-in screen, which cannot fix this"
+
+have "$GATE" "two_factor_setup_required" \
+  && ok "carrying a machine-readable reason the client can route on" \
+  || bad "the refusal says nothing a client can act on"
+
+# ── AND THE WAY OUT MUST STAY OPEN ──────────────────────────────────────────
+#
+# Enrolment requires being signed in. If the gate refuses the enrolment endpoints
+# too, the policy is not a policy, it is a tenant-wide lockout with no recovery
+# that is not a database edit.
+for allowed in "'account/me'" "'account/2fa/start'" "'account/2fa/confirm'"; do
+  have "$GATE" "$allowed" \
+    && ok "$allowed stays reachable, so nobody is locked out" \
+    || bad "$allowed is NOT on the allow-list - enrolling becomes impossible"
+done
+
+# And `disable` must NOT be, or somebody walks straight back out of the policy.
+# A prefix of 'account/2fa' would have covered it by accident, which is why the
+# allow-list is matched per full path.
+if strip "$GATE" | grep -q "'account/2fa/disable'"; then
+  bad "account/2fa/disable is on the allow-list - the policy can be shrugged off"
+else
+  ok "and account/2fa/disable is NOT, so the policy cannot be walked out of"
+fi
+
+# The refusal at the controller as well, so it is not merely unreachable by luck.
+have "$HP/app/Http/Controllers/Api/Account/TwoFactorController.php" "policyRequires(" \
+  && ok "turning it off is refused while the organisation requires it" \
+  || bad "disable does not consult the policy"
+
+# ── THE NUMBER IS SHOWN BEFORE THE SWITCH IS FLIPPED ────────────────────────
+#
+# "Require it for everyone" reads like a checkbox and behaves like a migration.
+have "$OSC" "two_factor_coverage" \
+  && ok "the settings payload carries how many people would have to enrol" \
+  || bad "no coverage count - an administrator flips this blind"
+
+have "$FE/components/settings/sections/security-policy-section.tsx" "pendingEnrolments" \
+  && ok "and the screen warns when the draft would newly oblige people" \
+  || bad "the screen does not say how many people this affects"
+
+# The person who is obliged has to be told why the product stopped working.
+have "$FE/components/settings/sections/two-factor-block.tsx" "status.required && !status.enabled" \
+  && ok "and somebody obliged but not enrolled is told why, not left guessing" \
+  || bad "the 403s are unexplained - a person will conclude the product is broken"
 
 echo
 echo "════════════════════════════════════════════════════════════════"

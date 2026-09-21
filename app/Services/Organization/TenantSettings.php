@@ -80,7 +80,35 @@ class TenantSettings
         // Whether signing in with a one-time code by SMS is allowed at all.
         // The switch that would have made the hardcoded-OTP backdoor moot.
         'security.otp_login_enabled' => '1',
+
+        /*
+         * WHO MUST HAVE TWO-STEP VERIFICATION ON.
+         *
+         * `off` by default, and that default is load-bearing: this is read by a
+         * middleware on every API request, and a default of anything else would
+         * change the behaviour of eleven live tenants the moment the migration ran.
+         * A tenant opts in; nobody is opted in for them.
+         *
+         *   off             nobody is required to; it is offered, as now
+         *   administrators  the accounts that can change other people's access
+         *   everyone
+         *
+         * `administrators` rather than `everyone` is the setting most tenants want:
+         * it covers the accounts where a stolen password does the most damage,
+         * without asking 293 employees to install an authenticator app first.
+         */
+        'security.require_two_factor' => 'off',
     ];
+
+    /**
+     * The three answers to "who must have it on".
+     *
+     * A closed list rather than free text, because this drives an authorisation
+     * decision - an unrecognised value would have to mean something, and every
+     * option for what it should mean is wrong. See RequireTwoFactorEnrolment,
+     * which treats anything outside this list as `off`.
+     */
+    public const REQUIRE_TWO_FACTOR = ['off', 'administrators', 'everyone'];
 
     /** Read everything for one organisation, defaults filled in. */
     public function all(int $tenantId): array

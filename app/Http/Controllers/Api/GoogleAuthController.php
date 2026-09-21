@@ -199,7 +199,21 @@ class GoogleAuthController extends Controller
 
         session()->put($sessionData);
 
-        $token = $user->createToken(\App\Support\DeviceLabel::from($request->userAgent()))->plainTextToken;
+        $token = $user->createToken(
+                \App\Support\DeviceLabel::from($request->userAgent()),
+                ['*'],
+                /*
+                 * AN EXPIRY AT CREATION, not only once the token is used.
+                 *
+                 * `TouchTokenActivity` slides this forward on every use, so an
+                 * active session never ends. Setting it here as well closes the
+                 * window between signing in and the first authenticated request:
+                 * without it a token that is created and then abandoned - a
+                 * failed automation, somebody who signs in and closes the tab -
+                 * would be immortal, which is how the 4,960 on live came to be.
+                 */
+                now()->addDays(\App\Http\Middleware\TouchTokenActivity::IDLE_DAYS),
+            )->plainTextToken;
 
         /*
          * Signing in through Google is still signing in.
