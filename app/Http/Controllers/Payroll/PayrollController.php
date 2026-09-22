@@ -807,10 +807,55 @@ if($type=="API"){
 
         $employees = tbluserModel::where('sub_institute_id', $sub_institute_id)->where('department_id', $department_id)->where('status',1)->get()->toArray(); // 23-04-24 by uma
 
-        $get_map_year = DB::table('fees_map_years')->selectRaw('from_month, to_month')->where(['sub_institute_id' => $sub_institute_id, 'syear' => $year])->first();
+        /*
+         * F-210. THIS LINE MADE FORM 16 IMPOSSIBLE TO PRODUCE, FOR ANYONE.
+         *
+         * `fees_map_years` does not exist on either host - checked against
+         * information_schema on 202.47.117.220 and 128.199.17.97, and no
+         * migration in this repository creates it. This was its only reference
+         * in app/. So every call to /form16-report threw
+         *
+         *   SQLSTATE[42S02]: Base table or view not found: 1146
+         *   Table 'hp_erp.fees_map_years' doesn't exist
+         *
+         * and died here, ten lines before it would have returned anything.
+         * Not "Form 16 is incomplete": Form 16 has never once been generated,
+         * by an employee or by HR, on either deployment.
+         *
+         * The `?? date('m')` fallbacks below say the author expected the row to
+         * be optional. They were simply unreachable, because a missing TABLE
+         * throws where a missing ROW returns null. So the table is checked
+         * rather than assumed, and the query only runs when it is there.
+         *
+         * AND THE FALLBACK ITSELF IS CORRECTED. date('m') is the current
+         * calendar month, which would have produced a period running from this
+         * month of $year to this month of $year+1 - a twelve-month window that
+         * moves every time it is read, on a tax document. April to March is what
+         * the surrounding code already assumes: `$next_year = $year + 1` two
+         * lines down only makes sense for a year that ENDS in the following
+         * calendar year, and Helpers::getPairYears() labels these years '2025-2026'
+         * for the same reason.
+         *
+         * Schema::hasTable is avoided on purpose - this deployment includes
+         * MariaDB 10.1, where the Schema builder's introspection is unreliable;
+         * information_schema is queried directly, as elsewhere in this audit.
+         */
+        $get_map_year = null;
 
-        $from_month = $get_map_year->from_month ?? date('m');
-        $to_month = $get_map_year->to_month ?? date('m');
+        $hasMapYears = DB::selectOne(
+            'select count(*) as c from information_schema.tables where table_schema = database() and table_name = ?',
+            ['fees_map_years']
+        );
+
+        if ((int) ($hasMapYears->c ?? 0) > 0) {
+            $get_map_year = DB::table('fees_map_years')
+                ->selectRaw('from_month, to_month')
+                ->where(['sub_institute_id' => $sub_institute_id, 'syear' => $year])
+                ->first();
+        }
+
+        $from_month = $get_map_year->from_month ?? 4;   // April
+        $to_month = $get_map_year->to_month ?? 3;       // to March of $year + 1
 
         // Assuming $from_month and $to_month are integers
         $from_date = Carbon::createFromDate($year, $from_month, 1)->format('d/M/Y');
@@ -829,7 +874,29 @@ if($type=="API"){
         $res['get_employee_salary'] = DB::table('employee_salary_structures')->where(['employee_id' => $employee_id, 'sub_institute_id' => $sub_institute_id,'year'=>$year])->first();
         // echo "<pre>";print_r($res['get_employee_salary']);exit;
         $res['get_school_detail'] = DB::table('school_setup')->where('id', $sub_institute_id)->first();
-        $res['get_employee_detail'] = DB::table('tbluser')->where('id', $employee_id)->first();
+        /*
+         * F-211. An explicit select, because `->first()` on tbluser returns 99
+         * columns and this response is rendered in a browser. Among them:
+         * `password` - the bcrypt hash - plus `plain_password`, `otp` and
+         * `fcm_token`. No account on either host currently stores a plaintext
+         * password (checked: 0 of 2,373 on 202.47.117.220, 0 of 299 on
+         * 128.199.17.97), so what was actually shipped is the hash. That is
+         * still a credential leaving the database for a Form 16 screen that
+         * never asked for it, and the column would start carrying plaintext the
+         * day anything populated it.
+         *
+         * The list is what the two consumers read and nothing else: the React
+         * hook uses first/middle/last name, employee_no and pan_no
+         * (hooks/use-form16.ts), and the Blade view additionally prints
+         * address.
+         */
+        $res['get_employee_detail'] = DB::table('tbluser')
+            ->where('id', $employee_id)
+            ->first([
+                'id', 'first_name', 'middle_name', 'last_name', 'employee_no',
+                'pan_no', 'join_year', 'address', 'email', 'mobile',
+                'department_id', 'jobtitle_id', 'joined_date',
+            ]);
 
         $res['years'] = Helpers::getPairYears();
         $res['search'] = 1;
@@ -957,7 +1024,28 @@ if($type=="API"){
                     'updated_at' => now(),
                 ]);
 
-            $request->session()->flash('success', 'Salary Certificate Updated Successfully.');
+            /*
+             * F-213. Guarded, because there is not always a session to flash to.
+             *
+             * These legacy payroll routes live on the WEB router, which runs
+             * StartSession, so this was safe for as long as the only callers
+             * were Blade screens and the React console proxying through
+             * routes/hrms.php. The employee's own salary certificate is served
+             * from the `api` group, which has no session middleware at all, and
+             * `$request->session()` throws
+             *
+             *   RuntimeException: Session store not set on request.
+             *
+             * AFTER the certificate had already been written. So the row was
+             * filed correctly and the caller still got a 500 - the worst of both
+             * outcomes, and invisible to anyone testing through the HR screen.
+             *
+             * A flash message is for the next rendered page; an API caller has
+             * no next page, and the JSON response already carries the outcome.
+             */
+            if ($request->hasSession()) {
+                $request->session()->flash('success', 'Salary Certificate Updated Successfully.');
+            }
         }
         else
         {
@@ -979,7 +1067,28 @@ if($type=="API"){
                 'created_at' => now(),
             ]);
 
-            $request->session()->flash('success', 'Salary Certificate Generated Successfully.');
+            /*
+             * F-213. Guarded, because there is not always a session to flash to.
+             *
+             * These legacy payroll routes live on the WEB router, which runs
+             * StartSession, so this was safe for as long as the only callers
+             * were Blade screens and the React console proxying through
+             * routes/hrms.php. The employee's own salary certificate is served
+             * from the `api` group, which has no session middleware at all, and
+             * `$request->session()` throws
+             *
+             *   RuntimeException: Session store not set on request.
+             *
+             * AFTER the certificate had already been written. So the row was
+             * filed correctly and the caller still got a 500 - the worst of both
+             * outcomes, and invisible to anyone testing through the HR screen.
+             *
+             * A flash message is for the next rendered page; an API caller has
+             * no next page, and the JSON response already carries the outcome.
+             */
+            if ($request->hasSession()) {
+                $request->session()->flash('success', 'Salary Certificate Generated Successfully.');
+            }
         }
 
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->where('payroll_type', 1)->get()->toArray();

@@ -2755,4 +2755,26 @@ Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
     Route::get('/payslips', [App\Http\Controllers\Api\MyHrController::class, 'payslips']);
     Route::get('/payslips/{month}/{year}/pdf', [App\Http\Controllers\Api\MyHrController::class, 'payslipPdf'])
         ->whereNumber('year');
+
+    /*
+     * F-209. The three things an employee could not get for themselves.
+     *
+     * Each existed only inside routes/hrms.php's `hrit.role:admin,hr` group, so
+     * the only route to your own pay breakdown, your own salary certificate or
+     * your own Form 16 was to ask HR to operate a screen on your behalf - and
+     * in the case of Form 16 that screen threw a 500 for them too (F-210).
+     *
+     * They are added HERE rather than by widening that group, and the
+     * difference is the whole point: widening it would let any employee read
+     * any colleague's pay, because those endpoints take an employee_id. These
+     * do not have one. The subject is the token's owner and there is no
+     * parameter with which to name anybody else.
+     */
+    Route::get('/pay-breakdown', [App\Http\Controllers\Api\MyHrController::class, 'payBreakdown']);
+
+    Route::get('/salary-certificate/{year}', [App\Http\Controllers\Api\MyHrController::class, 'salaryCertificate'])
+        ->whereNumber('year');
+
+    Route::get('/form-16/{year}', [App\Http\Controllers\Api\MyHrController::class, 'form16'])
+        ->whereNumber('year');
 });

@@ -1,0 +1,1296 @@
+{
+    "mysql": {
+        "profiles": [
+            {
+                "id": 3,
+                "sub_institute_id": 1
+            },
+            {
+                "id": 6,
+                "sub_institute_id": 2
+            },
+            {
+                "id": 9,
+                "sub_institute_id": 3
+            },
+            {
+                "id": 12,
+                "sub_institute_id": 4
+            },
+            {
+                "id": 15,
+                "sub_institute_id": 5
+            },
+            {
+                "id": 17,
+                "sub_institute_id": 6
+            },
+            {
+                "id": 20,
+                "sub_institute_id": 7
+            },
+            {
+                "id": 26,
+                "sub_institute_id": 9
+            },
+            {
+                "id": 30,
+                "sub_institute_id": 10
+            },
+            {
+                "id": 32,
+                "sub_institute_id": 11
+            },
+            {
+                "id": 174,
+                "sub_institute_id": 1000019
+            }
+        ],
+        "rights": [
+            {
+                "id": 22714,
+                "profile_id": 3,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22715,
+                "profile_id": 3,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22716,
+                "profile_id": 3,
+                "menu_id": 94,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22717,
+                "profile_id": 3,
+                "menu_id": 95,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22718,
+                "profile_id": 3,
+                "menu_id": 96,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22719,
+                "profile_id": 3,
+                "menu_id": 97,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22720,
+                "profile_id": 3,
+                "menu_id": 98,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22721,
+                "profile_id": 3,
+                "menu_id": 99,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22724,
+                "profile_id": 3,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22725,
+                "profile_id": 3,
+                "menu_id": 101,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22729,
+                "profile_id": 3,
+                "menu_id": 102,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22730,
+                "profile_id": 3,
+                "menu_id": 103,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22731,
+                "profile_id": 3,
+                "menu_id": 104,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22735,
+                "profile_id": 3,
+                "menu_id": 105,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22736,
+                "profile_id": 3,
+                "menu_id": 106,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22737,
+                "profile_id": 3,
+                "menu_id": 107,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22738,
+                "profile_id": 3,
+                "menu_id": 108,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22739,
+                "profile_id": 3,
+                "menu_id": 109,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22740,
+                "profile_id": 3,
+                "menu_id": 110,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22742,
+                "profile_id": 3,
+                "menu_id": 111,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22743,
+                "profile_id": 3,
+                "menu_id": 112,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22744,
+                "profile_id": 3,
+                "menu_id": 113,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22745,
+                "profile_id": 3,
+                "menu_id": 114,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22722,
+                "profile_id": 3,
+                "menu_id": 115,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22746,
+                "profile_id": 3,
+                "menu_id": 116,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22741,
+                "profile_id": 3,
+                "menu_id": 140,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22726,
+                "profile_id": 3,
+                "menu_id": 162,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22727,
+                "profile_id": 3,
+                "menu_id": 163,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22728,
+                "profile_id": 3,
+                "menu_id": 164,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22732,
+                "profile_id": 3,
+                "menu_id": 165,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22733,
+                "profile_id": 3,
+                "menu_id": 166,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22734,
+                "profile_id": 3,
+                "menu_id": 167,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 22723,
+                "profile_id": 3,
+                "menu_id": 181,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 26245,
+                "profile_id": 3,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 31293,
+                "profile_id": 3,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 17060,
+                "profile_id": 6,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "2"
+            },
+            {
+                "id": 17059,
+                "profile_id": 6,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "2"
+            },
+            {
+                "id": 17050,
+                "profile_id": 6,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "2"
+            },
+            {
+                "id": 26254,
+                "profile_id": 6,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "2"
+            },
+            {
+                "id": 31302,
+                "profile_id": 6,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "2"
+            },
+            {
+                "id": 17247,
+                "profile_id": 9,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "3"
+            },
+            {
+                "id": 17246,
+                "profile_id": 9,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "3"
+            },
+            {
+                "id": 17237,
+                "profile_id": 9,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "3"
+            },
+            {
+                "id": 26263,
+                "profile_id": 9,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "3"
+            },
+            {
+                "id": 31311,
+                "profile_id": 9,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "3"
+            },
+            {
+                "id": 17434,
+                "profile_id": 12,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "4"
+            },
+            {
+                "id": 17433,
+                "profile_id": 12,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "4"
+            },
+            {
+                "id": 17424,
+                "profile_id": 12,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "4"
+            },
+            {
+                "id": 26274,
+                "profile_id": 12,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "4"
+            },
+            {
+                "id": 31322,
+                "profile_id": 12,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "4"
+            },
+            {
+                "id": 17621,
+                "profile_id": 15,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "5"
+            },
+            {
+                "id": 17620,
+                "profile_id": 15,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "5"
+            },
+            {
+                "id": 17611,
+                "profile_id": 15,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "5"
+            },
+            {
+                "id": 26283,
+                "profile_id": 15,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "5"
+            },
+            {
+                "id": 31331,
+                "profile_id": 15,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "5"
+            },
+            {
+                "id": 17729,
+                "profile_id": 17,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 17728,
+                "profile_id": 17,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 17719,
+                "profile_id": 17,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 26291,
+                "profile_id": 17,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 31339,
+                "profile_id": 17,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 17916,
+                "profile_id": 20,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "7"
+            },
+            {
+                "id": 17915,
+                "profile_id": 20,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "7"
+            },
+            {
+                "id": 17906,
+                "profile_id": 20,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "7"
+            },
+            {
+                "id": 26300,
+                "profile_id": 20,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "7"
+            },
+            {
+                "id": 31348,
+                "profile_id": 20,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "7"
+            },
+            {
+                "id": 18290,
+                "profile_id": 26,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "9"
+            },
+            {
+                "id": 18289,
+                "profile_id": 26,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "9"
+            },
+            {
+                "id": 18280,
+                "profile_id": 26,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "9"
+            },
+            {
+                "id": 26309,
+                "profile_id": 26,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "9"
+            },
+            {
+                "id": 31357,
+                "profile_id": 26,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "9"
+            },
+            {
+                "id": 18556,
+                "profile_id": 30,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "10"
+            },
+            {
+                "id": 18555,
+                "profile_id": 30,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "10"
+            },
+            {
+                "id": 18546,
+                "profile_id": 30,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "10"
+            },
+            {
+                "id": 26319,
+                "profile_id": 30,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "10"
+            },
+            {
+                "id": 31367,
+                "profile_id": 30,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "10"
+            },
+            {
+                "id": 18664,
+                "profile_id": 32,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "11"
+            },
+            {
+                "id": 18663,
+                "profile_id": 32,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "11"
+            },
+            {
+                "id": 18654,
+                "profile_id": 32,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 1,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "11"
+            },
+            {
+                "id": 26327,
+                "profile_id": 32,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "11"
+            },
+            {
+                "id": 31375,
+                "profile_id": 32,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "11"
+            },
+            {
+                "id": 26349,
+                "profile_id": 174,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1000019"
+            },
+            {
+                "id": 31397,
+                "profile_id": 174,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1000019"
+            }
+        ]
+    },
+    "live": {
+        "profiles": [
+            {
+                "id": 3,
+                "sub_institute_id": 1
+            },
+            {
+                "id": 17,
+                "sub_institute_id": 6
+            }
+        ],
+        "rights": [
+            {
+                "id": 305,
+                "profile_id": 3,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 364,
+                "profile_id": 3,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 365,
+                "profile_id": 3,
+                "menu_id": 94,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 366,
+                "profile_id": 3,
+                "menu_id": 95,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 367,
+                "profile_id": 3,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 368,
+                "profile_id": 3,
+                "menu_id": 101,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 369,
+                "profile_id": 3,
+                "menu_id": 102,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 370,
+                "profile_id": 3,
+                "menu_id": 103,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 371,
+                "profile_id": 3,
+                "menu_id": 104,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 372,
+                "profile_id": 3,
+                "menu_id": 105,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 373,
+                "profile_id": 3,
+                "menu_id": 106,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 374,
+                "profile_id": 3,
+                "menu_id": 108,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 375,
+                "profile_id": 3,
+                "menu_id": 109,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 376,
+                "profile_id": 3,
+                "menu_id": 110,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 377,
+                "profile_id": 3,
+                "menu_id": 111,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 378,
+                "profile_id": 3,
+                "menu_id": 112,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 379,
+                "profile_id": 3,
+                "menu_id": 113,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 380,
+                "profile_id": 3,
+                "menu_id": 114,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 381,
+                "profile_id": 3,
+                "menu_id": 116,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 397,
+                "profile_id": 3,
+                "menu_id": 140,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 417,
+                "profile_id": 3,
+                "menu_id": 165,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": null
+            },
+            {
+                "id": 6935,
+                "profile_id": 3,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 7217,
+                "profile_id": 3,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "1"
+            },
+            {
+                "id": 6147,
+                "profile_id": 17,
+                "menu_id": 5,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6148,
+                "profile_id": 17,
+                "menu_id": 93,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6151,
+                "profile_id": 17,
+                "menu_id": 94,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6156,
+                "profile_id": 17,
+                "menu_id": 95,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6149,
+                "profile_id": 17,
+                "menu_id": 100,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6150,
+                "profile_id": 17,
+                "menu_id": 101,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6152,
+                "profile_id": 17,
+                "menu_id": 102,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6153,
+                "profile_id": 17,
+                "menu_id": 103,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6154,
+                "profile_id": 17,
+                "menu_id": 104,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6157,
+                "profile_id": 17,
+                "menu_id": 105,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6158,
+                "profile_id": 17,
+                "menu_id": 106,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6159,
+                "profile_id": 17,
+                "menu_id": 108,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6160,
+                "profile_id": 17,
+                "menu_id": 109,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6161,
+                "profile_id": 17,
+                "menu_id": 110,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6162,
+                "profile_id": 17,
+                "menu_id": 140,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6155,
+                "profile_id": 17,
+                "menu_id": 165,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 6949,
+                "profile_id": 17,
+                "menu_id": 305,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            },
+            {
+                "id": 7231,
+                "profile_id": 17,
+                "menu_id": 309,
+                "can_view": 1,
+                "can_add": 0,
+                "can_edit": 0,
+                "can_delete": 0,
+                "sub_institute_id": "6"
+            }
+        ]
+    }
+}
