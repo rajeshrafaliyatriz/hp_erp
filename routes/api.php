@@ -79,6 +79,7 @@ use App\Http\Controllers\Api\Talent\TalentAssessmentController;
 use App\Http\Controllers\talent\CandidateAssessmentResponseController;
 use App\Http\Controllers\talent\TalentOfferController;
 use App\Http\Controllers\talent\CareersController;
+use App\Http\Controllers\talent\PosterController;
 use App\Http\Controllers\talent\OfferResponseController;
 use App\Http\Controllers\talent\TalentAcquisition\TalentAcquisitionController;
 use App\Http\Controllers\talent\TalentAcquisition\CandidateDropoffController;
@@ -201,6 +202,22 @@ use App\Http\Controllers\Api\Attendance\AttendanceRegularisationApiController;
 Route::middleware('throttle:30,1')->group(function () {
     Route::get('/careers/{slug}', [CareersController::class, 'organisation']);
     Route::get('/careers/{slug}/postings/{id}', [CareersController::class, 'posting'])->whereNumber('id');
+
+    /*
+     * The hiring poster. Same surface and the same allow-list as the two reads
+     * above - it prints what the careers page already shows, so it belongs on
+     * the public side rather than behind a token that Next.js server code
+     * cannot read anyway.
+     */
+    Route::get('/careers/{slug}/poster-content', [PosterController::class, 'content']);
+});
+
+/*
+| The poster PDF, throttled harder than the reads above: dompdf renders
+| synchronously and a poster is downloaded once, never polled.
+*/
+Route::middleware('throttle:10,1')->group(function () {
+    Route::get('/careers/{slug}/poster.pdf', [PosterController::class, 'pdf']);
 });
 /*
 | A candidate following their OWN application. Public, and the token is the

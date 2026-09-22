@@ -118,6 +118,21 @@ class OrganizationProfileController extends Controller
                     'mobile' => $setup->Mobile ?? null,
                     'email' => $setup->Email ?? null,
                     'institute_type' => $setup->institute_type ?? null,
+                    /*
+                     * The public careers address, for anything that has to link
+                     * to a job advert from inside the product - the hiring
+                     * poster prints it, so it has to be readable here.
+                     *
+                     * NULL for a tenant with no institute_detail row, which is
+                     * most of them: that table has 5 rows against school_setup's
+                     * 12. A null slug means the organisation has no careers page
+                     * at all, and callers must treat it as "feature unavailable"
+                     * rather than building a URL that 404s.
+                     */
+                    'careers_slug' => DB::table('institute_detail')
+                        ->where('sub_institute_id', $tenant)
+                        ->whereNull('deleted_at')
+                        ->value('careers_slug'),
                 ],
             ],
         ]);

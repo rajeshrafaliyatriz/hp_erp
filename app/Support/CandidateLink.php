@@ -68,6 +68,26 @@ final class CandidateLink
     }
 
     /**
+     * A public careers page.
+     *
+     * The same origin question as to(), for the same reason: /careers/{slug} is
+     * a Next.js page and Laravel has no route for it. This is here rather than
+     * inline because a hiring poster PRINTS the URL - once a poster is shared
+     * there is no fixing a wrong one, so the origin has to be decided in the
+     * one place that already knows the answer.
+     */
+    public static function careers(string $slug): string
+    {
+        return self::base() . '/careers/' . trim($slug, '/');
+    }
+
+    /** One public job advert: /careers/{slug}/jobs/{id}. */
+    public static function careersPosting(string $slug, int $postingId): string
+    {
+        return self::careers($slug) . '/jobs/' . $postingId;
+    }
+
+    /**
      * True when the origin still points at this API rather than the front end.
      *
      * Callers use it to tell HR that the link they are about to send will not
