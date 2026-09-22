@@ -64,6 +64,34 @@ class OrganizationProfileController extends Controller
             ? DB::table('org_sister_details')->where('sub_institute_id', $tenant)->get()
             : collect();
 
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * WHO THIS ORGANISATION IS, FROM THE TABLE THAT ACTUALLY HAS A ROW
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * Three tables describe an organisation, and they disagree about how many
+         * organisations exist: `school_setup` has 12 rows on live, `org_details`
+         * has 4, `institute_detail` has 5. So `org_details` cannot be the source
+         * of an organisation's IDENTITY - for eight of twelve tenants it is simply
+         * absent, and a screen reading the logo from it shows nothing.
+         *
+         * `school_setup` is the source of truth for identity, because it IS the
+         * tenant: `school_setup.id` is `sub_institute_id`. `org_details` keeps what
+         * it is actually for - the statutory record: legal name, CIN, GSTIN, PAN,
+         * registered address.
+         *
+         * ── THE LOGO WAS WRITTEN TWICE AND THE COPIES DRIFTED ───────────────
+         *
+         * `save()` below writes `org_details.logo` and mirrors it into
+         * `school_setup.Logo`. The two have since diverged on live - tenant 1 holds
+         * a different filename in each - and three different organisations ended up
+         * sharing one file. `identity.logo` prefers `school_setup`, so every tenant
+         * has an answer, and the migration reconciles the historic divergence.
+         */
+        $setup = DB::table('school_setup')
+            ->where('id', $tenant)
+            ->first(['SchoolName', 'ShortCode', 'Logo', 'ContactPerson', 'Mobile', 'Email', 'institute_type']);
+
         return response()->json([
             'status' => true,
             'data' => [
@@ -72,7 +100,25 @@ class OrganizationProfileController extends Controller
                 // setup checklist distinguishes them.
                 'profile' => $profile,
                 'sister_companies' => $sisters,
-                'organisation_name' => DB::table('school_setup')->where('id', $tenant)->value('SchoolName'),
+                'organisation_name' => $setup->SchoolName ?? null,
+                /*
+                 * The organisation's own identity, always present because
+                 * `school_setup` always has a row for a tenant that can sign in.
+                 *
+                 * `logo` falls back to `org_details.logo` only when `school_setup`
+                 * has none - not the other way round. Preferring the statutory
+                 * table would reintroduce the eight tenants with no answer.
+                 */
+                'identity' => [
+                    'name' => $setup->SchoolName ?? null,
+                    'short_code' => $setup->ShortCode ?? null,
+                    'logo' => ($setup->Logo ?? null) ?: ($profile->logo ?? null),
+                    'logo_url' => $this->logoUrl(($setup->Logo ?? null) ?: ($profile->logo ?? null)),
+                    'contact_person' => $setup->ContactPerson ?? null,
+                    'mobile' => $setup->Mobile ?? null,
+                    'email' => $setup->Email ?? null,
+                    'institute_type' => $setup->institute_type ?? null,
+                ],
             ],
         ]);
     }
@@ -223,6 +269,30 @@ class OrganizationProfileController extends Controller
      * Returns null when there is no file, which every caller reads as "leave
      * whatever is there alone" rather than "clear it".
      */
+    /**
+     * A servable URL for a stored logo filename, or null.
+     *
+     * Mirrors `AccountController::avatarUrl` deliberately - same disk, same
+     * try/catch, different folder (`hp_logo/` for organisations, `hp_user/` for
+     * people, and they have never crossed). A misconfigured disk must not be able
+     * to 500 the organisation screen for a cosmetic field, so a failure degrades to
+     * null and the screen falls back to the monogram.
+     */
+    private function logoUrl(?string $filename): ?string
+    {
+        $filename = trim((string) $filename);
+
+        if ($filename === '') {
+            return null;
+        }
+
+        try {
+            return Storage::disk('digitalocean')->url('public/hp_logo/' . $filename);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function storeLogo(Request $request, string $field): ?string
     {
         if (!$request->hasFile($field)) {

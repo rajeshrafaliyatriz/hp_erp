@@ -1825,6 +1825,22 @@ Route::middleware('api.token')->group(function () {
 
     Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
 
+    /*
+     * END THIS SESSION ON THE SERVER, not just in the browser.
+     *
+     * There was no logout endpoint in this application at all. "Sign out" cleared
+     * localStorage and the token stayed valid for its full 30-day window - so
+     * anybody who recovered it from a shared machine was still authenticated.
+     *
+     * POST because it changes state. It revokes only the CALLING token, so signing
+     * out of a laptop does not sign the same person out of their phone;
+     * `/account/sessions` is the separate, deliberate "everywhere else" action.
+     *
+     * `RequireTwoFactorEnrolment` already allow-lists this path, so somebody who
+     * has not yet enrolled under an organisation policy can still leave.
+     */
+    Route::post('/account/logout', [\App\Http\Controllers\Api\Account\AccountController::class, 'logout']);
+
     Route::get('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'sessions']);
     Route::delete('/account/sessions/{id}', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions'])->whereNumber('id');
     Route::delete('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions']);

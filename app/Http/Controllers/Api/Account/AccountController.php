@@ -95,6 +95,7 @@ class AccountController extends Controller
     private const EVENT_PASSWORD_CHANGED = 'account.password_changed';
     private const EVENT_PHOTO_CHANGED = 'account.photo_changed';
     private const EVENT_SESSIONS_ENDED = 'account.sessions_ended';
+    private const EVENT_SIGNED_OUT = 'account.signed_out';
 
     /**
      * What a person may change about themselves.
@@ -898,6 +899,107 @@ class AccountController extends Controller
                 : $ended . ' device(s) have been signed out.',
             'data' => ['ended' => $ended],
         ]);
+    }
+
+    /**
+     * POST /api/account/logout — end THIS session, on the server.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * SIGNING OUT USED TO BE A CLIENT-SIDE FICTION
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * There was no logout endpoint anywhere in this application. A repository-wide
+     * search for one found nothing, and `routes/web.php` has never declared
+     * `/logout` - while `header.blade.php` links to it and `footer.blade.php`
+     * navigates to it, so both 404.
+     *
+     * So "Sign out" cleared the browser and nothing else. The Sanctum token stayed
+     * valid for its full 30-day window, and the Laravel session row was never
+     * invalidated. On a shared machine, anybody who recovered that token from
+     * storage - or simply pressed Back - was still authenticated. `endSessions`
+     * above even tells people "That is this device. Use Sign out instead", which
+     * until now pointed at an action that revoked nothing.
+     *
+     * ── ONLY THIS TOKEN, NOT EVERY TOKEN ────────────────────────────────────
+     *
+     * Signing out of a laptop must not sign the same person out of their phone.
+     * "Sign out everywhere else" is a separate, deliberate action - `endSessions`
+     * - and conflating the two would make a routine sign-out destructive.
+     *
+     * ── IT SUCCEEDS EVEN WHEN IT CANNOT FIND THE TOKEN ──────────────────────
+     *
+     * An expired or already-deleted token means the session is ALREADY over, which
+     * is what the caller asked for. Returning an error there would leave a client
+     * unable to complete a sign-out it has every right to complete, and it would
+     * teach clients to ignore the response.
+     */
+    public function logout(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $currentTokenId = $this->currentTokenId($request);
+
+        $revoked = 0;
+
+        if ($currentTokenId) {
+            $revoked = DB::table('personal_access_tokens')
+                ->where('tokenable_type', \App\Models\auth\tbluserModel::class)
+                // Scoped to the caller as well as to the id. The tokens table is
+                // global, and an id alone would be somebody else's session.
+                ->where('tokenable_id', $identity['user_id'])
+                ->where('id', $currentTokenId)
+                ->delete();
+        }
+
+        /*
+         * The web session too, where there is one.
+         *
+         * A caller may hold BOTH a token and a Blade session - the same browser can
+         * have used both surfaces. Clearing one and leaving the other is how
+         * somebody "signs out" and then finds the ERP still open in another tab.
+         * `authMiddleware::hasSession()` is satisfied by `user_id` alone, so the
+         * session has to be emptied rather than partly rewritten.
+         */
+        $this->forgetWebSession($request);
+
+        $this->recordSecurityEvent(self::EVENT_SIGNED_OUT, $identity, [
+            'token_revoked' => $revoked === 1,
+        ]);
+
+        return response()->json([
+            'status' => true,
+            // The same answer whether a token was found or not: the session is over
+            // either way, and a client has nothing different to do.
+            'message' => 'You have been signed out.',
+        ]);
+    }
+
+    /**
+     * Invalidate the Laravel session, if this request has one.
+     *
+     * `invalidate()` flushes the data AND regenerates the id, which is what stops a
+     * fixated session id being reused. `regenerateToken()` then reissues the CSRF
+     * token, without which the very next form post from that browser would 419.
+     *
+     * Wrapped, because an API request may legitimately have no session at all, and
+     * sign-out must never fail on the half that does not apply to it.
+     */
+    private function forgetWebSession(Request $request): void
+    {
+        try {
+            if (!$request->hasSession()) {
+                return;
+            }
+
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        } catch (\Throwable $caught) {
+            report($caught);
+        }
     }
 
     /**

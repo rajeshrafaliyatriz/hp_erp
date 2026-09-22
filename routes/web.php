@@ -107,6 +107,23 @@ Route::get('/', function () {
 });
 
 Route::resource('login', authController::class);
+
+/*
+ * THE SIGN-OUT LINK THAT TWO VIEWS HAVE POINTED AT ALL ALONG.
+ *
+ * `header.blade.php:242` renders `<a href="{{ url('/logout') }}">` and
+ * `footer.blade.php:27` navigates to `/logout`. Neither route existed: the resource
+ * above declares login.index/store/show/edit/update/destroy and nothing named
+ * logout. So the ERP's Sign out returned a 404 and left the person signed in - a
+ * broken button hiding a real hole, because `authMiddleware` is satisfied by
+ * `session('user_id')` and that key was never removed.
+ *
+ * GET rather than POST, because that is what the two existing links send and the
+ * point is to make them work. Deliberately outside any middleware group: somebody
+ * whose session is half broken must still be able to leave, and a guard that
+ * refused them would trap them in it.
+ */
+Route::get('/logout', [authController::class, 'logout'])->name('logout');
 Route::post('user_login', [authController::class, 'user_login']);
 Route::post('user_check_otp', [authController::class, 'user_check_otp']);
 Route::middleware(['auth','session','menu'])->group(function () {
