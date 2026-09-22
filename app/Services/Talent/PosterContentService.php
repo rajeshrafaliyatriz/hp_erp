@@ -40,7 +40,7 @@ class PosterContentService
      * @param  object  $org       row from institute_detail (slug, name, ...)
      * @param  array<int,array<string,mixed>>  $postings  public payload rows
      */
-    public function build(object $org, array $postings, string $format): array
+    public function build(object $org, array $postings, string $format, ?string $careersBase = null): array
     {
         $count = max(1, count($postings));
         $spec = PosterFormat::spec($format, $count);
@@ -64,11 +64,30 @@ class PosterContentService
              * careers page rather than to any one job, because a reader cannot
              * tell which of three "Apply Now" links they are looking at.
              */
-            'apply_url' => $count === 1
-                ? CandidateLink::careersPosting($org->careers_slug, (int) $postings[0]['id'])
-                : CandidateLink::careers($org->careers_slug),
+            /*
+             * The base is passed in rather than read here, because on a
+             * misconfigured deployment the only thing that knows the careers
+             * origin is the request. See CandidateLink::careersOrigin().
+             */
+            'apply_url' => $this->applyUrl($org, $postings, $count, $careersBase),
             'layout' => $this->layout($roles, $count),
         ];
+    }
+
+    /** One job advert, or the careers page when several roles share a poster. */
+    private function applyUrl(object $org, array $postings, int $count, ?string $base): string
+    {
+        $slug = (string) $org->careers_slug;
+
+        if ($base === null) {
+            return $count === 1
+                ? CandidateLink::careersPosting($slug, (int) $postings[0]['id'])
+                : CandidateLink::careers($slug);
+        }
+
+        $careers = rtrim($base, '/') . '/careers/' . trim($slug, '/');
+
+        return $count === 1 ? $careers . '/jobs/' . (int) $postings[0]['id'] : $careers;
     }
 
     /**

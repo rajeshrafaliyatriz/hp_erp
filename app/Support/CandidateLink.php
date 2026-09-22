@@ -88,6 +88,81 @@ final class CandidateLink
     }
 
     /**
+     * The careers origin, allowing a REQUEST to supply it when config has not.
+     *
+     * ── WHY THIS EXISTS, AND WHY ONLY FOR CAREERS ───────────────────────────
+     *
+     * FRONTEND_URL is unset on production, so base() falls back to app.url -
+     * the API host - and https://hp.triz.co.in/careers/{slug} is a 404, as are
+     * /assessment/{token} and /offer/{token}. Every candidate-facing link the
+     * system emails is currently dead. That is a configuration fault and the
+     * real fix is one environment variable; this is not a substitute for it.
+     *
+     * But a careers page is different from an emailed link in one way that
+     * matters: it is being viewed RIGHT NOW by a browser that knows which
+     * origin serves it. When an operator downloads a hiring poster from
+     * https://g2g.scholarclone.com, that origin is a fact about the request,
+     * not a guess - so the poster can be correct even while the config is not.
+     *
+     * Deliberately NOT used for assessment or offer links. Those are built
+     * inside queued work and emails, where there is no request to ask, and a
+     * silently-wrong link there is exactly the failure CandidateLink exists to
+     * prevent. They must keep failing loudly until FRONTEND_URL is set.
+     *
+     * The supplied origin is accepted only when config is absent, only from
+     * the Origin/Referer header the browser sets (not a query parameter a
+     * caller types), and only as a well-formed http(s) origin with no path.
+     */
+    public static function careersOrigin(?string $requestOrigin, ?string $apiHost = null): ?string
+    {
+        if (!self::pointsAtApi()) {
+            return self::base();
+        }
+
+        $origin = trim((string) $requestOrigin);
+
+        if ($origin === '') {
+            return null;
+        }
+
+        $parts = parse_url($origin);
+
+        if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return null;
+        }
+
+        if (!in_array($parts['scheme'], ['http', 'https'], true)) {
+            return null;
+        }
+
+        $rebuilt = $parts['scheme'] . '://' . $parts['host']
+            . (isset($parts['port']) ? ':' . $parts['port'] : '');
+
+        /*
+         * Never the API host - that is the dead link this whole path exists to
+         * avoid.
+         *
+         * Checked against the HOST SERVING THIS REQUEST as well as app.url,
+         * because app.url can itself be wrong on a misconfigured deployment -
+         * and it was, in the first test of this method: with app.url still
+         * pointing at localhost, an Origin of https://hp.triz.co.in was
+         * accepted and produced the exact 404 URL the guard is for. The
+         * request's own host cannot be misconfigured; it is where the call
+         * actually arrived.
+         */
+        $forbidden = array_filter([
+            parse_url((string) config('app.url'), PHP_URL_HOST),
+            $apiHost,
+        ]);
+
+        if (in_array($parts['host'], $forbidden, true)) {
+            return null;
+        }
+
+        return $rebuilt;
+    }
+
+    /**
      * True when the origin still points at this API rather than the front end.
      *
      * Callers use it to tell HR that the link they are about to send will not
