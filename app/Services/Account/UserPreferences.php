@@ -75,7 +75,61 @@ class UserPreferences
         // something happened in your own workspace, and a silent inbox is how
         // an approval sits unseen for a week.
         'notify_email' => true,
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * HOW SOMEBODY PRESENTS THEMSELVES TO COLLEAGUES
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * Every comparable product has these three and this one had none: a
+         * display name, pronouns, and a line about yourself. Without them a
+         * person is only ever their legal name as typed by HR - "Kwame" is
+         * stuck as "Kwabena", and somebody called Alexandra who goes by Alex
+         * has nowhere to say so.
+         *
+         * Stored HERE rather than as new `tbluser` columns on purpose. That
+         * table is already 99 columns wide and is read by dozens of controllers;
+         * three more nullable strings on it is three more things every SELECT
+         * carries and every importer has an opinion about. These are per-person
+         * settings, which is exactly what this table is for, and it costs no
+         * migration.
+         *
+         * `display_name` empty means "use my real name" rather than meaning
+         * blank - the resolver, not the storage, decides that.
+         */
+        'display_name' => '',
+        'pronouns' => '',
+        'about' => '',
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * WHO CAN SEE THE PARTS OF A PERSON THAT ARE NOT WORK
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * An HR product holds a home address, a date of birth and a personal
+         * mobile number, and until now every colleague who could open the
+         * Employee Directory could read all three. That is not a setting anybody
+         * chose; it is the absence of one.
+         *
+         * `everyone` is kept as the default deliberately. Changing what existing
+         * organisations already see, silently, on the day of a deploy, would
+         * break directories people rely on - the honest move is to offer the
+         * choice and let somebody make it, not to make it for them.
+         *
+         * A job title and department are NOT here: they are how the organisation
+         * is arranged, not personal details, and hiding them would break the
+         * directory's purpose.
+         */
+        'visible_mobile' => 'everyone',
+        'visible_birthdate' => 'everyone',
+        'visible_address' => 'everyone',
     ];
+
+    /** What a visibility preference may be set to, narrowest last. */
+    public const VISIBILITY = ['everyone', 'department', 'private'];
+
+    /** The preferences that answer "who may see this field about me". */
+    public const VISIBILITY_KEYS = ['visible_mobile', 'visible_birthdate', 'visible_address'];
 
     /**
      * The preferences that belong to a MACHINE rather than to a person.

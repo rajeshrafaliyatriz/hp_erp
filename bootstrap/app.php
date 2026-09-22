@@ -39,7 +39,52 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     // ... rest of configuration
     ->withMiddleware(function (Middleware $middleware) {
-        $middleware->alias([ 
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * KEEP `last_used_at` HONEST, AND EXPIRE ABANDONED SESSIONS
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `last_used_at` was NULL on all 4,960 live tokens, so Sign-in & security
+         * reported "Never used since it was created" for every session anybody
+         * had. Sanctum writes that column in its own Guard, and this application
+         * never uses that guard - eight middlewares and several controllers call
+         * `PersonalAccessToken::findToken()` directly, which looks up and nothing
+         * more.
+         *
+         * Appended to BOTH groups rather than added to those eight call sites:
+         * 167 routes are role-gated without `api.token` or `auth`, so no pair of
+         * them covers everything, and eight edits is eight chances to miss the
+         * ninth. See TouchTokenActivity for the throttle and the sliding expiry.
+         *
+         * It never blocks and never throws - a missing timestamp must not be able
+         * to 500 somebody's dashboard.
+         */
+        $middleware->appendToGroup('api', [\App\Http\Middleware\TouchTokenActivity::class]);
+        $middleware->appendToGroup('web', [\App\Http\Middleware\TouchTokenActivity::class]);
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * THE ORGANISATION'S "REQUIRE TWO-STEP VERIFICATION" POLICY
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * Both groups, for the same reason as above: 167 routes are role-gated
+         * without `api.token` or `auth`, so there is no narrower place that covers
+         * the product. And the web group matters as much as the API one - a policy
+         * enforced only on /api would leave every Blade screen reachable, which is
+         * the same half-enforcement that made `can_view` a UI hint.
+         *
+         * AFTER TouchTokenActivity, deliberately. That one refuses to slide an
+         * already-expired token forward, so by the time this runs an expired session
+         * is still expired and this gate's own expiry check agrees with it.
+         *
+         * `security.require_two_factor` is `off` for every tenant by default and
+         * this returns early on it, so adding it changes nothing until an
+         * administrator deliberately switches it on. It never throws.
+         */
+        $middleware->appendToGroup('api', [\App\Http\Middleware\RequireTwoFactorEnrolment::class]);
+        $middleware->appendToGroup('web', [\App\Http\Middleware\RequireTwoFactorEnrolment::class]);
+
+        $middleware->alias([
             'menu' => \App\Http\Middleware\MenuMiddleware::class,
             'session' => \App\Http\Middleware\SessionMiddleware::class,
             'auth' => \App\Http\Middleware\authMiddleware::class,

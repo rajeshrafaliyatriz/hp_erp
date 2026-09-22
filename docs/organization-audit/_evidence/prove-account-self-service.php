@@ -225,6 +225,73 @@ try {
     $self = $call('DELETE', '/api/account/sessions/' . $current['id']);
     printf("  ending THIS device by id     : HTTP %d  %s\n", $self->getStatusCode(),
         $self->getStatusCode() === 422 ? 'CORRECT - use Sign out' : 'WRONG');
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * 6. WHO THIS PERSON IS AT WORK - READABLE, AND STILL NOT WRITABLE
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * Section 2 proves department and job role cannot be CHANGED by their owner.
+     * That was always right, and for a long time it also meant they could not be
+     * SEEN: `EDITABLE` was used as both the write allow-list and the read payload,
+     * so `/account/me` said nothing about anybody's job. That single decision is
+     * why a second profile screen, on a second set of endpoints, had to exist -
+     * and why the two could disagree about the same person.
+     *
+     * So both halves are asserted together here. Readable is the new claim;
+     * not-writable is the one that must survive it.
+     *
+     * ── AND THE JOB TITLE IS THE ONE THAT FAILS SILENTLY ────────────────────
+     *
+     * `tbluser.jobtitle_id` resolves against `s_user_jobrole`, NOT `s_jobrole`.
+     * Both tables exist, both have `id` and `jobrole`, and the ids overlap - so
+     * joining the wrong one does not error. It returns A DIFFERENT PERSON'S JOB
+     * TITLE, which is why this checks the value against the row rather than
+     * merely checking that the key is present.
+     */
+    echo "\n══ 6. the work identity is readable, and still nobody's to edit ══\n";
+
+    $work = json_decode($call('GET', '/api/account/me')->getContent(), true)['data']['profile']['work'] ?? null;
+
+    printf("  profile.work present         : %s  %s\n",
+        is_array($work) ? 'yes' : 'NO',
+        is_array($work) ? 'CORRECT - one profile, one source' : 'WRONG - the account payload still says nothing about work');
+
+    if (is_array($work)) {
+        foreach (['job_title', 'department', 'reporting_manager', 'joined_date', 'employee_no'] as $key) {
+            printf("  carries %-21s: %s  %s\n", $key,
+                array_key_exists($key, $work) ? 'yes' : 'NO',
+                array_key_exists($key, $work) ? 'CORRECT' : 'WRONG - the screen would have to fetch it elsewhere');
+        }
+
+        /*
+         * The value, against the table the id actually belongs to. A join against
+         * `s_jobrole` would also produce a non-null string here - somebody else's -
+         * so "not null" would pass on the bug this is written for.
+         */
+        $expected = $db->table('s_user_jobrole')
+            ->where('id', $db->table('tbluser')->where('id', $user->id)->value('jobtitle_id'))
+            ->value('jobrole');
+
+        printf("  job_title matches s_user_jobrole: %s vs %s  %s\n",
+            var_export($work['job_title'], true),
+            var_export($expected, true),
+            ((string) $work['job_title'] === (string) $expected)
+                ? 'CORRECT - resolved against the right table'
+                : 'WRONG - this is another person\'s job title');
+    }
+
+    // And naming those keys in a write still changes nothing, exactly as section 2.
+    $beforeJob = $db->table('tbluser')->where('id', $user->id)->value('jobtitle_id');
+    $call('PUT', '/api/account/profile', ['jobtitle_id' => 999999, 'joined_date' => '1999-01-01']);
+    $afterJob = $db->table('tbluser')->where('id', $user->id)->value('jobtitle_id');
+
+    printf("  writing jobtitle_id          : %s -> %s  %s\n",
+        var_export($beforeJob, true), var_export($afterJob, true),
+        (string) $beforeJob === (string) $afterJob
+            ? 'CORRECT - refused, reading it did not make it writable'
+            : 'WRONG - exposing the field made it editable');
+
 } finally {
     DB::rollBack();
     $user->tokens()->whereIn('name', ['account-evidence', 'another-device'])->delete();

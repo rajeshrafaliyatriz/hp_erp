@@ -233,6 +233,307 @@ class MyHrController extends Controller
     }
 
     /**
+     * GET /api/my-hr/pay-breakdown
+     *
+     * Every month this employee has been paid for, with the COMPONENTS behind
+     * each figure - Basic, HRA, PF, whatever this organisation has configured -
+     * rather than only the gross and net that /my-hr/payslips returns.
+     *
+     * The same information exists on the HR side as `employee-payroll-history`,
+     * and that endpoint is deliberately NOT reused: it calls
+     * employeeDetails($sub_institute_id), which returns the organisation's whole
+     * roster in the same response. Handing an employee the staff directory in
+     * order to show them their own pay is a worse trade than reading two tables
+     * here.
+     *
+     * Nothing is recomputed. `employee_salary_data` is the payslip's own stored
+     * breakdown, read back verbatim; the head names and earning/deduction sense
+     * come from payroll_types. A second implementation of "what were you paid"
+     * is exactly the defect class this module has spent two phases removing.
+     */
+    public function payBreakdown(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenant = (int) $identity['sub_institute_id'];
+
+        /*
+         * Heads are read WITHOUT a status filter on purpose. A deactivated head
+         * that was paid last March is still part of last March's pay, and
+         * filtering on status=1 would render it as "Head #14" on the employee's
+         * own payslip. F-174 is the same mistake one table across.
+         */
+        $heads = DB::table('payroll_types')
+            ->where('sub_institute_id', $tenant)
+            ->get(['id', 'payroll_name', 'payroll_type'])
+            ->keyBy('id');
+
+        $query = DB::table('employee_monthly_salary_data')
+            ->where('employee_id', $userId)
+            ->where('sub_institute_id', $tenant)
+            ->whereNull('deleted_at');
+
+        // An optional narrowing, never a widening: there is no employee_id here
+        // to pass, so the worst a caller can do is ask for fewer of their own.
+        if ($request->filled('year')) {
+            $query->where('year', (int) $request->input('year'));
+        }
+
+        $rows = $query
+            ->orderByDesc('year')
+            ->orderByRaw("FIELD(month,'Dec','Nov','Oct','Sep','Aug','Jul','Jun','May','Apr','Mar','Feb','Jan')")
+            ->get(['id', 'month', 'year', 'total_payment', 'total_deduction', 'total_day', 'employee_salary_data', 'created_at']);
+
+        $months = $rows->map(function ($row) use ($heads) {
+            $stored = json_decode((string) $row->employee_salary_data, true);
+            $stored = is_array($stored) ? $stored : [];
+
+            $components = [];
+            foreach ($stored as $headId => $amount) {
+                $head = $heads->get((int) $headId);
+
+                $components[] = [
+                    'head_id' => (int) $headId,
+                    // Named where the head still exists; identified where it
+                    // does not, so a missing name reads as a missing name.
+                    'name'    => $head->payroll_name ?? "Head #{$headId}",
+                    'kind'    => ((int) ($head->payroll_type ?? 1)) === 1 ? 'earning' : 'deduction',
+                    'amount'  => (float) $amount,
+                ];
+            }
+
+            $componentSum = array_sum(array_column($components, 'amount'));
+
+            return [
+                'id'            => (int) $row->id,
+                'month'         => $row->month,
+                'year'          => (int) $row->year,
+                'days'          => (float) $row->total_day,
+                'gross'         => (float) $row->total_payment + (float) $row->total_deduction,
+                'deductions'    => (float) $row->total_deduction,
+                'net'           => (float) $row->total_payment,
+                'components'    => $components,
+                /*
+                 * Surfaced rather than hidden. The stored components need not
+                 * add up to what was filed - eleven adjustments on this
+                 * deployment were entered against a month payroll never matched
+                 * (F-173) - and an employee comparing their payslip to their
+                 * bank statement deserves to see that the two disagree rather
+                 * than a total that quietly papers over it.
+                 */
+                'component_sum' => $componentSum,
+                'reconciles'    => abs($componentSum - (float) $row->total_deduction - (float) $row->total_payment) <= 0.5,
+                'issued_at'     => $row->created_at,
+            ];
+        });
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Pay breakdown fetched successfully',
+            'data'    => [
+                'months' => $months,
+                'years'  => $months->pluck('year')->unique()->values(),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /api/my-hr/salary-certificate/{year}
+     *
+     * The employee's own salary certificate, generated and returned as a PDF.
+     *
+     * hrms_salary_certificate held ZERO rows across the whole platform when
+     * this was written - no certificate had ever been produced, by anybody. The
+     * reason was F-110: the builder dereferenced a salary structure that did not
+     * exist and fatalled, so the screen refused every combination a user could
+     * pick. That is fixed; this makes the result reachable by the person who
+     * actually needs it, who until now had to ask HR to operate a screen that
+     * did not work.
+     *
+     * THE GENERATOR IS REUSED VERBATIM, exactly as payslipPdf reuses
+     * monthlyPayrollPdf. A certificate an employee downloads and one HR
+     * downloads must not be two implementations that can disagree about
+     * somebody's salary.
+     */
+    public function salaryCertificate(Request $request, int $year)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenant = (int) $identity['sub_institute_id'];
+
+        /*
+         * Say why BEFORE generating. The builder returns null without a salary
+         * structure for the year, and "we could not make your certificate" is a
+         * worse answer than naming the missing thing and who can add it.
+         */
+        $hasStructure = DB::table('employee_salary_structures')
+            ->where('employee_id', $userId)
+            ->where('sub_institute_id', $tenant)
+            ->where('year', $year)
+            ->exists();
+
+        if (!$hasStructure) {
+            return response()->json([
+                'status'  => 0,
+                'message' => "A salary certificate for {$year} cannot be issued yet - there is no "
+                    . 'salary structure on record for you for that year. Ask HR to add one under '
+                    . 'Salary Structure.',
+            ], 422);
+        }
+
+        /*
+         * The whole year and every active earning head, because an employee
+         * asking for a salary certificate wants the one a bank or a consulate
+         * will accept - a complete statement of their pay, not a subset. HR
+         * keeps the picker for the cases where a partial certificate is wanted.
+         */
+        $earningHeads = DB::table('payroll_types')
+            ->where('sub_institute_id', $tenant)
+            ->where('status', 1)
+            ->where('payroll_type', 1)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        if ($earningHeads === []) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Your organisation has no active earning pay heads configured, so a '
+                    . 'salary certificate would state nothing. Ask HR to set them up under Payroll Type.',
+            ], 422);
+        }
+
+        $request->merge([
+            'type'             => 'API',
+            'sub_institute_id' => $tenant,
+            'employee_id'      => $userId,
+            'department_id'    => (int) (DB::table('tbluser')->where('id', $userId)->value('department_id') ?? 0),
+            'year'             => $year,
+            'month_id'         => array_map('strval', range(1, 12)),
+            'payroll_type_id'  => $earningHeads,
+            'reason'           => (string) ($request->input('reason') ?: 'Requested by the employee'),
+        ]);
+
+        $payroll = app(\App\Http\Controllers\Payroll\PayrollController::class);
+
+        $generated = $this->decodeControllerJson($payroll->hrmsSalaryCertificateReport($request));
+
+        // The builder's refusal carries its own sentence; pass it through rather
+        // than replacing it with a vaguer one.
+        if (is_array($generated)
+            && (string) ($generated['status_code'] ?? $generated['status'] ?? '1') === '0') {
+            return response()->json([
+                'status'  => 0,
+                'message' => $generated['message'] ?? 'Your salary certificate could not be produced.',
+            ], 422);
+        }
+
+        return $payroll->SalaryCertificatePdfDownload($request);
+    }
+
+    /**
+     * GET /api/my-hr/form-16/{year}
+     *
+     * The employee's own Form 16 figures for a financial year.
+     *
+     * FORM 16 HAD NEVER BEEN PRODUCED EITHER, and for a blunter reason than the
+     * certificate: form16Report queried `fees_map_years`, a table that exists on
+     * neither host and that no migration creates, so every call - HR's included -
+     * died with "Base table or view not found" (F-210). Fixed at the source, so
+     * this endpoint and the HR screen recovered together.
+     *
+     * What comes back is the same figures HR sees, narrowed to the caller. It is
+     * NOT a statutory Form 16: that is issued by the deductor against filed TDS
+     * returns, and nothing here files anything. Whether it satisfies a given
+     * authority is a question for the organisation's accountant, not for this
+     * endpoint.
+     */
+    public function form16(Request $request, int $year)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenant = (int) $identity['sub_institute_id'];
+
+        $request->merge([
+            'type'             => 'API',
+            'sub_institute_id' => $tenant,
+            'emp_id'           => $userId,
+            'department_id'    => (int) (DB::table('tbluser')->where('id', $userId)->value('department_id') ?? 0),
+            'year'             => $year,
+            'syear'            => $request->input('syear') ?: $year,
+        ]);
+
+        $decoded = $this->decodeControllerJson(
+            app(\App\Http\Controllers\Payroll\PayrollController::class)->form16Report($request)
+        );
+
+        if (!is_array($decoded)) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Your Form 16 figures could not be produced.',
+            ], 409);
+        }
+
+        /*
+         * The HR response also carries the organisation's department list and
+         * every configured pay head, which the HR picker needs and this caller
+         * does not. Only the employee's own document is passed through.
+         */
+        $keep = [
+            'get_employee_salary', 'get_school_detail', 'get_employee_detail',
+            'from_date', 'to_date', 'department_name', 'year',
+            'allowance', 'deduction',
+        ];
+
+        $data = array_intersect_key($decoded, array_flip($keep));
+        $data['employee_id'] = $userId;
+
+        return response()->json([
+            'status'  => (string) ($decoded['status_code'] ?? 1) === '0' ? 0 : 1,
+            'message' => $decoded['message'] ?? 'Form 16 fetched successfully',
+            'data'    => $data,
+        ]);
+    }
+
+    /**
+     * The array behind whatever a legacy controller handed back.
+     *
+     * is_mobile() returns a JsonResponse under type=API and a View otherwise,
+     * and these legacy methods are called directly here rather than through the
+     * router, so neither shape can be assumed.
+     */
+    private function decodeControllerJson($response): ?array
+    {
+        if ($response instanceof \Illuminate\Http\JsonResponse) {
+            $decoded = $response->getData(true);
+
+            return is_array($decoded) ? $decoded : null;
+        }
+
+        if (is_array($response)) {
+            return $response;
+        }
+
+        if ($response instanceof \Illuminate\Contracts\Support\Arrayable) {
+            return $response->toArray();
+        }
+
+        return null;
+    }
+
+    /**
      * The leave year, April to March, normalised the same way ResolvesLeaveContext
      * does it. Duplicated deliberately rather than pulling in the leave trait -
      * that trait also resolves a leave SUBJECT, which is precisely the concept

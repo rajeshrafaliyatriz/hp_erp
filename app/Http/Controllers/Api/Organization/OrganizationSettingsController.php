@@ -59,7 +59,19 @@ class OrganizationSettingsController extends Controller
                     'date_format' => TenantSettings::DATE_FORMATS,
                     'number_format' => TenantSettings::NUMBER_FORMATS,
                     'week_start' => TenantSettings::WEEK_STARTS,
+                    'require_two_factor' => TenantSettings::REQUIRE_TWO_FACTOR,
                 ],
+                /*
+                 * HOW MANY PEOPLE THE 2FA POLICY WOULD ACTUALLY AFFECT.
+                 *
+                 * Sent because "require it for everyone" is a decision somebody
+                 * should make with the number in front of them: on a tenant with
+                 * 293 employees and 4 enrolments, switching it on means 289 people
+                 * enrolling before they can work. A policy screen that hides that
+                 * is how an administrator locks out their own organisation on a
+                 * Monday morning.
+                 */
+                'two_factor_coverage' => $this->twoFactorCoverage($tenantId),
                 /*
                  * WHICH OF THESE ACTUALLY DO ANYTHING TODAY.
                  *
@@ -77,6 +89,10 @@ class OrganizationSettingsController extends Controller
                     'invite_hours' => false,
                     // No login path consults this yet.
                     'otp_login' => false,
+                    // RequireTwoFactorEnrolment reads it on every API request, and
+                    // authController::index challenges an enrolled account before a
+                    // session or a token exists. This one is real.
+                    'require_two_factor' => true,
                     // Nothing reads the working week or the financial year.
                     'calendar' => false,
                     // The formatters across the frontend still hardcode a locale.
@@ -140,6 +156,14 @@ class OrganizationSettingsController extends Controller
             'password_require_symbol' => ['sometimes', 'boolean'],
             'invite_hours' => ['sometimes', 'integer', 'min:1', 'max:168'],
             'otp_login_enabled' => ['sometimes', 'boolean'],
+
+            /*
+             * A closed list, because this one authorises. Free text would leave
+             * `RequireTwoFactorEnrolment` deciding what "Administrators" or
+             * "ADMINS" means, and a policy that silently means `off` because of a
+             * capital letter is worse than no policy.
+             */
+            'require_two_factor' => ['sometimes', Rule::in(TenantSettings::REQUIRE_TWO_FACTOR)],
         ], [
             'password_min_length.min' =>
                 'The minimum password length cannot be set below 8 - that is the product-wide rule.',
@@ -160,6 +184,7 @@ class OrganizationSettingsController extends Controller
             'password_require_symbol' => 'security.password_require_symbol',
             'invite_hours' => 'security.invite_hours',
             'otp_login_enabled' => 'security.otp_login_enabled',
+            'require_two_factor' => 'security.require_two_factor',
         ];
 
         $booleans = ['password_require_symbol', 'otp_login_enabled'];
@@ -182,6 +207,74 @@ class OrganizationSettingsController extends Controller
         }
 
         return $this->show($request, $settings);
+    }
+
+    /**
+     * How many people in this organisation would have to enrol, and how many have.
+     *
+     * ═══════════════════════════════════════════════════════════════════════════
+     * A POLICY SCREEN THAT HIDES THIS NUMBER IS A TRAP
+     * ═══════════════════════════════════════════════════════════════════════════
+     *
+     * "Require it for everyone" reads like a checkbox and behaves like a migration.
+     * On a tenant with 293 active people and four enrolments, it means 289
+     * authenticator apps installed before anybody can work - and the person who
+     * flipped it will not be the one fielding the calls.
+     *
+     * So both halves are sent: the total, and how many already have it on. The
+     * screen can then say "12 of 293" instead of asking somebody to guess.
+     *
+     * ── WHY administrators IS COUNTED VIA RoleKey AND NOT A PROFILE NAME ─────
+     *
+     * `RoleKey::ALIASES` exists because ten live tenants have a legacy profile
+     * called "Admin" rather than one with `role_key = 'administrator'`. Counting on
+     * the display name would under-report on exactly those tenants, which is to say
+     * on most of them.
+     *
+     * Failure returns nulls rather than throwing: this is a number beside a control,
+     * and it must never be the reason the settings screen will not load.
+     */
+    private function twoFactorCoverage(int $tenantId): array
+    {
+        try {
+            $active = DB::table('tbluser')
+                ->where('sub_institute_id', $tenantId)
+                ->where('status', 1)
+                ->whereNull('deleted_at');
+
+            $adminProfiles = DB::table('tbluserprofilemaster')
+                ->where('sub_institute_id', $tenantId)
+                ->where(function ($query) {
+                    $query->where('role_key', 'administrator')
+                        // The legacy display names RoleKey::ALIASES maps to
+                        // 'administrator'. Ten live tenants have only these.
+                        ->orWhereIn('name', ['Admin', 'Administrator']);
+                })
+                ->pluck('id');
+
+            $enrolled = DB::table('user_two_factor')
+                ->whereNotNull('confirmed_at')
+                ->pluck('user_id');
+
+            return [
+                'people' => (clone $active)->count(),
+                'people_enrolled' => (clone $active)->whereIn('id', $enrolled)->count(),
+                'administrators' => (clone $active)->whereIn('user_profile_id', $adminProfiles)->count(),
+                'administrators_enrolled' => (clone $active)
+                    ->whereIn('user_profile_id', $adminProfiles)
+                    ->whereIn('id', $enrolled)
+                    ->count(),
+            ];
+        } catch (\Throwable $caught) {
+            report($caught);
+
+            return [
+                'people' => null,
+                'people_enrolled' => null,
+                'administrators' => null,
+                'administrators_enrolled' => null,
+            ];
+        }
     }
 
     /**

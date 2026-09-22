@@ -5,8 +5,10 @@ namespace App\Http\Controllers\HRMS;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
+use App\Services\Account\ProfileVisibility;
 use App\Services\Events\EventRecorder;
 use App\Services\HRMS\EmployeeFactory;
+use App\Support\RoleKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -132,13 +134,24 @@ class EmployeeDirectoryController extends Controller
     private const ROLE_ID_SQL = "COALESCE(NULLIF(u.jobtitle_id, 0), NULLIF(SUBSTRING_INDEX(u.allocated_standards, ',', 1), '') + 0)";
 
     /** GET /api/employees-management */
-    public function index(Request $request)
+    public function index(Request $request, ProfileVisibility $visibility)
     {
         $identity = $this->resolveApiIdentity($request);
         if (!is_array($identity)) {
             return $identity;
         }
         $tenantId = $identity['sub_institute_id'];
+
+        /*
+         * The VIEWER's department, for the "my department" visibility setting.
+         *
+         * Read once here rather than per row: the redaction compares it against
+         * every returned person, and on a 2000-row page that would otherwise be
+         * 2000 lookups of the same value.
+         */
+        $viewerDepartmentId = (int) (DB::table('tbluser')
+            ->where('id', $identity['user_id'])
+            ->value('department_id') ?? 0);
 
         $query = DB::table('tbluser as u')
             ->leftJoin('tbluserprofilemaster as p', 'u.user_profile_id', '=', 'p.id')
@@ -240,6 +253,34 @@ class EmployeeDirectoryController extends Controller
             $rows      = $rows->take(self::MAX_ROWS)->values();
             $truncated = true;
         }
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * A COLLEAGUE DOES NOT AUTOMATICALLY GET YOUR MOBILE NUMBER
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `LIST_COLUMNS` carries `u.mobile`, `u.city` and `u.state`, so before
+         * this every employee who could open the directory could read the
+         * personal mobile number of everybody in the organisation. That was not a
+         * decision anybody made; it was the absence of one.
+         *
+         * Applied AFTER truncation on purpose - redacting rows that are about to
+         * be discarded would be up to 2000 pointless comparisons on a large
+         * tenant. `redact()` resolves the whole page's visibility in ONE query;
+         * see the note in `ProfileVisibility`.
+         *
+         * HR and administrators are unaffected: they maintain these records, and
+         * the edit form has to round-trip what it loaded or saving blanks the
+         * field.
+         */
+        $rows = collect($visibility->redact(
+            $rows->all(),
+            (object) [
+                'id' => (int) $identity['user_id'],
+                'department_id' => $viewerDepartmentId,
+            ],
+            RoleKey::forUserId((int) $identity['user_id'])
+        ));
 
         return response()->json([
             'status'  => 1,
