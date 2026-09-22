@@ -79,6 +79,7 @@ use App\Http\Controllers\Api\Talent\TalentAssessmentController;
 use App\Http\Controllers\talent\CandidateAssessmentResponseController;
 use App\Http\Controllers\talent\TalentOfferController;
 use App\Http\Controllers\talent\CareersController;
+use App\Http\Controllers\talent\PosterController;
 use App\Http\Controllers\talent\OfferResponseController;
 use App\Http\Controllers\talent\TalentAcquisition\TalentAcquisitionController;
 use App\Http\Controllers\talent\TalentAcquisition\CandidateDropoffController;
@@ -201,6 +202,22 @@ use App\Http\Controllers\Api\Attendance\AttendanceRegularisationApiController;
 Route::middleware('throttle:30,1')->group(function () {
     Route::get('/careers/{slug}', [CareersController::class, 'organisation']);
     Route::get('/careers/{slug}/postings/{id}', [CareersController::class, 'posting'])->whereNumber('id');
+
+    /*
+     * The hiring poster. Same surface and the same allow-list as the two reads
+     * above - it prints what the careers page already shows, so it belongs on
+     * the public side rather than behind a token that Next.js server code
+     * cannot read anyway.
+     */
+    Route::get('/careers/{slug}/poster-content', [PosterController::class, 'content']);
+});
+
+/*
+| The poster PDF, throttled harder than the reads above: dompdf renders
+| synchronously and a poster is downloaded once, never polled.
+*/
+Route::middleware('throttle:10,1')->group(function () {
+    Route::get('/careers/{slug}/poster.pdf', [PosterController::class, 'pdf']);
 });
 /*
 | A candidate following their OWN application. Public, and the token is the
@@ -1824,6 +1841,22 @@ Route::middleware('api.token')->group(function () {
     Route::post('/account/2fa/disable', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'destroy']);
 
     Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
+
+    /*
+     * END THIS SESSION ON THE SERVER, not just in the browser.
+     *
+     * There was no logout endpoint in this application at all. "Sign out" cleared
+     * localStorage and the token stayed valid for its full 30-day window - so
+     * anybody who recovered it from a shared machine was still authenticated.
+     *
+     * POST because it changes state. It revokes only the CALLING token, so signing
+     * out of a laptop does not sign the same person out of their phone;
+     * `/account/sessions` is the separate, deliberate "everywhere else" action.
+     *
+     * `RequireTwoFactorEnrolment` already allow-lists this path, so somebody who
+     * has not yet enrolled under an organisation policy can still leave.
+     */
+    Route::post('/account/logout', [\App\Http\Controllers\Api\Account\AccountController::class, 'logout']);
 
     Route::get('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'sessions']);
     Route::delete('/account/sessions/{id}', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions'])->whereNumber('id');

@@ -49,16 +49,16 @@ use Illuminate\Support\Facades\Storage;
  */
 class CareersController extends Controller
 {
+    /*
+     * The publish rule, the public column allow-list and the presenter now live
+     * in ResolvesPublicCareers, because the hiring poster needs exactly the same
+     * three and a copy of a security predicate is a predicate that drifts. The
+     * behaviour here is unchanged - the methods moved, not their contents.
+     */
+    use \App\Http\Controllers\talent\Concerns\ResolvesPublicCareers;
+
     /** talent_candidates.source — VARCHAR + const, never ENUM. */
     public const CANDIDATE_SOURCES = ['careers', 'internal'];
-
-    /** Columns a stranger may see. An allow-list, so a column added later stays private until named. */
-    private const POSTING_PUBLIC = [
-        'p.id', 'p.title', 'p.location', 'p.employment_type', 'p.work_mode', 'p.experience',
-        'p.education', 'p.skills', 'p.certifications', 'p.benefits',
-        'p.description', 'p.min_salary', 'p.max_salary', 'p.positions',
-        'p.start_date', 'p.deadline', 'p.priority_level', 'p.created_at',
-    ];
 
     /**
      * GET /api/careers/{slug}
@@ -338,47 +338,6 @@ class CareersController extends Controller
         ]);
     }
 
-    /** The organisation behind a careers slug, or null. */
-    private function resolveOrganisation(string $slug)
-    {
-        return DB::table('institute_detail')
-            ->where('careers_slug', $slug)
-            ->whereNull('deleted_at')
-            ->first(['sub_institute_id', 'organization_name', 'careers_slug', 'industry_type', 'organization_website', 'address']);
-    }
-
-    /**
-     * Postings a stranger is allowed to see: active, not deleted, not past their
-     * deadline. Everything else in the table stays invisible.
-     */
-    private function openPostings(int $tenantId)
-    {
-        return DB::table('talent_job_postings as p')
-            ->leftJoin('hrms_departments as d', function ($join) use ($tenantId) {
-                $join->on('p.department_id', '=', 'd.id')
-                    ->where('d.sub_institute_id', '=', $tenantId);
-            })
-            ->where('p.sub_institute_id', $tenantId)
-            ->where('p.status', 'active')
-            ->whereNull('p.deleted_at')
-            ->where(function ($q) {
-                $q->whereNull('p.deadline')->orWhere('p.deadline', '>=', now()->toDateString());
-            })
-            /*
-             * A role scheduled to open later is not public yet.
-             *
-             * NULL means "already open", which is every posting that predates
-             * the column - so nothing that is public today stops being public.
-             * HR still sees it in the admin list; only the careers page waits.
-             */
-            ->where(function ($q) {
-                $q->whereNull('p.start_date')->orWhere('p.start_date', '<=', now()->toDateString());
-            })
-            ->orderByDesc('p.created_at')
-            ->select(array_merge(self::POSTING_PUBLIC, [DB::raw('d.department as department_name')]));
-    }
-
-
     /**
      * GET /api/careers/track/{token}
      *
@@ -501,33 +460,4 @@ class CareersController extends Controller
     }
 
     /** Shape a posting for public consumption. */
-    private function presentPosting($p, bool $full = false): array
-    {
-        $row = [
-            'id'              => (int) $p->id,
-            'title'           => $p->title,
-            'department'      => $p->department_name,
-            'location'        => $p->location,
-            'employment_type' => $p->employment_type,
-            'work_mode'       => $p->work_mode,
-            'experience'      => $p->experience,
-            'positions'       => $p->positions !== null ? (int) $p->positions : null,
-            'opens_on'        => $p->start_date,
-            'deadline'        => $p->deadline,
-            'posted_at'       => $p->created_at,
-            'skills'          => array_values(array_filter(array_map('trim', explode(',', (string) $p->skills)))),
-            'salary_min'      => $p->min_salary !== null ? (float) $p->min_salary : null,
-            'salary_max'      => $p->max_salary !== null ? (float) $p->max_salary : null,
-        ];
-
-        if ($full) {
-            $row['description']    = $p->description;
-            $row['education']      = $p->education;
-            $row['certifications'] = $p->certifications;
-            $row['benefits']       = $p->benefits;
-            $row['priority']       = $p->priority_level;
-        }
-
-        return $row;
-    }
 }

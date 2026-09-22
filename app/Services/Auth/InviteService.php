@@ -69,13 +69,53 @@ class InviteService
      *
      * @return array{delivered:'email'|'link'|'failed', link:?string, error:?string, expires_hours:int}
      */
-    public function issue(?string $email, ?int $tenantId, string $purpose = 'invite'): array
-    {
+    /**
+     * Create a set-password link for `$email`, and send it to `$deliverTo`.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE ADDRESS THE TOKEN IS KEYED ON IS NOT ALWAYS THE MAILBOX
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `$email` decides WHOSE PASSWORD the link sets:
+     * `password_reset_tokens.email` is the primary key, `consume()` returns it, and
+     * `PasswordController::setPassword` then does
+     * `DB::table('tbluser')->where('email', $email)` and writes that user's
+     * password, revoking all their tokens.
+     *
+     * `$deliverTo` decides only where the message goes.
+     *
+     * ── WHY THESE HAD TO BE SEPARATED ───────────────────────────────────────
+     *
+     * A request to "send the set-password link to kalpesh@triz.co.in" for an
+     * account whose address is kalpesh@scholarclone.com. With one parameter the
+     * only way to honour it would be to issue the invite FOR
+     * `kalpesh@triz.co.in` - and that address belongs to a different account: the
+     * administrator of another organisation entirely. Whoever opened the link would
+     * have taken over THAT account and signed it out everywhere.
+     *
+     * One parameter conflated "who this is for" with "where to send it", and the two
+     * are not the same question. `$deliverTo` defaults to `$email`, so every
+     * existing caller behaves exactly as before.
+     *
+     * A caller passing `$deliverTo` is asserting that the recipient is entitled to
+     * set that account's password. Nothing here can verify that, which is why it is
+     * an explicit, separate argument rather than something inferred.
+     */
+    public function issue(
+        ?string $email,
+        ?int $tenantId,
+        string $purpose = 'invite',
+        ?string $deliverTo = null
+    ): array {
         $email = trim((string) $email);
 
         if ($email === '') {
             return $this->failed('This person has no email address, so there is nothing to send a link to. Add one first.');
         }
+
+        // The mailbox. Defaults to the account's own address, which is the case for
+        // every caller but the deliberate hand-over described above.
+        $deliverTo = trim((string) $deliverTo) ?: $email;
 
         $base = rtrim((string) config('app.frontend_url'), '/');
 
@@ -140,7 +180,9 @@ class InviteService
         }
 
         try {
-            $this->mail($email, $link, $purpose);
+            // $deliverTo, NOT $email: the link already carries whose account it is
+            // for, and this decides only which mailbox receives it.
+            $this->mail($deliverTo, $link, $purpose);
         } catch (\Throwable $e) {
             /*
              * Mail was permitted and still did not go. The link is handed back

@@ -124,7 +124,24 @@ while IFS= read -r target; do
 done < <(
   grep -oE '^(have|code) "[^"]+"' "$0" \
     | sed -E 's/^(have|code) "//; s/"$//' \
-    | ( set +u; while IFS= read -r raw; do eval "printf '%s\n' \"$raw\"" 2>/dev/null || printf '\n'; done ) \
+    | (
+        set +u
+        # EVERY PATH VARIABLE, INCLUDING THOSE ASSIGNED FURTHER DOWN THE FILE.
+        #
+        # The first version only knew the variables assigned ABOVE this point, so a
+        # `have "$DASH" ...` whose `DASH=` sits 400 lines below expanded to nothing
+        # and was written off as "not checkable". That is exactly what then happened:
+        # profile-dashboard.tsx was deleted, seven guards began reporting the PRODUCT
+        # as broken, and this preflight had nothing to say about it.
+        #
+        # Every simple NAME="..." assignment in the file is evaluated first, so a
+        # variable's POSITION no longer decides whether its path can be checked. Only
+        # literal assignments are taken - the pattern excludes backticks and $( - so this
+        # cannot execute anything the script would not have run itself.
+        eval "$(grep -oE '^[A-Z_][A-Z0-9_]*="[^"`]*"' "$0" | grep -v '$(')" 2>/dev/null
+
+        while IFS= read -r raw; do eval "printf '%s\n' \"$raw\"" 2>/dev/null || printf '\n'; done
+      ) \
     | sort -u
 )
 
@@ -495,16 +512,26 @@ have "$ORG" "<ImageCropper"   && ok "the organisation logo renders it too"   || 
 #
 # All three avatar sites must read image_url off the ONE app-wide /account/me
 # response, or two of them can disagree about whose photo it is.
-DASH="$FE/components/profile/profile-dashboard.tsx"
+# ── THE SECOND PROFILE PAGE IS GONE, AND SO ARE THE CHECKS ABOUT IT ────────
+#
+# These guards used to test `/profile` (profile-dashboard.tsx): that it handed the
+# stored photo to the picker, and that it read the shared `/account/me` response
+# rather than fetching its own.
+#
+# That file no longer exists. `/profile` now redirects to `/settings?s=profile`,
+# because two URLs for one profile - one read-only on the HRMS endpoints, one
+# editable on /account/me - is what let them disagree about the same person.
+#
+# The checks are NOT simply deleted: the concerns they protected are still real and
+# now live on the surviving screen, so they are re-pointed rather than dropped. What
+# is gone is only the assertion that a deleted file behaves a certain way.
+#
+# `DASH` is deliberately not reassigned. A variable still pointing at a removed file
+# is how a guard goes blind - and the section-0 preflight cannot catch this one,
+# because a path assigned here cannot be expanded from the top of the script. That
+# limitation is reported there as "1 path not checkable", and this is what it was.
 
-# /profile draws its avatar through the picker, so that is where AvatarImage is.
-# What matters here is that this screen passes the stored URL in at all - without
-# it the picker would render initials forever and the original bug would be back.
-have "$DASH" "imageUrl={accountProfile?.image_url}"   && ok "/profile hands the stored photo to the picker, so it is shown"   || bad "/profile shows initials only - a photo set in Settings never appears there"
-
-have "$DASH" "useAppPreferences()"   && ok "and reads it from the shared response, so it matches the header"   || bad "/profile fetches its own copy, which can disagree with the header"
-
-for avatar in "$SEC/profile-section.tsx" "$FE/components/shell/gtg-user-menu.tsx" "$DASH"; do
+for avatar in "$SEC/profile-section.tsx" "$FE/components/shell/gtg-user-menu.tsx"; do
   n=$(basename "$avatar" .tsx)
   if strip "$avatar" | grep -q "image_url"; then
     ok "$n sources its avatar from image_url"
@@ -531,7 +558,11 @@ PICKER="$FE/components/settings/profile-photo-picker.tsx"
 
 have "$PICKER" "ACCEPTED = \['image/jpeg', 'image/png', 'image/gif', 'image/webp'\]"   && ok "the picker carries the server's own accepted-format list"   || bad "the accept list has drifted from what AccountController accepts"
 
-for parent in "$SEC/profile-section.tsx" "$DASH"; do
+# One consumer now, not two: the second screen that used this picker is the one
+# that was removed. The shared picker is KEPT rather than inlined, because the
+# organisation logo flow uses the same cropper underneath and the `accept` list
+# still has to match the server's five formats in exactly one place.
+for parent in "$SEC/profile-section.tsx"; do
   n=$(basename "$parent" .tsx)
   have "$parent" "<ProfilePhotoPicker"     && ok "$n renders the shared picker"     || bad "$n does not use the shared picker - a second copy will drift"
 done
@@ -546,16 +577,21 @@ fi
 # THE TWO SAVE MODES, which is the one thing the parents must NOT share.
 have "$SEC/profile-section.tsx" "setPhoto({ file: picked.file"   && ok "Settings STAGES the photo, so a form saves as one unit"   || bad "Settings no longer stages - a photo would commit half a form"
 
-have "$DASH" "accountService.updatePhoto("   && ok "/profile UPLOADS immediately, because it has no Save button"   || bad "/profile stages a photo it has no way to commit"
+# THE OTHER SAVE MODE IS GONE WITH THE SCREEN THAT NEEDED IT.
+#
+# `/profile` had no Save button, so it uploaded a photo the moment it was framed and
+# then refreshed the shared response so the header avatar followed. Both are checks
+# about a file that no longer exists: that screen redirects to this one now, and
+# Settings stages the photo with the rest of the form - which is why the staging
+# check above is the one that survives.
+#
+# What does NOT go away is the failure case below. It is the same concern on the
+# surviving path, so it is re-pointed rather than dropped.
 
-have "$DASH" "await refreshAccount()"   && ok "and refreshes the shared response, so the header avatar follows at once"   || bad "the header keeps the old photo until a full page load"
-
-# A 200 with an image_error means the row was written and the object was not.
-# THE FALSE BRANCH, not the bare identifier. `response.image_error` appears twice
-# - the test and the message - so a mutation that removed only the test left this
-# check passing while a rejected upload reported "Photo saved". grep is
-# line-based, so the assertion is the single line that carries both.
-have "$DASH" "ok: false, message: response.image_error"   && ok "an image_error is surfaced rather than read as success"   || bad "a rejected upload would report Photo saved"
+# A 200 with an image_error means the row was written and the object store was not -
+# the details saved, the photo did not. Reading that as success tells somebody their
+# picture is set when it is not, and they find out the next time they look.
+have "$SEC/profile-section.tsx" "if (response.image_error) setError(response.image_error)"   && ok "a partial save surfaces the image error instead of reporting success"   || bad "a rejected upload would report the save as clean"
 
 echo
 echo "  -- and the organisation is administrator-only --"
@@ -955,6 +991,311 @@ have "$FE/components/settings/sections/security-policy-section.tsx" "pendingEnro
 have "$FE/components/settings/sections/two-factor-block.tsx" "status.required && !status.enabled" \
   && ok "and somebody obliged but not enrolled is told why, not left guessing" \
   || bad "the 403s are unexplained - a person will conclude the product is broken"
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "16. One person's data cannot outlive their session in the browser"
+echo "════════════════════════════════════════════════════════════════"
+PROV="$FE/components/providers/preferences-provider.tsx"
+SESSLIB="$FE/lib/laravel-session.ts"
+STORE="$FE/lib/browser-storage.ts"
+AUTHTSX="$FE/components/auth/gtg-auth.tsx"
+MENU="$FE/components/shell/gtg-user-menu.tsx"
+PROFSEC="$FE/components/settings/sections/profile-section.tsx"
+
+# ── THE BUG THIS SECTION EXISTS FOR ─────────────────────────────────────────
+#
+# Reported on live: edit your profile, sign out, sign in as a colleague, and the
+# colleague's profile screen showed YOUR details. The server was innocent - the
+# right row was written and /account/me answers correctly per token. The provider
+# fetched once per PAGE LOAD (dependency array `[setTheme]`, which never changes)
+# and sign-out/sign-in are both `router.push`, which never reloads.
+#
+# The dependency array is therefore the whole fix, and it is one token long. A
+# future refactor that "simplifies" it back is the regression this guards.
+if strip "$PROV" | grep -q "\[identity, setTheme\]"; then
+  ok "the account fetch depends on WHICH USER is signed in, not just on mount"
+else
+  bad "the /account/me fetch no longer keys on identity - one person's data will outlive their session again"
+fi
+
+have "$PROV" "const [identity, setIdentity]" \
+  && ok "and the provider tracks that identity" \
+  || bad "no identity state - the provider cannot know the user changed"
+
+# Dropping the old data must happen DURING render, not in an effect: an effect
+# runs after the children have painted, so there is one frame showing the new
+# user's screen with the previous user's name.
+have "$PROV" "if (identity !== loadedFor)" \
+  && ok "and clears the previous user's account during render, before anything paints" \
+  || bad "the previous user's payload is not cleared on a user change"
+
+# The provider sits above AuthProvider, so it cannot watch the auth context. It
+# learns from the session store instead - which only works if the store announces.
+have "$SESSLIB" "function announceSessionChange" \
+  && ok "the session store announces sign-in and sign-out" \
+  || bad "nothing announces a session change - the provider will never hear about it"
+
+for fn in "saveLaravelSession" "clearLaravelSession"; do
+  # The announce must be INSIDE both writers. Counting the calls is not enough:
+  # one of the two silently not announcing is exactly half a fix.
+  if strip "$SESSLIB" | grep -A 6 "function $fn" | grep -q "announceSessionChange()"; then
+    ok "$fn announces the change"
+  else
+    bad "$fn does not announce - a $([ "$fn" = clearLaravelSession ] && echo 'sign-out' || echo 'sign-in') leaves the cache stale"
+  fi
+done
+
+# `storage` fires only in OTHER tabs, the custom event only in THIS one. Both, or
+# half the cases are missed.
+if have "$SESSLIB" "SESSION_CHANGED_EVENT, listener" && have "$SESSLIB" "'storage', listener"; then
+  ok "and both this tab and other tabs are subscribed"
+else
+  bad "only one of the two event sources - signing out in one tab will not reach the others"
+fi
+
+echo
+echo "  -- and sign-out leaves nothing behind --"
+# Sign-out cleared 4 keys while the product writes 14. The nine it missed were
+# each inherited by the next person to sign in on that browser.
+have "$AUTHTSX" "clearBrowserStateOnSignOut()" \
+  && ok "sign-out clears the whole registry, not a hand-written subset" \
+  || bad "sign-out is back to clearing keys by hand - the list will drift again"
+
+for key in "gtg-last-visited" "gtg-theme" "gtg-device-id" "agentic:agent-draft:" "pendingTasksCount"; do
+  have "$STORE" "$key" \
+    && ok "  $key is in the registry" \
+    || bad "  $key is NOT cleared on sign-out - the next person inherits it"
+done
+
+# One list, read by both consumers, or they drift as they already had.
+have "$FE/components/settings/sections/saved-views-section.tsx" "LISTABLE_KEYS" \
+  && ok "and Saved views reads the same list sign-out uses" \
+  || bad "Saved views has its own hard-coded list again"
+
+# A hard navigation guarantees nothing in memory survives, even state nobody
+# thought to reset.
+have "$MENU" "window.location.assign('/login')" \
+  && ok "signing out is a full page load, so no provider state can survive it" \
+  || bad "sign-out is a client-side route change - in-memory state outlives the session"
+
+echo
+echo "  -- and the profile screen holds no private copy --"
+# Uncontrolled inputs read their default ONCE at mount, so these three kept the
+# previous user's text even after the provider was fixed.
+if strip "$PROFSEC" | grep -q "defaultValue={preferences"; then
+  bad "the identity fields are uncontrolled again - they will show the previous user's name"
+else
+  ok "display name, pronouns and about are controlled inputs"
+fi
+
+have "$PROFSEC" "if (preferences && preferences !== identityFrom)" \
+  && ok "and re-sync when the signed-in person changes" \
+  || bad "nothing re-syncs the identity fields"
+
+# The photo path used to append EVERY editable field, so a stale form would write
+# one person's address onto another's row.
+if strip "$PROFSEC" | grep -A 3 "for (const field of EDITABLE)" | grep -q "continue"; then
+  ok "the photo upload sends only changed fields, as the text path does"
+else
+  bad "the photo upload sends every field - a stale form writes another person's details"
+fi
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "17. An organisation has one identity, and it is its own"
+echo "════════════════════════════════════════════════════════════════"
+ORGCTL="$HP/app/Http/Controllers/Api/Organization/OrganizationProfileController.php"
+ORGSVC="$FE/services/organization/index.ts"
+ORGVIEW="$FE/components/domain/organization/organization-information.tsx"
+ORGEDIT="$FE/components/domain/organization/organization-information-edit-panel.tsx"
+INVITE="$HP/app/Services/Auth/InviteService.php"
+
+# The logo was read from `org_details`, which exists for 4 of 12 live organisations.
+# `school_setup` is the only table with a row per tenant, because it IS the tenant.
+have "$ORGCTL" "'identity' =>" \
+  && ok "the profile endpoint returns an identity block" \
+  || bad "no identity block - the screen is back to reading org_details for the logo"
+
+have "$ORGCTL" "table('school_setup')" \
+  && ok "and sources it from school_setup, which has a row for every tenant" \
+  || bad "identity is not read from school_setup - 8 of 12 organisations would have none"
+
+have "$ORGCTL" "function logoUrl" \
+  && ok "and builds the logo URL server-side, so no screen knows the bucket layout" \
+  || bad "no logoUrl helper - the frontend would have to construct storage paths"
+
+# The screen called a WEB route needing the ERP session cookie, which the Next.js
+# app does not have. The token-authenticated API existed and nothing called it.
+have "$ORGSVC" "'/organization/profile'" \
+  && ok "the frontend calls the token-authenticated API" \
+  || bad "the org screen is back on the web route it cannot authenticate against"
+
+if strip "$ORGSVC" | grep -q "webClient.get<OrganizationProfileResponse>"; then
+  bad "getOrganizationProfile still uses webClient - it depends on a cookie this app has no way to set"
+else
+  ok "and no longer depends on the ERP browser session"
+fi
+
+# The card was titled "Company Logo" and drew a monogram. No <img> existed.
+have "$ORGVIEW" "src={logoUrl}" \
+  && ok "the view actually renders the stored logo" \
+  || bad "the logo is still never displayed - uploads go nowhere visible"
+
+have "$ORGVIEW" "onError={() => setLogoBroken(true)}" \
+  && ok "and falls back to the monogram if the file will not load" \
+  || bad "a missing object would leave a broken-image icon on a customer's page"
+
+have "$ORGEDIT" "storedLogoUrl ?" \
+  && ok "and the editor shows the logo already saved, not just a freshly picked one" \
+  || bad "the editor shows a monogram beside 'Upload New Logo', which reads as 'there is none'"
+
+echo
+echo "  -- and one mailbox cannot claim another account --"
+# password_reset_tokens.email is the PRIMARY KEY and decides WHOSE password is set.
+# Issuing for a delivery address would have reset a different organisation's admin.
+have "$INVITE" "?string \$deliverTo = null" \
+  && ok "the delivery address is separate from the address the token is keyed on" \
+  || bad "keying and delivery are one argument again - sending to another mailbox would take over its account"
+
+if strip "$INVITE" | grep -q 'mail($deliverTo, $link'; then
+  ok "and the mail goes to the delivery address"
+else
+  bad "the mail is not sent to the delivery address - the split does nothing"
+fi
+
+# The default must be unchanged, or every existing invite and reset breaks.
+if strip "$INVITE" | grep -q 'trim((string) \$deliverTo) ?: \$email'; then
+  ok "defaulting to the account's own address, so existing callers are unaffected"
+else
+  bad "the default is not the account address - three-argument callers changed behaviour"
+fi
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "18. Signing out ends the session on the server, not just the browser"
+echo "════════════════════════════════════════════════════════════════"
+ACCT="$HP/app/Http/Controllers/Api/Account/AccountController.php"
+AUTHPHP="$HP/app/Http/Controllers/auth/authController.php"
+WEBROUTES="$HP/routes/web.php"
+APIROUTES="$HP/routes/api.php"
+AUTHTSX2="$FE/components/auth/gtg-auth.tsx"
+
+# There was NO logout endpoint of any kind. Two Blade views linked to /logout and
+# both 404ed, while the token stayed valid for its full 30-day idle window.
+have "$ACCT" "public function logout" \
+  && ok "the account controller has a logout method" \
+  || bad "no API logout - clearing the browser leaves the token valid for 30 days"
+
+have "$APIROUTES" "'/account/logout'" \
+  && ok "and it is routed" \
+  || bad "the method exists and no route reaches it"
+
+have "$AUTHPHP" "public function logout" \
+  && ok "the web controller has one too, for the Blade surface" \
+  || bad "no web logout - header.blade.php's Sign out link still 404s"
+
+have "$WEBROUTES" "'/logout'" \
+  && ok "and /logout is declared, so the two existing links finally work" \
+  || bad "/logout is undeclared - header.blade.php:242 and footer.blade.php:27 are dead"
+
+# Scoped to the calling token. Signing out of a laptop must not end the phone's
+# session - that is `endSessions`, a separate deliberate action.
+# Anchored on the exact predicate rather than on a window after the method name.
+# The first version of this check used `grep -A 8`, and the line it wanted sits 19
+# lines into the method - so it reported correct, mutation-tested code as broken.
+# That is the same class of error the preflight in section 0 exists for: the guard
+# was wrong, not the product.
+#
+# `where('id', $currentTokenId)` is unique to logout. The two other uses of that
+# variable in this file are `where('id', '!=', $currentTokenId)` - the
+# "everywhere ELSE" action - so this cannot match them by accident.
+if strip "$ACCT" | grep -q "where('id', \$currentTokenId)"; then
+  ok "revocation is scoped to THIS session, not every device"
+else
+  bad "logout does not scope to the current token - it would sign the person out everywhere"
+fi
+
+# The Laravel session must be invalidated, not partly rewritten: authMiddleware is
+# satisfied by session('user_id') alone, and session()->put() MERGES.
+have "$ACCT" "session()->invalidate()" \
+  && ok "and the web session is invalidated, not just partly cleared" \
+  || bad "the session survives - authMiddleware accepts session('user_id') on its own"
+
+have "$AUTHPHP" "regenerateToken()" \
+  && ok "with the CSRF token reissued, so the next form post does not 419" \
+  || bad "no regenerateToken - the login form the person lands on would 419"
+
+# Recorded, or the security history has a hole exactly where somebody would look.
+have "$ACCT" "EVENT_SIGNED_OUT" \
+  && ok "and the sign-out is recorded" \
+  || bad "signing out leaves no trace in the activity history"
+
+echo
+echo "  -- and the client actually calls it --"
+have "$FE/services/account/index.ts" "'/account/logout'" \
+  && ok "the account service exposes logout" \
+  || bad "no client method - the endpoint would never be called"
+
+have "$AUTHTSX2" "accountService.logout(context)" \
+  && ok "and sign-out calls it before clearing local state" \
+  || bad "the frontend never tells the server - the token outlives the sign-out"
+
+# Fired, not awaited. Somebody clicking Sign out must end up signed out even with
+# no network; blocking on the request would trap them in the session.
+if strip "$AUTHTSX2" | grep -q "void accountService.logout(context)"; then
+  ok "fired without blocking, so a network failure cannot prevent signing out"
+else
+  bad "the sign-out awaits the server - a failed request would leave somebody signed in"
+fi
+
+echo
+echo "════════════════════════════════════════════════════════════════"
+echo "19. There is ONE profile URL, not two"
+echo "════════════════════════════════════════════════════════════════"
+PROFPAGE="$FE/app/profile/page.tsx"
+PROFSEC2="$FE/components/settings/sections/profile-section.tsx"
+MENU2="$FE/components/shell/gtg-user-menu.tsx"
+
+# Two URLs for one thing: /profile was read-only on the HRMS endpoints,
+# /settings?s=profile was the only editor and read /account/me. Two sources, no
+# reason to agree - and when a person reported seeing a colleague's details, the
+# first question was "which of the two pages?".
+have "$PROFPAGE" "router.replace('/settings?s=profile')" \
+  && ok "/profile redirects to the one profile screen" \
+  || bad "/profile is a page again - there are two profiles and they can disagree"
+
+# The ROUTE must survive. 299 people have bookmarks and history; deleting it turns
+# every one of those into a 404.
+[ -f "$PROFPAGE" ] \
+  && ok "and the route still exists, so old bookmarks land somewhere useful" \
+  || bad "the /profile route was deleted - every existing bookmark now 404s"
+
+# `replace`, or Back bounces between the two URLs forever.
+if strip "$PROFPAGE" | grep -q "router.push('/settings?s=profile')"; then
+  bad "the redirect uses push - Back would bounce between the two URLs"
+else
+  ok "using replace, so Back does not bounce"
+fi
+
+# The menu should go straight there rather than through the redirect.
+have "$MENU2" "href: '/settings?s=profile'" \
+  && ok "and My Profile links straight to it, not via the redirect" \
+  || bad "the menu still points at /profile, so every visit takes two navigations"
+
+# Bank details existed ONLY on the deleted page. A redirect without moving them
+# would have silently removed them from the product.
+have "$PROFSEC2" "<BankCard profile={bankProfile} />" \
+  && ok "bank details moved across rather than disappearing with the page" \
+  || bad "bank details are gone - they existed only on the page that now redirects"
+
+# And the dead implementation must not linger: "imported but never rendered" has
+# shipped twice in this repository.
+if [ -f "$FE/components/profile/profile-dashboard.tsx" ]; then
+  bad "the second profile implementation is still in the tree - the next person maintains two"
+else
+  ok "and the second implementation is removed, not left orphaned in the tree"
+fi
 
 echo
 echo "════════════════════════════════════════════════════════════════"

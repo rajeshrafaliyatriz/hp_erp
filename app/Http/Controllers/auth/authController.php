@@ -205,6 +205,70 @@ class authController extends Controller
         return null;
     }
 
+    /**
+     * GET /logout — end the Blade session.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * TWO VIEWS HAVE LINKED HERE ALL ALONG, AND IT 404ed
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `header.blade.php:242` renders `<a href="{{ url('/logout') }}">` and
+     * `footer.blade.php:27` does `window.location.href = "/logout"`. Neither route
+     * existed: `Route::resource('login', authController::class)` gives
+     * login.index/store/show/edit/update/destroy and nothing called logout, and a
+     * repository-wide search found no logout route of any kind.
+     *
+     * So the ERP's own Sign out was a dead link. Whoever clicked it got a 404 page
+     * and stayed logged in - which looks like a broken button and is actually a
+     * security hole, because `authMiddleware::hasSession()` is satisfied by
+     * `session('user_id')` alone and that key was never removed.
+     *
+     * ── invalidate(), NOT forget() ───────────────────────────────────────────
+     *
+     * `invalidate()` flushes every key and regenerates the session id. Removing
+     * `user_id` by itself would leave `client_id`, `is_admin`, `syear`,
+     * `user_profile_name` and twenty more keys behind for the next person to sign in
+     * on that browser - and `session()->put()` MERGES, so several of those are never
+     * overwritten at the next login.
+     *
+     * `regenerateToken()` reissues the CSRF token; without it the login form the
+     * person lands on would post a stale token and 419.
+     *
+     * ── AND THE API TOKENS THIS BROWSER MINTED ──────────────────────────────
+     *
+     * A Blade sign-out also revokes the tokens issued to this user, because the ERP
+     * and the Next.js frontend share one account: leaving a live 30-day token behind
+     * would mean the person is signed out of one surface and not the other. This is
+     * the one place that is deliberately broad - a person clicking Sign out in the
+     * ERP means "end my access on this machine", and the Blade session carries no
+     * token id to be narrower with.
+     */
+    public function logout(Request $request)
+    {
+        $userId = $request->session()->get('user_id');
+
+        if (is_numeric($userId)) {
+            try {
+                DB::table('personal_access_tokens')
+                    ->where('tokenable_type', \App\Models\auth\tbluserModel::class)
+                    ->where('tokenable_id', (int) $userId)
+                    ->delete();
+            } catch (\Throwable $e) {
+                // Never blocks the sign-out. A person must always be able to leave,
+                // and the session invalidation below is the part that matters most.
+                \Illuminate\Support\Facades\Log::warning('logout: token revocation failed', [
+                    'user_id' => $userId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login.index');
+    }
+
     private function recordSignIn($userId): void
     {
         try {
