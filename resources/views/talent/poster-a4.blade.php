@@ -51,7 +51,7 @@
 
         .headline { font-size: 40px; font-weight: bold; color: #ffffff;
                     letter-spacing: -0.5px; margin: 7mm 0 1mm 0; }
-        .kicker { font-size: 11px; color: {{ $p['blue'] }}; letter-spacing: 2px;
+        .kicker { font-size: 11px; color: #8fb0ee; letter-spacing: 2px;
                   text-transform: uppercase; font-weight: bold; }
 
         .rolebox { margin-top: 7mm; }
@@ -66,6 +66,11 @@
         .flabel { font-size: 7.5px; letter-spacing: 1.2px; text-transform: uppercase;
                   color: {{ $p['muted'] }}; font-weight: bold; }
         .fvalue { font-size: 11px; color: {{ $p['navy'] }}; font-weight: bold; padding-top: 1mm; }
+        .facts td.lead { background: {{ $p['navy'] }}; }
+        .facts td.lead .flabel { color: #8fb0ee; }
+        .facts td.lead .fvalue { color: #ffffff; }
+
+        .logoplate { background: #ffffff; padding: 2mm 2.5mm; display: inline-block; }
 
         .panel { margin-top: 7mm; padding: 5mm 5mm 4mm 5mm; }
         .panel-primary { background: {{ $p['blue_soft'] }}; border-left: 3px solid {{ $p['blue'] }}; }
@@ -100,8 +105,11 @@
         <tr>
             <td style="width: 46px;">
                 @if (!empty($poster['brand']['logo']))
-                    {{-- Sized from the file header: an <img> dompdf cannot size lays out wrong. --}}
-                    <img src="{{ $poster['brand']['logo'] }}" style="height: 34px;" alt="">
+                    {{-- On a white plate: a logo is an arbitrary image from the
+                         tenant, and a dark wordmark vanishes on the navy band. --}}
+                    <div class="logoplate">
+                        <img src="{{ $poster['brand']['logo'] }}" style="height: 26px;" alt="">
+                    </div>
                 @else
                     {{-- No logo is a normal state, not a failure. The slot stays filled so the
                          masthead is the same height either way. --}}
@@ -137,7 +145,8 @@
                 <table class="facts">
                     <tr>
                         @foreach (array_slice($r['facts'], 0, 3) as $fact)
-                            <td>
+                            @php $lead = in_array($fact['label'], ['Salary', 'Apply by'], true); @endphp
+                            <td class="{{ $lead ? 'lead' : '' }}">
                                 <div class="flabel">{{ $fact['label'] }}</div>
                                 <div class="fvalue">{{ $fact['value'] }}</div>
                             </td>
@@ -160,7 +169,11 @@
             @foreach (array_chunk($role['facts'], 3) as $row)
                 <tr>
                     @foreach ($row as $fact)
-                        <td>
+                        {{-- Salary and the closing date are what a reader looks
+                             for first, so they carry the accent and the rest
+                             recede. Same ordering decision as PosterFacts. --}}
+                        @php $lead = in_array($fact['label'], ['Salary', 'Apply by'], true); @endphp
+                        <td class="{{ $lead ? 'lead' : '' }}">
                             <div class="flabel">{{ $fact['label'] }}</div>
                             <div class="fvalue">{{ $fact['value'] }}</div>
                         </td>

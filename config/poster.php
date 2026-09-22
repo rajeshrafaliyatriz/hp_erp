@@ -38,11 +38,11 @@ return [
      * chooses are structural.
      */
     'copy' => [
-        'headline'         => "WE'RE HIRING",
-        'headline_multi'   => "WE'RE HIRING",
+        'headline'         => "WE’RE HIRING",
+        'headline_multi'   => "WE’RE HIRING",
         'cta'              => 'Apply Now',
         'panel_primary'    => 'Key Responsibilities',
-        'panel_secondary'  => "What We're Looking For",
+        'panel_secondary'  => "What We’re Looking For",
         'panel_skills'     => "Skills We're Looking For",
         'panel_quals'      => 'Qualifications',
         'facts_heading'    => 'The role at a glance',

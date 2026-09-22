@@ -39,8 +39,25 @@ class PosterFacts
             }
         };
 
+        /*
+         * ── THE ORDER IS THE PRIORITY, BECAUSE THE TAIL GETS CUT ────────────
+         *
+         * $limit varies by format - a square poster shows four chips, a
+         * portrait six - so whatever sits last is simply not printed.
+         *
+         * The first version listed these in schema order and put salary sixth,
+         * which meant the square poster rendered Location, Type, Work mode and
+         * Experience and dropped the pay entirely. Salary is the single thing a
+         * candidate looks for first; publishing a hiring poster without it
+         * while showing "Work mode: Hybrid" is the wrong four facts.
+         *
+         * Ordered by what someone scanning a feed actually wants: where, how
+         * much, what kind of contract, how long they have to decide.
+         */
         $add('Location', self::text($posting['location'] ?? null, 28));
+        $add('Salary', self::salary($posting['salary_min'] ?? null, $posting['salary_max'] ?? null));
         $add('Type', self::text($posting['employment_type'] ?? null, 20));
+        $add('Apply by', self::deadline($posting['deadline'] ?? null));
 
         /*
          * Work mode is omitted when unset rather than defaulting to On-site.
@@ -51,8 +68,6 @@ class PosterFacts
         $add('Work mode', self::text($posting['work_mode'] ?? null, 20));
         $add('Experience', self::text($posting['experience'] ?? null, 24));
         $add('Openings', self::openings($posting['positions'] ?? null));
-        $add('Salary', self::salary($posting['salary_min'] ?? null, $posting['salary_max'] ?? null));
-        $add('Apply by', self::deadline($posting['deadline'] ?? null));
 
         /*
          * One chip reads as a rendering fault rather than as information, so

@@ -29,14 +29,35 @@ class PosterFormat
      * chips    how many facts the strip may show
      * title    the largest title size in px (pt for a4); the ramp steps down
      */
+    /*
+     * ── THE WIDTHS ARE ONE LINE OF TYPE, NOT A GUESS ────────────────────────
+     *
+     * These were first set generously (86 characters on portrait) and the
+     * render overflowed the canvas: at 22px in a ~850px column, 86 characters
+     * of DejaVu Sans wrap to two lines, so two five-item panels ran past 1350px
+     * and pushed the Apply button off the poster entirely.
+     *
+     * A poster bullet should be one scannable line anyway. The widths below are
+     * what fits a single line in each column, and the counts are what then fits
+     * the canvas - both confirmed by rendering, not by arithmetic.
+     *
+     * A4 keeps larger numbers because it is a print document with a full page
+     * and a reader who is standing still.
+     */
     private const TABLE = [
         self::PORTRAIT => [
             'label' => 'Portrait', 'w' => 1080, 'h' => 1350,
-            'bullets' => 5, 'width' => 86, 'chips' => 6, 'title' => 96, 'headline' => 96,
+            'bullets' => 4, 'width' => 64, 'chips' => 6, 'title' => 96, 'headline' => 96,
         ],
+        /*
+         * Square is 270px shorter than portrait and was carrying almost the
+         * same content, so the Apply button rendered off the bottom edge - the
+         * one element the whole poster exists for. Four chips and a smaller
+         * headline buy back the room.
+         */
         self::SQUARE => [
             'label' => 'Square', 'w' => 1080, 'h' => 1080,
-            'bullets' => 4, 'width' => 78, 'chips' => 5, 'title' => 80, 'headline' => 88,
+            'bullets' => 3, 'width' => 58, 'chips' => 4, 'title' => 72, 'headline' => 76,
         ],
         /*
          * Landscape is mostly headline and apply link. At 630px tall, three
@@ -45,7 +66,7 @@ class PosterFormat
          */
         self::LANDSCAPE => [
             'label' => 'Landscape', 'w' => 1200, 'h' => 630,
-            'bullets' => 3, 'width' => 62, 'chips' => 4, 'title' => 56, 'headline' => 64,
+            'bullets' => 3, 'width' => 46, 'chips' => 4, 'title' => 56, 'headline' => 64,
         ],
         self::A4 => [
             'label' => 'A4 print', 'w' => 794, 'h' => 1123,
@@ -53,10 +74,20 @@ class PosterFormat
         ],
     ];
 
-    /** Multi-role posters carry no parsed content - title and facts only. */
+    /**
+     * Multi-role posters carry no parsed content - title and facts only.
+     *
+     * That is deliberate: every parser failure mode in JobDescriptionParser is
+     * simply absent from this path, because the path never calls it.
+     *
+     * The title scale grows as the role count falls, because the canvas is
+     * fixed and two compact cards on a 1350px poster otherwise leave a third of
+     * it empty. Fewer roles means each one is allowed to be larger, which uses
+     * the space rather than padding it out.
+     */
     private const MULTI = [
-        2 => ['chips' => 4, 'title' => 0.70],
-        3 => ['chips' => 3, 'title' => 0.58],
+        2 => ['chips' => 4, 'title' => 0.88],
+        3 => ['chips' => 4, 'title' => 0.62],
     ];
 
     public static function all(): array
