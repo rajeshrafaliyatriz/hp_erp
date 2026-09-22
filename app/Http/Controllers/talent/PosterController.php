@@ -60,11 +60,11 @@ class PosterController extends Controller
             return $resolved;
         }
 
-        [$org, $postings, $dropped] = $resolved;
+        [$org, $postings, $dropped, $careersBase] = $resolved;
 
         return response()->json([
             'status' => 1,
-            'data' => $this->content->build($org, $postings, $format),
+            'data' => $this->content->build($org, $postings, $format, $careersBase),
             /*
              * Roles that closed between the moment HR ticked them and the
              * moment they pressed download. Reported rather than silently
@@ -84,9 +84,9 @@ class PosterController extends Controller
             return $resolved;
         }
 
-        [$org, $postings, $dropped] = $resolved;
+        [$org, $postings, $dropped, $careersBase] = $resolved;
 
-        $content = $this->content->build($org, $postings, PosterFormat::A4);
+        $content = $this->content->build($org, $postings, PosterFormat::A4, $careersBase);
 
         $pdf = Pdf::loadView('talent.poster-a4', ['poster' => $content])
             ->setPaper('a4', 'portrait');
@@ -124,7 +124,7 @@ class PosterController extends Controller
     /**
      * Organisation, postings and whatever was asked for but is not public.
      *
-     * @return array{0:object,1:array,2:array}|\Illuminate\Http\JsonResponse
+     * @return array{0:object,1:array,2:array,3:string}|\Illuminate\Http\JsonResponse
      */
     private function resolve(string $slug, Request $request)
     {
@@ -135,14 +135,28 @@ class PosterController extends Controller
         }
 
         /*
-         * An unset FRONTEND_URL means every apply link on the poster points at
-         * the API host and 404s. A poster cannot be recalled once it is shared,
-         * so this refuses rather than printing a dead link.
+         * WHERE THE APPLY LINK POINTS.
+         *
+         * With FRONTEND_URL set, that is simply the configured origin. Without
+         * it, CandidateLink falls back to the API host and every careers URL
+         * 404s - so rather than print a dead link onto something that cannot be
+         * recalled once shared, the origin is taken from the browser that is
+         * asking. It knows which site it is on; the misconfigured server does
+         * not.
+         *
+         * Header only, never a query parameter: the browser sets Origin and
+         * Referer, a caller types a parameter.
          */
-        if (CandidateLink::pointsAtApi()) {
+        $careersBase = CandidateLink::careersOrigin(
+            $request->headers->get('Origin') ?: $request->headers->get('Referer'),
+            $request->getHost(),
+        );
+
+        if ($careersBase === null) {
             return response()->json([
                 'status' => 0,
-                'message' => 'The careers site address is not configured, so the Apply link on the poster would not work.',
+                'message' => 'The careers site address is not configured on the server, so the Apply link on the poster would not work. '
+                    . 'Set FRONTEND_URL to the address of your careers site.',
             ], 503);
         }
 
@@ -186,7 +200,7 @@ class PosterController extends Controller
             ->values()
             ->all();
 
-        return [$org, $postings, $dropped];
+        return [$org, $postings, $dropped, $careersBase];
     }
 
     private function filename(array $postings, string $extension): string
