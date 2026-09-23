@@ -307,12 +307,38 @@ class LmsLearningController extends Controller
 
             // Total content and completed content per course, in two queries
             // rather than one per course.
+            /*
+             * ── `subject_id`, NOT `course_id`. THE KEY MUST BE A COLUMN THAT IS
+             *    ACTUALLY SELECTED ───────────────────────────────────────────
+             *
+             * This plucked by `course_id`, and `content_master` HAS NO SUCH COLUMN -
+             * it calls the course `subject_id`. So every row came back with an
+             * undefined key and the whole result collapsed into one entry keyed by
+             * the empty string.
+             *
+             * The consequence was `total_content = 0` for every course, and with a
+             * real `completed_content` beside it the progress bar read 700%. Worse,
+             * on the live web server `HandleExceptions` promotes that PHP warning to
+             * an ErrorException, which the catch at the foot of this method turns
+             * into a 500 - so My Learning showed "Failed to load your courses" to
+             * every learner who actually had one.
+             *
+             * ── WHY IT SURVIVED ────────────────────────────────────────────────
+             *
+             * The ternary above: with no enrolments `$courseIds` is empty and this
+             * query never runs. A brand-new account - which is what a smoke test
+             * uses - got a clean empty list, and only somebody with a course in
+             * progress ever hit it.
+             *
+             * The two plucks beside this one are correct: both select `v.course_id`
+             * and pluck by that same alias.
+             */
             $totals = empty($courseIds) ? collect() : DB::table('content_master')
                 ->whereIn('subject_id', $courseIds)
                 ->whereNull('deleted_at')
                 ->select('subject_id', DB::raw('COUNT(*) as total'))
                 ->groupBy('subject_id')
-                ->pluck('total', 'course_id');
+                ->pluck('total', 'subject_id');
 
             $completed = empty($courseIds) ? collect() : DB::table('lms_content_progress')
                 ->where('user_id', $userId)

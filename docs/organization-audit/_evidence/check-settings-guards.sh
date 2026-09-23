@@ -80,6 +80,32 @@ strip() { python "$(dirname "$0")/strip-comments.py" "$1" 2>/dev/null; }
 # "grep: unknown option -- >" and the check reported the product as broken. Fixed
 # here rather than at the call site, because the next such pattern would hit it too.
 have() { strip "$1" | grep -q -- "$2"; }
+# WHOLE FUNCTION BODIES, BECAUSE FIXED `-A N` WINDOWS KEEP LYING.
+#
+# Twice now a check has reported correct code as broken because the line it wanted
+# drifted past the end of a `grep -A N` window:
+#
+#   -A 8  on the logout scoping   the predicate sits 19 lines into the method
+#   -A 6  on saveLaravelSession   a "remember me" parameter pushed the announce
+#                                 from line 6 to line 8
+#
+# Both times the product was fine and the guard was wrong, which is the most
+# expensive kind of failure this file can produce - it sends somebody looking for a
+# bug that is not there, and it teaches them to distrust the next red line.
+#
+# `body` extracts from the declaration to the function's closing brace, so the size
+# of a function is no longer part of whether it can be checked. The close is a `}`
+# at the SAME indent as the declaration, which is what both PHP and TypeScript in
+# this repository use.
+body() {
+  strip "$1" | awk -v name="$2" '
+    index($0, name) && !seen { seen = 1; indent = match($0, /[^ ]/) - 1; print; next }
+    seen {
+      print
+      if ($0 ~ /^[ ]*\}/ && (match($0, /[^ ]/) - 1) == indent) exit
+    }
+  '
+}
 code() { have "$1" "$2"; }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1039,7 +1065,7 @@ have "$SESSLIB" "function announceSessionChange" \
 for fn in "saveLaravelSession" "clearLaravelSession"; do
   # The announce must be INSIDE both writers. Counting the calls is not enough:
   # one of the two silently not announcing is exactly half a fix.
-  if strip "$SESSLIB" | grep -A 6 "function $fn" | grep -q "announceSessionChange()"; then
+  if body "$SESSLIB" "function $fn" | grep -q "announceSessionChange()"; then
     ok "$fn announces the change"
   else
     bad "$fn does not announce - a $([ "$fn" = clearLaravelSession ] && echo 'sign-out' || echo 'sign-in') leaves the cache stale"
