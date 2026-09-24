@@ -937,6 +937,44 @@ class LibraryController extends Controller
         ) !== [];
     }
 
+    /**
+     * Who currently holds a job role, and how many.
+     *
+     * `tbluser.jobtitle_id` is the link - NOT `s_jobrole`. Both tables have an
+     * `id` and a `jobrole` column and their ids overlap, so checking the wrong one
+     * returns a confident, wrong answer rather than an error. Measured on live:
+     * 293 of 293 `jobtitle_id` values resolve against `s_user_jobrole`.
+     *
+     * Scoped to the tenant as well as the role. The role id was already resolved
+     * tenant-scoped by the caller, but `tbluser` is a global table and an unscoped
+     * count here would leak the size of another organisation's team.
+     *
+     * Names are capped at five. The message needs enough to act on, not a
+     * directory - and an unbounded list would be a 2000-name response on a large
+     * tenant.
+     */
+    private function jobroleHolders(int $jobroleId, int $tenantId): array
+    {
+        $query = DB::table('tbluser')
+            ->where('jobtitle_id', $jobroleId)
+            ->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at');
+
+        $names = (clone $query)
+            ->orderBy('first_name')
+            ->limit(5)
+            ->get(['id', 'first_name', 'last_name'])
+            ->map(fn ($u) => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')))
+            ->filter()
+            ->values()
+            ->all();
+
+        return [
+            'count' => (int) $query->count(),
+            'names' => $names,
+        ];
+    }
+
     private function destroyResource(string $type, int $id, Request $request)
     {
         $context = $this->competencyContext($request);
@@ -952,6 +990,44 @@ class LibraryController extends Controller
         $existing = $this->baseQuery($resource, $context['sub_institute_id'], true)->where('id', $id)->first();
         if (!$existing) {
             return $this->readOnlyOrMissing($resource, $context['sub_institute_id'], $id, 'deleted');
+        }
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * A JOB ROLE SOMEBODY HOLDS IS NOT DELETABLE
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * There was no reference check here at all - unlike department delete,
+         * which refuses with 409 when LMS tables point at it. Measured on live,
+         * tenant 6: 272 job roles, 21 of them held by a real person through
+         * `tbluser.jobtitle_id`. Deleting one of those soft-deleted the row and
+         * left those people with a job title that resolves to nothing - on their
+         * own profile, in the directory, and on every screen that reads it.
+         *
+         * Nobody would have been told. The role would simply stop existing and
+         * the holders would quietly lose a field.
+         *
+         * ── REFUSED HERE, NOT ONLY IN THE DIALOG ───────────────────────────
+         *
+         * The screen asks before deleting, but a confirmation is not a guard: this
+         * endpoint is reachable with a token and nothing else. The check belongs
+         * where the write happens.
+         *
+         * 409, not 403: the caller is authorised and the request is understood. It
+         * conflicts with the state of the data, and the response says whose.
+         */
+        if ($type === 'jobrole') {
+            $holders = $this->jobroleHolders($id, (int) $context['sub_institute_id']);
+
+            if ($holders['count'] > 0) {
+                return response()->json([
+                    'status' => 0,
+                    'message' => $holders['count'] === 1
+                        ? '1 person holds this job role. Move them to another role before deleting it.'
+                        : $holders['count'] . ' people hold this job role. Move them to another role before deleting it.',
+                    'data' => $holders,
+                ], 409);
+            }
         }
 
         if ($resource['soft']) {
@@ -1167,6 +1243,52 @@ class LibraryController extends Controller
     public function destroyJobrole(Request $request, $id)
     {
         return $this->destroyResource('jobrole', (int) $id, $request);
+    }
+
+    /**
+     * GET /api/competency/library/jobroles/{id}/impact — what deleting this costs.
+     *
+     * Asked by the Department Management drawer BEFORE offering the delete, so a
+     * role that cannot be removed says so in the dialog rather than after the
+     * click. `destroyResource` refuses independently; this is the courtesy, not
+     * the guard.
+     *
+     * Deliberately NOT gated `profile:admin,hr` like the merge pair beside it.
+     * This reads nothing an employee cannot already see - the directory shows who
+     * holds which role to anybody with a token - and the drawer that calls it is
+     * open to whoever can reach Department Management. The WRITE is where the
+     * gate belongs, and that is where it is.
+     */
+    public function jobroleImpact(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $tenantId = (int) $context['sub_institute_id'];
+
+        // Tenant-scoped, so asking about another organisation's role id answers
+        // "not found" rather than reporting its headcount.
+        $exists = $this->baseQuery($this->resource('jobrole'), $tenantId, true)
+            ->where('id', (int) $id)
+            ->exists();
+
+        if (!$exists) {
+            return $this->badRequest('That job role is not in your library.', 404);
+        }
+
+        $holders = $this->jobroleHolders((int) $id, $tenantId);
+
+        return $this->ok('Impact loaded', [
+            'id' => (int) $id,
+            'holders' => $holders['count'],
+            'holder_names' => $holders['names'],
+            // The single fact the dialog needs, so the screen does not have to
+            // re-derive the rule and get it subtly different.
+            'can_delete' => $holders['count'] === 0,
+        ]);
     }
 
     /* -------------------------- Job role tasks ------------------------ */

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 /**
  * THE ORGANISATION'S OWN DETAILS — on the API stack, where the frontend is.
@@ -46,6 +47,27 @@ use Illuminate\Support\Facades\Storage;
 class OrganizationProfileController extends Controller
 {
     use ResolvesApiIdentity;
+
+    /**
+     * The legal forms an organisation can be constituted as, in India.
+     *
+     * Served to the screen so the dropdown is fed from one place rather than
+     * hardcoded in a component - which is how "Private Limited" came to be
+     * asserted about all twelve tenants. A country-level set that changes on the
+     * timescale of company law, so a constant rather than a table.
+     */
+    public const ORGANISATION_TYPES = [
+        'Private Limited',
+        'Public Limited',
+        'LLP',
+        'Partnership',
+        'Sole Proprietorship',
+        'One Person Company',
+        'Trust',
+        'Society',
+        'Section 8 Company',
+        'Government Body',
+    ];
 
     /** GET /api/organization/profile */
     public function show(Request $request)
@@ -101,6 +123,9 @@ class OrganizationProfileController extends Controller
                 'profile' => $profile,
                 'sister_companies' => $sisters,
                 'organisation_name' => $setup->SchoolName ?? null,
+                // The dropdown's options, from the server. The screen had its own
+                // four hardcoded and discarded whichever was chosen.
+                'organisation_types' => self::ORGANISATION_TYPES,
                 /*
                  * The organisation's own identity, always present because
                  * `school_setup` always has a row for a tenant that can sign in.
@@ -118,6 +143,37 @@ class OrganizationProfileController extends Controller
                     'mobile' => $setup->Mobile ?? null,
                     'email' => $setup->Email ?? null,
                     'institute_type' => $setup->institute_type ?? null,
+                    /*
+                     * ═════════════════════════════════════════════════════════
+                     * THE HEADCOUNT, COUNTED RATHER THAN TYPED
+                     * ═════════════════════════════════════════════════════════
+                     *
+                     * `org_details.employee_count` is a free-text VARCHAR holding a
+                     * self-declared BAND - "1-10", "51-200". It was wrong for every
+                     * organisation that had one and NULL for the rest:
+                     *
+                     *   Scholar Clone      12 people, stored "1-10"
+                     *   Triz High School    5 people, stored "51-200"
+                     *   Healthcare        108 people, stored "201-500"
+                     *
+                     * And nothing on the screen could set it, because the field was
+                     * read-only there - while the save wrote `String(null)`, i.e.
+                     * the literal four-character string "null", on every submit. The
+                     * field re-poisoned itself each time it was saved.
+                     *
+                     * This is the count, computed. It cannot go stale and nobody has
+                     * to maintain it. The band is left in place untouched for any
+                     * caller still reading it, but the screen shows this.
+                     *
+                     * The definition matches the four controllers that already count
+                     * employees - status 1, not soft-deleted - because a headcount
+                     * that disagrees with the dashboard is worse than none.
+                     */
+                    'employee_count' => DB::table('tbluser')
+                        ->where('sub_institute_id', $tenant)
+                        ->where('status', 1)
+                        ->whereNull('deleted_at')
+                        ->count(),
                     /*
                      * The public careers address, for anything that has to link
                      * to a job advert from inside the product - the hiring
@@ -152,6 +208,27 @@ class OrganizationProfileController extends Controller
 
         $data = $request->validate([
             'legal_name' => ['required', 'string', 'max:191'],
+            /*
+             * A CLOSED LIST, because this is a legal form and not free text.
+             *
+             * It was a hardcoded constant in a React component - every one of the
+             * twelve organisations rendered "Private Limited" whatever they are -
+             * and the dropdown beside it wrote nowhere. `Rule::in` is where the
+             * platform's other closed choices already live (DATE_FORMATS,
+             * WEEK_STARTS), and it is the same guarantee a lookup table would give
+             * without a table nobody edits.
+             *
+             * Nullable, so an organisation that has not stated its form stays blank
+             * rather than being asserted to be something.
+             */
+            'organization_type' => ['sometimes', 'nullable', Rule::in(self::ORGANISATION_TYPES)],
+            /*
+             * Udyam is UDYAM-XX-00-0000000. Not regex-validated: the format has
+             * changed once already and a stale pattern would reject a number a
+             * government portal had just issued. Length-capped, and the person
+             * reading it off the certificate is the authority.
+             */
+            'udyam_registration_no' => ['sometimes', 'nullable', 'string', 'max:32'],
             'cin' => ['nullable', 'string', 'max:191'],
             'gstin' => ['nullable', 'string', 'max:191'],
             'pan' => ['nullable', 'string', 'max:191'],
@@ -189,6 +266,8 @@ class OrganizationProfileController extends Controller
 
             $columns = [
                 'legal_name' => $data['legal_name'],
+                'organization_type' => $data['organization_type'] ?? null,
+                'udyam_registration_no' => $data['udyam_registration_no'] ?? null,
                 'cin' => $data['cin'] ?? null,
                 'gstin' => $data['gstin'] ?? null,
                 'pan' => $data['pan'] ?? null,
