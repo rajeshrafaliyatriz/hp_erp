@@ -54,7 +54,7 @@ return new class extends Migration
              * NULL is the normal case and means "whoever holds approver_role".
              * When set, only that person may decide the step - see roleMayDecide().
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'approver_user_id')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'approver_user_id')) {
                 $table->unsignedBigInteger('approver_user_id')->nullable()->after('approver_role');
             }
 
@@ -64,7 +64,7 @@ return new class extends Migration
              * The settings path has no names - its steps are just roles - so this
              * stays null there and the UI falls back to the role, as it does today.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'step_name')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'step_name')) {
                 $table->string('step_name', 120)->nullable()->after('approver_user_id');
             }
 
@@ -74,7 +74,7 @@ return new class extends Migration
              * The settings path has ONE tenant-wide escalation_time instead, so
              * these stay null there and escalateOverdue() falls back to it.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'sla_hours')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'sla_hours')) {
                 $table->unsignedSmallInteger('sla_hours')->nullable()->after('step_name');
             }
 
@@ -88,7 +88,7 @@ return new class extends Migration
              * only ever reachable from a platform chain that explicitly asks for
              * them, and never from the settings path.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'on_breach')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'on_breach')) {
                 $table->string('on_breach', 20)->nullable()->after('sla_hours');
             }
 
@@ -102,7 +102,7 @@ return new class extends Migration
              * deadline comes from its own sla_hours or from the tenant-wide
              * setting, and the timeline uses it to explain where a rule came from.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'source')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'source')) {
                 $table->string('source', 20)->default('settings')->after('on_breach');
             }
 
@@ -114,7 +114,7 @@ return new class extends Migration
              * cascade. A dangling id here is expected and means "the chain this
              * came from is gone", which is worth being able to say.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'workflow_id')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'workflow_id')) {
                 $table->unsignedBigInteger('workflow_id')->nullable()->after('source');
             }
 
@@ -127,7 +127,7 @@ return new class extends Migration
              * say "approved automatically: no response within 48h" rather than
              * showing an approval with no approver.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'auto_decided_reason')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'auto_decided_reason')) {
                 $table->string('auto_decided_reason', 191)->nullable()->after('decided_at');
             }
         });
@@ -162,7 +162,7 @@ return new class extends Migration
             'approver_user_id', 'step_name', 'sla_hours', 'on_breach',
             'source', 'workflow_id', 'auto_decided_reason',
         ] as $column) {
-            if (Schema::hasColumn('hrms_leave_approval_steps', $column)) {
+            if (self::hasColumn('hrms_leave_approval_steps', $column)) {
                 Schema::table('hrms_leave_approval_steps', function (Blueprint $table) use ($column) {
                     $table->dropColumn($column);
                 });
@@ -173,10 +173,8 @@ return new class extends Migration
     /**
      * Whether an index exists, without relying on `doctrine/dbal`.
      *
-     * `Schema::hasIndex()` needs DBAL on this Laravel line, and this application
-     * runs against MariaDB 10.1 on one deployment where schema introspection is
-     * already handled specially (see AppServiceProvider's legacy grammar note).
-     * SHOW INDEX is the portable answer and cannot fail on a missing column.
+     * `Schema::hasIndex()` needs DBAL on this Laravel line. SHOW INDEX is the
+     * portable answer and cannot fail on a missing information_schema column.
      */
     private static function hasIndex(string $table, string $index): bool
     {
@@ -188,6 +186,54 @@ return new class extends Migration
 
             return $rows !== [];
         } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Whether a column exists, on ANY MySQL or MariaDB version.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY NOT `Schema::hasColumn()`
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * It compiles to a SELECT against `information_schema.columns` that asks for
+     * `generation_expression` — a column MariaDB only gained in 10.2. On an older
+     * engine the introspection query itself errors before it can answer anything:
+     *
+     *   SQLSTATE[42S22]: 1054 Unknown column 'generation_expression' in 'field list'
+     *
+     * This application already carries `LegacyMariaDbSchemaGrammar` for exactly
+     * that, registered on the `ConnectionEstablished` event in `AppServiceProvider`.
+     * It did not save this migration: the connection is established during console
+     * bootstrapping, before the provider's `boot()` has attached the listener, so
+     * the override is registered too late for the very first connection — which is
+     * the one a migration runs on.
+     *
+     * A migration cannot depend on a listener having been attached in time. This
+     * asks information_schema the same question naming ONLY `column_name`, which
+     * every version has, so it behaves identically on 10.1 and on 10.11.
+     *
+     * ── NOT `SHOW COLUMNS ... LIKE ?` ───────────────────────────────────────
+     *
+     * The obvious alternative, and it does not work: MariaDB rejects a placeholder
+     * in a SHOW statement's LIKE clause with a 1064 syntax error. Verified against
+     * a real 10.1.48 server rather than assumed — the first version of this fix
+     * used it and was broken in exactly the situation it was written for.
+     */
+    private static function hasColumn(string $table, string $column): bool
+    {
+        try {
+            $rows = \Illuminate\Support\Facades\DB::select(
+                'select column_name from information_schema.columns '
+                . 'where table_schema = database() and table_name = ? and column_name = ?',
+                [$table, $column]
+            );
+
+            return $rows !== [];
+        } catch (\Throwable) {
+            // A missing table answers "no column", which is what the guards above
+            // want — they are already skipped by the hasTable() check.
             return false;
         }
     }

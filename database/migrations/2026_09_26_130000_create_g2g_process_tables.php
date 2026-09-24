@@ -62,10 +62,15 @@ return new class extends Migration
                  * The structured result: objective, trigger, completion criteria,
                  * the workflow steps and the derived tasks.
                  *
-                 * JSON because it is read and written whole and never queried
+                 * JSON text because it is read and written whole and never queried
                  * field-by-field — the same reasoning as g2g_platform_workflows.steps.
+                 *
+                 * `longText` rather than `json` for the same reason as that column:
+                 * MariaDB gained the JSON type in 10.2, one of this application's
+                 * deployments is older, and the CREATE fails there. See the note on
+                 * `g2g_platform_workflows.steps`.
                  */
-                $table->json('spec');
+                $table->longText('spec');
 
                 // draft | published. A draft has raised no tasks.
                 $table->string('status', 16)->default('draft');
