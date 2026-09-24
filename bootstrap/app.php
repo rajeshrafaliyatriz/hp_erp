@@ -35,6 +35,13 @@ return Application::configure(basePath: dirname(__DIR__))
             // the token-authenticated frontend and a session guard would 401 them,
             // which is the same reason user-api.php is registered bare.
             Route::group([], base_path('routes/ai.php'));
+
+            // Platform Services. Same reasoning as routes/ai.php directly above:
+            // declares its own prefix and its own middleware stack, so it is registered
+            // bare rather than wrapped in the web/session group - these routes are
+            // reached by the token-authenticated frontend and a session guard would 401
+            // them.
+            Route::group([], base_path('routes/platform.php'));
         }
     )
     // ... rest of configuration

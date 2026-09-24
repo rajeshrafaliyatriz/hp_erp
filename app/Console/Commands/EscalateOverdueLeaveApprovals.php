@@ -99,23 +99,58 @@ class EscalateOverdueLeaveApprovals extends Command
          */
         if (!$this->option('dry-run')) {
             foreach ($escalated as $row) {
-                $notifier->escalated($row, $this->hoursWaiting($row['waiting_since']));
+                /*
+                 * Only a real escalation notifies the escalation target — that
+                 * notification says "you may now act on this", which is only true
+                 * when somebody actually gained the right to. A reminder, an
+                 * auto-decision and a skip each mean something different, and
+                 * `LeaveNotifier` has no method that means them yet.
+                 */
+                if (($row['action'] ?? 'escalate') === 'escalate') {
+                    $notifier->escalated($row, $this->hoursWaiting($row['waiting_since']));
+                }
             }
         }
 
         $this->table(
-            ['step', 'leave', 'tenant', 'from', 'to', 'waiting since'],
+            ['step', 'leave', 'tenant', 'action', 'from', 'to', 'waiting since'],
             array_map(fn ($row) => [
                 $row['step_id'],
                 $row['leave_id'],
                 $row['sub_institute_id'],
+                $row['action'] ?? 'escalate',
                 LeaveApprovalWorkflow::label($row['from']),
-                LeaveApprovalWorkflow::label($row['to']),
+                // Null for everything that is not an escalation — a reminder and an
+                // auto-decision have no target. `label(null)` would fatal here.
+                $row['to'] !== null ? LeaveApprovalWorkflow::label($row['to']) : '—',
                 $row['waiting_since'],
             ], $escalated)
         );
 
-        $this->info(count($escalated) . ' approval step(s) escalated.');
+        $counts = [];
+
+        foreach ($escalated as $row) {
+            $action = $row['action'] ?? 'escalate';
+            $counts[$action] = ($counts[$action] ?? 0) + 1;
+        }
+
+        $this->info(
+            count($escalated) . ' breached step(s): '
+            . ($counts === [] ? 'none' : implode(', ', array_map(
+                fn ($action, $n) => "{$n} {$action}",
+                array_keys($counts),
+                array_values($counts)
+            )))
+        );
+
+        // Said once, loudly, rather than per row: somebody reading this output
+        // needs to know the auto-decisions they configured did not happen.
+        if (($counts['auto_skipped'] ?? 0) > 0) {
+            $this->warn(
+                $counts['auto_skipped'] . ' step(s) were due to be decided automatically and were not. '
+                . 'Set G2G_LEAVE_AUTO_DECIDE=true to allow it, or change those steps to escalate.'
+            );
+        }
 
         return self::SUCCESS;
     }
