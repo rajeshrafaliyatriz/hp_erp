@@ -1325,6 +1325,139 @@ fi
 
 echo
 echo "════════════════════════════════════════════════════════════════"
+echo "20. The organisation module: four reported problems"
+echo "════════════════════════════════════════════════════════════════"
+LIB="$HP/app/Http/Controllers/Api/Competency/LibraryController.php"
+DIRCTL="$HP/app/Http/Controllers/HRMS/EmployeeDirectoryController.php"
+DOCCTL="$HP/app/Http/Controllers/HRMS/EmployeeDocumentController.php"
+LEGACYDOC="$HP/app/Http/Controllers/user/tbluserController.php"
+ORGCTL2="$HP/app/Http/Controllers/Api/Organization/OrganizationProfileController.php"
+JRPANEL="$FE/components/domain/organization/department-management/department-job-roles-panel.tsx"
+DEPTLIST="$FE/components/domain/organization/department-management/department-list.tsx"
+AVATAR="$FE/components/domain/organization/employee-avatar.tsx"
+DOCBLOCK="$FE/components/settings/sections/profile-documents-block.tsx"
+
+echo "  -- 1. job roles can be added and deleted, safely --"
+# The endpoint existed and checked NOTHING. 21 of tenant 6's 272 roles are held
+# by a real person; deleting one stranded them with no job title, silently.
+have "$LIB" "function jobroleHolders" \
+  && ok "the delete consults who holds the role" \
+  || bad "no holder check - deleting a held role strands somebody's job title"
+
+if strip "$LIB" | grep -q "], 409)"; then
+  ok "and refuses with 409 rather than deleting anyway"
+else
+  bad "a held role is still deletable"
+fi
+
+# The guard must be on the WRITE, not only in the dialog: the endpoint is
+# reachable with a token and nothing else.
+if strip "$LIB" | grep -B 4 "jobroleHolders" | grep -q "destroyResource\|type === 'jobrole'"; then
+  ok "the check is in the delete path itself, not just the confirmation"
+else
+  bad "the refusal is not wired into destroyResource"
+fi
+
+have "$JRPANEL" "Trash2" \
+  && ok "the drawer has a delete control at last" \
+  || bad "there is still no way to delete a job role from the department drawer"
+
+have "$JRPANEL" "createDepartmentJobRole" \
+  && ok "and adds in place, sending department_id rather than a name" \
+  || bad "adding still leaves the screen for Capability Library"
+
+if strip "$DEPTLIST" | grep -q "sm:max-w-2xl"; then
+  bad "the drawer is back to 672px - the job-role rows wrap at that width"
+else
+  ok "the drawer is wider than 2xl"
+fi
+
+echo
+echo "  -- 2. the organisation profile counts and stores what it claims --"
+# employee_count was a typed band, wrong for every org that had one, and the
+# save wrote the literal string "null" on every submit.
+if strip "$ORGCTL2" | grep -A 4 "'employee_count' =>" | grep -q "table('tbluser')"; then
+  ok "the headcount is counted from staff records, not read from a typed band"
+else
+  bad "the headcount is back to a stored string"
+fi
+
+have "$ORGCTL2" "ORGANISATION_TYPES" \
+  && ok "organisation type is a served, closed list" \
+  || bad "the legal form is hardcoded in a component again"
+
+have "$ORGCTL2" "udyam_registration_no" \
+  && ok "and the Udyam registration number is stored" \
+  || bad "no Udyam field"
+
+# The write used to go to a legacy route whose 422 branch is a guaranteed 500.
+if strip "$FE/services/organization/index.ts" | grep -q "postForm<LaravelStatusResponse>('/settings/organization_data'"; then
+  bad "the save is back on the legacy web route, whose validation branch 500s"
+else
+  ok "the save goes through the API controller built for it"
+fi
+
+have "$FE/services/organization/index.ts" "getIndustries" \
+  && ok "and industries come from s_industries rather than three hardcoded strings" \
+  || bad "the industry dropdown is hardcoded again"
+
+echo
+echo "  -- 3. the directory shows photos --"
+have "$DIRCTL" "function avatarUrl" \
+  && ok "the directory builds a servable URL" \
+  || bad "the directory serves a bare filename, which 404s in the browser"
+
+have "$AVATAR" "onError={() => setFailed(true)}" \
+  && ok "and a broken image falls back instead of showing a broken-image box" \
+  || bad "no onError - a missing object leaves the browser's broken-image glyph"
+
+echo
+echo "  -- 4. documents are stored, private, and yours --"
+# The form sent `file`, the server checked `document`: every upload created a row
+# and threw the file away while reporting success.
+if strip "$LEGACYDOC" | grep -q "file('document') ?: \$request->file('file')"; then
+  ok "the legacy upload accepts both field names, so nothing is silently lost"
+else
+  bad "the field-name mismatch is back - uploads will store NULL and look fine"
+fi
+
+have "$LEGACYDOC" "DOCUMENT_EXTENSIONS" \
+  && ok "and validates what may be uploaded" \
+  || bad "the upload has no mime allow-list"
+
+# The CONTROLLER is asserted on its methods; the ROUTE on its path, just below.
+# The first version looked for the route path INSIDE the controller, where it does
+# not live, and reported working code as missing. The section-0 preflight cannot
+# catch that one: the file is real, only the pattern was wrong.
+have "$DOCCTL" "public function mine(" \
+  && ok "there is a self-service reader whose subject is the token's owner" \
+  || bad "employees still cannot list their own documents"
+
+have "$DOCCTL" "public function store(" \
+  && ok "and a self-service upload, with no id parameter to tamper with" \
+  || bad "employees still cannot file their own documents"
+
+have "$HP/routes/api.php" "'/account/documents'" \
+  && ok "and it is routed" \
+  || bad "the controller exists and no route reaches it"
+
+# Private objects. The old scheme wrote public with a guessable key.
+if strip "$DOCCTL" | grep -q "'visibility' => 'public'"; then
+  bad "documents are written public again - a guessed key reads them unauthenticated"
+else
+  ok "no path here writes a public object"
+fi
+
+have "$DOCCTL" "function readableDocument" \
+  && ok "and reads are checked per document: yours, or HR in your own tenant" \
+  || bad "no permission check on reading a document"
+
+have "$DOCBLOCK" "accountService.uploadDocument" \
+  && ok "the profile screen can upload one" \
+  || bad "there is no Documents block on the profile screen"
+
+echo
+echo "════════════════════════════════════════════════════════════════"
 echo "  $correct CORRECT, $wrong WRONG"
 echo "════════════════════════════════════════════════════════════════"
 [ "$wrong" -eq 0 ] || exit 1

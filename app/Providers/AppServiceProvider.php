@@ -3,6 +3,11 @@
 namespace App\Providers;
 
 use App\Database\Schema\LegacyMariaDbSchemaGrammar;
+use App\Listeners\RecordScheduledTaskRun;
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskFinished;
+use Illuminate\Console\Events\ScheduledTaskSkipped;
+use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Events\ConnectionEstablished;
 use Illuminate\Support\Facades\Event;
@@ -27,6 +32,31 @@ class AppServiceProvider extends ServiceProvider
         Schema::defaultStringLength(191);
 
         $this->useLegacySafeSchemaGrammar();
+
+        $this->recordScheduledTaskRuns();
+    }
+
+    /**
+     * Record every scheduled task run into `g2g_platform_task_runs`.
+     *
+     * ── WHY HERE AND NOT SIX `->onSuccess()` CALLS IN routes/console.php ─────
+     *
+     * Those would be six edits that a seventh task added next year would silently not
+     * get, and the symptom — that one task shows "never run" forever — looks like a
+     * problem with the task rather than with the instrumentation. Listening to the
+     * framework's own scheduler events covers everything registered now and everything
+     * registered later.
+     *
+     * There is no EventServiceProvider in this application, so the four listeners are
+     * registered here. `RecordScheduledTaskRun` swallows its own failures: a ledger
+     * that can break the job it documents is worse than no ledger.
+     */
+    private function recordScheduledTaskRuns(): void
+    {
+        Event::listen(ScheduledTaskStarting::class, [RecordScheduledTaskRun::class, 'starting']);
+        Event::listen(ScheduledTaskFinished::class, [RecordScheduledTaskRun::class, 'finished']);
+        Event::listen(ScheduledTaskFailed::class, [RecordScheduledTaskRun::class, 'failed']);
+        Event::listen(ScheduledTaskSkipped::class, [RecordScheduledTaskRun::class, 'skipped']);
     }
 
     /**

@@ -1331,26 +1331,99 @@ class tbluserController extends Controller
         return json_encode($res);
     }
 
+    /**
+     * Attach a document to somebody's personnel record.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * THIS SILENTLY LOST EVERY FILE IT WAS EVER GIVEN
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * The upload form sends the file as `file`. This method asked for
+     * `document`. The names did not match, so `hasFile()` was ALWAYS false, no
+     * object was ever written to the Space, and `$file_name` was never assigned.
+     *
+     * The guard above it was spelled `$filename` - no underscore - so it did not
+     * cover the variable actually used four lines later. PHP emitted "Undefined
+     * variable $file_name", the row inserted with `file_name = NULL`, and the
+     * screen reported "Document Added successfully".
+     *
+     * So the feature looked like it worked, created a database row every time,
+     * and threw the document away. Eight rows on live are in that state.
+     *
+     * ── BOTH NAMES ARE ACCEPTED, DELIBERATELY ──────────────────────────────
+     *
+     * Renaming one side alone would fix this caller and break any other. The
+     * Blade screen at resources/views/user/documentModel.blade.php posts
+     * `document`; the React tab posts `file`. Accepting either costs one line
+     * and cannot break a caller that already works.
+     *
+     * ── AND VALIDATION LANDS IN THE SAME CHANGE, NOT AFTER ─────────────────
+     *
+     * This method had NO validation at all: no mime allow-list, no size cap, and
+     * the extension taken from the CLIENT-SUPPLIED filename. That was survivable
+     * only because the upload never actually happened. Correcting the field name
+     * without this would have converted a broken feature into a working arbitrary
+     * file upload - strictly worse than the bug.
+     *
+     * The rules mirror DepartmentSopController, and the filename follows
+     * AccountController::storeAvatar: the extension comes from the BYTES, never
+     * from the name, and a random component stops one upload guessing another's
+     * key. See the comment block in storeAvatar for why both matter.
+     */
+    /**
+     * What a personnel document may be, and how large.
+     *
+     * Mirrors DepartmentSopController::ALLOWED_EXTENSIONS - the one upload path in
+     * this codebase that was written with an allow-list. Office documents and PDFs
+     * are what a personnel record holds; images are included because ID proofs are
+     * usually photographed. Anything executable is not on the list.
+     */
+    private const DOCUMENT_EXTENSIONS = 'pdf,doc,docx,xls,xlsx,ppt,pptx,txt,rtf,odt,csv,jpg,jpeg,png,webp';
+    private const DOCUMENT_MAX_KB = 20480; // 20 MB
+
     public function addUserDocument(Request $request, $id)
     {
         $type = $request->type;
-        $document = $request->document;
-        $doc_type = $request->document_type_id;
-        $document_title = $request->document_title;
         $sub_institute_id = session()->get('sub_institute_id');
         if ($type == 'API') {
             $sub_institute_id = $request->sub_institute_id;
         }
-        $filename = '';
-        if ($request->hasFile('document')) {
-            $file = $request->file('document');
-            $originalname = $file->getClientOriginalName();
-            $name = $id.date('YmdHis');
-            $ext = File::extension($originalname);
-            $file_name = $name.'.'.$ext;
-            // $path = $file->storeAs('public/student_document/', $file_name);
-            Storage::disk('digitalocean')->putFileAs('public/hp_staff_document/', $file, $file_name, 'public');
+
+        // Whichever field name the caller used. `sometimes` on both, because the
+        // validator must not demand a field this caller was never going to send.
+        $request->validate([
+            'document' => 'sometimes|file|mimes:' . self::DOCUMENT_EXTENSIONS . '|max:' . self::DOCUMENT_MAX_KB,
+            'file' => 'sometimes|file|mimes:' . self::DOCUMENT_EXTENSIONS . '|max:' . self::DOCUMENT_MAX_KB,
+            'document_title' => 'required|string|max:191',
+            'document_type_id' => 'required|integer',
+        ]);
+
+        $file = $request->file('document') ?: $request->file('file');
+
+        if (!$file) {
+            /*
+             * Refused rather than inserted. A row with no file is what this method
+             * used to create on every call, and it is worse than an error: the
+             * person believes their document is filed.
+             */
+            $res['fail'] = 0;
+            $res['message'] = 'No document was received. Choose a file and try again.';
+
+            return is_mobile($type, 'add_user.index', $res);
         }
+
+        // Content-derived extension, random basename. Never the client's name.
+        $extension = $file->extension() ?: 'bin';
+        $file_name = $id . '_' . \Illuminate\Support\Str::random(24) . '.' . $extension;
+
+        Storage::disk('digitalocean')->putFileAs(
+            'public/hp_staff_document/',
+            $file,
+            $file_name,
+            // ContentType stated explicitly: putFileAs hands Flysystem a stream,
+            // which otherwise types the object from the KEY rather than the bytes.
+            ['visibility' => 'public', 'ContentType' => $file->getMimeType()]
+        );
 
         $data = [
             'user_id' => $id,

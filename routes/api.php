@@ -530,6 +530,18 @@ Route::delete('/competency/library/jobroles/{id}', [CompetencyLibraryController:
  * role, moves every employee on it and rewrites tens of thousands of rows, so
  * it is gated the same way the neighbouring competency routes already are.
  */
+/*
+ * What deleting a job role would cost, asked before the dialog opens.
+ *
+ * Literal segment before the resource routes, for the same reason merge-impact is:
+ * otherwise /{id}/impact dispatches to showJobrole($id = 'impact').
+ *
+ * Not gated like the merge pair - it reads only who holds a role, which the
+ * directory already shows to any token-holder. The delete itself refuses on its
+ * own, so this endpoint is not what protects anything.
+ */
+Route::get('/competency/library/jobroles/{id}/impact', [CompetencyLibraryController::class, 'jobroleImpact'])->whereNumber('id');
+
 Route::get('/competency/library/jobroles/{id}/merge-impact', [JobRoleMergeController::class, 'impact'])->whereNumber('id')->middleware('profile:admin,hr');
 Route::post('/competency/library/jobroles/{id}/merge', [JobRoleMergeController::class, 'merge'])->whereNumber('id')->middleware('profile:admin,hr');
 
@@ -1395,6 +1407,20 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
     Route::get('/reference-data', [EmployeeDirectoryController::class, 'referenceData']);
 
     Route::middleware('profile:admin,hr')->group(function () {
+        /*
+         * SOMEBODY ELSE'S DOCUMENTS - and gated twice, deliberately.
+         *
+         * `profile:admin,hr` (administrator, hr_manager, hr_executive) says WHO may
+         * ask. The controller re-checks the target employee against the caller's
+         * OWN tenant, which says WHOM they may ask about. Neither is sufficient: an
+         * HR manager is HR for one organisation, not for all twelve, and a route
+         * gate alone cannot know that.
+         *
+         * The download is NOT here - it is on /account/documents/{id}/download,
+         * which resolves the same two permissions from the row itself. One reader,
+         * one rule.
+         */
+        Route::get('/{id}/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'forEmployee'])->whereNumber('id');
         Route::post('/', [EmployeeDirectoryController::class, 'store']);
         Route::put('/{id}', [EmployeeDirectoryController::class, 'update'])->whereNumber('id');
         Route::patch('/{id}/status', [EmployeeDirectoryController::class, 'setStatus'])->whereNumber('id');
@@ -1842,6 +1868,27 @@ Route::middleware('api.token')->group(function () {
      * could reach with the password in the URL.
      */
     Route::post('/account/2fa/disable', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'destroy']);
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * YOUR OWN DOCUMENTS. NO ID PARAMETER, BY CONSTRUCTION.
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * The subject is the token's owner, the same way `/account/me` works. There
+     * is no id to tamper with, so this cannot be an IDOR however it is called.
+     *
+     * That matters because the route it replaces - POST /user/user_document/{id}
+     * on the web stack - took an arbitrary id AND its tenant from the request,
+     * with no role gate: any authenticated employee could file a document against
+     * any user in any organisation.
+     *
+     * Reads and writes are both open to any token holder here, because the only
+     * thing reachable is the caller's own record.
+     */
+    Route::get('/account/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'mine']);
+    Route::post('/account/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'store']);
+    Route::get('/account/documents/{id}/download', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'download'])->whereNumber('id');
+    Route::delete('/account/documents/{id}', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'destroy'])->whereNumber('id');
 
     Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
 

@@ -282,6 +282,31 @@ class EmployeeDirectoryController extends Controller
             RoleKey::forUserId((int) $identity['user_id'])
         ));
 
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * THE PHOTO, WHICH THIS SCREEN HAS NEVER ACTUALLY SHOWN
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `u.image` has been in LIST_COLUMNS all along, and the directory has
+         * rendered an `<img>` all along - fed the BARE FILENAME. A value like
+         * `41_a8Kd.jpg` resolves against the Next.js origin, 404s, and shows a
+         * broken-image box. Not "initials instead of a photo": a broken image,
+         * for all 24 live accounts that have one.
+         *
+         * The filename is what belongs in the database; the URL is this layer's
+         * job, exactly as `AccountController` does it for `/account/me`. Doing it
+         * here rather than in the browser also means no screen has to know which
+         * bucket or folder avatars live in.
+         *
+         * Mapped in the same pass as redaction rather than a second one - on a
+         * 2000-row page that is one traversal instead of two.
+         */
+        $rows = $rows->map(function ($row) {
+            $row->image_url = $this->avatarUrl($row->image ?? null);
+
+            return $row;
+        });
+
         return response()->json([
             'status'  => 1,
             'message' => 'Success',
@@ -941,11 +966,36 @@ class EmployeeDirectoryController extends Controller
         return $caller > $target;
     }
 
+    /**
+     * A servable URL for a stored avatar filename, or null.
+     *
+     * Deliberately identical to `AccountController::avatarUrl` - same disk, same
+     * folder, same try/catch. The catch is not defensive padding: an unconfigured
+     * or unreachable object store would otherwise throw here and 500 the entire
+     * Employee Directory over a cosmetic field. A missing photo is a placeholder;
+     * a missing directory is an outage.
+     */
+    private function avatarUrl(?string $filename): ?string
+    {
+        $filename = trim((string) $filename);
+
+        if ($filename === '') {
+            return null;
+        }
+
+        try {
+            return \Illuminate\Support\Facades\Storage::disk('digitalocean')
+                ->url('public/hp_user/' . $filename);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function findForTenant(int $id, int $tenantId)
     {
         // Aliased to `u` so FULL_NAME_SQL, which is written against that alias,
         // works here as well as in index().
-        return DB::table('tbluser as u')
+        $row = DB::table('tbluser as u')
             ->where('u.id', $id)
             ->where('u.sub_institute_id', $tenantId)
             ->whereNull('u.deleted_at')
@@ -969,6 +1019,19 @@ class EmployeeDirectoryController extends Controller
                     ...array_map(fn ($d) => $d . '_out_date', self::DAYS),
                 ])
             ));
+
+        /*
+         * The same `image_url` the list carries, attached HERE rather than at the
+         * call sites - six methods use this, two of them return it straight to the
+         * browser. Adding it per caller is five chances to forget one, and the
+         * symptom of forgetting is a drawer whose avatar disagrees with the row
+         * that opened it.
+         */
+        if ($row) {
+            $row->image_url = $this->avatarUrl($row->image ?? null);
+        }
+
+        return $row;
     }
 
     /**

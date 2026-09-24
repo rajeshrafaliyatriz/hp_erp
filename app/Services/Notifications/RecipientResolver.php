@@ -205,6 +205,25 @@ class RecipientResolver
             return [];
         }
 
+        /*
+         * A STEP THAT NAMES A PERSON IS ANNOUNCED TO THAT PERSON.
+         *
+         * Without this branch the named approver is never told it is their turn:
+         * `roleKeysFor('user')` is deliberately empty — a named-person step is
+         * decided by a person, not a role — so `holdersOfChainRole()` would return
+         * nobody and the request would sit pending with nobody aware of it.
+         *
+         * This reads the same frozen column `roleMayDecide()` reads, which is the
+         * property this whole method's note insists on: one answer to "who may act",
+         * not two that can disagree.
+         */
+        if (!empty($step->approver_user_id)) {
+            return [[
+                'user_id' => (int) $step->approver_user_id,
+                'reason'  => 'leave_approver_named',
+            ]];
+        }
+
         return $this->holdersOfChainRole($step->approver_role, $tenant, 'leave_approver');
     }
 

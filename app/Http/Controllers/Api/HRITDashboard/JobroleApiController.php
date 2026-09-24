@@ -46,7 +46,27 @@ class JobroleApiController extends Controller
             'j.description',
             'j.jobrole_category',
             'j.department_id',
-            'd.department AS department_name'
+            'd.department AS department_name',
+            /*
+             * HOW MANY PEOPLE HOLD EACH ROLE.
+             *
+             * The Department Management drawer has always rendered a headcount
+             * badge for this and never received the number, so the badge never
+             * appeared. It is the signal a delete needs - "nobody holds this" is
+             * the difference between a safe removal and stranding somebody's job
+             * title - so it is served with the list rather than asked for per row,
+             * which on a 103-role department would be 103 requests.
+             *
+             * `tbluser.jobtitle_id` is the link, NOT `s_jobrole`: both tables have
+             * an `id` and a `jobrole`, their ids overlap, and joining the wrong one
+             * returns another person's role without erroring. Tenant-scoped as
+             * well, because `tbluser` is global and an unscoped count would report
+             * another organisation's headcount.
+             */
+            DB::raw('(SELECT COUNT(*) FROM tbluser u
+                       WHERE u.jobtitle_id = j.id
+                         AND u.sub_institute_id = ' . (int) $subInstituteId . '
+                         AND u.deleted_at IS NULL) AS employee_count')
         );
 
     // Department filter

@@ -600,8 +600,17 @@ class LeaveRequestApiController extends Controller
             // above, and caches it - asking again costs nothing.
             $roleKey = $this->leaveAuthority($context)['role_key'] ?? null;
 
-            if (!$this->workflow->roleMayDecide($step, $roleKey)) {
-                $waitingFor = LeaveApprovalWorkflow::label($step['approver_role']);
+            if (!$this->workflow->roleMayDecide($step, $roleKey, (int) ($context['user_id'] ?? 0) ?: null)) {
+                /*
+                 * Name the person when the step names one.
+                 *
+                 * `label('user')` renders "A named approver", which is true and
+                 * unhelpful: somebody refused here needs to know who to chase, and
+                 * the name is already frozen on the row for exactly this reason.
+                 */
+                $waitingFor = !empty($step['approver_user_name'])
+                    ? $step['approver_user_name']
+                    : LeaveApprovalWorkflow::label($step['approver_role']);
 
                 return response()->json([
                     'status'  => 0,
@@ -806,7 +815,7 @@ class LeaveRequestApiController extends Controller
                 continue;
             }
 
-            if (!$this->workflow->roleMayDecide($step, $roleKey)) {
+            if (!$this->workflow->roleMayDecide($step, $roleKey, (int) ($context['user_id'] ?? 0) ?: null)) {
                 $notYours[] = (int) $leaveId;
                 continue;
             }
@@ -1178,15 +1187,53 @@ class LeaveRequestApiController extends Controller
             return $query->whereRaw('1 = 0');
         }
 
-        return $query->whereExists(function ($sub) use ($roleKey, $context) {
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * THIS COMPARED TWO DIFFERENT VOCABULARIES, AND HAS SINCE SPRINT 6
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `step.approver_role` holds a CHAIN role — `reporting_manager`,
+         * `department_head`, `hr` — while `$roleKey` is the caller's own role_key,
+         * `hr_manager` or `hr_executive`. Those two only coincide for the first
+         * two roles, so an `hr` step has NEVER matched an HR user and the
+         * "Pending approvals" filter has been quietly under-reporting for them.
+         *
+         * `chainRoleFor()` is the existing inverse of that mapping. Matching on
+         * both spellings fixes the old rows and the new ones at once: a platform
+         * step stores the role key verbatim (`hr_manager`), a settings step stores
+         * the chain role (`hr`), and a caller should see either.
+         *
+         * The third clause is the named-person case: a step that names somebody is
+         * theirs regardless of role, and without this they would have no way to
+         * find their own queue.
+         */
+        $accepts = array_values(array_filter(array_unique([
+            $roleKey,
+            LeaveApprovalWorkflow::chainRoleFor($roleKey),
+        ])));
+
+        $userId = (int) ($context['user_id'] ?? 0);
+
+        return $query->whereExists(function ($sub) use ($accepts, $userId, $context) {
             $sub->selectRaw('1')
                 ->from('hrms_leave_approval_steps as step')
                 ->whereColumn('step.leave_id', 'hel.id')
                 ->where('step.sub_institute_id', $context['sub_institute_id'])
                 ->where('step.status', 'pending')
-                ->where(function ($q) use ($roleKey) {
-                    $q->where('step.approver_role', $roleKey)
-                      ->orWhere('step.escalated_to', $roleKey);
+                ->where(function ($q) use ($accepts, $userId) {
+                    $q->where(function ($r) use ($accepts) {
+                        // A role step: only when it does NOT name a person, or a
+                        // colleague sharing the role would see somebody else's step.
+                        $r->whereNull('step.approver_user_id')
+                          ->where(function ($s) use ($accepts) {
+                              $s->whereIn('step.approver_role', $accepts)
+                                ->orWhereIn('step.escalated_to', $accepts);
+                          });
+                    });
+
+                    if ($userId > 0) {
+                        $q->orWhere('step.approver_user_id', $userId);
+                    }
                 });
         });
     }
