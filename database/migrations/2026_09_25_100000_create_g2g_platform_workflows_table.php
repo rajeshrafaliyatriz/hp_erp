@@ -72,10 +72,28 @@ return new class extends Migration
 
             $table->string('condition', 255)->default('');
 
-            // The ladder. JSON rather than a child table because a chain is read and
-            // written whole — there is no query that wants one step of one chain, and a
-            // child table would buy joins nobody needs in exchange for ordering bugs.
-            $table->json('steps');
+            /*
+             * The ladder, as JSON text.
+             *
+             * A child table was considered and rejected: a chain is read and written
+             * whole, no query wants one step of one chain, and a child table would buy
+             * joins nobody needs in exchange for ordering bugs.
+             *
+             * ── `longText`, NOT `json` ──────────────────────────────────────────
+             *
+             * `$table->json()` emits a native JSON column, and MariaDB only gained
+             * that type in 10.2. One of the deployments this application runs on is
+             * older, and the CREATE fails outright there:
+             *
+             *   SQLSTATE[42000]: 1064 ... near 'json not null, `on_reject` ...'
+             *
+             * MariaDB's JSON type is an alias for LONGTEXT with a validation
+             * constraint, so this is the same storage on a modern server and the only
+             * thing that works on an old one. Nothing is lost: the column is written
+             * with json_encode() and read with json_decode() by hand, never through a
+             * JSON path query.
+             */
+            $table->longText('steps');
 
             $table->string('on_reject', 32)->default('return_to_requester');
             $table->boolean('notify_requester')->default(true);

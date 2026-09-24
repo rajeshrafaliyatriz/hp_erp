@@ -42,7 +42,7 @@ return new class extends Migration
              * stops resolving the day the person is deactivated, and a step that
              * cannot say whose approval it is waiting for is not much of a record.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'approver_user_name')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'approver_user_name')) {
                 $table->string('approver_user_name', 191)->nullable()->after('approver_user_id');
             }
 
@@ -53,7 +53,7 @@ return new class extends Migration
              * silently drop an audit requirement from a request that was
              * submitted under it.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'require_comment')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'require_comment')) {
                 $table->boolean('require_comment')->default(false)->after('on_breach');
             }
 
@@ -69,10 +69,43 @@ return new class extends Migration
              * reminder every hour to up to five people for as long as the step
              * stays open.
              */
-            if (! Schema::hasColumn('hrms_leave_approval_steps', 'reminded_at')) {
+            if (! self::hasColumn('hrms_leave_approval_steps', 'reminded_at')) {
                 $table->timestamp('reminded_at')->nullable()->after('escalated_to');
             }
         });
+    }
+
+    /**
+     * Whether a column exists, on ANY MySQL or MariaDB version.
+     *
+     * `Schema::hasColumn()` asks information_schema for `generation_expression`,
+     * a column MariaDB only gained in 10.2, so on an older engine the
+     * introspection query errors before it can answer:
+     *
+     *   SQLSTATE[42S22]: 1054 Unknown column 'generation_expression' in 'field list'
+     *
+     * `LegacyMariaDbSchemaGrammar` exists for that and is registered on
+     * `ConnectionEstablished` in `AppServiceProvider` — but a migration runs on the
+     * connection opened during console bootstrapping, before that listener is
+     * attached, so the override arrives too late to help here. Naming only
+     * `column_name` asks the same question with nothing version-specific in it.
+     *
+     * Not `SHOW COLUMNS ... LIKE ?` — MariaDB rejects a placeholder in a SHOW
+     * statement's LIKE clause with a 1064. See the sibling migration's note.
+     */
+    private static function hasColumn(string $table, string $column): bool
+    {
+        try {
+            $rows = \Illuminate\Support\Facades\DB::select(
+                'select column_name from information_schema.columns '
+                . 'where table_schema = database() and table_name = ? and column_name = ?',
+                [$table, $column]
+            );
+
+            return $rows !== [];
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function down(): void
@@ -82,7 +115,7 @@ return new class extends Migration
         }
 
         foreach (['approver_user_name', 'require_comment', 'reminded_at'] as $column) {
-            if (Schema::hasColumn('hrms_leave_approval_steps', $column)) {
+            if (self::hasColumn('hrms_leave_approval_steps', $column)) {
                 Schema::table('hrms_leave_approval_steps', function (Blueprint $table) use ($column) {
                     $table->dropColumn($column);
                 });
