@@ -385,7 +385,25 @@ class AttendanceApiController extends Controller
                         'leave_id'        => $leave->id,
                         'leave_type'      => $leave->leave_type_name,
                         'day_type'        => $leave->day_type, // 1 = full, 0.5 = half
-                        'reason'          => $leave->reason,
+                        /*
+                         * `comment`, not `reason`. hrms_emp_leaves has no
+                         * `reason` column - the employee's own words are stored
+                         * in `comment` (hod_comment and hr_remarks are the
+                         * approvers'). Reading $leave->reason raised
+                         *
+                         *   ErrorException: Undefined property: stdClass::$reason
+                         *
+                         * which Laravel renders as a 500, so this whole endpoint
+                         * died for ANY employee who had approved leave in the
+                         * month being viewed. Monthly Attendance Report is the
+                         * screen that calls it: it worked for people with no
+                         * leave and broke for exactly the people whose row the
+                         * report existed to explain.
+                         *
+                         * The response key stays `reason` because that is what
+                         * it means to a reader; only the column is corrected.
+                         */
+                        'reason'          => $leave->comment,
                     ];
                 }
             }

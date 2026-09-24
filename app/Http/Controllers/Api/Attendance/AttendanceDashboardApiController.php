@@ -68,7 +68,56 @@ class AttendanceDashboardApiController extends Controller
             ->orderBy('hrms_attendances.day', 'ASC')
             ->get();
 
-        $labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        /*
+         * THE DAYS THE CALLER ACTUALLY ASKED ABOUT.
+         *
+         * This was ['Mon','Tue','Wed','Thu','Fri','Sat'] - six labels, always -
+         * walked as $start->copy()->addDays($index) whatever the range. Select
+         * "Today" and the series still ran six days forward: five of them lay
+         * outside the queried window, so $presentCount was 0 for each, and
+         * $absentCount = $totalUsers - 0 made every one of them 100% absent.
+         *
+         * That is the "Absent 100%" sitting next to "Attendance 5%" on the same
+         * row of cards. Neither number was wrong about its own question; the
+         * series was answering about days nobody had asked for.
+         */
+        $days = [];
+        for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addDay()) {
+            $days[] = $cursor->copy();
+        }
+
+        /*
+         * A day per point is right for a week or a month and unreadable for a
+         * year, so anything longer than 31 days is bucketed into weeks. The
+         * response says which was used rather than leaving the reader to infer
+         * it from the label count.
+         */
+        $granularity = count($days) > 31 ? 'week' : 'day';
+
+        $buckets = [];
+        if ($granularity === 'day') {
+            foreach ($days as $day) {
+                $buckets[] = [
+                    'label' => $day->format('D j M'),
+                    'from'  => $day->format('Y-m-d'),
+                    'to'    => $day->format('Y-m-d'),
+                ];
+            }
+        } else {
+            for ($cursor = $start->copy(); $cursor->lte($end); $cursor->addWeek()) {
+                $weekEnd = $cursor->copy()->addDays(6);
+                if ($weekEnd->gt($end)) {
+                    $weekEnd = $end->copy();
+                }
+                $buckets[] = [
+                    'label' => $cursor->format('j M'),
+                    'from'  => $cursor->format('Y-m-d'),
+                    'to'    => $weekEnd->format('Y-m-d'),
+                ];
+            }
+        }
+
+        $labels = array_column($buckets, 'label');
 
         $present = [];
         $absent  = [];
@@ -92,14 +141,19 @@ class AttendanceDashboardApiController extends Controller
 
         $totalUsers = $userQuery->count();
 
-        foreach ($labels as $index => $dayName) {
-            $dayDate = $start->copy()->addDays($index)->format('Y-m-d');
-            $dayRecords = $attendance->where('day', $dayDate);
+        foreach ($buckets as $bucket) {
+            $dayName = $bucket['label'];
+
+            $dayRecords = $attendance->filter(
+                fn ($rec) => $rec->day >= $bucket['from'] && $rec->day <= $bucket['to']
+            );
 
             // Present is when both entries exist.
             $presentCount = $dayRecords
                 ->whereNotNull('punchin_time')
                 ->whereNotNull('punchout_time')
+                ->pluck('user_id')
+                ->unique()
                 ->count();
 
             $lateCount = $dayRecords->filter(function ($rec) {
@@ -110,9 +164,16 @@ class AttendanceDashboardApiController extends Controller
                 }
 
                 return false;
-            })->count();
+            })->pluck('user_id')->unique()->count();
 
-            $absentCount = $totalUsers - $presentCount;
+            /*
+             * DISTINCT people, because a bucket can span several days and the
+             * same employee appears once per day in it. Counting rows made
+             * $presentCount exceed $totalUsers over a week, which drove
+             * $absentCount negative and the "present" percentage above 100.
+             */
+            $presentCount = min($presentCount, $totalUsers);
+            $absentCount = max(0, $totalUsers - $presentCount);
 
             $punchTimes = [];
             foreach ($dayRecords as $rec) {
@@ -154,6 +215,8 @@ class AttendanceDashboardApiController extends Controller
             ],
             'department_filter' => $departmentId ?? 'All',
             'employee_filter'   => $employeeId ?? 'All',
+            // 'day' or 'week' - the screen should say which it is plotting.
+            'granularity' => $granularity,
             'labels'      => $labels,
             'present'     => $present,
             'absent'      => $absent,
@@ -177,10 +240,33 @@ class AttendanceDashboardApiController extends Controller
         $departmentId = $this->activeFilter($request->input('department_id'));
         $employeeId = $this->activeFilter($request->input('employee_id'));
 
-        $today = Carbon::today()->format('Y-m-d');
+        /*
+         * THE RANGE THE CALLER ASKED FOR, not today.
+         *
+         * This read Carbon::today() and filtered attendance on that one date,
+         * while the screen above it offers Today / This Week / This Month / This
+         * Quarter / This Year / Custom. Every one of those produced the same
+         * number, and that number described today. A user selecting a quarter
+         * and reading "Attendance 5%" was being shown this morning's punch-in
+         * rate with a quarter's label over it.
+         *
+         * Defaults to today when no range is given, so the previous behaviour is
+         * still what an un-filtered caller gets.
+         */
+        $fromDate = $request->input('from_date') ?: Carbon::today()->format('Y-m-d');
+        $toDate   = $request->input('to_date') ?: $fromDate;
 
+        /*
+         * `status = 1` and not soft-deleted. tbluser.status is 1/0, and this
+         * counted every row - disabled accounts and deleted ones included - so
+         * "Total Employees" was larger than the headcount any other screen
+         * reports, and every percentage computed against it was correspondingly
+         * understated.
+         */
         $userQuery = DB::table('tbluser')
-            ->where('sub_institute_id', $subInstituteId);
+            ->where('sub_institute_id', $subInstituteId)
+            ->where('status', 1)
+            ->whereNull('deleted_at');
 
         if ($departmentId) {
             $userQuery->where('department_id', $departmentId);
@@ -195,8 +281,10 @@ class AttendanceDashboardApiController extends Controller
         $attendanceQuery = DB::table('hrms_attendances')
             ->join('tbluser', 'hrms_attendances.user_id', '=', 'tbluser.id')
             ->where('hrms_attendances.sub_institute_id', $subInstituteId)
-            ->where('hrms_attendances.day', $today)
-            ->where('hrms_attendances.status', 1);
+            ->whereBetween('hrms_attendances.day', [$fromDate, $toDate])
+            ->where('hrms_attendances.status', 1)
+            ->where('tbluser.status', 1)
+            ->whereNull('tbluser.deleted_at');
 
         if ($departmentId) {
             $attendanceQuery->where('tbluser.department_id', $departmentId);
@@ -210,6 +298,12 @@ class AttendanceDashboardApiController extends Controller
             ->distinct()
             ->count('hrms_attendances.user_id');
 
+        /*
+         * Over a multi-day range this is "how many people were present at all",
+         * not an average daily attendance - $presentCount is DISTINCT user_id.
+         * Named accordingly in the response so the screen cannot label it as
+         * something it is not.
+         */
         $presentPercentage = $totalUsers
             ? round(($presentCount / $totalUsers) * 100, 1)
             : 0;
@@ -249,6 +343,10 @@ class AttendanceDashboardApiController extends Controller
             'present_today'     => $presentPercentage . '%',
             'leave_utilization' => $leaveUtilization . '%',
             'active_employees'  => $totalUsers,
+            // Echoed so the screen can state the period it is reporting rather
+            // than the period the filter happens to be set to.
+            'from_date'         => $fromDate,
+            'to_date'           => $toDate,
         ]);
     }
 }

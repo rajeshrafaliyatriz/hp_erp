@@ -4,10 +4,11 @@ namespace App\Models\Competency;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 class CompetencyActivityLog extends Model
 {
-    use HasFactory;
+    use HasFactory, SkipsGuardableColumnCheck;
 
     protected $table = 's_competency_activity_log';
     protected $guarded = ['id'];

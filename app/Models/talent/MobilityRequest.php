@@ -5,6 +5,7 @@ namespace App\Models\talent;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 /**
  * An employee's move: an application to an internal job, or a transfer,
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class MobilityRequest extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 'talent_mobility_requests';
     protected $guarded = ['id'];

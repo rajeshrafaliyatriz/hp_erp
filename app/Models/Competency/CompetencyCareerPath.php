@@ -5,10 +5,11 @@ namespace App\Models\Competency;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 class CompetencyCareerPath extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 's_competency_career_paths';
     protected $guarded = ['id'];

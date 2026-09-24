@@ -1830,8 +1830,24 @@ class HrmsController extends Controller
                 $join->on('hel.user_id', '=', 'ha.user_id')->where('hel.from_date', '>=', $from_date)->where('hel.to_date', '<=', $to_date)->where('hel.sub_institute_id', $sub_institute_id)->where('hel.status', 'approved');
             })
             ->join('hrms_departments as hd', 'tu.department_id', '=', 'hd.id')
+            /*
+             * '>=' and '<=', not '=>'. '=>' is not a SQL operator, and Laravel
+             * does not reject it - Builder::where() sees an unknown operator and
+             * rewrites the clause as `hh.from_date = '=>'`, binding the operator
+             * itself as the value:
+             *
+             *   where `from_date` = ?   bindings: ["=>"]
+             *
+             * No error, no warning, and a condition that can never be true. So
+             * the holiday join has never matched a single row, total_holidays
+             * has always been 0, and working days have always been overstated by
+             * however many holidays fell in the period.
+             *
+             * The direction is the pair the author meant: a holiday counts when
+             * it falls wholly inside the reported range.
+             */
             ->leftJoin('hrms_holidays as hh', function ($join) use ($from_date, $to_date, $sub_institute_id) {
-                $join->on('hh.department', '=', 'hd.id')->where('hh.from_date', '=>', $from_date)->where('hh.to_date', '=>', $to_date)->where(['hh.sub_institute_id' => $sub_institute_id]);
+                $join->on('hh.department', '=', 'hd.id')->where('hh.from_date', '>=', $from_date)->where('hh.to_date', '<=', $to_date)->where(['hh.sub_institute_id' => $sub_institute_id]);
             })
             ->selectRaw('tu.id as user_id, tu.employee_no, CONCAT_WS(" ", COALESCE(tu.first_name, "-"), COALESCE(tu.middle_name, "-"),COALESCE(tu.last_name, "-")) as full_name, tu.sub_institute_id, IFNULL(upm.name, "-") as user_profile, hd.department, COUNT(DISTINCT ha.id) as total_att_day, GROUP_CONCAT(DISTINCT ha.id) as worked_days, COUNT(DISTINCT hel.id) as total_ab_day, GROUP_CONCAT(DISTINCT hel.id) as ab_days, COUNT(DISTINCT hh.id) as total_holidays, GROUP_CONCAT(DISTINCT hh.id) as holidays,GROUP_CONCAT(DISTINCT hd.id) as department_id')
             ->where('tu.sub_institute_id', $sub_institute_id)
@@ -1909,10 +1925,20 @@ class HrmsController extends Controller
                     }
                 }
             }
-            $holidays = $value->holidays ?? 0;
+            /*
+             * total_holidays (a COUNT), not holidays (a GROUP_CONCAT).
+             *
+             * `holidays` is GROUP_CONCAT(DISTINCT hh.id) - a string of ids like
+             * "12,45,7". Subtracting it from a day count made PHP cast it to an
+             * int, which takes the digits up to the first comma: that expression
+             * removed 12 days for three holidays, and would remove 4 days for a
+             * single holiday whose id happened to be 4. The count sitting right
+             * beside it in the same select is what was wanted.
+             */
+            $holidays = (int) ($value->total_holidays ?? 0);
             $newEmpData[$key]->weekday_off = $countSundays;
             $newEmpData[$key]->totalDays = $totalDays;
-            $newEmpData[$key]->workingDays = ($totalDays - $countSundays - $holidays);
+            $newEmpData[$key]->workingDays = max(0, $totalDays - $countSundays - $holidays);
             $newEmpData[$key]->total_ab_day = ($totAb + $attAb);
         }
 

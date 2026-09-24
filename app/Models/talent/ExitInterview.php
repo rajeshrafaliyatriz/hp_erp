@@ -4,10 +4,11 @@ namespace App\Models\Talent;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 class ExitInterview extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 'talent_exit_interviews';
 

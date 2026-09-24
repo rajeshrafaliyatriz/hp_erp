@@ -119,7 +119,21 @@ check "no column hardcoded to a dash" "0" "$(v dash_only_columns)"
 check "every Print button has a print stylesheet" "0" "$(v print_without_styles)"
 
 echo
-echo "6. Components reachable, not merely exported"
+echo "6. Layout contracts - Phase 17"
+# Five widgets at h-full in one CSS grid: stretch means the tallest sets them
+# all, so one long holiday name grew the entire row. A .slice() bounds a card
+# as well as a max-height does, so a capped list is not counted here.
+check "no card can grow without limit in a stretch grid" "0" "$(v unbounded_card)"
+# The shell offsets the sidebar with padding-left, but Tailwind breakpoints key
+# off VIEWPORT width - so expanding it removed 188px while the grid kept its
+# column count. These two grids must follow @container/content instead.
+check "the two crowded grids follow container width, not the window" "0" "$(v viewport_grid_cols)"
+# A bare 2025-09-01 becomes a date serial in Excel and renders ###### as soon as
+# the column is narrow. payroll-shell exports csvText() for exactly this.
+check "no date or clock time exported without being forced to text" "0" "$(v bare_date_export)"
+
+echo
+echo "7. Components reachable, not merely exported"
 # A barrel re-export counts as a reference, which is why the first orphan scan
 # found none while eight drifted duplicates of live panels sat in the tree.
 check "the drifted attendance duplicates are gone" "0" "$(v drifted_duplicates)"

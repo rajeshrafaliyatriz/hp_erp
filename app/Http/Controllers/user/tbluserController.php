@@ -630,13 +630,6 @@ class tbluserController extends Controller
     }
 
     /**
-     * tbluser's real column list, resolved once per request.
-     *
-     * Schema::getColumnListing is safe on the live MariaDB 10.1 box - it is
-     * hasColumn()/hasTable() that throw there, because Laravel 11 selects
-     * `generation_expression`, which 10.1 does not have.
-     */
-    /**
      * One classification group as {id, item} pairs.
      *
      * The id is s_skill_knowledge_ability.id, which is what the Jobrole Skill
@@ -656,6 +649,26 @@ class tbluserController extends Controller
             ->all();
     }
 
+    /**
+     * tbluser's real column list, resolved once per request.
+     *
+     * A note that used to sit above this method had it exactly backwards: it
+     * claimed getColumnListing() was safe on the MariaDB 10.1 host and that
+     * hasColumn()/hasTable() were the dangerous ones. The truth is the reverse
+     * for two of the three. Laravel compiles them like this:
+     *
+     *   hasTable()          -> information_schema.tables only           SAFE
+     *   hasColumn()         -> getColumnListing() -> compileColumns()   THREW
+     *   getColumnListing()  -> compileColumns()                         THREW
+     *
+     * and compileColumns() selects `generation_expression`, which arrived in
+     * MariaDB 10.2. So this very method was one of the calls that died on that
+     * server, while the comment above it said it was fine.
+     *
+     * It is safe now because App\Database\Schema\LegacyMariaDbSchemaGrammar
+     * rewrites that query on any server lacking the column - not because the
+     * call was ever harmless.
+     */
     private function userColumns(): array
     {
         static $columns = null;

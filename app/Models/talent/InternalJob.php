@@ -5,6 +5,7 @@ namespace App\Models\talent;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 /**
  * A role opened to internal candidates only.
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class InternalJob extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 'talent_internal_jobs';
     protected $guarded = ['id'];

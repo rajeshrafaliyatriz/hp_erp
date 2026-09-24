@@ -5,10 +5,11 @@ namespace App\Models\HRMS;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Concerns\SkipsGuardableColumnCheck;
 
 class HrmsLeaveRolePermission extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, SkipsGuardableColumnCheck;
 
     protected $table = 'hrms_leave_role_permissions';
     protected $guarded = ['id'];
