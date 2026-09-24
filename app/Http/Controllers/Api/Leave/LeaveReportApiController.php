@@ -15,6 +15,77 @@ class LeaveReportApiController extends Controller
     use ResolvesLeaveAuthority;
 
     /**
+     * GET /api/leave/reports/catalog
+     *
+     * Which leave reports exist, and which category each belongs to.
+     *
+     * This list lived in the frontend as a module-level constant, which had two
+     * consequences worth naming. Adding or renaming a report meant a frontend
+     * deploy; and the category counts beside it were computed from the same
+     * constant with an empty dependency array, so they were frozen at 3/2/1 and
+     * contradicted the "Showing X of Y" line on the same card.
+     *
+     * DELIBERATELY SERVED FROM CODE, NOT A TABLE. Each entry names the endpoint
+     * that produces it, and those endpoints are methods on this controller -
+     * a row in a database could name a report this application cannot build,
+     * which is exactly the "label over nothing" the catalogue was trimmed from
+     * fifteen entries to three to remove. The list moves when the code moves.
+     *
+     * The counts are computed here so the screen cannot disagree with itself.
+     */
+    public function catalog(Request $request)
+    {
+        $context = $this->leaveContext($request);
+
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $reports = [
+            [
+                'id'          => 'leave-summary',
+                'title'       => 'Leave Summary Report',
+                'description' => 'Summary of leave requests by status, type and department.',
+                'category'    => 'Leave Request Reports',
+                'endpoint'    => 'reports/summary',
+            ],
+            [
+                'id'          => 'leave-register',
+                'title'       => 'Leave Register Report',
+                'description' => 'Detailed register of every leave request in the range.',
+                'category'    => 'Leave Request Reports',
+                'endpoint'    => 'reports/register',
+            ],
+            [
+                'id'          => 'leave-balance',
+                'title'       => 'Leave Balance Report',
+                'description' => 'Entitlement, used and remaining, per employee and leave type.',
+                'category'    => 'Leave Balance Reports',
+                'endpoint'    => 'reports/balance',
+            ],
+        ];
+
+        $counts = ['All Reports' => count($reports)];
+        foreach ($reports as $report) {
+            $counts[$report['category']] = ($counts[$report['category']] ?? 0) + 1;
+        }
+
+        $categories = array_map(
+            fn ($name) => ['name' => $name, 'count' => $counts[$name]],
+            array_keys($counts)
+        );
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Report catalog fetched successfully',
+            'data'    => [
+                'reports'    => $reports,
+                'categories' => $categories,
+            ],
+        ]);
+    }
+
+    /**
      * The chargeable days for a request. F-95.
      *
      * This was a THIRD implementation of the day count - a raw SQL copy of

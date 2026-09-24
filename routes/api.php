@@ -916,6 +916,9 @@ Route::prefix('leave')->group(function () {
     Route::delete('/requests/{id}', [LeaveRequestApiController::class, 'destroy'])->whereNumber('id');
 
     // Reports
+    // What reports exist, and their category counts - so the screen stops
+    // computing them from a frozen frontend constant.
+    Route::get('/reports/catalog', [LeaveReportApiController::class, 'catalog']);
     Route::get('/reports/summary', [LeaveReportApiController::class, 'summary']);
     Route::get('/reports/register', [LeaveReportApiController::class, 'register']);
     Route::get('/reports/balance', [LeaveReportApiController::class, 'balance']);

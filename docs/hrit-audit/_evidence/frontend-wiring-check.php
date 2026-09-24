@@ -246,6 +246,118 @@ foreach ($files as $file) {
     $mergedGroupBranch += preg_match_all("/groupBy\s*===\s*'[a-z]+'\s*\|\|\s*groupBy\s*===\s*'[a-z]+'/", $code($file));
 }
 
+/*
+ * A CARD THAT CAN GROW WITHOUT LIMIT INSIDE A STRETCH GRID.
+ *
+ * Phase 17. Five widgets sat in one `grid ... lg:grid-cols-5` and every one of
+ * them set `h-full`. CSS Grid stretches by default, so the tallest card set the
+ * height of all five - one long holiday name wrapping in Upcoming Events made
+ * the whole row grow, and nothing on the screen said why.
+ *
+ * `h-full` is fine; `h-full` with no height ceiling and no scrolling body is
+ * what makes a card unbounded. Counted per file so a new widget added to that
+ * row is caught the same way.
+ */
+$unboundedCard = 0;
+$unboundedFiles = [];
+foreach ($files as $file) {
+    $src = $code($file);
+    if (!preg_match('/className="[^"]*\bh-full\b[^"]*"/', $src)) {
+        continue;
+    }
+
+    /*
+     * Renders a list whose length the component does not control. A .slice()
+     * bounds a card just as effectively as a max-height - PendingApprovalCard
+     * caps at four and is fine - so a capped list is not a finding, and
+     * counting it as one would leave this detector unassertable.
+     */
+    if (!preg_match('/\\{\\s*\\w+\\.map\\(/', $src)) {
+        continue;
+    }
+    if (preg_match('/\\.slice\\(\\s*0\\s*,/', $src)) {
+        continue;
+    }
+    // A ceiling (max-h-*) or a scrolling body (overflow-y-auto / overflow-auto)
+    // is what bounds it. Either counts.
+    if (preg_match('/max-h-\[|max-h-\d|overflow-y-auto|overflow-auto/', $src)) {
+        continue;
+    }
+    $unboundedCard++;
+    $unboundedFiles[] = basename(dirname($file)) . '/' . basename($file);
+}
+
+/*
+ * A VIEWPORT BREAKPOINT DECIDING A COLUMN COUNT INSIDE THE APP SHELL.
+ *
+ * Phase 17. The shell compensates for the sidebar with padding-left, but
+ * Tailwind's sm/md/lg/xl key off VIEWPORT width - so expanding the sidebar took
+ * 188px out of the row while the grid kept its column count, and cards that fit
+ * at "lg" no longer did. The content wrapper is now @container/content, and
+ * multi-column HRIT grids should ask it how much room they actually have.
+ *
+ * Scoped to grid-cols only. Viewport breakpoints are correct for plenty of
+ * other things; it is the COLUMN COUNT that has to follow real width.
+ */
+$viewportGridCols = 0;
+$viewportGridFiles = [];
+
+/*
+ * SCOPED TO THE TWO SCREENS WHOSE CROWDING WAS ACTUALLY REPORTED.
+ *
+ * A viewport breakpoint is correct for most things, and a four-across row of
+ * KPI tiles is fine everywhere - a repo-wide count runs to 38 and not one of
+ * them is a defect. Asserting on that number would be asserting on noise.
+ *
+ * These two are different: they hold the widest card grids in the module, and
+ * they are where expanding the sidebar visibly collided a title with a button.
+ * Their column count has to follow @container/content, not the window.
+ */
+$crowdedGrids = [
+    'attendance-tracking/page.tsx',
+    'leave-dashboard/page.tsx',
+];
+foreach ($files as $file) {
+    $rel = str_replace('\\', '/', $file);
+    $matched = false;
+    foreach ($crowdedGrids as $needle) {
+        if (str_contains($rel, $needle)) { $matched = true; break; }
+    }
+    if (!$matched) {
+        continue;
+    }
+    $src = $code($file);
+    if (preg_match_all('/\\b(?:sm|md|lg|xl|2xl):grid-cols-([3-9]|1[0-2])\\b/', $src, $m)) {
+        $viewportGridCols += count($m[0]);
+        $viewportGridFiles[] = basename(dirname($file)) . '/' . basename($file);
+    }
+}
+
+/*
+ * A DATE OR CLOCK TIME EXPORTED WITHOUT BEING FORCED TO TEXT.
+ *
+ * Phase 17. A bare "2025-09-01" in a CSV is converted by Excel to a date serial
+ * with a date format attached, and renders as ###### the moment the column is
+ * narrower than the result - which is exactly what was reported. Durations like
+ * "07:30" become clock times by the same route.
+ *
+ * payroll-shell exports csvText() for this. Counted: a downloadCsv row array
+ * that passes something date- or time-shaped straight through.
+ */
+$bareDateExport = 0;
+$bareDateFiles = [];
+foreach ($files as $file) {
+    $src = $code($file);
+    if (strpos($src, 'downloadCsv(') === false) {
+        continue;
+    }
+    // the row-mapping arguments, not the filename argument
+    if (preg_match_all('/^\s*(?!\/\/)(?:String\()?\w+\.(date|punchIn|punchOut|punchin_time|punchout_time|working_hours|totalHours)\b/mi', $src, $m)) {
+        $bareDateExport += count($m[0]);
+        $bareDateFiles[] = basename(dirname($file)) . '/' . basename($file);
+    }
+}
+
 // ------------------------------------------------------------------- output
 printf("routed=%d\n", count($routed));
 printf("routed_without_menu=%d\n", count($routedWithoutMenu));
@@ -271,7 +383,13 @@ printf("dash_only_columns=%d\n", $dashColumns);
 printf("constant_zero_metric=%d\n", $constantZeroMetric);
 printf("merged_group_branch=%d\n", $mergedGroupBranch);
 printf("print_without_styles=%d\n", $printNoStyles);
+printf("unbounded_card=%d\n", $unboundedCard);
+printf("viewport_grid_cols=%d\n", $viewportGridCols);
+printf("bare_date_export=%d\n", $bareDateExport);
 printf("files_scanned=%d\n", count($files));
 
+foreach ($unboundedFiles as $x)    { printf("detail_unbounded=%s\n", $x); }
+foreach ($viewportGridFiles as $x) { printf("detail_viewport_grid=%s\n", $x); }
+foreach ($bareDateFiles as $x)     { printf("detail_bare_date=%s\n", $x); }
 foreach ($routedWithoutMenu as $x) { printf("detail_no_menu=%s\n", $x); }
 foreach ($liveLeafNoRoute as $x)   { printf("detail_no_route=%s\n", $x); }
