@@ -1,11 +1,23 @@
 <?php
 
+use App\Services\Platform\TaskRunLedger;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+/*
+ * EVERY ENTRY BELOW IS WRAPPED IN TaskRunLedger::track().
+ *
+ * `g2g_platform_task_runs` has existed since Round 1 and `ScheduleReader` has always been
+ * able to read it — the Scheduler console has been saying "Last-run times are not recorded
+ * yet" because nothing ever wrote to it. `track()` is the writer: a `before()` hook stamps
+ * a start row, an `after()` hook closes it with the real exit code and the first 2000
+ * characters of whatever the command printed. See `TaskRunLedger`'s class docblock for why
+ * the two hooks correlate through the row itself rather than a shared variable.
+ */
 
 /*
  * READINESS GATES — RECOMPUTED DAILY.
@@ -23,10 +35,13 @@ Artisan::command('inspire', function () {
  * withoutOverlapping() because a slow run must not have a second one start
  * behind it and advance the counter twice for the same period.
  */
-Schedule::command('readiness:recompute --quiet-summary')
-    ->dailyAt('02:00')
-    ->withoutOverlapping()
-    ->onOneServer();
+TaskRunLedger::track(
+    Schedule::command('readiness:recompute --quiet-summary')
+        ->dailyAt('02:00')
+        ->withoutOverlapping()
+        ->onOneServer(),
+    'readiness.recompute'
+);
 
 /*
 |--------------------------------------------------------------------------
@@ -60,11 +75,14 @@ Schedule::command('readiness:recompute --quiet-summary')
  * withoutOverlapping() because catchUp() is idempotent but not free; two
  * overlapping runs would both scan the backlog against a remote database.
  */
-Schedule::command('events:project')
-    ->everyFiveMinutes()
-    ->withoutOverlapping()
-    ->onOneServer()
-    ->runInBackground();
+TaskRunLedger::track(
+    Schedule::command('events:project')
+        ->everyFiveMinutes()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'events.project'
+);
 
 /*
  * REACTORS, ON THEIR OWN SCHEDULE AND THEIR OWN COMMAND.
@@ -81,11 +99,14 @@ Schedule::command('events:project')
  * this concurrently would race on the delivery ledger, and the loser's work is a
  * duplicate side effect rather than a duplicate row.
  */
-Schedule::command('events:react')
-    ->everyTenMinutes()
-    ->withoutOverlapping()
-    ->onOneServer()
-    ->runInBackground();
+TaskRunLedger::track(
+    Schedule::command('events:react')
+        ->everyTenMinutes()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'events.react'
+);
 
 /*
  * The emitter the certification renewal chain was always missing — nothing in the
@@ -97,19 +118,25 @@ Schedule::command('events:react')
  * emission is idempotent per (certification, window) via the store's unique
  * idempotency key, so a re-run emits nothing new.
  */
-Schedule::command('certifications:scan-expiry')
-    ->dailyAt('07:00')
-    ->withoutOverlapping()
-    ->onOneServer()
-    ->runInBackground();
+TaskRunLedger::track(
+    Schedule::command('certifications:scan-expiry')
+        ->dailyAt('07:00')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'certifications.scan_expiry'
+);
 
 /*
  * Pre-existing, carried across from the Kernel with its original timing.
  */
-Schedule::command('sync:data')
-    ->dailyAt('18:00')
-    ->withoutOverlapping()
-    ->onOneServer();
+TaskRunLedger::track(
+    Schedule::command('sync:data')
+        ->dailyAt('18:00')
+        ->withoutOverlapping()
+        ->onOneServer(),
+    'sync.data'
+);
 
 /*
  * F-108. hrms_leave_workflow_settings has always offered "escalate after 24
@@ -120,8 +147,11 @@ Schedule::command('sync:data')
  * screen offers, so a shorter interval is work that cannot change an outcome.
  * escalated_at is one-shot, so a re-run escalates nothing twice.
  */
-Schedule::command('leave:escalate')
-    ->hourly()
-    ->withoutOverlapping()
-    ->onOneServer()
-    ->runInBackground();
+TaskRunLedger::track(
+    Schedule::command('leave:escalate')
+        ->hourly()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'leave.escalate'
+);

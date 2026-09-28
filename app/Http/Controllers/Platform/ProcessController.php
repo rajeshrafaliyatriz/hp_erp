@@ -7,6 +7,7 @@ use App\Services\Platform\ProcedureParser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
@@ -35,6 +36,11 @@ class ProcessController extends PlatformController
 {
     private const TABLE = 'g2g_process';
     private const TASKS = 'g2g_process_task';
+    private const VERSIONS = 'g2g_process_version';
+
+    /** The one spelling every completion check in this codebase already uses — see
+     *  `ReportController`/`ProjectController`'s identical `UPPER(...) = 'COMPLETED'`. */
+    private const COMPLETED_STATUS = 'COMPLETED';
 
     public function __construct(
         private readonly PlatformRegistry $registry,
@@ -88,12 +94,40 @@ class ProcessController extends PlatformController
                 ->groupBy('process_id')
                 ->pluck('total', 'process_id');
 
+            $completed = $this->completedCounts($scope->selectedInstituteId);
+
             return $this->success('Processes.', [
-                'rows' => $rows->map(fn ($row) => $this->present($row, (int) ($published[$row->id] ?? 0)))->all(),
+                'rows' => $rows->map(fn ($row) => $this->present(
+                    $row,
+                    (int) ($published[$row->id] ?? 0),
+                    (int) ($completed[$row->id] ?? 0)
+                ))->all(),
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
         }
+    }
+
+    /**
+     * How many of each process's raised tasks are done, in ONE query rather than one
+     * per row — the same reasoning as `EventBusReader::deliveryCountsFor()`.
+     *
+     * `g2g_process_task.task_id` is joined to the real `task` table and counted where
+     * `UPPER(status) = 'COMPLETED'` — the exact predicate `ReportController` and
+     * `ProjectController` already use for "is this task done", so this answers the
+     * question the same way the rest of task management would.
+     *
+     * @return \Illuminate\Support\Collection<int, int> keyed by process_id
+     */
+    private function completedCounts(int $tenantId)
+    {
+        return DB::table(self::TASKS)
+            ->join('task', 'task.id', '=', self::TASKS . '.task_id')
+            ->where(self::TASKS . '.sub_institute_id', $tenantId)
+            ->whereRaw("UPPER(COALESCE(task.status, '')) = ?", [self::COMPLETED_STATUS])
+            ->select(self::TASKS . '.process_id', DB::raw('count(*) as total'))
+            ->groupBy(self::TASKS . '.process_id')
+            ->pluck('total', 'process_id');
     }
 
     public function show(Request $request, int $id): JsonResponse
@@ -111,11 +145,62 @@ class ProcessController extends PlatformController
                 ->orderBy('id')
                 ->get(['task_id', 'task_ref', 'title', 'assignee_id', 'created_at']);
 
+            // Per-task completion, so the screen can show WHICH are done rather than
+            // only how many — a count alone cannot answer "which one is stuck".
+            $statuses = $tasks->isEmpty() ? collect() : DB::table('task')
+                ->whereIn('id', $tasks->pluck('task_id')->all())
+                ->pluck('status', 'id');
+
+            $completedCount = $tasks->filter(
+                fn ($task) => strtoupper((string) ($statuses[$task->task_id] ?? '')) === self::COMPLETED_STATUS
+            )->count();
+
             return $this->success('Process.', [
-                'process' => $this->present($row, $tasks->count()),
+                'process' => $this->present($row, $tasks->count(), $completedCount),
                 // What the publish actually created, so the screen can link to the
                 // tasks rather than claim they exist.
-                'tasks' => $tasks->all(),
+                'tasks' => $tasks->map(fn ($task) => [
+                    'task_id' => (int) $task->task_id,
+                    'task_ref' => $task->task_ref,
+                    'title' => $task->title,
+                    'assignee_id' => $task->assignee_id === null ? null : (int) $task->assignee_id,
+                    'created_at' => $task->created_at,
+                    'completed' => strtoupper((string) ($statuses[$task->task_id] ?? '')) === self::COMPLETED_STATUS,
+                ])->all(),
+            ]);
+        } catch (Throwable $exception) {
+            return $this->handle($exception);
+        }
+    }
+
+    /**
+     * Every prior version of this process, most recent edit first.
+     *
+     * Each row is the state that was OVERWRITTEN by that edit — see the migration's
+     * note. There is deliberately no diff here the way `WorkflowController::history()`
+     * computes one for chains: a procedure is prose, and a structural diff over
+     * `spec.steps` would answer a narrower question than just re-reading the old text,
+     * which this already returns in full.
+     */
+    public function history(Request $request, int $id): JsonResponse
+    {
+        try {
+            $scope = $this->scope($request);
+
+            $versions = DB::table(self::VERSIONS)
+                ->where('process_id', $id)
+                ->where('sub_institute_id', $scope->selectedInstituteId)
+                ->orderByDesc('id')
+                ->get();
+
+            return $this->success('Process history.', [
+                'versions' => $versions->map(fn ($row) => [
+                    'id' => (int) $row->id,
+                    'source_text' => $row->source_text,
+                    'spec' => json_decode((string) $row->spec, true) ?: [],
+                    'changed_by' => $row->changed_by,
+                    'created_at' => $row->created_at,
+                ])->all(),
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -189,9 +274,19 @@ class ProcessController extends PlatformController
              * The spec is derived; editing the procedure and keeping the old
              * derivation would leave the two disagreeing, with the screen showing
              * steps the text no longer contains.
+             *
+             * The PREVIOUS text and spec are snapshotted before being overwritten —
+             * only when the text actually changed, not on every edit (a name-only
+             * change is not a procedure edit and would otherwise create a version
+             * that is identical to the one before it).
              */
             if ($request->has('source_text')) {
                 $text = (string) $request->input('source_text');
+
+                if ($text !== $row->source_text) {
+                    $this->snapshotVersion($id, $scope->selectedInstituteId, $row, $this->actor($scope));
+                }
+
                 $values['source_text'] = $text;
                 $values['spec'] = json_encode($this->parser->parse($text, $row->name));
             }
@@ -427,8 +522,25 @@ class ProcessController extends PlatformController
             ->first();
     }
 
+    /** Writes the row an edit is about to overwrite. See the migration's note. */
+    private function snapshotVersion(int $processId, int $tenantId, object $beforeRow, string $actor): void
+    {
+        if (! Schema::hasTable(self::VERSIONS)) {
+            return;
+        }
+
+        DB::table(self::VERSIONS)->insert([
+            'process_id' => $processId,
+            'sub_institute_id' => $tenantId,
+            'source_text' => $beforeRow->source_text,
+            'spec' => $beforeRow->spec,
+            'changed_by' => $actor,
+            'created_at' => now(),
+        ]);
+    }
+
     /** @return array<string, mixed> */
-    private function present(object $row, int $publishedCount): array
+    private function present(object $row, int $publishedCount, int $completedCount = 0): array
     {
         return [
             'id' => (int) $row->id,
@@ -439,6 +551,10 @@ class ProcessController extends PlatformController
             'spec' => json_decode((string) $row->spec, true) ?: [],
             // What it has actually raised. The number K-12 forgets.
             'published_tasks' => $publishedCount,
+            // Of those, how many are done — the analytics gap Round 1 left. Null,
+            // not a fraction, when nothing has been raised yet: "0 of 0" reads as a
+            // stalled process, and this one has simply not been published.
+            'completed_tasks' => $publishedCount > 0 ? $completedCount : null,
             'created_at' => $row->created_at,
             'created_by' => $row->created_by,
             'updated_at' => $row->updated_at,

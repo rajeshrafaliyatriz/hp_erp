@@ -457,4 +457,96 @@ return [
         'tbluser' => 'Employee record',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Integrations — every third-party connection this platform declares
+    |--------------------------------------------------------------------------
+    |
+    | Round 2. Before this, "Integration" was four unrelated surfaces: a read-only env
+    | check on the task-management session endpoint (Gemini/n8n/FCM), an honest 501 stub
+    | for Google OAuth (NangoController), a real tokenless CRUD scoped to LMS
+    | (lms_integrations via LmsPartnerController), and nothing at all for anything else.
+    | This is the one registry naming all of them, plus the two genuinely new providers
+    | this round adds.
+    |
+    | `kind` decides how IntegrationController presents and handles a provider:
+    |
+    |   readonly_env    a flag read from config()/env(), same as SessionController's
+    |                    existing check — status only, nothing to save or test here.
+    |   oauth_stub       NangoController's honest "not configured" — shown, not hidden.
+    |   crud_existing    a real, working screen elsewhere (LMS Administration &
+    |                    Governance) — summarised and linked to, never re-implemented.
+    |   credential       NEW. Backed by g2g_integration_credentials, an encrypted vault
+    |                    that did not exist before this round. `fields` describes the
+    |                    form; a `type: password` field is never echoed back once saved.
+    |
+    | SMTP and webhook are the two `credential` providers chosen deliberately: both are
+    | "bring your own endpoint" — genuinely testable with a real handshake or a real
+    | signed POST — without requiring a Razorpay/WhatsApp-style vendor account this
+    | environment does not have. See SmtpIntegrationTester and WebhookIntegrationTester.
+    */
+    'integrations' => [
+        'gemini' => [
+            'label' => 'Gemini AI task generation',
+            'description' => 'Drafts task titles and descriptions in the create-task form.',
+            'module' => 'task',
+            'kind' => 'readonly_env',
+            'env' => 'GEMINI_API_KEY',
+        ],
+        'n8n' => [
+            'label' => 'n8n task webhook',
+            'description' => 'Notifies an n8n workflow whenever a task is created through the API.',
+            'module' => 'task',
+            'kind' => 'readonly_env',
+            'env' => 'N8N_TASK_WEBHOOK_URL',
+        ],
+        'fcm' => [
+            'label' => 'Push notifications (FCM)',
+            'description' => 'Delivers task notifications to mobile devices.',
+            'module' => 'task',
+            'kind' => 'readonly_env',
+            'env' => 'FCM_SERVER_KEY',
+        ],
+        'google_calendar' => [
+            'label' => 'Google Calendar (OAuth)',
+            'description' => 'Syncs calendar events via Nango-brokered OAuth. Not configured on this '
+                . 'installation — NangoController fails honestly rather than erroring.',
+            'module' => 'lms',
+            'kind' => 'oauth_stub',
+        ],
+        'lms_partners' => [
+            'label' => 'LMS trainers, vendors & integrations',
+            'description' => 'Third-party providers connected from LMS Administration & Governance. '
+                . 'Tokenless by design — access tokens stay with the provider.',
+            'module' => 'lms',
+            'kind' => 'crud_existing',
+            'screen' => '/module/lms/administration/administration-and-governance',
+        ],
+        'smtp' => [
+            'label' => 'SMTP email',
+            'description' => 'An outbound mail server this organisation controls.',
+            'module' => 'events',
+            'kind' => 'credential',
+            'fields' => [
+                ['key' => 'host', 'label' => 'Host', 'type' => 'text', 'required' => true],
+                ['key' => 'port', 'label' => 'Port', 'type' => 'number', 'required' => true],
+                ['key' => 'encryption', 'label' => 'Encryption', 'type' => 'select', 'required' => true, 'options' => ['none', 'tls', 'ssl']],
+                ['key' => 'username', 'label' => 'Username', 'type' => 'text', 'required' => false],
+                ['key' => 'password', 'label' => 'Password', 'type' => 'password', 'required' => false],
+                ['key' => 'from_address', 'label' => 'From address', 'type' => 'text', 'required' => true],
+            ],
+        ],
+        'webhook' => [
+            'label' => 'Outbound webhook',
+            'description' => 'Posts a signed test payload to an endpoint this organisation controls.',
+            'module' => 'events',
+            'kind' => 'credential',
+            'fields' => [
+                ['key' => 'name', 'label' => 'Name', 'type' => 'text', 'required' => true],
+                ['key' => 'url', 'label' => 'URL', 'type' => 'text', 'required' => true],
+                ['key' => 'secret', 'label' => 'Signing secret (HMAC-SHA256)', 'type' => 'password', 'required' => false],
+            ],
+        ],
+    ],
+
 ];

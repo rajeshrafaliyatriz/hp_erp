@@ -33,14 +33,21 @@ use Illuminate\Support\Facades\Schema;
  * a rule enforced in one method is a rule, and a rule restated in six is a coincidence
  * waiting to be broken by the seventh.
  *
- * ── WHY EVERYTHING HERE IS A READ ───────────────────────────────────────────
+ * ── ROUND 2: ONE NARROW WRITE, AND WHY IT DOES NOT BREAK THE RULE ABOVE ─────
  *
- * There is no replay, redrive or publish method, and there should not be. A projector
- * is pure and re-running it is harmless; a reactor enrols people on courses, issues
- * certificates and sends notifications, so replaying one does those things again. The
- * console commands `events:project` and `events:react` already separate the two for
- * exactly that reason. Putting a replay button on a screen would hand that distinction
- * to whoever clicks it.
+ * `replay()` is the one exception, and it is scoped tightly enough to still honour the
+ * reasoning that kept this class read-only for a whole round: a PROJECTOR is pure, so
+ * re-running it for ONE event it already covers is harmless — `AuditLogProjector`,
+ * `TaskStatusProjector` and `CapabilityEvidenceProjector` all write with
+ * `updateOrInsert()` keyed on the event, so calling `project($event)` twice produces
+ * the same row, not a duplicate. `replay()` refuses anything else: a reactor is never
+ * accepted, checked against `EventCatalogue`'s own declared kind rather than trusted
+ * from the caller, so the refusal holds even if the endpoint is called directly. This
+ * is NOT `ReplayRunner` (`app/Services/Events/ReplayRunner.php`) and must never be
+ * confused with it — that class truncates and rebuilds a WHOLE projection table across
+ * every tenant, is deliberately not exposed over HTTP, and exists for an operator
+ * running a documented, backed-up procedure. `replay()` here touches exactly one row,
+ * for one tenant's own event, and nothing else.
  */
 class EventBusReader
 {
@@ -428,13 +435,58 @@ class EventBusReader
     }
 
     /**
+     * A DISPLAY-ONLY threshold, not an enforced one.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY "STUCK", NOT "GIVEN UP"
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * Neither `events:project` nor `events:react` caps retries anywhere in this
+     * codebase — grepped for one before adding this and found nothing. Every failed
+     * delivery is retried again on the next five- or ten-minute sweep, forever, with no
+     * concept of giving up. So a row past this many attempts has NOT been abandoned by
+     * anything; it is only distinguished here as "this has failed enough times that a
+     * human should look at it", which is a claim about what is worth attention, not
+     * about what the sweeper will do next. Calling it "given up" would be a second
+     * false claim of exactly the kind this whole project has been removing.
+     */
+    private const STUCK_AFTER_ATTEMPTS = 5;
+
+    /**
      * Failed deliveries, newest first, with the error the consumer reported.
      *
-     * @return array{rows: array<int, array<string, mixed>>, total: int}
+     * `$consumer` is an exact match against `g2g_event_delivery.consumer` — the ledger
+     * key itself (`audit_log_projector`), which is what this table has always stored and
+     * what every row on this page already shows, not the catalogue's class name.
+     * `$search` is a `LIKE` over the error text. Both optional and both narrow rather
+     * than replace the tenant scope, which is never a filter — it is always applied.
+     *
+     * Each row also carries `event_id` and `kind` — `kind` resolved from
+     * `EventCatalogue::SHIPPED[type][consumer]` where the pairing is still declared
+     * there, null where it is not (an old row whose type/consumer no longer appears
+     * together in the catalogue). Both exist for exactly one purpose: letting the
+     * screen offer Replay only where it could possibly succeed, on a row that already
+     * IS one specific event-and-consumer pair — the server re-checks both anyway, see
+     * `EventBusController::replay()`.
+     *
+     * @return array{rows: array<int, array<string, mixed>>, total: int, stuck_after: int}
      */
-    public function failures(int $tenantId, int $page, int $limit): array
-    {
+    public function failures(
+        int $tenantId,
+        int $page,
+        int $limit,
+        ?string $consumer = null,
+        ?string $search = null
+    ): array {
         $query = $this->deliveries($tenantId)->where(self::DELIVERY . '.status', 'failed');
+
+        if ($consumer !== null && $consumer !== '') {
+            $query->where(self::DELIVERY . '.consumer', $consumer);
+        }
+
+        if ($search !== null && $search !== '') {
+            $query->where(self::DELIVERY . '.last_error', 'like', '%' . str_replace(['%', '_'], ['\\%', '\\_'], $search) . '%');
+        }
 
         $total = (clone $query)->count();
 
@@ -443,6 +495,7 @@ class EventBusReader
             ->forPage($page, $limit)
             ->get([
                 self::DELIVERY . '.id',
+                self::DELIVERY . '.event_id',
                 self::DELIVERY . '.consumer',
                 self::DELIVERY . '.attempts',
                 self::DELIVERY . '.last_error',
@@ -453,18 +506,64 @@ class EventBusReader
             ]);
 
         return [
-            'rows' => $rows->map(fn ($row) => [
-                'id' => (int) $row->id,
-                'consumer' => $row->consumer,
-                'attempts' => (int) $row->attempts,
-                'last_error' => $row->last_error,
-                'type' => $row->type,
-                'entity_type' => $row->entity_type,
-                'entity_id' => $row->entity_id === null ? null : (int) $row->entity_id,
-                'occurred_at' => $row->occurred_at,
-            ])->all(),
+            'rows' => $rows->map(function ($row) {
+                $catalogue = $this->catalogueEntryFor($row->type, $row->consumer);
+
+                return [
+                    'id' => (int) $row->id,
+                    'event_id' => (int) $row->event_id,
+                    'consumer' => $row->consumer,
+                    'attempts' => (int) $row->attempts,
+                    'stuck' => (int) $row->attempts >= self::STUCK_AFTER_ATTEMPTS,
+                    'last_error' => $row->last_error,
+                    'type' => $row->type,
+                    'entity_type' => $row->entity_type,
+                    'entity_id' => $row->entity_id === null ? null : (int) $row->entity_id,
+                    'occurred_at' => $row->occurred_at,
+                    // The catalogue CLASS name — what `replayEvent()` must send back as
+                    // `consumer`, not the ledger key this row is otherwise keyed by. Null
+                    // when the pairing is no longer declared, which correctly hides Replay
+                    // for a row the catalogue can no longer vouch for.
+                    'catalogue_consumer' => $catalogue['class'] ?? null,
+                    'kind' => $catalogue['kind'] ?? null,
+                ];
+            })->all(),
             'total' => $total,
+            'stuck_after' => self::STUCK_AFTER_ATTEMPTS,
         ];
+    }
+
+    /**
+     * The catalogue's own class name and kind for a (type, ledger key) pair.
+     *
+     * `g2g_event_delivery.consumer` stores the LEDGER KEY (`audit_log_projector`);
+     * `EventCatalogue::SHIPPED` is keyed by CLASS name (`AuditLogProjector`) per event
+     * type. This walks that event type's declared consumers and reuses `ledgerKeyFor()`
+     * — the same translation `consumers()` already relies on — to find whichever one
+     * writes this ledger key, rather than guessing the class name from the key by
+     * inverting a naming convention that has already broken this screen once (see
+     * `ledgerKeyFor()`'s own note).
+     *
+     * @return array{class: string, kind: string}|null
+     */
+    private function catalogueEntryFor(string $type, string $ledgerKey): ?array
+    {
+        foreach (EventCatalogue::SHIPPED[$type] ?? [] as $class => $kind) {
+            if ($this->ledgerKeyFor($class) === $ledgerKey) {
+                return ['class' => $class, 'kind' => $kind];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * One event, if it belongs to this tenant — the check `replay()` needs before
+     * touching anything.
+     */
+    public function eventFor(int $tenantId, int $eventId): ?object
+    {
+        return $this->events($tenantId)->where(self::EVENTS . '.id', $eventId)->first();
     }
 
     /**
@@ -526,5 +625,32 @@ class EventBusReader
             ->orderBy('type')
             ->pluck('type')
             ->all();
+    }
+
+    /**
+     * Re-run one projector for one event. See the class note for why this is safe.
+     *
+     * `$event` must already have been confirmed to belong to the caller's tenant — via
+     * `eventFor()` — and `$consumer` must already have been confirmed to be a
+     * PROJECTOR-kind consumer of `$event->type` in `EventCatalogue::SHIPPED`. This
+     * method does not re-check either, on purpose: those checks need request-shaped
+     * error messages (404 vs 422, which field is wrong), which belong in the
+     * controller, not buried in a service method whose contract would otherwise be
+     * "trust me". `EventBusController::replay()` is the only caller and does both
+     * before this is reached.
+     *
+     * @throws \RuntimeException if `$consumer` does not resolve to a real class — this
+     *   one check stays here because it is not a request-validation question, it is a
+     *   fact about whether the write can happen at all.
+     */
+    public function replay(object $event, string $consumer): void
+    {
+        $class = EventCatalogue::resolveConsumer($consumer);
+
+        if ($class === null) {
+            throw new \RuntimeException("The consumer \"$consumer\" does not resolve to a class.");
+        }
+
+        app($class)->project($event);
     }
 }
