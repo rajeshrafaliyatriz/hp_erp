@@ -455,6 +455,13 @@ return [
     */
     'custom_field_tables' => [
         'tbluser' => 'Employee record',
+        // Round 2. The obvious second entry: hrms.leave.approval is the one
+        // enforced workflow point, and LeaveRequestDetailsDrawer is a real,
+        // already-shipped review surface to render these on — added together with
+        // this row, in the same change, so the allowlist entry is never a promise
+        // with no form behind it. See CustomFieldValueController::recordBelongsToTenant()
+        // for the matching tenant-ownership check this table needed.
+        'hrms_emp_leaves' => 'Leave request',
     ],
 
     /*
