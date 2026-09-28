@@ -12,7 +12,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // One SchemaCache per request, so its memoised table/column probes are shared
+        // by every AI class that asks — see SchemaCache for why Schema::hasColumn() is
+        // not used (it crashes on the live MariaDB 10.1).
+        $this->app->scoped(\App\Domain\AI\Support\SchemaCache::class);
     }
 
     /**

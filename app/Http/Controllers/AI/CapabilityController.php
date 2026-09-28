@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AI;
 
+use App\Domain\AI\Support\SchemaCache;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -582,7 +583,7 @@ class CapabilityController extends AiController
         $query = $this->scoped($table, $institute);
 
         foreach ($where as $column => $value) {
-            if (Schema::hasColumn($table, $column)) {
+            if (app(SchemaCache::class)->hasColumn($table, $column)) {
                 $query->where($column, $value);
             }
         }
@@ -592,7 +593,7 @@ class CapabilityController extends AiController
 
     private function distinct(string $table, int|string $institute, string $column): int
     {
-        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $column)) {
+        if (! Schema::hasTable($table) || ! app(SchemaCache::class)->hasColumn($table, $column)) {
             return 0;
         }
 
@@ -613,7 +614,7 @@ class CapabilityController extends AiController
     {
         $present = array_filter(
             $columns,
-            fn (string $label, string $column) => Schema::hasColumn($table, $column),
+            fn (string $label, string $column) => app(SchemaCache::class)->hasColumn($table, $column),
             ARRAY_FILTER_USE_BOTH
         );
 
@@ -653,7 +654,7 @@ class CapabilityController extends AiController
     private function orderColumn(string $table): string
     {
         foreach (['created_date', 'created_at', 'started_at', 'run_date', 'date'] as $column) {
-            if (Schema::hasColumn($table, $column)) {
+            if (app(SchemaCache::class)->hasColumn($table, $column)) {
                 return $column;
             }
         }
@@ -680,12 +681,12 @@ class CapabilityController extends AiController
     {
         $query = DB::table($table);
 
-        if (Schema::hasColumn($table, 'sub_institute_id')) {
+        if (app(SchemaCache::class)->hasColumn($table, 'sub_institute_id')) {
             $query->where(function ($inner) use ($institute) {
                 $inner->where('sub_institute_id', $institute)
                     ->orWhereNull('sub_institute_id');
             });
-        } elseif (Schema::hasColumn($table, 'tenant_id')) {
+        } elseif (app(SchemaCache::class)->hasColumn($table, 'tenant_id')) {
             $query->where(function ($inner) use ($institute) {
                 $inner->where('tenant_id', (string) $institute)
                     ->orWhere('tenant_id', '*')
@@ -694,7 +695,7 @@ class CapabilityController extends AiController
         }
 
         foreach (['deleted_at', 'deleted_date'] as $softDelete) {
-            if (Schema::hasColumn($table, $softDelete)) {
+            if (app(SchemaCache::class)->hasColumn($table, $softDelete)) {
                 $query->whereNull($softDelete);
             }
         }

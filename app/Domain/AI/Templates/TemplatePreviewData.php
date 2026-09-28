@@ -2,6 +2,7 @@
 
 namespace App\Domain\AI\Templates;
 
+use App\Domain\AI\Support\SchemaCache;
 use App\Domain\AI\Support\ActiveRowFilter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -151,7 +152,7 @@ final class TemplatePreviewData
 
     private function countFor(string $table, int|string $institute): int
     {
-        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'sub_institute_id')) {
+        if (! Schema::hasTable($table) || ! app(SchemaCache::class)->hasColumn($table, 'sub_institute_id')) {
             return 0;
         }
 

@@ -69,7 +69,7 @@ class ProviderKeyResolver
                 ->where('api_type', $apiType)
                 ->where('status', 1);
 
-            $hasTenantColumn = Schema::hasColumn('ai_api_keys', 'sub_institute_id');
+            $hasTenantColumn = app(SchemaCache::class)->hasColumn('ai_api_keys', 'sub_institute_id');
 
             if ($hasTenantColumn) {
                 $institute = $subInstituteId === null ? null : trim((string) $subInstituteId);
