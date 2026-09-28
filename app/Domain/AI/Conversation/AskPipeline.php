@@ -111,7 +111,10 @@ final class AskPipeline
                 // exactly zero makes it repeat itself verbatim when asked a question
                 // twice, which reads as a broken screen rather than a consistent one.
                 ['temperature' => 0.2],
-                $institute
+                $institute,
+                // The screen's module, so a model chosen on that module's AI Stack
+                // Models tab is the one that answers here.
+                $moduleKey
             );
         } catch (AiNotConfiguredException $exception) {
             return $this->recordFailure($scope, $conversation, $exception, configured: false);

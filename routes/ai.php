@@ -1,6 +1,11 @@
 <?php
 
 use App\Http\Controllers\AI\AiConfigurationController;
+use App\Http\Controllers\AI\AiGenerationController;
+use App\Http\Controllers\AI\AiModuleController;
+use App\Http\Controllers\AI\AiModuleModelController;
+use App\Http\Controllers\AI\AiReportController;
+use App\Http\Controllers\AI\AiToolAgentController;
 use App\Http\Controllers\AI\AiPolicyController;
 use App\Http\Controllers\AI\AiTemplateController;
 use App\Http\Controllers\AI\AskController;
@@ -199,4 +204,56 @@ Route::prefix(config('ai.route_prefix', 'api/ai'))
             ->where('id', '[0-9]+');
         Route::delete('/policies/{id}', [AiPolicyController::class, 'destroy'])
             ->where('id', '[0-9]+');
+
+        /*
+        | One module's own AI Stack — the decentralised, LMS_K12-universal screens
+        | embedded inside a G2G submodule. Same paths and envelopes as LMS_K12's,
+        | answered from G2G's tables, scoped to one `ai_modules` key.
+        */
+        Route::get('/modules/{module}/usage', [AiModuleController::class, 'usage'])
+            ->where('module', '[a-z0-9_\-]+');
+        Route::get('/modules/{module}/guardrails', [AiModuleController::class, 'guardrails'])
+            ->where('module', '[a-z0-9_\-]+');
+        Route::get('/modules/{module}/activity', [AiModuleController::class, 'activity'])
+            ->where('module', '[a-z0-9_\-]+');
+        Route::post('/modules/{module}/activity', [AiModuleController::class, 'recordActivity'])
+            ->where('module', '[a-z0-9_\-]+');
+        Route::get('/modules/{module}/models', [AiModuleModelController::class, 'index'])
+            ->where('module', '[a-z0-9_\-]+');
+        Route::put('/modules/{module}/models', [AiModuleModelController::class, 'update'])
+            ->where('module', '[a-z0-9_\-]+');
+        Route::delete('/modules/{module}/models', [AiModuleModelController::class, 'destroy'])
+            ->where('module', '[a-z0-9_\-]+');
+        Route::post('/modules/{module}/models/credentials', [AiModuleModelController::class, 'storeCredential'])
+            ->where('module', '[a-z0-9_\-]+');
+        Route::put('/modules/{module}/models/credentials/{credential}', [AiModuleModelController::class, 'updateCredential'])
+            ->where(['module' => '[a-z0-9_\-]+', 'credential' => '[0-9]+']);
+
+        /*
+        | Reports built from a module's AI Stack Templates tab, and the read-only data
+        | sources they (and the Knowledge Base "Check", and Automations agents) run.
+        */
+        Route::post('/workspace/report', [AiReportController::class, 'build']);
+        Route::get('/reports/{id}', [AiReportController::class, 'show'])->where('id', '[0-9]+');
+        Route::put('/reports/{id}', [AiReportController::class, 'update'])->where('id', '[0-9]+');
+        Route::post('/reports/{id}/regenerate', [AiReportController::class, 'regenerate'])->where('id', '[0-9]+');
+        Route::post('/data-sources/{name}/run', [AiReportController::class, 'runSource'])
+            ->where('name', '[a-z0-9_.\-]+');
+
+        /*
+        | Tool agents for a module's AI Stack Automations tab, stored in G2G's own
+        | Agentic AI tables (agentic_agents / agentic_agent_runs).
+        */
+        Route::get('/tool-agents', [AiToolAgentController::class, 'index']);
+        Route::post('/tool-agents', [AiToolAgentController::class, 'store']);
+        Route::patch('/tool-agents/{id}', [AiToolAgentController::class, 'setStatus'])->where('id', '[0-9]+');
+        Route::post('/tool-agents/{id}/run', [AiToolAgentController::class, 'run'])->where('id', '[0-9]+');
+        Route::get('/tool-agent-runs', [AiToolAgentController::class, 'runs']);
+
+        /*
+        | Render one published prompt template and return what the model wrote — the
+        | AI Stack field assistant's backend. Goes through AiModelClient, so it is
+        | resolved, quota-checked and metered like every other call.
+        */
+        Route::post('/generate', [AiGenerationController::class, 'generate']);
     });

@@ -70,6 +70,12 @@ class AiPolicyController extends AiController
                     // is passed to scope it by.
                     'job_role' => $this->targets('s_jobrole', 'jobrole', $institute, null),
                 ],
+                // The same modules again, with their key. The shared (LMS_K12-universal)
+                // module AI Stack scopes a new policy to its own module by key, and needs
+                // the `ai_modules` id that key resolves to on this estate — ids differ
+                // between deployments, so they are looked up, never hardcoded. Additive:
+                // the central console reads `scope_targets` and ignores this.
+                'modules' => $this->moduleOptions($institute),
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -190,18 +196,47 @@ class AiPolicyController extends AiController
                 return $this->failure('That AI policy was not found.', 404);
             }
 
-            // A platform policy is shared by every organisation. Editing one here
-            // would rewrite governance for all of them, so it is refused rather than
-            // silently applied — and the refusal says what to do instead.
-            if ($row->sub_institute_id === null) {
-                return $this->failure(
-                    'This is a platform policy shared by every organisation and cannot be edited here. '
-                    . 'Create your own policy instead — an organisation policy takes precedence over it.',
-                    403
-                );
-            }
-
             $data = $this->validatedPolicy($request);
+
+            // A platform policy is shared by every organisation, so an edit never
+            // rewrites it: it writes THIS organisation its own copy, which takes
+            // precedence over the platform one — the same fork LMS_K12 does, and exactly
+            // what the old refusal told the user to do by hand. The platform row is left
+            // intact for everyone else.
+            if ($row->sub_institute_id === null) {
+                $forkId = (int) DB::table('ai_policies')->insertGetId([
+                    'sub_institute_id' => $institute,
+                    'name' => trim($data['name']),
+                    'description' => isset($data['description']) ? trim((string) $data['description']) : null,
+                    'policy_type' => $data['policy_type'],
+                    'status' => $data['status'] ?? 1,
+                    'require_disclosure' => $data['require_disclosure'] ?? 0,
+                    'require_acknowledgement' => $data['require_acknowledgement'] ?? 0,
+                    'ai_detection_required' => $data['ai_detection_required'] ?? 0,
+                    'plagiarism_check_required' => $data['plagiarism_check_required'] ?? 0,
+                    'detection_provider' => $data['detection_provider'] ?? null,
+                    'detection_threshold' => $data['detection_threshold'] ?? null,
+                    'created_by' => $scope->userId,
+                    'updated_by' => $scope->userId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $this->saveRules($forkId, $data['rules'] ?? []);
+                $this->saveAssignments($forkId, $data['assignments'] ?? [], $institute, $scope->userId);
+
+                $this->audit->record('ai.policy.forked', $scope, [
+                    'related_type' => 'ai_policies',
+                    'related_id' => $forkId,
+                    'message' => sprintf('Platform AI policy #%d copied to this organisation as "%s".', $id, trim($data['name'])),
+                ]);
+
+                return $this->success('Saved as this organisation\'s own copy of the shared policy.', [
+                    'policy' => $this->policyDetail($forkId, $institute),
+                    'action' => 'forked',
+                    'forked_from' => $id,
+                ]);
+            }
 
             DB::table('ai_policies')->where('id', $id)->update([
                 'name' => trim($data['name']),
@@ -229,6 +264,7 @@ class AiPolicyController extends AiController
 
             return $this->success('AI policy updated.', [
                 'policy' => $this->policyDetail($id, $institute),
+                'action' => 'updated',
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -400,6 +436,23 @@ class AiPolicyController extends AiController
      *
      * @return array<int, int>
      */
+    /** @return array<int, array{id:int, key:string, label:string}> */
+    private function moduleOptions(int|string|null $institute): array
+    {
+        if (! Schema::hasTable('ai_modules')) {
+            return [];
+        }
+
+        return DB::table('ai_modules')
+            ->where('status', 1)
+            ->where(fn ($q) => $q->where('sub_institute_id', $institute)->orWhereNull('sub_institute_id'))
+            ->orderBy('sort_order')
+            ->orderBy('label')
+            ->get(['id', 'module_key', 'label'])
+            ->map(fn ($row) => ['id' => (int) $row->id, 'key' => (string) $row->module_key, 'label' => (string) $row->label])
+            ->all();
+    }
+
     private function moduleIds(string $moduleKey, int|string|null $institute): array
     {
         if (! Schema::hasTable('ai_modules')) {
@@ -481,9 +534,11 @@ class AiPolicyController extends AiController
             'id' => (int) $row->id,
             'sub_institute_id' => $row->sub_institute_id !== null ? (int) $row->sub_institute_id : null,
             'is_platform' => $row->sub_institute_id === null,
-            // Platform policies are shared, so this organisation may read them and
-            // not change them. The API refuses the write too — this is the
-            // explanation, not the control.
+            // A seeded worked example: a platform row whose name says so. G2G has no
+            // `is_example` column, and every seeded example is named "(example)".
+            'is_example' => $row->sub_institute_id === null && str_ends_with((string) $row->name, '(example)') ? 1 : 0,
+            // Platform policies are shared: this organisation reads them, and an edit
+            // writes it its own copy (see update()) rather than changing the shared row.
             'editable' => $row->sub_institute_id !== null,
             'name' => (string) $row->name,
             'description' => $row->description,

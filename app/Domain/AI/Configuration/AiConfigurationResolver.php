@@ -52,17 +52,37 @@ final class AiConfigurationResolver
         private readonly ModelCatalog $models,
         private readonly AiModuleRegistry $modules,
         private readonly ProviderKeyResolver $keys,
+        private readonly ModuleModelBindings $bindings,
     ) {
     }
 
     /**
      * Resolve the provider, model and credential for one module.
      *
-     * @param  string|null  $moduleKey  A key from `AiModuleRegistry`, or null for the
-     *                                  unbound pool behaviour every legacy caller has.
+     * @param  string|null  $moduleKey      A key from `AiModuleRegistry`, or null for the
+     *                                      unbound pool behaviour every legacy caller has.
+     * @param  string|null  $productModule  An `ai_modules` key (`lms_course_builder`, ...)
+     *                                      when the call is made from inside one module's
+     *                                      screen. Step 0 below — that module's own AI Stack
+     *                                      Models choice — applies only when this is given,
+     *                                      so every caller that omits it resolves exactly
+     *                                      as it did before module bindings existed.
      */
-    public function resolve(?string $moduleKey, int|string|null $subInstituteId = null): ResolvedAiConfiguration
-    {
+    public function resolve(
+        ?string $moduleKey,
+        int|string|null $subInstituteId = null,
+        ?string $productModule = null
+    ): ResolvedAiConfiguration {
+        // Step 0. This product module's own choice for this capability, saved from its
+        // AI Stack Models tab. Institute row first, then platform.
+        if ($productModule !== null && $moduleKey !== null) {
+            $binding = $this->bindings->find($productModule, $moduleKey, $subInstituteId);
+
+            if ($binding !== null && $this->providers->exists((string) $binding->provider)) {
+                return $this->fromBinding($binding, $subInstituteId);
+            }
+        }
+
         $moduleKey = $moduleKey !== null && $this->modules->exists($moduleKey) ? $moduleKey : null;
 
         // Steps 1-2. Only a module row may choose the provider, because only a module
@@ -102,6 +122,71 @@ final class AiConfigurationResolver
             keyId: $key['id'] ?? null,
             scope: $key['scope'] ?? 'config',
             maxOutputTokens: $this->poolMaxTokens($key, $provider),
+        );
+    }
+
+    /**
+     * A module binding turned into a resolution.
+     *
+     * The binding chooses the provider and model. The credential is the one it names when
+     * it names one this institute can see; otherwise that provider's own pool/env key —
+     * the same lookup an unbound call makes, so a binding never invents a credential.
+     */
+    private function fromBinding(object $binding, int|string|null $subInstituteId): ResolvedAiConfiguration
+    {
+        $provider = (string) $binding->provider;
+        $apiKey = null;
+        $keyId = null;
+        $scope = ($binding->sub_institute_id ?? null) === null ? 'platform' : 'institute';
+        $limit = null;
+
+        if (($binding->api_key_id ?? null) !== null) {
+            try {
+                $row = DB::table('ai_api_keys')
+                    ->where('id', (int) $binding->api_key_id)
+                    ->where('status', 1)
+                    ->where(fn ($q) => $q->whereNull('sub_institute_id')->orWhere('sub_institute_id', $subInstituteId))
+                    ->first();
+            } catch (Throwable) {
+                $row = null;
+            }
+
+            if ($row !== null && ! empty($row->api_key) && trim((string) $row->api_key) !== '-') {
+                $apiKey = trim((string) $row->api_key);
+                $keyId = (int) $row->id;
+                $limit = $row->api_limit ?? null;
+            }
+        }
+
+        if ($apiKey === null) {
+            $key = $this->keys->resolve(
+                $this->providers->apiType($provider),
+                $subInstituteId,
+                $this->providers->envKey($provider),
+            );
+            $apiKey = $key['api_key'] ?? null;
+            $keyId = $key['id'] ?? null;
+            $limit = $key['api_limit'] ?? null;
+        }
+
+        $max = $binding->max_output_tokens ?? null;
+
+        if (is_numeric($max) && (int) $max > 0) {
+            $maxTokens = (int) $max;
+        } elseif (is_numeric($limit) && (int) $limit > 0) {
+            $maxTokens = (int) $limit;
+        } else {
+            $maxTokens = ((int) config("ai.provider.{$provider}.max_output_tokens")) ?: null;
+        }
+
+        return new ResolvedAiConfiguration(
+            provider: $provider,
+            model: $this->modelFor($provider, $binding->model ?? null, $subInstituteId),
+            apiKey: $apiKey,
+            source: (string) ($binding->source ?? 'module_binding'),
+            keyId: $keyId,
+            scope: $scope,
+            maxOutputTokens: $maxTokens,
         );
     }
 

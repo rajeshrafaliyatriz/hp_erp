@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers\AI;
 
+use App\Domain\AI\Reports\ModuleDataSourceCatalog;
 use App\Domain\AI\Support\AiAuditLogger;
+use App\Domain\AI\Templates\OrganisationBranding;
+use App\Domain\AI\Templates\ReportLayoutRenderer;
 use App\Domain\AI\Templates\TemplateCatalog;
 use App\Domain\AI\Templates\TemplateModuleCatalog;
 use App\Domain\AI\Templates\TemplatePreviewData;
@@ -57,6 +60,9 @@ class AiTemplateController extends AiController
         private readonly TemplateVariableCatalog $variables,
         private readonly TemplatePreviewData $previewData,
         private readonly AiAuditLogger $audit,
+        private readonly ModuleDataSourceCatalog $dataSources,
+        private readonly ReportLayoutRenderer $layoutRenderer,
+        private readonly OrganisationBranding $branding,
     ) {
     }
 
@@ -82,6 +88,12 @@ class AiTemplateController extends AiController
                 'kinds' => TemplateCatalog::KINDS,
                 'output_formats' => TemplateCatalog::OUTPUT_FORMATS,
                 'categories' => TemplateCatalog::SUGGESTED_CATEGORIES,
+                // For report layouts, as LMS_K12 returns them: the organisation's own
+                // letterhead, the read-only sources a layout can bind to, and the
+                // placeholders a layout may use. Additive — the central console ignores them.
+                'branding' => $this->branding->for($institute),
+                'data_sources' => $this->dataSources->all(),
+                'report_placeholders' => $this->layoutRenderer->placeholders(),
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -292,10 +304,31 @@ class AiTemplateController extends AiController
     {
         $moduleKeys = array_merge([TemplateModuleCatalog::SHARED], $this->modules->keys($institute));
 
+        // A report needs a layout and a data source; a prompt needs a user prompt — the
+        // same split LMS_K12 makes, read before the rules so each kind is asked only for
+        // what it uses.
+        $kind = (string) $request->input('kind', 'prompt');
+        $isReport = $kind === TemplateCatalog::KINDS[1];
+
         $validated = $request->validate([
             'name' => 'required|string|max:200',
             'description' => 'nullable|string|max:1000',
             'kind' => ['nullable', Rule::in(TemplateCatalog::KINDS)],
+
+            // Report-only. The source must be one of G2G's read-only module data sources,
+            // so a layout can never be bound to anything that writes.
+            'html_layout' => [$isReport ? 'required' : 'nullable', 'string', 'max:200000'],
+            'data_source' => [
+                $isReport ? 'required' : 'nullable',
+                'string',
+                'max:120',
+                function (string $attribute, mixed $value, callable $fail) {
+                    if ($value !== null && $value !== '' && ! $this->dataSources->exists((string) $value)) {
+                        $fail('That data source is not an available read-only source.');
+                    }
+                },
+            ],
+            'data_arguments' => 'nullable|array',
 
             // Write the template for the whole platform rather than only this
             // organisation. Opt-in — see TemplateCatalog::create().
@@ -311,7 +344,7 @@ class AiTemplateController extends AiController
             'status' => ['required', Rule::in(TemplateCatalog::STATUSES)],
 
             'system_prompt' => 'nullable|string|max:20000',
-            'user_prompt' => 'required|string|max:20000',
+            'user_prompt' => [$isReport ? 'nullable' : 'required', 'string', 'max:20000'],
 
             'variables' => 'nullable|array',
             'variables.*.key' => 'required|string|max:60|regex:/^[a-zA-Z0-9_.]+$/',
@@ -345,7 +378,9 @@ class AiTemplateController extends AiController
         // organisation's competencies means a confident, invented number. Refused
         // rather than warned: a warning on a screen is not read by the person who
         // meets the answer.
-        if (($validated['status'] ?? 'draft') === 'published') {
+        // Reports are exempt: nothing in a report is written by a model — its figures are
+        // substituted from the rows its data source returned.
+        if (! $isReport && ($validated['status'] ?? 'draft') === 'published') {
             $prompt = ($validated['user_prompt'] ?? '') . ' ' . ($validated['system_prompt'] ?? '');
             $used = $this->variables->used($prompt);
             $declared = array_column($validated['variables'] ?? [], 'key');
@@ -362,7 +397,13 @@ class AiTemplateController extends AiController
             }
         }
 
-        $validated['kind'] = 'prompt';
+        $validated['kind'] = in_array($kind, TemplateCatalog::KINDS, true) ? $kind : 'prompt';
+
+        // `user_prompt` is NOT NULL on the table and a layout has none.
+        if ($isReport) {
+            $validated['user_prompt'] ??= '';
+        }
+
         $validated['template_key'] = $validated['template_key'] ?? null;
 
         return $validated;
