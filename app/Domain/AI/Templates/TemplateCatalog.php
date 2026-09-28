@@ -32,13 +32,15 @@ use RuntimeException;
  *
  * WHAT IS DELIBERATELY NOT HERE
  *
+ * REPORT LAYOUTS
+ *
  * LMS K-12's copy also stores report layouts: `kind = 'report'` rows whose HTML is
- * filled by substitution from rows an MCP tool returned. That half depends on LMS's
- * read-only tool registry, which G2G does not have — there is nothing here for a
- * layout to bind to, and a `data_source` dropdown with no sources in it is a control
- * that cannot work. The columns exist in the table so the two schemas stay
- * comparable and so the feature can be added without a migration; this class writes
- * `kind = 'prompt'` and the controller accepts nothing else.
+ * filled by substitution from rows a read-only data source returned. That half used to
+ * be deliberately absent here because G2G had no read-only source registry for a
+ * layout to bind to. It now has one — `ModuleDataSourceCatalog`, one tenant-scoped query
+ * per AI Stack module — so `report` is accepted, bound to one of those sources, and the
+ * columns that were kept for exactly this (`html_layout`, `data_source`,
+ * `data_arguments`) are written.
  */
 class TemplateCatalog
 {
@@ -48,10 +50,12 @@ class TemplateCatalog
     /**
      * What a template *is*.
      *
-     * Only `prompt` today — see the class note on report layouts. The constant is a
-     * list rather than a string so adding `report` later is one entry here.
+     * `prompt` is sent to a model. `report` is an HTML layout filled by substitution from
+     * the rows a read-only data source returned (App\Domain\AI\Reports\
+     * ModuleDataSourceCatalog) — the precondition the class note below waited for, now
+     * met. Order matters: index 1 is the report kind, as in LMS_K12.
      */
-    public const KINDS = ['prompt'];
+    public const KINDS = ['prompt', 'report'];
 
     /** What the output of a template is expected to look like. */
     public const OUTPUT_FORMATS = ['text', 'markdown', 'json'];
@@ -570,6 +574,10 @@ class TemplateCatalog
             'module_key' => $this->modules->fromColumn($row->module_key ?? null),
             'module_label' => $this->modules->label($row->module_key ?? null, $institute),
             'kind' => (string) ($row->kind ?? 'prompt'),
+            // Report layouts only. Null on a prompt, and read back exactly as stored.
+            'html_layout' => ($row->html_layout ?? '') === '' ? null : (string) $row->html_layout,
+            'data_source' => ($row->data_source ?? '') === '' ? null : (string) $row->data_source,
+            'data_arguments' => $this->decode($row->data_arguments ?? null),
             'domain' => (string) ($row->domain ?? 'g2g'),
             'category' => $row->category === null ? null : (string) $row->category,
             'version' => (int) $row->version,
@@ -627,12 +635,16 @@ class TemplateCatalog
             'description' => $this->nullable($data['description'] ?? null),
             'domain' => trim((string) ($data['domain'] ?? 'g2g')) ?: 'g2g',
             'module_key' => $moduleKey,
-            'kind' => 'prompt',
+            'kind' => in_array($data['kind'] ?? 'prompt', self::KINDS, true) ? (string) $data['kind'] : 'prompt',
+            'html_layout' => $this->nullable($data['html_layout'] ?? null),
+            'data_source' => $this->nullable($data['data_source'] ?? null),
+            'data_arguments' => $this->encode($data['data_arguments'] ?? []),
             'category' => $this->nullable($data['category'] ?? null),
             'version' => $version,
             'status' => (string) ($data['status'] ?? 'draft'),
             'system_prompt' => $this->nullable($data['system_prompt'] ?? null),
-            'user_prompt' => (string) $data['user_prompt'],
+            // NOT NULL on the table; a report layout has none, so an empty string.
+            'user_prompt' => (string) ($data['user_prompt'] ?? ''),
             'variables' => $this->encode($data['variables'] ?? []),
             'output_schema' => $this->encode($data['output_schema'] ?? null),
             'output_format' => (string) ($data['output_format'] ?? 'text'),

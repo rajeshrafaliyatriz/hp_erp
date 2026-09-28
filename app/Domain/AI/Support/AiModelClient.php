@@ -65,9 +65,12 @@ final class AiModelClient
         string $moduleKey,
         array $messages,
         array $options = [],
-        int|string|null $institute = null
+        int|string|null $institute = null,
+        // The `ai_modules` key the call is made from, when there is one. Only lets that
+        // module's own AI Stack model choice apply; omitted, resolution is unchanged.
+        ?string $productModule = null
     ): AiCompletion {
-        $config = $this->configuration->resolve($moduleKey, $institute);
+        $config = $this->configuration->resolve($moduleKey, $institute, $productModule);
 
         if (! $this->providers->isDriveable($config->provider)) {
             throw AiNotConfiguredException::providerNotDriveable(
