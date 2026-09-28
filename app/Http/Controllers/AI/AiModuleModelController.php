@@ -52,6 +52,7 @@ class AiModuleModelController extends AiController
         private readonly AiConfigurationResolver $resolver,
         private readonly TemplateModuleCatalog $modules,
         private readonly AiAuditLogger $audit,
+        private readonly \App\Domain\AI\Support\SchemaCache $schema,
     ) {
     }
 
@@ -288,7 +289,7 @@ class AiModuleModelController extends AiController
                 return $this->failure('That module is not one this organisation has.', 404);
             }
 
-            if (! Schema::hasTable('ai_api_keys')) {
+            if (! $this->schema->hasTable('ai_api_keys')) {
                 return $this->failure('AI credentials are not available on this estate.', 503);
             }
 
@@ -433,7 +434,7 @@ class AiModuleModelController extends AiController
                 return $this->failure('That module is not one this organisation has.', 404);
             }
 
-            if (! Schema::hasTable('ai_api_keys')) {
+            if (! $this->schema->hasTable('ai_api_keys')) {
                 return $this->failure('AI credentials are not available on this estate.', 503);
             }
 
@@ -540,7 +541,7 @@ class AiModuleModelController extends AiController
         int|string|null $institute,
         $scope
     ): ?int {
-        if (! Schema::hasTable('ai_models')) {
+        if (! $this->schema->hasTable('ai_models')) {
             return null;
         }
 
@@ -638,7 +639,7 @@ class AiModuleModelController extends AiController
     /** @return array<int, string> */
     private function registryKeys(string $module, int|string|null $institute): array
     {
-        if (! Schema::hasTable('ai_modules') || ! Schema::hasColumn('ai_modules', 'registry_keys')) {
+        if (! $this->schema->hasTable('ai_modules') || ! $this->schema->hasColumn('ai_modules', 'registry_keys')) {
             return [];
         }
 
@@ -667,7 +668,7 @@ class AiModuleModelController extends AiController
     /** @return array<string, bool> */
     private function moduleFlags(string $module, int|string|null $institute): array
     {
-        if (! Schema::hasTable('ai_modules')) {
+        if (! $this->schema->hasTable('ai_modules')) {
             return [];
         }
 
@@ -743,7 +744,7 @@ class AiModuleModelController extends AiController
      */
     private function credentialOptions(int|string|null $institute): array
     {
-        if (! Schema::hasTable('ai_api_keys')) {
+        if (! $this->schema->hasTable('ai_api_keys')) {
             return [];
         }
 
@@ -767,7 +768,7 @@ class AiModuleModelController extends AiController
 
     private function credentialVisible(int $id, int|string|null $institute): bool
     {
-        if (! Schema::hasTable('ai_api_keys')) {
+        if (! $this->schema->hasTable('ai_api_keys')) {
             return false;
         }
 

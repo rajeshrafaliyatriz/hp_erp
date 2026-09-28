@@ -39,7 +39,7 @@ return new class extends Migration
 
     public function up(): void
     {
-        if (! Schema::hasTable('ai_generated_reports')) {
+        if (! $this->tableExists('ai_generated_reports')) {
             Schema::create('ai_generated_reports', function (Blueprint $table) {
                 $table->bigIncrements('id');
                 $table->unsignedBigInteger('sub_institute_id')->index();
@@ -59,13 +59,13 @@ return new class extends Migration
             });
         }
 
-        if (! Schema::hasTable('ai_templates')) {
+        if (! $this->tableExists('ai_templates')) {
             return;
         }
 
         foreach (self::LAYOUTS as $module => [$oldKey, $newKey, $name, $description, $source, $heading]) {
             // Retire the prose "template" example — only the platform row this seeding wrote.
-            if (Schema::hasTable('ai_suggestions')) {
+            if ($this->tableExists('ai_suggestions')) {
                 DB::table('ai_suggestions')->where('action_ref', $oldKey)->whereNull('sub_institute_id')->delete();
             }
             DB::table('ai_templates')->where('template_key', $oldKey)->whereNull('sub_institute_id')->where('kind', 'template')->delete();
@@ -110,7 +110,7 @@ return new class extends Migration
                 'updated_at' => now(),
             ]);
 
-            if (Schema::hasTable('ai_suggestions')) {
+            if ($this->tableExists('ai_suggestions')) {
                 DB::table('ai_suggestions')->insert([
                     'module_key' => $module,
                     'capability' => 'generative',
@@ -133,7 +133,7 @@ return new class extends Migration
                 ]);
             }
 
-            if (Schema::hasTable('ai_audit_logs')) {
+            if ($this->tableExists('ai_audit_logs')) {
                 DB::table('ai_audit_logs')->insert([
                     'event_type' => 'ai.template.created',
                     'actor_type' => 'system',
@@ -167,14 +167,30 @@ return new class extends Migration
     public function down(): void
     {
         foreach (self::LAYOUTS as [$oldKey, $newKey]) {
-            if (Schema::hasTable('ai_suggestions')) {
+            if ($this->tableExists('ai_suggestions')) {
                 DB::table('ai_suggestions')->where('action_ref', $newKey)->whereNull('sub_institute_id')->delete();
             }
-            if (Schema::hasTable('ai_templates')) {
+            if ($this->tableExists('ai_templates')) {
                 DB::table('ai_templates')->where('template_key', $newKey)->whereNull('sub_institute_id')->delete();
             }
         }
 
         Schema::dropIfExists('ai_generated_reports');
+    }
+
+    /**
+     * Schema::hasTable() throws on this estate's live MariaDB — its query asks
+     * information_schema.columns for a `generation_expression` field that database does
+     * not have. This crashed the migration on first deploy before the tables it guards
+     * were ever created, so it is answered directly against information_schema instead,
+     * the same fix already used throughout this migration's siblings.
+     */
+    private function tableExists(string $table): bool
+    {
+        return DB::selectOne(
+            'SELECT COUNT(*) AS c FROM information_schema.tables
+              WHERE table_schema = DATABASE() AND table_name = ?',
+            [$table]
+        )->c > 0;
     }
 };
