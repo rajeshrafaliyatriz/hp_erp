@@ -195,6 +195,22 @@ class EventCatalogue
         'leave.escalated' => [
             'NotificationDispatcher'      => self::REACTOR,
         ],
+
+        /*
+         * Round 2 Platform Services. Emitted by SchedulerController::runNow() when an
+         * administrator manually runs a tenant-scoped task and it fails.
+         *
+         * AuditLogProjector-only, same reasoning as payroll.payslip.superseded: this
+         * event exists purely so the failure lands in g2g_audit_log, not to trigger a
+         * reaction. It is deliberately NOT emitted from the routes/console.php scheduled
+         * hooks themselves - EventRecorder::record() refuses a request with no tenant,
+         * and a scheduled pass has none to attribute a failure to. g2g_platform_task_runs
+         * (see TaskRunLedger) is the estate-wide record; this is the tenant-attributed one,
+         * raised only when a tenant genuinely triggered the run.
+         */
+        'platform.scheduler.task_run_failed' => [
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
     ];
 
     /**

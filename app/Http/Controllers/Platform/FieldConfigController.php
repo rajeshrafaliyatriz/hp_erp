@@ -101,6 +101,9 @@ class FieldConfigController extends PlatformController
                     'sort_order' => (int) $row->sort_order,
                     'tab_sort_order' => $row->tab_sort_order === null ? null : (int) $row->tab_sort_order,
                     'file_size_max' => $row->file_size_max,
+                    'min_value' => $row->min_value ?? null,
+                    'max_value' => $row->max_value ?? null,
+                    'validation_pattern' => $row->validation_pattern ?? null,
                     // A platform-wide field is not this organisation's to change.
                     'editable' => ! (bool) $row->common_to_all,
                     'options' => $options[(int) $row->id] ?? [],
@@ -162,6 +165,7 @@ class FieldConfigController extends PlatformController
                 'user_type' => $this->text($request, 'user_type', 50),
                 'file_size_max' => $this->text($request, 'file_size_max', 50),
                 'required' => (int) (bool) $request->input('required', false),
+                ...$this->validationRuleColumns($request, (string) $request->input('field_type')),
                 // NOT settable by a tenant. A platform-wide field affects every
                 // organisation, and this endpoint is scoped to one.
                 'common_to_all' => 0,
@@ -215,6 +219,10 @@ class FieldConfigController extends PlatformController
                 'field_message' => $this->text($request, 'field_message', 50),
                 'file_size_max' => $this->text($request, 'file_size_max', 50),
                 'required' => (int) (bool) $request->input('required', (bool) $row->required),
+                // `field_type` is fixed at creation (see the note above on why), so the
+                // rule columns are always resolved against the ROW's own type, never a
+                // type the request could smuggle in on an edit.
+                ...$this->validationRuleColumns($request, $row->field_type),
                 'sort_order' => (int) $request->input('sort_order', $row->sort_order),
                 'tab_sort_order' => $request->input('tab_sort_order') === null
                     ? $row->tab_sort_order
@@ -293,6 +301,29 @@ class FieldConfigController extends PlatformController
 
             if (! in_array($type, self::TYPES, true)) {
                 return 'That is not a field type this platform can render.';
+            }
+        }
+
+        if ($type === 'number' && ($request->has('min_value') || $request->has('max_value'))) {
+            $min = $request->input('min_value');
+            $max = $request->input('max_value');
+
+            if ($min !== null && $min !== '' && ! is_numeric($min)) {
+                return 'The minimum must be a number.';
+            }
+
+            if ($max !== null && $max !== '' && ! is_numeric($max)) {
+                return 'The maximum must be a number.';
+            }
+
+            if ($min !== null && $min !== '' && $max !== null && $max !== '' && (float) $min > (float) $max) {
+                return 'The minimum cannot be greater than the maximum.';
+            }
+        }
+
+        if (in_array($type, ['text', 'textarea'], true) && $request->filled('validation_pattern')) {
+            if (! self::isValidPattern((string) $request->input('validation_pattern'))) {
+                return 'That pattern is not a valid regular expression.';
             }
         }
 
@@ -395,5 +426,47 @@ class FieldConfigController extends PlatformController
         $value = trim((string) $request->input($key, ''));
 
         return $value === '' ? null : mb_substr($value, 0, $max);
+    }
+
+    /**
+     * `min_value`/`max_value`/`validation_pattern` for the row being written, scoped to
+     * the field's OWN type — a `number` field's min/max are meaningless on a `text`
+     * field and vice versa, so writing all three columns unconditionally would let a
+     * request set a rule the renderer on the other side has no way to apply.
+     *
+     * @return array<string, string|null>
+     */
+    private function validationRuleColumns(Request $request, string $type): array
+    {
+        if ($type === 'number') {
+            return [
+                'min_value' => $this->text($request, 'min_value', 32),
+                'max_value' => $this->text($request, 'max_value', 32),
+                'validation_pattern' => null,
+            ];
+        }
+
+        if (in_array($type, ['text', 'textarea'], true)) {
+            return [
+                'min_value' => null,
+                'max_value' => null,
+                'validation_pattern' => $this->text($request, 'validation_pattern', 191),
+            ];
+        }
+
+        return ['min_value' => null, 'max_value' => null, 'validation_pattern' => null];
+    }
+
+    /**
+     * Whether a string compiles as a PCRE pattern.
+     *
+     * Delimiter-free by convention here — see the migration's note on
+     * `validation_pattern` — so this wraps it in the same `#...#u` `CustomFieldValues`
+     * will use to actually test a value, rather than validating a shape the value-time
+     * check does not use.
+     */
+    public static function isValidPattern(string $pattern): bool
+    {
+        return @preg_match('#' . str_replace('#', '\#', $pattern) . '#u', '') !== false;
     }
 }

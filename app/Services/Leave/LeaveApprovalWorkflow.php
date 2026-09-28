@@ -129,15 +129,22 @@ class LeaveApprovalWorkflow
      * nothing elsewhere. `rolesOf()` gives the flat list of roles that the rest of
      * the product still speaks.
      *
+     * `$context` is what `WorkflowConditionEvaluator` tests a platform chain's
+     * `condition` against — see `contextFor()`. Optional and defaults to empty:
+     * every OTHER caller of this method (there are none in production besides
+     * `openFor()`, which always has a real leave id) gets exactly Round 1's
+     * behaviour, since an empty context can only ever select an unconditional chain.
+     *
+     * @param  array<string, float|int>  $context
      * @return array<int, array{
      *   approver_role: string, approver_user_id: ?int, approver_user_name: ?string,
      *   step_name: ?string, sla_hours: ?int, on_breach: ?string,
      *   require_comment: bool, source: string, workflow_id: ?int
      * }>
      */
-    public function chainFor(int $subInstituteId): array
+    public function chainFor(int $subInstituteId, array $context = []): array
     {
-        $platform = $this->platformChainFor($subInstituteId);
+        $platform = $this->platformChainFor($subInstituteId, $context);
 
         if ($platform !== null) {
             return $platform;
@@ -223,12 +230,13 @@ class LeaveApprovalWorkflow
      * that it was not the one being used. Falling back is at least a chain
      * somebody chose, and the log line says which chain was skipped and why.
      *
+     * @param  array<string, float|int>  $context
      * @return array<int, array<string, mixed>>|null
      */
-    private function platformChainFor(int $subInstituteId): ?array
+    private function platformChainFor(int $subInstituteId, array $context = []): ?array
     {
         $chain = app(WorkflowChainSelector::class)
-            ->select($subInstituteId, self::LEAVE_FLOW_KEY)['chain'];
+            ->select($subInstituteId, self::LEAVE_FLOW_KEY, $context)['chain'];
 
         if ($chain === null) {
             return null;
@@ -381,7 +389,7 @@ class LeaveApprovalWorkflow
      */
     public function openFor(int $leaveId, int $subInstituteId): array
     {
-        $chain = $this->chainFor($subInstituteId);
+        $chain = $this->chainFor($subInstituteId, $this->conditionContextFor($leaveId, $subInstituteId));
         $now   = now();
         $rows  = [];
 
@@ -432,6 +440,59 @@ class LeaveApprovalWorkflow
          * takes it from.
          */
         return self::rolesOf($chain);
+    }
+
+    /**
+     * The real facts this leave request offers `WorkflowConditionEvaluator`.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY THESE THREE, AND NOT AN "EMPLOYEE GRADE" THE PLAN ONCE ASSUMED
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `hrms_emp_leaves.chargeable_days` and `.leave_type_id` are real, numeric, and
+     * exactly what an administrator configuring "leave over 5 days" or "sick leave
+     * only" means by those words. A fourth field, the employee's grade, does not
+     * exist anywhere in `tbluser` — there is no grade column to read — so it is not
+     * offered rather than being faked from something that resembles it. Only
+     * `department_id` is available as the closest organisational fact, via the
+     * requester's own row.
+     *
+     * Returns `[]` — not a partial guess — when the leave row cannot be found, so a
+     * condition naming any of these three fails closed exactly as
+     * `WorkflowConditionEvaluator` documents, rather than matching on stale defaults.
+     *
+     * @return array<string, float>
+     */
+    private function conditionContextFor(int $leaveId, int $subInstituteId): array
+    {
+        $leave = DB::table('hrms_emp_leaves')
+            ->where('id', $leaveId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->first(['chargeable_days', 'leave_type_id', 'user_id']);
+
+        if ($leave === null) {
+            return [];
+        }
+
+        $departmentId = $leave->user_id === null
+            ? null
+            : DB::table('tbluser')->where('id', $leave->user_id)->value('department_id');
+
+        $context = [];
+
+        if ($leave->chargeable_days !== null && is_numeric($leave->chargeable_days)) {
+            $context['leave_days'] = (float) $leave->chargeable_days;
+        }
+
+        if ($leave->leave_type_id !== null && is_numeric($leave->leave_type_id)) {
+            $context['leave_type_id'] = (float) $leave->leave_type_id;
+        }
+
+        if ($departmentId !== null && is_numeric($departmentId)) {
+            $context['department_id'] = (float) $departmentId;
+        }
+
+        return $context;
     }
 
     /**

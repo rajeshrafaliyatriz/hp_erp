@@ -86,6 +86,9 @@ class CustomFieldValues
             'field_message' => $field->field_message,
             'required' => (bool) $field->required,
             'sort_order' => (int) $field->sort_order,
+            'min_value' => $field->min_value ?? null,
+            'max_value' => $field->max_value ?? null,
+            'validation_pattern' => $field->validation_pattern ?? null,
             'options' => $options[(int) $field->id] ?? [],
             // Null means unanswered, which is different from an empty answer only
             // in a form that distinguishes them. Neither is an error.
@@ -120,12 +123,12 @@ class CustomFieldValues
      * silently erase the other two.
      *
      * @param  array<int|string, mixed>  $answers
-     * @return array{saved: int, ignored: array<int, int>}
+     * @return array{saved: int, ignored: array<int, int>, invalid: array<int, string>}
      */
     public function save(string $recordTable, int $recordId, int $tenantId, array $answers, ?int $actorId): array
     {
         if ($answers === [] || ! $this->usable($recordTable)) {
-            return ['saved' => 0, 'ignored' => []];
+            return ['saved' => 0, 'ignored' => [], 'invalid' => []];
         }
 
         /*
@@ -138,7 +141,9 @@ class CustomFieldValues
          *
          * Unknown ids are IGNORED and reported rather than refused: a stale form
          * naming a field somebody deleted a minute ago should save the rest of its
-         * answers, not fail wholesale.
+         * answers, not fail wholesale. A value that fails ITS OWN field's min/max or
+         * pattern rule (Round 2) is treated the same way and for the same reason — see
+         * `invalidReason()`.
          */
         $allowed = DB::table(self::FIELDS)
             ->where(function ($query) use ($tenantId) {
@@ -148,19 +153,27 @@ class CustomFieldValues
             ->where('table_name', $recordTable)
             ->where('status', 1)
             ->where('is_deleted', 'N')
-            ->pluck('id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
+            ->get(['id', 'field_type', 'min_value', 'max_value', 'validation_pattern'])
+            ->keyBy(fn ($field) => (int) $field->id);
 
         $saved = 0;
         $ignored = [];
+        $invalid = [];
         $now = now();
 
         foreach ($answers as $fieldId => $value) {
             $fieldId = (int) $fieldId;
+            $field = $allowed->get($fieldId);
 
-            if (! in_array($fieldId, $allowed, true)) {
+            if ($field === null) {
                 $ignored[] = $fieldId;
+                continue;
+            }
+
+            $reason = $this->invalidReason($field, $value);
+
+            if ($reason !== null) {
+                $invalid[$fieldId] = $reason;
                 continue;
             }
 
@@ -186,7 +199,52 @@ class CustomFieldValues
             $saved++;
         }
 
-        return ['saved' => $saved, 'ignored' => $ignored];
+        return ['saved' => $saved, 'ignored' => $ignored, 'invalid' => $invalid];
+    }
+
+    /**
+     * Why this value cannot be saved against this field, or null when it can.
+     *
+     * An empty value is never invalid here — `required` is a separate, form-level
+     * question this service does not answer, and a min/max/pattern rule on an
+     * unanswered field would wrongly block clearing it.
+     */
+    private function invalidReason(object $field, mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if ($field->field_type === 'number') {
+            if (! is_numeric($value)) {
+                return 'Not a number.';
+            }
+
+            $number = (float) $value;
+
+            if ($field->min_value !== null && $field->min_value !== '' && $number < (float) $field->min_value) {
+                return 'Below the minimum of ' . $field->min_value . '.';
+            }
+
+            if ($field->max_value !== null && $field->max_value !== '' && $number > (float) $field->max_value) {
+                return 'Above the maximum of ' . $field->max_value . '.';
+            }
+
+            return null;
+        }
+
+        if (in_array($field->field_type, ['text', 'textarea'], true) && ! empty($field->validation_pattern)) {
+            $pattern = '#' . str_replace('#', '\#', $field->validation_pattern) . '#u';
+
+            // A pattern that no longer compiles (edited into something invalid by a
+            // route this service does not control) is not this value's fault — it is
+            // treated as "no rule" rather than rejecting every answer to the field.
+            if (@preg_match($pattern, (string) $value) === 0) {
+                return "Does not match the required pattern.";
+            }
+        }
+
+        return null;
     }
 
     /**

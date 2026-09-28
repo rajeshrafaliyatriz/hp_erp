@@ -137,6 +137,23 @@ class PlatformRegistry
         return array_key_exists($key, $this->workflowPoints());
     }
 
+    /** @return array<string, mixed> */
+    public function integrations(): array
+    {
+        return (array) config('platform_services.integrations', []);
+    }
+
+    public function hasIntegration(string $key): bool
+    {
+        return array_key_exists($key, $this->integrations());
+    }
+
+    /** @return array<string, mixed>|null */
+    public function integration(string $key): ?array
+    {
+        return $this->integrations()[$key] ?? null;
+    }
+
     /**
      * Whether anything in the product actually reads a chain saved at this point.
      *

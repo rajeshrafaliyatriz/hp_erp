@@ -6,6 +6,7 @@ use App\Services\Platform\PlatformRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
@@ -33,6 +34,7 @@ use Throwable;
 class WorkflowController extends PlatformController
 {
     private const TABLE = 'g2g_platform_workflows';
+    private const VERSIONS = 'g2g_platform_workflow_versions';
 
     /** A ladder longer than this is a process problem, not a configuration one. */
     private const MAX_STEPS = 12;
@@ -159,6 +161,65 @@ class WorkflowController extends PlatformController
         }
     }
 
+    /**
+     * Which chain would govern this point right now, for sample values an
+     * administrator types in — the tool that makes `condition` trustworthy to
+     * configure.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY THIS TAKES A RAW CONTEXT RATHER THAN "SIMULATE FOR LEAVE ID 4103"
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * The alternative — pick a real record and show what would happen to it — only
+     * works for the one workflow point (`hrms.leave.approval`) that has a context
+     * resolver at all, and ties this generic console to HRMS internals it has no
+     * business knowing about. Asking for sample values directly works for every
+     * workflow point the registry will ever declare, present or future, with no new
+     * code here when the next one is added — it evaluates the SAME
+     * `WorkflowChainSelector::select()` every real decision uses, just with a
+     * hand-typed context instead of one read off a stored row.
+     */
+    public function simulate(Request $request): JsonResponse
+    {
+        try {
+            $scope = $this->scope($request);
+
+            $flowKey = trim((string) $request->input('flow_key', ''));
+
+            if (! $this->registry->hasWorkflowPoint($flowKey)) {
+                return $this->failure('That is not a workflow point this platform declares.', 422, [
+                    'flow_key' => ['Unknown workflow point.'],
+                ]);
+            }
+
+            $context = [];
+
+            foreach ((array) $request->input('context', []) as $field => $value) {
+                if (is_string($field) && $field !== '' && is_numeric($value)) {
+                    $context[$field] = (float) $value;
+                }
+            }
+
+            $result = $this->selector->select($scope->selectedInstituteId, $flowKey, $context);
+
+            if ($result['chain'] === null) {
+                return $this->success('No chain would govern this.', [
+                    'matched' => false,
+                    'reason' => $result['reason'],
+                    'workflow' => null,
+                ]);
+            }
+
+            return $this->success('A chain would govern this.', [
+                'matched' => true,
+                'reason' => $result['reason'],
+                'workflow' => $this->present($result['chain']),
+            ]);
+        } catch (Throwable $exception) {
+            return $this->handle($exception);
+        }
+    }
+
     public function store(Request $request): JsonResponse
     {
         try {
@@ -211,7 +272,10 @@ class WorkflowController extends PlatformController
                 'updated_at' => $now,
             ]);
 
-            return $this->success('Workflow created.', ['workflow' => $this->find($scope->selectedInstituteId, $id)], 201);
+            $workflow = $this->find($scope->selectedInstituteId, $id);
+            $this->snapshotVersion($id, $scope->selectedInstituteId, $flowKey, $workflow, $this->actor($scope));
+
+            return $this->success('Workflow created.', ['workflow' => $workflow], 201);
         } catch (Throwable $exception) {
             return $this->handle($exception);
         }
@@ -281,8 +345,11 @@ class WorkflowController extends PlatformController
             // change what a stored `condition` is evaluated against.
             DB::table(self::TABLE)->where('id', $id)->update($values);
 
+            $workflow = $this->find($scope->selectedInstituteId, $id);
+            $this->snapshotVersion($id, $scope->selectedInstituteId, $row->flow_key, $workflow, $this->actor($scope));
+
             return $this->success('Workflow updated.', [
-                'workflow' => $this->find($scope->selectedInstituteId, $id),
+                'workflow' => $workflow,
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -304,6 +371,59 @@ class WorkflowController extends PlatformController
             }
 
             return $this->success('Workflow deleted.', ['deleted' => $id]);
+        } catch (Throwable $exception) {
+            return $this->handle($exception);
+        }
+    }
+
+    /**
+     * Every snapshot saved for one chain, most recent first — with a plain-text
+     * summary of what changed since the PREVIOUS snapshot, computed on read.
+     *
+     * ── SCOPED BY workflow_id, NOT BY A LIVE ROW ────────────────────────────────
+     *
+     * There is deliberately no check that `g2g_platform_workflows` still has this
+     * id — see the migration's note on why versions outlive a deleted chain. What
+     * IS checked is that the version rows themselves belong to this tenant, via
+     * their own denormalised `sub_institute_id`, so history cannot be read across
+     * organisations by guessing a workflow id.
+     */
+    public function history(Request $request, int $id): JsonResponse
+    {
+        try {
+            $scope = $this->scope($request);
+
+            $rows = DB::table(self::VERSIONS)
+                ->where('workflow_id', $id)
+                ->where('sub_institute_id', $scope->selectedInstituteId)
+                ->orderByDesc('id')
+                ->get();
+
+            if ($rows->isEmpty()) {
+                return $this->success('No history recorded.', ['versions' => []]);
+            }
+
+            $versions = [];
+            $previous = null;
+
+            // Oldest first while diffing, so each summary reads as "what changed
+            // to arrive at this one" — then the whole list is reversed once, to
+            // present newest first as the screen wants it.
+            foreach ($rows->reverse()->values() as $row) {
+                $snapshot = json_decode((string) $row->snapshot, true) ?: [];
+
+                $versions[] = [
+                    'id' => (int) $row->id,
+                    'changed_by' => $row->changed_by,
+                    'created_at' => $row->created_at,
+                    'snapshot' => $snapshot,
+                    'summary' => $previous === null ? 'First saved version.' : $this->diffSummary($previous, $snapshot),
+                ];
+
+                $previous = $snapshot;
+            }
+
+            return $this->success('Version history.', ['versions' => array_reverse($versions)]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
         }
@@ -471,6 +591,72 @@ class WorkflowController extends PlatformController
         }
 
         return $out;
+    }
+
+    /**
+     * Write one version row. Best-effort: a missing `$workflow` (the row vanished
+     * between the write and the re-read, which cannot happen in a single request but
+     * costs nothing to guard) or a missing table skip silently rather than turning a
+     * successful save into a 500 over history-keeping.
+     *
+     * @param  array<string, mixed>|null  $workflow
+     */
+    private function snapshotVersion(int $workflowId, int $tenantId, string $flowKey, ?array $workflow, string $actor): void
+    {
+        if ($workflow === null || ! Schema::hasTable(self::VERSIONS)) {
+            return;
+        }
+
+        DB::table(self::VERSIONS)->insert([
+            'workflow_id' => $workflowId,
+            'sub_institute_id' => $tenantId,
+            'flow_key' => $flowKey,
+            'snapshot' => json_encode($workflow),
+            'changed_by' => $actor,
+            'created_at' => now(),
+        ]);
+    }
+
+    /**
+     * What changed between two snapshots, in the same instructive-sentence style as
+     * `validateChain()`'s own messages — "3 steps -> 4 steps", not a JSON diff.
+     *
+     * Deliberately shallow: step ADD/REMOVE by count, a step NAME set changing (which
+     * catches reordering too, since a reorder changes which name is at which
+     * position), and the three chain-level fields most worth flagging. This is enough
+     * to answer "did this chain get bigger, get a new condition, or go live" without
+     * a general-purpose diff algorithm this feature does not need.
+     *
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $after
+     */
+    private function diffSummary(array $before, array $after): string
+    {
+        $notes = [];
+
+        $beforeSteps = $before['steps'] ?? [];
+        $afterSteps = $after['steps'] ?? [];
+
+        if (count($beforeSteps) !== count($afterSteps)) {
+            $notes[] = count($beforeSteps) . ' step' . (count($beforeSteps) === 1 ? '' : 's')
+                . ' -> ' . count($afterSteps) . ' step' . (count($afterSteps) === 1 ? '' : 's');
+        } elseif (array_column($beforeSteps, 'name') !== array_column($afterSteps, 'name')) {
+            $notes[] = 'Steps renamed or reordered.';
+        }
+
+        if (($before['condition'] ?? '') !== ($after['condition'] ?? '')) {
+            $notes[] = ($after['condition'] ?? '') === '' ? 'Condition removed.' : 'Condition changed.';
+        }
+
+        if (($before['status'] ?? null) !== ($after['status'] ?? null)) {
+            $notes[] = 'Status: ' . ($before['status'] ?? '?') . ' -> ' . ($after['status'] ?? '?') . '.';
+        }
+
+        if (($before['total_sla_hours'] ?? null) !== ($after['total_sla_hours'] ?? null)) {
+            $notes[] = 'Total SLA changed.';
+        }
+
+        return $notes === [] ? 'No visible change (name or description only).' : implode(' ', $notes);
     }
 
     /** @return array<string, mixed>|null */

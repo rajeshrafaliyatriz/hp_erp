@@ -3,6 +3,7 @@
 use App\Http\Controllers\Platform\CustomFieldValueController;
 use App\Http\Controllers\Platform\EventBusController;
 use App\Http\Controllers\Platform\FieldConfigController;
+use App\Http\Controllers\Platform\IntegrationController;
 use App\Http\Controllers\Platform\ProcessController;
 use App\Http\Controllers\Platform\RegistryController;
 use App\Http\Controllers\Platform\SchedulerController;
@@ -94,6 +95,7 @@ Route::prefix('api/platform')
         Route::get('/events/failures', [EventBusController::class, 'failures']);
         Route::get('/events/catalogue', [EventBusController::class, 'catalogue']);
         Route::get('/events/options', [EventBusController::class, 'options']);
+        Route::post('/events/replay', [EventBusController::class, 'replay']);
 
         /*
         | Scheduler — what is registered, when it next runs, and what the queue holds.
@@ -104,6 +106,7 @@ Route::prefix('api/platform')
         */
         Route::get('/scheduler/tasks', [SchedulerController::class, 'index']);
         Route::post('/scheduler/tasks', [SchedulerController::class, 'save']);
+        Route::post('/scheduler/tasks/run', [SchedulerController::class, 'runNow']);
 
         /*
         | The catalogue every screen renders and every write below validates against.
@@ -127,9 +130,11 @@ Route::prefix('api/platform')
         | 404 would be confusing.
         */
         Route::get('/workflow/points', [WorkflowController::class, 'index']);
+        Route::post('/workflow/simulate', [WorkflowController::class, 'simulate']);
         Route::post('/workflow', [WorkflowController::class, 'store']);
         Route::put('/workflow/{id}', [WorkflowController::class, 'update'])->whereNumber('id');
         Route::delete('/workflow/{id}', [WorkflowController::class, 'destroy'])->whereNumber('id');
+        Route::get('/workflow/{id}/history', [WorkflowController::class, 'history'])->whereNumber('id');
 
         /*
         | Fields Configuration — over tblcustom_fields, which has existed for a year
@@ -186,4 +191,16 @@ Route::prefix('api/platform')
         Route::put('/process/{id}', [ProcessController::class, 'update'])->whereNumber('id');
         Route::delete('/process/{id}', [ProcessController::class, 'destroy'])->whereNumber('id');
         Route::post('/process/{id}/publish', [ProcessController::class, 'publish'])->whereNumber('id');
+        Route::get('/process/{id}/history', [ProcessController::class, 'history'])->whereNumber('id');
+
+        /*
+        | Integrations — every third-party connection the platform declares, real
+        | status for the readonly/stub/existing kinds, and real save + test for the
+        | two new `credential` providers. See config/platform_services.php and
+        | IntegrationController for the full account of what this consolidates.
+        */
+        Route::get('/integrations', [IntegrationController::class, 'index']);
+        Route::post('/integrations/{key}', [IntegrationController::class, 'upsert']);
+        Route::post('/integrations/{key}/test', [IntegrationController::class, 'test']);
+        Route::delete('/integrations/{key}', [IntegrationController::class, 'destroy']);
     });

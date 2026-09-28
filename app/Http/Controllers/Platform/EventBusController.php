@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Platform;
 
+use App\Services\Events\EventCatalogue;
 use App\Services\Platform\EventBusReader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -89,13 +90,73 @@ class EventBusController extends PlatformController
             $result = $this->reader->failures(
                 $this->scope($request)->selectedInstituteId,
                 $page,
-                $limit
+                $limit,
+                $this->text($request, 'consumer'),
+                $this->text($request, 'q')
             );
 
             return $this->success(
                 'Failed deliveries.',
                 $this->paged($result['rows'], $result['total'], $page, $limit)
+                    + ['stuck_after' => $result['stuck_after']]
             );
+        } catch (Throwable $exception) {
+            return $this->handle($exception);
+        }
+    }
+
+    /**
+     * Re-run one projector for one event this tenant owns.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * BOTH REFUSALS HAPPEN HERE, NOT JUST IN THE UI
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * A cross-tenant event id reads as 404 — `eventFor()` is scoped to this tenant, so
+     * an id belonging to another organisation simply does not resolve, the same 404
+     * every other cross-tenant lookup in this API gives. A reactor-kind consumer, or
+     * one this event's type does not even declare, is refused with 422 and a reason —
+     * checked against `EventCatalogue::SHIPPED` itself, not against whatever the
+     * console happened to show, so calling this endpoint directly cannot reach a
+     * reactor even if the Consumers tab's own filtering were ever removed or buggy.
+     */
+    public function replay(Request $request): JsonResponse
+    {
+        try {
+            $scope = $this->scope($request);
+
+            $eventId = (int) $request->input('event_id');
+            $consumer = trim((string) $request->input('consumer', ''));
+
+            $event = $this->reader->eventFor($scope->selectedInstituteId, $eventId);
+
+            if ($event === null) {
+                return $this->failure('That event does not exist.', 404);
+            }
+
+            $kind = EventCatalogue::SHIPPED[$event->type][$consumer] ?? null;
+
+            if ($kind === null) {
+                return $this->failure(
+                    'That is not a declared consumer of this event type.',
+                    422,
+                    ['consumer' => ['Unknown consumer for this event.']]
+                );
+            }
+
+            if ($kind !== EventCatalogue::PROJECTOR) {
+                return $this->failure(
+                    'Only projectors can be replayed here. A reactor has side effects — '
+                    . 'enrolling somebody, issuing a certificate, sending a notification — '
+                    . 'and replaying it would do those things again.',
+                    422,
+                    ['consumer' => ['Not a projector.']]
+                );
+            }
+
+            $this->reader->replay($event, $consumer);
+
+            return $this->success('Replayed.', ['event_id' => $eventId, 'consumer' => $consumer]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
         }
