@@ -78,6 +78,7 @@ class TemplateCatalog
     public function __construct(
         private readonly TemplateModuleCatalog $modules,
         private readonly TemplateVariableCatalog $variables,
+        private readonly \App\Domain\AI\Support\SchemaCache $schema,
     ) {
     }
 
@@ -92,7 +93,7 @@ class TemplateCatalog
      */
     public function forModule(?string $moduleKey, int|string|null $institute): array
     {
-        if (! Schema::hasTable('ai_templates')) {
+        if (! $this->schema->hasTable('ai_templates')) {
             return [];
         }
 
@@ -135,7 +136,7 @@ class TemplateCatalog
     /** The raw row, scoped so a caller cannot reach another organisation's template by id. */
     public function row(int $id, int|string|null $institute): ?object
     {
-        if (! Schema::hasTable('ai_templates')) {
+        if (! $this->schema->hasTable('ai_templates')) {
             return null;
         }
 
@@ -400,7 +401,7 @@ class TemplateCatalog
         int|string|null $institute,
         int|string|null $clientId
     ): void {
-        if (! Schema::hasTable('ai_suggestions')) {
+        if (! $this->schema->hasTable('ai_suggestions')) {
             return;
         }
 
@@ -472,7 +473,7 @@ class TemplateCatalog
      */
     private function withdrawBinding(string $templateKey, ?string $moduleKey, int|string|null $institute): void
     {
-        if (! Schema::hasTable('ai_suggestions')) {
+        if (! $this->schema->hasTable('ai_suggestions')) {
             return;
         }
 
@@ -504,7 +505,7 @@ class TemplateCatalog
      */
     private function bindings(int|string|null $institute): array
     {
-        if (! Schema::hasTable('ai_suggestions')) {
+        if (! $this->schema->hasTable('ai_suggestions')) {
             return [];
         }
 

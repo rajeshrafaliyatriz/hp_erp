@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AI;
 
+use App\Domain\AI\Support\SchemaCache;
 use App\Domain\AI\Configuration\AiModuleRegistry;
 use App\Domain\AI\Support\AiAuditLogger;
 use App\Domain\AI\Support\AiUsageMeter;
@@ -401,9 +402,9 @@ class UsageController extends AiController
 
         $query = DB::table($table);
 
-        if (Schema::hasColumn($table, 'tenant_id')) {
+        if (app(SchemaCache::class)->hasColumn($table, 'tenant_id')) {
             $query->where('tenant_id', (string) $institute);
-        } elseif (Schema::hasColumn($table, 'sub_institute_id')) {
+        } elseif (app(SchemaCache::class)->hasColumn($table, 'sub_institute_id')) {
             $query->where('sub_institute_id', $institute);
         }
 

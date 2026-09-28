@@ -58,7 +58,7 @@ PROMPT;
 
     public function up(): void
     {
-        if (! Schema::hasTable('ai_templates') || DB::table('ai_templates')->where('template_key', self::TEMPLATE_KEY)->exists()) {
+        if (! $this->tableExists('ai_templates') || DB::table('ai_templates')->where('template_key', self::TEMPLATE_KEY)->exists()) {
             return;
         }
 
@@ -100,8 +100,18 @@ PROMPT;
 
     public function down(): void
     {
-        if (Schema::hasTable('ai_templates')) {
+        if ($this->tableExists('ai_templates')) {
             DB::table('ai_templates')->where('template_key', self::TEMPLATE_KEY)->whereNull('sub_institute_id')->delete();
         }
+    }
+
+    /** Schema::hasTable() throws on this estate's live MariaDB - information_schema does not. */
+    private function tableExists(string $table): bool
+    {
+        return DB::selectOne(
+            'SELECT COUNT(*) AS c FROM information_schema.tables
+              WHERE table_schema = DATABASE() AND table_name = ?',
+            [$table]
+        )->c > 0;
     }
 };

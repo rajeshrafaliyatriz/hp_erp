@@ -2,7 +2,6 @@
 
 namespace App\Domain\AI\Support;
 
-use Illuminate\Support\Facades\Schema;
 
 /**
  * "Only the rows that are still in use", across tables that disagree about how to
@@ -61,7 +60,7 @@ final class ActiveRowFilter
      */
     public static function apply($query, string $table, string $column = 'status'): void
     {
-        if (! Schema::hasColumn($table, $column)) {
+        if (! app(SchemaCache::class)->hasColumn($table, $column)) {
             return;
         }
 
@@ -69,7 +68,7 @@ final class ActiveRowFilter
 
         // NULL is kept: a row that has never been given a status has not been
         // retired. Bindings rather than interpolation for the values; the column is
-        // quoted from a `Schema::hasColumn` result, so it cannot be caller-supplied.
+        // quoted from a `SchemaCache::hasColumn` result, so it cannot be caller-supplied.
         $query->whereRaw(
             sprintf(
                 '(`%s` IS NULL OR LOWER(TRIM(`%s`)) NOT IN (%s))',

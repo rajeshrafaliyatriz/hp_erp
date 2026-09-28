@@ -2,6 +2,7 @@
 
 namespace App\Domain\AI\Conversation;
 
+use App\Domain\AI\Support\SchemaCache;
 use App\Domain\AI\Support\ActiveRowFilter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -127,13 +128,13 @@ final class OrganisationContext
 
         $query = DB::table($table);
 
-        if (Schema::hasColumn($table, 'sub_institute_id')) {
+        if (app(SchemaCache::class)->hasColumn($table, 'sub_institute_id')) {
             $includePlatform
                 ? $query->where(fn ($inner) => $inner->where('sub_institute_id', $institute)->orWhereNull('sub_institute_id'))
                 : $query->where('sub_institute_id', $institute);
         }
 
-        if (Schema::hasColumn($table, 'deleted_at')) {
+        if (app(SchemaCache::class)->hasColumn($table, 'deleted_at')) {
             $query->whereNull('deleted_at');
         }
 
