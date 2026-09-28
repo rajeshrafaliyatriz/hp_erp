@@ -47,6 +47,7 @@ class AiPolicyController extends AiController
     public function __construct(
         private readonly AiPolicyResolver $resolver,
         private readonly AiAuditLogger $audit,
+        private readonly \App\Domain\AI\Support\SchemaCache $schema,
     ) {
     }
 
@@ -395,19 +396,19 @@ class AiPolicyController extends AiController
      */
     private function targets(string $table, string $labelColumn, int|string|null $institute, ?string $tenantColumn): array
     {
-        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $labelColumn)) {
+        if (! $this->schema->hasTable($table) || ! $this->schema->hasColumn($table, $labelColumn)) {
             return [];
         }
 
         $query = DB::table($table);
 
-        if ($tenantColumn !== null && Schema::hasColumn($table, $tenantColumn)) {
+        if ($tenantColumn !== null && $this->schema->hasColumn($table, $tenantColumn)) {
             $query->where(function ($inner) use ($tenantColumn, $institute) {
                 $inner->where($tenantColumn, $institute)->orWhereNull($tenantColumn);
             });
         }
 
-        if (Schema::hasColumn($table, 'deleted_at')) {
+        if ($this->schema->hasColumn($table, 'deleted_at')) {
             $query->whereNull('deleted_at');
         }
 
@@ -439,7 +440,7 @@ class AiPolicyController extends AiController
     /** @return array<int, array{id:int, key:string, label:string}> */
     private function moduleOptions(int|string|null $institute): array
     {
-        if (! Schema::hasTable('ai_modules')) {
+        if (! $this->schema->hasTable('ai_modules')) {
             return [];
         }
 
@@ -455,7 +456,7 @@ class AiPolicyController extends AiController
 
     private function moduleIds(string $moduleKey, int|string|null $institute): array
     {
-        if (! Schema::hasTable('ai_modules')) {
+        if (! $this->schema->hasTable('ai_modules')) {
             return [];
         }
 
@@ -488,7 +489,7 @@ class AiPolicyController extends AiController
             }
         }
 
-        if ($ids === [] || ! Schema::hasTable('ai_modules')) {
+        if ($ids === [] || ! $this->schema->hasTable('ai_modules')) {
             return [];
         }
 

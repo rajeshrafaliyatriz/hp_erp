@@ -53,6 +53,7 @@ final class AiConfigurationResolver
         private readonly AiModuleRegistry $modules,
         private readonly ProviderKeyResolver $keys,
         private readonly ModuleModelBindings $bindings,
+        private readonly \App\Domain\AI\Support\SchemaCache $schema,
     ) {
     }
 
@@ -265,7 +266,7 @@ final class AiConfigurationResolver
      */
     private function findModuleRow(?string $moduleKey, int|string|null $subInstituteId): ?object
     {
-        if ($moduleKey === null || ! Schema::hasTable('ai_api_keys') || ! Schema::hasColumn('ai_api_keys', 'ai_module')) {
+        if ($moduleKey === null || ! $this->schema->hasTable('ai_api_keys') || ! $this->schema->hasColumn('ai_api_keys', 'ai_module')) {
             return null;
         }
 

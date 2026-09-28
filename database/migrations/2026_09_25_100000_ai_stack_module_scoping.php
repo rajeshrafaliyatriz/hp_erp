@@ -26,6 +26,17 @@ use Illuminate\Support\Facades\Schema;
  * existing caller resolves exactly as before.
  *
  * Only the nine AI Stack modules are seeded; the eight top-level rows are untouched.
+ *
+ * WHY THIS ASKS information_schema DIRECTLY, NOT VIA Schema::hasTable()/hasColumn()
+ *
+ * Both compile to a query selecting every information_schema.columns field, including
+ * `generation_expression` — a column MySQL added in 8.0.13 and this estate's live
+ * database does not have. That crashed this exact migration on first deploy: the very
+ * first `Schema::hasTable('ai_modules')` check threw before the table or the columns it
+ * guards were ever created. `tableExists()`/`columnExists()` below ask for only the
+ * columns that exist everywhere, which is the same fix already applied throughout this
+ * migration's own siblings (see 2026_09_24_120000 and its neighbours) — this file was the
+ * one place that fix was missed.
  */
 return new class extends Migration
 {
@@ -44,15 +55,20 @@ return new class extends Migration
 
     public function up(): void
     {
-        if (Schema::hasTable('ai_modules')) {
-            Schema::table('ai_modules', function (Blueprint $table) {
-                if (! Schema::hasColumn('ai_modules', 'capabilities')) {
-                    $table->text('capabilities')->nullable()->after('description');
-                }
-                if (! Schema::hasColumn('ai_modules', 'registry_keys')) {
-                    $table->text('registry_keys')->nullable()->after('capabilities');
-                }
-            });
+        if ($this->tableExists('ai_modules')) {
+            $hasCapabilities = $this->columnExists('ai_modules', 'capabilities');
+            $hasRegistryKeys = $this->columnExists('ai_modules', 'registry_keys');
+
+            if (! $hasCapabilities || ! $hasRegistryKeys) {
+                Schema::table('ai_modules', function (Blueprint $table) use ($hasCapabilities, $hasRegistryKeys) {
+                    if (! $hasCapabilities) {
+                        $table->text('capabilities')->nullable()->after('description');
+                    }
+                    if (! $hasRegistryKeys) {
+                        $table->text('registry_keys')->nullable()->after('capabilities');
+                    }
+                });
+            }
 
             foreach (self::SEED as $key => [$capabilities, $registryKeys]) {
                 DB::table('ai_modules')
@@ -66,7 +82,7 @@ return new class extends Migration
             }
         }
 
-        if (! Schema::hasTable('ai_module_model_bindings')) {
+        if (! $this->tableExists('ai_module_model_bindings')) {
             Schema::create('ai_module_model_bindings', function (Blueprint $table) {
                 $table->bigIncrements('id');
                 $table->string('product_module', 80);
@@ -91,14 +107,37 @@ return new class extends Migration
     {
         Schema::dropIfExists('ai_module_model_bindings');
 
-        if (Schema::hasTable('ai_modules')) {
-            Schema::table('ai_modules', function (Blueprint $table) {
-                foreach (['registry_keys', 'capabilities'] as $column) {
-                    if (Schema::hasColumn('ai_modules', $column)) {
-                        $table->dropColumn($column);
-                    }
-                }
-            });
+        if ($this->tableExists('ai_modules')) {
+            $toDrop = array_values(array_filter(
+                ['registry_keys', 'capabilities'],
+                fn ($column) => $this->columnExists('ai_modules', $column)
+            ));
+
+            if ($toDrop !== []) {
+                Schema::table('ai_modules', function (Blueprint $table) use ($toDrop) {
+                    $table->dropColumn($toDrop);
+                });
+            }
         }
+    }
+
+    /** Schema::hasTable() throws on this estate's MariaDB - information_schema does not. */
+    private function tableExists(string $table): bool
+    {
+        return DB::selectOne(
+            'SELECT COUNT(*) AS c FROM information_schema.tables
+              WHERE table_schema = DATABASE() AND table_name = ?',
+            [$table]
+        )->c > 0;
+    }
+
+    /** Schema::hasColumn() throws on this estate's MariaDB for the same reason. */
+    private function columnExists(string $table, string $column): bool
+    {
+        return DB::selectOne(
+            'SELECT COUNT(*) AS c FROM information_schema.columns
+              WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
+            [$table, $column]
+        )->c > 0;
     }
 };
