@@ -123,6 +123,7 @@ class CustomFieldValueController extends PlatformController
         // enough to interpolate, so the lookup is a fixed map.
         $tenantColumn = match ($recordTable) {
             'tbluser' => 'sub_institute_id',
+            'hrms_emp_leaves' => 'sub_institute_id',
             default => null,
         };
 
