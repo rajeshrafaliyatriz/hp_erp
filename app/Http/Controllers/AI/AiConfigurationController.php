@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AI;
 
+use App\Domain\AI\Support\SchemaCache;
 use App\Domain\AI\Configuration\AiConfigurationResolver;
 use App\Domain\AI\Configuration\AiModuleRegistry;
 use App\Domain\AI\Configuration\ModelCatalog;
@@ -448,7 +449,7 @@ class AiConfigurationController extends AiController
             return [];
         }
 
-        $hasModule = Schema::hasColumn('ai_api_keys', 'ai_module');
+        $hasModule = app(SchemaCache::class)->hasColumn('ai_api_keys', 'ai_module');
 
         $rows = DB::table('ai_api_keys')
             ->where(function ($query) use ($institute) {
@@ -469,7 +470,7 @@ class AiConfigurationController extends AiController
     {
         $row = DB::table('ai_api_keys')->where('id', $id)->first();
 
-        return $row ? $this->present($row, $institute, Schema::hasColumn('ai_api_keys', 'ai_module')) : null;
+        return $row ? $this->present($row, $institute, app(SchemaCache::class)->hasColumn('ai_api_keys', 'ai_module')) : null;
     }
 
     /** @return array<string, mixed> */
