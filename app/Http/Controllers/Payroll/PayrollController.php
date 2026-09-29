@@ -102,7 +102,10 @@ class PayrollController extends Controller
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
           if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only, the one
+            // place a login token should never travel.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -172,7 +175,9 @@ class PayrollController extends Controller
         $user_id = session()->get('user_id');
 
 if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -268,7 +273,9 @@ if($type=="API"){
         $sub_institute_id = session()->get('sub_institute_id');
         $user_id = session()->get('user_id');
         if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -376,7 +383,9 @@ if($type=="API"){
         $department_id= ($request->department_id!=0) ? implode(',',$request->department_id) : '';
 
         if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -444,7 +453,9 @@ if($type=="API"){
         $sub_institute_id =$request->session()->get('sub_institute_id');
         $type=$request->input('type');
         if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -2637,7 +2648,9 @@ public function payrollTypeReport(Request $request)
     $type = $request->input('type');
 
     if ($type === "API") {
-        $token = $request->input('token');
+        // Header first, matching the fix already applied at line ~3390 - this
+        // was reading the token from the URL/query only.
+        $token = $request->bearerToken() ?: $request->input('token');
         if (!$token) {
             return response()->json(['message' => 'Token not provided'], 401);
         }

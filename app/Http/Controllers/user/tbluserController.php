@@ -1295,19 +1295,16 @@ class tbluserController extends Controller
     public function teacherListAPI(Request $request)
 
     {
-
-        // try {
-        //           if (!$this->apiTokenIsValid()) {
-        //               $response = array('status' => '2', 'message' => 'Token Auth Failed', 'data' => array());
-        //               return response()->json($response, 401);
-        //           }
-        //       } catch (\Exception $e) {
-        //           $response = array('status' => '2', 'message' => $e->getMessage(), 'data' => array());
-        //           return response()->json($response, 401);
-        //       }
-
+        // The token check that used to be here was commented out rather than
+        // removed, and sub_institute_id was trusted straight from the request -
+        // meaning ANY caller who knew this endpoint existed could pass any
+        // tenant's id and read every teacher's name/email/mobile for it. The
+        // route now requires api.token (see routes/user.php), and the tenant
+        // is read from the authenticated caller's own record below, never from
+        // request input - the same "identity from the token, not the request"
+        // rule the rest of this codebase's fixed cross-tenant bugs follow.
         $type = $request->input('type');
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $request->user()->sub_institute_id ?? null;
 
         if ($sub_institute_id != '') {
             $data = DB::table('tbluser as u')

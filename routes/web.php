@@ -216,7 +216,10 @@ Route::post('collectsct', [AJAXController::class, 'collectsct'])->name('collects
 
 Route::get('table_data',[AJAXController::class, 'GetTableData'])->name('table_data');
 
-Route::group(['prefix' => 'custom-module'], function () {
+// Was missing the login check every sibling group here has (see school_setup
+// above) — every endpoint in this group read the tenant straight from the
+// session with nothing verifying a real, logged-in session even existed.
+Route::group(['prefix' => 'custom-module', 'middleware' => ['auth','session','menu']], function () {
     Route::get('/tables',[CustomModuleController::class,'tables'])->name('custom-module.tables');
     Route::get('/table-create/{id?}',[CustomModuleController::class,'tableCreate'])->name('custom_module_table.create');
     Route::post('/table-store',[CustomModuleController::class,'tableStore'])->name('custom_module_table.store');

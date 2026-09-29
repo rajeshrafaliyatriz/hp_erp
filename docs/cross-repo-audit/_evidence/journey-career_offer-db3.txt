@@ -1,0 +1,45 @@
+DB3 (connection 'live', 128.199.17.97, MariaDB 10.1.48) — Career/Offer Flow evidence
+Run via: cd C:/Users/MILAN/Downloads/hp_erp && php artisan tinker --execute="..."
+Date: 2026-09-28
+
+=== Table existence + row counts (DB::connection('live')->table(x)->count()) ===
+institute_detail: 5
+talent_job_postings: 133
+talent_job_applications: 281
+talent_candidates: 216
+talent_application_tracking: 1
+talent_candidate_assessments: 0
+talent_offers: 71
+talent_offer_acceptances: 0
+hrms_departments: 1236
+tbluserprofilemaster: 42
+s_user_jobrole: 4894
+tbluser: 299
+s_mobility_transfers: 9
+
+=== Qualifying-row checks (predicates actually used by the controllers) ===
+institute_detail WHERE careers_slug IS NOT NULL AND deleted_at IS NULL: 5
+talent_job_postings WHERE status='active' AND deleted_at IS NULL (used by openPostings(), ignores deadline/start_date filters): 7
+talent_offer_acceptances (any row, any decision status): 0
+
+talent_offers.status distribution:
+  draft:    1
+  sent:     68
+  rejected: 2
+  (accepted: 0 — none present)
+
+=== Notes ===
+- All 13 tables referenced by the trace exist and are queryable on DB3.
+- talent_offer_acceptances = 0 rows is the standout: OfferLinkService::mint() is the
+  only writer of this table, and OfferResponseController::show/respond (steps 7-8)
+  read exclusively from it via token hash. Zero rows means no candidate offer link
+  has ever been minted on DB3, despite 68 offers in 'sent' status — i.e. those 68
+  sends did not go through OfferLinkService on this host (or went through it on a
+  different DB connection than 'live'). No live token currently exists to open
+  /offer-response/{token} against DB3.
+- talent_application_tracking = 1 row against 281 applications: only one application
+  has ever produced a tracking link via ApplicationTrackingService::mint() on DB3;
+  the other 280 rows predate this public flow or were entered through a different
+  (internal/authenticated) path that does not mint a tracking row.
+- talent_candidate_assessments = 0 rows: not a blocker for this journey — track()
+  treats a missing row as `assessment: null`, which is handled.

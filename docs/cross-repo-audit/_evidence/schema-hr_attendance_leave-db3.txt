@@ -1,0 +1,208 @@
+Psy Shell v0.12.18 (PHP 8.2.12 — cli) by Justin Hileman
+New PHP manual is available (latest: 3.1.1). Update with `doc --update-manual`
+=== TABLE: hrms_attendances ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+user_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+employee_no | varchar(191) | Null=YES | Key=MUL | Default=NULL | Extra=
+day | date | Null=NO | Key=MUL | Default=NULL | Extra=
+punchin_time | datetime | Null=YES | Key=MUL | Default=NULL | Extra=
+punchout_time | datetime | Null=YES | Key=MUL | Default=NULL | Extra=
+work_mode | varchar(20) | Null=NO | Key= | Default='office' | Extra=
+in_note | tinyint(1) | Null=NO | Key=MUL | Default='0' | Extra=
+out_note | tinyint(1) | Null=NO | Key=MUL | Default='0' | Extra=
+timestamp_diff | time | Null=YES | Key=MUL | Default=NULL | Extra=
+status | tinyint(1) | Null=NO | Key=MUL | Default='1' | Extra=
+ipaddress_in | varchar(191) | Null=YES | Key=MUL | Default=NULL | Extra=
+ipaddress_out | varchar(191) | Null=YES | Key=MUL | Default=NULL | Extra=
+attendance_log_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+client_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+photo_in | varchar(191) | Null=YES | Key=MUL | Default=NULL | Extra=
+photo_out | varchar(191) | Null=YES | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 1263
+
+=== TABLE: hrms_attendance_regularisations ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+user_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+day | date | Null=NO | Key= | Default=NULL | Extra=
+requested_in_time | time | Null=YES | Key= | Default=NULL | Extra=
+requested_out_time | time | Null=YES | Key= | Default=NULL | Extra=
+original_in_time | time | Null=YES | Key= | Default=NULL | Extra=
+original_out_time | time | Null=YES | Key= | Default=NULL | Extra=
+reason | varchar(255) | Null=NO | Key= | Default=NULL | Extra=
+status | varchar(20) | Null=NO | Key=MUL | Default='pending' | Extra=
+reviewer_comment | varchar(255) | Null=YES | Key= | Default=NULL | Extra=
+reviewed_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+reviewed_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 0
+
+=== TABLE: hrms_emp_leaves ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+department_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+user_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+leave_type_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+day_type | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+slot | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+from_date | date | Null=NO | Key= | Default=NULL | Extra=
+to_date | date | Null=YES | Key= | Default=NULL | Extra=
+chargeable_days | decimal(6,2) | Null=YES | Key= | Default=NULL | Extra=
+comment | varchar(255) | Null=YES | Key= | Default=NULL | Extra=
+hod_comment | varchar(50) | Null=YES | Key= | Default=NULL | Extra=
+hod_comment_date | date | Null=YES | Key= | Default=NULL | Extra=
+hr_remarks | varchar(100) | Null=YES | Key= | Default=NULL | Extra=
+hr_remark_date | date | Null=YES | Key= | Default=NULL | Extra=
+approved_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+status | enum('approved','pending','rejected','cancelled','approved_lwp','sent_back') | Null=YES | Key= | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 41
+
+=== TABLE: hrms_leave_allocation ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+employee_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+department_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+leave_type_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+year | year(4) | Null=YES | Key= | Default=NULL | Extra=
+value | decimal(6,2) | Null=NO | Key= | Default='0.00' | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 28
+
+=== TABLE: hrms_leave_types ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+leave_type_id | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+leave_type | varchar(30) | Null=YES | Key= | Default=NULL | Extra=
+sort_order | int(11) | Null=YES | Key= | Default=NULL | Extra=
+carry_forward | tinyint(1) | Null=YES | Key= | Default='0' | Extra=
+status | int(11) | Null=YES | Key= | Default='1' | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 12
+
+=== TABLE: hrms_leave_role_permissions ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+role_name | varchar(100) | Null=NO | Key= | Default=NULL | Extra=
+scope | enum('Self','Team','Department','Organization') | Null=NO | Key= | Default='Self' | Extra=
+approve_leave | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+view_reports | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+configure_settings | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+bulk_operations | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+escalation_rights | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+user_management | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+sort_order | smallint(5) unsigned | Null=NO | Key= | Default='0' | Extra=
+status | tinyint(1) | Null=NO | Key= | Default='1' | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 27
+
+=== TABLE: hrms_leave_workflow_settings ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=UNI | Default=NULL | Extra=
+reporting_manager_enabled | tinyint(1) | Null=NO | Key= | Default='1' | Extra=
+department_head_enabled | tinyint(1) | Null=NO | Key= | Default='1' | Extra=
+hr_enabled | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+multi_level_enabled | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+multi_level_count | tinyint(3) unsigned | Null=NO | Key= | Default='2' | Extra=
+escalation_enabled | tinyint(1) | Null=NO | Key= | Default='1' | Extra=
+escalation_time | int(10) unsigned | Null=NO | Key= | Default='24' | Extra=
+escalation_unit | enum('hours','days') | Null=NO | Key= | Default='hours' | Extra=
+escalate_to | enum('department-head','hr','admin') | Null=NO | Key= | Default='hr' | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 3
+
+=== TABLE: hrms_leave_approval_steps ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+leave_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+step_order | tinyint(3) unsigned | Null=NO | Key= | Default=NULL | Extra=
+approver_role | varchar(40) | Null=NO | Key= | Default=NULL | Extra=
+approver_user_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+approver_user_name | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+step_name | varchar(120) | Null=YES | Key= | Default=NULL | Extra=
+sla_hours | smallint(5) unsigned | Null=YES | Key= | Default=NULL | Extra=
+on_breach | varchar(20) | Null=YES | Key= | Default=NULL | Extra=
+require_comment | tinyint(1) | Null=NO | Key= | Default='0' | Extra=
+source | varchar(20) | Null=NO | Key= | Default='settings' | Extra=
+workflow_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+status | varchar(20) | Null=NO | Key=MUL | Default='waiting' | Extra=
+decision | varchar(20) | Null=YES | Key= | Default=NULL | Extra=
+approver_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+approver_name | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+comment | varchar(255) | Null=YES | Key= | Default=NULL | Extra=
+decided_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+auto_decided_reason | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+pending_since | timestamp | Null=YES | Key= | Default=NULL | Extra=
+escalated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+escalated_to | varchar(40) | Null=YES | Key= | Default=NULL | Extra=
+reminded_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 41
+
+=== TABLE: user_onboarding_status ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+user_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+feature | varchar(191) | Null=NO | Key= | Default=NULL | Extra=
+completed_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 2
+
+=== TABLE: Onboarding_tour_details ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+menu_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+access_link | varchar(255) | Null=YES | Key= | Default=NULL | Extra=
+event_type | enum('page_visit','tour_step_view','tour_step_complete','tour_skipped') | Null=NO | Key= | Default=NULL | Extra=
+title | varchar(255) | Null=YES | Key= | Default=NULL | Extra=
+description | text | Null=YES | Key= | Default=NULL | Extra=
+on_click | varchar(255) | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW COUNT: 537
+
+
+
+   INFO  Ctrl+D.
+

@@ -19,7 +19,13 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'],
+    // Was ['*'] with supports_credentials true below — that combination let any
+    // website make credentialed requests to this API. Restricted to the two real
+    // frontend origins this app actually runs on (see .env.example).
+    'allowed_origins' => [
+        'https://g2g.scholarclone.com',
+        'http://localhost:3000',
+    ],
 
     'allowed_origins_patterns' => [],
 

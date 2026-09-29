@@ -42,29 +42,58 @@ final class AiModuleRegistry
         [
             'key' => 'assessment_ai',
             'label' => 'Assessment AI',
-            'description' => 'Competency assessment generation and scoring — the DeepSeek client behind AiAssessmentController.',
-            'wired' => true,
+            // Verified 2026-09-29: AiAssessmentController::generate() calls
+            // DeepSeekService::chatJson() directly. It never passes through
+            // AiConfigurationResolver, so a module binding saved for this capability
+            // is stored and shown but does not change what this call sends. See the
+            // note on eso_intelligence below for why that is not simply an oversight.
+            'description' => 'Competency assessment generation and scoring — the DeepSeek client behind AiAssessmentController. A saved module binding is not read yet.',
+            'wired' => false,
             'consumer' => 'App\Services\DeepSeekService',
         ],
         [
             'key' => 'eso_intelligence',
             'label' => 'ESO Intelligence',
-            'description' => 'Employee Skill Objective generation and task-execution classification.',
-            'wired' => true,
+            // Verified 2026-09-29: EsoGenerator::generateForTask() and
+            // TaskExecutionClassifier both call DeepSeekService::chatJson() directly,
+            // bypassing AiConfigurationResolver/ModuleModelBindings entirely.
+            //
+            // This is deliberate, not an oversight left half-finished: config/deepseek.php
+            // and EsoGenerator::EXPECTED_MODEL both document a measured, named failure —
+            // 'deepseek-v4-flash'/'deepseek-v4-pro' consume their entire output budget and
+            // return nothing parseable, at 8-24x the cost of 'deepseek-chat', which is the
+            // only model these generators are tuned for. `ai_models` is an admin-editable
+            // catalogue (ModelCatalog), so wiring this capability today would let an admin
+            // pick an untested model from this module's own Models tab and silently break
+            // ESO generation and task classification for their whole tenant. Wiring this
+            // safely needs a per-provider allowed-model check BEFORE a binding is trusted,
+            // not just a resolver call — see Docs/cross-repo-audit for the full trace.
+            'description' => 'Employee Skill Objective generation and task-execution classification. A saved module binding is not read yet — wiring it without a model allowlist would let an admin pick a model already measured to fail for this generator.',
+            'wired' => false,
             'consumer' => 'App\Services\Competency\EsoGenerator',
         ],
         [
             'key' => 'recruitment_ai',
             'label' => 'Recruitment AI',
-            'description' => 'Job-description analysis, interview question generation and resume screening.',
-            'wired' => true,
+            // Verified 2026-09-29: AnalyzeJDController reads its Gemini key from a
+            // separate legacy `gemini_api` table (keyed only by sub_institute_id) with
+            // a hardcoded model in the request URL — it does not use ai_api_keys,
+            // ai_module_model_bindings, or AiConfigurationResolver at all. This is a
+            // different credential system, not just an unwired resolver call.
+            'description' => 'Job-description analysis, interview question generation and resume screening. Reads a separate legacy credentials table, not this configuration — a bigger migration than a resolver call.',
+            'wired' => false,
             'consumer' => 'App\Http\Controllers\Api\Gemini\AnalyzeJDController',
         ],
         [
             'key' => 'lms_content_ai',
             'label' => 'LMS Content AI',
-            'description' => 'Course outlines, quizzes and lesson content for the learning module.',
-            'wired' => true,
+            // Verified 2026-09-29: AiCourseController::generateOutline()/generatePresentation()
+            // and CourseQuizGenerator both call DeepSeekService directly. generateOutline()
+            // already accepts an optional `model` request field, but nothing in g2gv0 ever
+            // sends it, and it is never sourced from this module's saved binding — the same
+            // deepseek-chat-only constraint noted on eso_intelligence applies here too.
+            'description' => 'Course outlines, quizzes and lesson content for the learning module. A saved module binding is not read yet — see eso_intelligence for why that needs a model allowlist, not just a resolver call.',
+            'wired' => false,
             'consumer' => 'App\Services\Lms\CourseQuizGenerator',
         ],
         [

@@ -1,0 +1,35 @@
+Journey: LMS Course Completion — DB3 ("live") table checks
+Connection: Laravel connection literally named "live" (config/database.php) -> host 128.199.17.97, MariaDB 10.1.48
+Command: cd C:/Users/MILAN/Downloads/hp_erp && php artisan tinker --execute="..."
+Counted via DB::connection('live')->table(x)->count() (never information_schema).
+
+Raw output:
+content_master => 181
+lms_content_progress => 18
+lms_course_enroll => 1500
+sub_std_map => 108
+hrms_departments => 1236
+chapter_master => 183
+lms_course_settings => 8
+lms_session_registrations => 4
+lms_virtual_classroom => 2
+question_paper => 83
+lms_quiz_attempt => 1
+lms_assignments => 59
+g2g_event => 346
+lms_certificates => 1
+
+Table -> controller method mapping (from grep of app/Http/Controllers/Api/LmsLearningController.php):
+- sub_std_map (course row), hrms_departments (standard/department name join), lms_course_enroll (enrolment) -> courses()
+- content_master, lms_content_progress -> courses() totals/completed
+- lms_session_registrations, lms_virtual_classroom -> sessionCounts() (used by courses(), courseCompletion())
+- sub_std_map, hrms_departments, lms_course_enroll, chapter_master, content_master, lms_content_progress, lms_course_settings -> course()
+- content_master (belongs check), lms_content_progress (upsert) -> saveProgress()
+- lms_course_enroll (own enrolment check + status update), sub_std_map (join), lms_assignments (status/progress update), g2g_event (course.completed event via EventRecorder) -> completeCourse()
+- lms_certificates (dedupe/read), sub_std_map (course lookup), question_paper + lms_quiz_attempt (quizGate) -> issueCertificate()
+
+Notes:
+- All 14 tables exist and are non-empty on DB3/live.
+- lms_content_progress (18 rows) is thin relative to lms_course_enroll (1500 rows) — consistent with the controller's own inline comment describing this as historically near-empty on live, which previously caused every lesson to render as locked before the sequential-unlock default was fixed. Not "broken" (table exists, is queryable, has rows), but a real signal that most historical enrolments have no progress recorded.
+- lms_quiz_attempt (1 row) and lms_virtual_classroom (2 rows) / lms_session_registrations (4 rows) are also very thin, meaning the quiz-gate and session-gate paths are lightly exercised on this DB, though present and non-empty.
+- No table was found empty (0 rows) or missing for this journey on DB3/live.

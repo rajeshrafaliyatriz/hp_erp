@@ -1,0 +1,62 @@
+[DB3 / live / 128.199.17.97] Raw tinker stdout — Assessment / AI module
+Connection: config/database.php 'live' (DB3_* env vars). Query method: DB::connection('live')->...
+Command run from hp_erp root: php artisan tinker --execute="..."
+
+=== Row counts (DB::connection('live')->table(x)->count()) ===
+competency_assessment_test        => count=1
+competency_assessment_question    => count=8
+competency_assessment_response    => count=0
+talent_candidate_assessments      => count=0
+competency_assessment_attempt     => count=0
+talent_job_applications           => count=281
+institute_detail                  => count=5
+ai_evaluations                    => ERROR: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'hp_erp.ai_evaluations' doesn't exist (Connection: live, Host: 128.199.17.97, Port: 3306, Database: hp_erp)
+ai_evaluation_cases               => ERROR: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'hp_erp.ai_evaluation_cases' doesn't exist (Connection: live, Host: 128.199.17.97, Port: 3306, Database: hp_erp)
+ai_models                         => count=0
+
+=== DESCRIBE competency_assessment_test ===
+id bigint(20) unsigned PK auto_increment
+sub_institute_id bigint(20) unsigned MUL
+jobrole_id bigint(20) unsigned
+scope_type varchar(20) default 'jobrole'
+competency_id bigint(20) unsigned NULL
+kasba_item_id bigint(20) unsigned NULL
+title varchar(191)
+instructions text NULL
+time_limit_minutes smallint(5) unsigned NULL
+pass_percent decimal(5,2) NULL
+is_open tinyint(1) default 0
+model varchar(100) NULL
+status varchar(30) default 'draft'
+generated_by bigint(20) unsigned
+published_at timestamp NULL
+created_at timestamp NULL
+updated_at timestamp NULL
+deleted_at timestamp NULL
+
+=== DESCRIBE competency_assessment_question ===
+id bigint(20) unsigned PK auto_increment
+sub_institute_id bigint(20) unsigned MUL
+test_id bigint(20) unsigned MUL
+kasba_item_id bigint(20) unsigned MUL NULL
+cited_item_label varchar(255) NULL
+cited_kasba_type varchar(50) NULL
+cited_competency_id bigint(20) unsigned MUL NULL
+cited_competency_name varchar(191) NULL
+cited_jobrole varchar(191) NULL
+cited_required_proficiency varchar(50) NULL
+format varchar(30)
+question_text text
+options longtext NULL
+correct_option varchar(255) NULL   -- answer key column; excluded from candidate-facing payload per controller comment
+model_answer text NULL             -- answer key column; excluded from candidate-facing payload per controller comment
+max_score smallint(5) unsigned default 1
+sort_order smallint(5) unsigned default 0
+created_at timestamp NULL
+updated_at timestamp NULL
+
+=== DESCRIBE ai_evaluations ===
+ERROR: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'hp_erp.ai_evaluations' doesn't exist (Connection: live, Host: 128.199.17.97, Port: 3306, Database: hp_erp)
+
+NOTE: DB3/live is a separate, differently-migrated host from whatever DB_* the app uses in
+production; these facts describe DB3's own state only, not any claim about production.

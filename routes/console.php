@@ -155,3 +155,22 @@ TaskRunLedger::track(
         ->runInBackground(),
     'leave.escalate'
 );
+
+/*
+ * ROUND 4. The same sweep as leave:escalate, for the other six declared
+ * workflow points ApprovalEngine enforces — one command across all of them,
+ * not one per domain, since escalateOverdue() already sweeps
+ * g2g_platform_approval_steps in a single pass regardless of which point or
+ * tenant a step belongs to.
+ *
+ * Hourly, same reasoning as leave:escalate — an SLA is configured in whole
+ * hours, so nothing finer-grained could change an outcome.
+ */
+TaskRunLedger::track(
+    Schedule::command('approvals:escalate')
+        ->hourly()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'approvals.escalate'
+);

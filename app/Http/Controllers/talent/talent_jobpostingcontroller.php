@@ -109,6 +109,33 @@ class talent_jobpostingcontroller extends Controller
                             ->whereNull('a.deleted_at')
                             ->get();
 
+                /*
+                 * ROUND 5 FOLLOW-UP. Same read-side addition as the offer/
+                 * mobility/offboarding controllers last round: surface the
+                 * chain a 'Requested' posting is actually waiting on, so the
+                 * frontend can offer decideRequisition() instead of leaving
+                 * a gated requisition with no visible way forward. `null`
+                 * for every posting with no active chain.
+                 */
+                $requisitionWorkflow = app(\App\Services\Talent\RequisitionApprovalWorkflow::class);
+                foreach ($talent as $posting) {
+                    $posting->approval = null;
+                    if (strcasecmp((string) $posting->status, 'Requested') !== 0) {
+                        continue;
+                    }
+                    $steps = $requisitionWorkflow->stepsFor((int) $posting->id);
+                    if ($steps === []) {
+                        continue;
+                    }
+                    $current = $requisitionWorkflow->currentStep((int) $posting->id);
+                    $posting->approval = [
+                        'pending' => $current !== null,
+                        'step_name' => $current['step_name'] ?? null,
+                        'approver_role' => $current['approver_role'] ?? null,
+                        'step' => $current['step_order'] ?? null,
+                        'of' => count($steps),
+                    ];
+                }
 
                 return response()->json([
                     'message' => ' fetched successfully',
@@ -246,12 +273,54 @@ class talent_jobpostingcontroller extends Controller
             $objtalent->certifications = $request->certifications;
             $objtalent->benefits = $request->benefits;
             $objtalent->description = $request->description;
-            // Omitted means a live posting, which is what Create means here.
-            $objtalent->status = $request->filled('status') ? $request->status : 'active';
             $objtalent->sub_institute_id = $sub_institute_id;
             $objtalent->created_by = $request->user_id;
 
+            /*
+             * ROUND 5. talent.recruitment.requisition — checked BEFORE the
+             * status decision, not after. Every other tenant is completely
+             * unchanged: omitted still means a live posting, exactly as
+             * before. A tenant with an active chain here creates the
+             * posting 'Requested' instead, with a real requester, and the
+             * chain opened once the row (and its id) exists.
+             */
+            $requisitionWorkflow = app(\App\Services\Talent\RequisitionApprovalWorkflow::class);
+            $departmentIdForContext = $objtalent->department_id;
+            $chainApplies = $requisitionWorkflow->wouldApply(
+                (int) $sub_institute_id,
+                (is_numeric($departmentIdForContext) ? ['department_id' => (float) $departmentIdForContext] : [])
+            );
+
+            if ($chainApplies) {
+                /*
+                 * A configured chain always wins over any client-supplied
+                 * status - the same discipline
+                 * MobilityTransferController::store() uses, for the same
+                 * reason: a client-supplied status let a caller skip review
+                 * entirely, which is exactly the hole a chain exists to
+                 * close.
+                 */
+                $objtalent->status = 'Requested';
+                $objtalent->requested_by = $this->g2gActorId($request);
+            } else {
+                // Omitted means a live posting, which is what Create means here.
+                $objtalent->status = $request->filled('status') ? $request->status : 'active';
+            }
+
             if ($objtalent->save()) {
+                if ($chainApplies) {
+                    $requisitionWorkflow->openFor(
+                        (int) $objtalent->id,
+                        (int) $sub_institute_id,
+                        $requisitionWorkflow->conditionContextFor((int) $objtalent->id, (int) $sub_institute_id)
+                    );
+
+                    return response()->json([
+                        'message' => 'Requisition submitted and awaiting approval before it goes live.',
+                        'data' => $objtalent,
+                    ], 200);
+                }
+
                 return response()->json(['message' => 'added successfully !!','data' => $objtalent], 200);
             }
 
@@ -262,6 +331,121 @@ class talent_jobpostingcontroller extends Controller
         }
     }
     }
+
+    /**
+     * POST /job-postings/{id}/decision
+     *
+     * The internal sign-off talent.recruitment.requisition declares. Only
+     * does anything when a real approval step is open for this posting
+     * (posting.status === 'Requested' with steps actually configured) - a
+     * tenant with no active chain never has one, since store() only opens
+     * one when a chain is active in the first place.
+     */
+    public function decideRequisition(Request $request, $id)
+    {
+        $type = $request->input('type');
+        if ($type !== 'API') {
+            return response()->json(['message' => 'Invalid request type'], 400);
+        }
+
+        $token = $request->input('token');
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $sub_institute_id = $this->apiTenantId($request);
+        if (!$sub_institute_id) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'decision' => 'required|in:approve,reject',
+            'remarks' => 'nullable|string|max:2000',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $posting = talent_jobposting::where('id', $id)->where('sub_institute_id', $sub_institute_id)->first();
+        if (!$posting) {
+            return response()->json(['status' => 0, 'message' => 'Job posting not found'], 404);
+        }
+
+        $workflow = app(\App\Services\Talent\RequisitionApprovalWorkflow::class);
+        $current = $workflow->currentStep((int) $id);
+
+        if ($current === null) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'This requisition has no approval step awaiting a decision.',
+            ], 422);
+        }
+
+        $actorId = $this->g2gActorId($request);
+        $actorRoleKey = \App\Support\RoleKey::forUserId((int) $actorId);
+
+        if (!$workflow->roleMayDecide($current, $actorRoleKey, (int) $actorId)) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'You are not the approver for this step.',
+            ], 403);
+        }
+
+        $decision = $request->input('decision') === 'approve' ? 'approved' : 'rejected';
+
+        $progress = $workflow->recordDecision(
+            (int) $id,
+            $current,
+            $decision,
+            ['user_id' => (int) $actorId],
+            $request->input('remarks')
+        );
+
+        if (!empty($progress['conflict'])) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Somebody else just decided this step. Refresh and try again.',
+            ], 409);
+        }
+
+        if (!$progress['final']) {
+            return response()->json([
+                'status' => 1,
+                'message' => "Step {$progress['step']} of {$progress['of']} decided. Now awaiting {$progress['next']}.",
+            ]);
+        }
+
+        if ($decision === 'rejected') {
+            /*
+             * No dedicated 'Rejected' enum member, and this posting has no
+             * activity log to record the decision in either way (unlike
+             * offboarding's case log). Same choice offboarding/mobility make
+             * on their own rejections: leave status exactly where it is
+             * ('Requested') rather than inventing a terminal state that
+             * would read as "closed" when it is really "needs revision."
+             */
+            return response()->json([
+                'status' => 1,
+                'message' => 'Requisition rejected. It was not published.',
+                'data' => $posting,
+            ]);
+        }
+
+        $posting->status = 'Active';
+        $posting->save();
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Requisition approved. The posting is now live.',
+            'data' => $posting,
+        ]);
+    }
+
     public function getHiringStatus(Request $request)
     {
         try {

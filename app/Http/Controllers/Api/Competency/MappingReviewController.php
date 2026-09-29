@@ -60,6 +60,7 @@ class MappingReviewController extends Controller
             'note'              => $r->note,
             'submitted_at'      => $r->created_at ? Carbon::parse($r->created_at)->format('M j, Y') : null,
             'reviewed_at'       => $r->reviewed_at ? Carbon::parse($r->reviewed_at)->format('M j, Y') : null,
+            'approval'          => $this->approvalInfoFor((int) $r->id, (string) $r->status),
         ])->all();
 
         return response()->json([
@@ -131,6 +132,11 @@ class MappingReviewController extends Controller
             'updated_at'        => now(),
         ]);
 
+        // Freeze a competency.assessment.review chain if the tenant has one
+        // configured. Opens nothing — and changes nothing about what happens
+        // next — for every tenant without an active chain here.
+        app(\App\Services\Competency\MappingReviewApprovalWorkflow::class)->openFor((int) $id, (int) $sid);
+
         $this->logCompetencyActivity(
             $sid,
             $context['user_id'],
@@ -179,6 +185,55 @@ class MappingReviewController extends Controller
         }
 
         $status = $request->input('action') === 'approve' ? 'approved' : 'rejected';
+
+        /*
+         * ROUND 4. CHAIN-ENFORCED WHEN A REAL OPEN STEP EXISTS.
+         *
+         * `currentStep()`, not `stepsFor()` — this endpoint has no guard
+         * against a redundant re-decision either, so "steps exist but nothing
+         * is pending" is reachable (already fully decided) and must fall
+         * through to the unenforced path, not error. No role/manager check
+         * existed here before this, so an enforced tenant gets its first real
+         * gate; every other tenant is unchanged.
+         */
+        $workflow = app(\App\Services\Competency\MappingReviewApprovalWorkflow::class);
+        $current = $workflow->currentStep((int) $id);
+
+        if ($current !== null) {
+            $actorRoleKey = \App\Support\RoleKey::forUserId((int) $context['user_id']);
+
+            if (! $workflow->roleMayDecide($current, $actorRoleKey, (int) $context['user_id'])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'You are not the approver for this step.',
+                ], 403);
+            }
+
+            $progress = $workflow->recordDecision(
+                (int) $id,
+                $current,
+                $status,
+                ['user_id' => (int) $context['user_id']],
+                $request->input('note')
+            );
+
+            if (! empty($progress['conflict'])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Somebody else just decided this step. Refresh and try again.',
+                ], 409);
+            }
+
+            if (! $progress['final']) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => "Step {$progress['step']} of {$progress['of']} decided. Now awaiting {$progress['next']}.",
+                ]);
+            }
+
+            // Chain finished on this decision — fall through to the same
+            // row update every decision applies, enforced or not.
+        }
 
         DB::table('s_competency_mapping_reviews')->where('id', $id)->update([
             'status'      => $status,
@@ -253,5 +308,36 @@ class MappingReviewController extends Controller
             'message' => $affected . ' review(s) approved',
             'data'    => ['approved' => $affected],
         ]);
+    }
+
+    /**
+     * ROUND 5 FOLLOW-UP. Same read-side addition made for the other
+     * enforced domains — surface the chain a pending mapping review is
+     * actually waiting on. update() (the decision endpoint) is already
+     * chain-aware (built last round); this only adds visibility for a
+     * screen that today shows just one Approve/Reject action per step.
+     * `null` for any review with no active chain.
+     */
+    private function approvalInfoFor(int $reviewId, string $status): ?array
+    {
+        if ($status !== 'pending') {
+            return null;
+        }
+
+        $workflow = app(\App\Services\Competency\MappingReviewApprovalWorkflow::class);
+        $steps = $workflow->stepsFor($reviewId);
+        if ($steps === []) {
+            return null;
+        }
+
+        $current = $workflow->currentStep($reviewId);
+
+        return [
+            'pending' => $current !== null,
+            'step_name' => $current['step_name'] ?? null,
+            'approver_role' => $current['approver_role'] ?? null,
+            'step' => $current['step_order'] ?? null,
+            'of' => count($steps),
+        ];
     }
 }

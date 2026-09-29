@@ -89,6 +89,11 @@ class ProcedureParser
                     break;
                 }
 
+                if ($step['issue'] !== null) {
+                    $issues[] = $step['issue'];
+                }
+                unset($step['issue']);
+
                 $steps[] = $step + ['order' => $order++];
                 continue;
             }
@@ -148,6 +153,7 @@ class ProcedureParser
                 'title' => mb_substr($step['text'], 0, 200),
                 'actor' => $step['actor'],
                 'is_approval' => (bool) $step['is_approval'],
+                'workflow_key' => $step['workflow_key'] ?? null,
                 // A suggestion the screen can change before publishing. Approvals
                 // are usually quicker than the work they gate.
                 'due_in_days' => $step['is_approval'] ? 2 : 7,
@@ -176,7 +182,8 @@ class ProcedureParser
     }
 
     /**
-     * A numbered or bulleted step, with its actor and whether it is an approval.
+     * A numbered or bulleted step, with its actor, whether it is an approval,
+     * and which real Workflow point (if any) it documents the same gate as.
      *
      * @return array<string, mixed>|null
      */
@@ -201,14 +208,42 @@ class ProcedureParser
             $actor = trim($actorMatch[2]);
         }
 
-        // `[approval]` anywhere in the step marks it as a sign-off point.
-        $isApproval = preg_match('/\[\s*approval\s*\]/i', $text) === 1;
-        $text = trim(preg_replace('/\[\s*approval\s*\]/i', '', $text) ?? $text);
+        /*
+         * `[approval]` marks a sign-off point, same as before. `[approval:flow.key]`
+         * additionally tags it as documenting the same real gate as one of the
+         * 8 points Platform Services' Workflow console declares — a
+         * cross-reference only, with zero execution semantics: publishing
+         * still raises a plain task exactly as it always has. An unrecognised
+         * key is reported in `issue` rather than silently dropped, the same
+         * "report what could not be read" discipline this whole parser holds
+         * to — `[approval]` itself is still honoured either way.
+         */
+        $isApproval = false;
+        $workflowKey = null;
+        $issue = null;
+
+        if (preg_match('/\[\s*approval\s*(?::\s*([a-z0-9_.]{1,100}))?\s*\]/i', $text, $approvalMatch) === 1) {
+            $isApproval = true;
+            $taggedKey = isset($approvalMatch[1]) && $approvalMatch[1] !== '' ? trim($approvalMatch[1]) : null;
+
+            if ($taggedKey !== null) {
+                if (array_key_exists($taggedKey, config('platform_services.workflows', []))) {
+                    $workflowKey = $taggedKey;
+                } else {
+                    $issue = 'Step tags an unrecognised workflow key "' . $taggedKey . '": "'
+                        . mb_substr($text, 0, 80) . '"';
+                }
+            }
+
+            $text = trim(preg_replace('/\[\s*approval\s*(?::\s*[a-z0-9_.]{1,100})?\s*\]/i', '', $text) ?? $text);
+        }
 
         return [
             'text' => $text,
             'actor' => $actor,
             'is_approval' => $isApproval,
+            'workflow_key' => $workflowKey,
+            'issue' => $issue,
         ];
     }
 }

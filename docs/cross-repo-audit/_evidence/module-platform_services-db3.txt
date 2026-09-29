@@ -1,0 +1,557 @@
+=== ROW COUNTS [DB3 / live / 128.199.17.97] ===
+g2g_platform_scheduled_tasks => count=1
+g2g_platform_task_runs => count=2
+g2g_event => count=345
+g2g_event_delivery => count=61
+g2g_platform_workflows => count=3
+g2g_platform_workflow_versions => count=3
+
+=== DESCRIBE g2g_platform_scheduled_tasks ===
+stdClass Object
+(
+    [Field] => id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => PRI
+    [Default] => 
+    [Extra] => auto_increment
+)
+stdClass Object
+(
+    [Field] => sub_institute_id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => task_key
+    [Type] => varchar(191)
+    [Null] => NO
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => minute
+    [Type] => varchar(64)
+    [Null] => NO
+    [Key] => 
+    [Default] => 0
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => hour
+    [Type] => varchar(64)
+    [Null] => NO
+    [Key] => 
+    [Default] => 0
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => day
+    [Type] => varchar(64)
+    [Null] => NO
+    [Key] => 
+    [Default] => *
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => month
+    [Type] => varchar(64)
+    [Null] => NO
+    [Key] => 
+    [Default] => *
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => day_of_week
+    [Type] => varchar(64)
+    [Null] => NO
+    [Key] => 
+    [Default] => *
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => disabled
+    [Type] => tinyint(1)
+    [Null] => NO
+    [Key] => 
+    [Default] => 0
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => updated_by
+    [Type] => varchar(191)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => created_at
+    [Type] => timestamp
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => updated_at
+    [Type] => timestamp
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+
+=== DESCRIBE g2g_event ===
+stdClass Object
+(
+    [Field] => id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => PRI
+    [Default] => 
+    [Extra] => auto_increment
+)
+stdClass Object
+(
+    [Field] => event_uuid
+    [Type] => char(36)
+    [Null] => NO
+    [Key] => UNI
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => type
+    [Type] => varchar(96)
+    [Null] => NO
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => sub_institute_id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => entity_type
+    [Type] => varchar(64)
+    [Null] => NO
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => entity_id
+    [Type] => bigint(20) unsigned
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => actor_id
+    [Type] => bigint(20) unsigned
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => acting_for_id
+    [Type] => bigint(20) unsigned
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => payload
+    [Type] => longtext
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => metadata
+    [Type] => longtext
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => correlation_id
+    [Type] => char(36)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => causation_id
+    [Type] => char(36)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => idempotency_key
+    [Type] => varchar(191)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => occurred_at
+    [Type] => datetime(3)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => recorded_at
+    [Type] => datetime(3)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+
+=== DESCRIBE g2g_event_delivery ===
+stdClass Object
+(
+    [Field] => id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => PRI
+    [Default] => 
+    [Extra] => auto_increment
+)
+stdClass Object
+(
+    [Field] => event_id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => consumer
+    [Type] => varchar(96)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => status
+    [Type] => enum('pending','done','failed','skipped')
+    [Null] => NO
+    [Key] => MUL
+    [Default] => pending
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => attempts
+    [Type] => int(11)
+    [Null] => NO
+    [Key] => 
+    [Default] => 0
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => last_error
+    [Type] => text
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => completed_at
+    [Type] => datetime
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+
+=== DESCRIBE g2g_platform_workflows ===
+stdClass Object
+(
+    [Field] => id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => PRI
+    [Default] => 
+    [Extra] => auto_increment
+)
+stdClass Object
+(
+    [Field] => sub_institute_id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => flow_key
+    [Type] => varchar(191)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => module
+    [Type] => varchar(64)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => component
+    [Type] => varchar(128)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => name
+    [Type] => varchar(191)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => description
+    [Type] => text
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => status
+    [Type] => varchar(16)
+    [Null] => NO
+    [Key] => 
+    [Default] => draft
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => condition
+    [Type] => varchar(255)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => steps
+    [Type] => longtext
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => on_reject
+    [Type] => varchar(32)
+    [Null] => NO
+    [Key] => 
+    [Default] => return_to_requester
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => notify_requester
+    [Type] => tinyint(1)
+    [Null] => NO
+    [Key] => 
+    [Default] => 1
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => created_by
+    [Type] => varchar(191)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => updated_by
+    [Type] => varchar(191)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => created_at
+    [Type] => timestamp
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => updated_at
+    [Type] => timestamp
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+
+=== DESCRIBE g2g_platform_task_runs ===
+stdClass Object
+(
+    [Field] => id
+    [Type] => bigint(20) unsigned
+    [Null] => NO
+    [Key] => PRI
+    [Default] => 
+    [Extra] => auto_increment
+)
+stdClass Object
+(
+    [Field] => task_key
+    [Type] => varchar(191)
+    [Null] => NO
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => sub_institute_id
+    [Type] => bigint(20) unsigned
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => started_at
+    [Type] => datetime(3)
+    [Null] => NO
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => finished_at
+    [Type] => datetime(3)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => status
+    [Type] => varchar(16)
+    [Null] => YES
+    [Key] => MUL
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => exit_code
+    [Type] => int(11)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => duration_ms
+    [Type] => int(10) unsigned
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => output_head
+    [Type] => text
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)
+stdClass Object
+(
+    [Field] => host
+    [Type] => varchar(191)
+    [Null] => YES
+    [Key] => 
+    [Default] => 
+    [Extra] => 
+)

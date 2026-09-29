@@ -107,29 +107,47 @@ class PlatformRegistry
         return array_key_exists($taskKey, $this->scheduledTasks());
     }
 
-    /** @return array<string, string> */
+    /** @return array<string, array<string, string>> */
     public function customFieldTables(): array
     {
         return (array) config('platform_services.custom_field_tables', []);
     }
 
     /**
-     * The allowlisted tables as `[{key, label}]`, for a dropdown.
+     * The allowlisted tables as `[{key, label, module}]`, for a dropdown.
      *
      * The screen offers only these, and the API refuses anything else — the same list,
      * read twice, which is the whole point of the registry living in one place.
      *
+     * `$module` narrows to one module's own tables — the decentralized Fields
+     * Configuration tab's dropdown must not offer another module's tables, the same way
+     * its own `index()` must not return another module's rows.
+     *
      * @return array<int, array<string, string>>
      */
-    public function customFieldTableOptions(): array
+    public function customFieldTableOptions(?string $module = null): array
     {
         $out = [];
 
-        foreach ($this->customFieldTables() as $table => $label) {
-            $out[] = ['key' => $table, 'label' => (string) $label];
+        foreach ($this->customFieldTables() as $table => $entry) {
+            if ($module !== null && ($entry['module'] ?? null) !== $module) {
+                continue;
+            }
+
+            $out[] = [
+                'key' => $table,
+                'label' => (string) ($entry['label'] ?? $table),
+                'module' => $entry['module'] ?? null,
+            ];
         }
 
         return $out;
+    }
+
+    /** The table names allowlisted for one module — for filtering `index()`'s rows. */
+    public function customFieldTableNamesOfModule(string $module): array
+    {
+        return array_column($this->customFieldTableOptions($module), 'key');
     }
 
     public function hasWorkflowPoint(string $key): bool

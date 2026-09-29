@@ -67,6 +67,7 @@ class IntegrationController extends PlatformController
     {
         try {
             $scope = $this->scope($request);
+            $module = trim((string) $request->input('module', ''));
 
             $rows = DB::table(self::TABLE)
                 ->where('sub_institute_id', $scope->selectedInstituteId)
@@ -76,6 +77,11 @@ class IntegrationController extends PlatformController
             $providers = [];
 
             foreach ($this->registry->integrations() as $key => $meta) {
+                // A DECENTRALIZED TAB SEES ONLY ITS OWN MODULE'S PROVIDERS.
+                if ($module !== '' && ($meta['module'] ?? null) !== $module) {
+                    continue;
+                }
+
                 $providers[] = $this->present($key, $meta, $rows->get($key), $scope->selectedInstituteId);
             }
 

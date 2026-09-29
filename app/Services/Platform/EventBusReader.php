@@ -4,6 +4,7 @@ namespace App\Services\Platform;
 
 use App\Services\Events\EventCatalogue;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -48,12 +49,21 @@ use Illuminate\Support\Facades\Schema;
  * every tenant, is deliberately not exposed over HTTP, and exists for an operator
  * running a documented, backed-up procedure. `replay()` here touches exactly one row,
  * for one tenant's own event, and nothing else.
+ *
+ * ── ROUND 4: "LAST DRAIN PASS" IS NO LONGER PERMANENTLY UNAVAILABLE ─────────
+ *
+ * This class's own doc comment used to say `events:project` "writes no run ledger" —
+ * true when it was written, false since `TaskRunLedger::track()` wrapped every entry in
+ * `routes/console.php`, `events:project` included. `lastDrainPass()` reads that ledger
+ * now. The class comment above (M6-era) is left as history of why the store existed
+ * unread for as long as it did; only the summary tile's own honesty claim needed fixing.
  */
 class EventBusReader
 {
     private const EVENTS = 'g2g_event';
     private const DELIVERY = 'g2g_event_delivery';
     private const AUDIT = 'g2g_audit_log';
+    private const RUNS = 'g2g_platform_task_runs';
 
     /** Events for one tenant. The base of every read in this class. */
     private function events(int $tenantId): Builder
@@ -76,13 +86,14 @@ class EventBusReader
     /**
      * The headline numbers.
      *
-     * `available: false` is the important field. Five of these can be computed from
-     * tables that exist; "when did the drain last run" cannot, because nothing records
-     * a scheduled pass — `routes/console.php` registers `events:project` with no
-     * `onSuccess`/`onFailure` hook and there is no run ledger. A tile that cannot be
-     * computed says so. Showing `0` there would read as "nothing is behind", which is
-     * the opposite of "we do not know", and an operations screen that invents a
-     * reassuring number is worse than one that admits a gap.
+     * `available: false` is the important field. A tile that cannot be computed says
+     * so — showing `0` there would read as "nothing is behind", which is the opposite
+     * of "we do not know", and an operations screen that invents a reassuring number is
+     * worse than one that admits a gap. `last_drain_pass` was that gap for a whole
+     * round (`TaskRunLedger` did not exist yet); it is now read from the same ledger
+     * `Scheduler` shows, and stays honestly `available: false` only on an installation
+     * where that ledger table itself is missing, or where `events:project` has never
+     * completed a run.
      *
      * @return array<string, mixed>
      */
@@ -138,17 +149,78 @@ class EventBusReader
                 $auditRows === null
                     ? $this->tile('audit_rows', 'Audit rows projected', '—', 'gray', false, null, 'g2g_audit_log is not installed on this database.')
                     : $this->tile('audit_rows', 'Audit rows projected', number_format($auditRows), 'gray', true, 'g2g_audit_log'),
-                $this->tile(
-                    'last_drain_pass',
-                    'Last drain pass',
-                    '—',
-                    'gray',
-                    false,
-                    null,
-                    'Nothing records a scheduled run. events:project writes no run ledger, so this cannot be computed yet.'
-                ),
+                $this->lastDrainPassTile(),
             ],
         ];
+    }
+
+    /**
+     * "Last drain pass" — read from the run ledger `TaskRunLedger` writes on every
+     * `events:project` pass, not from anything this class records itself.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * WHY `events:project` ALONE, NOT ALSO `events:react`
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * "Drain" is the verb this tile's own label uses for taking the store from
+     * append-only rows to something projected — that is what `events:project` does.
+     * `events:react` runs issuing side effects (certificates, notifications) off
+     * already-projected events; it is a separate concern the Consumers tab already
+     * shows per-reactor, and folding it into one merged timestamp here would answer a
+     * question ("when did the drain last run") with a number that might actually be
+     * the reactor's, silently.
+     *
+     * `sub_institute_id` is never filtered — every entry in `routes/console.php` runs
+     * with no `--tenant`, so every row this task writes is estate-wide by construction,
+     * the same fact `TaskRunLedger::start()`'s own note relies on.
+     *
+     * @return array<string, mixed>
+     */
+    private function lastDrainPassTile(): array
+    {
+        if (! Schema::hasTable(self::RUNS)) {
+            return $this->tile(
+                'last_drain_pass',
+                'Last drain pass',
+                '—',
+                'gray',
+                false,
+                null,
+                'The task run ledger is not installed on this database.'
+            );
+        }
+
+        $run = DB::table(self::RUNS)
+            ->where('task_key', 'events:project')
+            ->whereNotNull('finished_at')
+            ->orderByDesc('started_at')
+            ->first(['finished_at', 'status', 'duration_ms']);
+
+        if ($run === null) {
+            return $this->tile(
+                'last_drain_pass',
+                'Last drain pass',
+                '—',
+                'gray',
+                false,
+                null,
+                'events:project has not completed a run yet.'
+            );
+        }
+
+        $failed = $run->status === 'failed';
+
+        return $this->tile(
+            'last_drain_pass',
+            'Last drain pass',
+            Carbon::parse($run->finished_at)->diffForHumans(),
+            $failed ? 'red' : 'gray',
+            true,
+            'g2g_platform_task_runs',
+            $failed
+                ? 'The last run failed. See the Scheduler console for the output.'
+                : ('Took ' . number_format((int) $run->duration_ms) . 'ms.')
+        );
     }
 
     /**

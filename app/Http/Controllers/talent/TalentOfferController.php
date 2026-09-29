@@ -144,9 +144,6 @@ class TalentOfferController extends Controller
             ]);
 
             if ($offer->save()) {
-                // Tracked across the PDF/mail block below, which is conditional.
-                $mailed = false;
-
                 // Set updated_at to null for new records
                 DB::table('talent_offers')->where('id', $offer->id)->update(['updated_at' => null]);
 
@@ -171,167 +168,54 @@ class TalentOfferController extends Controller
                 
                 }
 
-                // Send offer letter email with PDF attachment
+                /*
+                 * ROUND 4. HOLD THE SEND WHEN A PLATFORM CHAIN IS ACTIVE.
+                 *
+                 * `talent.recruitment.offer` is "sign-off before an offer is
+                 * sent" — and until this, store() created AND emailed an
+                 * offer in one action with no internal sign-off of any kind.
+                 * A tenant with an active chain now gets the offer created as
+                 * 'draft' and the chain opened, with the PDF/link/email block
+                 * below deferred to decideOffer() once the chain approves.
+                 * Every other tenant is completely unchanged — openFor()
+                 * opens nothing and this falls straight through.
+                 */
+                $offerWorkflow = app(\App\Services\Talent\OfferApprovalWorkflow::class);
+                $chainOpened = $offerWorkflow->openFor(
+                    (int) $offer->id,
+                    (int) $sub_institute_id,
+                    $offerWorkflow->conditionContextFor($offer->salary)
+                );
+
+                if ($chainOpened !== []) {
+                    return response()->json([
+                        'status' => 1,
+                        'message' => 'Talent offer created and awaiting approval before it is sent to the candidate.',
+                        'data' => $offer,
+                        'mail' => ['sent' => false],
+                    ], 200);
+                }
+
                 $application = talent_jobapplication::find($offer->application_id);
-                if ($application && $application->email) {
-                    $pdfPath = null;
+                $sendResult = $this->sendOfferLetter($offer, $application, $org, $signerUser, (int) $sub_institute_id, $request);
 
-                    // Prepare data for blade view
-                    $userName = $application->first_name . ' ' . $application->last_name;
-                    $todayDate = now()->format('F j, Y');
-                    $deadlineDate = $offer->start_date ? \Carbon\Carbon::parse($offer->start_date)->subDays(3)->format('F j, Y') : now()->addDays(7)->format('F j, Y');
-                    $signerName = $signerUser ? ($signerUser->first_name . ' ' . ($signerUser->middle_name ? $signerUser->middle_name . ' ' : '') . $signerUser->last_name) : 'Signer Name';
-
-                    $data = [
-                        'candidate_name' => $userName,
-                        'position' => $offer->position,
-                        'start_date' => $offer->start_date ? \Carbon\Carbon::parse($offer->start_date)->format('F d, Y') : null,
-                        'salary' => $offer->salary,
-                        'deadline' => $deadlineDate,
-                        'company_name' => $org->legal_name ?? 'Company Name',
-                        'company_address' => $org->registered_address ?? 'Address',
-                        'cin' => $org->cin ?? 'CIN',
-                        'signer_name' => $signerName,
-                        'mobile_no' => $org->mobile_no ?? null,
-                        'country_code' => $org->country_code ?? '+91',
-                        'email' => $org->email ?? null,
-                        'website' => $org->website ?? null,
-                    ];
-
-                    // Render blade view to HTML
-                    $html = view('offer_letter2', $data)->render();
-
-                    // Generate PDF
-                    $pdf = PDF::loadHTML($html);
-                    $fileName = 'offer_letter_' . $offer->id . '_' . str_replace(' ', '_', $userName) . '.pdf';
-                    $pdfPath = storage_path('app/public/' . $fileName);
-                    $pdf->save($pdfPath);
-
-                    // Store PDF in DigitalOcean Space
-                    try {
-                        $file_path = 'public/offerLetter/' . $fileName;
-                        Log::info('Attempting to store offer letter: ' . $file_path);
-                        $result = Storage::disk('digitalocean')->put($file_path, file_get_contents($pdfPath), 'public', [
-                            'Cache-Control' => 'max-age=0, no-cache, no-store'
-                        ]);
-                        Log::info('Storage result: ' . ($result ? 'success' : 'failed'));
-                    } catch (\Exception $e) {
-                        // Log the error if storage fails
-                        Log::error('Failed to store offer letter in DigitalOcean: ' . $e->getMessage());
-                    }
-
-                    // Save the offer letter URL to the database if storage was successful
-                    if (isset($result) && $result) {
-                        $url = 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION') . '.digitaloceanspaces.com/' . $file_path;
-                        $offer->offer_letter_url = $url;
-                        $offer->save();
-                    }
-
-                    /*
-                     * THE GATE - per tenant, and the offer survives it either way.
-                     *
-                     * This used to call MailGate::allowed() (the global switch)
-                     * and return 503 if it was off. Two bugs in one line, both
-                     * hit during the live lifecycle re-audit:
-                     *
-                     *   1. It asked the wrong gate. Tenant 6 is on the
-                     *      G2G_NOTIFY_EMAIL_TENANTS allowlist, but the global
-                     *      flag is off, so allowed() said no and creating an
-                     *      offer for an allowlisted tenant failed with 503.
-                     *
-                     *   2. The offer was already saved above. Returning 503 for
-                     *      the whole request reported failure for a record that
-                     *      exists, so HR sees an error and the candidate has an
-                     *      offer - the worst split.
-                     *
-                     * The offer is a record; the email is a notification about
-                     * it. A notification that cannot go out does not undo the
-                     * record. This mirrors candidateLink() below, which Sprint 4b
-                     * already built the right way.
-                     */
-                    /*
-                     * MINT THE ACCEPT LINK BEFORE SENDING, SO ONE ACTION DOES THE JOB.
-                     *
-                     * The token used to be issued by a SEPARATE button on another
-                     * screen (candidateLink()), pressed after this email had already
-                     * gone out. So the candidate received an offer with no way to
-                     * answer it and waited for a follow-up that depended on somebody
-                     * remembering. Now creating the offer sends a letter the
-                     * candidate can act on.
-                     *
-                     * Minted OUTSIDE the mail gate on purpose: the link must exist
-                     * whether or not this organisation may send email, because a
-                     * recruiter can still copy it from the offer screen. That is the
-                     * same reasoning candidateLink() already used.
-                     *
-                     * NO CREDENTIALS TRAVEL WITH THIS. The candidate has no account
-                     * yet and must not - EmployeeFactory::issueInvite() issues one on
-                     * ACCEPTANCE, which is the moment they become an employee.
-                     */
-                    $responseUrl = null;
-                    $linkExpires = null;
-
-                    try {
-                        $minted = $this->links->mint(
-                            $offer,
-                            (int) $sub_institute_id,
-                            (string) ($request->input('syear') ?: date('Y')),
-                            $this->g2gActorId($request),
-                            $application->email
-                        );
-                        // Front end origin, not this API's - see F-89.
-                        $responseUrl = CandidateLink::to('offer', $minted['token']);
-                        $linkExpires = $minted['expires_at'];
-                    } catch (\Throwable $e) {
-                        // The offer and its letter stand without a link; the email
-                        // falls back to "someone will be in touch".
-                        Log::error('Offer link could not be minted: ' . $e->getMessage());
-                    }
-
-                    /*
-                     * A link that points at this API cannot open. Unlike the
-                     * assessment email - which is nothing BUT a link, so it is
-                     * held back - this one carries the offer letter itself as an
-                     * attachment. Dropping the link and sending the letter is
-                     * strictly better than sending neither: OfferLetterMail
-                     * already renders "someone will be in touch" when it has no
-                     * URL, which is the same path a failed mint takes above.
-                     */
-                    if ($responseUrl !== null && CandidateLink::pointsAtApi()) {
-                        Log::warning('Offer response link suppressed: FRONTEND_URL is not set, so '
-                            . 'the link would point at the API and not open.');
-                        $responseUrl = null;
-                        $linkExpires = null;
-                    }
-
-                    if (\App\Support\MailGate::allowedForTenant($sub_institute_id)) {
-                        try {
-                            Mail::to($application->email)->send(new OfferLetterMail(
-                                $offer,
-                                $pdfPath,
-                                trim($application->first_name . ' ' . $application->last_name),
-                                $org->legal_name ?? null,
-                                $responseUrl,
-                                $linkExpires
-                            ));
-                            $offer->status = 'sent';
-                            $offer->sent_at = now();
-                            $offer->save();
-                            $mailed = true;
-                        } catch (\Throwable $e) {
-                            // A failed send must not lose the offer.
-                            Log::error('Offer letter email failed: ' . $e->getMessage());
-                        }
-                    }
+                if ($sendResult['link_error'] !== null) {
+                    return response()->json([
+                        'status' => 0,
+                        'message' => 'The offer was saved, but the candidate\'s accept/decline link could not '
+                            . 'be generated after 2 attempts, so the email was not sent. Please try sending '
+                            . 'this offer again.',
+                        'data' => $offer,
+                    ], 500);
                 }
 
                 return response()->json([
                     'status' => 1,
-                    'message' => $mailed
+                    'message' => $sendResult['mailed']
                         ? 'Talent offer created and emailed to the candidate.'
                         : 'Talent offer created. Email was not sent (' . \App\Support\MailGate::reasonForTenant($sub_institute_id) . ').',
                     'data' => $offer,
-                    'mail' => ['sent' => $mailed],
+                    'mail' => ['sent' => $sendResult['mailed']],
                 ], 200);
             }
 
@@ -343,6 +227,263 @@ class TalentOfferController extends Controller
                 'trace' => config('app.debug') ? $e->getTraceAsString() : null
             ], 500);
         }
+    }
+
+    /**
+     * Generate the PDF, mint the candidate's accept/decline link, and email
+     * the offer letter. Extracted verbatim from store()'s own inline block
+     * (Round 4) so the identical real side effects can be triggered from two
+     * places: store() itself when no approval chain is active (unchanged
+     * behaviour), and decideOffer() once a chain reaches final approval.
+     *
+     * Returns the outcome rather than a response directly, so each caller
+     * shapes its own HTTP response around the same real work.
+     *
+     * @return array{mailed: bool, link_error: ?string}
+     */
+    private function sendOfferLetter(
+        TalentOffer $offer,
+        ?talent_jobapplication $application,
+        object $org,
+        ?tbluserModel $signerUser,
+        int $sub_institute_id,
+        Request $request
+    ): array {
+        if (!$application || !$application->email) {
+            return ['mailed' => false, 'link_error' => null];
+        }
+
+        // Prepare data for blade view
+        $userName = $application->first_name . ' ' . $application->last_name;
+        $deadlineDate = $offer->start_date ? \Carbon\Carbon::parse($offer->start_date)->subDays(3)->format('F j, Y') : now()->addDays(7)->format('F j, Y');
+        $signerName = $signerUser ? ($signerUser->first_name . ' ' . ($signerUser->middle_name ? $signerUser->middle_name . ' ' : '') . $signerUser->last_name) : 'Signer Name';
+
+        $data = [
+            'candidate_name' => $userName,
+            'position' => $offer->position,
+            'start_date' => $offer->start_date ? \Carbon\Carbon::parse($offer->start_date)->format('F d, Y') : null,
+            'salary' => $offer->salary,
+            'deadline' => $deadlineDate,
+            'company_name' => $org->legal_name ?? 'Company Name',
+            'company_address' => $org->registered_address ?? 'Address',
+            'cin' => $org->cin ?? 'CIN',
+            'signer_name' => $signerName,
+            'mobile_no' => $org->mobile_no ?? null,
+            'country_code' => $org->country_code ?? '+91',
+            'email' => $org->email ?? null,
+            'website' => $org->website ?? null,
+        ];
+
+        // Render blade view to HTML
+        $html = view('offer_letter2', $data)->render();
+
+        // Generate PDF
+        $pdf = PDF::loadHTML($html);
+        $fileName = 'offer_letter_' . $offer->id . '_' . str_replace(' ', '_', $userName) . '.pdf';
+        $pdfPath = storage_path('app/public/' . $fileName);
+        $pdf->save($pdfPath);
+
+        // Store PDF in DigitalOcean Space
+        try {
+            $file_path = 'public/offerLetter/' . $fileName;
+            Log::info('Attempting to store offer letter: ' . $file_path);
+            $result = Storage::disk('digitalocean')->put($file_path, file_get_contents($pdfPath), 'public', [
+                'Cache-Control' => 'max-age=0, no-cache, no-store'
+            ]);
+            Log::info('Storage result: ' . ($result ? 'success' : 'failed'));
+        } catch (\Exception $e) {
+            Log::error('Failed to store offer letter in DigitalOcean: ' . $e->getMessage());
+        }
+
+        if (isset($result) && $result) {
+            $url = 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION') . '.digitaloceanspaces.com/' . $file_path;
+            $offer->offer_letter_url = $url;
+            $offer->save();
+        }
+
+        // MINT THE ACCEPT LINK BEFORE SENDING — see the original inline note
+        // (still true here) on why this happens outside the mail gate and
+        // why one retry (CRA-007) before giving up.
+        $responseUrl = null;
+        $linkExpires = null;
+        $mintError = null;
+
+        for ($mintAttempt = 1; $mintAttempt <= 2; $mintAttempt++) {
+            try {
+                $minted = $this->links->mint(
+                    $offer,
+                    $sub_institute_id,
+                    (string) ($request->input('syear') ?: date('Y')),
+                    $this->g2gActorId($request),
+                    $application->email
+                );
+                $responseUrl = CandidateLink::to('offer', $minted['token']);
+                $linkExpires = $minted['expires_at'];
+                $mintError = null;
+                break;
+            } catch (\Throwable $e) {
+                $mintError = $e;
+                Log::error('Offer link could not be minted (attempt ' . $mintAttempt . ' of 2): ' . $e->getMessage());
+            }
+        }
+
+        if ($mintError !== null) {
+            return ['mailed' => false, 'link_error' => 'link_mint_failed'];
+        }
+
+        if ($responseUrl !== null && CandidateLink::pointsAtApi()) {
+            Log::warning('Offer response link suppressed: FRONTEND_URL is not set, so '
+                . 'the link would point at the API and not open.');
+            $responseUrl = null;
+            $linkExpires = null;
+        }
+
+        $mailed = false;
+
+        if (\App\Support\MailGate::allowedForTenant($sub_institute_id)) {
+            try {
+                Mail::to($application->email)->send(new OfferLetterMail(
+                    $offer,
+                    $pdfPath,
+                    trim($application->first_name . ' ' . $application->last_name),
+                    $org->legal_name ?? null,
+                    $responseUrl,
+                    $linkExpires
+                ));
+                $offer->status = 'sent';
+                $offer->sent_at = now();
+                $offer->save();
+                $mailed = true;
+            } catch (\Throwable $e) {
+                Log::error('Offer letter email failed: ' . $e->getMessage());
+            }
+        }
+
+        return ['mailed' => $mailed, 'link_error' => null];
+    }
+
+    /**
+     * POST /api/talent-offers/{id}/decision
+     *
+     * The internal sign-off `talent.recruitment.offer` declares — distinct
+     * from accept()/reject() above, which are the CANDIDATE's own answer.
+     * Only reachable when a real step is awaiting a decision; a tenant with
+     * no active chain has no steps, so this always 422s for them, the same
+     * as every other unenforced tenant's request would if it somehow called
+     * an endpoint this build did not expose before Round 4.
+     */
+    public function decideOffer(Request $request, $id)
+    {
+        $type = $request->input('type');
+        if ($type !== "API") {
+            return response()->json(['message' => 'Invalid request type'], 400);
+        }
+
+        $token = $request->input('token');
+        if (!$token) {
+            return response()->json(['message' => 'Token not provided'], 401);
+        }
+
+        $accessToken = PersonalAccessToken::findToken($token);
+        if (!$accessToken) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
+
+        $user = $accessToken->tokenable;
+        $sub_institute_id = $this->apiTenantId($request) ?? $user->sub_institute_id;
+
+        $validator = Validator::make($request->all(), [
+            'decision' => 'required|in:approve,reject',
+            'remarks' => 'nullable|string|max:2000',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $offer = TalentOffer::where('id', $id)->where('sub_institute_id', $sub_institute_id)->first();
+        if (!$offer) {
+            return response()->json(['status' => 0, 'message' => 'Offer not found'], 404);
+        }
+
+        $workflow = app(\App\Services\Talent\OfferApprovalWorkflow::class);
+        $current = $workflow->currentStep((int) $id);
+
+        if ($current === null) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'This offer has no approval step awaiting a decision.',
+            ], 422);
+        }
+
+        $actorId = $this->g2gActorId($request);
+        $actorRoleKey = \App\Support\RoleKey::forUserId((int) $actorId);
+
+        if (!$workflow->roleMayDecide($current, $actorRoleKey, (int) $actorId)) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'You are not the approver for this step.',
+            ], 403);
+        }
+
+        $decision = $request->input('decision') === 'approve' ? 'approved' : 'rejected';
+
+        $progress = $workflow->recordDecision(
+            (int) $id,
+            $current,
+            $decision,
+            ['user_id' => (int) $actorId],
+            $request->input('remarks')
+        );
+
+        if (!empty($progress['conflict'])) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Somebody else just decided this step. Refresh and try again.',
+            ], 409);
+        }
+
+        if (!$progress['final']) {
+            return response()->json([
+                'status' => 1,
+                'message' => "Step {$progress['step']} of {$progress['of']} decided. Now awaiting {$progress['next']}.",
+            ]);
+        }
+
+        if ($decision === 'rejected') {
+            $offer->status = 'rejected';
+            $offer->save();
+
+            return response()->json([
+                'status' => 1,
+                'message' => 'Offer rejected internally. It was not sent to the candidate.',
+            ]);
+        }
+
+        // Approved, and the chain just finished — actually send it now.
+        $org = organizationDetails::where('sub_institute_id', $sub_institute_id)->first();
+        $job = talent_jobposting::find($offer->job_id);
+        $signerUser = ($job && $job->created_by) ? tbluserModel::find($job->created_by) : null;
+        $application = talent_jobapplication::find($offer->application_id);
+
+        $sendResult = $this->sendOfferLetter($offer, $application, $org, $signerUser, (int) $sub_institute_id, $request);
+
+        if ($sendResult['link_error'] !== null) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'The offer was approved, but the candidate\'s accept/decline link could not be '
+                    . 'generated after 2 attempts, so the email was not sent. Try sending it again.',
+                'data' => $offer,
+            ], 500);
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => $sendResult['mailed']
+                ? 'Offer approved and emailed to the candidate.'
+                : 'Offer approved. Email was not sent (' . \App\Support\MailGate::reasonForTenant($sub_institute_id) . ').',
+            'data' => $offer,
+            'mail' => ['sent' => $sendResult['mailed']],
+        ]);
     }
 
     /**
@@ -398,6 +539,33 @@ class TalentOfferController extends Controller
                     $offer->status = 'accepted';
                     $offer->accepted_employee_id = $accepted->get($offer->id);
                 }
+            });
+
+            /*
+             * ROUND 4 FOLLOW-UP. Surface the chain a draft offer is actually
+             * waiting on, so the frontend can offer decideOffer() instead of
+             * leaving a gated draft with no visible way forward. `null` for
+             * every offer with no active chain — completely unchanged for
+             * every unenforced tenant.
+             */
+            $offerWorkflow = app(\App\Services\Talent\OfferApprovalWorkflow::class);
+            $offers->each(function ($offer) use ($offerWorkflow) {
+                $offer->approval = null;
+                if ($offer->status !== 'draft') {
+                    return;
+                }
+                $steps = $offerWorkflow->stepsFor((int) $offer->id);
+                if ($steps === []) {
+                    return;
+                }
+                $current = $offerWorkflow->currentStep((int) $offer->id);
+                $offer->approval = [
+                    'pending' => $current !== null,
+                    'step_name' => $current['step_name'] ?? null,
+                    'approver_role' => $current['approver_role'] ?? null,
+                    'step' => $current['step_order'] ?? null,
+                    'of' => count($steps),
+                ];
             });
 
             return response()->json([

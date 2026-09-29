@@ -285,8 +285,19 @@ class CandidateDropoffController extends Controller
                 $query->where('r.priority_level', $jobLevel);
             }
 
-            if ($status !== 'all') {
-                $query->where('r.status', ucfirst($status)); // Active / Closed
+            if (!$request->has('status')) {
+                /*
+                 * ROUND 5. A requisition AWAITING approval is exactly what
+                 * this tab exists to surface, not something to hide behind
+                 * the implicit 'active' default — the frontend never sends
+                 * a status param, so 'Requested' rows would otherwise be
+                 * invisible on the one screen meant to show them. A caller
+                 * that explicitly asks for ?status=active (or any other
+                 * value) still gets an exact match, unchanged.
+                 */
+                $query->whereIn('r.status', ['Active', 'Requested']);
+            } elseif ($status !== 'all') {
+                $query->where('r.status', ucfirst($status)); // Active / Closed / Draft / Inactive / Requested
             }
 
             if ($experience) {
@@ -337,6 +348,34 @@ class CandidateDropoffController extends Controller
                 ->offset($offset)
                 ->limit($limit)
                 ->get();
+
+            /*
+             * ROUND 5 FOLLOW-UP. Same read-side addition as every other
+             * decision endpoint this and last round — surface the chain a
+             * 'Requested' requisition is actually waiting on, so the
+             * frontend can offer the real decision endpoint instead of
+             * leaving it with no visible way forward. `null` for every row
+             * with no active chain.
+             */
+            $requisitionWorkflow = app(\App\Services\Talent\RequisitionApprovalWorkflow::class);
+            foreach ($records as $record) {
+                $record->approval = null;
+                if (strcasecmp((string) $record->status, 'Requested') !== 0) {
+                    continue;
+                }
+                $steps = $requisitionWorkflow->stepsFor((int) $record->id);
+                if ($steps === []) {
+                    continue;
+                }
+                $current = $requisitionWorkflow->currentStep((int) $record->id);
+                $record->approval = [
+                    'pending' => $current !== null,
+                    'step_name' => $current['step_name'] ?? null,
+                    'approver_role' => $current['approver_role'] ?? null,
+                    'step' => $current['step_order'] ?? null,
+                    'of' => count($steps),
+                ];
+            }
 
             return response()->json([
                 'success' => true,

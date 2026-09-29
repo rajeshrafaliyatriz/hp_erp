@@ -1,0 +1,58 @@
+Schema audit — lms functional group — DB3 / live / 128.199.17.97 (MariaDB 10.1.48)
+Connection used: Laravel connection literally named "live" (config/database.php, reads DB3_* from .env)
+Method: php artisan tinker --execute="..." using DB::connection('live')->...
+Date: 2026-09-28
+
+=== Table existence check (information_schema.TABLES, TABLE_SCHEMA=DATABASE()) ===
+Requested candidates: lms, lms_course_enroll, lms_data_content_neo4j
+
+Query:
+SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('lms','lms_course_enroll','lms_data_content_neo4j')
+
+Result:
+[{"TABLE_NAME":"lms_course_enroll"}]
+
+=> Only lms_course_enroll exists on DB3/live. "lms" and "lms_data_content_neo4j" do NOT exist on this host.
+
+=== DESCRIBE lms_course_enroll ===
+{"Field":"id","Type":"bigint(20) unsigned","Null":"NO","Key":"PRI","Default":null,"Extra":"auto_increment"}
+{"Field":"sub_institute_id","Type":"int(11)","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"user_id","Type":"bigint(20) unsigned","Null":"NO","Key":"MUL","Default":"0","Extra":""}
+{"Field":"course_id","Type":"bigint(20) unsigned","Null":"NO","Key":"MUL","Default":"0","Extra":""}
+{"Field":"status","Type":"enum('in-progress','completed','enrolled','pending')","Null":"NO","Key":"","Default":"enrolled","Extra":""}
+{"Field":"start_date","Type":"date","Null":"NO","Key":"","Default":null,"Extra":""}
+{"Field":"end_date","Type":"date","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"created_at","Type":"timestamp","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"updated_at","Type":"timestamp","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"deleted_at","Type":"timestamp","Null":"YES","Key":"","Default":null,"Extra":""}
+
+Row count (DB::connection('live')->table('lms_course_enroll')->count()): 1500
+
+=== DESCRIBE lms (attempted) ===
+ERROR: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'hp_erp.lms' doesn't exist
+(Connection: live, Host: 128.199.17.97, Port: 3306, Database: hp_erp, SQL: DESCRIBE lms)
+
+=== DESCRIBE lms_data_content_neo4j (attempted) ===
+ERROR: SQLSTATE[42S02]: Base table or view not found: 1146 Table 'hp_erp.lms_data_content_neo4j' doesn't exist
+(Connection: live, Host: 128.199.17.97, Port: 3306, Database: hp_erp, SQL: DESCRIBE lms_data_content_neo4j)
+
+=== Source notes ===
+- app/Models/lms_course_enroll/LmsCourseEnroll.php sets $table = 'lms_course_enroll'; fillable
+  includes user_id, course_id, status, start_date, end_date, sub_institute_id, created_at,
+  updated_at, deleted_at (deleted_at is in fillable but model does NOT use SoftDeletes trait —
+  column exists but Eloquent will not auto-filter/set it).
+- app/Models/LmsDataContentNeo4j.php sets $table = 'lms_data_content_neo4j' — model exists in
+  code but the table it points to is absent on DB3/live.
+- database/migrations/2026_07_28_000000_create_lms_course_enroll_table.php is a documented
+  backdated/no-op migration: the repo has NO migration that originally created
+  lms_course_enroll. This CREATE is guarded on existence (checks information_schema, since
+  Schema::hasTable() throws on MariaDB 10.1) and is a no-op on any DB where the table already
+  exists (both dev and live/DB3). Per its own comment: on DB3/live the column
+  sub_institute_id is int(11) NULLABLE (confirmed above) — the migration's own NOT NULL bigint
+  definition is only what a brand-new database would get, not what DB3/live actually has.
+  The migration comment also states live holds 3 duplicate (user_id, course_id) pairs and
+  carries no UNIQUE key over them — consistent with the DESCRIBE above showing no unique key,
+  only a composite non-unique index (sub_institute_id, user_id, course_id).
+- 2026_07_29_110000_add_pending_to_lms_course_enroll_status.php alters the status
+  ENUM/column (adds 'pending') — consistent with the ENUM values seen in DESCRIBE above
+  (in-progress, completed, enrolled, pending).

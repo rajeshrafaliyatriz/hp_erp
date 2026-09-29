@@ -407,6 +407,59 @@ class WorkspaceController extends Controller
         $approving = $request->input('decision') === 'approve';
 
         /*
+         * ROUND 4. CHAIN-ENFORCED WHEN A PLATFORM CHAIN WAS OPEN AT SUBMISSION.
+         *
+         * `currentStep()` — not `stepsFor()` — is the gate: a task can be
+         * (redundantly) re-approved today with no guard against it, so "steps
+         * exist but nothing is pending" is a real, reachable state here (the
+         * chain already reached a final decision) and must fall through to the
+         * unenforced behaviour below, not be treated as an error. Only a REAL
+         * open step changes anything — this endpoint had no role/manager check
+         * at all before this, so for an enforced tenant this is the first real
+         * gate it has ever had; for every other tenant nothing changes.
+         */
+        $workflow = app(\App\Services\TaskManagement\TaskExecutionApprovalWorkflow::class);
+        $current = $workflow->currentStep($id);
+
+        if ($current !== null) {
+            $actorRoleKey = \App\Support\RoleKey::forUserId((int) $context['user_id']);
+
+            if (! $workflow->roleMayDecide($current, $actorRoleKey, (int) $context['user_id'])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'You are not the approver for this step.',
+                ], 403);
+            }
+
+            $engineDecision = $approving ? 'approved' : 'rejected';
+
+            $progress = $workflow->recordDecision(
+                $id,
+                $current,
+                $engineDecision,
+                ['user_id' => (int) $context['user_id']],
+                $request->input('remarks')
+            );
+
+            if (! empty($progress['conflict'])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Somebody else just decided this step. Refresh and try again.',
+                ], 409);
+            }
+
+            if (! $progress['final']) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => "Step {$progress['step']} of {$progress['of']} decided. Now awaiting {$progress['next']}.",
+                ]);
+            }
+
+            // The chain finished on this decision — fall through to the same
+            // task-row update every decision applies, enforced or not.
+        }
+
+        /*
          * LOWERCASE, DELIBERATELY. This wrote 'Approved'/'Rejected' in title case
          * while the stored data holds 'approved', 'rejected' and 'PENDING' — three
          * spellings of two ideas, so every reader needed its own case dance and the
@@ -789,6 +842,7 @@ class WorkspaceController extends Controller
             'approved_on' => $task->approved_on ?? null,
             'approve_remarks' => $task->approve_remarks ?: null,
             'approved_on' => $task->approved_on ?? null,
+            'approval' => $this->approvalInfoFor((int) $task->id, $status),
             'created_at' => $task->created_at ? Carbon::parse($task->created_at)->toIso8601String() : null,
             'updated_at' => $task->updated_at ? Carbon::parse($task->updated_at)->toIso8601String() : null,
             'attachment' => null,
@@ -840,5 +894,37 @@ class WorkspaceController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * ROUND 5 FOLLOW-UP. Same read-side addition made for the other
+     * enforced domains — surface the chain a completed-and-awaiting-review
+     * task is actually waiting on. approve() (above) already enforces this
+     * chain (built last round); this only adds visibility for a screen that
+     * today shows just one Approve/Reject action per step. `null` outside
+     * the one status approve() itself gates ("Only completed tasks can be
+     * reviewed"), and `null` for any task with no active chain.
+     */
+    private function approvalInfoFor(int $taskId, string $status): ?array
+    {
+        if ($status !== 'COMPLETED') {
+            return null;
+        }
+
+        $workflow = app(\App\Services\TaskManagement\TaskExecutionApprovalWorkflow::class);
+        $steps = $workflow->stepsFor($taskId);
+        if ($steps === []) {
+            return null;
+        }
+
+        $current = $workflow->currentStep($taskId);
+
+        return [
+            'pending' => $current !== null,
+            'step_name' => $current['step_name'] ?? null,
+            'approver_role' => $current['approver_role'] ?? null,
+            'step' => $current['step_order'] ?? null,
+            'of' => count($steps),
+        ];
     }
 }

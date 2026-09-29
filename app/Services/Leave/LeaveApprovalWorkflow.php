@@ -7,7 +7,6 @@ use App\Services\Platform\WorkflowChainSelector;
 use App\Support\RoleKey;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 /**
  * The approval chain. F-124.
@@ -248,136 +247,11 @@ class LeaveApprovalWorkflow
             return null;
         }
 
-        $out = [];
-
-        foreach ($steps as $step) {
-            $translated = is_array($step)
-                ? $this->translateStep($step, $subInstituteId, (int) $chain->id)
-                : null;
-
-            if ($translated === null) {
-                Log::warning('leave.platform_chain.untranslatable', [
-                    'sub_institute_id' => $subInstituteId,
-                    'workflow_id'      => (int) $chain->id,
-                    'step'             => is_array($step) ? ($step['name'] ?? null) : null,
-                    'approver_type'    => is_array($step) ? ($step['approver_type'] ?? null) : null,
-                ]);
-
-                return null;
-            }
-
-            $out[] = $translated;
-        }
-
-        return $out;
-    }
-
-    /**
-     * One platform step as a chain step, or null if it cannot be honoured.
-     *
-     * ═══════════════════════════════════════════════════════════════════════
-     * A ROLE KEY IS STORED VERBATIM AND NEVER COLLAPSED TO `hr`
-     * ═══════════════════════════════════════════════════════════════════════
-     *
-     * `ROLE_KEYS['hr']` is `['hr_manager', 'hr_executive']`, and its own note
-     * explains why: the LEAVE screen offers a single "HR" switch, so both keys are
-     * HR there.
-     *
-     * The platform console does not. It offers a role-key picker, and somebody who
-     * chose `hr_manager` did not choose `hr_executive`. Mapping the platform's
-     * `hr_manager` onto the chain role `hr` would silently hand approval rights to
-     * a second role nobody selected — a widening of access disguised as a tidy-up.
-     * So the role key is written as itself, and `roleKeysFor()` resolves it to
-     * exactly that one key.
-     *
-     * @return array<string, mixed>|null
-     */
-    private function translateStep(array $step, int $subInstituteId, int $workflowId): ?array
-    {
-        $type = (string) ($step['approver_type'] ?? '');
-
-        $common = [
-            'step_name'       => trim((string) ($step['name'] ?? '')) ?: null,
-            'sla_hours'       => (int) ($step['sla_hours'] ?? 0),
-            'on_breach'       => (string) ($step['on_breach'] ?? 'none'),
-            'require_comment' => (bool) ($step['require_comment'] ?? false),
-            'source'          => 'platform',
-            'workflow_id'     => $workflowId,
-        ];
-
-        if ($type === 'reporting_manager' || $type === 'department_head') {
-            return $common + [
-                'approver_role'      => $type,
-                'approver_user_id'   => null,
-                'approver_user_name' => null,
-            ];
-        }
-
-        if ($type === 'role') {
-            $roleKey = strtolower(trim((string) ($step['approver'] ?? '')));
-
-            // A role this platform does not define is a dead end, not a step: the
-            // administrator escape hatch would be the only way past it, which is a
-            // lockout rather than a chain.
-            if ($roleKey === '' || !in_array($roleKey, RoleKey::ALL, true)) {
-                return null;
-            }
-
-            return $common + [
-                'approver_role'      => $roleKey,
-                'approver_user_id'   => null,
-                'approver_user_name' => null,
-            ];
-        }
-
-        if ($type === 'user') {
-            $userId = (int) ($step['approver'] ?? 0);
-
-            if ($userId <= 0) {
-                return null;
-            }
-
-            /*
-             * The person must be ACTIVE and IN THIS TENANT.
-             *
-             * Without the tenant check a chain could name somebody in another
-             * organisation and hand them a decision about an employee they have no
-             * relationship with. Without the active check the step is decidable by
-             * nobody but an administrator, which is a stranded request.
-             */
-            $user = DB::table('tbluser')
-                ->where('id', $userId)
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 1)
-                ->first(['id', 'first_name', 'middle_name', 'last_name']);
-
-            if ($user === null) {
-                return null;
-            }
-
-            $name = trim(implode(' ', array_filter([
-                trim((string) $user->first_name),
-                trim((string) $user->middle_name),
-                trim((string) $user->last_name),
-            ])));
-
-            /*
-             * `approver_role` is STILL written, and it is not decoration.
-             *
-             * `LeaveRequestApiController` reads the chain as
-             * `array_column(stepsFor($id), 'approver_role')` in two places, and a
-             * null there would produce a chain with holes in it. The sentinel
-             * 'user' says "this step is a person"; `roleMayDecide()` then reads
-             * `approver_user_id` to decide which person.
-             */
-            return $common + [
-                'approver_role'      => 'user',
-                'approver_user_id'   => $userId,
-                'approver_user_name' => $name !== '' ? $name : ('User #' . $userId),
-            ];
-        }
-
-        return null;
+        // ROUND 4: delegates to WorkflowChainSelector::translateSteps() — the exact
+        // same logic that used to live in this class's own translateStep(), now the
+        // one copy a second enforced domain (ApprovalEngine) also calls. See that
+        // method's own note. Behaviour here is unchanged; only where it lives moved.
+        return app(WorkflowChainSelector::class)->translateSteps($steps, $subInstituteId, (int) $chain->id);
     }
 
     /**

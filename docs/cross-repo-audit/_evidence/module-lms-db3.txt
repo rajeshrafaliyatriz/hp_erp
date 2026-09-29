@@ -1,0 +1,81 @@
+DB3 / live / 128.199.17.97 — LMS / Course Enrollment module
+Connection: config/database.php 'live' (env DB3_HOST/DB3_PORT/DB3_DATABASE/DB3_USERNAME/DB3_PASSWORD)
+Command: cd hp_erp && php artisan tinker --execute="..."
+Captured: 2026-09-28
+
+lms_course_enroll count: 1500
+sub_std_map count: 108
+lms_course_settings count: 8
+lms_course_prerequisites count: 1
+tbluser count: 299
+hrms_departments count: 1236
+
+---DESCRIBE lms_course_enroll---
+id | bigint(20) unsigned | NO |
+sub_institute_id | int(11) | YES |
+user_id | bigint(20) unsigned | NO | 0
+course_id | bigint(20) unsigned | NO | 0
+status | enum('in-progress','completed','enrolled','pending') | NO | enrolled
+start_date | date | NO |
+end_date | date | YES |
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+deleted_at | timestamp | YES |
+
+---DESCRIBE sub_std_map---
+id | bigint(20) unsigned | NO |
+subject_id | bigint(20) unsigned | YES |
+standard_id | bigint(20) unsigned | YES |
+allow_grades | varchar(20) | YES |
+elective_subject | varchar(20) | YES |
+jobrole | longtext | YES |
+proficiency | varchar(191) | YES |
+display_name | varchar(191) | YES |
+subject_code | varchar(191) | YES |
+subject_type | varchar(191) | YES |
+short_name | varchar(191) | YES |
+load | varchar(20) | YES |
+optional_type | varchar(20) | YES |
+add_content | varchar(191) | NO | 1
+allow_content | varchar(20) | NO | Yes
+subject_category | varchar(191) | YES |
+display_image | varchar(191) | YES |
+sort_order | int(11) | YES |
+sub_institute_id | bigint(20) unsigned | YES |
+status | int(11) | NO | 1
+created_by | bigint(20) unsigned | YES |
+updated_by | bigint(20) unsigned | YES |
+deleted_by | bigint(20) unsigned | YES |
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+deleted_at | timestamp | YES |
+content_quantity | varchar(50) | YES |
+certificate_validity_months | smallint(5) unsigned | YES |
+
+---DESCRIBE lms_course_settings---
+id | bigint(20) unsigned | NO |
+course_id | bigint(20) unsigned | NO |
+sequential_unlock | tinyint(1) | NO | 0
+sub_institute_id | bigint(20) unsigned | YES |
+description | text | YES |
+duration_minutes | int(10) unsigned | YES |
+language | varchar(50) | YES |
+is_mandatory | tinyint(1) | NO | 0
+discussion_enabled | tinyint(1) | NO | 0
+visibility | varchar(20) | NO | all
+passing_score | tinyint(3) unsigned | YES |
+max_attempts | int(10) unsigned | YES |
+auto_apply_rating | tinyint(1) | NO | 0
+issue_certificate | tinyint(1) | NO | 1
+certificate_template | varchar(50) | YES |
+recert_alerts | tinyint(1) | NO | 0
+enrollment_rule | varchar(20) | NO | open
+restrict_departments | longtext | YES |
+restrict_roles | longtext | YES |
+available_from | date | YES |
+available_until | date | YES |
+created_by | bigint(20) unsigned | YES |
+updated_by | bigint(20) unsigned | YES |
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+deleted_at | timestamp | YES |

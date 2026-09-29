@@ -1,0 +1,7 @@
+tblmenumaster count: 196
+tblmenumaster_g2g count: 199
+
+Context: DB3 / live / 128.199.17.97 (MariaDB 10.1.48), per config/database.php connection "live" (env DB3_*).
+tblmenumaster       -> legacy table, read by App\Models\tblmenumasterModel via MenuMiddleware.php (session-based web sidebar).
+tblmenumaster_g2g   -> current table, read by App\Models\tblmenumaster_g2gModel via tblmenumasterG2gController.php (token-based API, consumed by g2gv0 Next.js frontend).
+Both tables carry live rows on this host; presence of data in tblmenumaster does not mean it is what g2gv0 consumes end-to-end.

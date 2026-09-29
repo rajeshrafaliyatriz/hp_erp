@@ -46,8 +46,34 @@ class MobilityTransferController extends Controller
         $userIds = $items->pluck('user_id')->all();
         $directory = $this->mobilityDirectory($subInstituteId, $userIds);
 
+        /*
+         * ROUND 4 FOLLOW-UP. Same shape as the offer/offboarding read-side
+         * additions: surface the chain a Pending transfer is waiting on, so
+         * the frontend can offer decideTransfer() instead of a "Complete"
+         * button that now 422s under an active chain. Untouched for every
+         * transfer with no active chain.
+         */
+        $transferWorkflow = app(\App\Services\Talent\MobilityTransferApprovalWorkflow::class);
+
         foreach ($items as $item) {
             $item->employee = $directory[$item->user_id] ?? null;
+
+            $item->approval = null;
+            if ($item->status !== 'Pending') {
+                continue;
+            }
+            $steps = $transferWorkflow->stepsFor((int) $item->id);
+            if ($steps === []) {
+                continue;
+            }
+            $current = $transferWorkflow->currentStep((int) $item->id);
+            $item->approval = [
+                'pending' => $current !== null,
+                'step_name' => $current['step_name'] ?? null,
+                'approver_role' => $current['approver_role'] ?? null,
+                'step' => $current['step_order'] ?? null,
+                'of' => count($steps),
+            ];
         }
 
         return $this->mobilityResponse($items, 'Success', 200, [
@@ -67,6 +93,18 @@ class MobilityTransferController extends Controller
         $subInstituteId = $context['sub_institute_id'];
         $actorId = $context['user_id'];
 
+        /*
+         * ROUND 4. `status` IS NO LONGER ACCEPTED FROM THE REQUEST.
+         *
+         * This validator used to be `'status' => 'required|string|in:Pending,
+         * Approved,Completed,Cancelled'` — so a caller could create a
+         * transfer that was ALREADY 'Completed', which runs straight into
+         * completeTransferInProfile() below and rewrites the employee's real
+         * department and job role with zero review. Every transfer is
+         * created 'Pending' now, server-side, whether or not a tenant has an
+         * approval chain configured — this is a real fix, not just something
+         * a chain narrows.
+         */
         $validator = Validator::make($request->all(), [
             'user_id' => 'required|integer',
             'from_department_id' => 'nullable|integer',
@@ -74,7 +112,6 @@ class MobilityTransferController extends Controller
             'from_jobrole' => 'nullable|string|max:191',
             'to_jobrole' => 'required|string|max:191',
             'effective_date' => 'required|date',
-            'status' => 'required|string|in:Pending,Approved,Completed,Cancelled',
             'remarks' => 'nullable|string',
         ]);
 
@@ -114,19 +151,21 @@ class MobilityTransferController extends Controller
 
         // One transaction: the transfer row and the tbluser write are one fact.
         $transfer = DB::transaction(function () use ($validator, $subInstituteId, $fromDept, $toDept, $actorId) {
-            $transfer = MobilityTransfer::create(array_merge($validator->validated(), [
+            return MobilityTransfer::create(array_merge($validator->validated(), [
                 'sub_institute_id' => $subInstituteId,
                 'from_department' => $fromDept,
                 'to_department' => $toDept,
                 'created_by' => $actorId,
+                // Always 'Pending' — see the note above. Completing happens
+                // only through update() (or, when a chain is configured,
+                // through the approval it gates), never at creation.
+                'status' => 'Pending',
             ]));
-
-            if ($transfer->status === 'Completed') {
-                $this->completeTransferInProfile($transfer);
-            }
-
-            return $transfer;
         });
+
+        // Freeze a talent.mobility.transfer chain if the tenant has one
+        // configured. Opens nothing for every other tenant.
+        app(\App\Services\Talent\MobilityTransferApprovalWorkflow::class)->openFor((int) $transfer->id, (int) $subInstituteId);
 
         return $this->mobilityResponse($transfer, 'Transfer recorded successfully', 201);
     }
@@ -155,6 +194,27 @@ class MobilityTransferController extends Controller
         }
 
         $oldStatus = $transfer->status;
+
+        /*
+         * ROUND 4. THE ONE TRANSITION THIS POINT GATES: INTO 'Completed'.
+         *
+         * That is the transition completeTransferInProfile() below acts on —
+         * the actual move. Approved/Cancelled stay exactly as free-form as
+         * before; only completing gets a sign-off, matching this point's own
+         * description ("sign-off before an employee moves team").
+         */
+        if ($request->input('status') === 'Completed' && $oldStatus !== 'Completed') {
+            $workflow = app(\App\Services\Talent\MobilityTransferApprovalWorkflow::class);
+            $opened = $workflow->openFor((int) $transfer->id, (int) $context['sub_institute_id']);
+
+            if ($opened !== []) {
+                if ($request->has('remarks')) {
+                    $transfer->update(['remarks' => $request->input('remarks')]);
+                }
+
+                return $this->mobilityResponse($transfer, 'Completing this transfer requires approval and has been submitted for sign-off.');
+            }
+        }
 
         // One transaction: the transfer row and the tbluser write are one fact.
         DB::transaction(function () use ($transfer, $request, $context, $oldStatus) {
@@ -189,6 +249,87 @@ class MobilityTransferController extends Controller
         });
 
         return $this->mobilityResponse($transfer, 'Transfer updated successfully');
+    }
+
+    /**
+     * POST /api/mobility/transfers/{id}/completion-decision
+     *
+     * The internal sign-off talent.mobility.transfer declares, for a
+     * completion a platform chain has gated. Only does anything when a real
+     * approval step is open for this transfer.
+     */
+    public function decideTransfer(Request $request, $id)
+    {
+        $context = $this->mobilityContext($request);
+        if ($context instanceof \Illuminate\Http\JsonResponse) {
+            return $context;
+        }
+
+        $transfer = MobilityTransfer::where('sub_institute_id', $context['sub_institute_id'])->find($id);
+        if (!$transfer) {
+            return $this->mobilityError('Transfer record not found', 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'decision' => 'required|string|in:approve,reject',
+            'remarks' => 'nullable|string',
+        ]);
+        if ($validator->fails()) {
+            return $this->mobilityError($validator->errors()->first(), 422);
+        }
+
+        $workflow = app(\App\Services\Talent\MobilityTransferApprovalWorkflow::class);
+        $current = $workflow->currentStep((int) $id);
+
+        if ($current === null) {
+            return $this->mobilityError('This transfer has no completion approval awaiting a decision.', 422);
+        }
+
+        $actorId = $context['user_id'];
+        $actorRoleKey = \App\Support\RoleKey::forUserId((int) $actorId);
+
+        if (!$workflow->roleMayDecide($current, $actorRoleKey, (int) $actorId)) {
+            return $this->mobilityError('You are not the approver for this step.', 403);
+        }
+
+        $decision = $request->input('decision') === 'approve' ? 'approved' : 'rejected';
+
+        $progress = $workflow->recordDecision(
+            (int) $id,
+            $current,
+            $decision,
+            ['user_id' => (int) $actorId],
+            $request->input('remarks')
+        );
+
+        if (!empty($progress['conflict'])) {
+            return $this->mobilityError('Somebody else just decided this step. Refresh and try again.', 409);
+        }
+
+        if (!$progress['final']) {
+            return $this->mobilityResponse(
+                $transfer,
+                "Step {$progress['step']} of {$progress['of']} decided. Now awaiting {$progress['next']}."
+            );
+        }
+
+        if ($decision === 'rejected') {
+            $changes = ['updated_by' => $actorId];
+            if ($request->has('remarks')) {
+                $changes['remarks'] = $request->input('remarks');
+            }
+            $transfer->update($changes);
+
+            return $this->mobilityResponse($transfer, 'Completion rejected. The transfer remains at its current status.');
+        }
+
+        // Approved, and the chain just finished — actually complete it now.
+        DB::transaction(function () use ($transfer, $actorId) {
+            $transfer->update(['status' => 'Completed', 'updated_by' => $actorId]);
+            $this->completeTransferInProfile($transfer);
+        });
+
+        return $this->mobilityResponse($transfer, 'Transfer completed.');
     }
 
     private function completeTransferInProfile(MobilityTransfer $transfer)

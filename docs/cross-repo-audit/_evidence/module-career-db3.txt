@@ -1,0 +1,94 @@
+DB3 / live / 128.199.17.97 (MariaDB 10.1.48) — Career Journey module evidence
+Command: cd C:/Users/MILAN/Downloads/hp_erp && php artisan tinker --execute="..."
+Connection literal used: DB::connection('live')
+
+=== Row counts (DB::connection('live')->table(x)->count()) ===
+talent_job_applications: 281
+talent_candidates: 216
+talent_job_postings: 133
+talent_candidate_assessments: 0
+talent_offers: 71
+institute_detail: 5
+hrms_departments: 1236
+talent_offer_acceptances: 0
+
+=== DESCRIBE talent_job_applications ===
+id | bigint(20) unsigned | NO | PRI
+job_id | bigint(20) unsigned | NO | MUL
+candidate_id | bigint(20) unsigned | YES | MUL
+first_name | varchar(100) | NO |
+middle_name | varchar(100) | YES |
+last_name | varchar(100) | NO |
+email | varchar(255) | NO |
+mobile | varchar(15) | YES |
+current_location | varchar(255) | YES |
+employment_type | varchar(100) | YES |
+work_mode | varchar(20) | YES |
+experience | varchar(100) | YES |
+education | varchar(255) | YES |
+expected_salary | decimal(10,2) | YES |
+skills | text | YES |
+certifications | text | YES |
+resume_path | varchar(255) | YES |
+applied_date | datetime | YES |
+status | varchar(30) | YES |
+sub_institute_id | bigint(20) unsigned | YES | MUL
+created_by | bigint(20) unsigned | YES |
+updated_by | bigint(20) unsigned | YES |
+deleted_by | bigint(20) unsigned | YES |
+created_at | timestamp | NO |
+updated_at | timestamp | NO |
+deleted_at | timestamp | YES |
+
+=== DESCRIBE talent_offers ===
+id | bigint(20) unsigned | NO | PRI
+application_id | bigint(20) unsigned | NO | MUL
+job_id | bigint(20) unsigned | NO | MUL
+template_id | varchar(50) | YES |
+position | varchar(255) | NO |
+salary | varchar(100) | YES |
+start_date | date | YES |
+expires_at | date | YES |
+status | enum('draft','sent','rejected','expired') | NO |
+offer_letter_url | varchar(500) | YES |
+notes | text | YES |
+sub_institute_id | bigint(20) unsigned | YES | MUL
+created_by | bigint(20) unsigned | NO | MUL
+reportmanager | bigint(20) unsigned | YES |
+punchintime | time | YES |
+punchouttime | time | YES |
+sent_at | datetime | YES |
+rejected_at | datetime | YES |
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+
+=== DESCRIBE talent_candidate_assessments ===
+id | bigint(20) unsigned | NO | PRI
+sub_institute_id | bigint(20) unsigned | NO | MUL
+application_id | bigint(20) unsigned | NO |
+candidate_id | bigint(20) unsigned | YES |
+blueprint_id | bigint(20) unsigned | YES |
+test_id | bigint(20) unsigned | YES |
+attempt_id | bigint(20) unsigned | YES | MUL
+token_hash | char(64) | YES | UNI
+token_expires_at | datetime | YES |
+token_used_at | datetime | YES |
+status | varchar(20) | NO |
+score | decimal(8,2) | YES |
+max_score | decimal(8,2) | YES |
+percent | decimal(5,2) | YES |
+qualified | tinyint(1) | YES |
+invited_at | datetime | YES |
+submitted_at | datetime | YES |
+graded_at | datetime | YES |
+created_by | bigint(20) unsigned | YES |
+updated_by | bigint(20) unsigned | YES |
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+deleted_at | timestamp | YES |
+
+Note: talent_offers.status is an internal offer-letter status (draft/sent/rejected/expired).
+The candidate's accept/decline decision lives on a separate table, talent_offer_acceptances
+(decision: pending/accepted/declined) — confirmed by reading
+app/Services/Talent/OfferLinkService.php and OfferAcceptanceService.php. Both tables exist
+on DB3/live; talent_offer_acceptances currently has 0 rows on this host.

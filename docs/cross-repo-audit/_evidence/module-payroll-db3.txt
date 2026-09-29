@@ -1,0 +1,65 @@
+[DB3 / live / 128.199.17.97] Payroll module - raw tinker evidence
+Connection: DB::connection('live') per config/database.php (DB3_* env vars), MariaDB 10.1.48
+Command: cd hp_erp && php artisan tinker --execute="..."
+Captured: 2026-09-28
+
+=== Row counts (DB::connection('live')->table(x)->count()) ===
+payroll_types: 13
+employee_salary_structures: 10
+employee_monthly_salary_data: 6
+hrms_salary_certificate: 0
+hrms_departments: 1236
+tbluser: 299
+school_setup: 12
+
+=== DESCRIBE payroll_types ===
+id | bigint(20) unsigned
+payroll_type | int(11)
+payroll_name | varchar(191)
+amount_type | int(11)
+status | tinyint(4)
+sort_order | int(11)
+sub_institute_id | bigint(20) unsigned
+payroll_percentage | varchar(191)
+day_count | char(1)
+created_by | bigint(20) unsigned
+updated_by | bigint(20) unsigned
+deleted_by | bigint(20) unsigned
+created_at | timestamp
+updated_at | timestamp
+deleted_at | timestamp
+
+=== DESCRIBE employee_salary_structures ===
+id | bigint(20) unsigned
+employee_id | bigint(20) unsigned
+employee_salary_data | text
+year | year(4)
+sub_institute_id | bigint(20) unsigned
+created_by | bigint(20) unsigned
+updated_by | bigint(20) unsigned
+created_at | timestamp
+updated_at | timestamp
+deleted_at | timestamp
+
+=== DESCRIBE employee_monthly_salary_data ===
+id | bigint(20) unsigned
+sub_institute_id | bigint(20) unsigned
+total_deduction | decimal(10,2)
+total_payment | decimal(10,2)
+employee_id | bigint(20) unsigned
+received_by | varchar(191)
+month | varchar(20)
+total_day | decimal(10,2)
+year | year(4)
+employee_salary_data | longtext
+salary_amount | decimal(10,2)
+created_by | bigint(20) unsigned
+updated_by | bigint(20) unsigned
+deleted_by | bigint(20) unsigned
+created_at | timestamp
+updated_at | timestamp
+deleted_at | timestamp
+
+Notes:
+- hrms_salary_certificate has 0 rows on this host - consistent with app/Http/Controllers/Payroll/PayrollController.php F-110 comments about the certificate flow being previously unreachable due to an unguarded array dereference (now guarded).
+- This is DB3/live only; it is a separate, differently-migrated host from whichever DB_* connection production actually uses. No cross-host comparison was made.
