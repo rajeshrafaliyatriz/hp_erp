@@ -215,6 +215,14 @@ return [
             'suggested_steps' => [
                 ['name' => 'Reporting manager', 'approver_type' => 'reporting_manager', 'sla_hours' => 24, 'on_breach' => 'remind'],
             ],
+            // ROUND 4. The first of six points wired onto the generic
+            // ApprovalEngine. A chain here narrows who may decide a request —
+            // it never widens it: the tenant's existing approve_leave
+            // permission and scope still gate every decision underneath it.
+            'enforced_by' => \App\Services\Attendance\AttendanceRegularisationApprovalWorkflow::class,
+            'enforced_note' => 'Enforced when a request is submitted. Editing or deleting a chain '
+                . 'does not change requests already in flight — they keep the ladder they '
+                . 'were submitted under.',
         ],
         'talent.recruitment.requisition' => [
             'label' => 'Job requisition',
@@ -232,6 +240,15 @@ return [
             'suggested_steps' => [
                 ['name' => 'HR', 'approver_type' => 'role', 'approver' => 'hr_manager', 'sla_hours' => 24, 'on_breach' => 'remind'],
             ],
+            // ROUND 4. TalentOfferController::store() used to create AND
+            // email an offer in one action with no internal sign-off at all.
+            // A chain here now holds the send — the offer is still created
+            // (as 'draft'), and the actual PDF/link/email work moves to
+            // POST talent-offers/{id}/decision once the chain approves.
+            'enforced_by' => \App\Services\Talent\OfferApprovalWorkflow::class,
+            'enforced_note' => 'Enforced when an offer is created. Editing or deleting a chain does '
+                . 'not change offers already awaiting a decision — they keep the ladder they were '
+                . 'created under.',
         ],
         'talent.offboarding.clearance' => [
             'label' => 'Exit clearance',
@@ -241,6 +258,15 @@ return [
                 ['name' => 'Reporting manager', 'approver_type' => 'reporting_manager', 'sla_hours' => 72, 'on_breach' => 'remind'],
                 ['name' => 'HR', 'approver_type' => 'role', 'approver' => 'hr_manager', 'sla_hours' => 72, 'on_breach' => 'escalate'],
             ],
+            // ROUND 4. updateStatus() lets a case move to ANY status freely,
+            // with no sequencing or permission check — this gates only the
+            // transition INTO 'Closed', matching this point's own subject
+            // ("Exit case") and description. No role/manager check existed on
+            // that transition before this.
+            'enforced_by' => \App\Services\Talent\OffboardingClearanceApprovalWorkflow::class,
+            'enforced_note' => 'Enforced when closing a case is requested. Editing or deleting a '
+                . 'chain does not change a closure already awaiting a decision — it keeps the '
+                . 'ladder it was submitted under.',
         ],
         'talent.mobility.transfer' => [
             'label' => 'Internal transfer',
@@ -250,6 +276,18 @@ return [
                 ['name' => 'Current manager', 'approver_type' => 'reporting_manager', 'sla_hours' => 48, 'on_breach' => 'remind'],
                 ['name' => 'HR', 'approver_type' => 'role', 'approver' => 'hr_manager', 'sla_hours' => 48, 'on_breach' => 'none'],
             ],
+            // ROUND 4. Paired with a real fix, not just enforcement: store()
+            // used to accept `status` directly from the request, so a caller
+            // could create an already-'Completed' transfer with zero review,
+            // immediately rewriting the employee's real department and job
+            // role. Every transfer is created 'Pending' now regardless of
+            // whether this tenant has a chain configured. The chain gates
+            // only the transition into 'Completed' — the one that actually
+            // moves the employee — matching this point's own description.
+            'enforced_by' => \App\Services\Talent\MobilityTransferApprovalWorkflow::class,
+            'enforced_note' => 'Enforced when completing a transfer is requested. Editing or deleting '
+                . 'a chain does not change a completion already awaiting a decision — it keeps the '
+                . 'ladder it was submitted under.',
         ],
         'competency.assessment.review' => [
             'label' => 'Capability mapping review',
@@ -258,6 +296,17 @@ return [
             'suggested_steps' => [
                 ['name' => 'Department head', 'approver_type' => 'role', 'approver' => 'department_head', 'sla_hours' => 72, 'on_breach' => 'remind'],
             ],
+            // ROUND 4. This subject is s_competency_mapping_reviews
+            // (MappingReviewController) — the registry's own "Mapping change"
+            // label — not the separate competency/framework queue
+            // Api\Competency\ApprovalController manages, confirmed by reading
+            // both controllers directly. No role/manager check existed on
+            // this endpoint before this, so a chain here is its first real
+            // gate, not a narrowing of one.
+            'enforced_by' => \App\Services\Competency\MappingReviewApprovalWorkflow::class,
+            'enforced_note' => 'Enforced when a mapping change is submitted. Editing or deleting a '
+                . 'chain does not change reviews already in flight — they keep the ladder they '
+                . 'were submitted under.',
         ],
         'task.execution.approval' => [
             'label' => 'Task execution approval',
@@ -266,6 +315,14 @@ return [
             'suggested_steps' => [
                 ['name' => 'Reporting manager', 'approver_type' => 'reporting_manager', 'sla_hours' => 48, 'on_breach' => 'remind'],
             ],
+            // ROUND 4. Unlike the other enforced points, this endpoint had NO
+            // role/manager check at all before this — any tenant member could
+            // approve or reject any completed task. A chain here is this
+            // point's first real gate, not a narrowing of one.
+            'enforced_by' => \App\Services\TaskManagement\TaskExecutionApprovalWorkflow::class,
+            'enforced_note' => 'Enforced when a task is marked completed. Editing or deleting a chain '
+                . 'does not change tasks already awaiting a decision — they keep the ladder they '
+                . 'were submitted under.',
         ],
     ],
 
@@ -433,6 +490,30 @@ return [
             'component' => 'events.store',
             'tenant_scoped' => false,
             'estate_reason' => 'Installation-wide job with no organisation parameter.',
+        ],
+
+        /*
+         * ROUND 4. The escalation sweep for every workflow point ApprovalEngine
+         * enforces — see config/platform_services.php's own `workflows` array
+         * for which of the eight declared points actually carry an
+         * `enforced_by` key. Tagged 'events' rather than one business module:
+         * it sweeps attendance, talent (three points) and competency together
+         * in one pass, so no single module honestly owns it — the same reason
+         * events:project/events:react are tagged 'events' rather than one of
+         * the modules whose events they happen to process.
+         */
+        'approvals.escalate' => [
+            'label' => 'Escalate overdue approvals',
+            'description' => 'Widens who may decide a step that has waited too long, for every '
+                . 'platform-enforced workflow point (attendance regularisation, offers, offboarding '
+                . 'clearance, mobility transfers, competency reviews, task execution approval).',
+            'command' => 'approvals:escalate',
+            'module' => 'events',
+            'component' => 'events.store',
+            // One sweep across every tenant and every enforced point together,
+            // the same reason events:project has no --tenant option.
+            'tenant_scoped' => false,
+            'estate_reason' => 'One pass sweeps every organisation and every enforced point together.',
         ],
     ],
 

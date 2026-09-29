@@ -201,6 +201,13 @@ class AttendanceRegularisationApiController extends Controller
         $payload['created_by'] = $userId;
         $id = DB::table('hrms_attendance_regularisations')->insertGetId($payload);
 
+        // Freeze a platform chain onto this request if the tenant has one
+        // configured for hrms.attendance.regularisation. Opens nothing — and
+        // changes nothing about what happens next — when there is no active
+        // chain, which is every tenant until one configures this point.
+        app(\App\Services\Attendance\AttendanceRegularisationApprovalWorkflow::class)
+            ->openFor((int) $id, (int) $context['sub_institute_id']);
+
         return response()->json([
             'status'  => 1,
             'message' => 'Regularisation request submitted.',
@@ -270,6 +277,92 @@ class AttendanceRegularisationApiController extends Controller
         }
 
         $decision = $request->input('status');
+
+        /*
+         * ROUND 4. CHAIN-ENFORCED WHEN A PLATFORM CHAIN WAS OPEN AT SUBMISSION.
+         *
+         * The permission check above (`approve_leave` + scope) is UNCHANGED and
+         * still gates every decision — a chain never widens who may act, only
+         * narrows it further to whichever step is currently open. A request
+         * submitted before this tenant configured a chain (or for a tenant that
+         * never has) has no steps at all, and falls straight through to the
+         * original single-decision behaviour below, unchanged.
+         */
+        $workflow = app(\App\Services\Attendance\AttendanceRegularisationApprovalWorkflow::class);
+        $steps = $workflow->stepsFor((int) $row->id);
+
+        if ($steps !== []) {
+            $current = $workflow->currentStep((int) $row->id);
+
+            if ($current === null) {
+                // Defensive: a pending request with a chain that has no pending
+                // step is a data inconsistency, not a normal outcome — the
+                // status guard above already refused anything not 'pending'.
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'This request\'s approval chain is in an inconsistent state. Contact an administrator.',
+                ], 422);
+            }
+
+            $actorRoleKey = \App\Support\RoleKey::forUserId((int) $context['user_id']);
+
+            if (! $workflow->roleMayDecide($current, $actorRoleKey, (int) $context['user_id'])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'You are not the approver for this step.',
+                ], 403);
+            }
+
+            $progress = $workflow->recordDecision(
+                (int) $row->id,
+                $current,
+                $decision,
+                ['user_id' => (int) $context['user_id']],
+                $request->input('reviewer_comment')
+            );
+
+            if (! empty($progress['conflict'])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Somebody else just decided this step. Refresh and try again.',
+                ], 409);
+            }
+
+            if (! $progress['final']) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => "Step {$progress['step']} of {$progress['of']} decided. Now awaiting {$progress['next']}.",
+                ]);
+            }
+
+            // The chain finished on this decision — apply the same status +
+            // correction path the unenforced flow below always has.
+            $correction = null;
+
+            DB::transaction(function () use ($row, $decision, $request, $context, &$correction) {
+                DB::table('hrms_attendance_regularisations')->where('id', $row->id)->update([
+                    'status'           => $decision,
+                    'reviewer_comment' => $request->input('reviewer_comment'),
+                    'reviewed_by'      => $context['user_id'],
+                    'reviewed_at'      => now(),
+                    'updated_at'       => now(),
+                    'updated_by'       => $context['user_id'],
+                ]);
+
+                if ($decision === 'approved') {
+                    $correction = $this->applyCorrection($row, (int) $context['user_id']);
+                }
+            });
+
+            $this->recordDecisionEvents($row, $decision, $request, $context, $correction);
+
+            return response()->json([
+                'status'  => 1,
+                'message' => $decision === 'approved'
+                    ? 'Approved. The attendance record has been corrected.'
+                    : 'Request rejected.',
+            ]);
+        }
 
         $correction = null;
 

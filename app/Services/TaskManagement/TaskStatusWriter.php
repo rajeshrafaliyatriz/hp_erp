@@ -161,6 +161,18 @@ class TaskStatusWriter
                     ]
                 );
             }
+
+            /*
+             * ROUND 4. Freeze a task.execution.approval chain the moment work
+             * is submitted for review — the same "open on submission" point
+             * LeaveApprovalWorkflow and AttendanceRegularisationApprovalWorkflow
+             * both use. A no-op for every tenant without an active chain here,
+             * and for a task that already has one (see the workflow's own note
+             * on why re-entering COMPLETED must not re-freeze).
+             */
+            if ($resolved['status'] === 'COMPLETED') {
+                app(\App\Services\TaskManagement\TaskExecutionApprovalWorkflow::class)->openFor($taskId, $tenantId);
+            }
         }
 
         return ['ok' => true, 'reason' => null, 'from' => $before->status, 'to' => $resolved['status']];

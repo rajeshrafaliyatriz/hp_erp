@@ -364,6 +364,11 @@ Route::post('talent-offers', [TalentOfferController::class, 'store'])
     ->middleware('profile:admin,hr,recruiter');
 Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject'])
     ->middleware('profile:admin,hr,recruiter');
+// ROUND 4. The INTERNAL sign-off talent.recruitment.offer declares, distinct
+// from reject()/accept() above (the candidate's own answer). Only does
+// anything when a real approval step is open for this offer.
+Route::post('talent-offers/{id}/decision', [TalentOfferController::class, 'decideOffer'])
+    ->middleware('profile:admin,hr,recruiter');
 // The other half of the decision. Until Sprint 2 an offer could be rejected but
 // never accepted, so the hire stopped here and the employee was retyped by hand.
 Route::post('talent-offers/{id}/accept', [TalentOfferController::class, 'accept'])
@@ -2000,13 +2005,19 @@ Route::prefix('skill-heatmap')->middleware('api.token')->group(function () {
 });
 
 Route::post('/import-users', [UserImportController::class, 'importUsers']);
-Route::get('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'credentialStatus']);
-Route::post('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'saveCredentials']);
-Route::post('/excel-agent/test-connection', [ExcelAutomationAgentController::class, 'testConnection']);
-Route::post('/excel-agent/upload', [ExcelAutomationAgentController::class, 'upload']);
-// Blank workbook using this organisation's own template headers, so the file
-// a user downloads is always the file upload() will accept.
-Route::get('/excel-agent/template', [ExcelAutomationAgentController::class, 'downloadTemplate']);
+// These 5 carried no route-level login check at all — tokenUser() only read the
+// token from the request body/query, never the standard Authorization header.
+// api.token adds the same check every other guarded route uses; tokenUser()
+// itself is also fixed to accept the header first (see its own comment).
+Route::middleware('api.token')->group(function () {
+    Route::get('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'credentialStatus']);
+    Route::post('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'saveCredentials']);
+    Route::post('/excel-agent/test-connection', [ExcelAutomationAgentController::class, 'testConnection']);
+    Route::post('/excel-agent/upload', [ExcelAutomationAgentController::class, 'upload']);
+    // Blank workbook using this organisation's own template headers, so the file
+    // a user downloads is always the file upload() will accept.
+    Route::get('/excel-agent/template', [ExcelAutomationAgentController::class, 'downloadTemplate']);
+});
 // Course Recommendation API - Get courses based on logged-in user's job role
 
 // Department Job Role Export API - Export department and job role data to CSV
@@ -2231,78 +2242,86 @@ Route::get('/talent/admin/workflows/{id}', [AdminWorkflowController::class, 'sho
 | The subject employee is `employee_id` on a journey and `owner_id` on a task.
 */
 
-// Header: the 5 KPI cards and every dropdown on the screen.
-Route::get('/onboarding/overview', [OnboardingOverviewController::class, 'index']);
-Route::get('/onboarding/filters', [OnboardingOverviewController::class, 'filters']);
+// This whole block had no role check at all - any logged-in user of any role
+// could manage any employee's onboarding. Wrapped in the same profile:admin,hr
+// gate every comparable HR-management block in this file already uses (see
+// talent/hiring-team above). This is HR's own management screen (the journey
+// list sheet + profile sidebar, per the comment below) - not an employee's
+// self-service view, so this does not affect a regular employee's own access.
+Route::middleware('profile:admin,hr')->group(function () {
+    // Header: the 5 KPI cards and every dropdown on the screen.
+    Route::get('/onboarding/overview', [OnboardingOverviewController::class, 'index']);
+    Route::get('/onboarding/filters', [OnboardingOverviewController::class, 'filters']);
 
-// Journeys - the journey list sheet, the profile sidebar and "Start onboarding".
-Route::get('/onboarding/journeys', [V2OnboardingJourneyController::class, 'index']);
-Route::post('/onboarding/journeys', [V2OnboardingJourneyController::class, 'store']);
-Route::post('/onboarding/journeys/from-offer/{offerId}', [V2OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
-Route::get('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'show'])->whereNumber('id');
-Route::put('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'update'])->whereNumber('id');
-Route::delete('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
+    // Journeys - the journey list sheet, the profile sidebar and "Start onboarding".
+    Route::get('/onboarding/journeys', [V2OnboardingJourneyController::class, 'index']);
+    Route::post('/onboarding/journeys', [V2OnboardingJourneyController::class, 'store']);
+    Route::post('/onboarding/journeys/from-offer/{offerId}', [V2OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
+    Route::get('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'show'])->whereNumber('id');
+    Route::put('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'update'])->whereNumber('id');
+    Route::delete('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
 
-// Journey stages - the "Onboarding Journey Progress" timeline.
-Route::get('/onboarding/journeys/{journeyId}/stages', [V2OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
-Route::put('/onboarding/stages/{id}', [V2OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
-Route::post('/onboarding/stages/{id}/complete', [V2OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
+    // Journey stages - the "Onboarding Journey Progress" timeline.
+    Route::get('/onboarding/journeys/{journeyId}/stages', [V2OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
+    Route::put('/onboarding/stages/{id}', [V2OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
+    Route::post('/onboarding/stages/{id}/complete', [V2OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
 
-// Key Contacts card and the Lifecycle Timeline tab.
-Route::get('/onboarding/journeys/{journeyId}/contacts', [V2OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
-Route::get('/onboarding/journeys/{journeyId}/timeline', [V2OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
+    // Key Contacts card and the Lifecycle Timeline tab.
+    Route::get('/onboarding/journeys/{journeyId}/contacts', [V2OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
+    Route::get('/onboarding/journeys/{journeyId}/timeline', [V2OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
 
-// Preboarding tasks - the main table, its row actions and the Add Task sheet.
-// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
-Route::get('/onboarding/workstreams', [V2OnboardingTaskController::class, 'workstreams']);
+    // Preboarding tasks - the main table, its row actions and the Add Task sheet.
+    // Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+    Route::get('/onboarding/workstreams', [V2OnboardingTaskController::class, 'workstreams']);
 
-/*
-| The DATA behind the five workstream cards.
-|
-| The cards above are a rollup of task counts; these carry what was actually
-| recorded - which laptop, which policy version, whose UAN. Three of the five
-| write to tables created for them; payroll writes the tbluser columns that
-| already existed, and learning only READS what LearningAssigner assigned.
-*/
-Route::get('/onboarding/journeys/{journeyId}/workstream-data', [OnboardingWorkstreamController::class, 'show'])
-    ->whereNumber('journeyId');
-Route::post('/onboarding/journeys/{journeyId}/assets', [OnboardingWorkstreamController::class, 'storeAsset'])
-    ->whereNumber('journeyId');
-Route::post('/onboarding/assets/{assetId}/return', [OnboardingWorkstreamController::class, 'returnAsset'])
-    ->whereNumber('assetId');
-Route::post('/onboarding/journeys/{journeyId}/benefits', [OnboardingWorkstreamController::class, 'storeBenefit'])
-    ->whereNumber('journeyId');
-Route::post('/onboarding/journeys/{journeyId}/acknowledge-policy', [OnboardingWorkstreamController::class, 'acknowledgePolicy'])
-    ->whereNumber('journeyId');
-Route::put('/onboarding/journeys/{journeyId}/payroll', [OnboardingWorkstreamController::class, 'savePayroll'])
-    ->whereNumber('journeyId');
-Route::post('/onboarding/tasks/bulk', [V2OnboardingTaskController::class, 'bulk']);
-Route::get('/onboarding/tasks', [V2OnboardingTaskController::class, 'index']);
-Route::post('/onboarding/tasks', [V2OnboardingTaskController::class, 'store']);
-Route::put('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'update'])->whereNumber('id');
-Route::post('/onboarding/tasks/{id}/complete', [V2OnboardingTaskController::class, 'complete'])->whereNumber('id');
-Route::delete('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'destroy'])->whereNumber('id');
+    /*
+    | The DATA behind the five workstream cards.
+    |
+    | The cards above are a rollup of task counts; these carry what was actually
+    | recorded - which laptop, which policy version, whose UAN. Three of the five
+    | write to tables created for them; payroll writes the tbluser columns that
+    | already existed, and learning only READS what LearningAssigner assigned.
+    */
+    Route::get('/onboarding/journeys/{journeyId}/workstream-data', [OnboardingWorkstreamController::class, 'show'])
+        ->whereNumber('journeyId');
+    Route::post('/onboarding/journeys/{journeyId}/assets', [OnboardingWorkstreamController::class, 'storeAsset'])
+        ->whereNumber('journeyId');
+    Route::post('/onboarding/assets/{assetId}/return', [OnboardingWorkstreamController::class, 'returnAsset'])
+        ->whereNumber('assetId');
+    Route::post('/onboarding/journeys/{journeyId}/benefits', [OnboardingWorkstreamController::class, 'storeBenefit'])
+        ->whereNumber('journeyId');
+    Route::post('/onboarding/journeys/{journeyId}/acknowledge-policy', [OnboardingWorkstreamController::class, 'acknowledgePolicy'])
+        ->whereNumber('journeyId');
+    Route::put('/onboarding/journeys/{journeyId}/payroll', [OnboardingWorkstreamController::class, 'savePayroll'])
+        ->whereNumber('journeyId');
+    Route::post('/onboarding/tasks/bulk', [V2OnboardingTaskController::class, 'bulk']);
+    Route::get('/onboarding/tasks', [V2OnboardingTaskController::class, 'index']);
+    Route::post('/onboarding/tasks', [V2OnboardingTaskController::class, 'store']);
+    Route::put('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'update'])->whereNumber('id');
+    Route::post('/onboarding/tasks/{id}/complete', [V2OnboardingTaskController::class, 'complete'])->whereNumber('id');
+    Route::delete('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'destroy'])->whereNumber('id');
 
-// Documents card. POST accepts multipart; PUT doubles as the upload endpoint for
-// an existing request (browsers cannot send multipart PUT, so the frontend posts
-// with _method=PUT, which Laravel's method spoofing resolves).
-Route::get('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
-Route::post('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
-Route::match(['put', 'post'], '/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'update'])->whereNumber('id');
-Route::delete('/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
+    // Documents card. POST accepts multipart; PUT doubles as the upload endpoint for
+    // an existing request (browsers cannot send multipart PUT, so the frontend posts
+    // with _method=PUT, which Laravel's method spoofing resolves).
+    Route::get('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
+    Route::post('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
+    Route::match(['put', 'post'], '/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'update'])->whereNumber('id');
+    Route::delete('/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
 
-// Notes card.
-Route::get('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'index'])->whereNumber('journeyId');
-Route::post('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'store'])->whereNumber('journeyId');
-Route::put('/onboarding/notes/{id}', [OnboardingNoteController::class, 'update'])->whereNumber('id');
-Route::delete('/onboarding/notes/{id}', [OnboardingNoteController::class, 'destroy'])->whereNumber('id');
+    // Notes card.
+    Route::get('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'index'])->whereNumber('journeyId');
+    Route::post('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'store'])->whereNumber('journeyId');
+    Route::put('/onboarding/notes/{id}', [OnboardingNoteController::class, 'update'])->whereNumber('id');
+    Route::delete('/onboarding/notes/{id}', [OnboardingNoteController::class, 'destroy'])->whereNumber('id');
 
-// Probation & Confirmation tab.
-Route::get('/onboarding/probation', [OnboardingProbationController::class, 'index']);
-Route::put('/onboarding/probation/{journeyId}', [OnboardingProbationController::class, 'update'])->whereNumber('journeyId');
-Route::post('/onboarding/probation/{journeyId}/confirm', [OnboardingProbationController::class, 'confirm'])->whereNumber('journeyId');
-Route::post('/onboarding/probation/{journeyId}/extend', [OnboardingProbationController::class, 'extend'])->whereNumber('journeyId');
-Route::post('/onboarding/probation/{journeyId}/terminate', [OnboardingProbationController::class, 'terminate'])->whereNumber('journeyId');
+    // Probation & Confirmation tab.
+    Route::get('/onboarding/probation', [OnboardingProbationController::class, 'index']);
+    Route::put('/onboarding/probation/{journeyId}', [OnboardingProbationController::class, 'update'])->whereNumber('journeyId');
+    Route::post('/onboarding/probation/{journeyId}/confirm', [OnboardingProbationController::class, 'confirm'])->whereNumber('journeyId');
+    Route::post('/onboarding/probation/{journeyId}/extend', [OnboardingProbationController::class, 'extend'])->whereNumber('journeyId');
+    Route::post('/onboarding/probation/{journeyId}/terminate', [OnboardingProbationController::class, 'terminate'])->whereNumber('journeyId');
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -2358,6 +2377,9 @@ Route::prefix('mobility')->group(function () {
 
         Route::post('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'store']);
         Route::put('/transfers/{id}', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'update'])->whereNumber('id');
+        // ROUND 4. The internal sign-off talent.mobility.transfer declares,
+        // for completing a transfer a platform chain has gated.
+        Route::post('/transfers/{id}/completion-decision', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'decideTransfer'])->whereNumber('id');
 
         Route::post('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'store']);
         Route::put('/promotions/{id}', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'update'])->whereNumber('id');
@@ -2386,6 +2408,10 @@ Route::prefix('offboarding')->group(function () {
     Route::get('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'show'])->whereNumber('id');
     Route::put('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'update'])->whereNumber('id');
     Route::post('/cases/{id}/status', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateStatus'])->whereNumber('id');
+    // ROUND 4. The internal sign-off talent.offboarding.clearance declares,
+    // for closing a case a platform chain has gated. Only does anything when
+    // a real approval step is open for this case.
+    Route::post('/cases/{id}/closure-decision', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'decideClearance'])->whereNumber('id');
     Route::post('/cases/{id}/clearance', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateClearance'])->whereNumber('id');
     Route::post('/cases/{id}/documents', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateDocuments'])->whereNumber('id');
     // The real file. The screen's upload dialog had no file input at all, so a

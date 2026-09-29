@@ -586,6 +586,35 @@ class OffboardingController extends Controller
         $actorName = $actor ? trim($actor->first_name . ' ' . $actor->last_name) : 'HR Specialist';
 
         if ($case->status !== $validated['status']) {
+            /*
+             * ROUND 4. THE ONE TRANSITION THIS POINT GATES: INTO 'Closed'.
+             *
+             * Every other transition here is unchanged — this endpoint has no
+             * sequencing rule at all, and this round does not add one. Only
+             * closing gets a sign-off, matching the registry's own
+             * description ("sign-off before an exit case is closed").
+             */
+            if ($validated['status'] === 'Closed') {
+                $workflow = app(\App\Services\Talent\OffboardingClearanceApprovalWorkflow::class);
+                $opened = $workflow->openFor((int) $case->id, (int) $tenant);
+
+                if ($opened !== []) {
+                    $activityLog = $case->activity_log ? json_decode($case->activity_log, true) : [];
+                    $activityLog[] = [
+                        'id' => uniqid(),
+                        'action' => 'Closure requested',
+                        'description' => 'Closing this case now requires approval.',
+                        'timestamp' => date('d M Y, h:i A'),
+                        'actor' => $actorName,
+                    ];
+                    $case->activity_log = json_encode($activityLog);
+                    $case->updated_by = $actorId;
+                    $case->save();
+
+                    return $this->offboardingResponse($case, 'Closure requires approval and has been submitted for sign-off.');
+                }
+            }
+
             $oldStatus = $case->status;
             $case->status = $validated['status'];
 
@@ -603,6 +632,108 @@ class OffboardingController extends Controller
         }
 
         return $this->offboardingResponse($case, 'Status updated successfully');
+    }
+
+    /**
+     * POST /api/offboarding/cases/{id}/closure-decision
+     *
+     * The internal sign-off talent.offboarding.clearance declares. Only
+     * reachable when a real step is awaiting a decision — a tenant with no
+     * active chain never has one, since updateStatus() only opens one when a
+     * chain is active in the first place.
+     */
+    public function decideClearance(Request $request, $id)
+    {
+        $context = $this->offboardingContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $tenant = $context['sub_institute_id'];
+        $actorId = $context['user_id'];
+
+        $case = TalentOffboardingCase::where('sub_institute_id', $tenant)->findOrFail($id);
+
+        $validated = $request->validate([
+            'decision' => 'required|string|in:approve,reject',
+            'note' => 'nullable|string|max:2000',
+        ]);
+
+        $workflow = app(\App\Services\Talent\OffboardingClearanceApprovalWorkflow::class);
+        $current = $workflow->currentStep((int) $id);
+
+        if ($current === null) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'This case has no closure approval awaiting a decision.',
+            ], 422);
+        }
+
+        $actorRoleKey = \App\Support\RoleKey::forUserId((int) $actorId);
+
+        if (!$workflow->roleMayDecide($current, $actorRoleKey, (int) $actorId)) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'You are not the approver for this step.',
+            ], 403);
+        }
+
+        $decision = $validated['decision'] === 'approve' ? 'approved' : 'rejected';
+
+        $progress = $workflow->recordDecision(
+            (int) $id,
+            $current,
+            $decision,
+            ['user_id' => (int) $actorId],
+            $validated['note'] ?? null
+        );
+
+        if (!empty($progress['conflict'])) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Somebody else just decided this step. Refresh and try again.',
+            ], 409);
+        }
+
+        if (!$progress['final']) {
+            return response()->json([
+                'status' => 1,
+                'message' => "Step {$progress['step']} of {$progress['of']} decided. Now awaiting {$progress['next']}.",
+            ]);
+        }
+
+        $actor = $actorId ? DB::table('tbluser')->where('id', $actorId)->first() : null;
+        $actorName = $actor ? trim($actor->first_name . ' ' . $actor->last_name) : 'HR Specialist';
+        $activityLog = $case->activity_log ? json_decode($case->activity_log, true) : [];
+
+        if ($decision === 'approved') {
+            $oldStatus = $case->status;
+            $case->status = 'Closed';
+            $activityLog[] = [
+                'id' => uniqid(),
+                'action' => 'Status Changed',
+                'description' => "Closure approved. Status changed from '{$oldStatus}' to 'Closed'.",
+                'timestamp' => date('d M Y, h:i A'),
+                'actor' => $actorName,
+            ];
+        } else {
+            $activityLog[] = [
+                'id' => uniqid(),
+                'action' => 'Closure rejected',
+                'description' => 'Closure was rejected. The case remains at its current status.',
+                'timestamp' => date('d M Y, h:i A'),
+                'actor' => $actorName,
+            ];
+        }
+
+        $case->activity_log = json_encode($activityLog);
+        $case->updated_by = $actorId;
+        $case->save();
+
+        return $this->offboardingResponse(
+            $case,
+            $decision === 'approved' ? 'Case closed.' : 'Closure rejected. The case remains open.'
+        );
     }
 
     /**

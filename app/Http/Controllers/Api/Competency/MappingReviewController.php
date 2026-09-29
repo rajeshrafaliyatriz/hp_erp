@@ -131,6 +131,11 @@ class MappingReviewController extends Controller
             'updated_at'        => now(),
         ]);
 
+        // Freeze a competency.assessment.review chain if the tenant has one
+        // configured. Opens nothing — and changes nothing about what happens
+        // next — for every tenant without an active chain here.
+        app(\App\Services\Competency\MappingReviewApprovalWorkflow::class)->openFor((int) $id, (int) $sid);
+
         $this->logCompetencyActivity(
             $sid,
             $context['user_id'],
@@ -179,6 +184,55 @@ class MappingReviewController extends Controller
         }
 
         $status = $request->input('action') === 'approve' ? 'approved' : 'rejected';
+
+        /*
+         * ROUND 4. CHAIN-ENFORCED WHEN A REAL OPEN STEP EXISTS.
+         *
+         * `currentStep()`, not `stepsFor()` — this endpoint has no guard
+         * against a redundant re-decision either, so "steps exist but nothing
+         * is pending" is reachable (already fully decided) and must fall
+         * through to the unenforced path, not error. No role/manager check
+         * existed here before this, so an enforced tenant gets its first real
+         * gate; every other tenant is unchanged.
+         */
+        $workflow = app(\App\Services\Competency\MappingReviewApprovalWorkflow::class);
+        $current = $workflow->currentStep((int) $id);
+
+        if ($current !== null) {
+            $actorRoleKey = \App\Support\RoleKey::forUserId((int) $context['user_id']);
+
+            if (! $workflow->roleMayDecide($current, $actorRoleKey, (int) $context['user_id'])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'You are not the approver for this step.',
+                ], 403);
+            }
+
+            $progress = $workflow->recordDecision(
+                (int) $id,
+                $current,
+                $status,
+                ['user_id' => (int) $context['user_id']],
+                $request->input('note')
+            );
+
+            if (! empty($progress['conflict'])) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'Somebody else just decided this step. Refresh and try again.',
+                ], 409);
+            }
+
+            if (! $progress['final']) {
+                return response()->json([
+                    'status'  => 1,
+                    'message' => "Step {$progress['step']} of {$progress['of']} decided. Now awaiting {$progress['next']}.",
+                ]);
+            }
+
+            // Chain finished on this decision — fall through to the same
+            // row update every decision applies, enforced or not.
+        }
 
         DB::table('s_competency_mapping_reviews')->where('id', $id)->update([
             'status'      => $status,

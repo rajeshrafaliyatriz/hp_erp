@@ -2,7 +2,9 @@
 
 namespace App\Services\Platform;
 
+use App\Support\RoleKey;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -203,5 +205,129 @@ class WorkflowChainSelector
         }
 
         return 'Another unconditional chain, saved earlier, is the fallback for this point instead.';
+    }
+
+    /**
+     * A stored chain's raw `steps` JSON, translated into the shape an enforcement
+     * engine freezes onto a request — resolved role/person, SLA, breach action.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * ROUND 4: EXTRACTED FROM `LeaveApprovalWorkflow::translateStep()`, VERBATIM
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * This had no leave-specific code in it at all — it already only knew about
+     * `approver_type`/`approver`/`name`/`sla_hours`/`on_breach`/`require_comment`,
+     * the registry's own vocabulary, and `tbluser`/`RoleKey`, which every tenant
+     * shares. `LeaveApprovalWorkflow::platformChainFor()` now calls this instead
+     * of its own private copy — so this is the SAME code path leave has used
+     * since round 1, not a reimplementation a second domain could drift from.
+     *
+     * ALL-OR-NOTHING PER CHAIN: one untranslatable step voids the whole chain,
+     * for the same reason leave's own note gives — a chain missing a step is a
+     * chain with a hole in it, not a shorter chain.
+     *
+     * A ROLE KEY IS STORED VERBATIM AND NEVER COLLAPSED. See
+     * `translateOneStep()`'s own note on `hr_manager` vs `hr_executive`.
+     *
+     * @param  array<int, mixed>  $steps
+     * @return array<int, array<string, mixed>>|null
+     */
+    public function translateSteps(array $steps, int $tenantId, int $workflowId): ?array
+    {
+        $out = [];
+
+        foreach ($steps as $step) {
+            $translated = is_array($step)
+                ? $this->translateOneStep($step, $tenantId, $workflowId)
+                : null;
+
+            if ($translated === null) {
+                Log::warning('platform_chain.untranslatable', [
+                    'sub_institute_id' => $tenantId,
+                    'workflow_id' => $workflowId,
+                    'step' => is_array($step) ? ($step['name'] ?? null) : null,
+                    'approver_type' => is_array($step) ? ($step['approver_type'] ?? null) : null,
+                ]);
+
+                return null;
+            }
+
+            $out[] = $translated;
+        }
+
+        return $out;
+    }
+
+    /**
+     * One platform step as a chain step, or null if it cannot be honoured.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function translateOneStep(array $step, int $tenantId, int $workflowId): ?array
+    {
+        $type = (string) ($step['approver_type'] ?? '');
+
+        $common = [
+            'step_name' => trim((string) ($step['name'] ?? '')) ?: null,
+            'sla_hours' => (int) ($step['sla_hours'] ?? 0),
+            'on_breach' => (string) ($step['on_breach'] ?? 'none'),
+            'require_comment' => (bool) ($step['require_comment'] ?? false),
+            'source' => 'platform',
+            'workflow_id' => $workflowId,
+        ];
+
+        if ($type === 'reporting_manager' || $type === 'department_head') {
+            return $common + [
+                'approver_role' => $type,
+                'approver_user_id' => null,
+                'approver_user_name' => null,
+            ];
+        }
+
+        if ($type === 'role') {
+            $roleKey = strtolower(trim((string) ($step['approver'] ?? '')));
+
+            if ($roleKey === '' || ! in_array($roleKey, RoleKey::ALL, true)) {
+                return null;
+            }
+
+            return $common + [
+                'approver_role' => $roleKey,
+                'approver_user_id' => null,
+                'approver_user_name' => null,
+            ];
+        }
+
+        if ($type === 'user') {
+            $userId = (int) ($step['approver'] ?? 0);
+
+            if ($userId <= 0) {
+                return null;
+            }
+
+            $user = DB::table('tbluser')
+                ->where('id', $userId)
+                ->where('sub_institute_id', $tenantId)
+                ->where('status', 1)
+                ->first(['id', 'first_name', 'middle_name', 'last_name']);
+
+            if ($user === null) {
+                return null;
+            }
+
+            $name = trim(implode(' ', array_filter([
+                trim((string) $user->first_name),
+                trim((string) $user->middle_name),
+                trim((string) $user->last_name),
+            ])));
+
+            return $common + [
+                'approver_role' => 'user',
+                'approver_user_id' => $userId,
+                'approver_user_name' => $name !== '' ? $name : ('User #' . $userId),
+            ];
+        }
+
+        return null;
     }
 }
