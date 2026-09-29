@@ -632,6 +632,38 @@ class AttendanceRegularisationApiController extends Controller
             'reviewer_comment'   => $row->reviewer_comment,
             'reviewed_at'        => $row->reviewed_at,
             'submitted_at'       => $row->created_at,
+            'approval'           => $this->approvalInfoFor((int) $row->id, (string) $row->status),
+        ];
+    }
+
+    /**
+     * ROUND 5 FOLLOW-UP. Same read-side addition made for offer/mobility/
+     * offboarding/requisition — surface the chain a pending regularisation
+     * is actually waiting on. The existing single-action decision() endpoint
+     * is already chain-aware (built last round); this only adds visibility
+     * for a screen that today shows just one Approve/Reject action per step.
+     * `null` for every request with no active chain.
+     */
+    private function approvalInfoFor(int $regularisationId, string $status): ?array
+    {
+        if ($status !== 'pending') {
+            return null;
+        }
+
+        $workflow = app(\App\Services\Attendance\AttendanceRegularisationApprovalWorkflow::class);
+        $steps = $workflow->stepsFor($regularisationId);
+        if ($steps === []) {
+            return null;
+        }
+
+        $current = $workflow->currentStep($regularisationId);
+
+        return [
+            'pending' => $current !== null,
+            'step_name' => $current['step_name'] ?? null,
+            'approver_role' => $current['approver_role'] ?? null,
+            'step' => $current['step_order'] ?? null,
+            'of' => count($steps),
         ];
     }
 }

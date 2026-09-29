@@ -842,6 +842,7 @@ class WorkspaceController extends Controller
             'approved_on' => $task->approved_on ?? null,
             'approve_remarks' => $task->approve_remarks ?: null,
             'approved_on' => $task->approved_on ?? null,
+            'approval' => $this->approvalInfoFor((int) $task->id, $status),
             'created_at' => $task->created_at ? Carbon::parse($task->created_at)->toIso8601String() : null,
             'updated_at' => $task->updated_at ? Carbon::parse($task->updated_at)->toIso8601String() : null,
             'attachment' => null,
@@ -893,5 +894,37 @@ class WorkspaceController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * ROUND 5 FOLLOW-UP. Same read-side addition made for the other
+     * enforced domains — surface the chain a completed-and-awaiting-review
+     * task is actually waiting on. approve() (above) already enforces this
+     * chain (built last round); this only adds visibility for a screen that
+     * today shows just one Approve/Reject action per step. `null` outside
+     * the one status approve() itself gates ("Only completed tasks can be
+     * reviewed"), and `null` for any task with no active chain.
+     */
+    private function approvalInfoFor(int $taskId, string $status): ?array
+    {
+        if ($status !== 'COMPLETED') {
+            return null;
+        }
+
+        $workflow = app(\App\Services\TaskManagement\TaskExecutionApprovalWorkflow::class);
+        $steps = $workflow->stepsFor($taskId);
+        if ($steps === []) {
+            return null;
+        }
+
+        $current = $workflow->currentStep($taskId);
+
+        return [
+            'pending' => $current !== null,
+            'step_name' => $current['step_name'] ?? null,
+            'approver_role' => $current['approver_role'] ?? null,
+            'step' => $current['step_order'] ?? null,
+            'of' => count($steps),
+        ];
     }
 }

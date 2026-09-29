@@ -60,6 +60,7 @@ class MappingReviewController extends Controller
             'note'              => $r->note,
             'submitted_at'      => $r->created_at ? Carbon::parse($r->created_at)->format('M j, Y') : null,
             'reviewed_at'       => $r->reviewed_at ? Carbon::parse($r->reviewed_at)->format('M j, Y') : null,
+            'approval'          => $this->approvalInfoFor((int) $r->id, (string) $r->status),
         ])->all();
 
         return response()->json([
@@ -307,5 +308,36 @@ class MappingReviewController extends Controller
             'message' => $affected . ' review(s) approved',
             'data'    => ['approved' => $affected],
         ]);
+    }
+
+    /**
+     * ROUND 5 FOLLOW-UP. Same read-side addition made for the other
+     * enforced domains — surface the chain a pending mapping review is
+     * actually waiting on. update() (the decision endpoint) is already
+     * chain-aware (built last round); this only adds visibility for a
+     * screen that today shows just one Approve/Reject action per step.
+     * `null` for any review with no active chain.
+     */
+    private function approvalInfoFor(int $reviewId, string $status): ?array
+    {
+        if ($status !== 'pending') {
+            return null;
+        }
+
+        $workflow = app(\App\Services\Competency\MappingReviewApprovalWorkflow::class);
+        $steps = $workflow->stepsFor($reviewId);
+        if ($steps === []) {
+            return null;
+        }
+
+        $current = $workflow->currentStep($reviewId);
+
+        return [
+            'pending' => $current !== null,
+            'step_name' => $current['step_name'] ?? null,
+            'approver_role' => $current['approver_role'] ?? null,
+            'step' => $current['step_order'] ?? null,
+            'of' => count($steps),
+        ];
     }
 }
