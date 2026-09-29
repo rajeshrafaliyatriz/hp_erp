@@ -54,7 +54,7 @@ class ExcelAutomationAgentController extends Controller
             ], 422);
         }
 
-        $tokenUser = $this->tokenUser($request->input('token'));
+        $tokenUser = $this->tokenUser($request);
 
         if (!$tokenUser) {
             return response()->json([
@@ -260,7 +260,7 @@ class ExcelAutomationAgentController extends Controller
             ], 422);
         }
 
-        $tokenUser = $this->tokenUser($request->input('token'));
+        $tokenUser = $this->tokenUser($request);
 
         if (!$tokenUser) {
             return response()->json([
@@ -337,7 +337,7 @@ class ExcelAutomationAgentController extends Controller
             ], 422);
         }
 
-        $tokenUser = $this->tokenUser($request->input('token'));
+        $tokenUser = $this->tokenUser($request);
 
         if (!$tokenUser) {
             return response()->json([
@@ -499,7 +499,7 @@ class ExcelAutomationAgentController extends Controller
             ], 422);
         }
 
-        $tokenUser = $this->tokenUser($request->input('token'));
+        $tokenUser = $this->tokenUser($request);
 
         if (!$tokenUser) {
             return response()->json(['status' => false, 'message' => 'Invalid token'], 401);
@@ -611,7 +611,7 @@ class ExcelAutomationAgentController extends Controller
             ], 422);
         }
 
-        $tokenUser = $this->tokenUser($request->input('token'));
+        $tokenUser = $this->tokenUser($request);
 
         if (!$tokenUser) {
             return response()->json([
@@ -681,9 +681,16 @@ class ExcelAutomationAgentController extends Controller
         return $request->file('file') ?: $request->file('excel_file');
     }
 
-    private function tokenUser(string $token): ?object
+    /**
+     * Was called with only the body/query `token` field — the standard
+     * `Authorization: Bearer` header is checked first now, same as every
+     * other guarded endpoint (`api.token` middleware); the body field is
+     * kept as a fallback so nothing already sending it breaks.
+     */
+    private function tokenUser(Request $request): ?object
     {
-        $accessToken = PersonalAccessToken::findToken($token);
+        $token = $request->bearerToken() ?: $request->input('token');
+        $accessToken = $token ? PersonalAccessToken::findToken($token) : null;
 
         return $accessToken?->tokenable;
     }

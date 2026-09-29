@@ -40,7 +40,9 @@ class jobrolecontroller extends Controller
      public function skills(Request $request, $id)
     {
 
-        $token = $request->input('token');
+        // Header first, matching the fix already applied in PayrollController -
+        // this was reading the token from the URL/query only.
+        $token = $request->bearerToken() ?: $request->input('token');
         if (!$token) {
             return response()->json(['message' => 'Token not provided'], 401);
         }

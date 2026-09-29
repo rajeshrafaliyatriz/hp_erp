@@ -57,4 +57,8 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
     Route::get('employee_report', [userReportController::class,'employeeReport'])->name('employee_report');
 });
 
-Route::post('/teacherListAPI', [tbluserController::class, 'teacherListAPI']);
+// Was reachable with no login check at all, and the token check that used to
+// exist here was commented out (see the method itself) rather than removed.
+// api.token restores the same login requirement every neighboring group above
+// already has.
+Route::post('/teacherListAPI', [tbluserController::class, 'teacherListAPI'])->middleware('api.token');
