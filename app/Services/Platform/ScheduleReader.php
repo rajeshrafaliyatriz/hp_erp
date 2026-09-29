@@ -160,6 +160,10 @@ class ScheduleReader
                 // event nobody declared.
                 'task_key' => $taskKey,
                 'label' => $declared['task']['label'] ?? null,
+                // Null for an event the catalogue does not describe — see `task_key`'s
+                // own note. Used both to group the central hub's list by module and to
+                // filter a decentralized tab down to its own module's tasks.
+                'module' => $declared['task']['module'] ?? null,
                 /*
                  * Whether this organisation may change it, and why not.
                  *

@@ -452,16 +452,22 @@ return [
     | This is that list. A table not named here cannot receive a custom field, whatever
     | the request says.
     |
+    | `module` is Round 3's addition, for the decentralized Fields Configuration tab
+    | each module's own navigation now carries — it is the honest reading of who owns
+    | the record, not an arbitrary tag: an employee record belongs to Organisation's
+    | own master data, a leave request to HRMS. A table with no owning module would
+    | show under none of the decentralized tabs and only the central one.
+    |
     */
     'custom_field_tables' => [
-        'tbluser' => 'Employee record',
+        'tbluser' => ['label' => 'Employee record', 'module' => 'organization'],
         // Round 2. The obvious second entry: hrms.leave.approval is the one
         // enforced workflow point, and LeaveRequestDetailsDrawer is a real,
         // already-shipped review surface to render these on — added together with
         // this row, in the same change, so the allowlist entry is never a promise
         // with no form behind it. See CustomFieldValueController::recordBelongsToTenant()
         // for the matching tenant-ownership check this table needed.
-        'hrms_emp_leaves' => 'Leave request',
+        'hrms_emp_leaves' => ['label' => 'Leave request', 'module' => 'hrms'],
     ],
 
     /*

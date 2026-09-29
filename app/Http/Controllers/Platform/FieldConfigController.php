@@ -59,10 +59,21 @@ class FieldConfigController extends PlatformController
     {
         try {
             $scope = $this->scope($request);
+            $module = trim((string) $request->input('module', ''));
 
             if (! Schema::hasTable(self::TABLE)) {
                 return $this->success('Custom fields.', ['rows' => [], 'installed' => false, 'tables' => []]);
             }
+
+            /*
+             * A DECENTRALIZED TAB SEES ONLY ITS OWN MODULE'S TABLES.
+             *
+             * An empty `$tableNames` (a module with nothing allowlisted, e.g. Talent)
+             * is not an error — `whereIn('table_name', [])` correctly returns no rows,
+             * and the screen shows the honest "nothing configured for this module yet"
+             * state rather than the whole platform's fields.
+             */
+            $tableNames = $module !== '' ? $this->registry->customFieldTableNamesOfModule($module) : null;
 
             $rows = DB::table(self::TABLE)
                 /*
@@ -77,6 +88,7 @@ class FieldConfigController extends PlatformController
                 })
                 ->where('status', 1)
                 ->where('is_deleted', 'N')
+                ->when($tableNames !== null, fn ($query) => $query->whereIn('table_name', $tableNames))
                 ->orderBy('table_name')
                 ->orderBy('sort_order')
                 ->get();
@@ -85,7 +97,7 @@ class FieldConfigController extends PlatformController
 
             return $this->success('Custom fields.', [
                 'installed' => true,
-                'tables' => $this->registry->customFieldTableOptions(),
+                'tables' => $this->registry->customFieldTableOptions($module !== '' ? $module : null),
                 'rows' => $rows->map(fn ($row) => [
                     'id' => (int) $row->id,
                     'table_name' => $row->table_name,

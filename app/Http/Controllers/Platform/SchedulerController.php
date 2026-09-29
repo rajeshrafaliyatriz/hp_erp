@@ -35,11 +35,35 @@ class SchedulerController extends PlatformController
     {
         try {
             $scope = $this->scope($request);
+            $module = trim((string) $request->input('module', ''));
 
-            return $this->success(
-                'Scheduled tasks.',
-                $this->reader->tasks($scope->selectedInstituteId)
-            );
+            $payload = $this->reader->tasks($scope->selectedInstituteId);
+
+            /*
+             * A DECENTRALIZED TAB SEES ONLY ITS OWN MODULE'S TASKS.
+             *
+             * A task the catalogue does not declare (`task_key` null) has no module to
+             * match, so it is excluded from every scoped view — it is still reported in
+             * full on the central, unscoped hub, per `ScheduleReader`'s own note on why
+             * an undeclared-but-running task must never be hidden there.
+             */
+            if ($module !== '') {
+                $payload['tasks'] = array_values(array_filter(
+                    $payload['tasks'],
+                    fn (array $task) => $task['module'] === $module
+                ));
+
+                $payload['summary'] = [
+                    'total' => count($payload['tasks']),
+                    'failing' => count(array_filter($payload['tasks'], fn ($t) => $t['last_run_status'] === 'failed')),
+                    'never_run' => count(array_filter($payload['tasks'], fn ($t) => ! $t['available']['last_run'])),
+                    'configurable' => count(array_filter($payload['tasks'], fn ($t) => $t['tenant_scoped'])),
+                    'overridden' => count(array_filter($payload['tasks'], fn ($t) => $t['overridden'])),
+                    'disabled_here' => count(array_filter($payload['tasks'], fn ($t) => $t['disabled_here'])),
+                ];
+            }
+
+            return $this->success('Scheduled tasks.', $payload);
         } catch (Throwable $exception) {
             return $this->handle($exception);
         }
