@@ -1,0 +1,85 @@
+Module: HRMS (attendance/leave/onboarding)
+Connection queried: Laravel connection literally named "live" in config/database.php
+DB3 target: host 128.199.17.97, MariaDB 10.1.48 (reads DB3_HOST/DB3_PORT/DB3_DATABASE/DB3_USERNAME/DB3_PASSWORD from .env)
+Command used: cd hp_erp && php artisan tinker --execute="..." using DB::connection('live')->...
+Row counts via DB::connection('live')->table(x)->count() (never information_schema).
+
+=== ROW COUNTS ===
+hrms_emp_leaves count: 41
+hrms_leave_types count: 12
+hrms_attendances count: 1263
+hrms_holidays count: 14
+hrms_leave_allocation count: 28
+hrms_leave_workflow_settings count: 3
+hrms_leave_role_permissions count: 27
+tbluser count: 299
+
+=== DESCRIBE hrms_emp_leaves ===
+id | bigint(20) unsigned | NO | PRI
+sub_institute_id | bigint(20) unsigned | YES | MUL
+department_id | bigint(20) unsigned | YES | MUL
+user_id | bigint(20) unsigned | NO | MUL
+leave_type_id | bigint(20) unsigned | NO | MUL
+day_type | varchar(191) | YES |
+slot | varchar(191) | YES |
+from_date | date | NO |
+to_date | date | YES |
+chargeable_days | decimal(6,2) | YES |
+comment | varchar(255) | YES |
+hod_comment | varchar(50) | YES |
+hod_comment_date | date | YES |
+hr_remarks | varchar(100) | YES |
+hr_remark_date | date | YES |
+approved_by | varchar(191) | YES |
+status | enum('approved','pending','rejected','cancelled','approved_lwp','sent_back') | YES |
+created_by | bigint(20) unsigned | YES | MUL
+updated_by | bigint(20) unsigned | YES | MUL
+deleted_by | bigint(20) unsigned | YES | MUL
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+deleted_at | timestamp | YES |
+
+=== DESCRIBE hrms_attendances ===
+id | bigint(20) unsigned | NO | PRI
+user_id | bigint(20) unsigned | NO | MUL
+employee_no | varchar(191) | YES | MUL
+day | date | NO | MUL
+punchin_time | datetime | YES | MUL
+punchout_time | datetime | YES | MUL
+work_mode | varchar(20) | NO |
+in_note | tinyint(1) | NO | MUL
+out_note | tinyint(1) | NO | MUL
+timestamp_diff | time | YES | MUL
+status | tinyint(1) | NO | MUL
+ipaddress_in | varchar(191) | YES | MUL
+ipaddress_out | varchar(191) | YES | MUL
+attendance_log_id | bigint(20) unsigned | YES | MUL
+client_id | bigint(20) unsigned | YES | MUL
+photo_in | varchar(191) | YES | MUL
+photo_out | varchar(191) | YES | MUL
+sub_institute_id | bigint(20) unsigned | YES | MUL
+created_by | bigint(20) unsigned | YES | MUL
+updated_by | bigint(20) unsigned | YES | MUL
+deleted_by | bigint(20) unsigned | YES | MUL
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+deleted_at | timestamp | YES |
+
+=== DESCRIBE hrms_leave_allocation ===
+id | bigint(20) unsigned | NO | PRI
+employee_id | bigint(20) unsigned | YES | MUL
+department_id | bigint(20) unsigned | YES | MUL
+leave_type_id | bigint(20) unsigned | YES | MUL
+year | year(4) | YES |
+value | decimal(6,2) | NO |
+sub_institute_id | bigint(20) unsigned | YES | MUL
+created_by | bigint(20) unsigned | YES | MUL
+updated_by | bigint(20) unsigned | YES | MUL
+deleted_by | bigint(20) unsigned | YES | MUL
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+deleted_at | timestamp | YES |
+
+NOTE: this DB3 "live" host is a separate, differently-migrated host from whatever the
+app's default DB_* connection points to in production. These counts/schemas describe
+DB3's own state only; no assumption is made that they match production.

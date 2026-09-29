@@ -1,0 +1,156 @@
+Schema audit — organization / department / tenant group
+Connection: Laravel connection literally named "live" (config/database.php lines 125-139)
+Host: 128.199.17.97 (DB3_HOST), MariaDB 10.1.48
+Method: php artisan tinker --execute="..." using DB::connection('live')->...
+Row counts via DB::connection('live')->table(x)->count() (NOT information_schema).
+Date: 2026-09-28
+
+=====TABLE: school_setup=====
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default= | Extra=auto_increment
+SchoolName | varchar(191) | Null=NO | Key= | Default= | Extra=
+ShortCode | varchar(191) | Null=YES | Key=MUL | Default= | Extra=
+ContactPerson | varchar(191) | Null=YES | Key= | Default= | Extra=
+Mobile | varchar(191) | Null=YES | Key=MUL | Default= | Extra=
+Email | varchar(191) | Null=YES | Key=MUL | Default= | Extra=
+ReceiptHeader | varchar(191) | Null=YES | Key= | Default= | Extra=
+ReceiptAddress | varchar(191) | Null=YES | Key= | Default= | Extra=
+FeeEmail | varchar(191) | Null=YES | Key= | Default= | Extra=
+ReceiptContact | varchar(191) | Null=YES | Key= | Default= | Extra=
+SortOrder | int(11) | Null=YES | Key=MUL | Default=0 | Extra=
+Logo | varchar(191) | Null=YES | Key= | Default= | Extra=
+client_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+is_lms | char(1) | Null=YES | Key=MUL | Default=N | Extra=
+cheque_return_charges | int(11) | Null=YES | Key= | Default= | Extra=
+syear | varchar(191) | Null=YES | Key=MUL | Default= | Extra=
+expire_date | date | Null=YES | Key=MUL | Default= | Extra=
+given_space_mb | int(11) | Null=YES | Key= | Default= | Extra=
+institute_type | text | Null=YES | Key= | Default= | Extra=
+created_at | timestamp | Null=YES | Key= | Default= | Extra=
+updated_at | timestamp | Null=YES | Key= | Default= | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default= | Extra=
+ROW COUNT: 12
+
+=====TABLE: tblclient=====
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default= | Extra=auto_increment
+client_name | varchar(191) | Null=NO
+short_code, logo, address, city, state, country, email, contact_person, contact_person_mobile,
+contact_persoon_email, trustee_name, trustee_emai, trustee_mobile | varchar(191) nullable
+number_of_schools | int(11) nullable
+db_host, db_user, db_password, db_solution, db_cms, db_hrms, db_library, db_lms | varchar(191) nullable
+multischool | tinyint(1) nullable
+total_student, total_staff | int(11) nullable
+hrms_folder, old_url | varchar(191) nullable
+deleted_at, created_at, updated_at | timestamp nullable
+ROW COUNT: 14
+
+=====TABLE: org_details=====
+id | bigint(20) unsigned | PK auto_increment
+legal_name, organization_type, cin(MUL), gstin, pan(MUL), udyam_registration_no,
+registered_address, industry(MUL), employee_count, work_week, logo | nullable
+sub_institute_id | bigint(20) unsigned | Key=UNI (nullable)
+created_by, updated_by | bigint(20) unsigned MUL, nullable
+created_at, updated_at | timestamp
+mobile_no, country_code(default +91), email, website | nullable
+ROW COUNT: 12
+
+=====TABLE: org_sister_details=====
+id | PK auto_increment
+org_id | bigint(20) unsigned MUL
+legal_name, cin(MUL), gstin, pan(MUL), registered_address, industry(MUL), employee_count,
+work_week, logo | nullable
+sub_institute_id | bigint(20) unsigned MUL (nullable, NOT unique here unlike org_details)
+created_by, updated_by | MUL nullable
+created_at, updated_at, mobile_no, country_code, email, website
+ROW COUNT: 4
+
+=====TABLE: hrms_departments=====
+id | PK auto_increment
+department | varchar(191) NOT NULL, MUL
+parent_id | bigint(20) unsigned MUL nullable (self-referencing hierarchy)
+tasks, roles_responsibility | text nullable
+status | int(11) NOT NULL MUL
+is_calculated | int(11) NOT NULL MUL
+sub_institute_id | bigint(20) unsigned MUL nullable
+created_by, updated_by, deleted_by | bigint(20) unsigned MUL nullable
+created_at, updated_at, deleted_at | timestamp
+head_user_id | bigint(20) unsigned MUL nullable
+code | varchar(50) MUL nullable
+description | text nullable
+sort_order | int(11) NOT NULL default 0, MUL
+ROW COUNT: 1236
+
+=====TABLE: hrms_departments_mapping=====
+id | PK auto_increment
+department | varchar(191) nullable
+parent_id | bigint(20) unsigned MUL nullable
+tasks, roles_responsibility | mediumtext nullable
+much_skill | varchar(191) nullable
+status | enum('1','0') nullable
+is_calculated | int(11) nullable
+sub_institute_id | bigint(20) unsigned MUL nullable
+created_by, updated_by, deleted_by | MUL nullable
+created_at, updated_at, deleted_at
+ROW COUNT: 0
+
+=====TABLE: org_designation=====
+id | PK auto_increment
+branch | varchar(191) NOT NULL
+level | varchar(191) NOT NULL
+user_id | bigint(20) unsigned NOT NULL MUL
+designation | varchar(191) NOT NULL
+sub_institute_id | bigint(20) unsigned NOT NULL MUL
+created_by, updated_by, deleted_by | MUL nullable
+created_at, updated_at, deleted_at
+ROW COUNT: 43
+
+=====TABLE: institute_detail=====
+id | PK auto_increment
+sub_institute_id | bigint(20) unsigned MUL nullable
+organization_name, organization_code, careers_slug(UNI), organization_type,
+organization_email, organization_ph_no, organization_website, address, industry_type,
+registration_number, handler_name, handler_mobile, handler_email, total_emp,
+total_department, working_days, working_hours,
+storeroom_condition, college_boundary_gate_condition, principal_house_inside_college,
+declared_dibar, data_available_AISHE, trustee_conflict, affilitated_college_condition | nullable
+created_by, updated_by, deleted_by | MUL nullable
+created_at, updated_at, deleted_at
+ROW COUNT: 5
+
+=====TABLE: tenant_readiness_gate=====
+id | PK auto_increment
+sub_institute_id | bigint(20) unsigned NOT NULL MUL
+gate_key | varchar(48) NOT NULL
+state | enum('blocked','at_risk','ready') default blocked
+unit | enum('percent','count') default percent
+value | decimal(10,2) nullable
+enable_threshold, disable_threshold | decimal(10,2) NOT NULL
+sustained_periods, consecutive_passes, warning_days | tinyint unsigned
+at_risk_since, acknowledged_at, computed_at | datetime nullable
+acknowledged_by | bigint(20) unsigned nullable
+remedy | varchar(255) nullable
+created_at, updated_at
+ROW COUNT: 65
+
+=====TABLE: department_sops=====
+id | PK auto_increment
+department_id | bigint(20) unsigned NOT NULL MUL (no FK by design)
+sub_institute_id | bigint(20) unsigned NOT NULL MUL
+title, code, description, category, version, status(enum Active/Draft/Archived),
+effective_date, review_date, file_path, file_name, file_size, file_mime
+created_by(MUL), updated_by, deleted_by | nullable
+created_at, updated_at, deleted_at
+ROW COUNT: 1
+
+=====TABLE: department_policies=====
+(same shape as department_sops minus file_* columns)
+ROW COUNT: 0
+
+=====TABLE: department_rules=====
+(same shape, adds rule_definition text, category indexed)
+ROW COUNT: 0
+
+Candidate tables NOT found in app/Models grep beyond the above (org/department/tenant naming
+convention exhausted at this set); tblclient + school_setup form the tenant hierarchy
+(client -> school_setup via client_id FK -> sub_institute_id used pervasively as tenant key
+across org_details/org_sister_details/hrms_departments*/org_designation/institute_detail/
+tenant_readiness_gate/department_*).

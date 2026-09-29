@@ -1,0 +1,71 @@
+--- DESCRIBE hrms_departments ---
+id | bigint(20) unsigned
+department | varchar(191)
+parent_id | bigint(20) unsigned
+tasks | text
+roles_responsibility | text
+status | int(11)
+is_calculated | int(11)
+sub_institute_id | bigint(20) unsigned
+created_by | bigint(20) unsigned
+updated_by | bigint(20) unsigned
+deleted_by | bigint(20) unsigned
+created_at | timestamp
+updated_at | timestamp
+deleted_at | timestamp
+head_user_id | bigint(20) unsigned
+code | varchar(50)
+description | text
+sort_order | int(11)
+--- DESCRIBE org_details ---
+id | bigint(20) unsigned
+legal_name | varchar(191)
+organization_type | varchar(64)
+cin | varchar(191)
+gstin | varchar(191)
+pan | varchar(191)
+udyam_registration_no | varchar(32)
+registered_address | text
+industry | varchar(191)
+employee_count | varchar(191)
+work_week | varchar(191)
+logo | varchar(191)
+sub_institute_id | bigint(20) unsigned
+created_by | bigint(20) unsigned
+updated_by | bigint(20) unsigned
+created_at | timestamp
+updated_at | timestamp
+mobile_no | varchar(20)
+country_code | varchar(5)
+email | varchar(255)
+website | varchar(500)
+--- DESCRIBE school_setup ---
+id | bigint(20) unsigned
+SchoolName | varchar(191)
+ShortCode | varchar(191)
+ContactPerson | varchar(191)
+Mobile | varchar(191)
+Email | varchar(191)
+ReceiptHeader | varchar(191)
+ReceiptAddress | varchar(191)
+FeeEmail | varchar(191)
+ReceiptContact | varchar(191)
+SortOrder | int(11)
+Logo | varchar(191)
+client_id | bigint(20) unsigned
+is_lms | char(1)
+cheque_return_charges | int(11)
+syear | varchar(191)
+expire_date | date
+given_space_mb | int(11)
+institute_type | text
+created_at | timestamp
+updated_at | timestamp
+deleted_at | timestamp
+--- row counts [DB3 / live / 128.199.17.97] ---
+hrms_departments: 1236
+org_details: 12
+school_setup: 12
+institute_detail: 5
+tbluser: 299
+org_sister_details: 4

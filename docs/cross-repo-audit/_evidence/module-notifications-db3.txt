@@ -1,0 +1,68 @@
+Module: Notifications
+DB connection queried: Laravel connection literally named "live" in config/database.php
+[DB3 / live / 128.199.17.97], MariaDB 10.1.48
+Command: cd C:/Users/MILAN/Downloads/hp_erp && php artisan tinker --execute="..."
+Date run: 2026-09-28
+
+=== Row counts (DB::connection('live')->table(x)->count()) ===
+count g2g_notification: 1
+count task_management_notifications: 7
+
+=== DESCRIBE g2g_notification ===
+id | bigint(20) unsigned | NO | PRI
+sub_institute_id | bigint(20) unsigned | NO | MUL
+user_id | bigint(20) unsigned | NO |
+event_id | bigint(20) unsigned | YES | MUL
+event_type | varchar(96) | NO |
+channel | varchar(16) | NO |
+subject | varchar(255) | NO |
+body | text | NO |
+action_url | varchar(255) | YES |
+recipient_reason | varchar(64) | NO |
+read_at | timestamp | YES |
+created_at | timestamp | NO |
+
+=== DESCRIBE task_management_notifications ===
+id | bigint(20) unsigned | NO | PRI
+sub_institute_id | bigint(20) unsigned | NO |
+user_id | bigint(20) unsigned | NO | MUL
+task_id | bigint(20) unsigned | YES |
+type | varchar(50) | NO |
+title | varchar(191) | NO |
+body | text | YES |
+read_at | timestamp | YES |
+created_at | timestamp | NO |
+
+=== Sample row: g2g_notification->first() ===
+stdClass Object
+(
+    [id] => 5
+    [sub_institute_id] => 3
+    [user_id] => 163
+    [event_id] => 401
+    [event_type] => certification.expiring
+    [channel] => inapp
+    [subject] => Your Certification expires on 2026-09-02
+    [body] => emp certi expires on 2026-09-02.
+
+Renew it before that date to keep it valid. If you have already renewed, no action is needed.
+    [action_url] =>
+    [recipient_reason] => certification_holder
+    [read_at] =>
+    [created_at] => 2026-08-31 11:47:46
+)
+
+Notes:
+- Table identified by grepping DB::table('g2g_notification') / DB::table('task_management_notifications')
+  usages in app/Http/Controllers/Api/Notifications/NotificationController.php,
+  app/Services/Notifications/{NotificationSender,NotificationComposer}.php,
+  app/Services/Events/NotificationDispatcher.php.
+- Field list returned by NotificationController@index's ->get([...]) matches the
+  DESCRIBE g2g_notification column list exactly (id, event_type, subject, body,
+  action_url, recipient_reason, read_at, created_at) - no drift found.
+- task_management_notifications backs the separate, unrelated
+  App\Http\Controllers\Api\TaskManagement\NotificationController (mounted under
+  /api/task-management/notifications), not the frontend's /api/notifications
+  service audited here.
+- This DB3 host is a separate, differently-migrated host from whatever the app's
+  default DB_* connection points to in production; only DB3/live state is reported.

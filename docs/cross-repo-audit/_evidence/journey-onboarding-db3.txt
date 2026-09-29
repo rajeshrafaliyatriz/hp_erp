@@ -1,0 +1,45 @@
+DB3 ACCESS: Laravel connection 'live' (config/database.php, DB3_* env vars) -> host 128.199.17.97, MariaDB 10.1.48
+Command: cd C:/Users/MILAN/Downloads/hp_erp && php artisan tinker --execute="... DB::connection('live')->table(X)->count() ..."
+Date run: 2026-09-28
+
+Tables queried, in order of the backend trace (Employee Onboarding journey):
+
+talent_onboarding_journeys: 1
+talent_onboarding_tasks: 1
+talent_onboarding_journey_stages: 7
+talent_onboarding_activity_log: 7
+talent_onboarding_documents: 0
+talent_onboarding_notes: 0
+talent_offers: 71
+talent_offer_acceptances: 0
+talent_job_applications: 281
+talent_job_postings: 133
+hrms_departments: 1236
+tbluser: 299
+document_type: 0
+
+Notes:
+- talent_onboarding_journey_stages has 7 rows and talent_onboarding_activity_log has 7 rows,
+  consistent with exactly ONE journey (talent_onboarding_journeys=1) that seeded the 7
+  DEFAULT_STAGES and logged 7 activity events (1 create + up to 6 stage/task actions) -
+  i.e. this looks like a single test/demo journey, not real onboarding volume.
+- talent_onboarding_tasks=1 means only a single onboarding task exists tenant-wide on
+  this host for that one journey - OnboardingTaskController@workstreams /
+  OnboardingOverviewController KPI #4 (Onboarding Completion) will show near-zero/trivial
+  numbers for any other journey.
+- talent_offer_acceptances=0 means storeFromOffer()'s "auto-link accepted employee" path
+  (DB::table('talent_offer_acceptances')->where('decision','accepted')...) will ALWAYS
+  return null on DB3 - every journey started from an offer on this host gets
+  employee_id=null, which per the controller's own comment disables probation
+  confirmation mirroring to tbluser and exit-case creation for every hire onboarded via
+  this path.
+- talent_onboarding_documents=0 and talent_onboarding_notes=0: the Documents/Notes tabs
+  of the onboarding UI have nothing to render on DB3 (not necessarily broken, just empty).
+- document_type=0: OnboardingOverviewController@filters' document_types dropdown will be
+  empty on DB3 - a user trying to log a received/verified document has no type to pick
+  from the dropdown filter list (soft UX gap, not a hard break).
+- talent_offers=71, talent_job_applications=281, talent_job_postings=133, tbluser=299,
+  hrms_departments=1236: all populated, sufficient for storeFromOffer()'s joins and the
+  filters()/employees dropdown to return real data.
+
+[DB3 / live / 128.199.17.97] for every count above.

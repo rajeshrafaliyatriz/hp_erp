@@ -1,0 +1,73 @@
+--- DESCRIBE competency ---
+id | bigint(20) unsigned
+framework_id | bigint(20) unsigned
+sub_institute_id | bigint(20) unsigned
+code | varchar(64)
+name | varchar(191)
+description | text
+competency_type | varchar(64)
+criticality | varchar(32)
+requires_assessment | tinyint(1)
+status | varchar(32)
+approve_status | varchar(20)
+version | int(11)
+created_by | bigint(20) unsigned
+updated_by | bigint(20) unsigned
+deleted_by | bigint(20) unsigned
+created_at | timestamp
+updated_at | timestamp
+deleted_at | timestamp
+
+--- DESCRIBE competency_kasba_item ---
+id | bigint(20) unsigned
+sub_institute_id | bigint(20) unsigned
+competency_id | bigint(20) unsigned
+kasba_type | enum('skill','knowledge','ability','attitude','behaviour')
+item_id | bigint(20) unsigned
+item_label | varchar(191)
+weight | decimal(5,2)
+created_at | timestamp
+updated_at | timestamp
+
+--- DESCRIBE s_users_skills ---
+id | bigint(20) unsigned
+department | varchar(191)
+sub_department | varchar(191)
+department_id | int(11)
+category | varchar(191)
+competency_type | varchar(50)
+sub_category | varchar(191)
+micro_category | varchar(191)
+title | varchar(191)
+description | text
+skill_code | varchar(50)
+related_skills | tinytext
+bussiness_links | varchar(191)
+custom_tags | tinytext
+proficiency_level | tinytext
+job_titles | tinytext
+learning_resources | tinytext
+assesment_method | tinytext
+certification_qualifications | tinytext
+experience_project | tinytext
+skill_maps | tinytext
+skill_status | varchar(50)
+skill_importance | varchar(50)
+legal_compliance_relevance | varchar(100)
+sop_practice_link | tinytext
+performance_metrics | varchar(191)
+common_errors_tips | varchar(191)
+sme_contacts | varchar(100)
+sub_skills | varchar(100)
+skill_flow | varchar(191)
+tasklist | tinytext
+status | enum('Active','Inactive')
+approve_status | enum('Approved','Pending','Cancelled')
+sub_institute_id | bigint(20) unsigned
+created_by | bigint(20) unsigned
+updated_by | bigint(20) unsigned
+deleted_by | bigint(20) unsigned
+created_at | timestamp
+updated_at | timestamp
+deleted_at | timestamp
+catalogue_skill_id | bigint(20) unsigned

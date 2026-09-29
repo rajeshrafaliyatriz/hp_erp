@@ -1,0 +1,343 @@
+Schema audit: platform_ai group
+Connection: Laravel connection "live" (config/database.php) = DB3
+Host: 128.199.17.97 (MariaDB 10.1.48)
+Generated via: php artisan tinker --execute="..." using DB::connection('live')
+
+Candidate table existence check (Schema::connection('live')->hasTable):
+g2g_platform_scheduled_tasks=1
+g2g_platform_task_runs=1
+g2g_platform_workflows=1
+g2g_platform_workflow_versions=1
+g2g_process=1
+g2g_process_task=1
+g2g_process_version=1
+g2g_integration_credentials=1
+g2g_event=1
+g2g_event_delivery=1
+g2g_audit_log=1
+ai_daily_used_api=1
+ai_course_outlines=1
+ai_api_keys=1
+ai_models=1
+ai_modules=1
+ai_templates=0
+ai_suggestions=0
+ai_policies=1
+ai_policy_rules=0
+ai_policy_assignments=1
+ai_policy_acknowledgements=0
+ai_audit_logs=0
+ai_conversations=0
+ai_conversation_turns=0
+ai_evaluations=0
+ai_evaluation_cases=0
+ai_usage_events=0
+ai_usage_quotas=0
+ai_generated_reports=1
+ai_module_model_bindings=1
+
+No mcp_* tables found in app/Models or database/migrations (none to check).
+No knowledge_* prefixed tables found (only s_skill_knowledge_ability exists, table
+name does not match "knowledge_*" pattern and is not part of this AI/platform group
+- it belongs to app/Models/libraries/userKnowledgeAbility.php, an HR/skills feature,
+not the AI stack).
+
+===================================================================
+DESCRIBE + row count for each EXISTING table (DB3 / live / 128.199.17.97)
+===================================================================
+
+=== g2g_platform_scheduled_tasks ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+task_key | varchar(191) | Null=NO | Key=MUL | Default=NULL | Extra=
+minute | varchar(64) | Null=NO | Key= | Default=0 | Extra=
+hour | varchar(64) | Null=NO | Key= | Default=0 | Extra=
+day | varchar(64) | Null=NO | Key= | Default=* | Extra=
+month | varchar(64) | Null=NO | Key= | Default=* | Extra=
+day_of_week | varchar(64) | Null=NO | Key= | Default=* | Extra=
+disabled | tinyint(1) | Null=NO | Key= | Default=0 | Extra=
+updated_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=1
+
+=== g2g_platform_task_runs ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+task_key | varchar(191) | Null=NO | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+started_at | datetime(3) | Null=NO | Key= | Default=NULL | Extra=
+finished_at | datetime(3) | Null=YES | Key= | Default=NULL | Extra=
+status | varchar(16) | Null=YES | Key=MUL | Default=NULL | Extra=
+exit_code | int(11) | Null=YES | Key= | Default=NULL | Extra=
+duration_ms | int(10) unsigned | Null=YES | Key= | Default=NULL | Extra=
+output_head | text | Null=YES | Key= | Default=NULL | Extra=
+host | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=2
+
+=== g2g_platform_workflows ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+flow_key | varchar(191) | Null=NO | Key= | Default=NULL | Extra=
+module | varchar(64) | Null=NO | Key= | Default=NULL | Extra=
+component | varchar(128) | Null=NO | Key= | Default=NULL | Extra=
+name | varchar(191) | Null=NO | Key= | Default=NULL | Extra=
+description | text | Null=YES | Key= | Default=NULL | Extra=
+status | varchar(16) | Null=NO | Key= | Default=draft | Extra=
+condition | varchar(255) | Null=NO | Key= | Default= | Extra=
+steps | longtext | Null=NO | Key= | Default=NULL | Extra=
+on_reject | varchar(32) | Null=NO | Key= | Default=return_to_requester | Extra=
+notify_requester | tinyint(1) | Null=NO | Key= | Default=1 | Extra=
+created_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+updated_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=3
+
+=== g2g_platform_workflow_versions ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+workflow_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+flow_key | varchar(191) | Null=NO | Key= | Default=NULL | Extra=
+snapshot | longtext | Null=NO | Key= | Default=NULL | Extra=
+changed_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=3
+
+=== g2g_process ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+name | varchar(191) | Null=NO | Key= | Default=NULL | Extra=
+module | varchar(64) | Null=NO | Key= | Default=NULL | Extra=
+source_text | longtext | Null=NO | Key= | Default=NULL | Extra=
+spec | longtext | Null=NO | Key= | Default=NULL | Extra=
+status | varchar(16) | Null=NO | Key= | Default=draft | Extra=
+created_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+updated_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=2
+
+=== g2g_process_task ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+process_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+task_id | bigint(20) unsigned | Null=NO | Key= | Default=NULL | Extra=
+task_ref | varchar(64) | Null=NO | Key= | Default=NULL | Extra=
+title | varchar(255) | Null=NO | Key= | Default=NULL | Extra=
+assignee_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+idempotency_key | varchar(100) | Null=NO | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=4
+
+=== g2g_process_version ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+process_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=NO | Key= | Default=NULL | Extra=
+source_text | longtext | Null=NO | Key= | Default=NULL | Extra=
+spec | longtext | Null=NO | Key= | Default=NULL | Extra=
+changed_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=0
+
+=== g2g_integration_credentials ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+provider_key | varchar(64) | Null=NO | Key= | Default=NULL | Extra=
+status | varchar(20) | Null=NO | Key= | Default=not_configured | Extra=
+config | longtext | Null=YES | Key= | Default=NULL | Extra=
+last_tested_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+last_test_message | varchar(500) | Null=YES | Key= | Default=NULL | Extra=
+created_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+updated_by | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=2
+
+=== g2g_event ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+event_uuid | char(36) | Null=NO | Key=UNI | Default=NULL | Extra=
+type | varchar(96) | Null=NO | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+entity_type | varchar(64) | Null=NO | Key=MUL | Default=NULL | Extra=
+entity_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+actor_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+acting_for_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+payload | longtext | Null=NO | Key= | Default=NULL | Extra=
+metadata | longtext | Null=YES | Key= | Default=NULL | Extra=
+correlation_id | char(36) | Null=YES | Key= | Default=NULL | Extra=
+causation_id | char(36) | Null=YES | Key= | Default=NULL | Extra=
+idempotency_key | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+occurred_at | datetime(3) | Null=NO | Key= | Default=NULL | Extra=
+recorded_at | datetime(3) | Null=NO | Key= | Default=NULL | Extra=
+ROW_COUNT=346
+
+=== g2g_event_delivery ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+event_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+consumer | varchar(96) | Null=NO | Key= | Default=NULL | Extra=
+status | enum('pending','done','failed','skipped') | Null=NO | Key=MUL | Default=pending | Extra=
+attempts | int(11) | Null=NO | Key= | Default=0 | Extra=
+last_error | text | Null=YES | Key= | Default=NULL | Extra=
+completed_at | datetime | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=61
+
+=== g2g_audit_log ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+event_id | bigint(20) unsigned | Null=NO | Key=UNI | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+type | varchar(96) | Null=NO | Key= | Default=NULL | Extra=
+entity_type | varchar(64) | Null=NO | Key=MUL | Default=NULL | Extra=
+entity_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+actor_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+acting_for_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+detail | longtext | Null=YES | Key= | Default=NULL | Extra=
+occurred_at | datetime(3) | Null=NO | Key= | Default=NULL | Extra=
+ROW_COUNT=51
+
+=== ai_daily_used_api ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+api_name | varchar(191) | Null=YES | Key=MUL | Default=NULL | Extra=
+parent_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+key | mediumtext | Null=YES | Key= | Default=NULL | Extra=
+date | date | Null=YES | Key=MUL | Default=NULL | Extra=
+count | int(11) | Null=YES | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=194
+
+=== ai_course_outlines ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+course_type | varchar(255) | Null=NO | Key= | Default=NULL | Extra=
+input_fields | longtext | Null=NO | Key= | Default=NULL | Extra=
+configure_fields | longtext | Null=NO | Key= | Default=NULL | Extra=
+outline | longtext | Null=NO | Key= | Default=NULL | Extra=
+presentation_platform | varchar(50) | Null=YES | Key= | Default=NULL | Extra=
+ai_model | varchar(100) | Null=YES | Key= | Default=NULL | Extra=
+slide_count | int(10) unsigned | Null=YES | Key= | Default=NULL | Extra=
+generation_id | varchar(191) | Null=YES | Key=MUL | Default=NULL | Extra=
+gamma_url | text | Null=YES | Key= | Default=NULL | Extra=
+export_url | text | Null=YES | Key= | Default=NULL | Extra=
+status | varchar(20) | Null=YES | Key= | Default=draft | Extra=
+course_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=62
+
+=== ai_api_keys ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+account_email | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+api_type | varchar(191) | Null=YES | Key=MUL | Default=NULL | Extra=
+ai_module | varchar(64) | Null=YES | Key=MUL | Default=NULL | Extra=
+model | varchar(120) | Null=YES | Key= | Default=NULL | Extra=
+api_key | mediumtext | Null=NO | Key= | Default=NULL | Extra=
+api_limit | varchar(191) | Null=YES | Key= | Default=NULL | Extra=
+status | int(11) | Null=NO | Key= | Default=1 | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=0
+
+=== ai_models ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+provider | varchar(40) | Null=NO | Key=MUL | Default=NULL | Extra=
+model_id | varchar(120) | Null=NO | Key= | Default=NULL | Extra=
+label | varchar(120) | Null=NO | Key= | Default=NULL | Extra=
+max_output_tokens | int(10) unsigned | Null=YES | Key= | Default=NULL | Extra=
+input_cost_per_1k | decimal(12,6) | Null=YES | Key= | Default=NULL | Extra=
+output_cost_per_1k | decimal(12,6) | Null=YES | Key= | Default=NULL | Extra=
+sort_order | int(10) unsigned | Null=NO | Key= | Default=0 | Extra=
+status | int(11) | Null=NO | Key= | Default=1 | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=0
+
+=== ai_modules ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+module_key | varchar(80) | Null=NO | Key=MUL | Default=NULL | Extra=
+label | varchar(150) | Null=NO | Key= | Default=NULL | Extra=
+domain | varchar(40) | Null=NO | Key=MUL | Default=g2g | Extra=
+description | text | Null=YES | Key= | Default=NULL | Extra=
+capabilities | text | Null=YES | Key= | Default=NULL | Extra=
+registry_keys | text | Null=YES | Key= | Default=NULL | Extra=
+menu_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+icon | varchar(60) | Null=YES | Key= | Default=NULL | Extra=
+sort_order | smallint(5) unsigned | Null=NO | Key= | Default=0 | Extra=
+status | tinyint(1) | Null=NO | Key=MUL | Default=1 | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+client_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=9
+
+=== ai_policies ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+name | varchar(191) | Null=NO | Key= | Default=NULL | Extra=
+description | text | Null=YES | Key= | Default=NULL | Extra=
+policy_type | varchar(80) | Null=NO | Key= | Default=NULL | Extra=
+status | tinyint(4) | Null=NO | Key= | Default=1 | Extra=
+require_disclosure | tinyint(4) | Null=NO | Key= | Default=0 | Extra=
+require_acknowledgement | tinyint(4) | Null=NO | Key= | Default=0 | Extra=
+ai_detection_required | tinyint(4) | Null=NO | Key= | Default=0 | Extra=
+plagiarism_check_required | tinyint(4) | Null=NO | Key= | Default=0 | Extra=
+detection_provider | varchar(120) | Null=YES | Key= | Default=NULL | Extra=
+detection_threshold | decimal(5,2) | Null=YES | Key= | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=0
+
+=== ai_policy_assignments ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+policy_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+scope_type | varchar(40) | Null=NO | Key= | Default=NULL | Extra=
+scope_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+status | tinyint(4) | Null=NO | Key= | Default=1 | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=0
+
+=== ai_generated_reports ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default=NULL | Extra=
+client_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+module_key | varchar(60) | Null=NO | Key=MUL | Default=NULL | Extra=
+layout_template_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+title | varchar(250) | Null=NO | Key= | Default=NULL | Extra=
+html_content | longtext | Null=NO | Key= | Default=NULL | Extra=
+question | text | Null=YES | Key= | Default=NULL | Extra=
+source_tool | varchar(120) | Null=YES | Key= | Default=NULL | Extra=
+arguments | longtext | Null=YES | Key= | Default=NULL | Extra=
+row_count | int(10) unsigned | Null=NO | Key= | Default=0 | Extra=
+status | tinyint(3) unsigned | Null=NO | Key= | Default=1 | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=0
+
+=== ai_module_model_bindings ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default=NULL | Extra=auto_increment
+product_module | varchar(80) | Null=NO | Key=MUL | Default=NULL | Extra=
+capability | varchar(100) | Null=NO | Key= | Default=NULL | Extra=
+provider | varchar(60) | Null=YES | Key= | Default=NULL | Extra=
+model | varchar(190) | Null=YES | Key= | Default=NULL | Extra=
+api_key_id | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+max_output_tokens | int(10) unsigned | Null=YES | Key= | Default=NULL | Extra=
+status | tinyint(4) | Null=NO | Key= | Default=1 | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default=NULL | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key= | Default=NULL | Extra=
+created_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+updated_at | timestamp | Null=YES | Key= | Default=NULL | Extra=
+ROW_COUNT=0

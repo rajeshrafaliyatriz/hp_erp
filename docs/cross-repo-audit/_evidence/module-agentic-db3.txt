@@ -1,0 +1,85 @@
+=== TABLE EXISTENCE + ROW COUNTS [DB3 / live / 128.199.17.97] ===
+agentic_agents: EXISTS, count=26
+agentic_agent_runs: EXISTS, count=206
+agentic_run_tasks: EXISTS, count=806
+agentic_tool_invocations: EXISTS, count=23
+agentic_agent_configs: EXISTS, count=0
+agentic_workflows: EXISTS, count=1
+agentic_workflow_steps: EXISTS, count=3
+agentic_workflow_runs: EXISTS, count=0
+agentic_workflow_step_runs: EXISTS, count=0
+agentic_messages: EXISTS, count=2
+agentic_optimizations: EXISTS, count=5
+agentic_reflection_runs: EXISTS, count=1
+
+=== DESCRIBE agentic_agents [DB3 / live / 128.199.17.97] ===
+id | bigint(20) unsigned | NO | PRI | NULL
+sub_institute_id | bigint(20) unsigned | YES | MUL | NULL
+origin | varchar(20) | NO | MUL | tenant
+slug | varchar(120) | YES |  | NULL
+icon | varchar(60) | YES |  | NULL
+name | varchar(191) | NO |  | NULL
+description | text | YES |  | NULL
+module | varchar(191) | YES |  | NULL
+sub_module | varchar(191) | YES |  | NULL
+role | varchar(191) | YES |  | NULL
+model | varchar(100) | NO |  | gpt-4
+temperature | decimal(3,2) | NO |  | 0.70
+max_tokens | int(10) unsigned | NO |  | 2000
+system_prompt | longtext | YES |  | NULL
+function_text | longtext | YES |  | NULL
+workflow | longtext | YES |  | NULL
+outputs | longtext | YES |  | NULL
+input_schema | longtext | YES |  | NULL
+config_schema | longtext | YES |  | NULL
+launch_component | varchar(60) | YES |  | NULL
+cta_label | varchar(120) | YES |  | NULL
+cta_link | varchar(500) | YES |  | NULL
+cta_target | varchar(20) | NO |  | internal
+execution_mode | varchar(20) | NO |  | none
+endpoint_url | varchar(500) | YES |  | NULL
+endpoint_method | varchar(10) | NO |  | POST
+endpoint_headers | longtext | YES |  | NULL
+endpoint_timeout | smallint(5) unsigned | NO |  | 60
+tools | longtext | YES |  | NULL
+status | varchar(20) | NO |  | draft
+created_by | bigint(20) unsigned | YES |  | NULL
+updated_by | bigint(20) unsigned | YES |  | NULL
+deleted_by | bigint(20) unsigned | YES |  | NULL
+created_at | timestamp | YES |  | NULL
+updated_at | timestamp | YES |  | NULL
+deleted_at | timestamp | YES |  | NULL
+
+=== DESCRIBE agentic_agent_runs [DB3 / live / 128.199.17.97] ===
+id | bigint(20) unsigned | NO | PRI | NULL
+sub_institute_id | bigint(20) unsigned | NO | MUL | NULL
+agent_id | bigint(20) unsigned | NO | MUL | NULL
+status | varchar(20) | NO |  | pending
+trigger | varchar(30) | NO |  | manual
+input | longtext | YES |  | NULL
+output | longtext | YES |  | NULL
+error_message | text | YES |  | NULL
+duration_ms | int(10) unsigned | YES |  | NULL
+tokens_used | int(10) unsigned | YES |  | NULL
+cost | decimal(12,6) | YES |  | NULL
+started_at | timestamp | YES |  | NULL
+completed_at | timestamp | YES |  | NULL
+created_by | bigint(20) unsigned | YES |  | NULL
+created_at | timestamp | YES |  | NULL
+updated_at | timestamp | YES |  | NULL
+deleted_at | timestamp | YES |  | NULL
+
+=== DESCRIBE agentic_run_tasks [DB3 / live / 128.199.17.97] ===
+id | bigint(20) unsigned | NO | PRI | NULL
+sub_institute_id | bigint(20) unsigned | NO | MUL | NULL
+run_id | bigint(20) unsigned | NO | MUL | NULL
+sequence | int(10) unsigned | NO |  | 1
+description | varchar(500) | YES |  | NULL
+status | varchar(20) | NO |  | running
+tool | varchar(60) | YES |  | NULL
+result | longtext | YES |  | NULL
+error | text | YES |  | NULL
+duration_ms | int(10) unsigned | YES |  | NULL
+created_at | timestamp | YES |  | NULL
+updated_at | timestamp | YES |  | NULL
+
