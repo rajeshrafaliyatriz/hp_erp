@@ -6,15 +6,62 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Talent\Concerns\ResolvesTalentContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 
+/**
+ * The Talent "Administration & Governance → Workflows" screen.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ROUND 5. REPOINTED FROM A DEAD, SEEDED CATALOGUE TO THE REAL ONE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * This used to read `talent_workflows`/`talent_workflow_stages`/
+ * `talent_workflow_approvers` — a table nothing ever wrote to beyond 8 rows a
+ * seeder inserted with backdated timestamps (the project's own prior audit
+ * already flagged this, F-64: "eight rows, no writer, and no approval path
+ * consults it"). It genuinely queried a real, tenant-scoped table and
+ * computed real summary tiles — the DATA behind it was simply disconnected
+ * from anything the app actually enforces.
+ *
+ * The real thing is Platform Services' Workflow console: the 4 Talent-module
+ * points declared in `config('platform_services.workflows')`
+ * (`talent.recruitment.requisition`, `talent.recruitment.offer`,
+ * `talent.offboarding.clearance`, `talent.mobility.transfer` — all enforced
+ * as of this round), backed by real chains in `g2g_platform_workflows` and
+ * real version history in `g2g_platform_workflow_versions`
+ * (`WorkflowController`, same package). This controller now reads THAT.
+ *
+ * No destructive change: `talent_workflows` and its two sibling tables are
+ * left exactly as they are — dead, harmless, and not worth an irreversible
+ * schema drop for a screen repoint.
+ *
+ * `Workflow['status']` only has 'Active'/'Draft'/'Inactive' to work with (the
+ * frontend type, unchanged by this round) — a point with no chain configured
+ * at all reads 'Draft' rather than a fabricated 'Active', which is the same
+ * "an empty/near-empty result is honest, not a defect" standard the rest of
+ * this screen (and the summary tiles it sits above) already holds itself to.
+ */
 class AdminWorkflowController extends Controller
 {
     use ResolvesTalentContext;
 
     /**
+     * The 4 Talent-module points this screen shows, and the module label the
+     * frontend's own (unchanged) filter dropdown already offers for each —
+     * `Recruitment`/`Offboarding`/`Mobility`. No `Onboarding`/`Performance`
+     * point exists in the registry yet, so those filter options legitimately
+     * return nothing rather than something invented.
+     */
+    private const TALENT_FLOW_MODULES = [
+        'talent.recruitment.requisition' => 'Recruitment',
+        'talent.recruitment.offer' => 'Recruitment',
+        'talent.offboarding.clearance' => 'Offboarding',
+        'talent.mobility.transfer' => 'Mobility',
+    ];
+
+    /**
      * GET /api/talent/admin/workflows
-     * Returns a paginated list of workflows for the administration center.
+     * Returns a paginated list of the real Talent-module Workflow points for
+     * the administration center.
      */
     public function index(Request $request)
     {
@@ -24,66 +71,17 @@ class AdminWorkflowController extends Controller
         }
 
         $sid = $context['sub_institute_id'];
-        $module = $this->activeTalentFilter($request->input('module'));
+        $moduleFilter = $this->activeTalentFilter($request->input('module'));
         $search = $this->activeTalentFilter($request->input('search'));
         $paging = $this->talentPaging($request, 10);
-        
-        $query = DB::table('talent_workflows as w')
-            ->where('w.sub_institute_id', $sid)
-            ->whereNull('w.deleted_at')
-            ->when($module, fn ($q) => $q->where('w.module', $module))
-            ->when($search, fn ($q) => $q->where(function($sq) use ($search) {
-                $sq->where('w.name', 'like', "%{$search}%")
-                   ->orWhere('w.description', 'like', "%{$search}%");
-            }));
 
-        $total = $query->count();
-        $workflows = $query->orderByDesc('w.updated_at')
-            ->offset(($paging['page'] - 1) * $paging['per_page'])
-            ->limit($paging['per_page'])
-            ->get([
-                'w.id', 'w.name', 'w.module', 'w.status', 'w.version', 
-                'w.description', 'w.updated_at'
-            ]);
+        $rows = $this->buildRows($sid, $moduleFilter, $search);
 
-        // Eager load the creators/updaters using the directory helper
-        $userIds = DB::table('talent_workflows')->whereIn('id', $workflows->pluck('id'))->pluck('updated_by')->toArray();
-        $directory = $this->talentEmployeeDirectory($sid, $userIds);
+        $total = count($rows);
+        $paged = array_slice($rows, ($paging['page'] - 1) * $paging['per_page'], $paging['per_page']);
 
-        $result = $workflows->map(function ($w) use ($directory) {
-            $updatedBy = DB::table('talent_workflows')->where('id', $w->id)->value('updated_by');
-            return [
-                'id' => 'wf-' . $w->id,
-                'name' => $w->name,
-                'module' => $w->module,
-                'status' => $w->status,
-                'version' => $w->version,
-                'description' => $w->description,
-                'lastUpdated' => $this->talentDateLabel($w->updated_at),
-                'updatedBy' => $updatedBy ? ($directory[$updatedBy]['name'] ?? 'System') : 'System'
-            ];
-        });
-
-        /*
-         * Real counts for the headline tiles.
-         *
-         * The Administration screen rendered five hardcoded numbers - "Active
-         * Workflows: 28", "Templates: 56", "Audit Events: 1,248" - directly above a
-         * live, paginated table (audit F-28). The table told the truth and the
-         * tiles above it did not, which is worse than having no tiles: the real
-         * data lent the invented data credibility.
-         *
-         * Four of the five have a real referent and are computed here, tenant
-         * scoped. The fifth, "Integrations", has no table, no route and no
-         * concept anywhere in the codebase, so it is not returned and the tile is
-         * removed rather than invented.
-         */
         $summary = [
-            'active_workflows' => (int) DB::table('talent_workflows')
-                ->where('sub_institute_id', $sid)
-                ->where('status', 'Active')
-                ->whereNull('deleted_at')
-                ->count(),
+            'active_workflows' => count(array_filter($rows, fn ($r) => $r['status'] === 'Active')),
             'templates' => (int) DB::table('talent_offer_templates')
                 ->where('sub_institute_id', $sid)
                 ->where('status', 1)
@@ -101,20 +99,21 @@ class AdminWorkflowController extends Controller
         return collect([
             'status' => 1,
             'message' => 'Success',
-            'data' => $result,
+            'data' => $paged,
             'summary' => $summary,
             'pagination' => [
                 'total' => $total,
                 'per_page' => $paging['per_page'],
                 'current_page' => $paging['page'],
-                'last_page' => max(1, ceil($total / $paging['per_page']))
-            ]
+                'last_page' => max(1, (int) ceil($total / $paging['per_page'])),
+            ],
         ]);
     }
 
     /**
      * GET /api/talent/admin/workflows/{id}
-     * Returns the full workflow details including stages and approvers.
+     * Returns the full workflow details including its real configured
+     * stages and approvers, when a chain has actually been configured.
      */
     public function show(Request $request, $id)
     {
@@ -124,74 +123,64 @@ class AdminWorkflowController extends Controller
         }
 
         $sid = $context['sub_institute_id'];
-        $numericId = (int) str_replace('wf-', '', $id);
+        $flowKey = preg_replace('/^wf-/', '', (string) $id);
+        $module = self::TALENT_FLOW_MODULES[$flowKey] ?? null;
+        // NOT config('platform_services.workflows.' . $flowKey) — $flowKey
+        // itself contains dots ('talent.recruitment.offer'), so dot-notation
+        // config() would parse it as nested path segments instead of the
+        // literal array key it actually is.
+        $entry = config('platform_services.workflows', [])[$flowKey] ?? null;
 
-        $workflow = DB::table('talent_workflows')
-            ->where('id', $numericId)
-            ->where('sub_institute_id', $sid)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if (!$workflow) {
+        if ($module === null || $entry === null) {
             return $this->talentError('Workflow not found', 404);
         }
 
-        $stages = DB::table('talent_workflow_stages')
-            ->where('workflow_id', $numericId)
-            ->orderBy('step')
-            ->get(['step', 'label']);
+        $chain = DB::table('g2g_platform_workflows')
+            ->where('sub_institute_id', $sid)
+            ->where('flow_key', $flowKey)
+            ->orderByDesc('updated_at')
+            ->first();
 
-        $approvers = DB::table('talent_workflow_approvers')
-            ->where('workflow_id', $numericId)
-            ->orderBy('sort_order')
-            ->get(['id', 'role', 'title', 'approval_type', 'escalation']);
+        $versionCount = DB::table('g2g_platform_workflow_versions')
+            ->where('sub_institute_id', $sid)
+            ->where('flow_key', $flowKey)
+            ->count();
 
-        $userIds = array_filter([$workflow->created_by, $workflow->updated_by]);
-        $directory = $this->talentEmployeeDirectory($sid, $userIds);
+        $steps = $chain ? (json_decode((string) $chain->steps, true) ?: []) : [];
+        $steps = is_array($steps) ? array_values($steps) : [];
 
         return $this->talentResponse([
-            'id' => 'wf-' . $workflow->id,
-            'name' => $workflow->name,
-            'module' => $workflow->module,
-            'status' => $workflow->status,
-            'version' => $workflow->version,
-            'description' => $workflow->description,
-            'createdBy' => $workflow->created_by ? ($directory[$workflow->created_by]['name'] ?? 'System') : 'System',
-            'lastUpdated' => $this->talentDateLabel($workflow->updated_at),
-            'updatedBy' => $workflow->updated_by ? ($directory[$workflow->updated_by]['name'] ?? 'System') : 'System',
-            'stages' => $stages->map(fn($s) => [
-                'step' => $s->step,
-                'label' => $s->label
-            ]),
-            'approvers' => $approvers->map(fn($a) => [
-                'id' => 'a' . $a->id,
-                'role' => $a->role,
-                'title' => $a->title,
-                'initials' => $this->talentInitialsOf($a->role),
-                'approvalType' => $a->approval_type,
-                'escalation' => $a->escalation
-            ])
+            'id' => 'wf-' . $flowKey,
+            'name' => $entry['label'] ?? $flowKey,
+            'module' => $module,
+            'status' => ($chain !== null && $chain->status === 'active') ? 'Active' : 'Draft',
+            'version' => $versionCount > 0 ? ('v' . $versionCount) : '—',
+            'description' => $entry['description'] ?? '',
+            'createdBy' => $chain->created_by ?? 'Not configured',
+            'lastUpdated' => $chain ? ($this->talentDateLabel($chain->updated_at) ?? '—') : 'Not configured',
+            'updatedBy' => $chain->updated_by ?? 'Not configured',
+            'stages' => collect($steps)->values()->map(fn ($s, $i) => [
+                'step' => $i + 1,
+                'label' => $s['name'] ?? ('Step ' . ($i + 1)),
+            ])->all(),
+            'approvers' => collect($steps)->values()->map(fn ($s, $i) => [
+                'id' => 'a' . ($i + 1),
+                'role' => $s['approver'] ?? ($s['approver_type'] ?? 'unspecified'),
+                'title' => $s['name'] ?? ('Step ' . ($i + 1)),
+                'initials' => $this->talentInitialsOf($s['approver'] ?? ($s['name'] ?? '?')),
+                'approvalType' => !empty($s['require_comment']) ? 'Mandatory' : 'Optional',
+                'escalation' => !empty($s['sla_hours'])
+                    ? ($s['sla_hours'] . 'h (' . ($s['on_breach'] ?? 'none') . ')')
+                    : 'No SLA',
+            ])->all(),
         ]);
     }
 
     /**
      * GET /api/talent/admin/audit-logs
      *
-     * The Administration screen's Audit Logs button had no destination. This is
-     * it, and it needed no new storage: `g2g_event` is already the append-only
-     * record of everything that happens, written in the same transaction as the
-     * change it describes.
-     *
-     * ── WHY THIS READS THE EVENT STORE AND NOT A NEW TABLE ─────────────────
-     *
-     * An audit log assembled from a second source can disagree with what
-     * actually happened. The event store cannot: nothing writes a talent state
-     * change without recording one, and it has no UPDATE or DELETE path - a
-     * mistake is corrected by a compensating event, so history is never rewritten.
-     *
-     * Tenant-scoped, newest first, and the payload is returned decoded so the
-     * client does not have to know it is stored as a JSON string in a text
-     * column (live is MariaDB 10.1 and has no json type).
+     * Unchanged from before this round — still the real, append-only event
+     * store, not a second source that could disagree with what happened.
      */
     public function auditLogs(Request $request)
     {
@@ -255,5 +244,74 @@ class AdminWorkflowController extends Controller
                     ->whereNotNull('entity_type')->distinct()->orderBy('entity_type')->pluck('entity_type'),
             ]
         );
+    }
+
+    /**
+     * The real rows behind index() — one per declared Talent-module Workflow
+     * point, joined with whatever real chain (if any) this tenant has
+     * configured for it. Shared with index() so filtering/search/pagination
+     * happen over the same real list `show()` would resolve any one row from.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildRows(int $sid, ?string $moduleFilter, ?string $search): array
+    {
+        $flowKeys = array_keys(self::TALENT_FLOW_MODULES);
+
+        $chainsByFlowKey = DB::table('g2g_platform_workflows')
+            ->where('sub_institute_id', $sid)
+            ->whereIn('flow_key', $flowKeys)
+            ->orderByDesc('updated_at')
+            ->get()
+            ->groupBy('flow_key');
+
+        $versionCounts = DB::table('g2g_platform_workflow_versions')
+            ->where('sub_institute_id', $sid)
+            ->whereIn('flow_key', $flowKeys)
+            ->selectRaw('flow_key, COUNT(*) as versions')
+            ->groupBy('flow_key')
+            ->pluck('versions', 'flow_key');
+
+        $registry = config('platform_services.workflows', []);
+        $rows = [];
+
+        foreach ($flowKeys as $flowKey) {
+            $entry = $registry[$flowKey] ?? null;
+            if ($entry === null) {
+                continue;
+            }
+
+            $module = self::TALENT_FLOW_MODULES[$flowKey];
+            if ($moduleFilter !== null && $moduleFilter !== $module) {
+                continue;
+            }
+
+            $name = $entry['label'] ?? $flowKey;
+            $description = $entry['description'] ?? '';
+            if ($search !== null
+                && stripos($name, $search) === false
+                && stripos($description, $search) === false
+            ) {
+                continue;
+            }
+
+            $flowChains = $chainsByFlowKey->get($flowKey, collect());
+            $active = $flowChains->firstWhere('status', 'active');
+            $latest = $flowChains->first();
+            $versionCount = (int) ($versionCounts[$flowKey] ?? 0);
+
+            $rows[] = [
+                'id' => 'wf-' . $flowKey,
+                'name' => $name,
+                'module' => $module,
+                'status' => $active !== null ? 'Active' : 'Draft',
+                'version' => $versionCount > 0 ? ('v' . $versionCount) : '—',
+                'description' => $description,
+                'lastUpdated' => $latest ? ($this->talentDateLabel($latest->updated_at) ?? '—') : 'Not configured',
+                'updatedBy' => $latest->updated_by ?? 'Not configured',
+            ];
+        }
+
+        return $rows;
     }
 }
