@@ -404,6 +404,7 @@ class OffboardingController extends Controller
             'exit_interview_done' => (bool) $c->exit_interview_done,
             'exit_interview_date' => $c->exit_interview_date ? date('Y-m-d', strtotime($c->exit_interview_date)) : null,
             'exit_interview_notes' => $c->exit_interview_notes ?: '',
+            'approval' => $this->closureApprovalInfo((int) $c->id),
         ];
 
         return $this->offboardingResponse($data);
@@ -734,6 +735,32 @@ class OffboardingController extends Controller
             $case,
             $decision === 'approved' ? 'Case closed.' : 'Closure rejected. The case remains open.'
         );
+    }
+
+    /**
+     * ROUND 4 FOLLOW-UP. Same read-side addition as the offer/mobility
+     * controllers: whether this case has a closure chain actually waiting on
+     * someone, so the frontend can offer decideClearance() instead of a
+     * "Close Exit Case" button that now just replies "awaiting approval"
+     * under an active chain. `null` when this case has no active chain.
+     */
+    private function closureApprovalInfo(int $caseId): ?array
+    {
+        $workflow = app(\App\Services\Talent\OffboardingClearanceApprovalWorkflow::class);
+        $steps = $workflow->stepsFor($caseId);
+        if ($steps === []) {
+            return null;
+        }
+
+        $current = $workflow->currentStep($caseId);
+
+        return [
+            'pending' => $current !== null,
+            'step_name' => $current['step_name'] ?? null,
+            'approver_role' => $current['approver_role'] ?? null,
+            'step' => $current['step_order'] ?? null,
+            'of' => count($steps),
+        ];
     }
 
     /**

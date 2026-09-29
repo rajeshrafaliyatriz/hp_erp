@@ -46,8 +46,34 @@ class MobilityTransferController extends Controller
         $userIds = $items->pluck('user_id')->all();
         $directory = $this->mobilityDirectory($subInstituteId, $userIds);
 
+        /*
+         * ROUND 4 FOLLOW-UP. Same shape as the offer/offboarding read-side
+         * additions: surface the chain a Pending transfer is waiting on, so
+         * the frontend can offer decideTransfer() instead of a "Complete"
+         * button that now 422s under an active chain. Untouched for every
+         * transfer with no active chain.
+         */
+        $transferWorkflow = app(\App\Services\Talent\MobilityTransferApprovalWorkflow::class);
+
         foreach ($items as $item) {
             $item->employee = $directory[$item->user_id] ?? null;
+
+            $item->approval = null;
+            if ($item->status !== 'Pending') {
+                continue;
+            }
+            $steps = $transferWorkflow->stepsFor((int) $item->id);
+            if ($steps === []) {
+                continue;
+            }
+            $current = $transferWorkflow->currentStep((int) $item->id);
+            $item->approval = [
+                'pending' => $current !== null,
+                'step_name' => $current['step_name'] ?? null,
+                'approver_role' => $current['approver_role'] ?? null,
+                'step' => $current['step_order'] ?? null,
+                'of' => count($steps),
+            ];
         }
 
         return $this->mobilityResponse($items, 'Success', 200, [

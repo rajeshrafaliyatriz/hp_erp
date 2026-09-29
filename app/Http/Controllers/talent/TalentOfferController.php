@@ -541,6 +541,33 @@ class TalentOfferController extends Controller
                 }
             });
 
+            /*
+             * ROUND 4 FOLLOW-UP. Surface the chain a draft offer is actually
+             * waiting on, so the frontend can offer decideOffer() instead of
+             * leaving a gated draft with no visible way forward. `null` for
+             * every offer with no active chain — completely unchanged for
+             * every unenforced tenant.
+             */
+            $offerWorkflow = app(\App\Services\Talent\OfferApprovalWorkflow::class);
+            $offers->each(function ($offer) use ($offerWorkflow) {
+                $offer->approval = null;
+                if ($offer->status !== 'draft') {
+                    return;
+                }
+                $steps = $offerWorkflow->stepsFor((int) $offer->id);
+                if ($steps === []) {
+                    return;
+                }
+                $current = $offerWorkflow->currentStep((int) $offer->id);
+                $offer->approval = [
+                    'pending' => $current !== null,
+                    'step_name' => $current['step_name'] ?? null,
+                    'approver_role' => $current['approver_role'] ?? null,
+                    'step' => $current['step_order'] ?? null,
+                    'of' => count($steps),
+                ];
+            });
+
             return response()->json([
                 'status' => 1,
                 'message' => 'Offers retrieved successfully!',
