@@ -232,6 +232,16 @@ return [
                 ['name' => 'Department head', 'approver_type' => 'role', 'approver' => 'department_head', 'sla_hours' => 48, 'on_breach' => 'remind'],
                 ['name' => 'HR', 'approver_type' => 'role', 'approver' => 'hr_manager', 'sla_hours' => 48, 'on_breach' => 'escalate'],
             ],
+            // ROUND 5. talent_job_postings had nothing a chain could attach
+            // to before this — a flat active/inactive toggle, no requester,
+            // no pending state. A chain here now holds the posting at
+            // 'Requested' (a new enum member — see the paired migration's
+            // docblock for why 'Draft' was not reused) until approved
+            // through POST job-postings/{id}/decision.
+            'enforced_by' => \App\Services\Talent\RequisitionApprovalWorkflow::class,
+            'enforced_note' => 'Enforced when a posting is created. Editing or deleting a chain does '
+                . 'not change postings already awaiting a decision — they keep the ladder they were '
+                . 'created under.',
         ],
         'talent.recruitment.offer' => [
             'label' => 'Offer approval',

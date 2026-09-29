@@ -318,6 +318,10 @@ Route::resource('job-applications', talent_jobapplicationcontroller::class)
 
 Route::resource('job-postings', talent_jobpostingcontroller::class);
 Route::get('/talent/team-overview', [talent_jobpostingcontroller::class, 'getHiringStatus']);
+// ROUND 5. The internal sign-off talent.recruitment.requisition declares,
+// for a posting a platform chain has gated before it can go live.
+Route::post('job-postings/{id}/decision', [talent_jobpostingcontroller::class, 'decideRequisition'])
+    ->whereNumber('id');
 
 Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store'])
     ->middleware('profile:admin,hr,recruiter');
