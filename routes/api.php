@@ -502,9 +502,9 @@ Route::get('/competency/command-center/filters', [CompetencyCommandCenterControl
 */
 Route::get('/competency/approvals', [CompetencyApprovalController::class, 'index']);
 Route::post('/competency/approvals', [CompetencyApprovalController::class, 'store']);
-Route::post('/competency/approvals/bulk-approve', [CompetencyApprovalController::class, 'bulkApprove']);
+Route::post('/competency/approvals/bulk-approve', [CompetencyApprovalController::class, 'bulkApprove'])->middleware('subject:hr_elevated');
 Route::get('/competency/approvals/for/{type}/{id}', [CompetencyApprovalController::class, 'forSubject'])->whereNumber('id');
-Route::put('/competency/approvals/{id}', [CompetencyApprovalController::class, 'update'])->whereNumber('id');
+Route::put('/competency/approvals/{id}', [CompetencyApprovalController::class, 'update'])->whereNumber('id')->middleware('subject:hr_elevated');
 
 Route::get('/competency/library/meta', [CompetencyLibraryController::class, 'meta']);
 Route::get('/competency/library/skill-taxonomy-tree', [CompetencyLibraryController::class, 'skillTaxonomyTree']);
@@ -585,7 +585,7 @@ Route::get('/competency/assessment-cycles/participant-ratings', [CompetencyAsses
 Route::get('/competency/assessment-cycles/calibration', [CompetencyAssessmentCycleController::class, 'calibration']);
 Route::get('/competency/assessment-cycles/approvals', [CompetencyAssessmentCycleController::class, 'approvals']);
 Route::get('/competency/assessment-cycles/closed', [CompetencyAssessmentCycleController::class, 'closed']);
-Route::put('/competency/assessment-cycles/assessments/{id}/review', [CompetencyAssessmentCycleController::class, 'reviewAssessment'])->whereNumber('id');
+Route::put('/competency/assessment-cycles/assessments/{id}/review', [CompetencyAssessmentCycleController::class, 'reviewAssessment'])->whereNumber('id')->middleware('subject:hr_elevated');
 // "View Configuration" - declared BEFORE /{id} so the word is not read as an id.
 Route::get('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'configuration']);
 Route::put('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'saveConfiguration']);
@@ -728,16 +728,16 @@ Route::post('/competency/frameworks', [CompetencyFrameworkController::class, 'st
 Route::delete('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'destroy'])->whereNumber('id');
 
 Route::get('/competency/assessments', [CompetencyAssessmentController::class, 'index']);
-Route::post('/competency/assessments', [CompetencyAssessmentController::class, 'store']);
-Route::delete('/competency/assessments/{id}', [CompetencyAssessmentController::class, 'destroy'])->whereNumber('id');
+Route::post('/competency/assessments', [CompetencyAssessmentController::class, 'store'])->middleware('subject:people_managers');
+Route::delete('/competency/assessments/{id}', [CompetencyAssessmentController::class, 'destroy'])->whereNumber('id')->middleware('subject:people_managers');
 
 Route::get('/competency/certifications', [CompetencyCertificationController::class, 'index']);
-Route::post('/competency/certifications', [CompetencyCertificationController::class, 'store']);
-Route::delete('/competency/certifications/{id}', [CompetencyCertificationController::class, 'destroy'])->whereNumber('id');
+Route::post('/competency/certifications', [CompetencyCertificationController::class, 'store'])->middleware('subject:hr_elevated');
+Route::delete('/competency/certifications/{id}', [CompetencyCertificationController::class, 'destroy'])->whereNumber('id')->middleware('subject:hr_elevated');
 
 Route::get('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'index']);
-Route::post('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'store']);
-Route::delete('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'destroy'])->whereNumber('id');
+Route::post('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'store'])->middleware('subject:people_managers');
+Route::delete('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'destroy'])->whereNumber('id')->middleware('subject:people_managers');
 
 /*
 | Development & Career Path Workspace (token authenticated, tenant scoped).
@@ -754,13 +754,13 @@ Route::get('/competency/development-plans/owners', [CompetencyDevelopmentPlanCon
 Route::get('/competency/employee-options', [CompetencyDevelopmentPlanController::class, 'employees']);
 
 Route::get('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'show'])->whereNumber('id');
-Route::put('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'update'])->whereNumber('id');
+Route::put('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'update'])->whereNumber('id')->middleware('subject:people_managers');
 Route::get('/competency/development-plans/{id}/gaps', [CompetencyDevelopmentPlanController::class, 'gaps'])->whereNumber('id');
 Route::get('/competency/development-plans/{id}/history', [CompetencyDevelopmentPlanController::class, 'history'])->whereNumber('id');
 Route::get('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'actions'])->whereNumber('id');
-Route::post('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'storeAction'])->whereNumber('id');
-Route::put('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'updateAction'])->whereNumber('id')->whereNumber('actionId');
-Route::delete('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'destroyAction'])->whereNumber('id')->whereNumber('actionId');
+Route::post('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'storeAction'])->whereNumber('id')->middleware('subject:people_managers');
+Route::put('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'updateAction'])->whereNumber('id')->whereNumber('actionId')->middleware('subject:people_managers');
+Route::delete('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'destroyAction'])->whereNumber('id')->whereNumber('actionId')->middleware('subject:people_managers');
 
 // Named career paths + the Career Path Explorer.
 Route::get('/competency/career-paths/explorer', [CompetencyCareerPathController::class, 'explorer']);
@@ -774,9 +774,9 @@ Route::delete('/competency/career-paths/{id}', [CompetencyCareerPathController::
 // Learning assignments (lms_assignments rows tagged source='competency').
 Route::get('/competency/learning-assignments/courses', [CompetencyLearningAssignmentController::class, 'courses']);
 Route::get('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'index']);
-Route::post('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'store']);
-Route::put('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'update'])->whereNumber('id');
-Route::delete('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'destroy'])->whereNumber('id');
+Route::post('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'store'])->middleware('subject:people_managers');
+Route::put('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'update'])->whereNumber('id')->middleware('subject:people_managers');
+Route::delete('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'destroy'])->whereNumber('id')->middleware('subject:people_managers');
 
 /*
 | Framework & Role Mapping Studio (token authenticated, tenant scoped).
@@ -837,17 +837,17 @@ Route::post('/competency/mapping-reviews/bulk-approve', [CompetencyMappingReview
 Route::get('/competency/certifications/metrics', [CompetencyCertificationController::class, 'metrics']);
 Route::get('/competency/certifications/filters', [CompetencyCertificationController::class, 'filters']);
 Route::get('/competency/certifications/export', [CompetencyCertificationController::class, 'export']);
-Route::post('/competency/certifications/bulk', [CompetencyCertificationController::class, 'bulk']);
+Route::post('/competency/certifications/bulk', [CompetencyCertificationController::class, 'bulk'])->middleware('subject:hr_elevated');
 
 Route::get('/competency/certifications/{id}', [CompetencyCertificationController::class, 'show'])->whereNumber('id');
-Route::put('/competency/certifications/{id}', [CompetencyCertificationController::class, 'update'])->whereNumber('id');
-Route::post('/competency/certifications/{id}/notes', [CompetencyCertificationController::class, 'addNote'])->whereNumber('id');
+Route::put('/competency/certifications/{id}', [CompetencyCertificationController::class, 'update'])->whereNumber('id')->middleware('subject:hr_elevated');
+Route::post('/competency/certifications/{id}/notes', [CompetencyCertificationController::class, 'addNote'])->whereNumber('id')->middleware('subject:hr_elevated');
 Route::get('/competency/certifications/{id}/compliance', [CompetencyCertificationController::class, 'compliance'])->whereNumber('id');
 Route::get('/competency/certifications/{id}/requirements', [CompetencyCertificationController::class, 'requirements'])->whereNumber('id');
 Route::get('/competency/certifications/{id}/history', [CompetencyCertificationController::class, 'history'])->whereNumber('id');
 Route::get('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'documents'])->whereNumber('id');
-Route::post('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'storeDocument'])->whereNumber('id');
-Route::delete('/competency/certifications/{id}/documents/{documentId}', [CompetencyCertificationController::class, 'destroyDocument'])->whereNumber('id')->whereNumber('documentId');
+Route::post('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'storeDocument'])->whereNumber('id')->middleware('subject:hr_elevated');
+Route::delete('/competency/certifications/{id}/documents/{documentId}', [CompetencyCertificationController::class, 'destroyDocument'])->whereNumber('id')->whereNumber('documentId')->middleware('subject:hr_elevated');
 
 // Certification requirements - the "which role must hold what" policy master.
 Route::get('/competency/certification-requirements', [CompetencyCertificationRequirementController::class, 'index']);
@@ -879,9 +879,15 @@ Route::delete('/competency/certification-requirements/{id}', [CompetencyCertific
 | admin,hr and not admin,hr,manager: an activity log naming every employee's
 | actions is an administrative record. Managers are excluded for the same reason
 | ResolvesCompetencyContext excludes them from COMPETENCY_ELEVATED - their honest
-| scope is "my team", and tbluser.reporting_manager_id is NULL for every user, so
-| there is no way to evaluate it. Granting org-wide reach in the meantime would be
-| a wider grant than the one being closed.
+| scope is "my team", and that cannot be enforced today: tbluser.reporting_manager_id is populated on 8 of 2345
+| rows on the application database (tenant 3 only) and 0 of 299 on live - so
+| team scope is technically evaluable and resolves to almost nobody, which is
+| not the same as unevaluable. Measured 2026-09-30; ResolvesLeaveAuthority:28-38
+| carries the same correction.
+| Granting org-wide reach in the meantime would be a wider grant than the one
+| being closed. Note that SubjectAuthority::PEOPLE_MANAGERS deliberately DOES
+| make that wider grant, for the performance and offboarding guards, because a
+| manager who cannot rate their reports cannot do the job the module exists for.
 */
 Route::middleware('profile:admin,hr')->group(function () {
     Route::get('/competency/audit/metrics', [CompetencyAuditController::class, 'metrics']);
@@ -2107,7 +2113,9 @@ Route::get('/performance/reviews', [PerformanceReviewController::class, 'index']
 Route::get('/performance/reviews/{id}', [PerformanceReviewController::class, 'show'])->whereNumber('id');
 Route::put('/performance/reviews/{id}', [PerformanceReviewController::class, 'update'])->whereNumber('id');
 Route::post('/performance/reviews/{id}/advance', [PerformanceReviewController::class, 'advance'])->whereNumber('id')->middleware('profile:admin,hr,manager');
-Route::post('/performance/reviews/{id}/reminder', [PerformanceReviewController::class, 'sendReminder'])->whereNumber('id');
+// Nudging somebody is a manager act - nobody reminds themselves. Matches the
+// tier on `advance` directly above.
+Route::post('/performance/reviews/{id}/reminder', [PerformanceReviewController::class, 'sendReminder'])->whereNumber('id')->middleware('subject:people_managers');
 Route::delete('/performance/reviews/{id}', [PerformanceReviewController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 
 // Comments / Notes and Attachments, both scoped to a review.
@@ -2121,43 +2129,83 @@ Route::post('/performance/reviews/{reviewId}/attachments', [PerformanceActivityC
 Route::delete('/performance/attachments/{id}', [PerformanceActivityController::class, 'destroyAttachment'])->whereNumber('id');
 
 // Goals tab (KRA / KPI / OKR).
+//
+// S7: store() took `user_id_target` free-form and none of the three writes had
+// a gate, so any employee could create, retarget or delete a colleague's goals.
+// There is no employee goals surface in the frontend, so the writes are a
+// manager act; the read stays open and is scoped to the caller in the
+// controller, because an employee has a legitimate view of their own goals.
 Route::get('/performance/goals', [PerformanceGoalController::class, 'index']);
-Route::post('/performance/goals', [PerformanceGoalController::class, 'store']);
-Route::put('/performance/goals/{id}', [PerformanceGoalController::class, 'update'])->whereNumber('id');
-Route::delete('/performance/goals/{id}', [PerformanceGoalController::class, 'destroy'])->whereNumber('id');
+Route::middleware('subject:people_managers')->group(function () {
+    Route::post('/performance/goals', [PerformanceGoalController::class, 'store']);
+    Route::put('/performance/goals/{id}', [PerformanceGoalController::class, 'update'])->whereNumber('id');
+    Route::delete('/performance/goals/{id}', [PerformanceGoalController::class, 'destroy'])->whereNumber('id');
+});
 
 // Appraisals tab.
-Route::post('/performance/appraisals/bulk', [PerformanceAppraisalController::class, 'bulk']);
+//
+// S6: `decision` with action=approve stamped approver_id with the caller's
+// own id and had no gate - self-approval of a colleague's record, and of
+// one's own. Every write here is HR's act; there is no legitimate employee
+// write anywhere in this tab. The read stays open and is scoped to the
+// caller in the controller.
 Route::get('/performance/appraisals', [PerformanceAppraisalController::class, 'index']);
-Route::post('/performance/appraisals', [PerformanceAppraisalController::class, 'store']);
-Route::put('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'update'])->whereNumber('id');
-Route::put('/performance/appraisals/{id}/decision', [PerformanceAppraisalController::class, 'decision'])->whereNumber('id');
-Route::delete('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'destroy'])->whereNumber('id');
+Route::middleware('subject:hr_elevated')->group(function () {
+    Route::post('/performance/appraisals/bulk', [PerformanceAppraisalController::class, 'bulk']);
+    Route::post('/performance/appraisals', [PerformanceAppraisalController::class, 'store']);
+    Route::put('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'update'])->whereNumber('id');
+    Route::put('/performance/appraisals/{id}/decision', [PerformanceAppraisalController::class, 'decision'])->whereNumber('id');
+    Route::delete('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'destroy'])->whereNumber('id');
+});
 
 // Compensation tab.
-Route::post('/performance/compensation/bulk', [PerformanceCompensationController::class, 'bulk']);
+//
+// S6: `decision` with action=approve stamped approver_id with the caller's
+// own id and had no gate - self-approval of a colleague's record, and of
+// one's own. Every write here is HR's act; there is no legitimate employee
+// write anywhere in this tab. The read stays open and is scoped to the
+// caller in the controller.
 Route::get('/performance/compensation', [PerformanceCompensationController::class, 'index']);
-Route::post('/performance/compensation', [PerformanceCompensationController::class, 'store']);
-Route::put('/performance/compensation/{id}', [PerformanceCompensationController::class, 'update'])->whereNumber('id');
-Route::put('/performance/compensation/{id}/decision', [PerformanceCompensationController::class, 'decision'])->whereNumber('id');
-Route::delete('/performance/compensation/{id}', [PerformanceCompensationController::class, 'destroy'])->whereNumber('id');
+Route::middleware('subject:hr_elevated')->group(function () {
+    Route::post('/performance/compensation/bulk', [PerformanceCompensationController::class, 'bulk']);
+    Route::post('/performance/compensation', [PerformanceCompensationController::class, 'store']);
+    Route::put('/performance/compensation/{id}', [PerformanceCompensationController::class, 'update'])->whereNumber('id');
+    Route::put('/performance/compensation/{id}/decision', [PerformanceCompensationController::class, 'decision'])->whereNumber('id');
+    Route::delete('/performance/compensation/{id}', [PerformanceCompensationController::class, 'destroy'])->whereNumber('id');
+});
 
 // Bonus tab.
-Route::post('/performance/bonus/bulk', [PerformanceBonusController::class, 'bulk']);
+//
+// S6: `decision` with action=approve stamped approver_id with the caller's
+// own id and had no gate - self-approval of a colleague's record, and of
+// one's own. Every write here is HR's act; there is no legitimate employee
+// write anywhere in this tab. The read stays open and is scoped to the
+// caller in the controller.
 Route::get('/performance/bonus', [PerformanceBonusController::class, 'index']);
-Route::post('/performance/bonus', [PerformanceBonusController::class, 'store']);
-Route::put('/performance/bonus/{id}', [PerformanceBonusController::class, 'update'])->whereNumber('id');
-Route::put('/performance/bonus/{id}/decision', [PerformanceBonusController::class, 'decision'])->whereNumber('id');
-Route::delete('/performance/bonus/{id}', [PerformanceBonusController::class, 'destroy'])->whereNumber('id');
+Route::middleware('subject:hr_elevated')->group(function () {
+    Route::post('/performance/bonus/bulk', [PerformanceBonusController::class, 'bulk']);
+    Route::post('/performance/bonus', [PerformanceBonusController::class, 'store']);
+    Route::put('/performance/bonus/{id}', [PerformanceBonusController::class, 'update'])->whereNumber('id');
+    Route::put('/performance/bonus/{id}/decision', [PerformanceBonusController::class, 'decision'])->whereNumber('id');
+    Route::delete('/performance/bonus/{id}', [PerformanceBonusController::class, 'destroy'])->whereNumber('id');
+});
 
 // Calibration tab.
-Route::get('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'index']);
-Route::post('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'store']);
-Route::get('/performance/calibration-sessions/{id}/grid', [PerformanceCalibrationController::class, 'grid'])->whereNumber('id');
-Route::put('/performance/calibration-sessions/{id}/calibrate', [PerformanceCalibrationController::class, 'calibrate'])->whereNumber('id');
-Route::post('/performance/calibration-sessions/{id}/lock', [PerformanceCalibrationController::class, 'lock'])->whereNumber('id');
-Route::put('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'update'])->whereNumber('id');
-Route::delete('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'destroy'])->whereNumber('id');
+//
+// S2: `calibrate` overwrote overall_rating across an arbitrary set of reviews
+// through `ratings[]`, scoped only by session and tenant - then `lock` made the
+// result immutable, so a tampered grid could be sealed. Bulk, irreversible and
+// ungated. A calibration meeting is HR-run end to end, including the grid read,
+// which shows every participant's rating side by side.
+Route::middleware('subject:hr_elevated')->group(function () {
+    Route::get('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'index']);
+    Route::post('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'store']);
+    Route::get('/performance/calibration-sessions/{id}/grid', [PerformanceCalibrationController::class, 'grid'])->whereNumber('id');
+    Route::put('/performance/calibration-sessions/{id}/calibrate', [PerformanceCalibrationController::class, 'calibrate'])->whereNumber('id');
+    Route::post('/performance/calibration-sessions/{id}/lock', [PerformanceCalibrationController::class, 'lock'])->whereNumber('id');
+    Route::put('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'update'])->whereNumber('id');
+    Route::delete('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'destroy'])->whereNumber('id');
+});
 
 // Activity Feed / Audit Trail.
 Route::get('/performance/activity/filters', [PerformanceActivityController::class, 'filters']);
@@ -2374,12 +2422,35 @@ Route::prefix('mobility')->group(function () {
 
     Route::get('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'index']);
     Route::get('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'show'])->whereNumber('id');
+    /*
+     * S10 - these three DO have a "mine" view, so they are scoped in their
+     * controllers rather than gated here: an employee has a real interest in
+     * their own internal application, transfer and promotion history, and
+     * refusing it outright would remove a legitimate view in order to close an
+     * illegitimate one. An elevated caller is not narrowed at all.
+     */
     Route::get('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'index']);
     Route::get('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'index']);
     Route::get('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'index']);
-    Route::get('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'index']);
-    Route::get('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'index']);
-    Route::get('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'members'])->whereNumber('id');
+    /*
+     * S9 - SUCCESSION AND TALENT POOLS ARE NOT THE JOB BOARD.
+     *
+     * The comment opening this block is right that an internal job board is
+     * meant to be browsed, and /jobs stays open for exactly that reason. It
+     * never claimed to cover these three.
+     *
+     * A succession slate is the most sensitive list HR keeps: it says who is
+     * being groomed to replace whom. Talent-pool membership is the same kind of
+     * fact. Neither has a "mine" view that would make scoping the right answer
+     * instead - being on a slate is information about you that you are
+     * specifically not meant to have, and there is no caller column to narrow
+     * by. So these are gated, not scoped.
+     */
+    Route::middleware('subject:people_managers')->group(function () {
+        Route::get('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'index']);
+        Route::get('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'index']);
+        Route::get('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'members'])->whereNumber('id');
+    });
 
     // ── Writes: HR and administrators only ─────────────────────────────────
     // An employee applying to an internal job is deliberately inside this gate
@@ -2419,7 +2490,32 @@ Route::prefix('mobility')->group(function () {
 | Talent Management -> Offboarding Center
 |--------------------------------------------------------------------------
 */
-Route::prefix('offboarding')->group(function () {
+/*
+ * S4 - THIS GROUP HAD NO ROLE GATE AT ALL.
+ *
+ * Fourteen routes, ten of them writes: POST /cases takes a client-supplied
+ * employee_id, and updateExitInterview, uploadDocument and destroy all take an
+ * id straight from the route. So any authenticated employee could open an
+ * involuntary-exit case against a colleague with a reason and a last working
+ * day, write their exit-interview record, attach a document to their exit
+ * file, or delete a live case. ResolvesOffboardingContext enforced the tenant
+ * and nothing else.
+ *
+ * The sibling Onboarding block above was explicitly wrapped for exactly this
+ * reason ("any logged-in user of any role could manage any employee's
+ * onboarding"). Offboarding was missed in that pass. This is that fix.
+ *
+ * `subject:hr_elevated` rather than `profile:admin,hr` so that auditor and
+ * executive keep READ access - an auditor exists to read the organisation and
+ * change nothing, and gating them out of exit records is a different bug, not
+ * this fix. The tier matches offboardingSubject()'s, so the gate and the guard
+ * cannot disagree.
+ *
+ * Verified before gating: offboarding-center.tsx is the only consumer of
+ * services/talent/offboarding.ts, and there is no self-service resignation
+ * route, so no employee surface depends on these.
+ */
+Route::prefix('offboarding')->middleware('subject:hr_elevated')->group(function () {
     Route::get('/overview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'overview']);
     Route::get('/filters', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'filters']);
     Route::get('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'index']);

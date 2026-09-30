@@ -5,10 +5,73 @@ namespace App\Http\Controllers\Api\Offboarding\Concerns;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Support\SubjectAuthority;
 
+/**
+ * Shared request context, filters, paging and response envelope for the
+ * Offboarding Center API.
+ *
+ * ── THIS TRAIT WAS A COPY THAT LEFT THE GUARD BEHIND ────────────────────────
+ *
+ * Written as a copy of ResolvesCompetencyContext. It took the context resolver,
+ * the filter normaliser, the paging helpers, the sort whitelist and the response
+ * envelopes - and not competencySubject(). So the whole offboarding route group
+ * enforced the tenant boundary and no ownership boundary at all, and the group
+ * itself carried no role gate either: any authenticated employee could open an
+ * involuntary-exit case against a colleague, write their exit-interview record,
+ * upload a document to their exit file, or delete a live case.
+ *
+ * The sibling Onboarding block was explicitly wrapped in a role gate for exactly
+ * this reason. Offboarding was missed in that pass.
+ */
 trait ResolvesOffboardingContext
 {
     use ResolvesApiIdentity;
+
+    /**
+     * Resolve the SUBJECT of an offboarding request - the employee whose exit
+     * is being recorded - and refuse when the caller may not act on them.
+     *
+     * Same contract as competencySubject() and performanceSubject(): int on
+     * success, JsonResponse on refusal, 404 before 403.
+     *
+     * The tier is HR_ELEVATED, NOT PEOPLE_MANAGERS, and the difference is
+     * deliberate: an exit case carries a reason, a last working day and an exit
+     * interview. Recording that is HR's act, not a line manager's, and the
+     * route group is gated at the same tier so the gate and the guard agree. A
+     * guard narrower than its gate is the shape where a caller passes the door
+     * and is then refused by the room.
+     *
+     * @return int|\Illuminate\Http\JsonResponse
+     */
+    protected function offboardingSubject(array $context, $requestedId, ?array $tier = null)
+    {
+        $subjectId = (int) $requestedId;
+
+        $verdict = SubjectAuthority::verdict(
+            (int) ($context['user_id'] ?? 0),
+            $subjectId,
+            $context['sub_institute_id'],
+            $tier ?? SubjectAuthority::HR_ELEVATED
+        );
+
+        if ($verdict === SubjectAuthority::OK) {
+            return $subjectId;
+        }
+
+        return $verdict === SubjectAuthority::NOT_FOUND
+            ? $this->offboardingError('Employee not found', 404)
+            : $this->offboardingError('You may only act on your own exit record.', 403);
+    }
+
+    /** Is the caller allowed to act on people other than themselves? */
+    protected function offboardingElevated(array $context, ?array $tier = null): bool
+    {
+        return SubjectAuthority::userSatisfies(
+            (int) ($context['user_id'] ?? 0),
+            $tier ?? SubjectAuthority::HR_ELEVATED
+        );
+    }
 
     protected function offboardingContext(Request $request)
     {

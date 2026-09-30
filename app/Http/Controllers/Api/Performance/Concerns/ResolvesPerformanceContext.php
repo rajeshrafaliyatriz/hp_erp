@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Performance\Concerns;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Support\SubjectAuthority;
 
 /**
  * Shared request context, filters, paging, response envelope and activity
@@ -20,6 +21,23 @@ use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
  * filter on it with `user_id_filter`. Writing the raw request `user_id` into an
  * owner column silently reassigns the record to the actor - exactly the bug that
  * bit CertificationController::update in the Competency module.
+ *
+ * ── AND THE TRAP THAT WARNING DOES NOT COVER ────────────────────────────────
+ *
+ * The advice above was followed faithfully, and it is about ATTRIBUTION: taking
+ * the subject from `user_id_target` puts the right person's name on the row. It
+ * says nothing about WHO MAY NAME THAT PERSON.
+ *
+ * This trait was written as a copy of ResolvesCompetencyContext. It copied the
+ * context resolver, the filter normaliser, the paging helpers, the response
+ * envelope, the activity logger and the diff builder - and did not copy
+ * competencySubject(). So no controller using it could have called one, and 47
+ * endpoints enforced the tenant boundary and no ownership boundary at all: any
+ * authenticated employee could set any colleague's rating, approve their
+ * appraisal, or award their bonus.
+ *
+ * That is the module looking careful with its carefulness pointed elsewhere.
+ * performanceSubject() below is the missing half.
  */
 trait ResolvesPerformanceContext
 {
@@ -40,6 +58,94 @@ trait ResolvesPerformanceContext
             'sub_institute_id' => $identity['sub_institute_id'],
             'user_id'          => $identity['user_id'],
         ];
+    }
+
+    /**
+     * Resolve the SUBJECT of a performance request - the employee whose review,
+     * goal, appraisal, compensation or bonus record is being read or written -
+     * and refuse when the caller may not act on them.
+     *
+     * The missing half of this trait. Deliberately identical in contract to
+     * ResolvesCompetencyContext::competencySubject(), because 18 call sites
+     * already depend on that shape and a second shape is a second thing to get
+     * wrong:
+     *
+     *   returns int on success, JsonResponse on refusal;
+     *   404 for a cross-tenant or nonexistent id, checked BEFORE the ownership
+     *       rule so an elevated caller cannot probe another organisation for
+     *       which ids exist;
+     *   403 for an id that exists in this tenant but is not the caller's to
+     *       touch.
+     *
+     * The tier is PEOPLE_MANAGERS, not HR_ELEVATED: a reporting manager rates
+     * their reports and a department head owns their department's reviews, and
+     * excluding them would break the thing this module is for. See
+     * SubjectAuthority::PEOPLE_MANAGERS for why that is tenant-wide today.
+     *
+     * @return int|\Illuminate\Http\JsonResponse
+     */
+    protected function performanceSubject(array $context, $requestedId, ?array $tier = null)
+    {
+        $subjectId = (int) $requestedId;
+
+        $verdict = SubjectAuthority::verdict(
+            (int) ($context['user_id'] ?? 0),
+            $subjectId,
+            $context['sub_institute_id'],
+            $tier ?? SubjectAuthority::PEOPLE_MANAGERS
+        );
+
+        if ($verdict === SubjectAuthority::OK) {
+            return $subjectId;
+        }
+
+        // 404 before 403, so a cross-tenant id cannot be probed for existence.
+        return $verdict === SubjectAuthority::NOT_FOUND
+            ? $this->performanceError('Employee not found', 404)
+            : $this->performanceError('You may only access your own performance records.', 403);
+    }
+
+    /**
+     * Is the caller allowed to act on people other than themselves?
+     *
+     * For the places that need the answer without a subject to check it
+     * against - a list that must be narrowed, or a field that only an elevated
+     * caller may write.
+     */
+    protected function performanceElevated(array $context, ?array $tier = null): bool
+    {
+        return SubjectAuthority::userSatisfies(
+            (int) ($context['user_id'] ?? 0),
+            $tier ?? SubjectAuthority::PEOPLE_MANAGERS
+        );
+    }
+
+    /**
+     * Narrow a list query to the caller unless they are elevated.
+     *
+     * For reads that mean something different to an employee than to HR: an
+     * employee has a real interest in their OWN reviews, goals and
+     * compensation history, and none in a colleague's. Gating those endpoints
+     * outright would remove a legitimate view in order to close an
+     * illegitimate one, so they are scoped instead.
+     *
+     * Not ResolvesLeaveAuthority::applyLeaveScope(): that resolves a four-way
+     * scope out of hrms_leave_role_permissions, a table this module has no rows
+     * in, and reusing it would make Performance depend on Leave's
+     * configuration to answer a question Leave knows nothing about.
+     *
+     * @param  string  $column  The owner column on the query's own table.
+     * @return bool  True when the query was narrowed.
+     */
+    protected function scopePerformanceToSelf($query, array $context, string $column, ?array $tier = null): bool
+    {
+        if ($this->performanceElevated($context, $tier)) {
+            return false;
+        }
+
+        $query->where($column, (int) ($context['user_id'] ?? 0));
+
+        return true;
     }
 
     /**

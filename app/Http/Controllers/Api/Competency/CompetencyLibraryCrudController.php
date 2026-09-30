@@ -172,6 +172,31 @@ class CompetencyLibraryCrudController extends Controller
              */
             ->when($request->filled('status') && $request->input('status') !== 'all', function ($w) use ($request) {
                 $value = strtolower(trim((string) $request->input('status')));
+
+                /*
+                 * `not_submitted` - THE MOST COMMON STATE, AND THE ONE THAT
+                 * COULD NOT BE FILTERED TO.
+                 *
+                 * The list renders "Not submitted" whenever approve_status is
+                 * null, and null is the default: store(), the CSV import,
+                 * clone() and restore() all leave it unset, which covered all
+                 * 231 competencies. The COALESCE below already matches an empty
+                 * string, but filled('status') above means an empty value can
+                 * never arrive - so the state was unreachable through a guard
+                 * rather than through a missing clause.
+                 *
+                 * A NAMED sentinel rather than an empty value, because a filter
+                 * whose "off" and whose "unset" look identical on the wire is
+                 * how this became unreachable in the first place.
+                 */
+                if ($value === 'not_submitted') {
+                    $w->where(function ($x) {
+                        $x->whereNull('c.approve_status')
+                          ->orWhereRaw("TRIM(COALESCE(c.approve_status, '')) = ''");
+                    });
+
+                    return;
+                }
                 $w->where(function ($x) use ($value) {
                     $x->whereRaw('LOWER(c.status) = ?', [$value])
                       ->orWhereRaw('LOWER(COALESCE(c.approve_status, \'\')) = ?', [$value]);

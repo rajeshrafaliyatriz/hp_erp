@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Talent\Concerns\ResolvesTalentContext;
 use App\Models\talent\OffboardingCase;
+use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -477,7 +478,32 @@ class TalentDashboardController extends Controller
      * every column into one layout. The volume is small so the cost is a
      * handful of indexed reads.
      */
-    private function activity(int $sid, int $limit = 10): array
+    /**
+     * The activity feed.
+     *
+     * S10: the offboarding items read "<name> submitted <exit_type>", so any
+     * authenticated employee opening the Talent dashboard learned who was
+     * resigning and whether it was voluntary.
+     *
+     * The name is REDACTED rather than the feed removed. Gating the whole
+     * dashboard - a landing page employees legitimately use - to hide one
+     * string would be a worse trade, and the row already has a fallback for a
+     * missing name ('An employee'), so this reuses a path that was always
+     * there rather than inventing one. The count and the timeline stay
+     * truthful; only the identity goes.
+     *
+     * FIVE SOURCES, NOT ONE. The audit named only the offboarding items, and
+     * fixing just those would have left the same leak in four other shapes:
+     * onboarding ("<name> is at <stage>"), mobility moves ("<name> - promoted"),
+     * the performance activity line ("<actor> updated the review for ..."), and
+     * the recruitment items ("<candidate> moved to Offer"). Every one of them
+     * already had a role-appropriate fallback string, so every one of them was
+     * one word away from being correct. Fixing the finding rather than the
+     * method is how four of these would have survived.
+     *
+     * @param  bool  $namesVisible  Whether the caller may see who a row is about.
+     */
+    private function activity(int $sid, int $limit = 10, bool $namesVisible = true): array
     {
         $feed = [];
 
@@ -500,7 +526,8 @@ class TalentDashboardController extends Controller
             $feed[] = [
                 'id'      => 'app-' . $row->id,
                 'type'    => 'application',
-                'text'    => trim(($row->candidate_name ?: 'A candidate') . ' moved to ' . ($row->status ?: 'a new stage')),
+                'text'    => trim((($namesVisible ? $row->candidate_name : null) ?: 'A candidate')
+                    . ' moved to ' . ($row->status ?: 'a new stage')),
                 'context' => $row->title,
                 'tone'    => $row->status === 'Hired' ? 'success' : 'neutral',
                 'at'      => $row->updated_at,
@@ -524,17 +551,35 @@ class TalentDashboardController extends Controller
             ];
         }
 
-        $logs = DB::table('s_performance_activity_log')
-            ->where('sub_institute_id', $sid)
-            ->orderByDesc('created_at')
-            ->limit($limit)
-            ->get(['id', 'description', 'action', 'actor_name', 'created_at']);
+        /*
+         * OMITTED ENTIRELY FOR A NON-ELEVATED CALLER, NOT REDACTED.
+         *
+         * Every other source here can be redacted at read time because the name
+         * is a joined column. This one cannot: logPerformanceActivity() bakes
+         * the employee's name INTO the stored `description`
+         * ("updated the review for <name>"), so the name is persisted free text
+         * and no read-time flag can take it out again. Blanking `actor_name`
+         * while replaying that description would look redacted and not be.
+         *
+         * These are HR's audit-trail entries rather than employee-facing news,
+         * so dropping them is also the right product answer. Fixing the storage
+         * shape - logging an id and resolving the name per reader - is the
+         * durable fix and a larger change than this pass.
+         */
+        $logs = $namesVisible
+            ? DB::table('s_performance_activity_log')
+                ->where('sub_institute_id', $sid)
+                ->orderByDesc('created_at')
+                ->limit($limit)
+                ->get(['id', 'description', 'action', 'actor_name', 'created_at'])
+            : collect();
 
         foreach ($logs as $row) {
             $feed[] = [
                 'id'      => 'perf-' . $row->id,
                 'type'    => 'performance',
-                'text'    => trim(($row->actor_name ? $row->actor_name . ' ' : '') . ($row->description ?: $row->action)),
+                'text'    => trim((($namesVisible && $row->actor_name) ? $row->actor_name . ' ' : '')
+                    . ($row->description ?: $row->action)),
                 'context' => 'Performance',
                 'tone'    => 'neutral',
                 'at'      => $row->created_at,
@@ -556,7 +601,8 @@ class TalentDashboardController extends Controller
             $feed[] = [
                 'id'      => 'onb-' . $row->id,
                 'type'    => 'onboarding',
-                'text'    => ($row->employee_name ?: 'A new hire') . ' is at ' . str_replace('-', ' ', (string) $row->stage),
+                'text'    => (($namesVisible ? $row->employee_name : null) ?: 'A new hire')
+                    . ' is at ' . str_replace('-', ' ', (string) $row->stage),
                 'context' => $row->position ?: 'Onboarding',
                 'tone'    => $row->status === 'completed' ? 'success' : 'neutral',
                 'at'      => $row->updated_at,
@@ -598,7 +644,7 @@ class TalentDashboardController extends Controller
                 $moves->push([
                     'id'      => 'mob-' . $source['verb'] . '-' . $row->id,
                     'type'    => 'mobility',
-                    'text'    => ($row->employee_name ?: 'An employee') . ' - ' . $source['verb']
+                    'text'    => (($namesVisible ? $row->employee_name : null) ?: 'An employee') . ' - ' . $source['verb']
                                  . ' ' . strtolower((string) $row->status)
                                  . ($row->moved_to ? ' to ' . $row->moved_to : ''),
                     'context' => 'Mobility',
@@ -630,7 +676,8 @@ class TalentDashboardController extends Controller
             $feed[] = [
                 'id'      => 'exit-' . $row->id,
                 'type'    => 'offboarding',
-                'text'    => ($row->employee_name ?: 'An employee') . ' submitted ' . str_replace('-', ' ', (string) $row->exit_type),
+                'text'    => (($namesVisible ? $row->employee_name : null) ?: 'An employee')
+                    . ' submitted ' . str_replace('-', ' ', (string) $row->exit_type),
                 'context' => 'Offboarding',
                 'tone'    => 'danger',
                 'at'      => $row->created_at,
@@ -666,7 +713,13 @@ class TalentDashboardController extends Controller
                 'performance_cycle'   => $this->performanceCycle($sid),
                 'onboarding_progress' => $this->onboardingProgress($sid, $this->activeTalentFilter($request->input('department_id'))),
                 'action_items'        => $this->actionItems($sid),
-                'activity'            => $this->activity($sid),
+                // Names in the feed only for callers who may see whose record
+                // a row is - see activity().
+                'activity'            => $this->activity(
+                    $sid,
+                    10,
+                    SubjectAuthority::userSatisfies((int) ($context['user_id'] ?? 0), SubjectAuthority::PEOPLE_MANAGERS)
+                ),
             ], 'Success', 200, [
                 'meta' => ['from' => $from, 'to' => $to],
             ]);

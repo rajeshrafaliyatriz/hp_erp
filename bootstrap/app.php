@@ -112,6 +112,15 @@ return Application::configure(basePath: dirname(__DIR__))
             // authenticated Blade screens, so 'profile' alone would 401 the
             // latter - see RequireHritRole.
             'hrit.role' => \App\Http\Middleware\RequireHritRole::class,
+            // Restricts a route to a NAMED TIER of App\Support\SubjectAuthority,
+            // e.g. 'subject:hr_elevated' or 'subject:people_managers'.
+            //
+            // Not 'profile:' because that vocabulary cannot express the
+            // requirement: RoleKey::ALIASES has no alias for department_head at
+            // all, and 'profile:admin,hr' excludes executive and auditor, whose
+            // purpose is to read the organisation. One tier name, one list, and
+            // the row-level guards read the same list.
+            'subject' => \App\Http\Middleware\RequireSubjectAuthority::class,
             'menuright' => \App\Http\Middleware\RequireMenuRight::class,
             // Same enforcement rule as 'menuright', but resolves its menu id
             // from an access_link (optionally module-scoped via {module}) at

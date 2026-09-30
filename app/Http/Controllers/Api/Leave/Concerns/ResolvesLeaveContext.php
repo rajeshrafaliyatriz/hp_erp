@@ -25,6 +25,16 @@ trait ResolvesLeaveContext
      *
      * department_head and reporting_manager are absent for the same reason as in
      * ResolvesCompetencyContext: their scope is "my department" / "my team", and
+     * neither is enforceable today. MEASURED 2026-09-30, and the older wording
+     * here ("NULL for every user") was reading a different host:
+     * tbluser.reporting_manager_id is populated on 8 of 2345 rows on the
+     * application database - all in tenant 3 - and 0 of 299 on live, while
+     * department_id is populated on 2331 of 2345. So team scope resolves to
+     * almost nobody and department scope is meaningful. See
+     * ResolvesLeaveAuthority:28-38, which reconciles this properly, and
+     * App\Support\SubjectAuthority for the tier that grants managers tenant-wide
+     * reach deliberately. The original sentence follows, for the record:
+     *
      * neither is evaluable while tbluser.reporting_manager_id is NULL for every
      * user (G-ORG-02). They return with reporting-line coverage.
      */

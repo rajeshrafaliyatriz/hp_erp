@@ -16,6 +16,76 @@ each finding carries *who can actually open the screen that calls it*.
 
 ---
 
+## STATUS: CLOSED, 2026-09-30
+
+Every ranked finding below is fixed. The audit text is kept as written — it is the
+record of what was wrong — with this section as the record of what was done.
+
+| # | Finding | Closed by |
+|---|---|---|
+| **S1** | Any employee sets any colleague's rating | A **field-level** rule in `PerformanceReviewController::update`, not a route gate: an employee self-rates, so a gate would have locked them out of their own review. Three paths — the subject, the row's own `manager_id`, then the role tier |
+| **S2** | One call rewrites many ratings, then seals them | `subject:hr_elevated` on the whole calibration group, `grid` read included |
+| **S3** | Mandatory learning assigned to anyone | Targets intersected with `tbluser` for the caller's tenant, rejects reported in the envelope, plus `subject:people_managers` on the route |
+| **S4** | The entire Offboarding block ungated | One `subject:hr_elevated` wrapper on the group — 14 routes |
+| **S5** | Self-issue a credential, then verify it | `subject:hr_elevated` on all 7 certification writes. The employee's read surface is `GET /competency/my-certifications`, which takes no subject |
+| **S6** | Self-approval of appraisals, salary, bonus | `subject:hr_elevated` on all three tabs' writes |
+| **S7** | Development plans and goals | `subject:people_managers` on the writes |
+| **S8** | Assessments | `subject:people_managers` on create/destroy, `hr_elevated` on the cycle review |
+| **S9** | Succession slates and pools readable by all | `subject:people_managers` on those three reads. `/mobility/jobs` stays open — it is the job board |
+| **S10** | Bulk per-employee reads | Scoped to the caller unless elevated: reviews, applications, transfers, promotions. Dashboard feed names redacted |
+| **S11** | A divergent second role list | Deleted; `CapabilityProgressController` now calls the authority |
+| **S12** | Library governance ungated | `subject:hr_elevated` on `update` and `bulkApprove` |
+
+Proven by `_evidence/prove-talent-authorization.php` — **61 assertions, 0 failures**, run
+against tenant 6 inside a rolled-back transaction. Half of those assertions are the
+regression half: **every refused call repeated as HR, expecting 200.** A guard that refuses
+everybody looks exactly like a guard that works.
+
+### What the fix is, in one paragraph
+
+`app/Support/SubjectAuthority.php` holds two named tiers and one ordered verdict. A new
+`subject:` middleware enforces a tier at the route; `performanceSubject()` and
+`offboardingSubject()` enforce it per row, alongside the `competencySubject()` that already
+existed. Five divergent role lists became two named tiers.
+
+**`profile:` could not do this job**, which is why the middleware is new:
+`RoleKey::ALIASES` has **no alias for `department_head` at all**, and `profile:admin,hr`
+excludes `executive` and `auditor` — roles whose purpose is to read the organisation.
+
+### Three things found while fixing, that the audit had wrong or missed
+
+1. **`competencySubject()` was not too permissive — it was too RESTRICTIVE, and silently.**
+   It read `p.role_key` raw, bypassing `RoleKey::LEGACY_NAMES`. 30 of 42 live profiles have
+   `role_key = NULL` and resolve only through that table. So **20 live profiles passed
+   `profile:admin,hr` at the route and were then refused by the guard** — tenant 7's HR
+   profile (59 users), tenant 7's Admin (31), tenant 3's Admin (31), tenant 3's HR (12).
+   Nine organisations' administrators were being told *"You may only access your own
+   competency profile."* Fixed by resolving through `RoleKey`, so a gate and a row guard can
+   never disagree about what a caller is.
+2. **`reporting_manager_id` is not NULL for everyone.** Three docblocks and this audit said
+   it was. It is populated on 8 of 2345 rows on the app database (tenant 3 only) and 0 of 299
+   on live, while `department_id` is populated on 2331 of 2345. Corrected in all four places.
+3. **The dashboard leak had five sources, not one.** The audit named the offboarding items.
+   Onboarding, mobility moves, recruitment and the performance activity line all emitted
+   names too. Worse, the performance line **cannot be redacted at read time**:
+   `logPerformanceActivity` bakes the employee's name into the stored `description`, so that
+   source is omitted entirely for non-elevated callers, and the durable fix — log an id,
+   resolve the name per reader — is recorded as outstanding.
+
+### Deliberately not done, as decisions
+
+- **Backfilling `tbluser.role_key`.** 30 of 42 live profiles rely on a three-entry legacy-name
+  table. Nothing is at risk today (measured), but a tenant whose HR profile is renamed to
+  anything but `admin`/`hr` resolves to null, and **null grants nothing**. This changes who
+  can reach every gated route in the product, not just Talent, so it belongs in its own change.
+- **Real per-team scope.** Needs reporting lines populated. `PEOPLE_MANAGERS` is tenant-wide
+  until then, by decision, and narrows to team scope with no call-site changes when it lands.
+- **`LEAVE_ELEVATED` and `TaskPermissionMiddleware::ELEVATED`.** Two more copies of a role
+  list, in modules outside this audit.
+- **The activity-log storage shape.** See finding 3 above.
+
+---
+
 ## The finding in one sentence
 
 `competencySubject()` — the ownership guard — **exists, works, is documented, and is used by 18

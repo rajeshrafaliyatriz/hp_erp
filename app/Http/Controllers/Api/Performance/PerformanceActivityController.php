@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Performance\Concerns\ResolvesPerformanceContext;
 use App\Models\Performance\PerformanceAttachment;
 use App\Models\Performance\PerformanceNote;
+use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -222,6 +223,76 @@ class PerformanceActivityController extends Controller
     }
 
     /** POST /api/performance/reviews/{reviewId}/notes */
+    /**
+     * May this caller attach anything to this review?
+     *
+     * An employee commenting on their OWN review is legitimate - it is the
+     * conversation the review exists to hold. Commenting on a colleague's is
+     * not, and `storeNote` was tenant-only, so it was possible.
+     *
+     * Same three paths as PerformanceReviewController::reviewWritableFields():
+     * the subject, the row's own manager (`manager_id`, which a real line
+     * manager holds even when their profile says `employee`), or an elevated
+     * caller. Duplicated as a small predicate rather than shared, because the
+     * field matrix over there is about columns on s_performance_reviews and
+     * this is only about reachability.
+     *
+     * @return \Illuminate\Http\JsonResponse|null  A refusal, or null to proceed.
+     */
+    private function refuseUnlessReviewIsTheirs(array $context, $review)
+    {
+        $callerId = (int) ($context['user_id'] ?? 0);
+
+        if ($callerId > 0 && (int) ($review->user_id ?? 0) === $callerId) {
+            return null;
+        }
+
+        if ($callerId > 0 && (int) ($review->manager_id ?? 0) === $callerId) {
+            return null;
+        }
+
+        if ($this->performanceElevated($context, SubjectAuthority::PEOPLE_MANAGERS)) {
+            return null;
+        }
+
+        return $this->performanceError('You may only comment on your own review.', 403);
+    }
+
+    /**
+     * Only the author, or an elevated caller, may change a note or attachment.
+     *
+     * These were tenant-only: `where('sub_institute_id', $tenant)->find($id)`
+     * and nothing else. So any authenticated employee could edit or delete ANY
+     * note on ANY colleague's review - including notes written with
+     * `visibility = 'hr'`, which exist precisely so the subject cannot read
+     * them.
+     *
+     * The pattern is PerformanceSavedViewController:148 verbatim, which the
+     * audit correctly identified as the only ownership boundary anywhere in
+     * this namespace. It is now the second.
+     *
+     * One difference from that precedent, deliberately: it guards with
+     * `$context['user_id'] && ...`, so a falsy actor id SKIPS the ownership
+     * test rather than failing it. Here a caller we cannot identify is refused,
+     * because an unknown author is not the author.
+     *
+     * @return \Illuminate\Http\JsonResponse|null  A refusal, or null to proceed.
+     */
+    private function refuseUnlessAuthor(array $context, $row, string $noun)
+    {
+        $callerId = (int) ($context['user_id'] ?? 0);
+
+        if ($callerId > 0 && (int) ($row->created_by ?? 0) === $callerId) {
+            return null;
+        }
+
+        if ($this->performanceElevated($context, SubjectAuthority::PEOPLE_MANAGERS)) {
+            return null;
+        }
+
+        return $this->performanceError('You may only change your own ' . $noun . '.', 403);
+    }
+
     public function storeNote(Request $request, $reviewId)
     {
         $context = $this->performanceContext($request);
@@ -238,6 +309,10 @@ class PerformanceActivityController extends Controller
 
         if (!$review) {
             return $this->performanceError('Review not found', 404);
+        }
+
+        if ($refusal = $this->refuseUnlessReviewIsTheirs($context, $review)) {
+            return $refusal;
         }
 
         $validated = $request->validate([
@@ -297,6 +372,10 @@ class PerformanceActivityController extends Controller
             return $this->performanceError('Note not found', 404);
         }
 
+        if ($refusal = $this->refuseUnlessAuthor($context, $note, 'notes')) {
+            return $refusal;
+        }
+
         $validated = $request->validate([
             'body'       => 'sometimes|required|string',
             'visibility' => 'nullable|in:all,manager,hr,private',
@@ -345,6 +424,10 @@ class PerformanceActivityController extends Controller
 
         if (!$note) {
             return $this->performanceError('Note not found', 404);
+        }
+
+        if ($refusal = $this->refuseUnlessAuthor($context, $note, 'notes')) {
+            return $refusal;
         }
 
         $noteType = $note->note_type;
@@ -424,6 +507,10 @@ class PerformanceActivityController extends Controller
 
         if (!$review) {
             return $this->performanceError('Review not found', 404);
+        }
+
+        if ($refusal = $this->refuseUnlessReviewIsTheirs($context, $review)) {
+            return $refusal;
         }
 
         $validated = $request->validate([
@@ -508,6 +595,10 @@ class PerformanceActivityController extends Controller
 
         if (!$attachment) {
             return $this->performanceError('Attachment not found', 404);
+        }
+
+        if ($refusal = $this->refuseUnlessAuthor($context, $attachment, 'attachments')) {
+            return $refusal;
         }
 
         $fileName = $attachment->file_name;

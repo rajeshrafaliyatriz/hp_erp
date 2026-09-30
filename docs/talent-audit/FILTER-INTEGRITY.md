@@ -5,6 +5,45 @@
 the real stored value domain (Laravel controllers, `types/recruitment.ts`, type unions).
 **Date** 2026-09-30 · **Changes made** one, recorded at the end.
 
+## STATUS: CLOSED, 2026-09-30 — and two of my own claims were wrong
+
+All six items are fixed. **Two of this document's findings were wrong and are corrected
+below**, because an audit that is wrong about its own evidence is worse than no audit.
+
+| # | Claim as written | Verdict | What was actually done |
+|---|---|---|---|
+| **F-1** | Workflow filter offers 2 modules that can never match | **Right** | The list is now derived from the rows, accumulating so a server-side filter cannot shrink it. Understated, in fact: the registry yields **3** module values, not 4 |
+| **F-2** | The most common status cannot be filtered to | **Right, wrong prescription** | The recommended `COALESCE` was already there. The real blocker was `filled('status')`, so an empty value could never reach it. Fixed with a named `not_submitted` sentinel on both halves |
+| **F-3** | `Rejected` renders and cannot be filtered to | **WRONG EVIDENCE** | I cited `SkillMatchingController`, which reads **`task.approve_status`** — a different table. This screen reads `s_users_skills`, whose column is `enum('Approved','Pending','Cancelled')`, so `Rejected` is not a member and was unreachable **by construction**. Offering it would have *created* the bug. The real gap was the **NULL** state, and that is what was added |
+| **F-4** | `statusFilter` has no dropdown; 2 statuses unreachable | **WRONG** | `offboarding-center.tsx:877-902` has a 7-chip strip covering the whole 6-value domain, and has since 2026-07-31 — two months before this audit. Both "unreachable" statuses were reachable. The two *real* defects on that screen were fixed: the KPI handler now keys on `kpi.id` rather than display text, and `activeFiltersCount` no longer disagrees with Clear Filters |
+| **F-5** | Badge and predicate disagree about `undefined` | **Right, and it hid something bigger** | Fixed towards `'draft'`, which is what the server actually defaults to. But the real defect was one neither this audit nor the re-check found — below |
+| mobility | `setFilterStatus` is never called | **Wrong wording** | It is called once, with the value it already holds. Functionally dead as reported. Now has a real Status control |
+
+### The defect none of the passes had right
+
+Both this audit and the re-check read the **migration** and concluded the interview-feedback
+status column held `enum('Rejected','Hired','Completed')`. Reading the **column** on both
+hosts:
+
+```
+talent_evaluation_form.status = enum('draft','submitted','approved','rejected','Hired')  default 'draft'
+```
+
+So Laravel's four validated values are all legal — but **`'Hired'` is a fifth legal value
+holding 69 of 124 rows on app and 70 of 124 on live: the majority.** It was absent from the
+filter, from the TS union and from both validation rules. The same defect as F-2, on a screen
+where this audit reported something else.
+
+Two further causes fixed with it: `feedbackController`'s **update path wrote `status` with no
+fallback**, so any edit omitting it wrote NULL — the actual producer of the unmatchable rows —
+and `config/database.php` has `'strict' => false`, so those writes succeeded silently instead
+of erroring against the enum.
+
+**The lesson worth keeping: a migration is not a schema.** Four separate readings of this one
+column were wrong because nobody ran `SHOW COLUMNS`.
+
+---
+
 ## Why this was measured
 
 The review opened with *"see the all filters all are static in this screen"*, about the
