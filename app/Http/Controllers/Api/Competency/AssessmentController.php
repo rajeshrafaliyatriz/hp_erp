@@ -55,6 +55,29 @@ class AssessmentController extends Controller
         ]);
     }
 
+    /**
+     * $id when that user belongs to the caller's organisation, else null.
+     *
+     * For OPTIONAL people-columns, where a foreign or unknown id should not
+     * abort the write but must not be stored either - storing it would attach
+     * this tenant's row to somebody it cannot see.
+     */
+    private function tenantUserOrNull(array $context, $id): ?int
+    {
+        $id = (int) $id;
+
+        if ($id <= 0) {
+            return null;
+        }
+
+        $exists = DB::table('tbluser')
+            ->where('id', $id)
+            ->where('sub_institute_id', $context['sub_institute_id'])
+            ->exists();
+
+        return $exists ? $id : null;
+    }
+
     public function store(Request $request)
     {
         $context = $this->competencyContext($request);
@@ -82,13 +105,45 @@ class AssessmentController extends Controller
             ], 422);
         }
 
+
+        /*
+         * THE SUBJECT MUST BE SOMEBODY IN THIS ORGANISATION.
+         *
+         * `user_id` (and `assessor_id`) was validated only as `integer`, so a foreign-tenant id
+         * could be written into the owner column while the row carried THIS
+         * tenant's sub_institute_id - the same defect as
+         * LearningAssignmentController's unchecked user_ids[].
+         *
+         * competencySubject() answers both halves: 404 for an id outside the
+         * caller's tenant, 403 for a subject a non-elevated caller may not
+         * touch. The route gate limits this to managers and HR, so in practice this is
+         * the tenant half - which is exactly the half a role gate cannot do.
+         */
+        $subjectId = (int) ($request->input('user_id'));
+
+        if ($subjectId > 0) {
+            $subject = $this->competencySubject($context, $subjectId);
+
+            if (!is_int($subject)) {
+                return $subject;
+            }
+        }
         $id = DB::table('s_competency_assessments')->insertGetId([
             'sub_institute_id' => $context['sub_institute_id'],
             'title'            => $request->input('title'),
             'framework_id'     => $request->input('framework_id'),
             'cycle_id'         => $request->input('cycle_id'),
             'user_id'          => $request->input('user_id'),
-            'assessor_id'      => $request->input('assessor_id'),
+            /*
+             * The assessor is dropped unless they are in this tenant.
+             *
+             * Same unchecked-integer defect as user_id, and the audit named
+             * only user_id. Dropped rather than refused: an unresolvable
+             * assessor is a data-entry slip on an optional field, and a 422
+             * would lose the whole assessment over it. Null means "not yet
+             * assigned", which the column already allows.
+             */
+            'assessor_id'      => $this->tenantUserOrNull($context, $request->input('assessor_id')),
             'department_id'    => $request->input('department_id'),
             // The id is what the merge, renames and every id-based reader use;
             // the name stays because ~20 screens still read it. NULL when the

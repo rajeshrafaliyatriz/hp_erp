@@ -308,6 +308,55 @@ try {
         echo "  skipped: need a course and a foreign-tenant user\n";
     }
 
+    echo PHP_EOL . '── Self-verification, and foreign-tenant owners ──' . PHP_EOL;
+
+    // A credential HR holds themselves.
+    $ownCert = DB::table('s_competency_certifications')->insertGetId([
+        'sub_institute_id' => TENANT, 'name' => MARKER . ' own', 'user_id' => $hr,
+        'status' => 'valid', 'verification_status' => 'pending',
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $otherCert = DB::table('s_competency_certifications')->insertGetId([
+        'sub_institute_id' => TENANT, 'name' => MARKER . ' other', 'user_id' => $colleague,
+        'status' => 'valid', 'verification_status' => 'pending',
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    [$s] = $call('PUT', "/competency/certifications/$ownCert", $hrToken, ['verification_status' => 'verified']);
+    check('HR verifies their OWN credential', 403, $s, '(cannot verify what you hold)');
+    check('  ... and it is still pending', 'pending',
+        DB::table('s_competency_certifications')->where('id', $ownCert)->value('verification_status'));
+
+    [$s] = $call('PUT', "/competency/certifications/$otherCert", $hrToken, ['verification_status' => 'verified']);
+    check("HR verifies somebody else's credential", 200, $s);
+    check('  ... and it is verified', 'verified',
+        DB::table('s_competency_certifications')->where('id', $otherCert)->value('verification_status'));
+
+    [$s, $b] = $call('POST', '/competency/certifications/bulk', $hrToken, [
+        'action' => 'verify', 'ids' => [$ownCert, $otherCert],
+    ]);
+    check('bulk verify including their own', 200, $s);
+    check('  ... one was skipped and reported', 1, $b['data']['self_skipped'] ?? -1);
+    check('  ... their own is STILL pending', 'pending',
+        DB::table('s_competency_certifications')->where('id', $ownCert)->value('verification_status'));
+
+    if ($foreign) {
+        [$s] = $call('POST', '/competency/certifications', $hrToken, [
+            'name' => MARKER . ' foreign', 'user_id_target' => $foreign,
+        ]);
+        check('HR creates a credential for a FOREIGN tenant user', 404, $s, '(not found, not forbidden)');
+
+        [$s] = $call('POST', '/competency/development-plans', $hrToken, [
+            'title' => MARKER, 'user_id_target' => $foreign,
+        ]);
+        check('HR creates a development plan for a foreign user', 404, $s);
+
+        [$s] = $call('POST', '/competency/assessments', $hrToken, [
+            'title' => MARKER, 'user_id' => $foreign,
+        ]);
+        check('HR creates an assessment for a foreign user', 404, $s);
+    }
+
     echo "\n── The authority itself ──\n";
 
     check('employee satisfies neither tier', false,

@@ -378,6 +378,31 @@ class CertificationController extends Controller
         $ownerId = (int) ($request->input('user_id_target') ?: $request->input('user_id'));
 
         /*
+         * THE OWNER MUST BE SOMEBODY IN THIS ORGANISATION.
+         *
+         * `user_id_target` was validated only as `integer`, so a foreign-tenant
+         * id could be written into user_id while the row carried THIS tenant's
+         * sub_institute_id - the same defect as LearningAssignmentController's
+         * unchecked user_ids[], in a table that feeds compliance reporting.
+         *
+         * competencySubject() answers both halves at once: it 404s an id that
+         * is not in the caller's tenant, and it enforces ownership for a caller
+         * who is not elevated. The route gate already limits this to HR, so in
+         * practice this is the tenant check - which is exactly the half a role
+         * gate cannot do.
+         *
+         * Only when an owner is named: the column is nullable and an unassigned
+         * credential is a legitimate row.
+         */
+        if ($ownerId > 0) {
+            $subject = $this->competencySubject($context, $ownerId);
+
+            if (!is_int($subject)) {
+                return $subject;
+            }
+        }
+
+        /*
          * Inherited from the owner when the caller did not say.
          * CertificationDialog sends neither department nor role, so without
          * this every credential created through the UI is invisible to the
@@ -504,6 +529,18 @@ class CertificationController extends Controller
 
         // Reassigning the holder is deliberate and explicit only.
         if ($request->has('user_id_target')) {
+            // Same tenant + ownership check as store(). A retarget is a create
+            // in every respect that matters here.
+            $newOwner = (int) $request->input('user_id_target');
+
+            if ($newOwner > 0) {
+                $subject = $this->competencySubject($context, $newOwner);
+
+                if (!is_int($subject)) {
+                    return $subject;
+                }
+            }
+
             $update['user_id'] = $request->input('user_id_target');
 
             /*
@@ -533,6 +570,28 @@ class CertificationController extends Controller
         // Stamp who signed the credential off whenever verification moves on.
         if ($request->has('verification_status')) {
             $newState = $request->input('verification_status');
+
+            /*
+             * A CREDENTIAL CANNOT BE VERIFIED BY THE PERSON WHO HOLDS IT.
+             *
+             * store() already refuses to let a credential verify itself - it
+             * forces 'pending' and says so. But the update path then stamped
+             * verified_by with the caller's own id and checked nothing, so the
+             * holder could simply verify it in a second request. The route gate
+             * does NOT close this: it limits the route to HR, and an HR user
+             * holds credentials of their own.
+             *
+             * Same shape as the appraisal self-approval in S6, one table over,
+             * and the audit missed it because it was reasoning about who may
+             * reach the endpoint rather than about what they may do once there.
+             */
+            if ($newState !== 'pending' && (int) $existing->user_id === (int) $context['user_id']) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'A credential cannot be verified by the person who holds it.',
+                ], 403);
+            }
+
             $update['verified_by'] = $newState === 'pending' ? null : $context['user_id'];
             $update['verified_at'] = $newState === 'pending' ? null : now();
         }
@@ -629,6 +688,36 @@ class CertificationController extends Controller
             return response()->json(['status' => 0, 'message' => 'No matching certifications found'], 404);
         }
 
+        /*
+         * The caller's OWN credentials are excluded from verify and reject, for
+         * the same reason as the single-row path above: a bulk select-all would
+         * otherwise be the easy way to self-verify. Excluded rather than
+         * refused, so selecting 40 rows that happen to include your own still
+         * does the other 39 - and the count is reported, so the one that was
+         * skipped is not silent.
+         */
+        $selfSkipped = 0;
+
+        if (in_array($action, ['verify', 'reject'], true)) {
+            $mine = DB::table(self::TABLE)
+                ->where('sub_institute_id', $sid)
+                ->whereIn('id', $ownedIds)
+                ->where('user_id', (int) $context['user_id'])
+                ->pluck('id')->all();
+
+            if ($mine) {
+                $selfSkipped = count($mine);
+                $ownedIds = array_values(array_diff($ownedIds, $mine));
+            }
+
+            if (!$ownedIds) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'A credential cannot be verified by the person who holds it.',
+                ], 403);
+            }
+        }
+
         $update = ['updated_by' => $context['user_id'], 'updated_at' => now()];
 
         switch ($action) {
@@ -669,8 +758,11 @@ class CertificationController extends Controller
 
         return response()->json([
             'status'  => 1,
-            'message' => $label . ' ' . $count . ' certification' . ($count === 1 ? '' : 's'),
-            'data'    => ['affected' => $count],
+            'message' => $label . ' ' . $count . ' certification' . ($count === 1 ? '' : 's')
+                . ($selfSkipped ? ' (' . $selfSkipped . ' of your own skipped - a credential cannot be verified by its holder)' : ''),
+            // Reported, not silent: a bulk that quietly did fewer rows than were
+            // selected, under a success message, is the false-success shape.
+            'data'    => ['affected' => $count, 'self_skipped' => $selfSkipped],
         ]);
     }
 

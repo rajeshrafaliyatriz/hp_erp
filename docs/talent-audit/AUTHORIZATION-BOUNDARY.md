@@ -36,7 +36,30 @@ record of what was wrong — with this section as the record of what was done.
 | **S11** | A divergent second role list | Deleted; `CapabilityProgressController` now calls the authority |
 | **S12** | Library governance ungated | `subject:hr_elevated` on `update` and `bulkApprove` |
 
-Proven by `_evidence/prove-talent-authorization.php` — **61 assertions, 0 failures**, run
+### A fourth thing, found only by re-reading the plan against the diff
+
+Route gates alone did **not** finish items 10-12. Three gaps survived the first pass:
+
+- **`user_id_target` was validated only as `integer`** in certification, development-plan
+  and assessment writes — no tenant check — so a foreign-tenant id could be written into the
+  owner column while the row carried *this* tenant's `sub_institute_id`. Exactly the defect
+  fixed in `LearningAssignmentController`, in three more places. Now `competencySubject()`,
+  which answers tenancy and ownership in one call.
+- **`assessor_id` had the same hole** and the audit named only `user_id`. Dropped to null
+  when it is not a tenant member — an optional field should not abort the write, and must not
+  store an id this organisation cannot see.
+- **A credential could be verified by the person holding it.** `store()` forces
+  `verification_status = 'pending'` and says a credential must never verify itself — then
+  `update()` stamped `verified_by` with the caller's own id and checked nothing, so the holder
+  verified it in a second request. **The route gate does not close this**: it limits the route
+  to HR, and an HR user holds credentials of their own. Same shape as the S6 appraisal
+  self-approval, one table over. The bulk path had it too; the caller's own rows are now
+  excluded and the skipped count reported.
+
+The lesson is the one this engagement keeps relearning: *a gate answers who may reach the
+endpoint, never what they may do once there.*
+
+Proven by `_evidence/prove-talent-authorization.php` — **71 assertions, 0 failures**, run
 against tenant 6 inside a rolled-back transaction. Half of those assertions are the
 regression half: **every refused call repeated as HR, expecting 200.** A guard that refuses
 everybody looks exactly like a guard that works.
