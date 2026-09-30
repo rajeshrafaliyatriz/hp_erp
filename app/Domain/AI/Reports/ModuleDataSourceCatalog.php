@@ -47,16 +47,71 @@ final class ModuleDataSourceCatalog
         return array_map(fn (array $s) => [
             'name' => $s['name'],
             'module' => $s['module'],
+            // The top-level module this source's screen sits under (null when the source
+            // IS a top-level module's own). Read from the menu catalogue, never listed here.
+            'rolls_up_to' => $this->topLevelModuleOf($s['module']),
             'label' => $s['label'],
             'description' => $s['description'],
             'arguments' => $s['arguments'],
         ], $this->definitions());
     }
 
-    /** @return array<int, array<string, mixed>> Sources for one `ai_modules` key. */
+    /**
+     * Sources for one `ai_modules` key.
+     *
+     * A top-level module (Talent Management, LMS, …) also owns every source of the screens
+     * beneath it, so the Centralized AI Stack for a module reads its whole module's data
+     * rather than only the screens that happen to have a per-screen stack of their own.
+     *
+     * @return array<int, array<string, mixed>>
+     */
     public function forModule(string $module): array
     {
-        return array_values(array_filter($this->all(), fn (array $s) => $s['module'] === $module));
+        return array_values(array_filter(
+            $this->all(),
+            fn (array $s) => $s['module'] === $module || $s['rolls_up_to'] === $module
+        ));
+    }
+
+    /** @var array<string, string|null> */
+    private array $rollUpCache = [];
+
+    /**
+     * The `ai_modules` key of the level-1 menu above a module's screen, or null.
+     *
+     * Derived from `ai_modules.menu_id` and the `tblmenumaster_g2g.parent_id` chain, so a
+     * new screen's source lands under the right module without anybody restating the tree.
+     */
+    private function topLevelModuleOf(string $moduleKey): ?string
+    {
+        if (array_key_exists($moduleKey, $this->rollUpCache)) {
+            return $this->rollUpCache[$moduleKey];
+        }
+
+        $menuId = DB::table('ai_modules')->where('module_key', $moduleKey)->whereNull('sub_institute_id')->value('menu_id');
+        $root = null;
+
+        for ($hops = 0; $menuId !== null && $hops < 6; $hops++) {
+            $row = DB::table('tblmenumaster_g2g')->where('id', $menuId)->first(['id', 'parent_id', 'level']);
+
+            if ($row === null) {
+                break;
+            }
+
+            if ((int) $row->parent_id === 0 || (int) $row->level === 1) {
+                $root = (int) $row->id;
+                break;
+            }
+
+            $menuId = $row->parent_id;
+        }
+
+        $key = $root === null
+            ? null
+            : DB::table('ai_modules')->where('menu_id', $root)->whereNull('sub_institute_id')->value('module_key');
+
+        // A top-level module's own sources do not "roll up" to themselves.
+        return $this->rollUpCache[$moduleKey] = ($key === null || $key === $moduleKey) ? null : (string) $key;
     }
 
     public function exists(string $name): bool
@@ -535,6 +590,129 @@ final class ModuleDataSourceCatalog
                     }
                     if (($y = $this->text($a, 'syear')) !== null) {
                         $q->where('t.SYEAR', $y);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'organization.employees',
+                'module' => 'organizational_management',
+                'label' => 'Employees',
+                'description' => 'Employees with their job title, department, reporting manager, join date and status. No pay, bank or identity-document fields.',
+                'arguments' => [
+                    self::arg('department_id', 'integer', 'Only employees in this department.'),
+                    self::arg('status', 'string', 'Employee status as stored, e.g. 1 for active.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('tbluser as u')
+                        ->leftJoin('hrms_departments as d', 'd.id', '=', 'u.department_id')
+                        ->leftJoin('hrms_job_titles as j', 'j.id', '=', 'u.jobtitle_id')
+                        ->leftJoin('tbluser as m', 'm.id', '=', 'u.reporting_manager_id')
+                        ->where('u.sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('u.deleted_at')
+                        ->select(['u.id as user_id', 'u.employee_no', 'u.email', 'u.joined_date', 'u.status'])
+                        ->selectRaw("TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) as employee")
+                        ->addSelect(['d.department', 'j.title as job_title'])
+                        ->selectRaw("TRIM(CONCAT(COALESCE(m.first_name, ''), ' ', COALESCE(m.last_name, ''))) as reporting_manager")
+                        ->orderBy('u.first_name');
+
+                    if (($d = $this->int($a, 'department_id')) !== null) {
+                        $q->where('u.department_id', $d);
+                    }
+                    if (($s = $this->text($a, 'status')) !== null) {
+                        $q->where('u.status', $s);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'organization.departments',
+                'module' => 'organizational_management',
+                'label' => 'Departments',
+                'description' => 'Departments with their code, parent department, head and how many employees sit in each.',
+                'arguments' => [
+                    self::arg('status', 'string', 'Department status as stored.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('hrms_departments as d')
+                        ->leftJoin('hrms_departments as p', 'p.id', '=', 'd.parent_id')
+                        ->leftJoin('tbluser as h', 'h.id', '=', 'd.head_user_id')
+                        ->where('d.sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('d.deleted_at')
+                        ->select(['d.id as department_id', 'd.department', 'd.code', 'd.status', 'p.department as parent_department'])
+                        ->selectRaw("TRIM(CONCAT(COALESCE(h.first_name, ''), ' ', COALESCE(h.last_name, ''))) as head")
+                        ->selectRaw('(select count(*) from tbluser eu where eu.department_id = d.id and eu.sub_institute_id = d.sub_institute_id and eu.deleted_at is null) as employees')
+                        ->orderBy('d.department');
+
+                    if (($s = $this->text($a, 'status')) !== null) {
+                        $q->where('d.status', $s);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'hrms.leave_requests',
+                'module' => 'hrit_management',
+                'label' => 'Leave requests',
+                'description' => 'Leave requests with the employee, leave type, dates, days charged and approval status.',
+                'arguments' => [
+                    self::arg('user_id', 'integer', 'Only this employee\'s requests.'),
+                    self::arg('status', 'string', 'Request status as stored, e.g. approved.'),
+                    self::arg('from_date', 'string', 'Only requests starting on or after this date (YYYY-MM-DD).'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('hrms_emp_leaves as l')
+                        ->leftJoin('tbluser as u', 'u.id', '=', 'l.user_id')
+                        ->leftJoin('hrms_leave_types as t', 't.id', '=', 'l.leave_type_id')
+                        ->where('l.sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('l.deleted_at')
+                        ->select(['l.id as request_id', 'l.from_date', 'l.to_date', 'l.chargeable_days', 'l.status', 'l.approved_by', 't.leave_type'])
+                        ->selectRaw("TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) as employee")
+                        ->orderByDesc('l.from_date');
+
+                    if (($u = $this->int($a, 'user_id')) !== null) {
+                        $q->where('l.user_id', $u);
+                    }
+                    if (($s = $this->text($a, 'status')) !== null) {
+                        $q->where('l.status', $s);
+                    }
+                    if (($f = $this->text($a, 'from_date')) !== null) {
+                        $q->where('l.from_date', '>=', $f);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'hrms.attendance',
+                'module' => 'hrit_management',
+                'label' => 'Attendance',
+                'description' => 'Daily punch-in and punch-out records with the employee, work mode and status.',
+                'arguments' => [
+                    self::arg('user_id', 'integer', 'Only this employee\'s records.'),
+                    self::arg('from_date', 'string', 'Only days on or after this date (YYYY-MM-DD).'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('hrms_attendances as a')
+                        ->leftJoin('tbluser as u', 'u.id', '=', 'a.user_id')
+                        ->where('a.sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('a.deleted_at')
+                        ->select(['a.id as attendance_id', 'a.day', 'a.punchin_time', 'a.punchout_time', 'a.work_mode', 'a.status'])
+                        ->selectRaw("TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) as employee")
+                        ->orderByDesc('a.day');
+
+                    if (($u = $this->int($a, 'user_id')) !== null) {
+                        $q->where('a.user_id', $u);
+                    }
+                    if (($f = $this->text($a, 'from_date')) !== null) {
+                        $q->where('a.day', '>=', $f);
                     }
 
                     return $q;
