@@ -113,6 +113,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // latter - see RequireHritRole.
             'hrit.role' => \App\Http\Middleware\RequireHritRole::class,
             'menuright' => \App\Http\Middleware\RequireMenuRight::class,
+            // Same enforcement rule as 'menuright', but resolves its menu id
+            // from an access_link (optionally module-scoped via {module}) at
+            // request time instead of a fixed id baked into the route.
+            'platformright' => \App\Http\Middleware\RequirePlatformRight::class,
             // Acting ABOVE the tenants - creating an organisation. No role_key
             // can authorise this: every role the platform defines is scoped to
             // one organisation. Membership is a row in `platform_owners`.

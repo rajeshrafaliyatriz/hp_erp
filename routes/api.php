@@ -666,6 +666,21 @@ Route::get('/competency/capability-progress', [\App\Http\Controllers\Api\Compete
 // profile guard to protect. Employees could always SEE their capability and
 // never record a view of it — every kasba-rating write route is admin-only, so
 // self-rating returned 403 while `source = 'self'` rows sat in the table.
+// THE EMPLOYEE'S OWN CERTIFICATIONS. Read-only, `api.token`, and it takes NO
+// user_id - same reasoning as my-capability above, and for a sharper reason.
+//
+// The Certification Center's "My Certifications" TAB filters on a user_id sent
+// by the browser, over an endpoint that accepts any id it is handed. So an
+// administrator granting that module to an employee so they can see their own
+// certificate also grants edit, verify, revoke and delete on everyone else's;
+// withholding it leaves the employee unable to see their own at all. A tab
+// cannot express ownership - only a separate endpoint can.
+//
+// Documents come back inside this response rather than from
+// /certifications/{id}/documents, which is tenant-scoped only and would hand
+// every employee a read of any colleague's evidence one id at a time.
+Route::get('/competency/my-certifications', [\App\Http\Controllers\Api\Competency\MyCertificationsController::class, 'index'])->middleware('api.token');
+
 Route::post('/competency/my-rating', [\App\Http\Controllers\Api\Competency\MyRatingController::class, 'store'])->middleware('api.token');
 Route::delete('/competency/my-rating', [\App\Http\Controllers\Api\Competency\MyRatingController::class, 'destroy'])->middleware('api.token');
 
@@ -1224,7 +1239,7 @@ Route::middleware(['api.token', 'profile:admin'])->group(function () {
 });
 
 Route::get('/organization/audit', [\App\Http\Controllers\Api\Organization\OrganizationSettingsController::class, 'audit'])
-    ->middleware('api.token');
+    ->middleware(['api.token', 'platformright:/settings?s=audit,view']);
 
 /*
  * DELIVERY — how this organisation sends email.
