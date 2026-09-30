@@ -308,6 +308,33 @@ try {
         echo "  skipped: need a course and a foreign-tenant user\n";
     }
 
+    echo PHP_EOL . '── Notes and attachments: author-or-elevated ──' . PHP_EOL;
+
+    // An employee commenting on their OWN review is legitimate.
+    [$s] = $call('POST', "/performance/reviews/$myReview/notes", $meToken, ['body' => MARKER . ' mine']);
+    check('employee comments on their OWN review', 201, $s);
+
+    [$s] = $call('POST', "/performance/reviews/$colleagueReview/notes", $meToken, ['body' => MARKER]);
+    check("employee comments on a COLLEAGUE's review", 403, $s);
+
+    // A note written by HR on the colleague's review - not the employee's to touch.
+    $hrNote = DB::table('s_performance_notes')->insertGetId([
+        'sub_institute_id' => TENANT, 'review_id' => $colleagueReview,
+        'body' => MARKER . ' hr', 'note_type' => 'comment', 'visibility' => 'hr',
+        'created_by' => $hr, 'created_at' => now(), 'updated_at' => now(),
+    ]);
+
+    [$s] = $call('PUT', "/performance/notes/$hrNote", $meToken, ['body' => 'tampered']);
+    check("employee edits HR's note", 403, $s);
+    check('  ... and the body is unchanged', MARKER . ' hr',
+        DB::table('s_performance_notes')->where('id', $hrNote)->value('body'));
+
+    [$s] = $call('DELETE', "/performance/notes/$hrNote", $meToken);
+    check("employee deletes HR's note", 403, $s);
+
+    [$s] = $call('PUT', "/performance/notes/$hrNote", $hrToken, ['body' => MARKER . ' edited']);
+    check('HR edits their own note', 200, $s);
+
     echo PHP_EOL . '── Self-verification, and foreign-tenant owners ──' . PHP_EOL;
 
     // A credential HR holds themselves.

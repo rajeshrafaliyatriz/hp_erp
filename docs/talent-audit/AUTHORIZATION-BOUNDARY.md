@@ -59,7 +59,7 @@ Route gates alone did **not** finish items 10-12. Three gaps survived the first 
 The lesson is the one this engagement keeps relearning: *a gate answers who may reach the
 endpoint, never what they may do once there.*
 
-Proven by `_evidence/prove-talent-authorization.php` — **71 assertions, 0 failures**, run
+Proven by `_evidence/prove-talent-authorization.php` — **77 assertions, 0 failures**, run
 against tenant 6 inside a rolled-back transaction. Half of those assertions are the
 regression half: **every refused call repeated as HR, expecting 200.** A guard that refuses
 everybody looks exactly like a guard that works.
