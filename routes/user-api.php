@@ -48,6 +48,14 @@ Route::prefix('user')->group(function () {
         [tblmenumasterG2gController::class, 'displayUserProfilesG2g'])
         ->middleware('api.token')->name('ajax_user_profiles_g2g');
 
+    // What CAN the caller see, not what some named profile can - identity is
+    // the token's own, unlike ajax_groupwiserights_g2g's editable profile_id.
+    // Answers for the frontend what routes/platform.php + platformright now
+    // actually enforce, so the avatar menu shows exactly what will not 403.
+    Route::get('ajax_platform_services_rights_g2g',
+        [tblmenumasterG2gController::class, 'displayPlatformServicesRightsG2g'])
+        ->middleware('api.token')->name('ajax_platform_services_rights_g2g');
+
     Route::post('save_groupwiserights_g2g',
         [tblmenumasterG2gController::class, 'storeGroupwiseRightsG2g'])
         ->middleware('profile:admin')->name('save_groupwiserights_g2g');

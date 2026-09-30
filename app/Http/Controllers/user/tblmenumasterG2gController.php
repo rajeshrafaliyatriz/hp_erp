@@ -7,6 +7,7 @@ use App\Models\tblmenumaster_g2gModel;
 use App\Models\user\tblgroupwise_rights_g2gModel;
 use App\Models\user\tbluserModel;
 use App\Models\user\tbluserprofilemasterModel;
+use App\Support\MenuRight;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
@@ -145,7 +146,23 @@ class tblmenumasterG2gController extends Controller
         $sub_institute_id = $this->apiTenantId($request);
         $profile_id = $request->get('profile_id');
 
-        $allMenus = tblmenumaster_g2gModel::where('status', 1)
+        /*
+         * PLATFORM SERVICES ROWS ARE status=0 (hidden from the sidebar, on
+         * purpose - see 2026_09_30_100000_hide_platform_services_sidebar_row
+         * and the migration creating the Event Bus/Audit rows), but an admin
+         * still has to be able to see and edit their rights here or
+         * "dynamically rights-managed" would be true for enforcement only,
+         * with nothing able to ever change what got seeded. Admitted by
+         * access_link pattern rather than dropping the status filter
+         * outright, so other intentionally-hidden rows (e.g. Performance
+         * Reviews & Appraisals) do not resurface in this matrix as a side
+         * effect.
+         */
+        $allMenus = tblmenumaster_g2gModel::where(function ($query) {
+                $query->where('status', 1)
+                    ->orWhere('access_link', 'like', '/platform-services/%')
+                    ->orWhere('access_link', '/settings?s=audit');
+            })
             ->visibleToTenant($sub_institute_id)
             ->orderBy('sort_order', 'ASC')
             ->get();
@@ -305,6 +322,52 @@ class tblmenumasterG2gController extends Controller
             'status_code' => 1,
             'message' => 'Groupwise rights saved successfully',
             'data' => ['saved' => count($rows)],
+        ]);
+    }
+
+    /**
+     * "What Platform Services can I, the caller, actually reach" - the
+     * question neither displaySidebarMenu (excludes status=0 rows, which is
+     * every one of these) nor displayGroupwiseRightsG2g (answers for a named
+     * profile being edited, not the caller) can answer.
+     *
+     * Uses MenuRight::can() - full individual/group precedence, the same
+     * rule routes/platform.php's platformright middleware actually enforces
+     * - rather than the simpler canView() helper above, so this agrees with
+     * real enforcement rather than the sidebar's looser approximation.
+     */
+    public function displayPlatformServicesRightsG2g(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $profileId = (int) ($identity['user']->user_profile_id ?? 0);
+        $tenant = $identity['sub_institute_id'];
+
+        if (!$profileId) {
+            return response()->json(['status_code' => 0, 'message' => 'Unable to resolve profile'], 403);
+        }
+
+        $modules = [];
+        foreach (['organization', 'hrms', 'talent', 'lms', 'competency', 'task'] as $module) {
+            $menuId = MenuRight::idForAccessLink("/platform-services/workflow?module={$module}");
+            $modules[$module] = $menuId !== null && MenuRight::can($profileId, $menuId, $tenant, 'view');
+        }
+
+        $eventBusId = MenuRight::idForAccessLink('/platform-services/event-bus');
+        $auditId = MenuRight::idForAccessLink('/settings?s=audit');
+
+        return response()->json([
+            'status_code' => 1,
+            'message' => 'Success',
+            'data' => [
+                'modules' => $modules,
+                'event_bus' => $eventBusId !== null && MenuRight::can($profileId, $eventBusId, $tenant, 'view'),
+                'audit' => $auditId !== null && MenuRight::can($profileId, $auditId, $tenant, 'view'),
+            ],
         ]);
     }
 
