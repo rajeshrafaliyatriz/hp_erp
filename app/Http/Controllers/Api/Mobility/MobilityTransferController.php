@@ -31,6 +31,11 @@ class MobilityTransferController extends Controller
 
         $query = MobilityTransfer::where('sub_institute_id', $subInstituteId);
 
+        // S10 - an employee sees their own moves, not the organisation's.
+        // Not narrowed at all for an elevated caller. See
+        // ResolvesMobilityContext::scopeMobilityToSelf().
+        $this->scopeMobilityToSelf($query, $context);
+
         if ($status = $request->input('status')) {
             if (strtolower($status) !== 'all') {
                 $query->where('status', $status);

@@ -163,13 +163,72 @@ final class CandidateLink
     }
 
     /**
-     * True when the origin still points at this API rather than the front end.
+     * True when the link about to be sent will not open for a candidate.
      *
-     * Callers use it to tell HR that the link they are about to send will not
-     * open, instead of reporting success and leaving the candidate stuck.
+     * Callers use it to tell HR that, instead of reporting success and leaving
+     * the candidate stuck.
+     *
+     * ── THE NAME IS NOW NARROWER THAN THE QUESTION ──────────────────────────
+     *
+     * This asked only "does base() equal app.url", i.e. "is FRONTEND_URL
+     * unset". Measured on the API host, FRONTEND_URL is SET - to
+     * `http://localhost:3000`. So base() does not equal app.url, this returned
+     * FALSE, and all five guards concluded the link was fine while every
+     * emailed candidate link pointed at a machine the candidate does not have.
+     *
+     * A guard against a misconfiguration that only recognises one spelling of
+     * it is worse than no guard: it reports safety.
+     *
+     * Kept as a boolean with the same name so the five existing call sites
+     * start catching this without a change; unreachableForCandidates() below
+     * is the one to use for a specific message.
      */
     public static function pointsAtApi(): bool
     {
-        return self::base() === rtrim((string) config('app.url'), '/');
+        return self::unreachableForCandidates() !== null;
+    }
+
+    /**
+     * Why an emailed link would not open, or null when it looks reachable.
+     *
+     * Deliberately conservative about what counts as unreachable: a loopback or
+     * private address, or the API's own origin. Anything else is assumed fine,
+     * because guessing that a real hostname is wrong would block legitimate
+     * sends - and this runs on the path that emails a candidate.
+     */
+    public static function unreachableForCandidates(): ?string
+    {
+        $base = self::base();
+
+        if ($base === rtrim((string) config('app.url'), '/')) {
+            return 'FRONTEND_URL is not set, so links point at the API instead of the careers site.';
+        }
+
+        $host = strtolower((string) parse_url($base, PHP_URL_HOST));
+
+        if ($host === '') {
+            return 'FRONTEND_URL is not a usable address: ' . $base;
+        }
+
+        // Loopback and the .local / .internal suffixes nobody outside the
+        // network can resolve.
+        if ($host === 'localhost' || $host === '::1'
+            || str_starts_with($host, '127.')
+            || str_ends_with($host, '.local')
+            || str_ends_with($host, '.internal')) {
+            return 'FRONTEND_URL points at ' . $host . ', which a candidate cannot open.';
+        }
+
+        // RFC1918. A private address is reachable from the office and from
+        // nowhere a candidate will ever be.
+        if (str_starts_with($host, '10.') || str_starts_with($host, '192.168.')) {
+            return 'FRONTEND_URL points at the private address ' . $host . ', which a candidate cannot open.';
+        }
+
+        if (preg_match('/^172\.(1[6-9]|2\d|3[01])\./', $host)) {
+            return 'FRONTEND_URL points at the private address ' . $host . ', which a candidate cannot open.';
+        }
+
+        return null;
     }
 }

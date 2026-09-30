@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Performance;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Performance\Concerns\ResolvesPerformanceContext;
 use App\Models\Performance\PerformanceReview;
+use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -60,6 +61,22 @@ class PerformanceReviewController extends Controller
 
         $query = $this->baseQuery($tenant, $filters);
 
+        /*
+         * S10 - an employee sees their OWN reviews here, not the organisation's.
+         *
+         * Scoped rather than refused. An employee has a real interest in their
+         * own review history and none in a colleague's, so a 403 would remove a
+         * legitimate view to close an illegitimate one. An elevated caller is
+         * not narrowed at all, so the query HR runs is unchanged.
+         *
+         * This also composes with `user_id_filter`: an employee who sends a
+         * colleague's id gets `user_id = <colleague> AND user_id = <self>` and
+         * therefore zero rows - silently, because that filter is what the
+         * frontend's own "mine" tab sends from localStorage and a stale value
+         * there must not lock anybody out.
+         */
+        $this->scopePerformanceToSelf($query, $context, 'r.user_id');
+
         $total = (clone $query)->count('r.id');
 
         // Sorting on the joined display columns, not the raw ids.
@@ -109,7 +126,15 @@ class PerformanceReviewController extends Controller
         $filters = $this->performanceFilters($request);
         $limit = min(200, max(10, (int) ($request->input('column_limit') ?: 50)));
 
-        $totals = $this->baseQuery($tenant, $filters)
+        // Same self-scope as index(), applied to both of the board's queries so
+        // the column counts cannot disagree with the cards under them.
+        $scoped = function ($query) use ($context) {
+            $this->scopePerformanceToSelf($query, $context, 'r.user_id');
+
+            return $query;
+        };
+
+        $totals = $scoped($this->baseQuery($tenant, $filters))
             ->select('r.stage', DB::raw('COUNT(*) as total'))
             ->groupBy('r.stage')
             ->pluck('total', 'stage');
@@ -117,7 +142,7 @@ class PerformanceReviewController extends Controller
         $columns = [];
 
         foreach (PerformanceReview::STAGES as $stage) {
-            $rows = $this->baseQuery($tenant, array_merge($filters, ['stage' => $stage]))
+            $rows = $scoped($this->baseQuery($tenant, array_merge($filters, ['stage' => $stage])))
                 ->orderBy('r.due_date')
                 ->orderByDesc('r.id')
                 ->limit($limit)
@@ -154,6 +179,19 @@ class PerformanceReviewController extends Controller
 
         if (!$row) {
             return $this->performanceError('Review not found', 404);
+        }
+
+        /*
+         * The same row rule as update(), read-only.
+         *
+         * This HAS to allow the subject through, or the field-level write rule
+         * is unusable: an employee cannot self-rate a review they are not
+         * allowed to open. So the test is "is anything on this review yours to
+         * change" - which is true for the subject, the row's manager and any
+         * elevated caller, and false for a colleague.
+         */
+        if ($this->reviewWritableFields($context, $row) === []) {
+            return $this->performanceError('You may only view your own review.', 403);
         }
 
         $base = $this->presentRow($row);
@@ -249,6 +287,82 @@ class PerformanceReviewController extends Controller
     }
 
     /**
+     * WHICH FIELDS THIS CALLER MAY WRITE ON THIS REVIEW.
+     *
+     * S1: this route carried no middleware while `bulk`, `advance` and
+     * `destroy` on the same table were all gated - so any authenticated
+     * employee could set any colleague's manager_rating, overall_rating,
+     * potential_rating and status. That rating feeds 9-box, calibration,
+     * compensation and bonus, and a tampered rating does not announce itself.
+     *
+     * ── WHY THIS IS NOT A ROLE GATE ON THE ROUTE ────────────────────────────
+     *
+     * Because an employee self-rates. `profile:admin,hr` here would close the
+     * hole and simultaneously lock every employee out of their own review,
+     * which is the one thing on this screen that is unambiguously theirs. The
+     * fix has to be per-field, so it has to live here.
+     *
+     * ── THREE PATHS, CHECKED IN THIS ORDER ─────────────────────────────────
+     *
+     * 1. THE SUBJECT - `r.user_id`. Writes their own self-rating and comments.
+     * 2. THE ROW'S OWN MANAGER - `r.manager_id`, set at launch from
+     *    tbluser.employee_id (PerformanceCycleController:277-280). Checked
+     *    BEFORE the role tier and that ordering is the point: a real line
+     *    manager very often carries the `employee` profile, so the role list
+     *    alone would refuse the person whose job this is. Measured: manager_id
+     *    is set on 17 of 235 reviews on the app database and 15 of 121 on
+     *    live, so this path is real but thin, and it degrades to the tier
+     *    below when the column is null.
+     * 3. PEOPLE_MANAGERS - HR, admin, executives, auditors, and managers by
+     *    role. Writes the manager and calibration fields.
+     *
+     * `due_date` and `manager_id` are HR_ELEVATED only, deliberately narrower
+     * than the rest. Reassigning a review's manager is already an HR act via
+     * `bulk` action=assign_manager, which is gated; letting a reporting manager
+     * do it through here would open a wider door than the same field already
+     * has, and what it opens is "hand myself somebody else's review".
+     *
+     * HR may write `self_rating`: they key paper forms, and every write is
+     * attributed field-by-field into s_performance_activity_log. The row's
+     * manager may not - typing an employee's own words for them is
+     * falsification, and unlike HR it has no operational reason.
+     *
+     * @return array<int, string>  The writable field names; empty means refuse.
+     */
+    private function reviewWritableFields(array $context, $review): array
+    {
+        $callerId = (int) ($context['user_id'] ?? 0);
+
+        $isSubject    = $callerId > 0 && (int) $review->user_id === $callerId;
+        $isRowManager = $callerId > 0 && (int) ($review->manager_id ?? 0) === $callerId;
+        $isManager    = $this->performanceElevated($context, SubjectAuthority::PEOPLE_MANAGERS);
+        $isHr         = $this->performanceElevated($context, SubjectAuthority::HR_ELEVATED);
+
+        $fields = [];
+
+        if ($isSubject || $isHr) {
+            $fields = array_merge($fields, ['self_rating', 'self_comments']);
+        }
+
+        if ($isRowManager || $isManager) {
+            $fields = array_merge($fields, [
+                'manager_rating', 'manager_comments', 'overall_rating', 'potential_rating', 'status',
+            ]);
+        }
+
+        // Submitting your own draft, or a manager/HR moving it on.
+        if ($isSubject || $isRowManager || $isManager) {
+            $fields[] = 'is_draft';
+        }
+
+        if ($isHr) {
+            $fields = array_merge($fields, ['due_date', 'manager_id']);
+        }
+
+        return array_values(array_unique($fields));
+    }
+
+    /**
      * PUT /api/performance/reviews/{id}
      *
      * Rating / comment edits. `overall_rating` and its label stay in sync so the
@@ -285,6 +399,43 @@ class PerformanceReviewController extends Controller
         // It is set once at launch; accepting it would let the context actor's id
         // silently reassign the review to whoever pressed the button.
         unset($validated['user_id']);
+
+        /*
+         * WHO MAY WRITE WHAT. See reviewWritableFields().
+         *
+         * This block must sit ABOVE the label derivations below, or an employee
+         * sending `overall_rating` still gets `overall_rating_label` written
+         * from a value that is about to be discarded.
+         */
+        $writable = $this->reviewWritableFields($context, $review);
+
+        if ($writable === []) {
+            // Not the subject, not the row's manager, not elevated. Nothing on
+            // this review is theirs to change.
+            return $this->performanceError('You may not change this review.', 403);
+        }
+
+        $ignored   = array_values(array_diff(array_keys($validated), $writable));
+        $validated = array_intersect_key($validated, array_flip($writable));
+
+        if ($validated === []) {
+            /*
+             * Every field sent was one this caller may not write.
+             *
+             * A field the server owns is DROPPED rather than refused - the
+             * idiom three lines above, and the same reasoning ResolvesApiIdentity
+             * gives for ignoring a request tenant: a form post carrying one
+             * read-only field the UI rendered must not 422 wholesale.
+             *
+             * But dropping everything and answering "Review updated" would be a
+             * false success, which is the exact failure class this whole pass is
+             * about. So: drop when something writable remains, refuse when
+             * nothing does, and name what was ignored either way.
+             */
+            return $this->performanceError('You may not change these fields on this review.', 403, [
+                'ignored' => $ignored,
+            ]);
+        }
 
         $before = $review->getOriginal();
 
@@ -323,7 +474,14 @@ class PerformanceReviewController extends Controller
 
         $row = $this->baseQuery($tenant, [])->where('r.id', $review->id)->first();
 
-        return $this->performanceResponse($this->presentRow($row), 'Review updated');
+        // `ignored` names any field the caller sent and may not write, so a
+        // silent drop cannot read as a successful save of that field.
+        return $this->performanceResponse(
+            $this->presentRow($row),
+            'Review updated',
+            200,
+            $ignored ? ['ignored' => $ignored] : []
+        );
     }
 
     /**

@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Support\SubjectAuthority;
 
 /**
  * PERSONNEL DOCUMENTS — yours, and (for HR) everybody's.
@@ -69,6 +70,25 @@ class EmployeeDocumentController extends Controller
     /** Where new objects go. Legacy rows may be in `public/staff_document/`. */
     private const FOLDER = 'public/hp_staff_document/';
 
+    /**
+     * Every folder this table's files have ever been written to, newest first.
+     *
+     * Three writers have filed into `staff_document` with three conventions:
+     * this controller and the legacy directory upload both use
+     * `public/hp_staff_document/`, while PayrollController files payslips into
+     * `public/staff_document/` (PayrollController.php:2262) - a different
+     * folder, one character apart.
+     *
+     * `file_path` has only been recorded since 2026-09-24, so for every row
+     * older than that the folder has to be found rather than read. Guessing a
+     * single folder is what made every payslip in "Your documents" answer
+     * "its file is missing" while the file sat in the bucket next door.
+     */
+    private const LEGACY_FOLDERS = [
+        'public/hp_staff_document/',
+        'public/staff_document/',
+    ];
+
     /** GET /api/account/documents — my own. */
     public function mine(Request $request)
     {
@@ -108,14 +128,115 @@ class EmployeeDocumentController extends Controller
             return $identity;
         }
 
+        return $this->fileDocument(
+            $request,
+            (int) $identity['user_id'],
+            (int) $identity['sub_institute_id'],
+            (int) $identity['user_id']
+        );
+    }
+
+    /**
+     * POST /api/employees-management/{id}/documents — file one FOR an employee.
+     *
+     * HR has always been able to upload an employee's document; it went through
+     * `tbluserController::addUserDocument`, which wrote the object **public**,
+     * recorded no `file_path`, and took `sub_institute_id` from the request body
+     * rather than the token. Two writers filing the same folder with opposite
+     * visibility is why a download worked or failed depending on which screen
+     * had filed it.
+     *
+     * Same filer as self-service now, so there is one way in. The subject is the
+     * employee in the URL; the ACTOR recorded in `created_by` is the HR user, so
+     * the record still says who filed it.
+     *
+     * Route-gated `profile:admin,hr`; the tenant check below is the second lock,
+     * because a role alone would let HR in one organisation file against an
+     * employee id belonging to another.
+     */
+    public function storeForEmployee(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = (int) $identity['sub_institute_id'];
+
+        if (!$this->employeeInTenant((int) $id, $tenantId)) {
+            return $this->notFound();
+        }
+
+        return $this->fileDocument($request, (int) $id, $tenantId, (int) $identity['user_id']);
+    }
+
+    /**
+     * DELETE /api/employees-management/{employee}/documents/{document}
+     *
+     * HR removes an employee's document. `destroy()` above is deliberately
+     * owner-only - its comment says removing somebody else's "is a different
+     * decision and does not happen here" - so this is that decision, made
+     * explicitly rather than by widening the self-service route.
+     *
+     * The employee id in the URL is not decoration: the document must belong to
+     * that employee AND that employee must be in the caller's tenant, so a
+     * guessed document id cannot reach across.
+     */
+    public function destroyForEmployee(Request $request, $employee, $document)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = (int) $identity['sub_institute_id'];
+
+        if (!$this->employeeInTenant((int) $employee, $tenantId)) {
+            return $this->notFound();
+        }
+
+        $row = DB::table('staff_document')
+            ->where('id', (int) $document)
+            ->where('user_id', (int) $employee)
+            ->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            return $this->notFound();
+        }
+
+        DB::table('staff_document')->where('id', $row->id)->update([
+            'deleted_by' => (int) $identity['user_id'],
+            'deleted_at' => now(),
+        ]);
+
+        // The object is left in place for the same reason destroy() leaves it:
+        // the row soft-deletes and can be restored, and a restored row pointing
+        // at a purged object is worse than an orphaned object.
+        return response()->json([
+            'status' => 1,
+            'message' => 'Document removed.',
+        ]);
+    }
+
+    /**
+     * Write the file and the row. Shared by self-service and the HR route so
+     * there is exactly one place that decides visibility, naming and metadata.
+     *
+     * @param  int  $subjectId  whose document this is
+     * @param  int  $tenantId   the tenant it belongs to
+     * @param  int  $actorId    who is filing it (may differ from the subject)
+     */
+    private function fileDocument(Request $request, int $subjectId, int $tenantId, int $actorId)
+    {
         $data = $request->validate([
             'document' => 'required|file|mimes:' . self::ALLOWED_EXTENSIONS . '|max:' . self::MAX_KILOBYTES,
             'document_title' => 'required|string|max:191',
             'document_type_id' => 'required|integer',
         ]);
-
-        $userId = (int) $identity['user_id'];
-        $tenantId = (int) $identity['sub_institute_id'];
 
         /*
          * The type must be a real one, and a STAFF one. Without this the column
@@ -144,7 +265,7 @@ class EmployeeDocumentController extends Controller
          * executing page on the company's own CDN.
          */
         $extension = $file->extension() ?: 'bin';
-        $fileName = $userId . '_' . Str::random(24) . '.' . $extension;
+        $fileName = $subjectId . '_' . Str::random(24) . '.' . $extension;
         $path = self::FOLDER . $fileName;
 
         Storage::disk('digitalocean')->putFileAs(
@@ -166,7 +287,7 @@ class EmployeeDocumentController extends Controller
         );
 
         $documentId = DB::table('staff_document')->insertGetId([
-            'user_id' => $userId,
+            'user_id' => $subjectId,
             'document_type_id' => (int) $data['document_type_id'],
             'document_title' => $data['document_title'],
             'file_name' => $fileName,
@@ -174,7 +295,9 @@ class EmployeeDocumentController extends Controller
             'mime_type' => $file->getMimeType(),
             'file_size' => $file->getSize(),
             'sub_institute_id' => $tenantId,
-            'created_by' => $userId,
+            // The ACTOR, which is the HR user when they file on somebody's
+            // behalf - so the record says who put it there.
+            'created_by' => $actorId,
             'created_at' => now(),
         ]);
 
@@ -206,12 +329,10 @@ class EmployeeDocumentController extends Controller
             return $this->notFound();
         }
 
-        // Legacy rows carry no path. Fall back to the folder the directory has
-        // always written to rather than guessing between the two conventions.
-        $path = $row->file_path ?: (self::FOLDER . $row->file_name);
+        $path = $this->objectPath($row);
 
         try {
-            if (!Storage::disk('digitalocean')->exists($path)) {
+            if ($path === null) {
                 return response()->json([
                     'status' => 0,
                     'message' => 'That document is recorded but its file is missing. Ask whoever uploaded it to add it again.',
@@ -320,6 +441,36 @@ class EmployeeDocumentController extends Controller
     }
 
     /**
+     * Where this row's file actually is, or null if it is nowhere.
+     *
+     * `file_path` when we recorded one; otherwise every historic folder is
+     * tried in turn. Returning null rather than a guessed path lets the caller
+     * say "the file is missing" truthfully, instead of reporting a miss against
+     * one folder while the object sits in another.
+     */
+    private function objectPath($row): ?string
+    {
+        $disk = Storage::disk('digitalocean');
+
+        if (!empty($row->file_path) && $disk->exists($row->file_path)) {
+            return $row->file_path;
+        }
+
+        if (empty($row->file_name)) {
+            return null;
+        }
+
+        foreach (self::LEGACY_FOLDERS as $folder) {
+            $candidate = $folder . $row->file_name;
+            if ($disk->exists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The document, if this caller may read it.
      *
      * Two ways in, and they are checked in order of least privilege:
@@ -351,7 +502,7 @@ class EmployeeDocumentController extends Controller
 
         $role = RoleKey::forUserId((int) $identity['user_id']);
 
-        return in_array($role, ['administrator', 'hr_manager', 'hr_executive'], true) ? $row : null;
+        return in_array($role, SubjectAuthority::RECORD_OWNERS, true) ? $row : null;
     }
 
     /** Is this employee one of ours? */

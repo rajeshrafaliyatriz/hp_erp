@@ -38,9 +38,34 @@ use Symfony\Component\HttpFoundation\Response;
  *       back to "does the caller have view rights on AT LEAST ONE of the six
  *       module rows". Deliberately not admin-only: an administrator already
  *       sees every module unscoped today, so this is a bounded widening
- *       (some module's rights, not none) rather than an unlimited one. See
- *       the plan's own note on this being a documented, accepted trade-off
- *       rather than a precise per-row scope for id-based writes.
+ *       (some module's rights, not none) rather than an unlimited one.
+ *
+ *   ->middleware('platformright:/ai/{capability}!agents=/module/agentic-ai/agentic-library,view')
+ *       Any other `{name}` is read from the ROUTE's own parameter of that
+ *       name (`$request->route('capability')`), not request input — the AI
+ *       console addresses a capability as a URL path segment
+ *       (`/api/ai/capabilities/{capability}`), not a query string, unlike
+ *       Platform Services' `?module=`. No widening on a missing/blank value:
+ *       a route that declares `{capability}` always carries the segment, so
+ *       an empty read means something is actually wrong, not "unscoped".
+ *
+ *       `!value=link` (repeatable) overrides the substituted link for one
+ *       specific value instead of the generic `/ai/{value}` pattern — needed
+ *       because Laravel's router keys a route by its URI TEMPLATE alone
+ *       (`where()` constraints don't create a second, distinct route for the
+ *       same templated path — confirmed directly: two `Route::get()` calls
+ *       at the identical `{capability}` URI silently collapsed to whichever
+ *       registered last, discarding the first with no error). So a value
+ *       that rides a DIFFERENT real access_link than the generic pattern —
+ *       Agent Management reuses the real Agentic AI Library screen, not a
+ *       new `/ai/agents` row — has to be expressed as one exception on one
+ *       route, not as two competing route registrations.
+ *
+ *   ->middleware('platformright:/ai/providers|/ai/models,view')
+ *       `|`-separated tokens are OR'd — the caller needs only ONE of them.
+ *       For endpoints that genuinely serve more than one capability at once
+ *       (the AI console's own `/capabilities` index; `/configuration/options`,
+ *       which populates both the provider and model dropdowns in one call).
  */
 class RequirePlatformRight
 {
@@ -72,15 +97,32 @@ class RequirePlatformRight
             return $this->deny($request, 'Unable to resolve profile or organization', 403);
         }
 
-        $allowed = str_contains($linkTemplate, '{module}')
-            ? $this->checkModuleScoped($request, $linkTemplate, $profileId, $tenant, $action)
-            : $this->checkFixedLink($linkTemplate, $profileId, $tenant, $action);
+        $allowed = false;
+        foreach (explode('|', $linkTemplate) as $linkToken) {
+            if ($this->checkToken($request, $linkToken, $profileId, $tenant, $action)) {
+                $allowed = true;
+                break;
+            }
+        }
 
         if (!$allowed) {
-            return $this->deny($request, 'Your role does not have access to this Platform Services screen.', 403);
+            return $this->deny($request, 'Your role does not have access to this screen.', 403);
         }
 
         return $next($request);
+    }
+
+    private function checkToken(Request $request, string $linkTemplate, int $profileId, int $tenant, string $action): bool
+    {
+        if (str_contains($linkTemplate, '{module}')) {
+            return $this->checkModuleScoped($request, $linkTemplate, $profileId, $tenant, $action);
+        }
+
+        if (preg_match('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/', $linkTemplate, $match)) {
+            return $this->checkRouteParamScoped($request, $linkTemplate, $match[1], $profileId, $tenant, $action);
+        }
+
+        return $this->checkFixedLink($linkTemplate, $profileId, $tenant, $action);
     }
 
     private function checkFixedLink(string $accessLink, int $profileId, int $tenant, string $action): bool
@@ -106,6 +148,45 @@ class RequirePlatformRight
         }
 
         return false;
+    }
+
+    /**
+     * A templated segment read from the ROUTE's own parameter, e.g.
+     * `/ai/{capability}` against a route declaring `Route::get('/capabilities/{capability}', ...)`.
+     * Unlike `{module}`, no widening on a missing value — see class docblock.
+     *
+     * `$linkTemplate` may carry `!value=link` suffixes (see class docblock)
+     * overriding the substituted link for one specific route-parameter value.
+     */
+    private function checkRouteParamScoped(Request $request, string $linkTemplate, string $param, int $profileId, int $tenant, string $action): bool
+    {
+        $value = $request->route($param);
+
+        if (!is_string($value) || $value === '') {
+            return false;
+        }
+
+        [$baseTemplate, $overrides] = $this->parseOverrides($linkTemplate);
+
+        $accessLink = $overrides[$value] ?? str_replace('{' . $param . '}', $value, $baseTemplate);
+
+        return $this->checkFixedLink($accessLink, $profileId, $tenant, $action);
+    }
+
+    /** @return array{0: string, 1: array<string, string>} [base template with overrides stripped, value => link map] */
+    private function parseOverrides(string $linkTemplate): array
+    {
+        $overrides = [];
+        $base = preg_replace_callback(
+            '/!([a-zA-Z0-9\-]+)=(\/[^!]*)/',
+            function ($match) use (&$overrides) {
+                $overrides[$match[1]] = rtrim($match[2]);
+                return '';
+            },
+            $linkTemplate
+        );
+
+        return [$base, $overrides];
     }
 
     private function deny(Request $request, string $message, int $status): Response

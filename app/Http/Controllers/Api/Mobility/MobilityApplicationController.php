@@ -27,6 +27,11 @@ class MobilityApplicationController extends Controller
         $query = MobilityApplication::with('job')
             ->where('sub_institute_id', $subInstituteId);
 
+        // S10 - an employee sees their own moves, not the organisation's.
+        // Not narrowed at all for an elevated caller. See
+        // ResolvesMobilityContext::scopeMobilityToSelf().
+        $this->scopeMobilityToSelf($query, $context);
+
         if ($jobId = $request->input('job_posting_id')) {
             $query->where('job_posting_id', $jobId);
         }

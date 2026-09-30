@@ -2,6 +2,7 @@
 
 namespace App\Services\Account;
 
+use App\Support\SubjectAuthority;
 use App\Support\RoleKey;
 use Illuminate\Support\Facades\DB;
 
@@ -131,7 +132,11 @@ class ProfileVisibility
         }
 
         // The people who maintain the record. See the class note.
-        if (in_array($viewerRole, ['administrator', 'hr_manager', 'hr_executive'], true)) {
+        //
+        // Was an inline array - the fifth copy of an authorization table in this
+        // codebase, and byte-identical to LEAVE_ELEVATED. Both now name the same
+        // tier, so neither can drift from the other.
+        if (SubjectAuthority::roleSatisfies($viewerRole, SubjectAuthority::RECORD_OWNERS)) {
             return true;
         }
 

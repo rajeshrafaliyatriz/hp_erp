@@ -5,10 +5,45 @@ namespace App\Http\Controllers\Api\Mobility\Concerns;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Support\SubjectAuthority;
 
 trait ResolvesMobilityContext
 {
     use ResolvesApiIdentity;
+
+    /**
+     * Narrow a list to the caller unless they may see other people's records.
+     *
+     * S10: /mobility/applications, /transfers and /promotions each join
+     * tbluser and return a named person's internal move, to any authenticated
+     * employee in the tenant. They are SCOPED rather than gated because they
+     * genuinely have a "mine" view - an employee has a real interest in their
+     * own application and transfer history and none in a colleague's - so
+     * refusing them outright would remove a legitimate view in order to close
+     * an illegitimate one.
+     *
+     * An elevated caller is not narrowed, so the query HR runs is byte-identical
+     * to the one it ran before this change.
+     *
+     * Contrast /successions and /pools, which are gated at the route: being on
+     * a succession slate is information about you that you are not meant to
+     * have, so there is no "mine" view to preserve.
+     *
+     * @param  string  $column  The owner column on this query's own table.
+     * @return bool  True when the query was narrowed.
+     */
+    protected function scopeMobilityToSelf($query, array $context, string $column = 'user_id'): bool
+    {
+        // HR_ELEVATED: narrowing a list is a READ decision, and an auditor
+        // reads the whole organisation. See SubjectAuthority's tier docblocks.
+        if (SubjectAuthority::userSatisfies((int) ($context['user_id'] ?? 0), SubjectAuthority::HR_ELEVATED)) {
+            return false;
+        }
+
+        $query->where($column, (int) ($context['user_id'] ?? 0));
+
+        return true;
+    }
 
     /**
      * @return array{sub_institute_id:int, user_id:int|null}|\Illuminate\Http\JsonResponse

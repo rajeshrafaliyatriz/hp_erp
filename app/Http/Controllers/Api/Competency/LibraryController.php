@@ -655,7 +655,32 @@ class LibraryController extends Controller
                 $query->where('proficiency_level', $proficiency);
             }
             if ($status = $this->activeFilter($request->input('approve_status'))) {
-                $query->where('approve_status', $status);
+                /*
+                 * `not_submitted` - the skill rows nobody has put through review.
+                 *
+                 * s_users_skills.approve_status is
+                 * enum('Approved','Pending','Cancelled') NULL, and the screen
+                 * renders a row with a null value as unset. A plain equality
+                 * filter can never reach null, so those rows were visible in the
+                 * table and unreachable through the dropdown - the same defect
+                 * as the competency library's 'Not submitted', and the same
+                 * named sentinel is used for it so the two screens do not invent
+                 * separate vocabularies.
+                 *
+                 * NB: 'Rejected' is deliberately NOT offered. It is not a member
+                 * of this enum - the earlier claim that it was cited
+                 * SkillMatchingController, which reads `task.approve_status`, a
+                 * different table. Offering it would recreate exactly the bug
+                 * this branch fixes.
+                 */
+                if (strtolower((string) $status) === 'not_submitted') {
+                    $query->where(function ($w) {
+                        $w->whereNull('approve_status')
+                          ->orWhereRaw("TRIM(COALESCE(approve_status, '')) = ''");
+                    });
+                } else {
+                    $query->where('approve_status', $status);
+                }
             }
             if ($jobrole = $this->activeFilter($request->input('jobrole'))) {
                 // Skills mapped to a job role live in s_user_skill_jobrole by name.
