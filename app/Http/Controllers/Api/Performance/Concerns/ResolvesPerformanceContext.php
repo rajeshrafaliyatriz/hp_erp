@@ -139,7 +139,13 @@ trait ResolvesPerformanceContext
      */
     protected function scopePerformanceToSelf($query, array $context, string $column, ?array $tier = null): bool
     {
-        if ($this->performanceElevated($context, $tier)) {
+        /*
+         * HR_ELEVATED, not the write tier. Narrowing a LIST is a read decision,
+         * and reads are deliberately wider than writes: an auditor exists to
+         * see the whole organisation and change none of it. Defaulting this to
+         * the write tier would have scoped an auditor to their own reviews.
+         */
+        if ($this->performanceElevated($context, $tier ?? SubjectAuthority::HR_ELEVATED)) {
             return false;
         }
 

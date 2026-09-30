@@ -78,6 +78,57 @@ trait ResolvesCompetencyContext
      *
      * @return int|\Illuminate\Http\JsonResponse
      */
+    /**
+     * The same resolution, for the surfaces a LINE MANAGER legitimately runs.
+     *
+     * ── WHY THIS IS A SECOND NAMED METHOD, NOT A PARAMETER ──────────────────
+     *
+     * competencySubject() uses HR_ELEVATED, which excludes reporting_manager
+     * and department_head by name. Development plans, learning assignments and
+     * assessments are gated `subject:people_managers` at the route, which
+     * INCLUDES them. So a manager passed the door and was then refused by the
+     * room - a clean 403 on a screen they are supposed to own, and
+     * indistinguishable from a deliberate refusal.
+     *
+     * That is the shape the plan for this work explicitly warned about:
+     *
+     *     "A gate of admin,hr,people_manager over a guard of COMPETENCY is a
+     *      lie - the manager passes the gate and the guard 403s them, which is
+     *      exactly the menu-225 failure shape in a different mechanism."
+     *
+     * Written down, then built anyway, then caught by testing the tier with a
+     * real reporting_manager token instead of reasoning from its membership.
+     *
+     * THE RULE, stated once: a controller guard's tier must be AT LEAST AS WIDE
+     * as its route gate's tier. A named method per tier rather than an optional
+     * `$tier` argument with a default, because a hidden default is how the
+     * narrow list silently becomes the wide one at a call site nobody re-read.
+     *
+     * @return int|\Illuminate\Http\JsonResponse
+     */
+    protected function competencyPeopleSubject(array $context, $requestedId)
+    {
+        $subjectId = (int) $requestedId;
+
+        $verdict = SubjectAuthority::verdict(
+            (int) ($context['user_id'] ?? 0),
+            $subjectId,
+            $context['sub_institute_id'],
+            SubjectAuthority::PEOPLE_MANAGERS
+        );
+
+        if ($verdict === SubjectAuthority::OK) {
+            return $subjectId;
+        }
+
+        return $verdict === SubjectAuthority::NOT_FOUND
+            ? response()->json(['status' => 0, 'message' => 'Employee not found.'], 404)
+            : response()->json([
+                'status'  => 0,
+                'message' => 'You may only act on your own development record.',
+            ], 403);
+    }
+
     protected function competencySubject(array $context, $requestedId)
     {
         $subjectId = (int) $requestedId;

@@ -73,29 +73,6 @@ final class SubjectAuthority
     ];
 
     /**
-     * HR_ELEVATED plus the two line-management roles, TENANT-WIDE.
-     *
-     * Wider than HR_ELEVATED on purpose, and the reason is recorded because it
-     * is a decision rather than an oversight: a reporting manager rates their
-     * reports and a department head owns their department's reviews, and
-     * neither "my team" nor "my department" can be enforced today -
-     * tbluser.reporting_manager_id is populated on 8 of 2345 rows on the
-     * application database and 0 of 299 on live.
-     *
-     * So this grants more than the words "my team" mean, and far less than the
-     * nothing-at-all that was being enforced before. It narrows to real team
-     * scope the day reporting lines are filled in, and nothing that uses this
-     * tier needs to change when that happens.
-     */
-    public const PEOPLE_MANAGERS = [
-        // SPREAD, not restated. This is the anti-drift property: the tier
-        // cannot fall out of step with HR_ELEVATED because it is built from it.
-        ...self::HR_ELEVATED,
-        'reporting_manager',
-        'department_head',
-    ];
-
-    /**
      * Maintains the record itself, as opposed to reading it.
      *
      * Narrower than HR_ELEVATED: it drops `executive` and `auditor`, which exist
@@ -107,6 +84,46 @@ final class SubjectAuthority
     public const RECORD_OWNERS = [
         'administrator', 'hr_manager', 'hr_executive',
     ];
+
+    /**
+     * May WRITE another person's performance or development record.
+     *
+     * RECORD_OWNERS plus the two line-management roles, TENANT-WIDE.
+     *
+     * ── WHY THIS IS BUILT ON RECORD_OWNERS AND NOT ON HR_ELEVATED ───────────
+     *
+     * It was HR_ELEVATED + managers, which meant `auditor` and `executive`
+     * could write. Caught by testing rather than by reading: an auditor token
+     * set manager_rating on a colleague's review and got 200, and passed the
+     * compensation-decision gate.
+     *
+     * That contradicted this file's own stated reason for including them -
+     * "executive and auditor exist to read the organisation and change
+     * nothing". A tier whose justification argues against its own membership is
+     * a tier that will be used wrongly.
+     *
+     * So: HR_ELEVATED is what may READ somebody else's record. RECORD_OWNERS
+     * and PEOPLE_MANAGERS are what may WRITE one. Reads are deliberately wider
+     * than writes, which is the whole point of having an auditor.
+     *
+     * ── WHY MANAGERS ARE TENANT-WIDE ────────────────────────────────────────
+     *
+     * A reporting manager rates their reports and a department head owns their
+     * department's reviews, and neither "my team" nor "my department" can be
+     * enforced today: tbluser.reporting_manager_id is populated on 8 of 2345
+     * rows on the application database and 0 of 299 on live. So this grants
+     * more than "my team" means, and far less than the nothing-at-all that was
+     * enforced before. It narrows to real team scope the day reporting lines
+     * exist, with no call-site changes.
+     */
+    public const PEOPLE_MANAGERS = [
+        // SPREAD, not restated: the tier cannot fall out of step with the one
+        // it is built from.
+        ...self::RECORD_OWNERS,
+        'reporting_manager',
+        'department_head',
+    ];
+
 
     /**
      * Task Management's elevated set, moved verbatim.
@@ -128,6 +145,14 @@ final class SubjectAuthority
         'people_managers' => self::PEOPLE_MANAGERS,
         'record_owners'   => self::RECORD_OWNERS,
     ];
+
+    /**
+     * Tiers that authorise a WRITE to somebody else's record.
+     *
+     * Named so the distinction is checkable rather than remembered: HR_ELEVATED
+     * is a read tier and must never gate a write.
+     */
+    public const WRITE_TIERS = ['record_owners', 'people_managers'];
 
     /* ── The verdict, so the ladder is written once ────────────────────── */
 

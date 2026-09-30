@@ -122,7 +122,7 @@ class AssessmentController extends Controller
         $subjectId = (int) ($request->input('user_id'));
 
         if ($subjectId > 0) {
-            $subject = $this->competencySubject($context, $subjectId);
+            $subject = $this->competencyPeopleSubject($context, $subjectId);
 
             if (!is_int($subject)) {
                 return $subject;

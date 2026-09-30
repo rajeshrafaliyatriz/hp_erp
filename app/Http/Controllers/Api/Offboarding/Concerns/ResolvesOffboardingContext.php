@@ -52,7 +52,7 @@ trait ResolvesOffboardingContext
             (int) ($context['user_id'] ?? 0),
             $subjectId,
             $context['sub_institute_id'],
-            $tier ?? SubjectAuthority::HR_ELEVATED
+            $tier ?? SubjectAuthority::RECORD_OWNERS
         );
 
         if ($verdict === SubjectAuthority::OK) {

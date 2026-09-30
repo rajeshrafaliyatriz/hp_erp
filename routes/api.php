@@ -502,9 +502,9 @@ Route::get('/competency/command-center/filters', [CompetencyCommandCenterControl
 */
 Route::get('/competency/approvals', [CompetencyApprovalController::class, 'index']);
 Route::post('/competency/approvals', [CompetencyApprovalController::class, 'store']);
-Route::post('/competency/approvals/bulk-approve', [CompetencyApprovalController::class, 'bulkApprove'])->middleware('subject:hr_elevated');
+Route::post('/competency/approvals/bulk-approve', [CompetencyApprovalController::class, 'bulkApprove'])->middleware('subject:record_owners');
 Route::get('/competency/approvals/for/{type}/{id}', [CompetencyApprovalController::class, 'forSubject'])->whereNumber('id');
-Route::put('/competency/approvals/{id}', [CompetencyApprovalController::class, 'update'])->whereNumber('id')->middleware('subject:hr_elevated');
+Route::put('/competency/approvals/{id}', [CompetencyApprovalController::class, 'update'])->whereNumber('id')->middleware('subject:record_owners');
 
 Route::get('/competency/library/meta', [CompetencyLibraryController::class, 'meta']);
 Route::get('/competency/library/skill-taxonomy-tree', [CompetencyLibraryController::class, 'skillTaxonomyTree']);
@@ -585,7 +585,7 @@ Route::get('/competency/assessment-cycles/participant-ratings', [CompetencyAsses
 Route::get('/competency/assessment-cycles/calibration', [CompetencyAssessmentCycleController::class, 'calibration']);
 Route::get('/competency/assessment-cycles/approvals', [CompetencyAssessmentCycleController::class, 'approvals']);
 Route::get('/competency/assessment-cycles/closed', [CompetencyAssessmentCycleController::class, 'closed']);
-Route::put('/competency/assessment-cycles/assessments/{id}/review', [CompetencyAssessmentCycleController::class, 'reviewAssessment'])->whereNumber('id')->middleware('subject:hr_elevated');
+Route::put('/competency/assessment-cycles/assessments/{id}/review', [CompetencyAssessmentCycleController::class, 'reviewAssessment'])->whereNumber('id')->middleware('subject:record_owners');
 // "View Configuration" - declared BEFORE /{id} so the word is not read as an id.
 Route::get('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'configuration']);
 Route::put('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'saveConfiguration']);
@@ -732,8 +732,8 @@ Route::post('/competency/assessments', [CompetencyAssessmentController::class, '
 Route::delete('/competency/assessments/{id}', [CompetencyAssessmentController::class, 'destroy'])->whereNumber('id')->middleware('subject:people_managers');
 
 Route::get('/competency/certifications', [CompetencyCertificationController::class, 'index']);
-Route::post('/competency/certifications', [CompetencyCertificationController::class, 'store'])->middleware('subject:hr_elevated');
-Route::delete('/competency/certifications/{id}', [CompetencyCertificationController::class, 'destroy'])->whereNumber('id')->middleware('subject:hr_elevated');
+Route::post('/competency/certifications', [CompetencyCertificationController::class, 'store'])->middleware('subject:record_owners');
+Route::delete('/competency/certifications/{id}', [CompetencyCertificationController::class, 'destroy'])->whereNumber('id')->middleware('subject:record_owners');
 
 Route::get('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'index']);
 Route::post('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'store'])->middleware('subject:people_managers');
@@ -837,17 +837,17 @@ Route::post('/competency/mapping-reviews/bulk-approve', [CompetencyMappingReview
 Route::get('/competency/certifications/metrics', [CompetencyCertificationController::class, 'metrics']);
 Route::get('/competency/certifications/filters', [CompetencyCertificationController::class, 'filters']);
 Route::get('/competency/certifications/export', [CompetencyCertificationController::class, 'export']);
-Route::post('/competency/certifications/bulk', [CompetencyCertificationController::class, 'bulk'])->middleware('subject:hr_elevated');
+Route::post('/competency/certifications/bulk', [CompetencyCertificationController::class, 'bulk'])->middleware('subject:record_owners');
 
 Route::get('/competency/certifications/{id}', [CompetencyCertificationController::class, 'show'])->whereNumber('id');
-Route::put('/competency/certifications/{id}', [CompetencyCertificationController::class, 'update'])->whereNumber('id')->middleware('subject:hr_elevated');
-Route::post('/competency/certifications/{id}/notes', [CompetencyCertificationController::class, 'addNote'])->whereNumber('id')->middleware('subject:hr_elevated');
+Route::put('/competency/certifications/{id}', [CompetencyCertificationController::class, 'update'])->whereNumber('id')->middleware('subject:record_owners');
+Route::post('/competency/certifications/{id}/notes', [CompetencyCertificationController::class, 'addNote'])->whereNumber('id')->middleware('subject:record_owners');
 Route::get('/competency/certifications/{id}/compliance', [CompetencyCertificationController::class, 'compliance'])->whereNumber('id');
 Route::get('/competency/certifications/{id}/requirements', [CompetencyCertificationController::class, 'requirements'])->whereNumber('id');
 Route::get('/competency/certifications/{id}/history', [CompetencyCertificationController::class, 'history'])->whereNumber('id');
 Route::get('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'documents'])->whereNumber('id');
-Route::post('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'storeDocument'])->whereNumber('id')->middleware('subject:hr_elevated');
-Route::delete('/competency/certifications/{id}/documents/{documentId}', [CompetencyCertificationController::class, 'destroyDocument'])->whereNumber('id')->whereNumber('documentId')->middleware('subject:hr_elevated');
+Route::post('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'storeDocument'])->whereNumber('id')->middleware('subject:record_owners');
+Route::delete('/competency/certifications/{id}/documents/{documentId}', [CompetencyCertificationController::class, 'destroyDocument'])->whereNumber('id')->whereNumber('documentId')->middleware('subject:record_owners');
 
 // Certification requirements - the "which role must hold what" policy master.
 Route::get('/competency/certification-requirements', [CompetencyCertificationRequirementController::class, 'index']);
@@ -2150,7 +2150,7 @@ Route::middleware('subject:people_managers')->group(function () {
 // write anywhere in this tab. The read stays open and is scoped to the
 // caller in the controller.
 Route::get('/performance/appraisals', [PerformanceAppraisalController::class, 'index']);
-Route::middleware('subject:hr_elevated')->group(function () {
+Route::middleware('subject:record_owners')->group(function () {
     Route::post('/performance/appraisals/bulk', [PerformanceAppraisalController::class, 'bulk']);
     Route::post('/performance/appraisals', [PerformanceAppraisalController::class, 'store']);
     Route::put('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'update'])->whereNumber('id');
@@ -2166,7 +2166,7 @@ Route::middleware('subject:hr_elevated')->group(function () {
 // write anywhere in this tab. The read stays open and is scoped to the
 // caller in the controller.
 Route::get('/performance/compensation', [PerformanceCompensationController::class, 'index']);
-Route::middleware('subject:hr_elevated')->group(function () {
+Route::middleware('subject:record_owners')->group(function () {
     Route::post('/performance/compensation/bulk', [PerformanceCompensationController::class, 'bulk']);
     Route::post('/performance/compensation', [PerformanceCompensationController::class, 'store']);
     Route::put('/performance/compensation/{id}', [PerformanceCompensationController::class, 'update'])->whereNumber('id');
@@ -2182,7 +2182,7 @@ Route::middleware('subject:hr_elevated')->group(function () {
 // write anywhere in this tab. The read stays open and is scoped to the
 // caller in the controller.
 Route::get('/performance/bonus', [PerformanceBonusController::class, 'index']);
-Route::middleware('subject:hr_elevated')->group(function () {
+Route::middleware('subject:record_owners')->group(function () {
     Route::post('/performance/bonus/bulk', [PerformanceBonusController::class, 'bulk']);
     Route::post('/performance/bonus', [PerformanceBonusController::class, 'store']);
     Route::put('/performance/bonus/{id}', [PerformanceBonusController::class, 'update'])->whereNumber('id');
@@ -2197,10 +2197,16 @@ Route::middleware('subject:hr_elevated')->group(function () {
 // result immutable, so a tampered grid could be sealed. Bulk, irreversible and
 // ungated. A calibration meeting is HR-run end to end, including the grid read,
 // which shows every participant's rating side by side.
+// READS at the wider tier: a calibration grid is exactly what an auditor is
+// for. WRITES at the narrower one - overwriting a set of ratings and then
+// sealing them is HR's act, and S2 was that it was nobody's.
 Route::middleware('subject:hr_elevated')->group(function () {
     Route::get('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'index']);
-    Route::post('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'store']);
     Route::get('/performance/calibration-sessions/{id}/grid', [PerformanceCalibrationController::class, 'grid'])->whereNumber('id');
+});
+
+Route::middleware('subject:record_owners')->group(function () {
+    Route::post('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'store']);
     Route::put('/performance/calibration-sessions/{id}/calibrate', [PerformanceCalibrationController::class, 'calibrate'])->whereNumber('id');
     Route::post('/performance/calibration-sessions/{id}/lock', [PerformanceCalibrationController::class, 'lock'])->whereNumber('id');
     Route::put('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'update'])->whereNumber('id');
@@ -2446,7 +2452,7 @@ Route::prefix('mobility')->group(function () {
      * specifically not meant to have, and there is no caller column to narrow
      * by. So these are gated, not scoped.
      */
-    Route::middleware('subject:people_managers')->group(function () {
+    Route::middleware('subject:hr_elevated')->group(function () {
         Route::get('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'index']);
         Route::get('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'index']);
         Route::get('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'members'])->whereNumber('id');
@@ -2516,26 +2522,43 @@ Route::prefix('mobility')->group(function () {
  * route, so no employee surface depends on these.
  */
 Route::prefix('offboarding')->middleware('subject:hr_elevated')->group(function () {
+    /*
+     * READS at the wider tier so an auditor and an executive can see exit
+     * records without being able to touch one. An auditor who cannot read
+     * is not an auditor; the Onboarding precedent used profile:admin,hr and
+     * would have excluded them from both.
+     */
     Route::get('/overview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'overview']);
     Route::get('/filters', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'filters']);
     Route::get('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'index']);
-    Route::post('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'store']);
     Route::get('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'show'])->whereNumber('id');
-    Route::put('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'update'])->whereNumber('id');
-    Route::post('/cases/{id}/status', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateStatus'])->whereNumber('id');
-    // ROUND 4. The internal sign-off talent.offboarding.clearance declares,
-    // for closing a case a platform chain has gated. Only does anything when
-    // a real approval step is open for this case.
-    Route::post('/cases/{id}/closure-decision', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'decideClearance'])->whereNumber('id');
-    Route::post('/cases/{id}/clearance', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateClearance'])->whereNumber('id');
-    Route::post('/cases/{id}/documents', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateDocuments'])->whereNumber('id');
-    // The real file. The screen's upload dialog had no file input at all, so a
-    // document reached 'Submitted' on a typed string - see uploadDocument().
-    Route::post('/cases/{id}/documents/{docId}/upload', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'uploadDocument'])
-        ->whereNumber('id')->where('docId', '[A-Za-z0-9_-]{1,40}');
-    Route::post('/cases/{id}/comments', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'addComment'])->whereNumber('id');
-    Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
-    Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');
+
+    /*
+     * WRITES at the narrower tier. Opening an involuntary-exit case, writing
+     * somebody's exit interview, attaching a document to their exit file or
+     * deleting a live case are HR's acts - not a read-only oversight role's.
+     *
+     * offboardingSubject() uses RECORD_OWNERS too, so the gate and the guard
+     * agree: a guard narrower than its gate 403s the people the gate let in.
+     */
+    Route::middleware('subject:record_owners')->group(function () {
+        Route::post('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'store']);
+        Route::put('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'update'])->whereNumber('id');
+        Route::post('/cases/{id}/status', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateStatus'])->whereNumber('id');
+        // ROUND 4. The internal sign-off talent.offboarding.clearance declares,
+        // for closing a case a platform chain has gated. Only does anything when
+        // a real approval step is open for this case.
+        Route::post('/cases/{id}/closure-decision', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'decideClearance'])->whereNumber('id');
+        Route::post('/cases/{id}/clearance', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateClearance'])->whereNumber('id');
+        Route::post('/cases/{id}/documents', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateDocuments'])->whereNumber('id');
+        // The real file. The screen's upload dialog had no file input at all, so a
+        // document reached 'Submitted' on a typed string - see uploadDocument().
+        Route::post('/cases/{id}/documents/{docId}/upload', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'uploadDocument'])
+            ->whereNumber('id')->where('docId', '[A-Za-z0-9_-]{1,40}');
+        Route::post('/cases/{id}/comments', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'addComment'])->whereNumber('id');
+        Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
+        Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');
+    });
 });
 
 

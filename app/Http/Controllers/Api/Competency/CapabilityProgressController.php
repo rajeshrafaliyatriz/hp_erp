@@ -198,7 +198,7 @@ class CapabilityProgressController extends Controller
          * was reaching for, so the divergence closes by naming it rather than
          * by picking one of the two behaviours.
          */
-        if (!SubjectAuthority::userSatisfies((int) $context['user_id'], SubjectAuthority::PEOPLE_MANAGERS)) {
+        if (!SubjectAuthority::userSatisfies((int) $context['user_id'], SubjectAuthority::HR_ELEVATED)) {
             return response()->json([
                 'status' => 0,
                 'message' => "Your profile is not permitted to view other people's development records.",

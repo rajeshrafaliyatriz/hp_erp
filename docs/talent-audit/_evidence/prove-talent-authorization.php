@@ -335,6 +335,146 @@ try {
         echo "  skipped: need a course and a foreign-tenant user\n";
     }
 
+    echo PHP_EOL . '── The manager tier, tenant-wide (the product decision) ──' . PHP_EOL;
+
+    /*
+     * Tenant 6 HAS a reporting_manager profile and NO user holding it, so this
+     * decision shipped untested. The transaction is rolled back, so a temporary
+     * user is the honest way to exercise it rather than asserting from the
+     * tier's membership.
+     */
+    $borrow = DB::table('tbluser')->where('sub_institute_id', TENANT)->first();
+
+    $makeUserWithRole = function (string $roleKey) use ($borrow) {
+        $profileId = DB::table('tbluserprofilemaster')
+            ->where('sub_institute_id', TENANT)->where('role_key', $roleKey)
+            ->whereNull('deleted_at')->value('id');
+
+        if (!$profileId) {
+            return null;
+        }
+
+        // Cloned from a real row so every NOT NULL column is satisfied without
+        // this script needing to know the schema.
+        $row = (array) $borrow;
+        unset($row['id']);
+        $row['user_profile_id'] = $profileId;
+        $row['first_name'] = MARKER;
+        $row['last_name'] = strtoupper($roleKey);
+        $row['email'] = 'proof-' . $roleKey . '@example.invalid';
+        $row['user_name'] = 'proof-' . $roleKey;
+
+        return (int) DB::table('tbluser')->insertGetId($row);
+    };
+
+    foreach (['reporting_manager', 'department_head'] as $roleKey) {
+        $uid = $makeUserWithRole($roleKey);
+
+        if (!$uid) {
+            printf("  skipped: tenant %d has no %s profile
+", TENANT, $roleKey);
+            continue;
+        }
+
+        $tok = $token($uid);
+
+        // A review they have no row-level relationship to at all.
+        $arbitrary = $review($colleague);
+
+        [$st] = $call('PUT', "/performance/reviews/$arbitrary", $tok, ['manager_rating' => 4]);
+        check($roleKey . ' writes manager_rating on an unrelated review', 200, $st, '(tenant-wide, by decision)');
+        check('  ... and it persisted', 4.0,
+            (float) DB::table('s_performance_reviews')->where('id', $arbitrary)->value('manager_rating'));
+
+        [$st] = $call('PUT', "/performance/reviews/$arbitrary", $tok, ['due_date' => '2027-03-01']);
+        check($roleKey . ' sets due_date', 403, $st, '(HR-only field, tier is narrower)');
+
+        /*
+         * 403, deliberately. Succession slates are HR planning: the original
+         * rationale for gating them was that being on a slate is information
+         * about you that you are not meant to have, and a manager reading who
+         * is slated to replace their peers is the same category. Reads are
+         * wider than writes, but not unbounded - HR_ELEVATED is the read tier
+         * here, and it stops at the oversight roles.
+         */
+        [$st] = $call('GET', '/mobility/successions', $tok);
+        check($roleKey . ' reads succession slates', 403, $st, '(HR planning, not line management)');
+
+        [$st] = $call('POST', '/competency/development-plans', $tok, ['title' => MARKER, 'user_id_target' => $colleague]);
+        check($roleKey . ' creates a development plan', 201, $st);
+
+        // Writes that are HR's alone.
+        [$st] = $call('PUT', '/performance/compensation/1/decision', $tok, ['action' => 'approve']);
+        check($roleKey . ' decides a salary revision', 403, $st, '(hr_elevated only)');
+    }
+
+    echo PHP_EOL . '── Cross-tenant ids are NOT FOUND, never FORBIDDEN ──' . PHP_EOL;
+
+    if ($foreign) {
+        // A review belonging to another organisation entirely.
+        $foreignCycle = DB::table('s_performance_cycles')->insertGetId([
+            'sub_institute_id' => 99999, 'name' => MARKER . ' foreign', 'status' => 'active',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $foreignReview = DB::table('s_performance_reviews')->insertGetId([
+            'sub_institute_id' => 99999, 'cycle_id' => $foreignCycle, 'user_id' => $foreign,
+            'stage' => 'self_review', 'status' => 'pending',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        foreach ([['GET', 'reads'], ['PUT', 'writes']] as [$method, $verb]) {
+            [$st] = $call($method, "/performance/reviews/$foreignReview", $hrToken, ['self_rating' => 1]);
+            check("HR $verb another organisation's review", 404, $st, '(not 403 - no existence probing)');
+        }
+    }
+
+    echo PHP_EOL . '── An auditor READS everything and WRITES nothing ──' . PHP_EOL;
+
+    /*
+     * This section exists because the first version of the tiers got it wrong.
+     * HR_ELEVATED was used for reads AND writes, so an auditor set a colleague's
+     * manager_rating and got 200 - contradicting the tier's own stated reason
+     * for including them. Reads are now deliberately wider than writes.
+     */
+    $auditor = userWithRole('auditor');
+
+    if ($auditor) {
+        $aTok = $token($auditor);
+        $auditTarget = $review($colleague);
+
+        [$st] = $call('GET', "/performance/reviews/$auditTarget", $aTok);
+        check("auditor reads a colleague's review", 200, $st, '(that is the job)');
+
+        [$st, $ab] = $call('GET', '/performance/reviews', $aTok);
+        check('auditor lists reviews', 200, $st);
+        check('  ... and is NOT scoped to themselves', true, count($ab['data'] ?? []) > 1);
+
+        [$st] = $call('GET', '/offboarding/cases', $aTok);
+        check('auditor reads exit cases', 200, $st);
+
+        [$st] = $call('GET', '/mobility/successions', $aTok);
+        check('auditor reads succession slates', 200, $st);
+
+        [$st] = $call('GET', '/performance/calibration-sessions', $aTok);
+        check('auditor reads the calibration list', 200, $st);
+
+        [$st] = $call('PUT', "/performance/reviews/$auditTarget", $aTok, ['manager_rating' => 2]);
+        check('auditor WRITES manager_rating', 403, $st, '(reads wider than writes)');
+        check('  ... and nothing was written', null,
+            DB::table('s_performance_reviews')->where('id', $auditTarget)->value('manager_rating'));
+
+        [$st] = $call('PUT', '/performance/compensation/1/decision', $aTok, ['action' => 'approve']);
+        check('auditor decides a salary revision', 403, $st);
+
+        [$st] = $call('POST', '/competency/certifications', $aTok, ['name' => MARKER, 'user_id_target' => $colleague]);
+        check('auditor issues a credential', 403, $st);
+
+        [$st] = $call('POST', '/offboarding/cases', $aTok, ['employee_id' => $colleague, 'exit_type' => 'voluntary']);
+        check('auditor opens an exit case', 403, $st);
+    } else {
+        echo '  skipped: no auditor user on tenant ' . TENANT . PHP_EOL;
+    }
+
     echo PHP_EOL . '── Notes and attachments: author-or-elevated ──' . PHP_EOL;
 
     // An employee commenting on their OWN review is legitimate.
@@ -419,8 +559,21 @@ try {
     check('HR satisfies both tiers', true,
         SubjectAuthority::userSatisfies($hr, SubjectAuthority::HR_ELEVATED)
         && SubjectAuthority::userSatisfies($hr, SubjectAuthority::PEOPLE_MANAGERS));
-    check('PEOPLE_MANAGERS is a superset of HR_ELEVATED', [],
-        array_values(array_diff(SubjectAuthority::HR_ELEVATED, SubjectAuthority::PEOPLE_MANAGERS)));
+    /*
+     * The invariant moved when reads were separated from writes.
+     *
+     * It used to be "PEOPLE_MANAGERS contains HR_ELEVATED", which is what let
+     * an auditor write a rating. The invariant now is that every WRITE tier
+     * contains RECORD_OWNERS, and that neither write tier contains a read-only
+     * oversight role.
+     */
+    check('PEOPLE_MANAGERS contains RECORD_OWNERS', [],
+        array_values(array_diff(SubjectAuthority::RECORD_OWNERS, SubjectAuthority::PEOPLE_MANAGERS)));
+    check('no read-only role can write', [],
+        array_values(array_intersect(['executive', 'auditor'],
+            array_merge(SubjectAuthority::RECORD_OWNERS, SubjectAuthority::PEOPLE_MANAGERS))));
+    check('both read-only roles CAN read', [],
+        array_values(array_diff(['executive', 'auditor'], SubjectAuthority::HR_ELEVATED)));
     check('unknown tier name resolves to null', true, SubjectAuthority::tier('nonsense') === null);
 
     if ($foreign) {

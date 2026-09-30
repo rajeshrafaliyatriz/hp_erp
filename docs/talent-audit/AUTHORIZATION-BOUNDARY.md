@@ -59,7 +59,38 @@ Route gates alone did **not** finish items 10-12. Three gaps survived the first 
 The lesson is the one this engagement keeps relearning: *a gate answers who may reach the
 endpoint, never what they may do once there.*
 
-Proven by `_evidence/prove-talent-authorization.php` — **77 assertions, 0 failures**, run
+### And a fifth, found by testing the tier instead of reading it
+
+Two defects survived into the first commits, both caught only by minting a token for a role
+rather than reasoning from a list's membership:
+
+- **A manager passed the route gate and was refused by the controller.** Development plans and
+  assessments are gated `subject:people_managers`, and I guarded them with
+  `competencySubject()`, which is `HR_ELEVATED` and excludes `reporting_manager` and
+  `department_head` by name. So a manager got a clean 403 on a screen they own. The plan for
+  this work had written the rule down verbatim - *"a gate of admin,hr,people_manager over a
+  guard of COMPETENCY is a lie"* - and I built it anyway. `competencyPeopleSubject()` is the
+  matching-tier guard. **The rule: a controller guard's tier must be at least as wide as its
+  route gate's.**
+- **An auditor could write.** `HR_ELEVATED` was used for reads *and* writes, and
+  `PEOPLE_MANAGERS` was built on it, so an `auditor` token set a colleague's `manager_rating`
+  and got **200** - while this file's own justification for including auditors says they
+  *"exist to read the organisation and change nothing."* A tier whose rationale argues against
+  its own membership will be used wrongly.
+
+**Reads are now deliberately wider than writes:**
+
+| Tier | Members | For |
+|---|---|---|
+| `HR_ELEVATED` | administrator, hr_manager, hr_executive, **executive, auditor** | READ another person's record |
+| `RECORD_OWNERS` | administrator, hr_manager, hr_executive | WRITE another person's HR record |
+| `PEOPLE_MANAGERS` | RECORD_OWNERS + **reporting_manager, department_head** | WRITE performance and development |
+
+The offboarding and calibration route groups are split accordingly - reads at `hr_elevated`,
+writes at `record_owners` - so an auditor reads an exit case and a calibration grid and can
+change neither.
+
+Proven by `_evidence/prove-talent-authorization.php` — **108 assertions, 0 failures**, run
 against tenant 6 inside a rolled-back transaction. Half of those assertions are the
 regression half: **every refused call repeated as HR, expecting 200.** A guard that refuses
 everybody looks exactly like a guard that works.

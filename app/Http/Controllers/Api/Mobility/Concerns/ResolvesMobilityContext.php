@@ -34,7 +34,9 @@ trait ResolvesMobilityContext
      */
     protected function scopeMobilityToSelf($query, array $context, string $column = 'user_id'): bool
     {
-        if (SubjectAuthority::userSatisfies((int) ($context['user_id'] ?? 0), SubjectAuthority::PEOPLE_MANAGERS)) {
+        // HR_ELEVATED: narrowing a list is a READ decision, and an auditor
+        // reads the whole organisation. See SubjectAuthority's tier docblocks.
+        if (SubjectAuthority::userSatisfies((int) ($context['user_id'] ?? 0), SubjectAuthority::HR_ELEVATED)) {
             return false;
         }
 

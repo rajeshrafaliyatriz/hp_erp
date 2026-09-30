@@ -430,7 +430,7 @@ class DevelopmentPlanController extends Controller
         $subjectId = (int) ($request->input('user_id_target') ?: $request->input('user_id'));
 
         if ($subjectId > 0) {
-            $subject = $this->competencySubject($context, $subjectId);
+            $subject = $this->competencyPeopleSubject($context, $subjectId);
 
             if (!is_int($subject)) {
                 return $subject;
@@ -523,7 +523,7 @@ class DevelopmentPlanController extends Controller
             $newOwner = (int) $request->input('user_id_target');
 
             if ($newOwner > 0) {
-                $subject = $this->competencySubject($context, $newOwner);
+                $subject = $this->competencyPeopleSubject($context, $newOwner);
 
                 if (!is_int($subject)) {
                     return $subject;

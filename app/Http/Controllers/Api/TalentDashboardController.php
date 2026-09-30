@@ -735,7 +735,8 @@ class TalentDashboardController extends Controller
                 'activity'            => $this->activity(
                     $sid,
                     10,
-                    SubjectAuthority::userSatisfies((int) ($context['user_id'] ?? 0), SubjectAuthority::PEOPLE_MANAGERS)
+                    // A read: an auditor and an executive see who a row is about.
+                    SubjectAuthority::userSatisfies((int) ($context['user_id'] ?? 0), SubjectAuthority::HR_ELEVATED)
                 ),
             ], 'Success', 200, [
                 'meta' => ['from' => $from, 'to' => $to],
