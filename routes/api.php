@@ -1451,6 +1451,25 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
          * one rule.
          */
         Route::get('/{id}/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'forEmployee'])->whereNumber('id');
+
+        /*
+         * HR files and removes an employee's document.
+         *
+         * These replace the legacy `POST /user/user_document/{id}`
+         * (tbluserController::addUserDocument), which wrote the object PUBLIC
+         * into the same folder this controller writes PRIVATE, recorded no
+         * file_path, and trusted sub_institute_id from the request body. Two
+         * writers with opposite visibility is why a download worked or failed
+         * depending on which screen had filed the document.
+         *
+         * The delete is separate from /account/documents/{id} on purpose: that
+         * one is owner-only by design, and widening it would have let any
+         * employee delete by guessing an id. This one is gated by role AND by
+         * the employee-in-my-tenant check inside the controller.
+         */
+        Route::post('/{id}/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'storeForEmployee'])->whereNumber('id');
+        Route::delete('/{employee}/documents/{document}', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'destroyForEmployee'])
+            ->whereNumber('employee')->whereNumber('document');
         Route::post('/', [EmployeeDirectoryController::class, 'store']);
         Route::put('/{id}', [EmployeeDirectoryController::class, 'update'])->whereNumber('id');
         Route::patch('/{id}/status', [EmployeeDirectoryController::class, 'setStatus'])->whereNumber('id');
