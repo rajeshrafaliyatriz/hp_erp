@@ -263,6 +263,33 @@ try {
     check('HR sees the name', true,
         $colleagueName === '' || str_contains($hrFeed, $colleagueName));
 
+    // The activity feed embeds names in stored free text. Redaction has to
+    // survive that, not skip it.
+    DB::table('s_performance_activity_log')->insert([
+        'sub_institute_id' => TENANT,
+        'user_id'          => $hr,
+        'action'           => 'updated_review',
+        'description'      => 'updated the review for ' . $colleagueName,
+        'subject_type'     => 'review',
+        'subject_id'       => $colleagueReview,
+        'subject_name'     => $colleagueName,
+        'created_at'       => now(),
+        'updated_at'       => now(),
+    ]);
+
+    [$s, $b] = $call('GET', '/talent/dashboard', $meToken);
+    $feed = json_encode($b['data']['activity'] ?? []);
+    check('activity feed reaches the employee at all', true,
+        str_contains($feed, 'updated the review'), '(redacted, not dropped)');
+    check('  ... with the name removed from the stored text', false,
+        $colleagueName !== '' && str_contains($feed, $colleagueName));
+    check('  ... replaced by a role-neutral phrase', true,
+        str_contains($feed, 'an employee'));
+
+    [$s, $b] = $call('GET', '/talent/dashboard', $hrToken);
+    check('HR still sees the name in the same row', true,
+        $colleagueName === '' || str_contains(json_encode($b['data']['activity'] ?? []), $colleagueName));
+
     echo "\n── The half that matters as much: HR STILL WORKS ──\n";
 
     [$s] = $call('GET', "/performance/reviews/$colleagueReview", $hrToken);

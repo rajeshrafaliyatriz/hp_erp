@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Closure;
+use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -54,14 +55,11 @@ class TaskPermissionMiddleware
      * `employee`, `auditor` and `recruiter` are absent - an auditor reads, and
      * a recruiter has no business in another team's task queue.
      */
-    private const ELEVATED = [
-        'administrator',
-        'hr_manager',
-        'hr_executive',
-        'executive',
-        'reporting_manager',
-        'department_head',
-    ];
+    // One entry in App\Support\SubjectAuthority now. Membership unchanged -
+    // including the deliberate absence of `auditor`, which is the only thing
+    // separating this tier from PEOPLE_MANAGERS and is why it stays its own
+    // tier rather than being folded in.
+    private const ELEVATED = SubjectAuthority::TASK_PRIVILEGED;
 
     /** Profiles that predate role_key, resolved by EXACT name. */
     private const LEGACY_NAMES = [

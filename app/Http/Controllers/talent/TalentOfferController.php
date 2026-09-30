@@ -761,11 +761,13 @@ class TalentOfferController extends Controller
          * whole message pointless - and reporting "emailed to the candidate"
          * would be false. The link is still minted and returned for HR to copy.
          */
-        if (CandidateLink::pointsAtApi()) {
+        if ($linkProblem = CandidateLink::unreachableForCandidates()) {
             $mail = [
                 'sent' => false,
-                'error' => 'FRONTEND_URL is not set, so the link would point at the API and not '
-                    . 'open. Set it, or copy the link to the candidate yourself.',
+                // The specific reason. FRONTEND_URL being unset is only one
+                // spelling of this fault, and not the one in force today.
+                'error' => $linkProblem . ' The offer link would not open, so the email is held '
+                    . 'back. Fix the setting, or copy the link to the candidate yourself.',
             ];
         } elseif (\App\Support\MailGate::allowedForTenant($tenantId)) {
             try {

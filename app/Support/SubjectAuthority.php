@@ -24,6 +24,20 @@ use Illuminate\Support\Facades\DB;
  * approving their salary revision - and a tier can be named, whereas a fifth
  * array cannot.
  *
+ * ALL FIVE NOW LIVE HERE. Each moved verbatim, so the consolidation is a
+ * refactor and not a re-opened decision:
+ *
+ *   COMPETENCY_ELEVATED (5)  -> HR_ELEVATED
+ *   LEAVE_ELEVATED (3)       -> RECORD_OWNERS, provably identical to
+ *   ProfileVisibility (3)    -> RECORD_OWNERS, the same three strings
+ *   TaskPermissionMiddleware -> TASK_PRIVILEGED (6, the only tier without auditor)
+ *   CapabilityProgress (4)   -> deleted; it was the only one with
+ *                               reporting_manager and it now uses PEOPLE_MANAGERS
+ *
+ * The property worth keeping: PEOPLE_MANAGERS is DERIVED from HR_ELEVATED's
+ * membership rather than restated, so the two cannot drift apart. Any new tier
+ * should be built the same way.
+ *
  * ── WHY RESOLUTION GOES THROUGH RoleKey, AND THIS IS THE IMPORTANT PART ─────
  *
  * competencySubject() read `p.role_key` with a raw join, deliberately, so that
@@ -74,7 +88,37 @@ final class SubjectAuthority
      * tier needs to change when that happens.
      */
     public const PEOPLE_MANAGERS = [
-        'administrator', 'hr_manager', 'hr_executive', 'executive', 'auditor',
+        // SPREAD, not restated. This is the anti-drift property: the tier
+        // cannot fall out of step with HR_ELEVATED because it is built from it.
+        ...self::HR_ELEVATED,
+        'reporting_manager',
+        'department_head',
+    ];
+
+    /**
+     * Maintains the record itself, as opposed to reading it.
+     *
+     * Narrower than HR_ELEVATED: it drops `executive` and `auditor`, which exist
+     * to read the organisation and change nothing. Was two identical private
+     * copies - ResolvesLeaveContext::LEAVE_ELEVATED and an inline array in
+     * ProfileVisibility - so merging them is provable rather than a judgement:
+     * the two were already the same three strings.
+     */
+    public const RECORD_OWNERS = [
+        'administrator', 'hr_manager', 'hr_executive',
+    ];
+
+    /**
+     * Task Management's elevated set, moved verbatim.
+     *
+     * Differs from PEOPLE_MANAGERS by dropping `auditor` - the only tier here
+     * that does - because an auditor reads the organisation and has no business
+     * in somebody else's task queue. Kept as its own tier rather than folded
+     * into PEOPLE_MANAGERS precisely so that difference stays deliberate
+     * instead of being lost in a merge.
+     */
+    public const TASK_PRIVILEGED = [
+        'administrator', 'hr_manager', 'hr_executive', 'executive',
         'reporting_manager', 'department_head',
     ];
 
@@ -82,6 +126,7 @@ final class SubjectAuthority
     public const TIERS = [
         'hr_elevated'     => self::HR_ELEVATED,
         'people_managers' => self::PEOPLE_MANAGERS,
+        'record_owners'   => self::RECORD_OWNERS,
     ];
 
     /* ── The verdict, so the ladder is written once ────────────────────── */

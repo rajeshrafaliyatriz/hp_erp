@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Leave\Concerns;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\SubjectAuthority;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 
 /**
@@ -38,9 +39,10 @@ trait ResolvesLeaveContext
      * neither is evaluable while tbluser.reporting_manager_id is NULL for every
      * user (G-ORG-02). They return with reporting-line coverage.
      */
-    private const LEAVE_ELEVATED = [
-        'administrator', 'hr_manager', 'hr_executive',
-    ];
+    // One entry in App\Support\SubjectAuthority now, not a private copy. It was
+    // byte-identical to the inline array in ProfileVisibility, so merging the
+    // two is provable rather than a judgement. Membership unchanged.
+    private const LEAVE_ELEVATED = SubjectAuthority::RECORD_OWNERS;
 
     /**
      * The employee a leave request or balance is FOR.

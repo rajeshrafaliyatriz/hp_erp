@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Support\SubjectAuthority;
 
 /**
  * PERSONNEL DOCUMENTS — yours, and (for HR) everybody's.
@@ -351,7 +352,7 @@ class EmployeeDocumentController extends Controller
 
         $role = RoleKey::forUserId((int) $identity['user_id']);
 
-        return in_array($role, ['administrator', 'hr_manager', 'hr_executive'], true) ? $row : null;
+        return in_array($role, SubjectAuthority::RECORD_OWNERS, true) ? $row : null;
     }
 
     /** Is this employee one of ours? */

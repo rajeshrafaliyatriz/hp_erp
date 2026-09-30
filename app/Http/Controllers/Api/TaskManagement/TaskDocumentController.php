@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use App\Support\SubjectAuthority;
 
 /**
  * Reference documents on a task — what an employee needs to actually do it.
@@ -290,7 +291,7 @@ class TaskDocumentController extends Controller
             ->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
             ->where('u.id', $userId)->value('p.role_key');
 
-        return in_array((string) $roleKey, ['administrator', 'hr_manager', 'hr_executive'], true);
+        return in_array((string) $roleKey, SubjectAuthority::RECORD_OWNERS, true);
     }
 
     /** Denormalised at upload time, because a document outlives an account. */

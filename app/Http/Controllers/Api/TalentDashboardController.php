@@ -552,27 +552,44 @@ class TalentDashboardController extends Controller
         }
 
         /*
-         * OMITTED ENTIRELY FOR A NON-ELEVATED CALLER, NOT REDACTED.
+         * REDACTED PRECISELY, NOT OMITTED.
          *
-         * Every other source here can be redacted at read time because the name
-         * is a joined column. This one cannot: logPerformanceActivity() bakes
-         * the employee's name INTO the stored `description`
-         * ("updated the review for <name>"), so the name is persisted free text
-         * and no read-time flag can take it out again. Blanking `actor_name`
-         * while replaying that description would look redacted and not be.
+         * The first fix dropped this whole source for a non-elevated caller,
+         * because logPerformanceActivity bakes the employee's name into the
+         * stored `description` ("updated the review for <name>") and a
+         * read-time flag cannot take it out of free text.
          *
-         * These are HR's audit-trail entries rather than employee-facing news,
-         * so dropping them is also the right product answer. Fixing the storage
-         * shape - logging an id and resolving the name per reader - is the
-         * durable fix and a larger change than this pass.
+         * That was true but lazy. `subject_name` is a SEPARATE STRUCTURED
+         * COLUMN holding exactly the name the description duplicates - so the
+         * name can be removed from the text by substituting the value the row
+         * already carries. No regex over names, no guessing, and it works on
+         * all 161 existing rows and every future one without editing any of
+         * the dozen writers.
+         *
+         * A row whose subject_name is null cannot be redacted this way, so it
+         * is DROPPED rather than shown: redact what can be proven, discard what
+         * cannot. Five of 161 rows are in that state.
          */
-        $logs = $namesVisible
-            ? DB::table('s_performance_activity_log')
-                ->where('sub_institute_id', $sid)
-                ->orderByDesc('created_at')
-                ->limit($limit)
-                ->get(['id', 'description', 'action', 'actor_name', 'created_at'])
-            : collect();
+        $logs = DB::table('s_performance_activity_log')
+            ->where('sub_institute_id', $sid)
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get(['id', 'description', 'action', 'actor_name', 'subject_name', 'created_at']);
+
+        if (!$namesVisible) {
+            $logs = $logs
+                ->filter(static fn ($row) => trim((string) $row->subject_name) !== '')
+                ->map(static function ($row) {
+                    $row->description = str_ireplace(
+                        trim((string) $row->subject_name),
+                        'an employee',
+                        (string) $row->description
+                    );
+
+                    return $row;
+                })
+                ->values();
+        }
 
         foreach ($logs as $row) {
             $feed[] = [
