@@ -31,6 +31,7 @@ return [
         'https://g2g.scholarclone.com',
         'https://g2gv0.vercel.app',
         'http://localhost:3000',
+        'https://app.gapstogrowth.com',
     ],
 
     'allowed_origins_patterns' => [],
