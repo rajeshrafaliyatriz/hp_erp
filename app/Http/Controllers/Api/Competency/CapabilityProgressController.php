@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Http\Controllers\Controller;
 use App\Services\Competency\ProficiencyService;
 use App\Services\Competency\RatingWriter;
+use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -182,17 +183,25 @@ class CapabilityProgressController extends Controller
 
         $tenant = (int) $context['sub_institute_id'];
 
-        // Naming other people is an elevated act. The same alias vocabulary the
-        // rest of the module uses.
-        $roleKey = DB::table('tbluser as u')
-            ->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
-            ->where('u.id', $context['user_id'])
-            ->value('p.role_key');
-
-        if (!in_array((string) $roleKey, ['administrator', 'hr_manager', 'hr_executive', 'reporting_manager'], true)) {
+        /*
+         * Naming other people is an elevated act.
+         *
+         * This was an inline list - ['administrator','hr_manager','hr_executive',
+         * 'reporting_manager'] - and it was the FOURTH copy of an authorization
+         * table in this codebase, differing from all three others: the only one
+         * that included reporting_manager, and the only one that dropped
+         * executive and auditor. Two read-only oversight roles could not open a
+         * development roster, and a reporting manager could, on a module whose
+         * own guard excludes them by name and with a stated reason.
+         *
+         * PEOPLE_MANAGERS is the tier that actually means what the inline list
+         * was reaching for, so the divergence closes by naming it rather than
+         * by picking one of the two behaviours.
+         */
+        if (!SubjectAuthority::userSatisfies((int) $context['user_id'], SubjectAuthority::HR_ELEVATED)) {
             return response()->json([
                 'status' => 0,
-                "message" => "Your profile is not permitted to view other people's development records.",
+                'message' => "Your profile is not permitted to view other people's development records.",
             ], 403);
         }
 

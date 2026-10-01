@@ -289,9 +289,14 @@ class OrganizationSettingsController extends Controller
      *
      * ── AN AUDITOR MAY READ THIS AND MAY NOT TOUCH THE SETTINGS ─────────────
      *
-     * Which is why this method carries its own role check rather than sharing
-     * the route group above. `RoleKey::forUserId` is the same resolution every
-     * other guard uses, so the vocabulary cannot drift.
+     * Used to carry its own inline role check here, hardcoded to
+     * `['administrator', 'auditor']` — replaced by the route's own
+     * `platformright:/settings?s=audit,view` middleware (`routes/api.php`),
+     * which checks the same two roles via a real, admin-editable
+     * `tblmenumaster_g2g` row instead
+     * (`2026_09_30_110000_create_event_bus_and_audit_menu_rights.php`). Not
+     * shared with the `/api/platform` group above regardless — this route
+     * lives outside it in `routes/api.php` and always has.
      */
     public function audit(Request $request)
     {
@@ -299,15 +304,6 @@ class OrganizationSettingsController extends Controller
 
         if (!is_array($identity)) {
             return $identity;
-        }
-
-        $role = RoleKey::forUserId((int) $identity['user_id']);
-
-        if (!in_array($role, ['administrator', 'auditor'], true)) {
-            return response()->json([
-                'status' => 0,
-                'message' => 'The audit trail is available to administrators and auditors.',
-            ], 403);
         }
 
         $tenantId = (int) $identity['sub_institute_id'];

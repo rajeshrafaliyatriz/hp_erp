@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\File;
 use App\Models\auth\tbluserModel;
 use App\Models\school_setupModel;
+use App\Support\SubjectAuthority;
 
 if (!function_exists('is_mobile')) {
 
@@ -786,7 +787,7 @@ if (!function_exists('SearchChainSubject')) {
                 : null;
 
             $seesWholeInstitute = in_array($userProfileName, $profileArr, true)
-                || in_array($callerRoleKey, ['administrator', 'hr_manager', 'hr_executive'], true);
+                || in_array($callerRoleKey, SubjectAuthority::RECORD_OWNERS, true);
 
             $SubCordinates = [];
             if($userProfileName!='' && !$seesWholeInstitute && $profileUserId!=''){

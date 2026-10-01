@@ -156,7 +156,12 @@ class feedbackController extends Controller
             'areas_of_concern'            => 'nullable|string',
             'additional_comments'         => 'nullable|string',
             'notes'                       => 'nullable|string',
-            'status'                      => 'nullable|in:draft,submitted,approved,rejected',
+            // 'Hired' is the fifth member of the column's enum and holds the
+            // MAJORITY of rows - 69 of 124 on the app database, 70 of 124 on
+            // live. Validating without it meant the most common stored value
+            // could not be sent back, so any edit of a Hired row had to either
+            // omit status or be rejected.
+            'status'                      => 'nullable|in:draft,submitted,approved,rejected,Hired',
         ]);
         // No conversion needed, store as array (will be JSON in DB due to cast)
 
@@ -233,7 +238,12 @@ class feedbackController extends Controller
             'areas_of_concern'            => 'nullable|string',
             'additional_comments'         => 'nullable|string',
             'notes'                       => 'nullable|string',
-            'status'                      => 'nullable|in:draft,submitted,approved,rejected',
+            // 'Hired' is the fifth member of the column's enum and holds the
+            // MAJORITY of rows - 69 of 124 on the app database, 70 of 124 on
+            // live. Validating without it meant the most common stored value
+            // could not be sent back, so any edit of a Hired row had to either
+            // omit status or be rejected.
+            'status'                      => 'nullable|in:draft,submitted,approved,rejected,Hired',
         ]);
 
         // Find the feedback record
@@ -261,7 +271,20 @@ class feedbackController extends Controller
             'additional_comments'  => $request->additional_comments,
             'sub_institute_id'     => $subInstituteId,
             'notes'                => $request->notes,
-            'status'               => $request->status,
+            /*
+             * KEEP THE STORED VALUE when the request omits status.
+             *
+             * This was `$request->status` with no fallback, so any edit that
+             * did not resend status wrote NULL - and that is the actual
+             * producer of the null-status rows the list filter could never
+             * match. `config/database.php` has `'strict' => false`, so the
+             * write succeeded silently instead of erroring on the enum.
+             *
+             * The create path two hundred lines up already defaults to 'draft';
+             * an update has something better to fall back to, which is what is
+             * already there.
+             */
+            'status'               => $request->status ?? $evaluation->status ?? 'draft',
         ]);
 
         // 📤 Response

@@ -2,9 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\MenuRight;
 use Closure;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -84,43 +84,10 @@ class RequireMenuRight
             return $this->deny($request, 'Unable to resolve profile or organization', 403);
         }
 
-        /*
-         * ── F-152. WHY THE TENANT CLAUSE IS A PREFERENCE, NOT A FILTER ────
-         *
-         * This was `->where('sub_institute_id', $tenant)`, and that single
-         * line is why this middleware could never be switched on.
-         *
-         * Measured on live before changing it: of twelve organisations, SEVEN
-         * hold just 4 tenant-stamped rows against ~149 menus (445 rows each,
-         * the rest NULL-stamped by the old tenant-blind seeding command). With
-         * a strict filter those tenants match no row on almost every screen,
-         * permits(null) returns false, and every one of their users is refused
-         * everywhere. That is what made menu 225 have to be rolled back: the
-         * moment a menu row existed, its endpoint returned 403 to everybody
-         * including the administrator.
-         *
-         * The clause is not protecting anything either. $profileId comes from
-         * the CALLER'S OWN tbluser row, and tbluserprofilemaster.id is a global
-         * auto-increment primary key, so a row naming that profile belongs to
-         * that caller's organisation whatever its own stamp says. The stamp is
-         * data rot, not ownership - the same conclusion reached for
-         * displaySidebarMenu.
-         *
-         * So: the correctly stamped row wins, and a legacy row applies only
-         * when there is no stamped one. Enforcement becomes possible without
-         * an outage, and a tenant whose rows are properly stamped is decided
-         * by its own rows rather than by whichever the database returned
-         * first.
-         */
-        $rows = DB::table('tblgroupwise_rights_g2g')
-            ->where('menu_id', (int) $menuId)
-            ->where('profile_id', $profileId)
-            ->get();
-
-        $row = $rows->first(fn ($candidate) => (string) $candidate->sub_institute_id === (string) $tenant)
-            ?? $rows->first();
-
-        if (!$this->permits($row, $action)) {
+        // The precedence rule and the tenant-preference row selection (F-152)
+        // now live in MenuRight::can(), shared with RequirePlatformRight —
+        // see that class for the reasoning. Behavior here is unchanged.
+        if (!MenuRight::can($profileId, (int) $menuId, $tenant, $action)) {
             // The message names the MENU, not the role. A refusal that says
             // "admins only" would be describing a hardcoded rule; this one is
             // describing a row an administrator can change.
@@ -130,49 +97,6 @@ class RequireMenuRight
         }
 
         return $next($request);
-    }
-
-    /**
-     * THE PRECEDENCE, IN ONE PLACE, AS DECIDED:
-     *
-     *   individual DENY > group DENY > individual ALLOW > group ALLOW
-     *                   > role default > DENY
-     *
-     * ⚠ IMPLEMENTED AS STATED, AND ONE LEVEL IS UNREACHABLE. Recorded rather
-     * than quietly re-ordered.
-     *
-     * `can_*` is `tinyint(1) NOT NULL DEFAULT 0`, so it cannot distinguish
-     * "explicitly denied by the group" from "not granted". Reading GROUP DENY as
-     * `can_x = 0` — the only reading the column supports — makes INDIVIDUAL ALLOW
-     * unreachable:
-     *
-     *   can_x = 1  ->  the group already allows; individual ALLOW changes nothing
-     *   can_x = 0  ->  group DENY, which outranks individual ALLOW
-     *
-     * **So an individual grant can never widen access beyond the group.** That may
-     * be intended — it is the safer direction, and it means the group matrix is
-     * always an upper bound. But it means menu 16 ("Individual right management")
-     * can only ever REMOVE rights, never add them, and whoever builds that screen
-     * needs to know before designing it.
-     *
-     * The alternative reading — group DENY meaning only an explicit deny, which
-     * this schema cannot express — would need a nullable enum on `can_*` to be
-     * implementable at all. NOT CHANGED HERE: altering the shape of a column 89
-     * live rows depend on is not a side effect of adding a guard.
-     */
-    private function permits(?object $row, string $action): bool
-    {
-        if (!$row) {
-            return false;                                    // role default > DENY
-        }
-
-        $individual = $row->{'right_' . $action} ?? null;     // 'allow'|'deny'|null
-        $group      = (int) ($row->{'can_' . $action} ?? 0) === 1;
-
-        if ($individual === 'deny') return false;             // 1. individual DENY
-        if (!$group)                return false;             // 2. group DENY
-        if ($individual === 'allow') return true;             // 3. individual ALLOW
-        return $group;                                        // 4. group ALLOW
     }
 
     private function deny(Request $request, string $message, int $status): Response

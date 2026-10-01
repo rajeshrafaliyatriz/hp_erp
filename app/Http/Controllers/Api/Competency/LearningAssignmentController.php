@@ -175,12 +175,51 @@ class LearningAssignmentController extends Controller
             ], 422);
         }
 
-        $targets = $request->input('user_ids') ?: [$request->input('employee_id')];
-        $targets = array_values(array_unique(array_filter(array_map('intval', (array) $targets))));
+        $requested = $request->input('user_ids') ?: [$request->input('employee_id')];
+        $requested = array_values(array_unique(array_filter(array_map('intval', (array) $requested))));
 
-        if (!$targets) {
+        if (!$requested) {
             return response()->json(['status' => 0, 'message' => 'Select at least one employee'], 422);
         }
+
+        /*
+         * S3 - ONLY PEOPLE WHO BELONG TO THIS ORGANISATION.
+         *
+         * `user_ids.*` validated only `integer`, and these ids went straight
+         * into insert() with `approval_status => 'approved'` hard-coded. Nothing
+         * checked that they exist or that they are ours. So this was two defects
+         * in one statement:
+         *
+         *   authorization - assign mandatory learning, with a due date, to
+         *                   anybody whose id you can guess;
+         *   integrity     - an id from ANOTHER tenant gets inserted carrying
+         *                   THIS tenant's sub_institute_id, so the row is
+         *                   forever attributed to the wrong organisation.
+         *
+         * The check is AssessmentReviewController:187-189, which already does
+         * exactly this on the same shape of input, on the same table family.
+         * `?: [0]` because whereIn('id', []) is `IN ()` - a syntax error on some
+         * drivers and, worse, a silent match-everything if this guard is ever
+         * moved below the emptiness test.
+         */
+        $targets = DB::table('tbluser')
+            ->where('sub_institute_id', $sid)
+            ->whereIn('id', $requested ?: [0])
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        if (!$targets) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'None of the selected employees belong to your organisation',
+            ], 422);
+        }
+
+        // Reported, never silently dropped: a bulk assign that quietly skipped
+        // 3 of 40 targets under a success message is the false-success shape
+        // this whole pass exists to remove.
+        $rejected = array_values(array_diff($requested, $targets));
 
         $actor = $context['user_id'] ? $this->userMap([$context['user_id']]) : [];
         $actorName = $actor[$context['user_id']]['name'] ?? null;
@@ -229,6 +268,8 @@ class LearningAssignmentController extends Controller
                 ? 'Learning assigned successfully'
                 : 'Learning assigned to ' . count($rows) . ' employees',
             'data'    => ['assigned' => count($rows)],
+            // Ids that were asked for and are not in this organisation.
+            'rejected' => $rejected,
         ], 201);
     }
 

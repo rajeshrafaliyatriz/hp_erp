@@ -413,6 +413,29 @@ class DevelopmentPlanController extends Controller
             ], 422);
         }
 
+
+        /*
+         * THE SUBJECT MUST BE SOMEBODY IN THIS ORGANISATION.
+         *
+         * `user_id_target` was validated only as `integer`, so a foreign-tenant id
+         * could be written into the owner column while the row carried THIS
+         * tenant's sub_institute_id - the same defect as
+         * LearningAssignmentController's unchecked user_ids[].
+         *
+         * competencySubject() answers both halves: 404 for an id outside the
+         * caller's tenant, 403 for a subject a non-elevated caller may not
+         * touch. The route gate limits this to managers and HR, so in practice this is
+         * the tenant half - which is exactly the half a role gate cannot do.
+         */
+        $subjectId = (int) ($request->input('user_id_target') ?: $request->input('user_id'));
+
+        if ($subjectId > 0) {
+            $subject = $this->competencyPeopleSubject($context, $subjectId);
+
+            if (!is_int($subject)) {
+                return $subject;
+            }
+        }
         $id = DB::table(self::TABLE)->insertGetId([
             'sub_institute_id' => $context['sub_institute_id'],
             'title'            => $request->input('title'),
@@ -495,6 +518,18 @@ class DevelopmentPlanController extends Controller
             $update['focus_areas'] = $this->joinList($request->input('focus_areas'));
         }
         if ($request->has('user_id_target')) {
+            // Same tenant + ownership check as store(): a retarget is a
+            // create in every respect that matters here.
+            $newOwner = (int) $request->input('user_id_target');
+
+            if ($newOwner > 0) {
+                $subject = $this->competencyPeopleSubject($context, $newOwner);
+
+                if (!is_int($subject)) {
+                    return $subject;
+                }
+            }
+
             $update['user_id'] = $request->input('user_id_target');
         }
         if ($request->has('progress')) {

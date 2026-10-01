@@ -8,6 +8,7 @@ use App\Services\Competency\EsoExporter;
 use App\Services\Competency\TaskExecutionClassifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\SubjectAuthority;
 
 /**
  * "How do I do this?" — the procedure behind a task somebody has been assigned.
@@ -171,7 +172,7 @@ class TaskInstructionController extends Controller
             ->value('p.role_key');
 
         return in_array((string) $roleKey,
-            ['administrator', 'hr_manager', 'hr_executive'], true);
+            SubjectAuthority::RECORD_OWNERS, true);
     }
 
     /**

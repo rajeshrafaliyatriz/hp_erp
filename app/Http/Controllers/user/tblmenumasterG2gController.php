@@ -7,6 +7,7 @@ use App\Models\tblmenumaster_g2gModel;
 use App\Models\user\tblgroupwise_rights_g2gModel;
 use App\Models\user\tbluserModel;
 use App\Models\user\tbluserprofilemasterModel;
+use App\Support\MenuRight;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
@@ -145,7 +146,32 @@ class tblmenumasterG2gController extends Controller
         $sub_institute_id = $this->apiTenantId($request);
         $profile_id = $request->get('profile_id');
 
-        $allMenus = tblmenumaster_g2gModel::where('status', 1)
+        /*
+         * PLATFORM SERVICES AND AI & INTELLIGENCE ROWS ARE status=0 (hidden
+         * from the sidebar, on purpose - see
+         * 2026_09_30_100000_hide_platform_services_sidebar_row and the three
+         * migrations creating the Event Bus/Audit, Platform Administration/
+         * What's Coming, and AI capability rows), but an admin still has to
+         * be able to see and edit their rights here or "dynamically
+         * rights-managed" would be true for enforcement only, with nothing
+         * able to ever change what got seeded. Admitted by access_link
+         * pattern rather than dropping the status filter outright, so other
+         * intentionally-hidden rows (e.g. Performance Reviews & Appraisals)
+         * do not resurface in this matrix as a side effect.
+         *
+         * The bare `/platform-services` (Platform Administration, no
+         * trailing slash) needs its OWN exact-match arm - the `LIKE
+         * '/platform-services/%'` clause requires at least one character
+         * after the slash and does not match it, the same class of bug the
+         * clause below was written to fix in the first place.
+         */
+        $allMenus = tblmenumaster_g2gModel::where(function ($query) {
+                $query->where('status', 1)
+                    ->orWhere('access_link', 'like', '/platform-services/%')
+                    ->orWhere('access_link', '/platform-services')
+                    ->orWhere('access_link', '/settings?s=audit')
+                    ->orWhere('access_link', 'like', '/ai/%');
+            })
             ->visibleToTenant($sub_institute_id)
             ->orderBy('sort_order', 'ASC')
             ->get();
@@ -306,6 +332,78 @@ class tblmenumasterG2gController extends Controller
             'message' => 'Groupwise rights saved successfully',
             'data' => ['saved' => count($rows)],
         ]);
+    }
+
+    /**
+     * "What Platform Services AND AI & Intelligence can I, the caller,
+     * actually reach" - the question neither displaySidebarMenu (excludes
+     * status=0 rows, which is every one of these) nor
+     * displayGroupwiseRightsG2g (answers for a named profile being edited,
+     * not the caller) can answer.
+     *
+     * One endpoint for both sections, not two: they render from the same
+     * avatar-menu component and are fetched together, so a second call and
+     * a second `loading` state would answer nothing a shared one doesn't.
+     *
+     * Uses MenuRight::can() - full individual/group precedence, the same
+     * rule routes/platform.php's and routes/ai.php's platformright
+     * middleware actually enforce - rather than the simpler canView()
+     * helper above, so this agrees with real enforcement rather than the
+     * sidebar's looser approximation.
+     */
+    public function displayPlatformServicesRightsG2g(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $profileId = (int) ($identity['user']->user_profile_id ?? 0);
+        $tenant = $identity['sub_institute_id'];
+
+        if (!$profileId) {
+            return response()->json(['status_code' => 0, 'message' => 'Unable to resolve profile'], 403);
+        }
+
+        $modules = [];
+        foreach (['organization', 'hrms', 'talent', 'lms', 'competency', 'task'] as $module) {
+            $modules[$module] = $this->linkGranted("/platform-services/workflow?module={$module}", $profileId, $tenant);
+        }
+
+        return response()->json([
+            'status_code' => 1,
+            'message' => 'Success',
+            'data' => [
+                'modules' => $modules,
+                'event_bus' => $this->linkGranted('/platform-services/event-bus', $profileId, $tenant),
+                'audit' => $this->linkGranted('/settings?s=audit', $profileId, $tenant),
+                'platform_administration' => $this->linkGranted('/platform-services', $profileId, $tenant),
+                'whats_coming' => $this->linkGranted('/platform-services/whats-coming', $profileId, $tenant),
+                'ai' => [
+                    'providers' => $this->linkGranted('/ai/providers', $profileId, $tenant),
+                    'models' => $this->linkGranted('/ai/models', $profileId, $tenant),
+                    'prompts' => $this->linkGranted('/ai/prompts', $profileId, $tenant),
+                    'policies' => $this->linkGranted('/ai/policies', $profileId, $tenant),
+                    'agents' => $this->linkGranted('/module/agentic-ai/agentic-library', $profileId, $tenant),
+                    'conversational' => $this->linkGranted('/ai/conversational-ai', $profileId, $tenant),
+                    'knowledge_rag' => $this->linkGranted('/ai/knowledge-rag', $profileId, $tenant),
+                    'recommendations' => $this->linkGranted('/ai/recommendations', $profileId, $tenant),
+                    'knowledge_graph' => $this->linkGranted('/ai/knowledge-graph', $profileId, $tenant),
+                    'evaluation' => $this->linkGranted('/ai/evaluation', $profileId, $tenant),
+                    'usage_cost' => $this->linkGranted('/ai/usage-cost', $profileId, $tenant),
+                    'audit' => $this->linkGranted('/ai/audit', $profileId, $tenant),
+                ],
+            ],
+        ]);
+    }
+
+    /** Does this profile have view rights on the real row at this access_link, if one exists. */
+    private function linkGranted(string $accessLink, int $profileId, int $tenant): bool
+    {
+        $menuId = MenuRight::idForAccessLink($accessLink);
+
+        return $menuId !== null && MenuRight::can($profileId, $menuId, $tenant, 'view');
     }
 
     /**

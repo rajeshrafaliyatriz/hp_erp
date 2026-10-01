@@ -350,11 +350,14 @@ class TalentAssessmentController extends Controller
          * The assessment itself is still created and the link still returned -
          * HR can copy it - but the email is held back and the reason is said.
          */
-        if (CandidateLink::pointsAtApi()) {
+        if ($linkProblem = CandidateLink::unreachableForCandidates()) {
             $mail = [
                 'sent' => false,
-                'error' => 'FRONTEND_URL is not set, so the assessment link would point at the API '
-                    . 'and not open. Set it, or copy the link to the candidate yourself.',
+                // The specific reason, not a guess at it: FRONTEND_URL being
+                // unset is only one of the ways this goes wrong, and it is not
+                // the one currently in force on the API host.
+                'error' => $linkProblem . ' The assessment link would not open, so the email is '
+                    . 'held back. Fix the setting, or copy the link to the candidate yourself.',
             ];
         } elseif (MailGate::allowedForTenant($sid)) {
             try {

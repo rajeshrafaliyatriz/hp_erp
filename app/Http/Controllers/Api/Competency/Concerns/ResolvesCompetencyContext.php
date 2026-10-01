@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Competency\Concerns;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -42,19 +43,21 @@ trait ResolvesCompetencyContext
     /**
      * Roles that may act on somebody else's competency profile.
      *
-     * Keyed on role_key, the stable machine name added in D-010 - not on a
-     * substring of the display name, which renames.
+     * Now one entry in App\Support\SubjectAuthority rather than a private copy
+     * here - it was one of five divergent lists, and a second copy of an
+     * authorization table is how the first stops being the only one. The
+     * membership is unchanged.
      *
-     * department_head and reporting_manager are DELIBERATELY ABSENT. Their
-     * legitimate scope is "my department" and "my team", and neither can be
-     * evaluated while tbluser.reporting_manager_id is NULL for every user
-     * (G-ORG-02). Granting them org-wide access in the meantime would be a
-     * wider grant than the one being closed. They return here as team scope,
-     * the day reporting-line coverage exists.
+     * department_head and reporting_manager are DELIBERATELY ABSENT FROM THIS
+     * TIER. Their legitimate scope is "my department" and "my team". Note the
+     * measurement behind that, which has moved on since this was written:
+     * tbluser.reporting_manager_id is populated on 8 of 2345 rows on the
+     * application database (tenant 3 only) and 0 of 299 on live - so team scope
+     * is technically evaluable and would resolve to almost nobody, which is not
+     * the same as unevaluable. See SubjectAuthority::PEOPLE_MANAGERS, the wider
+     * tier the performance and offboarding guards use deliberately.
      */
-    private const COMPETENCY_ELEVATED = [
-        'administrator', 'hr_manager', 'hr_executive', 'executive', 'auditor',
-    ];
+    private const COMPETENCY_ELEVATED = SubjectAuthority::HR_ELEVATED;
 
     /**
      * Resolve the SUBJECT of a competency request - the employee whose profile
@@ -75,6 +78,57 @@ trait ResolvesCompetencyContext
      *
      * @return int|\Illuminate\Http\JsonResponse
      */
+    /**
+     * The same resolution, for the surfaces a LINE MANAGER legitimately runs.
+     *
+     * ── WHY THIS IS A SECOND NAMED METHOD, NOT A PARAMETER ──────────────────
+     *
+     * competencySubject() uses HR_ELEVATED, which excludes reporting_manager
+     * and department_head by name. Development plans, learning assignments and
+     * assessments are gated `subject:people_managers` at the route, which
+     * INCLUDES them. So a manager passed the door and was then refused by the
+     * room - a clean 403 on a screen they are supposed to own, and
+     * indistinguishable from a deliberate refusal.
+     *
+     * That is the shape the plan for this work explicitly warned about:
+     *
+     *     "A gate of admin,hr,people_manager over a guard of COMPETENCY is a
+     *      lie - the manager passes the gate and the guard 403s them, which is
+     *      exactly the menu-225 failure shape in a different mechanism."
+     *
+     * Written down, then built anyway, then caught by testing the tier with a
+     * real reporting_manager token instead of reasoning from its membership.
+     *
+     * THE RULE, stated once: a controller guard's tier must be AT LEAST AS WIDE
+     * as its route gate's tier. A named method per tier rather than an optional
+     * `$tier` argument with a default, because a hidden default is how the
+     * narrow list silently becomes the wide one at a call site nobody re-read.
+     *
+     * @return int|\Illuminate\Http\JsonResponse
+     */
+    protected function competencyPeopleSubject(array $context, $requestedId)
+    {
+        $subjectId = (int) $requestedId;
+
+        $verdict = SubjectAuthority::verdict(
+            (int) ($context['user_id'] ?? 0),
+            $subjectId,
+            $context['sub_institute_id'],
+            SubjectAuthority::PEOPLE_MANAGERS
+        );
+
+        if ($verdict === SubjectAuthority::OK) {
+            return $subjectId;
+        }
+
+        return $verdict === SubjectAuthority::NOT_FOUND
+            ? response()->json(['status' => 0, 'message' => 'Employee not found.'], 404)
+            : response()->json([
+                'status'  => 0,
+                'message' => 'You may only act on your own development record.',
+            ], 403);
+    }
+
     protected function competencySubject(array $context, $requestedId)
     {
         $subjectId = (int) $requestedId;
@@ -100,12 +154,29 @@ trait ResolvesCompetencyContext
             return $subjectId;
         }
 
-        $roleKey = DB::table('tbluser as u')
-            ->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
-            ->where('u.id', $callerId)
-            ->value('p.role_key');
-
-        if (in_array((string) $roleKey, self::COMPETENCY_ELEVATED, true)) {
+        /*
+         * ── THIS USED TO READ p.role_key RAW, AND THAT WAS AN OUTAGE ────────
+         *
+         * The raw read was deliberate: a blank role_key should not be rescued
+         * by a display name. Measured on both databases, the effect was the
+         * opposite of hardening.
+         *
+         * 30 of 42 live profiles have role_key = NULL and resolve only through
+         * RoleKey::LEGACY_NAMES, which maps the lowercased names 'admin' and
+         * 'hr'. So 20 live profiles pass `profile:admin,hr` at the route and
+         * then FAILED here - including tenant 7's HR profile (59 users),
+         * tenant 7's Admin (31), tenant 3's Admin (31) and tenant 3's HR (12).
+         * Nine organisations' administrators were being told "You may only
+         * access your own competency profile."
+         *
+         * THE GUARD WAS NOT TOO PERMISSIVE. IT WAS TOO RESTRICTIVE, SILENTLY,
+         * AND ONLY ON THE HOSTS NOBODY DEVELOPS AGAINST.
+         *
+         * Resolving through RoleKey makes a row guard and a route gate agree
+         * about what a caller is, which is the only defensible arrangement:
+         * two answers to "what role is this" is how one of them goes stale.
+         */
+        if (SubjectAuthority::userSatisfies($callerId, self::COMPETENCY_ELEVATED)) {
             return $subjectId;
         }
 

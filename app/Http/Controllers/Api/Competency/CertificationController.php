@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Controller;
+use App\Support\Competency\CertificationCompliance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -41,15 +42,10 @@ class CertificationController extends Controller
      * work queue deliberately uses a tighter 30-day window, so the two figures
      * are expected to differ.
      */
-    private const EXPIRING_WINDOW_DAYS = 60;
+    private const EXPIRING_WINDOW_DAYS = CertificationCompliance::EXPIRING_WINDOW_DAYS;
 
     /** Raw DB status -> the label the screen renders. */
-    private const STATUS_LABELS = [
-        'valid'    => 'Active',
-        'expiring' => 'Expiring',
-        'expired'  => 'Expired',
-        'revoked'  => 'Revoked',
-    ];
+    private const STATUS_LABELS = CertificationCompliance::STATUS_LABELS;
 
     private const SORTABLE = [
         'name'         => 'name',
@@ -379,21 +375,60 @@ class CertificationController extends Controller
             ], 422);
         }
 
+        $ownerId = (int) ($request->input('user_id_target') ?: $request->input('user_id'));
+
+        /*
+         * THE OWNER MUST BE SOMEBODY IN THIS ORGANISATION.
+         *
+         * `user_id_target` was validated only as `integer`, so a foreign-tenant
+         * id could be written into user_id while the row carried THIS tenant's
+         * sub_institute_id - the same defect as LearningAssignmentController's
+         * unchecked user_ids[], in a table that feeds compliance reporting.
+         *
+         * competencySubject() answers both halves at once: it 404s an id that
+         * is not in the caller's tenant, and it enforces ownership for a caller
+         * who is not elevated. The route gate already limits this to HR, so in
+         * practice this is the tenant check - which is exactly the half a role
+         * gate cannot do.
+         *
+         * Only when an owner is named: the column is nullable and an unassigned
+         * credential is a legitimate row.
+         */
+        if ($ownerId > 0) {
+            $subject = $this->competencySubject($context, $ownerId);
+
+            if (!is_int($subject)) {
+                return $subject;
+            }
+        }
+
+        /*
+         * Inherited from the owner when the caller did not say.
+         * CertificationDialog sends neither department nor role, so without
+         * this every credential created through the UI is invisible to the
+         * Department filter and can never satisfy a department-scoped
+         * requirement. See employeePlacement().
+         */
+        $placement = $this->employeePlacement($ownerId, (int) $context['sub_institute_id']);
+
         $id = DB::table(self::TABLE)->insertGetId([
             'sub_institute_id'    => $context['sub_institute_id'],
             'name'                => $request->input('name'),
-            'user_id'             => $request->input('user_id_target') ?: $request->input('user_id'),
+            'user_id'             => $ownerId ?: null,
             'competency_id'       => $request->input('competency_id'),
             'requirement_id'      => $request->input('requirement_id'),
             'issuing_body'        => $request->input('issuing_body'),
             'certification_type'  => $request->input('certification_type'),
             'credential_id'       => $request->input('credential_id'),
-            'department_id'       => $request->input('department_id'),
+            'department_id'       => $request->input('department_id') ?: $placement['department_id'],
             // The id is what the merge, renames and every id-based reader use;
             // the name stays because ~20 screens still read it. NULL when the
             // name is ambiguous - ResolvesJobRoleId refuses to guess.
-            'jobrole'             => $request->input('jobrole'),
-            'jobrole_id' => $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id']),
+            'jobrole'             => $request->input('jobrole') ?: $placement['jobrole'],
+            // The owner's own role id is more reliable than matching the name
+            // the request happened to send, so it is the fallback.
+            'jobrole_id' => $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id'])
+                ?: $placement['jobrole_id'],
             'status'              => $request->input('status', 'valid'),
             // G-SEC-08: verification state is SERVER-OWNED. It was taken from the
             // request, so an uploaded credential could declare itself already
@@ -494,12 +529,69 @@ class CertificationController extends Controller
 
         // Reassigning the holder is deliberate and explicit only.
         if ($request->has('user_id_target')) {
+            // Same tenant + ownership check as store(). A retarget is a create
+            // in every respect that matters here.
+            $newOwner = (int) $request->input('user_id_target');
+
+            if ($newOwner > 0) {
+                $subject = $this->competencySubject($context, $newOwner);
+
+                if (!is_int($subject)) {
+                    return $subject;
+                }
+            }
+
             $update['user_id'] = $request->input('user_id_target');
+
+            /*
+             * The placement has to move with the holder. A credential
+             * reassigned to somebody in another department would otherwise
+             * keep the old department, so it would be filtered to the wrong
+             * one and measured against the wrong requirements - and nothing
+             * would say so.
+             *
+             * Only fills what this request did not set explicitly, so an
+             * intentional department change in the same call still wins.
+             */
+            $placement = $this->employeePlacement(
+                (int) $request->input('user_id_target'),
+                (int) $context['sub_institute_id'],
+            );
+
+            if (!$request->has('department_id') && $placement['department_id'] !== null) {
+                $update['department_id'] = $placement['department_id'];
+            }
+            if (!$request->has('jobrole') && $placement['jobrole'] !== null) {
+                $update['jobrole'] = $placement['jobrole'];
+                $update['jobrole_id'] = $placement['jobrole_id'];
+            }
         }
 
         // Stamp who signed the credential off whenever verification moves on.
         if ($request->has('verification_status')) {
             $newState = $request->input('verification_status');
+
+            /*
+             * A CREDENTIAL CANNOT BE VERIFIED BY THE PERSON WHO HOLDS IT.
+             *
+             * store() already refuses to let a credential verify itself - it
+             * forces 'pending' and says so. But the update path then stamped
+             * verified_by with the caller's own id and checked nothing, so the
+             * holder could simply verify it in a second request. The route gate
+             * does NOT close this: it limits the route to HR, and an HR user
+             * holds credentials of their own.
+             *
+             * Same shape as the appraisal self-approval in S6, one table over,
+             * and the audit missed it because it was reasoning about who may
+             * reach the endpoint rather than about what they may do once there.
+             */
+            if ($newState !== 'pending' && (int) $existing->user_id === (int) $context['user_id']) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'A credential cannot be verified by the person who holds it.',
+                ], 403);
+            }
+
             $update['verified_by'] = $newState === 'pending' ? null : $context['user_id'];
             $update['verified_at'] = $newState === 'pending' ? null : now();
         }
@@ -596,6 +688,36 @@ class CertificationController extends Controller
             return response()->json(['status' => 0, 'message' => 'No matching certifications found'], 404);
         }
 
+        /*
+         * The caller's OWN credentials are excluded from verify and reject, for
+         * the same reason as the single-row path above: a bulk select-all would
+         * otherwise be the easy way to self-verify. Excluded rather than
+         * refused, so selecting 40 rows that happen to include your own still
+         * does the other 39 - and the count is reported, so the one that was
+         * skipped is not silent.
+         */
+        $selfSkipped = 0;
+
+        if (in_array($action, ['verify', 'reject'], true)) {
+            $mine = DB::table(self::TABLE)
+                ->where('sub_institute_id', $sid)
+                ->whereIn('id', $ownedIds)
+                ->where('user_id', (int) $context['user_id'])
+                ->pluck('id')->all();
+
+            if ($mine) {
+                $selfSkipped = count($mine);
+                $ownedIds = array_values(array_diff($ownedIds, $mine));
+            }
+
+            if (!$ownedIds) {
+                return response()->json([
+                    'status'  => 0,
+                    'message' => 'A credential cannot be verified by the person who holds it.',
+                ], 403);
+            }
+        }
+
         $update = ['updated_by' => $context['user_id'], 'updated_at' => now()];
 
         switch ($action) {
@@ -636,8 +758,11 @@ class CertificationController extends Controller
 
         return response()->json([
             'status'  => 1,
-            'message' => $label . ' ' . $count . ' certification' . ($count === 1 ? '' : 's'),
-            'data'    => ['affected' => $count],
+            'message' => $label . ' ' . $count . ' certification' . ($count === 1 ? '' : 's')
+                . ($selfSkipped ? ' (' . $selfSkipped . ' of your own skipped - a credential cannot be verified by its holder)' : ''),
+            // Reported, not silent: a bulk that quietly did fewer rows than were
+            // selected, under a success message, is the false-success shape.
+            'data'    => ['affected' => $count, 'self_skipped' => $selfSkipped],
         ]);
     }
 
@@ -1244,34 +1369,12 @@ class CertificationController extends Controller
      */
     private function complianceState($row): array
     {
-        $expiry = $row->expiry_date ? strtotime((string) $row->expiry_date) : null;
-        $today = strtotime(now()->toDateString());
-
-        if ($row->status === 'revoked') {
-            return ['key' => 'non_compliant', 'label' => 'Non-Compliant', 'reason' => 'Credential has been revoked'];
-        }
-        if ($row->status === 'expired' || ($expiry !== null && $expiry < $today)) {
-            return ['key' => 'non_compliant', 'label' => 'Non-Compliant', 'reason' => 'Credential has expired'];
-        }
-        if ($expiry !== null && $expiry <= strtotime('+' . self::EXPIRING_WINDOW_DAYS . ' days', $today)) {
-            return [
-                'key'    => 'expiring',
-                'label'  => 'Expiring Soon',
-                'reason' => 'Expires within ' . self::EXPIRING_WINDOW_DAYS . ' days',
-            ];
-        }
-
-        return ['key' => 'compliant', 'label' => 'Compliant', 'reason' => 'Credential is valid'];
+        return CertificationCompliance::state($row);
     }
 
     private function daysToExpiry($expiryDate): ?int
     {
-        if (!$expiryDate) {
-            return null;
-        }
-        $today = strtotime(now()->toDateString());
-
-        return (int) floor((strtotime((string) $expiryDate) - $today) / 86400);
+        return CertificationCompliance::daysToExpiry($expiryDate);
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -1365,6 +1468,70 @@ class CertificationController extends Controller
             'email'       => $user->email ?? null,
             'jobrole'     => $role->jobrole ?? null,
             'department'  => $department,
+        ];
+    }
+
+    /**
+     * Where an employee sits - the department and role a credential inherits.
+     *
+     * ── WHY THE WRITE PATHS BACKFILL THIS ──────────────────────────────────
+     *
+     * `department_id` and `jobrole` were taken straight from the request, and
+     * CertificationDialog sends neither. So every certification created through
+     * the UI stored NULL for both, and the consequences are all silent:
+     *
+     *   - the list renders "--" for Department
+     *   - the Department filter cannot find the row, because it filters on a
+     *     column the create path never set
+     *   - requirementsFor() matches on role and department, so a
+     *     department-scoped requirement can never be satisfied by it - which
+     *     makes the "Compliant Employees" KPI under-count
+     *
+     * Nothing errors. The row just quietly fails to participate.
+     *
+     * An explicit value from the caller still wins; this only fills a blank.
+     *
+     * Role resolution mirrors employeeCard(): `jobtitle_id` first, then
+     * `allocated_standards`, which is what this tenant actually fills in.
+     * Unlike employeeCard() the user lookup IS tenant-scoped - a credential's
+     * owner must belong to the caller's organisation.
+     *
+     * @return array{department_id:?int, jobrole:?string, jobrole_id:?int}
+     */
+    private function employeePlacement(int $userId, int $sid): array
+    {
+        $blank = ['department_id' => null, 'jobrole' => null, 'jobrole_id' => null];
+
+        if ($userId <= 0) {
+            return $blank;
+        }
+
+        $user = DB::table('tbluser')
+            ->where('id', $userId)
+            ->where('sub_institute_id', $sid)
+            ->first(['id', 'jobtitle_id', 'allocated_standards', 'department_id']);
+
+        if (!$user) {
+            return $blank;
+        }
+
+        $roleId = ($user->jobtitle_id ?? 0) ?: $this->firstNumeric($user->allocated_standards ?? null);
+
+        $role = $roleId
+            ? DB::table('s_user_jobrole')
+                ->where('id', $roleId)
+                ->where('sub_institute_id', $sid)
+                ->whereNull('deleted_at')
+                ->first(['id', 'jobrole', 'department_id'])
+            : null;
+
+        return [
+            // The role's department is preferred over the user's own column:
+            // s_user_jobrole is where the department a role belongs to is
+            // actually maintained.
+            'department_id' => (int) ($role->department_id ?? $user->department_id ?? 0) ?: null,
+            'jobrole'       => $role->jobrole ?? null,
+            'jobrole_id'    => $role ? (int) $role->id : null,
         ];
     }
 
@@ -1658,6 +1825,6 @@ class CertificationController extends Controller
 
     private function humanDate($value): ?string
     {
-        return $value ? date('d M Y', strtotime((string) $value)) : null;
+        return CertificationCompliance::humanDate($value);
     }
 }

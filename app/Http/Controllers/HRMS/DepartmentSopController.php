@@ -148,11 +148,11 @@ class DepartmentSopController extends DepartmentContentController
             return response()->json(['status' => 0, 'message' => 'SOP not found'], 404);
         }
 
-        if (!$sop->file_path || !Storage::disk('public')->exists($sop->file_path)) {
+        if (!$sop->file_path || !Storage::disk('digitalocean')->exists($sop->file_path)) {
             return response()->json(['status' => 0, 'message' => 'No document attached to this SOP'], 404);
         }
 
-        return Storage::disk('public')->download(
+        return Storage::disk('digitalocean')->download(
             $sop->file_path,
             $sop->file_name ?: basename($sop->file_path)
         );
@@ -210,7 +210,14 @@ class DepartmentSopController extends DepartmentContentController
             return;
         }
 
-        $path = $file->store('department_sops/' . $tenantId, 'public');
+        $fileName = 'sop_' . $sopId . '_' . time() . '.' . ($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
+        $path = 'private/department_sops/' . $tenantId . '/' . $fileName;
+        Storage::disk('digitalocean')->putFileAs(
+            'private/department_sops/' . $tenantId . '/',
+            $file,
+            $fileName,
+            ['visibility' => 'private', 'ContentType' => $file->getClientMimeType()]
+        );
 
         if ($replacing) {
             $this->deleteStoredFile($replacing);
@@ -230,8 +237,8 @@ class DepartmentSopController extends DepartmentContentController
 
     private function deleteStoredFile(?string $path): void
     {
-        if ($path && Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
+        if ($path && Storage::disk('digitalocean')->exists($path)) {
+            Storage::disk('digitalocean')->delete($path);
         }
     }
 }
