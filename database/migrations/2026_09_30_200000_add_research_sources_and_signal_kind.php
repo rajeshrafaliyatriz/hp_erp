@@ -35,9 +35,7 @@ return new class extends Migration
         }
 
         Schema::table('g2g_company_opportunities', function (Blueprint $t) {
-            if (! Schema::hasColumn('g2g_company_opportunities', 'signal_kind')) {
-                $t->string('signal_kind', 20)->nullable()->after('category');
-            }
+            $t->string('signal_kind', 20)->nullable()->after('category');
         });
     }
 

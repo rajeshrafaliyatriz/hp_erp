@@ -29,14 +29,14 @@ return new class extends Migration
                 $t->text('description')->nullable();
                 $t->text('problems_solved')->nullable();
                 $t->text('features')->nullable();
-                $t->json('target_industries')->nullable();
-                $t->json('target_company_types')->nullable();
+                $t->longText('target_industries')->nullable();
+                $t->longText('target_company_types')->nullable();
                 $t->string('target_company_size', 100)->nullable();
-                $t->json('target_markets')->nullable();
+                $t->longText('target_markets')->nullable();
                 $t->text('ideal_customer_profile')->nullable();
-                $t->json('keywords')->nullable();
-                $t->json('excluded')->nullable();
-                $t->json('competitors')->nullable();
+                $t->longText('keywords')->nullable();
+                $t->longText('excluded')->nullable();
+                $t->longText('competitors')->nullable();
                 $t->boolean('research_enabled')->default(false);
                 $t->string('research_frequency', 10)->default('daily');   // daily | weekdays | weekly
                 $t->string('schedule_time', 5)->nullable();                // HH:MM, null = config default
@@ -112,7 +112,7 @@ return new class extends Migration
                 $t->string('qualification', 40);           // see OpportunityQualification
                 $t->string('confidence', 10);              // High | Medium | Low
                 $t->string('review_status', 12)->default('New'); // New | Reviewed | Follow-up | Dismissed
-                $t->json('sources');                       // [{url,title,published_at,excerpt,retrieved_at}]
+                $t->longText('sources');                       // [{url,title,published_at,excerpt,retrieved_at}]
                 $t->date('source_published_at')->nullable();
                 $t->date('event_date')->nullable();
                 $t->char('fingerprint', 64);
@@ -187,7 +187,7 @@ return new class extends Migration
                 $t->string('title', 191);
                 $t->text('detail');
                 $t->string('priority', 10)->nullable();
-                $t->json('evidence');                      // [{ref, quote}] quotes verified against the source
+                $t->longText('evidence');                      // [{ref, quote}] quotes verified against the source
                 $t->string('review_status', 12)->default('New');
                 $t->unsignedBigInteger('reviewed_by')->nullable();
                 $t->timestamp('reviewed_at')->nullable();

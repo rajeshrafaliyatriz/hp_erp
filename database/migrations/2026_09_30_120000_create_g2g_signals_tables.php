@@ -52,8 +52,8 @@ return new class extends Migration
                 $table->text('why_it_matters');
                 $table->text('recommended_action');
                 $table->string('priority', 10);                            // High | Medium | Low
-                $table->json('evidence')->nullable();
-                $table->json('sources')->nullable();
+                $table->longText('evidence')->nullable();
+                $table->longText('sources')->nullable();
                 $table->string('origin', 10)->default('internal');         // internal | external | mixed
                 $table->char('fingerprint', 64);
                 $table->string('status', 10)->default('New');              // New | Reviewed | Dismissed
