@@ -25,9 +25,9 @@ return new class extends Migration
                 $t->string('parent_product', 50);
                 $t->text('modules_components')->nullable();
                 $t->text('what_it_does')->nullable();
-                $t->json('needs_solved')->nullable();         // array of taxonomy Need codes (N01..N20)
-                $t->json('primary_segments')->nullable();     // array of taxonomy Segment codes
-                $t->json('trigger_signals')->nullable();      // array of taxonomy Signal codes
+                $t->longText('needs_solved')->nullable();         // array of taxonomy Need codes (N01..N20)
+                $t->longText('primary_segments')->nullable();     // array of taxonomy Segment codes
+                $t->longText('trigger_signals')->nullable();      // array of taxonomy Signal codes
                 $t->string('deployment_model', 100)->nullable();
                 $t->string('readiness_status', 100);
                 $t->boolean('readiness_confirmed')->default(false);
@@ -35,7 +35,7 @@ return new class extends Migration
                 $t->string('pricing_model', 191)->nullable();
                 $t->string('implementation_effort', 100)->nullable();
                 $t->string('delivery_owner', 100)->nullable();
-                $t->json('bundles_with')->nullable();         // array of offer IDs
+                $t->longText('bundles_with')->nullable();         // array of offer IDs
                 $t->text('proof_points')->nullable();
                 $t->boolean('partner_sellable')->default(false);
                 $t->text('notes')->nullable();
@@ -58,13 +58,13 @@ return new class extends Migration
                 $t->string('partner_name', 191);
                 $t->string('partner_type', 100);
                 $t->string('hq_state', 100)->nullable();
-                $t->json('states_covered')->nullable();       // array of states/regions or "All India"
-                $t->json('segments_covered')->nullable();     // array of Segment codes
-                $t->json('needs_addressed')->nullable();      // array of Need codes
-                $t->json('procurement_routes')->nullable();   // array of procurement route codes
-                $t->json('offers_authorized')->nullable();    // array of offer IDs partner is authorized to sell
-                $t->json('empanelments')->nullable();         // e.g. GeM seller, state portal
-                $t->json('certifications')->nullable();       // e.g. ISO 9001, CMMI
+                $t->longText('states_covered')->nullable();       // array of states/regions or "All India"
+                $t->longText('segments_covered')->nullable();     // array of Segment codes
+                $t->longText('needs_addressed')->nullable();      // array of Need codes
+                $t->longText('procurement_routes')->nullable();   // array of procurement route codes
+                $t->longText('offers_authorized')->nullable();    // array of offer IDs partner is authorized to sell
+                $t->longText('empanelments')->nullable();         // e.g. GeM seller, state portal
+                $t->longText('certifications')->nullable();       // e.g. ISO 9001, CMMI
                 $t->text('key_buyer_relationships')->nullable();
                 $t->string('delivery_capability', 100)->nullable();
                 $t->unsignedSmallInteger('max_concurrent_deals')->default(1);
