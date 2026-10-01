@@ -105,7 +105,8 @@ class DeepSeekService
         }
 
         try {
-            $response = Http::withToken(config('deepseek.api_key'))
+            $response = Http::withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+                ->withToken(config('deepseek.api_key'))
                 ->acceptJson()
                 ->timeout(15)
                 ->get($this->url('/user/balance'));
@@ -276,7 +277,8 @@ class DeepSeekService
             $payload['response_format'] = ['type' => 'json_object'];
         }
 
-        $response = Http::withToken(config('deepseek.api_key'))
+        $response = Http::withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
+            ->withToken(config('deepseek.api_key'))
             ->timeout((int) config('deepseek.request_timeout'))
             ->acceptJson()
             ->asJson()

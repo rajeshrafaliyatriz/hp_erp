@@ -22,12 +22,10 @@ use Illuminate\Support\Facades\DB;
  * settings store already here. What is new is the SCOPE: this one is keyed by
  * user, and nothing in this product has been before.
  *
- * ── WHY THE THEME DEFAULT IS 'system' AND NOT 'light' ───────────────────────
+ * ── WHY THE THEME DEFAULT IS 'light' ─────────────────────────────────────────
  *
- * Because the honest default for "which theme?" is "I have not been asked".
- * `system` follows the operating system, which is what somebody who has never
- * opened these settings almost certainly wants, and it means the first render
- * is not a guess that has to be corrected.
+ * Light Theme is the product's default theme when no theme preference has been
+ * saved. Users can still explicitly select 'dark' or 'system' (Match my device).
  *
  * ── NOTIFICATION KEYS ARE DERIVED FROM THE DISPATCHER ───────────────────────
  *
@@ -57,7 +55,7 @@ class UserPreferences
      */
     public const DEFAULTS = [
         // Appearance
-        'theme' => 'system',
+        'theme' => 'light',
         'sidebar_collapsed' => true,
         'density' => 'comfortable',
 
