@@ -116,8 +116,8 @@ return new class extends Migration
                 $t->date('source_published_at')->nullable();
                 $t->date('event_date')->nullable();
                 $t->char('fingerprint', 64);
-                $t->timestamp('first_discovered_at');
-                $t->timestamp('last_verified_at');
+                $t->timestamp('first_discovered_at')->useCurrent();
+                $t->timestamp('last_verified_at')->useCurrent();
                 $t->unsignedBigInteger('reviewed_by')->nullable();
                 $t->timestamp('reviewed_at')->nullable();
                 $t->timestamps();
