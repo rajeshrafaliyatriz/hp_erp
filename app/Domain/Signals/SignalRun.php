@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class SignalRun extends Model
 {
+    use \App\Models\Concerns\SkipsGuardableColumnCheck;
     public const RUNNING = 'running';
     public const SUCCESS = 'success';
     public const PARTIAL = 'partial';
@@ -21,3 +22,4 @@ class SignalRun extends Model
         'completed_at' => 'datetime',
     ];
 }
+

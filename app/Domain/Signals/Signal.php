@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Signal extends Model
 {
+    use \App\Models\Concerns\SkipsGuardableColumnCheck;
     public const STATUS_NEW = 'New';
     public const STATUS_REVIEWED = 'Reviewed';
     public const STATUS_DISMISSED = 'Dismissed';
@@ -24,3 +25,4 @@ class Signal extends Model
         'reviewed_at' => 'datetime',
     ];
 }
+

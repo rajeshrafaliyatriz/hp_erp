@@ -59,4 +59,25 @@ class SchemaCache
 
         return $this->columns[$key] = $exists;
     }
+    /** @var array<string, array<string>> */
+    private array $columnLists = [];
+
+    public function getColumnListing(string $table): array
+    {
+        if (array_key_exists($table, $this->columnLists)) {
+            return $this->columnLists[$table];
+        }
+
+        try {
+            $rows = DB::select(
+                'SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?',
+                [$table]
+            );
+            $listing = array_map(fn($row) => $row->column_name, $rows);
+        } catch (Throwable) {
+            $listing = [];
+        }
+
+        return $this->columnLists[$table] = $listing;
+    }
 }
