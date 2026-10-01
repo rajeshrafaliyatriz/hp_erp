@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class IngestionFinding extends Model
 {
+    use \App\Models\Concerns\SkipsGuardableColumnCheck;
     protected $table = 'g2g_ingestion_findings';
 
     protected $guarded = ['id'];
@@ -15,3 +16,4 @@ class IngestionFinding extends Model
         'reviewed_at' => 'datetime',
     ];
 }
+

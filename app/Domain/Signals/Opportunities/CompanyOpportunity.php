@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class CompanyOpportunity extends Model
 {
+    use \App\Models\Concerns\SkipsGuardableColumnCheck;
     protected $table = 'g2g_company_opportunities';
 
     protected $guarded = ['id'];
@@ -36,3 +37,4 @@ class CompanyOpportunity extends Model
         return $this->belongsTo(\App\Domain\Signals\Ingestion\IngestionSource::class, 'ingestion_source_id');
     }
 }
+

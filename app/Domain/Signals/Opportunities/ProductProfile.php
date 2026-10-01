@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductProfile extends Model
 {
+    use \App\Models\Concerns\SkipsGuardableColumnCheck;
     protected $table = 'g2g_product_profiles';
 
     protected $guarded = ['id'];
@@ -21,3 +22,4 @@ class ProductProfile extends Model
         'recency_days' => 'integer',
     ];
 }
+
