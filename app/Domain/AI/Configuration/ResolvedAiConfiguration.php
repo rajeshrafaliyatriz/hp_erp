@@ -29,7 +29,19 @@ final class ResolvedAiConfiguration
 
     public function hasKey(): bool
     {
-        return $this->apiKey !== null && trim($this->apiKey) !== '';
+        return $this->apiKey !== null
+            && trim($this->apiKey) !== ''
+            && ! self::isPlaceholder($this->apiKey);
+    }
+
+    /**
+     * A template value such as YOUR_GEMINI_API_KEY is not a credential. Counting it as
+     * one made every AI feature report "configured" and then fail at the provider with
+     * an authentication error; treating it as absent gives the accurate answer.
+     */
+    private static function isPlaceholder(string $key): bool
+    {
+        return preg_match('/^(your[_\-\s]|<|changeme|change[_-]me|replace[_-]me|xxx+$|todo$)/i', trim($key)) === 1;
     }
 
     /**

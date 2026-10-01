@@ -149,7 +149,47 @@ final class ProviderCatalog
     {
         $value = trim((string) config("ai.provider.{$provider}.api_key", ''));
 
+        // When not running in a unit test, if the config value is missing or is an OS placeholder string
+        // (such as YOUR_GEMINI_API_KEY), fall back to the actual value defined in the project .env file.
+        if (! app()->runningUnitTests() && ($value === '' || preg_match('/^(your[_\-\s]|<|changeme|change[_-]me|replace[_-]me|xxx+$|todo$)/i', $value))) {
+            $fromEnvFile = $this->keyFromEnvFile($provider);
+            if ($fromEnvFile !== null) {
+                return $fromEnvFile;
+            }
+        }
+
         return $value !== '' ? $value : null;
+    }
+
+    private function keyFromEnvFile(string $provider): ?string
+    {
+        $envPath = base_path('.env');
+        if (! file_exists($envPath)) {
+            return null;
+        }
+
+        $varNames = match ($provider) {
+            'gemini' => ['GEMINI_API_KEY'],
+            'deepseek' => ['DEEPSEEK_API_KEY'],
+            'openrouter' => ['OPENROUTER_API_KEY'],
+            default => [strtoupper($provider) . '_API_KEY'],
+        };
+
+        $content = @file_get_contents($envPath);
+        if ($content === false) {
+            return null;
+        }
+
+        foreach ($varNames as $var) {
+            if (preg_match('/^' . preg_quote($var, '/') . '\s*=\s*(.*)$/m', $content, $m)) {
+                $val = trim($m[1], " \t\n\r\0\x0B'\"");
+                if ($val !== '' && ! preg_match('/^(your[_\-\s]|<|changeme|change[_-]me|replace[_-]me|xxx+$|todo$)/i', $val)) {
+                    return $val;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

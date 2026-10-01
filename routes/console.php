@@ -174,3 +174,56 @@ TaskRunLedger::track(
         ->runInBackground(),
     'approvals.escalate'
 );
+
+/*
+ * AI SIGNALS ENGINE — DAILY.
+ *
+ * Time and timezone come from config/signals.php (SIGNALS_SCHEDULE_TIME,
+ * SIGNALS_TIMEZONE; default 10:00 Asia/Kolkata), so changing the schedule needs
+ * an .env edit, not a code change. SIGNALS_SCHEDULE_ENABLED=false stops it.
+ *
+ * withoutOverlapping() + onOneServer() so two scheduler ticks never generate the
+ * same day twice; SignalRunner also holds a per-organisation lock and de-duplicates
+ * by fingerprint, so a retry is safe. runInBackground() keeps a slow AI call from
+ * delaying the other scheduled tasks.
+ *
+ * Like every entry here, this only fires while `php artisan schedule:work` (or a
+ * per-minute cron / Windows Task Scheduler entry) is running.
+ */
+if (config('signals.schedule_enabled')) {
+    $signalsTime = preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string) config('signals.schedule_time'))
+        ? config('signals.schedule_time')
+        : '10:00';
+
+    TaskRunLedger::track(
+        Schedule::command('signals:generate')
+            ->dailyAt($signalsTime)
+            ->timezone(config('signals.timezone', 'Asia/Kolkata'))
+            ->withoutOverlapping(60)
+            ->onOneServer()
+            ->runInBackground(),
+        'signals.generate'
+    );
+}
+
+/*
+ * COMPANY OPPORTUNITY RESEARCH — CHECKED EVERY 15 MINUTES, RUNS ONCE PER DAY.
+ *
+ * The run time is a per-organisation setting (Product Profile -> schedule time,
+ * default SIGNALS_RESEARCH_TIME=10:00 in SIGNALS_TIMEZONE=Asia/Kolkata), so it can be
+ * changed from the UI with no code or .env edit. The tick itself is cheap: the command
+ * runs an organisation only when its time has passed today and no scheduled run exists
+ * for today - which also means a machine that was off at 10:00 catches up on its next
+ * tick instead of skipping the day.
+ *
+ * Like every entry here it only fires while `php artisan schedule:work` (or a per-minute
+ * cron / Windows Task Scheduler entry) is running.
+ */
+TaskRunLedger::track(
+    Schedule::command('signals:research')
+        ->everyFifteenMinutes()
+        ->withoutOverlapping(120)
+        ->onOneServer()
+        ->runInBackground(),
+    'signals.research'
+);

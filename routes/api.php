@@ -3044,3 +3044,114 @@ Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
     Route::get('/form-16/{year}', [App\Http\Controllers\Api\MyHrController::class, 'form16'])
         ->whereNumber('year');
 });
+
+/*
+ * AI Signals Engine (Department Management -> Signals tab).
+ *
+ * Literal paths are declared BEFORE `/{id}` (same ORDER MATTERS rule as
+ * departments-management), and `whereNumber` backs that up.
+ *
+ * Reads need a valid token. Generating spends AI budget, so it is gated on profile
+ * AND throttled; reviewing/dismissing is gated on profile. The tenant always comes
+ * from the token (see SignalController).
+ */
+Route::prefix('signals')->middleware('api.token')->group(function () {
+    Route::get('/status', [\App\Http\Controllers\Api\Signals\SignalController::class, 'status']);
+    Route::get('/runs', [\App\Http\Controllers\Api\Signals\SignalController::class, 'runs']);
+    Route::post('/generate', [\App\Http\Controllers\Api\Signals\SignalController::class, 'generate'])
+        ->middleware(['profile:admin,hr', 'throttle:6,1']);
+
+    Route::get('/', [\App\Http\Controllers\Api\Signals\SignalController::class, 'index']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\Signals\SignalController::class, 'show'])->whereNumber('id');
+
+    Route::middleware('profile:admin,hr,manager')->group(function () {
+        Route::patch('/{id}/review', [\App\Http\Controllers\Api\Signals\SignalController::class, 'review'])->whereNumber('id');
+        Route::patch('/{id}/dismiss', [\App\Http\Controllers\Api\Signals\SignalController::class, 'dismiss'])->whereNumber('id');
+    });
+});
+
+/*
+ * Company Opportunity Intelligence + Manual Ingestion (Signals tab).
+ *
+ * All literal paths; none can collide with `/signals/{id}` (which is whereNumber).
+ *
+ *  - Product profile / research runs / opportunity review: admin, hr, manager can read
+ *    and review; only admin, hr can change the profile or start research (it spends
+ *    search and AI budget).
+ *  - Ingestion handles private documents, so ALL of it is admin/hr only.
+ * The tenant always comes from the token.
+ */
+Route::prefix('signals')->middleware('api.token')->group(function () {
+    $opp = \App\Http\Controllers\Api\Signals\OpportunityController::class;
+    $ing = \App\Http\Controllers\Api\Signals\IngestionController::class;
+
+    Route::middleware('profile:admin,hr,manager')->group(function () use ($opp) {
+        Route::get('/product-profile', [$opp, 'showProfile']);
+        Route::get('/research/status', [$opp, 'status']);
+        Route::get('/providers', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'show']);
+        Route::get('/research/runs', [$opp, 'runs']);
+        Route::get('/research/runs/{id}', [$opp, 'showRun'])->whereNumber('id');
+        Route::get('/research/runs/{id}/sources', [$opp, 'runSources'])->whereNumber('id');
+        Route::get('/opportunities', [$opp, 'index']);
+        Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
+        Route::patch('/opportunities/{id}/{action}', [$opp, 'act'])->whereNumber('id')->whereIn('action', ['review', 'dismiss', 'follow-up']);
+    });
+
+    Route::middleware('profile:admin,hr')->group(function () use ($opp, $ing) {
+        Route::put('/product-profile', [$opp, 'saveProfile']);
+        Route::post('/research/run', [$opp, 'run'])->middleware('throttle:6,1');
+        Route::post('/providers/ai/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testAi'])->middleware('throttle:6,1');
+        Route::post('/providers/search/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testSearch'])->middleware('throttle:6,1');
+
+        Route::get('/ingestion/sources', [$ing, 'index']);
+        Route::get('/ingestion/findings', [$ing, 'findings']);
+        Route::get('/ingestion/sources/{id}', [$ing, 'show'])->whereNumber('id');
+        Route::post('/ingestion/upload', [$ing, 'upload'])->middleware('throttle:20,1');
+        Route::post('/ingestion/url', [$ing, 'url'])->middleware('throttle:20,1');
+        Route::post('/ingestion/sources/{id}/analyze', [$ing, 'analyze'])->whereNumber('id')->middleware('throttle:10,1');
+        Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id');
+        Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss']);
+    });
+});
+
+/*
+ * Product Portfolio & Partner Network API.
+ * Foundation data for Phase 1: Business Opportunity Intelligence.
+ */
+Route::prefix('portfolio')->middleware('api.token')->group(function () {
+    $port = \App\Http\Controllers\Api\Portfolio\PortfolioController::class;
+    $part = \App\Http\Controllers\Api\Portfolio\PartnerController::class;
+
+    Route::get('/taxonomy', [$port, 'taxonomy']);
+    Route::get('/stats', [$port, 'stats']);
+    Route::get('/offers', [$port, 'index']);
+    Route::get('/offers/{id}', [$port, 'show']);
+
+    Route::get('/partners/stats', [$part, 'stats']);
+    Route::get('/partners', [$part, 'index']);
+    Route::get('/partners/{id}', [$part, 'show']);
+
+    Route::middleware('profile:admin,hr')->group(function () use ($port, $part) {
+        Route::post('/offers', [$port, 'store']);
+        Route::put('/offers/{id}', [$port, 'update']);
+        Route::delete('/offers/{id}', [$port, 'destroy']);
+        Route::post('/import', [$port, 'import']);
+
+        Route::post('/partners', [$part, 'store']);
+        Route::put('/partners/{id}', [$part, 'update']);
+        Route::delete('/partners/{id}', [$part, 'destroy']);
+    });
+});
+
+/*
+ * Business Opportunity Intelligence & Signal Matching API.
+ */
+Route::prefix('signals')->middleware('api.token')->group(function () {
+    $intel = \App\Http\Controllers\Api\Portfolio\OpportunityIntelligenceController::class;
+
+    Route::get('/{id}/opportunity-matches', [$intel, 'matchSignal'])->whereNumber('id');
+    Route::get('/opportunities/{id}/opportunity-matches', [$intel, 'matchOpportunity'])->whereNumber('id');
+    Route::get('/ingestion/findings/{id}/opportunity-matches', [$intel, 'matchFinding'])->whereNumber('id');
+    Route::get('/opportunity-matches', [$intel, 'listMatches']);
+    Route::post('/matches/action', [$intel, 'actOnMatch']);
+});

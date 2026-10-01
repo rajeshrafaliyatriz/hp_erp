@@ -238,6 +238,7 @@ final class AiModelClient
         $model = $config->model ?: 'gemini-3.6-flash';
 
         $response = Http::timeout($this->timeout($config->provider))
+            ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->acceptJson()
             ->asJson()
             // The key rides in a header, not the query string. A URL reaches access
@@ -289,6 +290,7 @@ final class AiModelClient
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
 
         $response = Http::timeout($this->timeout($config->provider))
+            ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->withToken($config->apiKey)
             ->acceptJson()
             ->asJson()
