@@ -25,7 +25,7 @@ return new class extends Migration
                 $t->string('domain', 191)->nullable();
                 $t->text('snippet')->nullable();
                 $t->date('published_at')->nullable();
-                $t->timestamp('retrieved_at');
+                $t->timestamp('retrieved_at')->useCurrent();
                 $t->boolean('page_fetched')->default(false);
                 $t->boolean('cited')->default(false);   // referenced by a saved opportunity
                 $t->timestamps();
