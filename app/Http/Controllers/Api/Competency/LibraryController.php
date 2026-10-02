@@ -823,10 +823,10 @@ class LibraryController extends Controller
 
         $data = ['record' => $row];
 
-        if ($type === 'skill') {
+        if ($type === 'skill' || $type === 'skills') {
             $data += $this->skillAssociations($row, $context['sub_institute_id']);
         }
-        if ($type === 'jobrole') {
+        if ($type === 'jobrole' || $type === 'jobroles') {
             $data += $this->jobroleAssociations($row, $context['sub_institute_id']);
         }
 
