@@ -823,10 +823,10 @@ class LibraryController extends Controller
 
         $data = ['record' => $row];
 
-        if ($type === 'skill') {
+        if ($type === 'skill' || $type === 'skills') {
             $data += $this->skillAssociations($row, $context['sub_institute_id']);
         }
-        if ($type === 'jobrole') {
+        if ($type === 'jobrole' || $type === 'jobroles') {
             $data += $this->jobroleAssociations($row, $context['sub_institute_id']);
         }
 
@@ -1160,12 +1160,99 @@ class LibraryController extends Controller
             ->where('sub_institute_id', $sid)
             ->whereNull('deleted_at')
             ->orderBy('skill')
-            ->get(['id', 'skill', 'proficiency_level', 'proficiency_description', 'type']);
+            ->get(['id', 'skill_id', 'skill', 'proficiency_level', 'proficiency_description', 'type']);
+
+        $skillTitles = array_unique(array_filter(array_column($skills->toArray(), 'skill')));
+        $kasaItemsByTitleAndLevel = [];
+        $jobroleKasa = $this->libraryMapAttributes('jobrole', (int) $jobrole->id, $sid);
+
+        if (!empty($skillTitles)) {
+            $kasas = DB::table('s_skill_knowledge_ability as k')
+                ->join('s_users_skills as s', 's.id', '=', 'k.skill_id')
+                ->whereIn('s.title', $skillTitles)
+                ->where(function($q) use ($sid) {
+                    $q->where('k.sub_institute_id', $sid)
+                      ->orWhere('k.sub_institute_id', 1)
+                      ->orWhereNull('k.sub_institute_id');
+                })
+                ->whereNull('k.deleted_at')
+                ->orderByRaw('CASE WHEN k.sub_institute_id = ? THEN 1 ELSE 2 END', [$sid])
+                ->get(['k.id', 'k.proficiency_level', 'k.classification', 'k.classification_item', 'k.classification_category', 'k.classification_sub_category', 'k.proficiency_description', 's.title as skill_title']);
+
+            foreach ($kasas as $k) {
+                $title = $k->skill_title;
+                $level = $k->proficiency_level;
+                $cat = strtolower(trim($k->classification));
+                
+                if (!isset($kasaItemsByTitleAndLevel[$title][$level])) {
+                    $kasaItemsByTitleAndLevel[$title][$level] = ['knowledge' => [], 'ability' => [], 'attitude' => [], 'behaviour' => []];
+                }
+                
+                if (isset($kasaItemsByTitleAndLevel[$title][$level][$cat])) {
+                    // Check for duplicate by title
+                    $exists = false;
+                    foreach ($kasaItemsByTitleAndLevel[$title][$level][$cat] as $existing) {
+                        if ($existing->title === $k->classification_item) {
+                            $exists = true;
+                            break;
+                        }
+                    }
+                    if (!$exists) {
+                        $kasaItemsByTitleAndLevel[$title][$level][$cat][] = (object) [
+                            'id' => $k->id ?? rand(1000000, 9999999),
+                            'title' => $k->classification_item,
+                            'category' => $k->classification_category ?? null,
+                            'sub_category' => $k->classification_sub_category ?? null,
+                            'description' => $k->proficiency_description ?? null,
+                        ];
+                    }
+                }
+            }
+        }
+
+        foreach ($skills as $s) {
+            // Assign KASA to the individual skill
+            $kasaForSkill = $s->skill && isset($kasaItemsByTitleAndLevel[$s->skill][$s->proficiency_level])
+                ? $kasaItemsByTitleAndLevel[$s->skill][$s->proficiency_level]
+                : ['knowledge' => [], 'ability' => [], 'attitude' => [], 'behaviour' => []];
+                
+            $s->kasa = $kasaForSkill;
+
+            // Merge this skill's KASA into the aggregated jobrole KASA
+            if (!empty($skillTitles) && isset($kasas)) {
+                // To merge full objects for the Jobrole KASA tab, we can re-find them in $kasas that match title and level
+                foreach ($kasas as $k) {
+                    if ($k->skill_title === $s->skill && $k->proficiency_level == $s->proficiency_level) {
+                        $cat = strtolower(trim($k->classification));
+                        if (isset($jobroleKasa[$cat])) {
+                            $itemObj = (object) [
+                                'id' => $k->id ?? rand(1000000, 9999999),
+                                'title' => $k->classification_item,
+                                'category' => $k->classification_category ?? null,
+                                'sub_category' => $k->classification_sub_category ?? null,
+                                'description' => $k->proficiency_description ?? null,
+                            ];
+                            
+                            $exists = false;
+                            foreach ($jobroleKasa[$cat] as $existing) {
+                                if ($existing->title === $itemObj->title) {
+                                    $exists = true;
+                                    break;
+                                }
+                            }
+                            if (!$exists) {
+                                $jobroleKasa[$cat][] = $itemObj;
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         return [
             'tasks'  => $tasks,
             'skills' => $skills,
-            'kasa'   => $this->libraryMapAttributes('jobrole', (int) $jobrole->id, $sid),
+            'kasa'   => $jobroleKasa,
         ];
     }
 
