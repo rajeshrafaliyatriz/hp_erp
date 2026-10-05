@@ -144,6 +144,13 @@ final class AiModuleRegistry
             'wired' => false,
             'consumer' => 'App\Http\Controllers\dashboards',
         ],
+        [
+            'key' => 'document_classification',
+            'label' => 'Document Library Classification',
+            'description' => 'Classifies an uploaded document (type, subject, keywords, summary) and OCRs scans/photos with no text layer, for the Document Library.',
+            'wired' => true,
+            'consumer' => 'App\Services\Documents\Understanding\DocumentClassificationService',
+        ],
     ];
 
     /** @return array<int, array{key:string, label:string, description:string, wired:bool, consumer:string}> */

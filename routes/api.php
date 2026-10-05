@@ -160,6 +160,8 @@ use App\Http\Controllers\HRMS\DepartmentSkillController;
 use App\Http\Controllers\HRMS\DepartmentSopController;
 use App\Http\Controllers\HRMS\DepartmentPolicyController;
 use App\Http\Controllers\HRMS\DepartmentRuleController;
+use App\Http\Controllers\HRMS\DepartmentProcessController;
+use App\Http\Controllers\HRMS\DepartmentProcessRunController;
 use App\Http\Controllers\HRTemplates\TemplateController;
 use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\CareerJourneyController;
@@ -1450,7 +1452,7 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
          * which resolves the same two permissions from the row itself. One reader,
          * one rule.
          */
-        Route::get('/{id}/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'forEmployee'])->whereNumber('id');
+        Route::get('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'forEmployee'])->whereNumber('id');
 
         /*
          * HR files and removes an employee's document.
@@ -1467,8 +1469,8 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
          * employee delete by guessing an id. This one is gated by role AND by
          * the employee-in-my-tenant check inside the controller.
          */
-        Route::post('/{id}/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'storeForEmployee'])->whereNumber('id');
-        Route::delete('/{employee}/documents/{document}', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'destroyForEmployee'])
+        Route::post('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'storeForEmployee'])->whereNumber('id');
+        Route::delete('/{employee}/documents/{document}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroyForEmployee'])
             ->whereNumber('employee')->whereNumber('document');
         Route::post('/', [EmployeeDirectoryController::class, 'store']);
         Route::put('/{id}', [EmployeeDirectoryController::class, 'update'])->whereNumber('id');
@@ -1517,6 +1519,41 @@ Route::prefix('department-rules')->group(function () {
     Route::post('/', [DepartmentRuleController::class, 'store']);
     Route::put('/{id}', [DepartmentRuleController::class, 'update']);
     Route::delete('/{id}', [DepartmentRuleController::class, 'destroy']);
+});
+
+// Department Process Builder: a department's own visual, versioned
+// processes (steps + branching edges). SOPs/Policies/Rules above are
+// referenced from a step by id rather than duplicated - see
+// DepartmentProcessController and department_process_steps.linked_*_id.
+// /templates is declared before /{id} for the same ORDER MATTERS reason as
+// elsewhere in this file - otherwise the router reads "templates" as an id.
+Route::prefix('department-processes')->group(function () {
+    Route::get('/templates', [DepartmentProcessController::class, 'templates']);
+    Route::get('/', [DepartmentProcessController::class, 'index']);
+    Route::post('/', [DepartmentProcessController::class, 'store']);
+    Route::get('/{id}', [DepartmentProcessController::class, 'show']);
+    Route::put('/{id}', [DepartmentProcessController::class, 'update']);
+    Route::delete('/{id}', [DepartmentProcessController::class, 'destroy']);
+    Route::post('/{id}/duplicate', [DepartmentProcessController::class, 'duplicate']);
+    Route::put('/{id}/canvas', [DepartmentProcessController::class, 'updateCanvas']);
+    Route::post('/{id}/publish', [DepartmentProcessController::class, 'publish']);
+    Route::get('/{id}/history', [DepartmentProcessController::class, 'history']);
+    Route::post('/{id}/history/{version}/restore', [DepartmentProcessController::class, 'restoreVersion']);
+    Route::get('/{id}/runs', [DepartmentProcessRunController::class, 'index']);
+    Route::post('/{id}/runs', [DepartmentProcessRunController::class, 'start']);
+});
+
+// Department Process execution engine: a launched run of a published
+// process, walked forward one step action at a time. See
+// DepartmentProcessRunController for why every transition is recorded twice
+// (this run's own timeline, plus the org-wide g2g_event history).
+Route::prefix('department-process-runs')->group(function () {
+    Route::get('/', [DepartmentProcessRunController::class, 'index']);
+    Route::get('/{id}', [DepartmentProcessRunController::class, 'show']);
+    Route::post('/{id}/cancel', [DepartmentProcessRunController::class, 'cancel']);
+    Route::post('/{id}/steps/{nodeKey}/claim', [DepartmentProcessRunController::class, 'claimStep']);
+    Route::post('/{id}/steps/{nodeKey}/complete', [DepartmentProcessRunController::class, 'completeStep']);
+    Route::post('/{id}/steps/{nodeKey}/skip', [DepartmentProcessRunController::class, 'skipStep']);
 });
 
 // Department Skills API Routes
@@ -1934,10 +1971,19 @@ Route::middleware('api.token')->group(function () {
      * Reads and writes are both open to any token holder here, because the only
      * thing reachable is the caller's own record.
      */
-    Route::get('/account/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'mine']);
-    Route::post('/account/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'store']);
-    Route::get('/account/documents/{id}/download', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'download'])->whereNumber('id');
-    Route::delete('/account/documents/{id}', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'destroy'])->whereNumber('id');
+    Route::get('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'mine']);
+    Route::post('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'store']);
+    Route::get('/account/documents/{id}/download', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'download'])->whereNumber('id');
+    Route::delete('/account/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroy'])->whereNumber('id');
+
+    /*
+     * One search box over the whole Document Library, self-service and admin
+     * alike. `DocumentAccess` (inside the controller) decides what a given
+     * caller may see - a non-elevated caller gets their own + organisation-
+     * visible documents, HR/admin additionally sees the whole tenant - so
+     * this needs no separate admin route or role gate of its own.
+     */
+    Route::get('/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'search']);
 
     Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
 
@@ -3042,6 +3088,15 @@ Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
         ->whereNumber('year');
 
     Route::get('/form-16/{year}', [App\Http\Controllers\Api\MyHrController::class, 'form16'])
+        ->whereNumber('year');
+
+    /*
+     * Renders the figures above to a PDF and files it into the Document
+     * Library, so a previous year's Form 16 is something to download rather
+     * than something to regenerate on screen every time. POST because it
+     * writes a document_library row, not just computes a response.
+     */
+    Route::post('/form-16/{year}/generate', [App\Http\Controllers\Api\MyHrController::class, 'generateForm16'])
         ->whereNumber('year');
 });
 

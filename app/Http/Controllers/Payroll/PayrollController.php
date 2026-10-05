@@ -11,6 +11,8 @@ use App\Models\HrmsDepartment;
 use App\Models\user\tbluserModel;
 use App\Http\Controllers\HRMS\HrmsController;
 use App\Traits\Helpers;
+use App\Services\Documents\DocumentStorageService;
+use App\Services\Documents\Extraction\TextExtractionManager;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -2259,19 +2261,28 @@ $dompdf->render();
 if ($pdfType == 'storeDoc') {
     $pdfContent = $dompdf->output();
     $fileName = 'emp_' . $id . '_payslip_' . $month . '_' . $year . '.pdf';
-    $file_path = 'public/staff_document/' . $fileName;
 
-    // Delete if already exists
-    if (Storage::disk('digitalocean')->exists($file_path)) {
-        Storage::disk('digitalocean')->delete($file_path);
-    }
+    /*
+     * Written through DocumentStorageService now, not a hand-rolled
+     * `public/staff_document/` path - that folder was one of three
+     * divergent conventions `staff_document`'s writers each used (see
+     * the document_library migration's docblock). The payslip is now a
+     * document_library row; the caller (monthlyPayrollStore) inserts it
+     * using the metadata returned here, same as any other upload.
+     */
+    $stored = (new DocumentStorageService())->storeGenerated(
+        $pdfContent,
+        $fileName,
+        'application/pdf',
+        (int) $id
+    );
 
-    // Store PDF in DigitalOcean Space
-    Storage::disk('digitalocean')->put($file_path, $pdfContent, 'public', [
-        'Cache-Control' => 'max-age=0, no-cache, no-store'
-    ]);
-
-    return $fileName;
+    return [
+        'file_name' => $fileName,
+        'storage_path' => $stored['storage_path'],
+        'size' => $stored['size'],
+        'checksum_sha256' => $stored['checksum_sha256'],
+    ];
 } else {
     // Download PDF directly
     return $dompdf->stream('salary.pdf');
@@ -3624,49 +3635,77 @@ public function monthlyPayrollStore(Request $request)
 
         // generate PDF if total_day is not 0
         if ($dataArr['total_day'] != 0) {
-            $pdfName = $this->monthlyPayrollPdf($request, $employee_id, $month, $searchedYear, 'storeDoc');
+            $pdfResult = $this->monthlyPayrollPdf($request, $employee_id, $month, $searchedYear, 'storeDoc');
 
             // F-125. null now means "this employee has no salary structure, so no
             // payslip could be produced" rather than a fatal. Collected and
             // reported below - a silently missing payslip is how somebody does
             // not get paid.
-            if ($pdfName === null) {
+            if ($pdfResult === null) {
                 $noPayslip[] = $employee_id;
             }
 
-            if (isset($pdfName)) {
+            if (isset($pdfResult) && is_array($pdfResult)) {
                 $docTitle = 'Payslip ' . $request->month . ' ' . $searchedYear;
 
-                $checkDoc = DB::table('staff_document')
+                /*
+                 * document_library, not staff_document - payslips are now
+                 * one of the writers this table has (see the
+                 * document_library migration's docblock). Matched by
+                 * owner + type + title + tenant, the same key the old
+                 * staff_document upsert used, so re-saving a month still
+                 * replaces that month's slip instead of duplicating it.
+                 */
+                $existing = DB::table('document_library')
                     ->where([
                         'sub_institute_id' => $sub_institute_id,
-                        'document_type_id' => 56,
-                        'user_id' => $employee_id,
-                        'file_name' => $pdfName
+                        'document_type' => 'payslip',
+                        'owner_id' => $employee_id,
+                        'title' => $docTitle,
                     ])
-                    ->first();
+                    ->whereNull('deleted_at')
+                    ->first(['id']);
+
+                $extractor = new TextExtractionManager();
+                // The PDF bytes are already written to the disk, not kept in
+                // memory here - extract straight from the stored object so
+                // this does not duplicate monthlyPayrollPdf's render.
+                try {
+                    $localCopy = tempnam(sys_get_temp_dir(), 'payslip_');
+                    file_put_contents($localCopy, Storage::disk((new DocumentStorageService())->disk())->get($pdfResult['storage_path']));
+                    $extractedText = $extractor->extract($localCopy, 'pdf');
+                    @unlink($localCopy);
+                } catch (\Throwable $e) {
+                    $extractedText = '';
+                }
 
                 $pdfData = [
-                    'document_title' => $docTitle,
                     'sub_institute_id' => $sub_institute_id,
-                    'document_type_id' => 56,
-                    'user_id' => $employee_id,
-                    'file_name' => $pdfName
+                    'owner_id' => $employee_id,
+                    'title' => $docTitle,
+                    'original_file_name' => $pdfResult['file_name'],
+                    'mime_type' => 'application/pdf',
+                    'size' => $pdfResult['size'],
+                    'checksum_sha256' => $pdfResult['checksum_sha256'],
+                    'storage_path' => $pdfResult['storage_path'],
+                    'category' => 'personnel',
+                    'document_type' => 'payslip',
+                    'document_date' => now()->toDateString(),
+                    'period_label' => $month . ' ' . $searchedYear,
+                    'extracted_text' => $extractedText !== '' ? $extractedText : null,
+                    'visibility' => 'private',
+                    'processing_status' => 'done',
+                    'updated_at' => now(),
                 ];
 
-                if (empty($checkDoc)) {
+                if (!$existing) {
+                    $pdfData['current_version'] = 1;
                     $pdfData['created_at'] = now();
-                    DB::table('staff_document')->insert($pdfData);
+                    // NULL means SYSTEM - nobody filed this by hand, payroll did.
+                    $pdfData['created_by'] = null;
+                    DB::table('document_library')->insert($pdfData);
                 } else {
-                    $pdfData['updated_at'] = now();
-                    DB::table('staff_document')
-                        ->where([
-                            'sub_institute_id' => $sub_institute_id,
-                            'document_type_id' => 56,
-                            'user_id' => $employee_id,
-                            'file_name' => $pdfName
-                        ])
-                        ->update($pdfData);
+                    DB::table('document_library')->where('id', $existing->id)->update($pdfData);
                 }
             }
         }
@@ -3786,15 +3825,18 @@ public function deleteMonthlyPayrolls(Request $request, $month)
                     $docTitle = 'Payslip ' . $month . ' ' . $year;
 
                     // Debug logs
-                    Log::info("Attempting to delete staff document for user_id=$empId, title=$docTitle");
+                    Log::info("Attempting to delete payslip document for user_id=$empId, title=$docTitle");
 
-                    // Delete staff document if exists
-                    DB::table('staff_document')->where([
-                        'user_id' => $empId,
-                        'document_type_id' => 56,
-                        'document_title' => $docTitle,
-                        'sub_institute_id' => $sub_institute_id
-                    ])->delete();
+                    // Soft-delete the document_library row if it exists (payslips moved off
+                    // staff_document - see the document_library migration's docblock).
+                    DB::table('document_library')->where([
+                        'owner_id' => $empId,
+                        'document_type' => 'payslip',
+                        'title' => $docTitle,
+                        'sub_institute_id' => $sub_institute_id,
+                    ])->whereNull('deleted_at')->update([
+                        'deleted_at' => now(),
+                    ]);
 
                     // Delete monthly salary record
                     $deleted = DB::table('employee_monthly_salary_data')->where('id', $dataId)->delete();
