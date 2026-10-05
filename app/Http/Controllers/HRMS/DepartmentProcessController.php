@@ -848,6 +848,32 @@ class DepartmentProcessController extends Controller
         return array_values(array_unique($errors));
     }
 
+    /** Step types publish() requires an assignee on - see validateGraph(). */
+    private const ASSIGNABLE_TYPES = ['task', 'approval'];
+
+    /**
+     * Seed a new process's graph from config/department_processes.php's flat
+     * per-category step list.
+     *
+     * Two things a plain linear chain cannot express on its own, handled
+     * here rather than by complicating the template data:
+     *
+     *   - A `task`/`approval` step needs SOME assignee before it can publish
+     *     (see validateGraph()). Every department can resolve one -
+     *     department_head - so that is the default; a user who wants a
+     *     specific person or role instead edits it in the builder, same as
+     *     any other field a template pre-fills.
+     *
+     *   - A `decision` step needs at least two LABELED outgoing edges, but
+     *     the template is one flat sequence with no branch data. Rather than
+     *     reshape every template into a branching structure for the sake of
+     *     a handful of decision steps, this fans a decision out to the SAME
+     *     next step via two edges labeled "Yes"/"No" - a valid, publishable
+     *     graph on creation that still reads correctly (both answers lead to
+     *     what the template always meant to happen next), which the builder
+     *     is exactly the tool for re-routing if a tenant wants the two
+     *     answers to actually diverge.
+     */
     protected function seedFromTemplate(int $processId, int $tenantId, int $actorId, string $categoryKey): void
     {
         $template = config('department_processes.templates.' . $categoryKey, []);
@@ -856,6 +882,7 @@ class DepartmentProcessController extends Controller
         }
 
         $previousKey = null;
+        $previousType = null;
         $y = 0;
         foreach ($template as $index => $item) {
             $nodeKey = (string) Str::uuid();
@@ -866,6 +893,7 @@ class DepartmentProcessController extends Controller
                 'node_key'         => $nodeKey,
                 'step_type'        => $item['type'],
                 'title'            => $item['title'],
+                'assignee_type'    => in_array($item['type'], self::ASSIGNABLE_TYPES, true) ? 'department_head' : null,
                 'position_x'       => 0,
                 'position_y'       => $y,
                 'is_required'      => true,
@@ -876,18 +904,23 @@ class DepartmentProcessController extends Controller
             ]);
 
             if ($previousKey !== null) {
-                DB::table('department_process_edges')->insert([
-                    'process_id'       => $processId,
-                    'sub_institute_id' => $tenantId,
-                    'source_node_key'  => $previousKey,
-                    'target_node_key'  => $nodeKey,
-                    'order'            => $index,
-                    'created_at'       => now(),
-                    'updated_at'       => now(),
-                ]);
+                $labels = $previousType === 'decision' ? ['Yes', 'No'] : [null];
+                foreach ($labels as $label) {
+                    DB::table('department_process_edges')->insert([
+                        'process_id'       => $processId,
+                        'sub_institute_id' => $tenantId,
+                        'source_node_key'  => $previousKey,
+                        'target_node_key'  => $nodeKey,
+                        'label'            => $label,
+                        'order'            => $index,
+                        'created_at'       => now(),
+                        'updated_at'       => now(),
+                    ]);
+                }
             }
 
             $previousKey = $nodeKey;
+            $previousType = $item['type'];
             $y += 120;
         }
     }
