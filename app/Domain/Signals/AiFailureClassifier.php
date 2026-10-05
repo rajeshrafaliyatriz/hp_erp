@@ -17,6 +17,10 @@ final class AiFailureClassifier
      */
     public static function classify(\Throwable $e): array
     {
+        if ($e instanceof \App\Domain\AI\Support\AiCredentialsExhaustedException) {
+            return self::result('ai_rate_limited', 'All configured AI credentials are temporarily at their usage limit. Please try again in a few minutes.', 429);
+        }
+
         $raw = $e->getMessage();
         $http = preg_match('/refused the request \(HTTP (\d{3})\)/', $raw, $m) ? (int) $m[1] : null;
         $text = strtolower($raw);

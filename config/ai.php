@@ -62,6 +62,13 @@ return [
             'timeout' => (int) env('GEMINI_REQUEST_TIMEOUT', 45),
             'max_output_tokens' => (int) env('GEMINI_MAX_OUTPUT_TOKENS', 2048),
             'api_type' => env('GEMINI_API_TYPE', 'gemini'),
+            // Additional platform credentials for automatic failover, on top of
+            // GEMINI_API_KEY: a comma-separated GEMINI_API_KEYS and/or GEMINI_API_KEY_1
+            // .. GEMINI_API_KEY_20. Only used when no key is saved in `ai_api_keys`.
+            'extra_api_keys' => array_values(array_filter(array_merge(
+                explode(',', (string) env('GEMINI_API_KEYS', '')),
+                array_map(fn ($n) => env("GEMINI_API_KEY_{$n}"), range(1, 20))
+            ), fn ($key) => is_string($key) && trim($key) !== '')),
         ],
 
         'openrouter' => [
@@ -81,6 +88,31 @@ return [
             'max_output_tokens' => (int) env('DEEPSEEK_MAX_OUTPUT_TOKENS', 0),
             'api_type' => env('DEEPSEEK_API_TYPE', 'DEEPSEEK_API_KEY'),
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Credential failover
+    |--------------------------------------------------------------------------
+    |
+    | When an organisation has several credentials for one provider, a quota /
+    | rate-limit / invalid-key failure moves the request to the next healthy one.
+    | Health (cooldowns) lives in the cache. Each credential is tried at most once
+    | per request, bounded by `max_attempts`.
+    */
+    'failover' => [
+        'providers' => array_values(array_filter(array_map('trim', explode(',', (string) env('AI_FAILOVER_PROVIDERS', 'gemini'))))),
+        'max_attempts' => (int) env('AI_FAILOVER_MAX_ATTEMPTS', 20),
+        // Provider 5xx: rotate, but never walk the whole pool for an outage.
+        'max_transient_attempts' => (int) env('AI_FAILOVER_MAX_TRANSIENT_ATTEMPTS', 2),
+        // 429 with no Retry-After / retryDelay from the provider.
+        'quota_cooldown_seconds' => (int) env('AI_FAILOVER_QUOTA_COOLDOWN', 60),
+        // Bounds applied to a provider-supplied retry delay.
+        'min_cooldown_seconds' => (int) env('AI_FAILOVER_MIN_COOLDOWN', 5),
+        'max_cooldown_seconds' => (int) env('AI_FAILOVER_MAX_COOLDOWN', 3600),
+        'transient_cooldown_seconds' => (int) env('AI_FAILOVER_TRANSIENT_COOLDOWN', 15),
+        // Rejected/revoked key: retried later in case it was fixed, not disabled in the DB.
+        'invalid_cooldown_seconds' => (int) env('AI_FAILOVER_INVALID_COOLDOWN', 3600),
     ],
 
     'rate_limit' => [
