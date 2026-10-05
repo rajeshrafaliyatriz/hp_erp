@@ -73,31 +73,73 @@ class ProcessDocumentPipelineJob implements ShouldQueue
 
         $warnings = [];
         $extractedText = (string) ($document->extracted_text ?? '');
+        $needsOcr = trim($extractedText) === '';
+
+        // Only the step this run will actually perform first - a document
+        // that already has text (the common case: sync extraction at upload
+        // already found it) goes straight to the duplicate check, not
+        // through an 'ocr' step it never runs.
+        $this->step($document->id, $needsOcr ? 'ocr' : 'checking_duplicates');
 
         try {
             $extractedText = $this->ensureText($document, $extractedText, $extractor, $ocr, $storage, $warnings);
+
+            if ($needsOcr) {
+                $this->step($document->id, 'checking_duplicates');
+            }
             $this->duplicateCheck($document, $warnings);
-            $this->classify($document, $extractedText, $classifier);
+
+            $this->step($document->id, 'classifying');
+            $classification = $this->classify($document, $extractedText, $classifier);
 
             DB::table('document_library')->where('id', $document->id)->update([
                 'processing_status' => 'done',
+                'processing_step' => 'done',
                 'processing_error' => null,
                 'warnings' => $warnings !== [] ? json_encode($warnings) : null,
                 'updated_at' => now(),
             ]);
+
+            $this->audit($document, 'classified', [
+                'source' => $classification['source'] ?? 'none',
+                'confidence' => $classification['confidence'] ?? null,
+                'warnings' => $warnings,
+            ]);
         } catch (\Throwable $e) {
             report($e);
 
-            // Still 'done', not 'failed' - see this class's docblock. The row
-            // already has whatever the synchronous upload-time extraction
-            // produced; a pipeline error here is recorded, not a reason to
-            // hide a document that is otherwise perfectly usable.
+            // processing_status is still 'done', not 'failed' - see this
+            // class's docblock. The row already has whatever the synchronous
+            // upload-time extraction produced; a pipeline error here is
+            // recorded, not a reason to hide a document that is otherwise
+            // perfectly usable. processing_step DOES say 'failed' - that is
+            // purely informational for the enrichment progress indicator,
+            // and carries no access-control meaning the way processing_status does.
             DB::table('document_library')->where('id', $document->id)->update([
                 'processing_status' => 'done',
+                'processing_step' => 'failed',
                 'processing_error' => mb_substr($e->getMessage(), 0, 500),
                 'updated_at' => now(),
             ]);
         }
+    }
+
+    private function step(int $documentId, string $step): void
+    {
+        DB::table('document_library')->where('id', $documentId)->update(['processing_step' => $step]);
+    }
+
+    /** A durable note in document_library_history, for the per-document and global activity feeds. */
+    private function audit(object $document, string $action, array $details = []): void
+    {
+        DB::table('document_library_history')->insert([
+            'document_id' => $document->id,
+            'entry_type' => 'audit',
+            'action' => $action,
+            'details' => $details !== [] ? json_encode($details) : null,
+            'created_by' => null, // SYSTEM - the pipeline did this, not a person.
+            'created_at' => now(),
+        ]);
     }
 
     /**
@@ -171,16 +213,17 @@ class ProcessDocumentPipelineJob implements ShouldQueue
         }
     }
 
-    private function classify(object $document, string $extractedText, DocumentClassificationService $classifier): void
+    /** @return array{document_type: ?string, subject: ?string, keywords: array<int, string>, summary: ?string, confidence: float, source: string} */
+    private function classify(object $document, string $extractedText, DocumentClassificationService $classifier): array
     {
         if (trim($extractedText) === '') {
-            return;
+            return ['document_type' => null, 'subject' => null, 'keywords' => [], 'summary' => null, 'confidence' => 0.0, 'source' => 'none'];
         }
 
         $result = $classifier->classify($extractedText, (int) $document->sub_institute_id);
 
         if ($result['source'] === 'none') {
-            return;
+            return $result;
         }
 
         $update = [
@@ -197,5 +240,7 @@ class ProcessDocumentPipelineJob implements ShouldQueue
         }
 
         DB::table('document_library')->where('id', $document->id)->update($update);
+
+        return $result;
     }
 }

@@ -1985,6 +1985,19 @@ Route::middleware('api.token')->group(function () {
      */
     Route::get('/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'search']);
 
+    /*
+     * Static segment BEFORE the /documents/{id} family below - the exact
+     * ordering gotcha this codebase has already been bitten by elsewhere
+     * (see the g2g-platform-services-rights history): a route for
+     * `/documents/{id}` registered first would swallow `/documents/activity`
+     * with id = "activity".
+     */
+    Route::get('/documents/activity', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'activity']);
+
+    Route::get('/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'show'])->whereNumber('id');
+    Route::get('/documents/{id}/history', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'history'])->whereNumber('id');
+    Route::get('/documents/{id}/related', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'related'])->whereNumber('id');
+
     Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
 
     /*

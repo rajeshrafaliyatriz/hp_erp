@@ -150,7 +150,154 @@ class DocumentLibraryController extends Controller
             'deleted_at' => now(),
         ]);
 
+        $this->recordAudit($row->id, (int) $identity['user_id'], $request, 'deleted');
+
         return response()->json(['status' => 1, 'message' => 'Document removed.']);
+    }
+
+    /**
+     * GET /api/documents/{id} — one document, in full.
+     *
+     * Everything the search/list rows omit for weight (subject, summary,
+     * confidence, keywords, warnings, processing_error, processing_step) -
+     * this is what the detail panel and the upload-progress poller both read.
+     * Unlike `search()`, this does NOT filter on `processing_status = 'done'`
+     * - a caller polling this endpoint right after upload needs to see
+     * 'processing' and the live `processing_step`, not a 404 until the
+     * background job finishes.
+     */
+    public function show(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $department = $this->callerDepartment((int) $identity['user_id']);
+        $row = DB::table('document_library')->where('id', (int) $id)->whereNull('deleted_at')->first();
+
+        if (!$row || !DocumentAccess::canView($row, (int) $identity['user_id'], (int) $identity['sub_institute_id'], $department)) {
+            return $this->notFound();
+        }
+
+        unset($row->extracted_text); // can be megabytes; never needed by the detail panel or the poller.
+
+        return response()->json(['status' => 1, 'data' => $row]);
+    }
+
+    /**
+     * GET /api/documents/{id}/history — this document's own version and
+     * audit trail, newest first. Backs the "Versions" and "Audit" tabs.
+     */
+    public function history(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $department = $this->callerDepartment((int) $identity['user_id']);
+        $row = DB::table('document_library')->where('id', (int) $id)->whereNull('deleted_at')->first(['id', 'sub_institute_id', 'owner_id', 'visibility', 'department_id', 'view_principals', 'created_by']);
+
+        if (!$row || !DocumentAccess::canView($row, (int) $identity['user_id'], (int) $identity['sub_institute_id'], $department)) {
+            return $this->notFound();
+        }
+
+        $entries = DB::table('document_library_history as h')
+            ->leftJoin('tbluser as u', 'u.id', '=', 'h.created_by')
+            ->where('h.document_id', $row->id)
+            ->orderByDesc('h.created_at')
+            ->orderByDesc('h.id')
+            ->limit(100)
+            ->get([
+                'h.id', 'h.entry_type', 'h.version_number', 'h.storage_path', 'h.size', 'h.change_note',
+                'h.action', 'h.details', 'h.ip_address', 'h.created_at',
+                DB::raw("TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) as actor_name"),
+            ]);
+
+        return response()->json(['status' => 1, 'data' => $entries]);
+    }
+
+    /**
+     * GET /api/documents/activity — every action recorded against any
+     * document this caller may see, newest first. The global counterpart to
+     * `history()`'s per-document feed.
+     *
+     * Scoped the same way `search()` is: joins document_library_history back
+     * to document_library and applies DocumentAccess::visibleTo, so a
+     * non-elevated caller sees activity on their own + organisation-visible
+     * documents, and HR/admin see the whole tenant's.
+     */
+    public function activity(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $department = $this->callerDepartment((int) $identity['user_id']);
+
+        $query = DB::table('document_library_history as h')
+            ->join('document_library as d', 'd.id', '=', 'h.document_id')
+            ->leftJoin('tbluser as u', 'u.id', '=', 'h.created_by')
+            ->where('h.entry_type', 'audit')
+            ->whereNull('d.deleted_at');
+
+        DocumentAccess::visibleTo($query, (int) $identity['user_id'], (int) $identity['sub_institute_id'], $department);
+
+        $entries = $query
+            ->orderByDesc('h.created_at')
+            ->orderByDesc('h.id')
+            ->limit(100)
+            ->get([
+                'h.id', 'h.action', 'h.details', 'h.created_at',
+                'd.id as document_id', 'd.title as document_title',
+                DB::raw("TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) as actor_name"),
+            ]);
+
+        return response()->json(['status' => 1, 'data' => $entries]);
+    }
+
+    /**
+     * GET /api/documents/{id}/related — other documents of the same type, in
+     * the same department, this caller may also see. A coarse heuristic
+     * (shared document_type + department_id), not a content-similarity
+     * search - good enough to answer "what else is like this" without a
+     * second AI call.
+     */
+    public function related(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $department = $this->callerDepartment((int) $identity['user_id']);
+        $row = DB::table('document_library')->where('id', (int) $id)->whereNull('deleted_at')->first();
+
+        if (!$row || !DocumentAccess::canView($row, (int) $identity['user_id'], (int) $identity['sub_institute_id'], $department)) {
+            return $this->notFound();
+        }
+
+        $query = DB::table('document_library')
+            ->where('id', '!=', $row->id)
+            ->where('processing_status', 'done')
+            ->whereNull('deleted_at')
+            ->when($row->document_type, fn ($q) => $q->where('document_type', $row->document_type))
+            ->when($row->department_id, fn ($q) => $q->where('department_id', $row->department_id));
+
+        DocumentAccess::visibleTo($query, (int) $identity['user_id'], (int) $identity['sub_institute_id'], $department);
+
+        $related = $query
+            ->orderByDesc('created_at')
+            ->limit(6)
+            ->get(['id', 'title', 'original_file_name', 'document_type', 'tags', 'created_at']);
+
+        return response()->json(['status' => 1, 'data' => $related]);
     }
 
     /**
@@ -238,6 +385,8 @@ class DocumentLibraryController extends Controller
         }
 
         try {
+            $this->recordAudit($row->id, (int) $identity['user_id'], $request, 'downloaded');
+
             return Storage::disk($storage->disk())->download($row->storage_path, $this->downloadName($row));
         } catch (\Throwable $caught) {
             report($caught);
@@ -271,6 +420,8 @@ class DocumentLibraryController extends Controller
             'deleted_by' => $userId,
             'deleted_at' => now(),
         ]);
+
+        $this->recordAudit($row->id, $userId, $request, 'deleted');
 
         return response()->json(['status' => 1, 'message' => 'Document removed.']);
     }
@@ -364,6 +515,11 @@ class DocumentLibraryController extends Controller
             'created_at' => now(),
         ]);
 
+        $this->recordAudit($documentId, $actorId, $request, 'uploaded', [
+            'subject_id' => $subjectId,
+            'on_behalf' => $actorId !== $subjectId,
+        ]);
+
         /*
          * OCR (if this is a scan with no text layer) and AI classification
          * happen asynchronously from here - the row above is already
@@ -419,7 +575,7 @@ class DocumentLibraryController extends Controller
             ->orderByDesc('created_at')
             ->get([
                 'id', 'title', 'document_type', 'category', 'original_file_name',
-                'mime_type', 'size', 'visibility', 'processing_status',
+                'mime_type', 'size', 'visibility', 'processing_status', 'processing_step',
                 'source_system', 'document_date', 'created_at',
             ]);
 
@@ -428,6 +584,31 @@ class DocumentLibraryController extends Controller
             'data' => $rows,
             'document_types' => config('documents.types'),
         ]);
+    }
+
+    /**
+     * A durable, human-attributed note in `document_library_history` - the
+     * `ProcessDocumentPipelineJob::audit()` counterpart for actions a person
+     * (rather than the pipeline) took. Never allowed to fail the request it
+     * is attached to.
+     *
+     * @param  array<string, mixed>  $details
+     */
+    private function recordAudit(int $documentId, int $actorId, Request $request, string $action, array $details = []): void
+    {
+        try {
+            DB::table('document_library_history')->insert([
+                'document_id' => $documentId,
+                'entry_type' => 'audit',
+                'action' => $action,
+                'details' => $details !== [] ? json_encode($details) : null,
+                'ip_address' => mb_substr((string) $request->ip(), 0, 45),
+                'created_by' => $actorId,
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     private function callerDepartment(int $userId): ?int
