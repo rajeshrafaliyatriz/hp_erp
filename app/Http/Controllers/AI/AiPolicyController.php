@@ -96,7 +96,11 @@ class AiPolicyController extends AiController
             $institute = $this->scope($request)->selectedInstituteId;
 
             $moduleKey = trim((string) $request->input('module_key', ''));
-            $moduleIds = $moduleKey === '' ? [] : $this->moduleIds($moduleKey, $institute);
+            // `rollup=1` is the module-wide view: policies assigned to the module's screens too.
+            $moduleKeys = $moduleKey === '' ? [] : ($request->boolean('rollup')
+                ? app(\App\Domain\AI\Modules\ModuleRollUp::class)->keysFor($moduleKey)
+                : [$moduleKey]);
+            $moduleIds = $moduleKeys === [] ? [] : $this->moduleIds($moduleKeys, $institute);
 
             $query = DB::table('ai_policies as p')
                 ->where(function ($inner) use ($institute) {
@@ -454,14 +458,15 @@ class AiPolicyController extends AiController
             ->all();
     }
 
-    private function moduleIds(string $moduleKey, int|string|null $institute): array
+    /** @param  string|array<int, string>  $moduleKey */
+    private function moduleIds(string|array $moduleKey, int|string|null $institute): array
     {
         if (! $this->schema->hasTable('ai_modules')) {
             return [];
         }
 
         return DB::table('ai_modules')
-            ->where('module_key', $moduleKey)
+            ->whereIn('module_key', (array) $moduleKey)
             ->where(function ($query) use ($institute) {
                 $query->where('sub_institute_id', $institute)->orWhereNull('sub_institute_id');
             })

@@ -122,7 +122,7 @@ class AiTemplateController extends AiController
                 return $this->failure('That module is not one this organisation has.', 404);
             }
 
-            $templates = $this->templates->forModule($moduleKey, $institute);
+            $templates = $this->templates->forModule($moduleKey, $institute, $request->boolean('rollup'));
 
             return $this->success('Templates resolved.', [
                 'sub_institute_id' => $institute,

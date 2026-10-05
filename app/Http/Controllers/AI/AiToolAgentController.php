@@ -56,7 +56,7 @@ class AiToolAgentController extends AiController
                 ->whereIn('sub_module', $this->stackModuleKeys());
 
             if ($request->filled('module')) {
-                $query->where('sub_module', (string) $request->query('module'));
+                $query->whereIn('sub_module', $this->moduleScope($request));
             }
 
             if ($request->filled('status') && isset(self::STATUS_TO_G2G[(string) $request->query('status')])) {
@@ -241,7 +241,7 @@ class AiToolAgentController extends AiController
                 ->whereIn('a.sub_module', $this->stackModuleKeys());
 
             if ($request->filled('module')) {
-                $query->where('a.sub_module', (string) $request->query('module'));
+                $query->whereIn('a.sub_module', $this->moduleScope($request));
             }
             if ($request->filled('agent_id')) {
                 $query->where('r.agent_id', (int) $request->query('agent_id'));
@@ -264,6 +264,19 @@ class AiToolAgentController extends AiController
     }
 
     // ------------------------------------------------------------------ internals
+
+    /**
+     * The module key a list is scoped to — plus the screens beneath it when the caller asked
+     * for the module-wide view (`rollup=1`). Without it, exactly the one key, as before.
+     *
+     * @return array<int, string>
+     */
+    private function moduleScope(Request $request): array
+    {
+        $module = (string) $request->query('module');
+
+        return $request->boolean('rollup') ? app(\App\Domain\AI\Modules\ModuleRollUp::class)->keysFor($module) : [$module];
+    }
 
     /** @return array<int, string> Keys of the modules that have an AI Stack (a registry_keys row). */
     private function stackModuleKeys(): array
