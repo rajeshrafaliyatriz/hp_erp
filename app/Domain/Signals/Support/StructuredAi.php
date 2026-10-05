@@ -3,6 +3,7 @@
 namespace App\Domain\Signals\Support;
 
 use App\Domain\AI\Support\AiCompletion;
+use App\Domain\AI\Support\AiCredentialsExhaustedException;
 use App\Domain\AI\Support\AiModelClient;
 use App\Domain\AI\Support\AiNotConfiguredException;
 use App\Domain\AI\Support\AiQuotaExceededException;
@@ -40,8 +41,8 @@ class StructuredAi
                 );
 
                 return ['data' => $this->decode($completion->text), 'completion' => $completion];
-            } catch (AiNotConfiguredException|AiQuotaExceededException $e) {
-                throw $e; // retrying cannot fix configuration or a quota
+            } catch (AiNotConfiguredException|AiQuotaExceededException|AiCredentialsExhaustedException $e) {
+                throw $e; // retrying cannot fix configuration, a quota, or a fully cooled-down pool
             } catch (\Throwable $e) {
                 $last = $e;
                 if ($i < $attempts) {

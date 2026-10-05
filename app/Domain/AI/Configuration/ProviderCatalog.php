@@ -161,6 +161,33 @@ final class ProviderCatalog
         return $value !== '' ? $value : null;
     }
 
+    /**
+     * Every environment key for a provider, primary first: `api_key` plus the optional
+     * `extra_api_keys` list (GEMINI_API_KEYS / GEMINI_API_KEY_1..20). Placeholders are
+     * dropped; duplicates are collapsed by the caller.
+     *
+     * @return list<string>
+     */
+    public function envKeys(string $provider): array
+    {
+        $keys = [];
+        $primary = $this->envKey($provider);
+
+        if ($primary !== null && $primary !== '') {
+            $keys[] = $primary;
+        }
+
+        foreach ((array) config("ai.provider.{$provider}.extra_api_keys", []) as $extra) {
+            $extra = trim((string) $extra, " \t\n\r\0\x0B'\"");
+
+            if ($extra !== '' && ! ResolvedAiConfiguration::isPlaceholder($extra)) {
+                $keys[] = $extra;
+            }
+        }
+
+        return array_values(array_unique($keys));
+    }
+
     private function keyFromEnvFile(string $provider): ?string
     {
         $envPath = base_path('.env');

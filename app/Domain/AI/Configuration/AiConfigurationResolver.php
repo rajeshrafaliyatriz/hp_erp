@@ -101,6 +101,7 @@ final class AiConfigurationResolver
                 keyId: $row->id ?? null,
                 scope: ($row->sub_institute_id ?? null) === null ? 'platform' : 'institute',
                 maxOutputTokens: $this->maxTokens($row),
+                alternates: $this->failoverSiblings($provider, $row->sub_institute_id ?? null, [$row->id ?? null]),
             );
         }
 
@@ -109,11 +110,26 @@ final class AiConfigurationResolver
         // precisely `ProviderKeyResolver`, delegated to rather than reimplemented.
         $provider = $this->defaultProvider();
 
-        $key = $this->keys->resolve(
-            $this->providers->apiType($provider),
-            $subInstituteId,
-            $this->providers->envKey($provider),
-        );
+        $alternates = [];
+
+        if ($this->failoverEnabled($provider)) {
+            // Health-aware failover list: first non-empty tier (organisation → platform
+            // → env), newest first. The head is the primary exactly as `resolve()` used
+            // to pick it, so every non-failover caller sees the same credential.
+            $candidates = $this->keys->candidates(
+                $this->providers->apiType($provider),
+                $subInstituteId,
+                $this->providers->envKeys($provider),
+            );
+            $key = $candidates[0] ?? null;
+            $alternates = array_slice($candidates, 1);
+        } else {
+            $key = $this->keys->resolve(
+                $this->providers->apiType($provider),
+                $subInstituteId,
+                $this->providers->envKey($provider),
+            );
+        }
 
         return new ResolvedAiConfiguration(
             provider: $provider,
@@ -123,7 +139,30 @@ final class AiConfigurationResolver
             keyId: $key['id'] ?? null,
             scope: $key['scope'] ?? 'config',
             maxOutputTokens: $this->poolMaxTokens($key, $provider),
+            alternates: $alternates,
         );
+    }
+
+    /** Whether quota/invalid-key failures for this provider rotate across credentials. */
+    public function failoverEnabled(string $provider): bool
+    {
+        return in_array($provider, (array) config('ai.failover.providers', ['gemini']), true);
+    }
+
+    /**
+     * Other active credentials of the same owner, for failover after a module-specific
+     * or bound credential. Empty when failover is off for the provider.
+     *
+     * @param  list<int|string|null>  $excludeIds
+     * @return list<array{api_key:string, api_limit:int|null, id:int|string|null, scope:string}>
+     */
+    private function failoverSiblings(string $provider, int|string|null $owner, array $excludeIds): array
+    {
+        if (! $this->failoverEnabled($provider)) {
+            return [];
+        }
+
+        return $this->keys->siblings($this->providers->apiType($provider), $owner, array_filter($excludeIds, fn ($id) => $id !== null));
     }
 
     /**
@@ -140,6 +179,7 @@ final class AiConfigurationResolver
         $keyId = null;
         $scope = ($binding->sub_institute_id ?? null) === null ? 'platform' : 'institute';
         $limit = null;
+        $alternates = [];
 
         if (($binding->api_key_id ?? null) !== null) {
             try {
@@ -156,15 +196,22 @@ final class AiConfigurationResolver
                 $apiKey = trim((string) $row->api_key);
                 $keyId = (int) $row->id;
                 $limit = $row->api_limit ?? null;
+                $alternates = $this->failoverSiblings($provider, $row->sub_institute_id ?? null, [$row->id]);
             }
         }
 
         if ($apiKey === null) {
-            $key = $this->keys->resolve(
-                $this->providers->apiType($provider),
-                $subInstituteId,
-                $this->providers->envKey($provider),
-            );
+            if ($this->failoverEnabled($provider)) {
+                $candidates = $this->keys->candidates($this->providers->apiType($provider), $subInstituteId, $this->providers->envKeys($provider));
+                $key = $candidates[0] ?? null;
+                $alternates = array_slice($candidates, 1);
+            } else {
+                $key = $this->keys->resolve(
+                    $this->providers->apiType($provider),
+                    $subInstituteId,
+                    $this->providers->envKey($provider),
+                );
+            }
             $apiKey = $key['api_key'] ?? null;
             $keyId = $key['id'] ?? null;
             $limit = $key['api_limit'] ?? null;
@@ -188,6 +235,7 @@ final class AiConfigurationResolver
             keyId: $keyId,
             scope: $scope,
             maxOutputTokens: $maxTokens,
+            alternates: $alternates,
         );
     }
 
