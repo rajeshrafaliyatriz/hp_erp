@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\TaskManagement;
 
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Controller;
+use App\Services\Documents\Federation\TaskDocumentIndexer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -155,6 +156,12 @@ class TaskDocumentController extends Controller
             'updated_at'       => now(),
         ]);
 
+        try {
+            app(TaskDocumentIndexer::class)->indexById((int) $id);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return response()->json([
             'status'  => 1,
             'data'    => ['id' => $id],
@@ -236,6 +243,12 @@ class TaskDocumentController extends Controller
         DB::table('task_documents')->where('id', $id)->update([
             'deleted_at' => now(), 'updated_at' => now(),
         ]);
+
+        try {
+            app(TaskDocumentIndexer::class)->removeById((int) $id);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json(['status' => 1, 'message' => 'Document removed from this task.']);
     }

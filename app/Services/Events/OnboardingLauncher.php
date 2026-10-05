@@ -2,6 +2,7 @@
 
 namespace App\Services\Events;
 
+use App\Services\Events\Concerns\DrivesFromEventStore;
 use App\Services\Talent\OnboardingJourneyFactory;
 use Illuminate\Support\Facades\DB;
 
@@ -39,6 +40,16 @@ use Illuminate\Support\Facades\DB;
  */
 class OnboardingLauncher
 {
+    /*
+     * Registered in ReactEvents::REACTORS but, until this line, missing the
+     * trait that actually makes `events:react` able to call it - see
+     * OfferLetterFiler's identical fix, found and corrected alongside this
+     * one. Confirmed live:
+     * `php artisan events:react --pending --consumer=onboarding_launcher`
+     * threw "Call to undefined method ::pendingCount()" before this fix.
+     */
+    use DrivesFromEventStore;
+
     public const CONSUMER = 'onboarding_launcher';
 
     public const HANDLES = [
