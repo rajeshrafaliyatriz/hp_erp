@@ -357,14 +357,26 @@ final class AiModelClient
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
         $model = $config->model ?: 'gemini-3.6-flash';
 
-        $response = Http::timeout($this->timeout($config->provider))
+        $send = fn (array $body) => Http::timeout($this->timeout($config->provider))
             ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->acceptJson()
             ->asJson()
             // The key rides in a header, not the query string. A URL reaches access
             // logs, proxy logs and the Referer header; a header does not.
             ->withHeaders(['x-goog-api-key' => $config->apiKey])
-            ->post("{$base}/models/{$model}:generateContent", $payload);
+            ->post("{$base}/models/{$model}:generateContent", $body);
+
+        $response = $send($payload);
+
+        // Some Gemini models cannot switch thinking off and answer `thinkingBudget: 0` with a
+        // 400 or 5xx. That is a statement about the optional setting, not about the model, so
+        // ask once more without it before reporting the provider as unavailable.
+        if (! $response->successful()
+            && ($response->status() === 400 || $response->status() >= 500)
+            && isset($payload['generationConfig']['thinkingConfig'])) {
+            unset($payload['generationConfig']['thinkingConfig']);
+            $response = $send($payload);
+        }
 
         $this->guard($response, $this->providers->label($config->provider), $config->apiKey);
 
