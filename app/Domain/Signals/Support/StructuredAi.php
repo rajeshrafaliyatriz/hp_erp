@@ -34,7 +34,7 @@ class StructuredAi
         for ($i = 1; $i <= $attempts; $i++) {
             try {
                 $completion = $this->client->complete(
-                    (string) config('signals.ai_module'),
+                    app(SignalsAiModule::class)->key($tenantId),
                     $messages,
                     ['json' => true, 'temperature' => (float) config('signals.temperature'), 'max_tokens' => $maxTokens ?? (int) config('signals.max_output_tokens'), 'thinking_budget' => config('signals.thinking_budget')],
                     $tenantId,

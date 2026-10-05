@@ -2,6 +2,7 @@
 
 namespace App\Domain\Signals;
 
+use App\Domain\Signals\Support\SignalsAiModule;
 use App\Domain\AI\Configuration\AiConfigurationResolver;
 use App\Domain\AI\Configuration\ProviderCatalog;
 use App\Domain\AI\Support\AiNotConfiguredException;
@@ -33,7 +34,7 @@ class SignalRunner
     public function aiConfigured(int $tenantId): bool
     {
         try {
-            $config = $this->configuration->resolve((string) config('signals.ai_module'), $tenantId);
+            $config = $this->configuration->resolve(app(SignalsAiModule::class)->key($tenantId), $tenantId);
 
             return $config->hasKey() && $this->providers->isDriveable($config->provider);
         } catch (\Throwable) {
@@ -44,7 +45,7 @@ class SignalRunner
     private function providerName(int $tenantId): ?string
     {
         try {
-            return $this->configuration->resolve((string) config('signals.ai_module'), $tenantId)->provider;
+            return $this->configuration->resolve(app(SignalsAiModule::class)->key($tenantId), $tenantId)->provider;
         } catch (\Throwable) {
             return null;
         }
