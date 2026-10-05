@@ -128,6 +128,24 @@ TaskRunLedger::track(
 );
 
 /*
+ * Walks every in-flight Department Process run forward past any `wait_delay`
+ * step whose due_at has elapsed, and flags task/approval/milestone/decision
+ * steps closing in on their own due_at. Every 15 minutes rather than daily
+ * (unlike the certification sweep above) - a two-hour wait step in a run
+ * should not sit until the next morning's cycle to advance. Idempotent: a
+ * wait step is only ever `in_progress` once, and a due-soon flag checks for
+ * its own prior emission before writing a second one.
+ */
+TaskRunLedger::track(
+    Schedule::command('process-runs:scan-due')
+        ->everyFifteenMinutes()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'department_process_runs.scan_due'
+);
+
+/*
  * Pre-existing, carried across from the Kernel with its original timing.
  */
 TaskRunLedger::track(
