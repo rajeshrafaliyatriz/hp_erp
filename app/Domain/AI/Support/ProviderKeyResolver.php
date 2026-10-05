@@ -70,19 +70,23 @@ class ProviderKeyResolver
      * @param  list<string>  $envKeys
      * @return list<array{api_key:string, api_limit:int|null, id:int|string|null, scope:string}>
      */
-    public function candidates(string $apiType, int|string|null $subInstituteId = null, array $envKeys = []): array
+    public function candidates(string $apiType, int|string|null $subInstituteId = null, array $envKeys = [], ?string $module = null): array
     {
+        // A module with its own bound keys (see `ai.failover.exclusive_modules`) keeps them
+        // to itself: every other module's shared-pool lookup skips those rows.
+        $exclude = array_values(array_diff((array) config('ai.failover.exclusive_modules', []), array_filter([$module])));
+
         $institute = $subInstituteId === null ? '' : trim((string) $subInstituteId);
 
         if ($institute !== '') {
-            $own = $this->poolRows($apiType, $institute);
+            $own = $this->poolRows($apiType, $institute, null, $exclude);
 
             if ($own !== []) {
                 return $own;
             }
         }
 
-        $platform = $this->poolRows($apiType, null);
+        $platform = $this->poolRows($apiType, null, null, $exclude);
 
         if ($platform !== []) {
             return $platform;
@@ -113,12 +117,12 @@ class ProviderKeyResolver
      * @param  list<int|string>  $excludeIds
      * @return list<array{api_key:string, api_limit:int|null, id:int|string|null, scope:string}>
      */
-    public function siblings(string $apiType, int|string|null $owner, array $excludeIds = []): array
+    public function siblings(string $apiType, int|string|null $owner, array $excludeIds = [], ?string $module = null): array
     {
         $owner = $owner === null ? null : trim((string) $owner);
 
         return array_values(array_filter(
-            $this->poolRows($apiType, $owner === '' ? null : $owner),
+            $this->poolRows($apiType, $owner === '' ? null : $owner, $module),
             fn ($row) => ! in_array($row['id'], $excludeIds, false)
         ));
     }
@@ -128,7 +132,7 @@ class ProviderKeyResolver
      *
      * @return list<array{api_key:string, api_limit:int|null, id:int|string|null, scope:string}>
      */
-    private function poolRows(string $apiType, ?string $owner): array
+    private function poolRows(string $apiType, ?string $owner, ?string $onlyModule = null, array $excludeModules = []): array
     {
         if (! Schema::hasTable('ai_api_keys')) {
             return [];
@@ -141,6 +145,14 @@ class ProviderKeyResolver
                 $owner === null ? $query->whereNull('sub_institute_id') : $query->where('sub_institute_id', $owner);
             } elseif ($owner !== null) {
                 return [];
+            }
+
+            if (($onlyModule !== null || $excludeModules !== []) && app(SchemaCache::class)->hasColumn('ai_api_keys', 'ai_module')) {
+                if ($onlyModule !== null) {
+                    $query->where('ai_module', $onlyModule);
+                } else {
+                    $query->where(fn ($q) => $q->whereNull('ai_module')->orWhereNotIn('ai_module', $excludeModules));
+                }
             }
 
             $out = [];

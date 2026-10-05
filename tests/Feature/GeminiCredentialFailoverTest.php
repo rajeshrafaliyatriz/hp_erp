@@ -257,6 +257,7 @@ class GeminiCredentialFailoverTest extends TestCase
         foreach ([self::KEY_A, self::KEY_B, self::KEY_C] as $k) {
             $this->addKey($k);
         }
+        config(['ai.failover.max_transient_attempts' => 2]);
         $down = [503, ['error' => ['code' => 503, 'status' => 'UNAVAILABLE', 'message' => 'overloaded']]];
         $this->fakeGemini([self::KEY_A => $down, self::KEY_B => $down, self::KEY_C => $down]);
 
@@ -394,6 +395,50 @@ class GeminiCredentialFailoverTest extends TestCase
         $this->assertStringNotContainsString('AIzaSecret', json_encode(DB::table('ai_usage_events')->get()));
     }
 
+    // ── Signals-only keys ────────────────────────────────────────────────────
+
+    private function addModuleKey(string $key, string $module, ?int $tenant = 1): int
+    {
+        $id = $this->addKey($key, $tenant);
+        DB::table('ai_api_keys')->where('id', $id)->update(['ai_module' => $module]);
+
+        return $id;
+    }
+
+    private function completeAs(string $module, ?int $tenant = 1): \App\Domain\AI\Support\AiCompletion
+    {
+        return app(AiModelClient::class)->complete($module, [['role' => 'user', 'content' => 'hi']], ['json' => true], $tenant);
+    }
+
+    public function test_signals_keys_fail_over_among_themselves_only(): void
+    {
+        $this->addModuleKey(self::KEY_A, 'signals');
+        $this->addModuleKey(self::KEY_B, 'signals');
+        $this->addModuleKey(self::KEY_C, 'analytics_ai'); // another module's key, same organisation
+        $this->fakeGemini([self::KEY_B => $this->quota(), self::KEY_A => $this->quota(), self::KEY_C => 'ok']);
+
+        try {
+            $this->completeAs('signals');
+            $this->fail('both Signals keys are exhausted; another module key must not be used');
+        } catch (AiCredentialsExhaustedException) {
+            $this->assertSame([self::KEY_B => 1, self::KEY_A => 1], $this->calls);
+        }
+    }
+
+    public function test_other_modules_never_use_signals_keys(): void
+    {
+        $this->addModuleKey(self::KEY_A, 'signals');
+        $this->addModuleKey(self::KEY_B, 'signals');
+        $this->fakeGemini([self::KEY_A => 'ok', self::KEY_B => 'ok']);
+
+        // 'analytics_ai' has no key of its own; it must not fall back to the Signals keys.
+        try {
+            $this->completeAs('analytics_ai');
+            $this->fail('expected not configured');
+        } catch (\App\Domain\AI\Support\AiNotConfiguredException) {
+            $this->assertSame([], $this->calls);
+        }
+    }
     // ── 12: retry safety ─────────────────────────────────────────────────────
 
     public function test_research_retry_layer_does_not_multiply_calls(): void
