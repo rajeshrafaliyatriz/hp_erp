@@ -35,7 +35,7 @@ class StructuredAi
                 $completion = $this->client->complete(
                     (string) config('signals.ai_module'),
                     $messages,
-                    ['json' => true, 'temperature' => (float) config('signals.temperature'), 'max_tokens' => $maxTokens ?? (int) config('signals.max_output_tokens')],
+                    ['json' => true, 'temperature' => (float) config('signals.temperature'), 'max_tokens' => $maxTokens ?? (int) config('signals.max_output_tokens'), 'thinking_budget' => config('signals.thinking_budget')],
                     $tenantId,
                 );
 

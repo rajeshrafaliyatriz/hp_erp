@@ -31,6 +31,9 @@ return [
     'ai_module' => env('SIGNALS_AI_MODULE', 'analytics_ai'),
     'max_output_tokens' => (int) env('SIGNALS_MAX_OUTPUT_TOKENS', 4096),
     'temperature' => (float) env('SIGNALS_TEMPERATURE', 0.2),
+    // Gemini thinking-token budget for signal JSON calls. 0 turns thinking off so the output
+    // budget is not used up before the JSON is written; null leaves the model default.
+    'thinking_budget' => env('SIGNALS_THINKING_BUDGET', 0),
     'ai_attempts' => (int) env('SIGNALS_AI_ATTEMPTS', 2),
 
     // Caps that bound cost and prompt size.
