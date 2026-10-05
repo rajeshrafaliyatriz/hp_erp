@@ -109,12 +109,13 @@ final class AiModuleRegistry
         [
             'key' => 'conversational_ai',
             'label' => 'Conversational AI',
-            // The assistant panel calls the Next.js route, which holds its own key.
-            // Listed because it is a real consumer and its spend is real; flagged
-            // unwired because that route does not read this configuration.
-            'description' => 'The assistant panel and its chat route. Served from the frontend today, so it does not read this configuration yet.',
-            'wired' => false,
-            'consumer' => 'app/api/agent/chat',
+            // Verified 2026-10-05: AskPipeline::MODULE and AiGenerationController both call
+            // AiModelClient::complete('conversational_ai', ...), so a saved configuration is
+            // read by the AI Stack assistant and by template generation. The separate Next.js
+            // chat route still holds its own key and does not read it.
+            'description' => 'The AI Stack assistant and template generation. The separate frontend chat route still uses its own key.',
+            'wired' => true,
+            'consumer' => 'App\Domain\AI\Conversation\AskPipeline',
         ],
         [
             'key' => 'recommendation_ai',
@@ -140,9 +141,23 @@ final class AiModuleRegistry
         [
             'key' => 'analytics_ai',
             'label' => 'Report & Analytics AI',
-            'description' => 'Analyse-this-screen actions over dashboards, reports and lists.',
-            'wired' => false,
-            'consumer' => 'App\Http\Controllers\dashboards',
+            // Verified 2026-10-05: EvaluationRunner::MODULE is 'analytics_ai' and calls
+            // AiModelClient::complete(), which resolves through AiConfigurationResolver, so a
+            // configuration saved here is read by the next evaluation run.
+            'description' => 'AI evaluation runs over the assistant\'s answers and templates. Resolved through this configuration; screen-analysis actions elsewhere are not routed here yet.',
+            'wired' => true,
+            'consumer' => 'App\Domain\AI\Evaluation\EvaluationRunner',
+        ],
+        [
+            'key' => 'signals',
+            'label' => 'Signals',
+            // Verified 2026-10-05: StructuredAi (company-opportunity research and the ingestion
+            // analyser), SignalGenerator and ProviderStatus all call AiModelClient::complete()
+            // with the module chosen by SignalsAiModule — `signals`, or the legacy
+            // `analytics_ai` for an organisation that configured that before this module existed.
+            'description' => 'Department Signals — company opportunities, the ingestion engine and signal generation. Resolved through this configuration; with none saved for Signals, a configuration saved for Report & Analytics AI is still used.',
+            'wired' => true,
+            'consumer' => 'App\Domain\Signals\Support\StructuredAi',
         ],
     ];
 

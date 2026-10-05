@@ -2,6 +2,7 @@
 
 namespace App\Domain\Signals\Providers;
 
+use App\Domain\Signals\Support\SignalsAiModule;
 use App\Domain\AI\Configuration\AiConfigurationResolver;
 use App\Domain\AI\Configuration\ProviderCatalog;
 use App\Domain\AI\Support\AiModelClient;
@@ -38,7 +39,7 @@ class ProviderStatus
     public function ai(int $tenantId): array
     {
         try {
-            $config = $this->configuration->resolve((string) config('signals.ai_module'), $tenantId);
+            $config = $this->configuration->resolve(app(SignalsAiModule::class)->key($tenantId), $tenantId);
             $driveable = $this->providers->isDriveable($config->provider);
             $configured = $config->hasKey() && $driveable;
 
@@ -117,7 +118,7 @@ class ProviderStatus
 
         try {
             $completion = $this->client->complete(
-                (string) config('signals.ai_module'),
+                app(SignalsAiModule::class)->key($tenantId),
                 [['role' => 'user', 'content' => 'Reply with exactly this JSON and nothing else: {"ok":true}']],
                 ['json' => true, 'temperature' => 0, 'max_tokens' => 20],
                 $tenantId,

@@ -7,7 +7,7 @@
 |
 | Everything an operator may want to change without touching code. The AI
 | provider, model and key are NOT here: signals call `AiModelClient` under the
-| `analytics_ai` module, so they resolve through the same AI Providers
+| `signals` module, so they resolve through the same AI Providers
 | configuration as every other AI feature (see config/ai.php).
 */
 
@@ -28,7 +28,10 @@ return [
     'queue' => env('SIGNALS_QUEUE', 'signals'),
 
     // The AI module the call is metered and resolved under.
-    'ai_module' => env('SIGNALS_AI_MODULE', 'analytics_ai'),
+    // Signals has its own AI module. An organisation that configured `analytics_ai` before
+    // that existed keeps it until a `signals` configuration is saved (see SignalsAiModule).
+    'ai_module' => env('SIGNALS_AI_MODULE', 'signals'),
+    'ai_module_legacy' => 'analytics_ai',
     'max_output_tokens' => (int) env('SIGNALS_MAX_OUTPUT_TOKENS', 4096),
     'temperature' => (float) env('SIGNALS_TEMPERATURE', 0.2),
     // Gemini thinking-token budget for signal JSON calls. 0 turns thinking off so the output

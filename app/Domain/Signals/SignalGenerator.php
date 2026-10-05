@@ -2,6 +2,7 @@
 
 namespace App\Domain\Signals;
 
+use App\Domain\Signals\Support\SignalsAiModule;
 use App\Domain\AI\Support\AiCompletion;
 use App\Domain\AI\Support\AiModelClient;
 
@@ -43,7 +44,7 @@ class SignalGenerator
         for ($i = 1; $i <= $attempts; $i++) {
             try {
                 return $this->client->complete(
-                    (string) config('signals.ai_module'),
+                    app(SignalsAiModule::class)->key($tenantId),
                     $messages,
                     [
                         'json' => true,
