@@ -230,6 +230,12 @@ final class AiModelClient
             ], fn ($value) => $value !== null),
         ];
 
+        // Opt-in: Gemini's internal "thinking" tokens count against maxOutputTokens, so a
+        // structured-JSON caller can lose its whole budget to thinking and get truncated JSON.
+        if (isset($options['thinking_budget'])) {
+            $payload['generationConfig']['thinkingConfig'] = ['thinkingBudget' => (int) $options['thinking_budget']];
+        }
+
         if ($system !== null) {
             $payload['systemInstruction'] = ['parts' => [['text' => $system]]];
         }
