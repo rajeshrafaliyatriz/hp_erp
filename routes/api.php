@@ -1975,6 +1975,8 @@ Route::middleware('api.token')->group(function () {
     Route::post('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'store']);
     Route::get('/account/documents/{id}/download', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'download'])->whereNumber('id');
     Route::delete('/account/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroy'])->whereNumber('id');
+    Route::post('/account/documents/{id}/versions', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'uploadVersion'])->whereNumber('id');
+    Route::post('/account/documents/{id}/versions/{historyId}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreVersion'])->whereNumber(['id', 'historyId']);
 
     /*
      * One search box over the whole Document Library, self-service and admin

@@ -213,6 +213,7 @@ class DocumentLibraryController extends Controller
             ->limit(100)
             ->get([
                 'h.id', 'h.entry_type', 'h.version_number', 'h.storage_path', 'h.size', 'h.change_note',
+                'h.mime_type', 'h.original_file_name',
                 'h.action', 'h.details', 'h.ip_address', 'h.created_at',
                 DB::raw("TRIM(CONCAT_WS(' ', u.first_name, u.last_name)) as actor_name"),
             ]);
@@ -426,6 +427,183 @@ class DocumentLibraryController extends Controller
         return response()->json(['status' => 1, 'message' => 'Document removed.']);
     }
 
+    /**
+     * POST /api/account/documents/{id}/versions — replace the file with a new
+     * version, keeping the old one in `document_library_history` rather than
+     * overwriting it in place. Owner-only, same reasoning as `destroy()`: an
+     * action that changes what's actually in the file must not be reachable
+     * by anyone who merely has view access to it.
+     */
+    public function uploadVersion(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+
+        $row = DB::table('document_library')
+            ->where('id', (int) $id)
+            ->where('owner_id', $userId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            return $this->notFound();
+        }
+
+        $allowedExtensions = (string) config('documents.allowed_extensions');
+        $maxKb = (int) config('documents.max_upload_kb');
+
+        $data = $request->validate([
+            'document' => 'required|file|mimes:' . $allowedExtensions . '|max:' . $maxKb,
+            'change_note' => 'nullable|string|max:255',
+        ]);
+
+        $file = $request->file('document');
+        $storage = new DocumentStorageService();
+        $stored = $storage->storeUpload($file, $userId);
+
+        $this->writeNewVersion($row, $stored, $userId, $request, $data['change_note'] ?? 'New version uploaded', null);
+
+        return response()->json(['status' => 1, 'message' => 'New version uploaded.', 'data' => ['id' => $row->id]]);
+    }
+
+    /**
+     * POST /api/account/documents/{id}/versions/{historyId}/restore — make an
+     * older version current again.
+     *
+     * This does NOT rewrite history in place (the table is append-only by
+     * design — see its migration's docblock): restoring writes a NEW version
+     * row pointing at the old file's bytes, the same way `git revert` adds a
+     * commit rather than erasing one. Nothing about what actually happened is
+     * ever lost, including the restore itself (it gets its own audit entry).
+     */
+    public function restoreVersion(Request $request, $id, $historyId)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+
+        $row = DB::table('document_library')
+            ->where('id', (int) $id)
+            ->where('owner_id', $userId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            return $this->notFound();
+        }
+
+        $target = DB::table('document_library_history')
+            ->where('id', (int) $historyId)
+            ->where('document_id', $row->id)
+            ->where('entry_type', 'version')
+            ->first();
+
+        if (!$target || empty($target->storage_path)) {
+            return $this->notFound();
+        }
+
+        if ((int) $target->version_number === (int) $row->current_version) {
+            return response()->json(['status' => 0, 'message' => 'That is already the current version.'], 422);
+        }
+
+        $storage = new DocumentStorageService();
+
+        if (!$storage->exists($target->storage_path)) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'That version\'s file is no longer available and cannot be restored.',
+            ], 409);
+        }
+
+        $stored = [
+            'storage_path' => $target->storage_path,
+            'checksum_sha256' => $target->checksum_sha256,
+            'size' => $target->size,
+            'mime_type' => $target->mime_type ?: $row->mime_type,
+            'original_file_name' => $target->original_file_name ?: $row->original_file_name,
+        ];
+
+        $changeNote = 'Restored from version ' . ($target->version_number ?? '?');
+        $this->writeNewVersion($row, $stored, $userId, $request, $changeNote, (int) $target->version_number);
+
+        return response()->json(['status' => 1, 'message' => 'Version restored.', 'data' => ['id' => $row->id]]);
+    }
+
+    /**
+     * Shared by `uploadVersion()` and `restoreVersion()`: point the live row
+     * at a (new or restored) file, record the version in history, re-extract
+     * text synchronously so content search reflects what's current, and
+     * re-run the same async pipeline a fresh upload gets — OCR/classification
+     * for the new content, and a real `processing_step` the detail dialog's
+     * progress indicator can poll exactly as it does for a first upload.
+     *
+     * @param  array{storage_path:string, checksum_sha256:string, size:int, mime_type:string, original_file_name:string}  $stored
+     */
+    private function writeNewVersion(object $row, array $stored, int $actorId, Request $request, string $changeNote, ?int $restoredFromVersion): void
+    {
+        $newVersion = (int) $row->current_version + 1;
+
+        $extension = strtolower(pathinfo((string) $stored['original_file_name'], PATHINFO_EXTENSION));
+        $extractor = new TextExtractionManager();
+        $extractedText = null;
+
+        if ($extension !== '' && $extractor->isTextBearing($extension)) {
+            try {
+                $local = tempnam(sys_get_temp_dir(), 'doc_ver_');
+                file_put_contents($local, Storage::disk((new DocumentStorageService())->disk())->get($stored['storage_path']));
+                $extractedText = $extractor->extract($local, $extension);
+                @unlink($local);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        DB::table('document_library')->where('id', $row->id)->update([
+            'storage_path' => $stored['storage_path'],
+            'checksum_sha256' => $stored['checksum_sha256'],
+            'size' => $stored['size'],
+            'mime_type' => $stored['mime_type'],
+            'original_file_name' => $stored['original_file_name'],
+            'current_version' => $newVersion,
+            'extracted_text' => ($extractedText !== null && $extractedText !== '') ? $extractedText : null,
+            'processing_status' => 'done',
+            'processing_step' => null,
+            'processing_error' => null,
+            'updated_at' => now(),
+        ]);
+
+        DB::table('document_library_history')->insert([
+            'document_id' => $row->id,
+            'entry_type' => 'version',
+            'version_number' => $newVersion,
+            'storage_path' => $stored['storage_path'],
+            'checksum_sha256' => $stored['checksum_sha256'],
+            'size' => $stored['size'],
+            'mime_type' => $stored['mime_type'],
+            'original_file_name' => $stored['original_file_name'],
+            'change_note' => $changeNote,
+            'created_by' => $actorId,
+            'created_at' => now(),
+        ]);
+
+        $this->recordAudit($row->id, $actorId, $request, $restoredFromVersion !== null ? 'restored' : 'version_uploaded', array_filter([
+            'version' => $newVersion,
+            'from_version' => $restoredFromVersion,
+        ], fn ($v) => $v !== null));
+
+        ProcessDocumentPipelineJob::dispatch($row->id);
+        $this->ensureQueueWorkerRunning();
+    }
+
     /* ── shared ────────────────────────────────────────────────────────── */
 
     /**
@@ -510,6 +688,8 @@ class DocumentLibraryController extends Controller
             'storage_path' => $stored['storage_path'],
             'checksum_sha256' => $stored['checksum_sha256'],
             'size' => $stored['size'],
+            'mime_type' => $stored['mime_type'],
+            'original_file_name' => $stored['original_file_name'],
             'change_note' => 'Uploaded',
             'created_by' => $actorId,
             'created_at' => now(),
