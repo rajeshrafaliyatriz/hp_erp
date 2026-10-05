@@ -101,7 +101,7 @@ final class AiConfigurationResolver
                 keyId: $row->id ?? null,
                 scope: ($row->sub_institute_id ?? null) === null ? 'platform' : 'institute',
                 maxOutputTokens: $this->maxTokens($row),
-                alternates: $this->failoverSiblings($provider, $row->sub_institute_id ?? null, [$row->id ?? null]),
+                alternates: $this->failoverSiblings($provider, $row->sub_institute_id ?? null, [$row->id ?? null], $moduleKey),
             );
         }
 
@@ -120,6 +120,7 @@ final class AiConfigurationResolver
                 $this->providers->apiType($provider),
                 $subInstituteId,
                 $this->providers->envKeys($provider),
+                $moduleKey,
             );
             $key = $candidates[0] ?? null;
             $alternates = array_slice($candidates, 1);
@@ -156,13 +157,13 @@ final class AiConfigurationResolver
      * @param  list<int|string|null>  $excludeIds
      * @return list<array{api_key:string, api_limit:int|null, id:int|string|null, scope:string}>
      */
-    private function failoverSiblings(string $provider, int|string|null $owner, array $excludeIds): array
+    private function failoverSiblings(string $provider, int|string|null $owner, array $excludeIds, ?string $module = null): array
     {
         if (! $this->failoverEnabled($provider)) {
             return [];
         }
 
-        return $this->keys->siblings($this->providers->apiType($provider), $owner, array_filter($excludeIds, fn ($id) => $id !== null));
+        return $this->keys->siblings($this->providers->apiType($provider), $owner, array_filter($excludeIds, fn ($id) => $id !== null), $module);
     }
 
     /**

@@ -101,10 +101,14 @@ return [
     | per request, bounded by `max_attempts`.
     */
     'failover' => [
+        // Modules whose credentials are reserved for them: rows bound to these modules are
+        // never picked up by another module's shared-pool fallback. Default: Signals.
+        'exclusive_modules' => array_values(array_filter(array_map('trim', explode(',', (string) env('AI_EXCLUSIVE_MODULES', env('SIGNALS_AI_MODULE', 'signals')))))),
         'providers' => array_values(array_filter(array_map('trim', explode(',', (string) env('AI_FAILOVER_PROVIDERS', 'gemini'))))),
         'max_attempts' => (int) env('AI_FAILOVER_MAX_ATTEMPTS', 20),
-        // Provider 5xx: rotate, but never walk the whole pool for an outage.
-        'max_transient_attempts' => (int) env('AI_FAILOVER_MAX_TRANSIENT_ATTEMPTS', 2),
+        // Provider 5xx (e.g. 503 overloaded): also move to the next key, each tried once.
+        // Still bounded by max_attempts; lower this to stop sooner during a provider outage.
+        'max_transient_attempts' => (int) env('AI_FAILOVER_MAX_TRANSIENT_ATTEMPTS', 20),
         // 429 with no Retry-After / retryDelay from the provider.
         'quota_cooldown_seconds' => (int) env('AI_FAILOVER_QUOTA_COOLDOWN', 60),
         // Bounds applied to a provider-supplied retry delay.
