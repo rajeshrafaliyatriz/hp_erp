@@ -39,7 +39,7 @@ class IdmsSearchService
             $query->where('lifecycle_status', (string) $params['lifecycle_status']);
         }
         if (!empty($params['tag'])) {
-            $query->whereRaw('JSON_CONTAINS(tag_names, ?)', [json_encode(mb_strtolower(trim((string) $params['tag'])))]);
+            $query->where('tag_names', 'LIKE', DocumentMaster::jsonListLike(mb_strtolower(trim((string) $params['tag']))));
         }
 
         $term = trim((string) ($params['q'] ?? $params['search'] ?? ''));

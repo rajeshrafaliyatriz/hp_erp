@@ -489,7 +489,7 @@ class IdmsDocumentController extends Controller
         if (!empty($document->tag_names)) {
             $query->where(function ($q) use ($document) {
                 foreach ($document->tag_names as $tag) {
-                    $q->orWhereRaw('JSON_CONTAINS(tag_names, ?)', [json_encode($tag)]);
+                    $q->orWhere('tag_names', 'LIKE', DocumentMaster::jsonListLike((string) $tag));
                 }
             });
         } elseif ($document->department_id) {

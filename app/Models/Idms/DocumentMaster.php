@@ -80,11 +80,22 @@ class DocumentMaster extends Model
                 });
             }
 
-            // One JSON_CONTAINS per principal (portable: JSON_OVERLAPS needs MySQL 8.0.17+ / MariaDB 10.9+).
             foreach ($principals as $principal) {
-                $q->orWhereRaw('JSON_CONTAINS(document_master.view_principals, ?)', [json_encode($principal)]);
+                $q->orWhere('document_master.view_principals', 'LIKE', self::jsonListLike($principal));
             }
         });
+    }
+
+    /**
+     * LIKE pattern matching one exact string inside a JSON list column
+     * (["user:42","role:3"]). This server has no JSON functions (no JSON_CONTAINS
+     * or JSON_OVERLAPS), so the stored text is matched instead. The surrounding
+     * quotes make it a whole-element match: "user:4" does not match "user:42".
+     * The value is encoded exactly as the array cast stored it.
+     */
+    public static function jsonListLike(string $value): string
+    {
+        return '%' . addcslashes(json_encode($value), '\\%_') . '%';
     }
 
     /** Recompute view_principals from visibility, department, owner and permission overrides. */
