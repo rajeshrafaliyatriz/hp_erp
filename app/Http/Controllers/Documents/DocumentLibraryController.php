@@ -1003,7 +1003,16 @@ class DocumentLibraryController extends Controller
             $queueName = (string) config('documents.processing.queue', 'documents');
 
             if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                pclose(popen("start /B php artisan queue:work --queue={$queueName},default --stop-when-empty", 'r'));
+                // Redirecting the spawned worker's own stdout/stderr to NUL (not just
+                // backgrounding it with /B) is what actually matters here: popen()'s
+                // pipe stays connected to cmd.exe until the spawned process stops
+                // writing to it, so with no redirection pclose() blocks for the
+                // worker's entire run - which, before this fix, meant every upload's
+                // HTTP response hung for 6-8+ seconds and the worker still never
+                // reserved a single job (confirmed via jobs.attempts staying 0).
+                // Running `php artisan queue:work` directly, unspawned, drains the
+                // queue fine - this was purely a spawn-plumbing bug, not a pipeline one.
+                pclose(popen("start \"\" /B php artisan queue:work --queue={$queueName},default --stop-when-empty > NUL 2>&1", 'r'));
             } else {
                 exec("php artisan queue:work --queue={$queueName},default --stop-when-empty > /dev/null 2>&1 &");
             }
