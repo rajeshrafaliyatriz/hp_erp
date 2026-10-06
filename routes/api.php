@@ -2006,6 +2006,21 @@ Route::middleware('api.token')->group(function () {
     Route::get('/documents/activity', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'activity']);
 
     /*
+     * Folders - DocumentAccess's folder-aware methods decide what a caller
+     * may see/manage internally (same reasoning as /documents search just
+     * above: no separate admin route needed). Static segments
+     * (tree/resolve-path) registered before any numeric {id} route in this
+     * prefix, same convention as /documents/activity above.
+     */
+    Route::get('/documents/folders/tree', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'tree']);
+    Route::post('/documents/folders/resolve-path', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'resolvePath']);
+    Route::get('/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'index']);
+    Route::post('/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'store']);
+    Route::patch('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'update'])->whereNumber('id');
+    Route::post('/documents/folders/{id}/move', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'move'])->whereNumber('id');
+    Route::delete('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'destroy'])->whereNumber('id');
+
+    /*
      * Tenant-wide trash, for HR/admin - unlike `/documents` (search) above,
      * this genuinely needs its own gate: a non-elevated caller's trash view
      * is `/account/documents/trash` (their own rows only), and nothing about
