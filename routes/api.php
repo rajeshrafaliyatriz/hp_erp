@@ -1542,6 +1542,7 @@ Route::prefix('department-processes')->group(function () {
     Route::post('/{id}/publish', [DepartmentProcessController::class, 'publish']);
     Route::get('/{id}/history', [DepartmentProcessController::class, 'history']);
     Route::post('/{id}/history/{version}/restore', [DepartmentProcessController::class, 'restoreVersion']);
+    Route::post('/{id}/tasks/publish', [DepartmentProcessController::class, 'publishTasks']);
     Route::get('/{id}/runs', [DepartmentProcessRunController::class, 'index']);
     Route::post('/{id}/runs', [DepartmentProcessRunController::class, 'start']);
 });
