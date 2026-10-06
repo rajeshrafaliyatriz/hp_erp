@@ -111,7 +111,7 @@ class IngestionAnalyzer
                 } catch (\Throwable $e) {
                     $chunkFailures++;
                     $lastFailure = $e;
-                    Log::warning('signals.analysis_chunk_failed', ['tenant' => $tenantId, 'source' => $source->id, 'chunk' => $i + 1, 'exception' => get_class($e)]);
+                    Log::warning('signals.analysis_chunk_failed', ['tenant' => $tenantId, 'source' => $source->id, 'chunk' => $i + 1, 'exception' => get_class($e)] + self::reason($e));
                 }
             }
 
@@ -255,7 +255,7 @@ class IngestionAnalyzer
         } catch (\Throwable $e) {
             $failure = AiFailureClassifier::classify($e);
             // Technical detail stays here (class + status + code). Never document text or keys.
-            Log::error('signals.analysis_failed', ['tenant' => $tenantId, 'source' => $source->id, 'http_status' => $failure['http'], 'code' => $failure['code'], 'exception' => get_class($e)]);
+            Log::error('signals.analysis_failed', ['tenant' => $tenantId, 'source' => $source->id, 'http_status' => $failure['http'], 'code' => $failure['code'], 'exception' => get_class($e)] + self::reason($e));
 
             return $this->close($analysis, $started, 'failed', [], $failure['code'], $failure['message']);
         } finally {
@@ -426,5 +426,20 @@ TXT;
         ])->save();
 
         return $analysis;
+    }
+    /**
+     * A short reason for the log, for failures that are NOT an HTTP answer from the provider
+     * (invalid JSON, timeouts, connection errors). Provider HTTP errors are excluded because
+     * their text can echo the prompt. Truncated; never contains a key (keys travel in headers).
+     *
+     * @return array<string, string>
+     */
+    private static function reason(\Throwable $e): array
+    {
+        if ($e instanceof \App\Domain\AI\Support\AiProviderHttpException) {
+            return [];
+        }
+
+        return ['reason' => mb_substr(preg_replace('/\s+/', ' ', $e->getMessage()) ?? '', 0, 200)];
     }
 }
