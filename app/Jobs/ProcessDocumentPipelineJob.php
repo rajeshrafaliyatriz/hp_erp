@@ -213,11 +213,11 @@ class ProcessDocumentPipelineJob implements ShouldQueue
         }
     }
 
-    /** @return array{document_type: ?string, subject: ?string, keywords: array<int, string>, summary: ?string, confidence: float, source: string} */
+    /** @return array{document_type: ?string, title: ?string, subject: ?string, keywords: array<int, string>, summary: ?string, confidence: float, source: string} */
     private function classify(object $document, string $extractedText, DocumentClassificationService $classifier): array
     {
         if (trim($extractedText) === '') {
-            return ['document_type' => null, 'subject' => null, 'keywords' => [], 'summary' => null, 'confidence' => 0.0, 'source' => 'none'];
+            return ['document_type' => null, 'title' => null, 'subject' => null, 'keywords' => [], 'summary' => null, 'confidence' => 0.0, 'source' => 'none'];
         }
 
         $result = $classifier->classify($extractedText, (int) $document->sub_institute_id);
@@ -237,6 +237,15 @@ class ProcessDocumentPipelineJob implements ShouldQueue
         // and DocumentClassificationService's docblocks.
         if (empty($document->document_type) && $result['document_type'] !== null) {
             $update['document_type'] = $result['document_type'];
+        }
+
+        // title is NOT NULL (unlike document_type), so "did the uploader set
+        // it" can't be read off emptiness - title_source is the provenance
+        // marker instead. Only 'filename'/null (never set, or auto-derived
+        // from the file name) gets overwritten; 'user' never does.
+        if (($document->title_source ?? null) !== 'user' && !empty($result['title'])) {
+            $update['title'] = mb_substr($result['title'], 0, 191);
+            $update['title_source'] = 'ai';
         }
 
         DB::table('document_library')->where('id', $document->id)->update($update);

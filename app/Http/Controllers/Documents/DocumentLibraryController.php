@@ -396,6 +396,72 @@ class DocumentLibraryController extends Controller
         }
     }
 
+    /**
+     * PUT/PATCH /api/account/documents/{id} — correct one of mine.
+     *
+     * The only way to change a document's own description today was to
+     * replace the FILE via `uploadVersion()`; nothing let a human fix a
+     * wrong title or AI-guessed type. Owner-only, same shape as `destroy()`
+     * (404 for both "doesn't exist" and "not yours" - never 403). Writes
+     * only the fields actually present AND different from the current row,
+     * so a no-op PATCH doesn't leave a vacuous audit entry.
+     */
+    public function update(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+
+        $row = DB::table('document_library')
+            ->where('id', (int) $id)
+            ->where('owner_id', $userId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            return $this->notFound();
+        }
+
+        $data = $request->validate([
+            'title' => 'sometimes|string|max:191',
+            'document_type' => 'sometimes|string|max:64',
+            'category' => 'sometimes|string|in:personnel,organization',
+            'subject' => 'sometimes|nullable|string|max:191',
+        ]);
+
+        $changes = [];
+
+        foreach ($data as $field => $value) {
+            if ((string) ($row->{$field} ?? '') !== (string) $value) {
+                $changes[$field] = $value;
+            }
+        }
+
+        if ($changes === []) {
+            return response()->json(['status' => 1, 'message' => 'Nothing to update.']);
+        }
+
+        if (array_key_exists('title', $changes)) {
+            // A human setting the title always wins, forever - the pipeline
+            // must never overwrite it again. See the title_source migration's
+            // docblock and ProcessDocumentPipelineJob::classify().
+            $changes['title_source'] = 'user';
+        }
+
+        $changes['updated_by'] = $userId;
+        $changes['updated_at'] = now();
+
+        DB::table('document_library')->where('id', $row->id)->update($changes);
+
+        $this->recordAudit($row->id, $userId, $request, 'updated', ['changed_fields' => array_keys($changes)]);
+
+        return response()->json(['status' => 1, 'message' => 'Document updated.']);
+    }
+
     /** DELETE /api/account/documents/{id} — remove one of mine. */
     public function destroy(Request $request, $id)
     {
@@ -660,6 +726,7 @@ class DocumentLibraryController extends Controller
             'sub_institute_id' => $tenantId,
             'owner_id' => $subjectId,
             'title' => $data['title'],
+            'title_source' => 'user',
             'original_file_name' => $stored['original_file_name'],
             'mime_type' => $stored['mime_type'],
             'size' => $stored['size'],
