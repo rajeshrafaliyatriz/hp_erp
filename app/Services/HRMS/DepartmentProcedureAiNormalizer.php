@@ -2,11 +2,9 @@
 
 namespace App\Services\HRMS;
 
-use App\Domain\AI\Support\AiCredentialsExhaustedException;
-use App\Domain\AI\Support\AiModelClient;
-use App\Domain\AI\Support\AiNotConfiguredException;
-use App\Domain\AI\Support\AiProviderHttpException;
-use App\Domain\AI\Support\AiQuotaExceededException;
+use App\Exceptions\DeepSeekBudgetException;
+use App\Exceptions\DeepSeekTruncatedException;
+use App\Services\DeepSeekService;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -25,32 +23,41 @@ use Illuminate\Support\Facades\Log;
  * actor that doesn't appear in the source fails the same validation either
  * way; nothing the model writes is trusted as structure on its own.
  *
- * Calls App\Domain\AI\Support\AiModelClient - "the one place this application
- * calls a model" - under the module key 'department_process_normalizer'
- * (registered in AiModuleRegistry), the same client Document Understanding's
- * DocumentClassificationService already calls. With no saved per-module
- * credential, AiConfigurationResolver falls through to the shared
- * GEMINI_API_KEY env credential every unregistered/unconfigured module uses -
- * the same "free Gemini" setup Document Understanding runs on today, not a
- * second one. Called synchronously from a controller, the same way
- * AskController/AskPipeline already call this client inline (Document
- * Understanding's own call is queue-only for unrelated reasons - OCR payload
- * size - not because the client requires a queue).
+ * Calls App\Services\DeepSeekService directly, same as
+ * App\Services\Competency\EsoGenerator - NOT App\Domain\AI\Support\
+ * AiModelClient's DeepSeek path. That path is wired correctly (confirmed:
+ * reads DEEPSEEK_API_KEY/DEEPSEEK_MODEL, sends response_format: json_object)
+ * but carries none of DeepSeekService's measured blank-completion handling -
+ * no retry, no perturbed resend, no "drop JSON mode on the last attempt"
+ * fallback, and no finish_reason=length check at all. DeepSeek is documented
+ * (config/deepseek.php) to return a blank 200 in JSON mode on a real,
+ * non-trivial fraction of calls; going through AiModelClient's DeepSeek path
+ * would mean this feature inherits that failure mode with no mitigation.
+ * DeepSeekService is the version of "call DeepSeek" that has already paid
+ * for the fix.
  */
 class DepartmentProcedureAiNormalizer
 {
-    private const MODULE_KEY = 'department_process_normalizer';
     private const FIRST_BUDGET = 2000;
 
-    public function __construct(private readonly AiModelClient $client)
+    public function __construct(private readonly DeepSeekService $ai)
     {
+    }
+
+    public function isConfigured(): bool
+    {
+        return $this->ai->isConfigured();
     }
 
     /**
      * @return array{ok:true, text:string}|array{ok:false, reason:string, detail:?string}
      */
-    public function normalize(string $sourceText, int|string|null $institute): array
+    public function normalize(string $sourceText): array
     {
+        if (!$this->ai->isConfigured()) {
+            return ['ok' => false, 'reason' => 'not_configured', 'detail' => null];
+        }
+
         $messages = [
             ['role' => 'system', 'content' => $this->systemPrompt()],
             ['role' => 'user', 'content' => $this->userPrompt($sourceText)],
@@ -60,18 +67,20 @@ class DepartmentProcedureAiNormalizer
 
         foreach ($attempts as $index => $budget) {
             try {
-                $completion = $this->client->complete(
-                    self::MODULE_KEY,
-                    $messages,
-                    ['max_tokens' => $budget, 'temperature' => 0.1, 'json' => true],
-                    $institute,
-                );
-            } catch (AiNotConfiguredException $e) {
-                return ['ok' => false, 'reason' => 'not_configured', 'detail' => $e->getMessage()];
-            } catch (AiQuotaExceededException|AiCredentialsExhaustedException $e) {
+                $result = $this->ai->chatJson($messages, [
+                    'json' => true,
+                    'temperature' => 0.1,
+                    'max_tokens' => $budget,
+                ]);
+
+                return ['ok' => true, 'text' => $this->toIntakeText($result)];
+            } catch (DeepSeekBudgetException $e) {
                 return ['ok' => false, 'reason' => 'insufficient_balance', 'detail' => $e->getMessage()];
-            } catch (AiProviderHttpException $e) {
-                return ['ok' => false, 'reason' => 'ai_error', 'detail' => $e->getMessage()];
+            } catch (DeepSeekTruncatedException $e) {
+                if ($index === array_key_last($attempts)) {
+                    return ['ok' => false, 'reason' => 'truncated', 'detail' => $e->getMessage()];
+                }
+                continue;
             } catch (\Throwable $e) {
                 Log::warning('Department procedure AI normalization failed', [
                     'type' => get_class($e),
@@ -80,42 +89,11 @@ class DepartmentProcedureAiNormalizer
 
                 return ['ok' => false, 'reason' => 'ai_error', 'detail' => null];
             }
-
-            if ($completion->wasTruncated()) {
-                if ($index === array_key_last($attempts)) {
-                    return ['ok' => false, 'reason' => 'truncated', 'detail' => null];
-                }
-                continue; // retry once with double the room
-            }
-
-            $decoded = $this->parseJson($completion->text);
-            if ($decoded === null) {
-                return ['ok' => false, 'reason' => 'ai_error', 'detail' => 'The model returned something that could not be read as JSON.'];
-            }
-
-            return ['ok' => true, 'text' => $this->toIntakeText($decoded)];
         }
 
         // Unreachable - the loop either returns inside the try or on the last
         // truncation. Kept so a future edit cannot fall through silently.
         return ['ok' => false, 'reason' => 'ai_error', 'detail' => null];
-    }
-
-    /**
-     * AiModelClient only asks the provider for JSON output mime type - it
-     * does not parse/validate the text itself, same as
-     * DocumentClassificationService::parseJson() right next to it.
-     *
-     * @return array<string, mixed>|null
-     */
-    private function parseJson(string $text): ?array
-    {
-        $clean = trim($text);
-        $clean = preg_replace('/^```(?:json)?\s*|\s*```$/', '', $clean) ?? $clean;
-
-        $decoded = json_decode($clean, true);
-
-        return is_array($decoded) ? $decoded : null;
     }
 
     private function systemPrompt(): string
