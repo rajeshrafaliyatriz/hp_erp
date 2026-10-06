@@ -106,6 +106,13 @@ class DepartmentProcessController extends Controller
                 break;
             }
         }
+        // A free-typed custom category (see the Source panel's "Custom"
+        // option) matches no config entry - its own text IS the label there
+        // is, same as a tenant's free-typed category already works on
+        // department_processes.category itself (an open string column).
+        if ($categoryLabel === null && $categoryKey !== '' && $categoryKey !== 'custom') {
+            $categoryLabel = $categoryKey;
+        }
 
         $fallbackName = trim((string) $request->input('name', '')) ?: 'Untitled process';
 
@@ -114,7 +121,7 @@ class DepartmentProcessController extends Controller
         $aiStatus = null;
 
         if ($spec['issues'] !== [] && $request->boolean('use_ai')) {
-            $normalized = $this->aiNormalizer->normalize($text);
+            $normalized = $this->aiNormalizer->normalize($text, $tenantId);
 
             if ($normalized['ok']) {
                 $spec = $this->parser->parse($normalized['text'], $departmentId, $departmentName, $categoryLabel, $fallbackName);

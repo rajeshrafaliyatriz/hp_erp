@@ -166,6 +166,13 @@ final class AiModuleRegistry
             'wired' => true,
             'consumer' => 'App\Services\Documents\Understanding\DocumentClassificationService',
         ],
+        [
+            'key' => 'department_process_normalizer',
+            'label' => 'Department Process SOP Normalizer',
+            'description' => 'Re-expresses a pasted SOP procedure the deterministic parser could not read into the parser\'s own plain-text syntax, for the department process converter.',
+            'wired' => true,
+            'consumer' => 'App\Services\HRMS\DepartmentProcedureAiNormalizer',
+        ],
     ];
 
     /** @return array<int, array{key:string, label:string, description:string, wired:bool, consumer:string}> */
