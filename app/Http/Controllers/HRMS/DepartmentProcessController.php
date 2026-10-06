@@ -4,6 +4,7 @@ namespace App\Http\Controllers\HRMS;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Services\Platform\ProcedureParser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -28,6 +29,10 @@ class DepartmentProcessController extends Controller
 {
     use ResolvesApiIdentity;
 
+    public function __construct(private readonly ProcedureParser $parser)
+    {
+    }
+
     /**
      * The template picker's data: step-type palette, category list (grouped),
      * and the starter step list for each category. No identity/tenant check -
@@ -43,6 +48,44 @@ class DepartmentProcessController extends Controller
                 'categories' => config('department_processes.categories', []),
                 'templates'  => config('department_processes.templates', []),
             ],
+        ]);
+    }
+
+    /**
+     * Read a pasted procedure into structure, without storing anything.
+     *
+     * The K12-style "Source" step of the canvas builder's left panel: a
+     * department describes a process in prose and gets back a parsed
+     * spec (objective/trigger/completion, ordered steps with actor/approval
+     * flags, derived tasks) to review in the Process/Workflow/Tasks sections
+     * before "Apply to Canvas" turns it into real graph nodes. Delegates to
+     * the same ProcedureParser the module-wide Platform Services builder
+     * uses (Platform\ProcessController::convert()) - it is stateless and has
+     * no database coupling, so reusing it here needs no new parsing logic
+     * and no dependency on Platform Services' admin-only rights gate.
+     */
+    public function convertSource(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $text = trim((string) $request->input('source_text', ''));
+
+        if ($text === '') {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Paste the procedure first.',
+                'errors'  => ['source_text' => ['Required.']],
+            ], 422);
+        }
+
+        $spec = $this->parser->parse($text, trim((string) $request->input('name', '')) ?: 'Untitled process');
+
+        return response()->json([
+            'status' => 1,
+            'data'   => ['spec' => $spec],
         ]);
     }
 
