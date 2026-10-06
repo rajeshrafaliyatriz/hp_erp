@@ -102,6 +102,64 @@ class DocumentAccess
     }
 
     /**
+     * `document_folders`' own `visibleTo()` twin, not a parallel ACL class -
+     * the rules are the same shape (owner, HR-elevated, organization-wide),
+     * deliberately simpler because folders carry no `department_id`/
+     * `view_principals`/`permissions` columns (a folder is either private to
+     * its owner or visible to the whole organisation - no department or
+     * per-principal sharing in v1, unlike documents themselves).
+     */
+    public static function visibleFoldersTo(Builder $query, int $userId, int $tenantId): Builder
+    {
+        $isElevated = SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED);
+
+        return $query->where('sub_institute_id', $tenantId)
+            ->where(function (Builder $q) use ($userId, $isElevated) {
+                $q->where('owner_id', $userId);
+
+                if ($isElevated) {
+                    $q->orWhere('sub_institute_id', '>', 0);
+
+                    return;
+                }
+
+                $q->orWhere('visibility', 'organization');
+            });
+    }
+
+    /** May this caller see this one folder? */
+    public static function canViewFolder(object $folder, int $userId, int $tenantId): bool
+    {
+        if ((int) $folder->sub_institute_id !== $tenantId) {
+            return false;
+        }
+
+        if ((int) ($folder->owner_id ?? 0) === $userId) {
+            return true;
+        }
+
+        if (SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED)) {
+            return true;
+        }
+
+        return (string) $folder->visibility === 'organization';
+    }
+
+    /** May this caller create/rename/move/delete this folder? Owner or HR-elevated only - no `created_by` fallback like documents have, since a folder's `created_by` and `owner_id` are set together and never diverge. */
+    public static function canManageFolder(object $folder, int $userId, int $tenantId): bool
+    {
+        if ((int) $folder->sub_institute_id !== $tenantId) {
+            return false;
+        }
+
+        if ((int) ($folder->owner_id ?? 0) === $userId) {
+            return true;
+        }
+
+        return SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED);
+    }
+
+    /**
      * A LIKE pattern matching this principal as one element of the
      * JSON-array-shaped string in `view_principals` (e.g. `["user:5","dept:2"]`).
      *

@@ -842,6 +842,7 @@ class DocumentLibraryController extends Controller
             'document_type' => 'required|string|max:64',
             'category' => 'nullable|string|in:personnel,organization',
             'visibility' => 'nullable|string|in:private,department,organization',
+            'folder_id' => 'nullable|integer',
         ]);
 
         $category = $data['category'] ?? 'personnel';
@@ -854,6 +855,23 @@ class DocumentLibraryController extends Controller
 
         if (!in_array($data['document_type'], $knownTypes, true)) {
             return response()->json(['status' => 0, 'message' => 'That document type does not exist.'], 422);
+        }
+
+        $folderId = $data['folder_id'] ?? null;
+
+        if ($folderId !== null) {
+            // 422, not a silent null-fallback - a document aimed at a folder
+            // the caller can't manage (wrong tenant, or someone else's
+            // private folder) must not quietly land at the root instead.
+            // Checked against the ACTOR, not the subject: when HR files on
+            // an employee's behalf (storeForEmployee), it is HR's own
+            // access to the destination folder that matters - the employee
+            // being filed for may have no access to that folder at all.
+            $folder = DB::table('document_folders')->where('id', $folderId)->whereNull('deleted_at')->first();
+
+            if (!$folder || !DocumentAccess::canManageFolder($folder, $actorId, $tenantId)) {
+                return response()->json(['status' => 0, 'message' => 'That folder does not exist.'], 422);
+            }
         }
 
         $file = $request->file('document');
@@ -874,6 +892,7 @@ class DocumentLibraryController extends Controller
         $documentId = DB::table('document_library')->insertGetId([
             'sub_institute_id' => $tenantId,
             'owner_id' => $subjectId,
+            'folder_id' => $folderId,
             'title' => $data['title'],
             'title_source' => 'user',
             'original_file_name' => $stored['original_file_name'],
