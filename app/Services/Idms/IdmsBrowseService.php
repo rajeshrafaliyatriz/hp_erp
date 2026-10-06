@@ -7,12 +7,31 @@ use App\Models\Idms\DocumentMaster;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
-/** Virtual folder tree (Department > Type > Year) and tag cloud, always under visibleTo. Cached briefly per user. */
+/**
+ * Virtual folder tree (Department > Type > Year) and tag cloud, always under
+ * visibleTo. Cached briefly per user; the cache is dropped for the whole tenant
+ * whenever anything that changes what is published is written (see forget()),
+ * so a freshly published document is never hidden behind a stale, empty tree.
+ */
 class IdmsBrowseService
 {
+    private function key(string $kind, int $subInstituteId, $user): string
+    {
+        $version = (int) Cache::get("idms_nav_version_{$subInstituteId}", 1);
+
+        return "idms_{$kind}_{$subInstituteId}_v{$version}_{$user->id}";
+    }
+
+    /** Invalidate every user's tree and tag cloud for one tenant. */
+    public static function forget(int $subInstituteId): void
+    {
+        $key = "idms_nav_version_{$subInstituteId}";
+        Cache::forever($key, (int) Cache::get($key, 1) + 1);
+    }
+
     public function getTree($user, int $subInstituteId): array
     {
-        return Cache::remember("idms_tree_{$subInstituteId}_{$user->id}", 60, function () use ($user, $subInstituteId) {
+        return Cache::remember($this->key('tree', $subInstituteId, $user), 60, function () use ($user, $subInstituteId) {
             $records = DocumentMaster::query()
                 ->visibleTo($user, $subInstituteId)
                 ->where('processing_status', 'done')
@@ -56,7 +75,7 @@ class IdmsBrowseService
 
     public function getTagCloud($user, int $subInstituteId): array
     {
-        return Cache::remember("idms_tags_{$subInstituteId}_{$user->id}", 60, function () use ($user, $subInstituteId) {
+        return Cache::remember($this->key('tags', $subInstituteId, $user), 60, function () use ($user, $subInstituteId) {
             $counts = [];
             $lists = DocumentMaster::query()
                 ->visibleTo($user, $subInstituteId)

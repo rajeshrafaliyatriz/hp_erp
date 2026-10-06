@@ -212,6 +212,7 @@ class IdmsDocumentController extends Controller
             $document->save();
             DocumentAuditService::log($document, 'edit_metadata', $ctx['user']->id, ['before' => $before, 'after' => $fields]);
             DB::commit();
+            IdmsBrowseService::forget($ctx['tenant']);
         } catch (Throwable $e) {
             DB::rollBack();
             report($e);
@@ -264,6 +265,7 @@ class IdmsDocumentController extends Controller
             $document->save();
             DocumentAuditService::log($document, 'review_confirmed', $ctx['user']->id);
             DB::commit();
+            IdmsBrowseService::forget($ctx['tenant']);
         } catch (Throwable $e) {
             DB::rollBack();
             report($e);
@@ -297,6 +299,7 @@ class IdmsDocumentController extends Controller
             $document->save();
             DocumentAuditService::log($document, 'tags_updated', $ctx['user']->id, ['tags' => $document->tags]);
             DB::commit();
+            IdmsBrowseService::forget($ctx['tenant']);
         } catch (Throwable $e) {
             DB::rollBack();
             report($e);
@@ -518,6 +521,7 @@ class IdmsDocumentController extends Controller
 
         DocumentAuditService::log($document, 'delete', $ctx['user']->id);
         $document->delete();
+        IdmsBrowseService::forget($ctx['tenant']);
 
         return response()->json(['status' => 1, 'message' => 'Document moved to trash.']);
     }
@@ -560,6 +564,7 @@ class IdmsDocumentController extends Controller
 
         $document->restore();
         DocumentAuditService::log($document, 'restore', $ctx['user']->id);
+        IdmsBrowseService::forget($ctx['tenant']);
 
         return response()->json(['status' => 1, 'message' => 'Document restored.', 'data' => new DocumentResource($document)]);
     }
@@ -579,6 +584,7 @@ class IdmsDocumentController extends Controller
 
         $this->storage->deleteAllFiles($document);
         $document->forceDelete();
+        IdmsBrowseService::forget($ctx['tenant']);
 
         return response()->json(['status' => 1, 'message' => 'Document deleted forever.']);
     }
