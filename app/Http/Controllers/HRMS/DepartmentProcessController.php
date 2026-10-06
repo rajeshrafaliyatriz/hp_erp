@@ -121,7 +121,7 @@ class DepartmentProcessController extends Controller
         $aiStatus = null;
 
         if ($spec['issues'] !== [] && $request->boolean('use_ai')) {
-            $normalized = $this->aiNormalizer->normalize($text, $tenantId);
+            $normalized = $this->aiNormalizer->normalize($text);
 
             if ($normalized['ok']) {
                 $spec = $this->parser->parse($normalized['text'], $departmentId, $departmentName, $categoryLabel, $fallbackName);
