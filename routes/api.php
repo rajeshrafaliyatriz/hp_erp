@@ -1472,6 +1472,8 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
         Route::post('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'storeForEmployee'])->whereNumber('id');
         Route::delete('/{employee}/documents/{document}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroyForEmployee'])
             ->whereNumber('employee')->whereNumber('document');
+        Route::post('/{employee}/documents/{document}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreForEmployee'])
+            ->whereNumber('employee')->whereNumber('document');
         Route::post('/', [EmployeeDirectoryController::class, 'store']);
         Route::put('/{id}', [EmployeeDirectoryController::class, 'update'])->whereNumber('id');
         Route::patch('/{id}/status', [EmployeeDirectoryController::class, 'setStatus'])->whereNumber('id');
@@ -1973,9 +1975,15 @@ Route::middleware('api.token')->group(function () {
      */
     Route::get('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'mine']);
     Route::post('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'store']);
+    // Static segment BEFORE /account/documents/{id} - same ordering rule as
+    // /documents/activity below. whereNumber('id') already makes "trash"
+    // un-matchable there regardless of order, but the convention stays one
+    // convention everywhere in this file, not "usually, except here."
+    Route::get('/account/documents/trash', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'trash']);
     Route::get('/account/documents/{id}/download', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'download'])->whereNumber('id');
     Route::match(['put', 'patch'], '/account/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'update'])->whereNumber('id');
     Route::delete('/account/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroy'])->whereNumber('id');
+    Route::post('/account/documents/{id}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restore'])->whereNumber('id');
     Route::post('/account/documents/{id}/versions', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'uploadVersion'])->whereNumber('id');
     Route::post('/account/documents/{id}/versions/{historyId}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreVersion'])->whereNumber(['id', 'historyId']);
 
@@ -1996,6 +2004,17 @@ Route::middleware('api.token')->group(function () {
      * with id = "activity".
      */
     Route::get('/documents/activity', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'activity']);
+
+    /*
+     * Tenant-wide trash, for HR/admin - unlike `/documents` (search) above,
+     * this genuinely needs its own gate: a non-elevated caller's trash view
+     * is `/account/documents/trash` (their own rows only), and nothing about
+     * a deleted-but-not-yet-purged row should be reachable through the
+     * ordinary visibility rules `DocumentAccess` applies to live documents.
+     */
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::get('/documents/trash', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'trashVisible']);
+    });
 
     Route::get('/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'show'])->whereNumber('id');
     Route::get('/documents/{id}/history', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'history'])->whereNumber('id');

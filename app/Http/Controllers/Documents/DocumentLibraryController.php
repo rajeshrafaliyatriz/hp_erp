@@ -10,6 +10,7 @@ use App\Services\Documents\DocumentStorageService;
 use App\Services\Documents\Extraction\TextExtractionManager;
 use App\Services\Documents\Search\DocumentSearchService;
 use App\Support\SubjectAuthority;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -153,6 +154,48 @@ class DocumentLibraryController extends Controller
         $this->recordAudit($row->id, (int) $identity['user_id'], $request, 'deleted');
 
         return response()->json(['status' => 1, 'message' => 'Document removed.']);
+    }
+
+    /**
+     * POST /api/employees-management/{employee}/documents/{document}/restore
+     * — undelete one of an employee's, admin-gated. Mirrors
+     * `destroyForEmployee()`'s shape exactly: role gate at the route
+     * (`profile:admin,hr`), tenant re-check here.
+     */
+    public function restoreForEmployee(Request $request, $employee, $document)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = (int) $identity['sub_institute_id'];
+
+        if (!$this->employeeInTenant((int) $employee, $tenantId)) {
+            return $this->notFound();
+        }
+
+        $row = DB::table('document_library')
+            ->where('id', (int) $document)
+            ->where('owner_id', (int) $employee)
+            ->where('sub_institute_id', $tenantId)
+            ->whereNotNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            return $this->notFound();
+        }
+
+        DB::table('document_library')->where('id', $row->id)->update([
+            'deleted_by' => null,
+            'deleted_at' => null,
+            'updated_at' => now(),
+        ]);
+
+        $this->recordAudit($row->id, (int) $identity['user_id'], $request, 'restored_from_trash');
+
+        return response()->json(['status' => 1, 'message' => 'Document restored.']);
     }
 
     /**
@@ -491,6 +534,112 @@ class DocumentLibraryController extends Controller
         $this->recordAudit($row->id, $userId, $request, 'deleted');
 
         return response()->json(['status' => 1, 'message' => 'Document removed.']);
+    }
+
+    /**
+     * POST /api/account/documents/{id}/restore — undelete one of mine.
+     *
+     * A true undelete, not a new row - unlike `restoreVersion()` (which adds
+     * a version pointing at old bytes, keeping history append-only), there is
+     * nothing to preserve by NOT clearing `deleted_at` here: the row between
+     * delete and restore was never visible or searchable, so there is no
+     * "what it looked like while deleted" worth keeping a trace of.
+     */
+    public function restore(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+
+        $row = DB::table('document_library')
+            ->where('id', (int) $id)
+            ->where('owner_id', $userId)
+            ->whereNotNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            return $this->notFound();
+        }
+
+        DB::table('document_library')->where('id', $row->id)->update([
+            'deleted_by' => null,
+            'deleted_at' => null,
+            'updated_at' => now(),
+        ]);
+
+        $this->recordAudit($row->id, $userId, $request, 'restored_from_trash');
+
+        return response()->json(['status' => 1, 'message' => 'Document restored.']);
+    }
+
+    /**
+     * GET /api/account/documents/trash — mine, deleted but not yet purged.
+     *
+     * `purge_at` is computed here, not stored - a denormalized column would
+     * need a backfill every time the retention window changes;
+     * `documents:purge-trash --days=N`'s own default is the one source of
+     * truth for how long trash lasts, and trash lists are small enough that
+     * computing it per-row costs nothing.
+     */
+    public function trash(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->trashFor((int) $identity['user_id'], (int) $identity['sub_institute_id'], false);
+    }
+
+    /**
+     * GET /api/documents/trash — every trashed document in the tenant, for
+     * HR/admin. Gated the same two ways every other admin-wide document view
+     * already is in this controller: route-level `profile:admin,hr` AND a
+     * row-level `SubjectAuthority::userSatisfies(..., HR_ELEVATED)` check
+     * here (see `DocumentAccess`'s own docblock for why both, not one).
+     */
+    public function trashVisible(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+
+        if (!SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED)) {
+            return $this->notFound();
+        }
+
+        return $this->trashFor($userId, (int) $identity['sub_institute_id'], true);
+    }
+
+    private function trashFor(int $userId, int $tenantId, bool $tenantWide)
+    {
+        $purgeDays = (int) config('documents.trash.purge_days', 30);
+
+        $rows = DB::table('document_library')
+            ->where('sub_institute_id', $tenantId)
+            ->when(!$tenantWide, fn ($q) => $q->where('owner_id', $userId))
+            ->whereNotNull('deleted_at')
+            ->orderByDesc('deleted_at')
+            ->get([
+                'id', 'title', 'document_type', 'category', 'original_file_name',
+                'mime_type', 'size', 'owner_id', 'deleted_at', 'created_at',
+            ])
+            ->map(function (object $row) use ($purgeDays) {
+                $row->purge_at = Carbon::parse($row->deleted_at)->addDays($purgeDays)->toDateTimeString();
+
+                return $row;
+            });
+
+        return response()->json(['status' => 1, 'data' => $rows]);
     }
 
     /**
