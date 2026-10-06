@@ -266,3 +266,16 @@ TaskRunLedger::track(
         ->runInBackground(),
     'documents.purge_trash'
 );
+
+/*
+ * IDMS TRASH - PURGED DAILY (30-day retention, config/idms.php). Only runs if
+ * the server's `schedule:run` cron is active.
+ */
+TaskRunLedger::track(
+    Schedule::command('idms:purge-trash')
+        ->dailyAt('03:30')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'idms.purge_trash'
+);
