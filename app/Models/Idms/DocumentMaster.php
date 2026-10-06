@@ -67,9 +67,8 @@ class DocumentMaster extends Model
         if ($deptId) {
             $principals[] = "dept:{$deptId}";
         }
-        $jsonPrincipals = json_encode($principals);
 
-        return $query->where(function (Builder $q) use ($userId, $deptId, $jsonPrincipals) {
+        return $query->where(function (Builder $q) use ($userId, $deptId, $principals) {
             $q->where('document_master.owner_id', $userId)
                 ->orWhere('document_master.created_by', $userId)
                 ->orWhere('document_master.visibility', 'organization');
@@ -81,7 +80,10 @@ class DocumentMaster extends Model
                 });
             }
 
-            $q->orWhereRaw('JSON_OVERLAPS(document_master.view_principals, ?)', [$jsonPrincipals]);
+            // One JSON_CONTAINS per principal (portable: JSON_OVERLAPS needs MySQL 8.0.17+ / MariaDB 10.9+).
+            foreach ($principals as $principal) {
+                $q->orWhereRaw('JSON_CONTAINS(document_master.view_principals, ?)', [json_encode($principal)]);
+            }
         });
     }
 
