@@ -21,7 +21,7 @@ class DocumentSearchService
 {
     /**
      * @param  array{q?:string, category?:string, document_type?:string, department_id?:int,
-     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int}  $filters
+     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, folder_id?:int|string}  $filters
      * @return array{data: array, total: int}
      */
     public function search(array $filters, int $tenantId, int $callerId, ?int $departmentId, int $page = 1, int $perPage = 24): array
@@ -91,6 +91,24 @@ class DocumentSearchService
 
         if (!empty($filters['date_to'])) {
             $query->whereDate('document_date', '<=', $filters['date_to']);
+        }
+
+        /*
+         * Presence, not truthiness: `folder_id=0` (the frontend's "Home"/root
+         * sentinel) must filter to `whereNull('folder_id')`, which `empty()`
+         * would otherwise treat as "no filter at all" and silently ignore -
+         * the same trap the other fields above don't have to worry about
+         * since none of them has a legitimate falsy value. Omitting the key
+         * entirely (not browsing by folder) is what leaves this unfiltered.
+         */
+        if (array_key_exists('folder_id', $filters)) {
+            $folderId = (int) $filters['folder_id'];
+
+            if ($folderId === 0) {
+                $query->whereNull('folder_id');
+            } else {
+                $query->where('folder_id', $folderId);
+            }
         }
     }
 
