@@ -3260,3 +3260,36 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     Route::get('/opportunity-matches', [$intel, 'listMatches']);
     Route::post('/matches/action', [$intel, 'actOnMatch']);
 });
+
+/*
+ * IDMS (Intelligent Document Management System) - /api/v1.
+ * Separate from the HR Document Library ('/documents', '/account/documents').
+ * `trash/documents` is its own prefix so it can never collide with `documents/{id}`.
+ * Identity and tenant come from the verified token inside the controller.
+ */
+Route::prefix('v1')->middleware(['api.token', 'throttle:120,1'])->group(function () {
+    $idms = \App\Http\Controllers\Idms\IdmsDocumentController::class;
+
+    Route::get('documents', [$idms, 'index']);
+    Route::post('documents', [$idms, 'store'])->middleware('throttle:30,1');
+    Route::get('documents/{id}', [$idms, 'show'])->whereNumber('id');
+    Route::patch('documents/{id}', [$idms, 'update'])->whereNumber('id');
+    Route::delete('documents/{id}', [$idms, 'destroy'])->whereNumber('id');
+    Route::post('documents/{id}/confirm', [$idms, 'confirm'])->whereNumber('id');
+    Route::post('documents/{id}/tags', [$idms, 'updateTags'])->whereNumber('id');
+    Route::get('documents/{id}/preview', [$idms, 'preview'])->whereNumber('id');
+    Route::get('documents/{id}/download', [$idms, 'download'])->whereNumber('id');
+    Route::get('documents/{id}/versions', [$idms, 'getVersions'])->whereNumber('id');
+    Route::post('documents/{id}/versions', [$idms, 'addVersion'])->whereNumber('id')->middleware('throttle:30,1');
+    Route::post('documents/{id}/versions/{versionNumber}/restore', [$idms, 'restoreVersion'])->whereNumber(['id', 'versionNumber']);
+    Route::get('documents/{id}/related', [$idms, 'related'])->whereNumber('id');
+
+    Route::get('trash/documents', [$idms, 'trash']);
+    Route::post('trash/documents/{id}/restore', [$idms, 'restore'])->whereNumber('id');
+    Route::delete('trash/documents/{id}', [$idms, 'purge'])->whereNumber('id');
+
+    Route::post('search/parse', [$idms, 'parseSearch']);
+    Route::get('browse/tree', [$idms, 'tree']);
+    Route::get('tags', [$idms, 'tags']);
+    Route::get('audit', [$idms, 'audit']);
+});
