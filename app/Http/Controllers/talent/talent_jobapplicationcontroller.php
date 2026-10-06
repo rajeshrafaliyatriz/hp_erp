@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -14,6 +15,56 @@ use Storage;
 
 class talent_jobapplicationcontroller extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The recruitment pipeline vocabulary. One list, three consumers.
+     *
+     * ── WHY THIS CONST EXISTS ───────────────────────────────────────────────
+     *
+     * The kanban has six columns. Two of them - Assessment and Offer - wrote
+     * 'Assessment' and 'Offered', and neither value appeared in the column ENUM,
+     * in store()'s `in:` rule, or in update()'s $allowedStatuses array. The last
+     * of those is the one that mattered: it was an `if (in_array(...))` with no
+     * else, so dragging a candidate to either column returned 200 and changed
+     * nothing. The card moved, the refresh put it back, and no error was ever
+     * raised. Two of six columns were decoration.
+     *
+     * The value list now lives here, the column is VARCHAR (see
+     * 2026_09_03_110000_widen_talent_application_status_to_varchar), and index()
+     * returns it to the client so the frontend stops keeping its own copy.
+     *
+     * VARCHAR + const, never ENUM: adding a stage later must not mean an ALTER
+     * TABLE rebuild on live.
+     */
+    public const STATUSES = [
+        'Pending Review',
+        'Under Review',
+        'Shortlisted',
+        'Assessment',
+        'Interview Scheduled',
+        'Offered',
+        'Hired',
+        'Rejected',
+        'Completed',
+    ];
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     public function index(request $request)
     {
         {
@@ -44,7 +95,7 @@ class talent_jobapplicationcontroller extends Controller
                     ], 400);
                 }
 
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->apiTenantId($request);
 
                 // fetch jobrole data from table
                 $talent = DB::table('talent_job_applications as a')
@@ -55,7 +106,12 @@ class talent_jobapplicationcontroller extends Controller
 
                 return response()->json([
                     'message' => ' fetched successfully',
-                    'data'    => $talent
+                    'data'    => $talent,
+                    // The pipeline vocabulary travels with the data so the client
+                    // does not keep its own copy and drift from it, which is how
+                    // 'Assessment' and 'Offered' came to be written by a kanban
+                    // whose backend had never heard of them.
+                    'options' => ['statuses' => self::STATUSES],
                 ], 200);
             }
             $res['talent'] = DB::table('talent_job_postings')
@@ -94,7 +150,7 @@ class talent_jobapplicationcontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         // Validation rules
         $validator = Validator::make($request->all(), [
@@ -112,7 +168,7 @@ class talent_jobapplicationcontroller extends Controller
             'skills'            => 'nullable|string',
             'certifications'    => 'nullable|string',
             'applied_date'      => 'nullable|date',
-            'status'            => 'required|in:Pending Review,Under Review,Shortlisted,Interview Scheduled,Rejected,Hired',
+            'status'            => ['required', \Illuminate\Validation\Rule::in(self::STATUSES)],
             'sub_institute_id'  => 'required|integer',
             'user_id'           => 'required|integer',
             'resume_path'       => 'required|file|mimes:pdf,doc,docx|max:5120', // 5MB
@@ -161,7 +217,7 @@ class talent_jobapplicationcontroller extends Controller
                 'applied_date'     => $request->applied_date,
                 'status'           => $request->status,
                 'sub_institute_id' => $sub_institute_id,
-                'created_by'       => $request->user_id,
+                'created_by'       => $this->g2gActorId($request),
             ]);
 
             if ($objtalent->save()) {
@@ -214,7 +270,7 @@ class talent_jobapplicationcontroller extends Controller
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // 🧩 Fetch single application with job details
             $application = DB::table('talent_job_applications as a')
@@ -286,7 +342,12 @@ class talent_jobapplicationcontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        // From the token, matching index() at :66 and store() at :116. Taking it from
+        // the request let a caller move an application into another organisation.
+        $sub_institute_id = $this->apiTenantId($request);
+        if (!$sub_institute_id) {
+            return response()->json(['message' => 'Invalid token'], 401);
+        }
 
         // 🧾 Validation
         $validator = Validator::make($request->all(), [
@@ -300,7 +361,9 @@ class talent_jobapplicationcontroller extends Controller
             'expected_salary'  => 'nullable|numeric|min:0',
             'resume_path'      => 'nullable|file|mimes:pdf,doc,docx|max:5120',
             'applied_date'     => 'nullable|date',
-            'status'           => 'nullable|string|max:50',
+            // Checked against the pipeline vocabulary, so an unknown stage is
+            // refused with a message rather than accepted and written.
+            'status'           => ['nullable', \Illuminate\Validation\Rule::in(self::STATUSES)],
             'sub_institute_id' => 'required|integer',
             'user_id'          => 'required|integer'
         ]);
@@ -313,11 +376,34 @@ class talent_jobapplicationcontroller extends Controller
         }
 
         try {
-            // 🧠 Find existing application
-            $application = talent_jobapplication::find($id);
+            /*
+             * Scoped to the caller's tenant, taken from the token.
+             *
+             * This was `talent_jobapplication::find($id)` - no tenant filter -
+             * while the tenant was resolved just above and then never used. A
+             * tenant-1 admin PUTting another institute's application id got HTTP
+             * 200 and rewrote the row; executed on live during the lifecycle
+             * re-audit, it changed a candidate's name and, because
+             * sub_institute_id below was taken from the request, moved the row
+             * into the attacker's tenant. Audit F-67.
+             *
+             * A row from another institute now answers 404, the same as one that
+             * does not exist - a 403 would confirm it does.
+             */
+            $application = talent_jobapplication::where('id', $id)
+                ->where('sub_institute_id', $sub_institute_id)
+                ->first();
 
             if (!$application) {
                 return response()->json(['message' => 'Application not found'], 404);
+            }
+
+            if (
+                $request->filled('status')
+                && $request->status === 'Shortlisted'
+                && $application->hasReachedOfferOrHiredStage()
+            ) {
+                return response()->json(['message' => 'A candidate cannot be shortlisted after an offer has been sent or the candidate has been hired.'], 422);
             }
 
             // 🧩 Update job info if job_id is changed
@@ -342,7 +428,10 @@ class talent_jobapplicationcontroller extends Controller
             $application->current_location = $request->current_location ?? $application->current_location;
             $application->expected_salary = $request->expected_salary ?? $application->expected_salary;
             $application->applied_date = $request->applied_date ?? $application->applied_date;
-            $application->status = $request->status ?? $application->status;
+            // status is deliberately NOT assigned here. It was, unconditionally, and
+            // that made the checked assignment further down dead code - any string
+            // at all reached the column. Status is written in exactly one place
+            // below, after it has been checked against self::STATUSES.
 
             // 📂 If new resume file uploaded, replace existing one
             if ($request->hasFile('resume_path')) {
@@ -367,21 +456,26 @@ class talent_jobapplicationcontroller extends Controller
             }
 
             // 🎯 Dynamic Status Validation
-            $allowedStatuses = [
-                'Pending Review',
-                'Under Review',
-                'Shortlisted',
-                'Interview Scheduled',
-                'Rejected',
-                'Hired'
-            ];
+            $allowedStatuses = self::STATUSES;
 
             if ($request->filled('status') && in_array($request->status, $allowedStatuses)) {
                 $application->status = $request->status;
             }
 
-            $application->updated_by = $request->user_id;
-            $application->sub_institute_id = $sub_institute_id;
+            /*
+             * The actor is the token's owner, not $request->user_id. Letting the
+             * caller name who made a change lets one person attribute an edit to
+             * another, which is the same class of problem as the tenant hole
+             * above - identity taken from the request rather than the token.
+             *
+             * sub_institute_id is NOT reassigned. It was set from $sub_institute_id
+             * here, so a caller passing sub_institute_id in the body could carry
+             * another tenant's row into their own once the untenanted find()
+             * above had let them reach it. With the lookup now tenant-scoped the
+             * row already belongs to this tenant; writing it again would only
+             * reintroduce a way to move it.
+             */
+            $application->updated_by = $this->apiUserId($request) ?? $application->updated_by;
 
             // 💾 Save update
             if ($application->save()) {
@@ -422,7 +516,7 @@ public function updateStatus(Request $request, $id)
             $validator = \Validator::make($request->all(), [
                 'sub_institute_id' => 'required|integer',
                 'user_id'          => 'required|integer',
-                'status'           => 'required|string|in:Pending Review,Under Review,Shortlisted,Interview Scheduled,Rejected,Hired,inactive'
+                'status'           => ['required', 'string', \Illuminate\Validation\Rule::in(array_merge(self::STATUSES, ['inactive']))]
             ]);
 
             if ($validator->fails()) {
@@ -432,7 +526,7 @@ public function updateStatus(Request $request, $id)
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // 🔍 Find the application
             $application = \App\Models\talent\talent_jobapplication::where([
@@ -444,9 +538,15 @@ public function updateStatus(Request $request, $id)
                 return response()->json(['message' => 'Job application not found'], 404);
             }
 
-            // 🧠 Update status only
+            if ($request->status === 'Shortlisted' && $application->hasReachedOfferOrHiredStage()) {
+                return response()->json(['message' => 'A candidate cannot be shortlisted after an offer has been sent or the candidate has been hired.'], 422);
+            }
+
+            // 🧠 Update status only. The actor is the token's owner - the tenant
+            // guard on the lookup above is already correct, this closes the same
+            // request-supplied-identity gap on updated_by (F-67).
             $application->status = $request->status;
-            $application->updated_by = $request->user_id;
+            $application->updated_by = $this->apiUserId($request) ?? $application->updated_by;
 
             if ($application->save()) {
                 return response()->json([
@@ -498,7 +598,7 @@ public function getCandidateApplications(Request $request, $candidate_id)
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // 🧠 Fetch applications for the given candidate
             $applications = DB::table('talent_job_applications as a')
@@ -575,7 +675,7 @@ public function getShortlistedCandidates(Request $request)
                 ], 400);
             }
 
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
 
             // 🧠 Fetch shortlisted applications
             $applications = DB::table('talent_job_applications as a')

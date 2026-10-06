@@ -4,12 +4,17 @@ namespace App\Http\Controllers\Api\HRITDashboard;
 
 use App\Http\Controllers\Controller;  
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
+use App\Support\RoleKey;
 use Carbon\Carbon;
 
 class AttendanceApiController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function weeklySummary(Request $request)
     {
         $type = $request->input('type');
@@ -29,7 +34,7 @@ class AttendanceApiController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
         $departmentId   = $request->department_id;  // <── NEW FILTER VARIABLE
 
         if (!$subInstituteId) {
@@ -196,7 +201,7 @@ class AttendanceApiController extends Controller
             }
         }
 
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
         $departmentId   = $request->department_id;
 
         if (!$subInstituteId) {
@@ -274,6 +279,284 @@ class AttendanceApiController extends Controller
             "present_today"     => $presentPercentage . "%",
             "leave_utilization" => $leaveUtilization . "%",
             "active_employees"  => $totalUsers
+        ]);
+    }
+
+    /**
+     * Employee Attendance Report - User ID + Month Wise
+     * Perfect for Flutter integration
+     */
+    public function employeeMonthlyReport(Request $request)
+    {
+        // F-159. The `if ($type === "API")` block that used to stand here was not
+        // a gate. It only ran when the CALLER said it should - omit `type` and the
+        // whole check was skipped - and even when it did run it validated the
+        // token without ever asking who owned it. The route now carries
+        // 'api.token', which is not optional, so that block is gone.
+        $subInstituteId = $this->apiTenantId($request);
+        $userId         = $request->user_id;
+        $month          = $request->month; // Expected format: YYYY-MM
+
+        $validator = Validator::make($request->all(), [
+            'sub_institute_id' => 'required|integer',
+            'user_id'          => 'required|integer',
+            'month'            => 'required|date_format:Y-m',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first()
+            ], 422);
+        }
+
+        // F-159. HR-or-self.
+        //
+        // apiTenantId() already bounds this to the caller's own organisation, so
+        // the old code could not read ACROSS tenants. What it could do is read
+        // any COLLEAGUE: user_id is a request parameter, and the response carries
+        // punch times, lateness, and the free-text reason on every leave day.
+        // Leave reasons are frequently medical. "Same company" is not a licence
+        // to read them.
+        //
+        // Roles come from RoleKey rather than tbluserprofilemaster.name, because
+        // the name is a label a tenant can edit (D-010). The list matches the one
+        // the HR attendance screens are gated on; anybody else gets their own row
+        // and only their own.
+        $callerId = $this->apiUserId($request);
+        $roleKey  = RoleKey::forUserId($callerId);
+
+        if (!RoleKey::satisfies($roleKey, ['admin', 'hr', 'executive', 'auditor'])
+            && (int) $userId !== (int) $callerId) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'You may only view your own attendance.',
+            ], 403);
+        }
+
+        // Month range
+        $startOfMonth = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $endOfMonth   = Carbon::createFromFormat('Y-m', $month)->endOfMonth();
+
+        // Employee info
+        $employee = DB::table('tbluser')
+            ->select('id', 'first_name', 'middle_name', 'last_name', 'employee_id', 'department_id', 'jobtitle_id',
+                     'monday_in_date', 'tuesday_in_date', 'wednesday_in_date', 'thursday_in_date',
+                     'friday_in_date', 'saturday_in_date', 'sunday_in_date',
+                     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+            ->where('id', $userId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->where('status', 1)
+            ->first();
+
+        if (!$employee) {
+            return response()->json(['message' => 'Employee not found'], 404);
+        }
+
+        // Fetch attendance for the month
+        $attendanceRecords = DB::table('hrms_attendances')
+            ->where('user_id', $userId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->whereBetween('day', [$startOfMonth->format('Y-m-d'), $endOfMonth->format('Y-m-d')])
+            ->get()
+            ->keyBy('day');
+
+        // Fetch approved leaves
+        $leaves = DB::table('hrms_emp_leaves as hel')
+            ->leftJoin('hrms_leave_types as hlt', 'hlt.id', '=', 'hel.leave_type_id')
+            ->where('hel.user_id', $userId)
+            ->where('hel.sub_institute_id', $subInstituteId)
+            ->where('hel.status', 'approved')
+            ->where(function ($q) use ($startOfMonth, $endOfMonth) {
+                $q->whereBetween('hel.from_date', [$startOfMonth, $endOfMonth])
+                  ->orWhereBetween('hel.to_date', [$startOfMonth, $endOfMonth]);
+            })
+            ->select('hel.*', 'hlt.leave_type as leave_type_name')
+            ->get();
+
+        // Build leave map (date => leave info)
+        $leaveMap = [];
+        foreach ($leaves as $leave) {
+            $from = Carbon::parse($leave->from_date);
+            $to   = Carbon::parse($leave->to_date);
+            for ($date = $from->copy(); $date->lte($to); $date->addDay()) {
+                if ($date->between($startOfMonth, $endOfMonth)) {
+                    $leaveMap[$date->format('Y-m-d')] = [
+                        'leave_id'        => $leave->id,
+                        'leave_type'      => $leave->leave_type_name,
+                        'day_type'        => $leave->day_type, // 1 = full, 0.5 = half
+                        /*
+                         * `comment`, not `reason`. hrms_emp_leaves has no
+                         * `reason` column - the employee's own words are stored
+                         * in `comment` (hod_comment and hr_remarks are the
+                         * approvers'). Reading $leave->reason raised
+                         *
+                         *   ErrorException: Undefined property: stdClass::$reason
+                         *
+                         * which Laravel renders as a 500, so this whole endpoint
+                         * died for ANY employee who had approved leave in the
+                         * month being viewed. Monthly Attendance Report is the
+                         * screen that calls it: it worked for people with no
+                         * leave and broke for exactly the people whose row the
+                         * report existed to explain.
+                         *
+                         * The response key stays `reason` because that is what
+                         * it means to a reader; only the column is corrected.
+                         */
+                        'reason'          => $leave->comment,
+                    ];
+                }
+            }
+        }
+
+        // Fetch holidays
+        $holidays = DB::table('hrms_holidays')
+            ->where('sub_institute_id', $subInstituteId)
+            ->where(function ($q) use ($startOfMonth, $endOfMonth) {
+                $q->whereBetween('from_date', [$startOfMonth, $endOfMonth])
+                  ->orWhereBetween('to_date', [$startOfMonth, $endOfMonth]);
+            })
+            ->get();
+
+        $holidayMap = [];
+        foreach ($holidays as $holiday) {
+            $from = Carbon::parse($holiday->from_date);
+            $to   = Carbon::parse($holiday->to_date);
+            for ($date = $from->copy(); $date->lte($to); $date->addDay()) {
+                if ($date->between($startOfMonth, $endOfMonth)) {
+                    $holidayMap[$date->format('Y-m-d')] = $holiday->holiday_name ?? 'Holiday';
+                }
+            }
+        }
+
+        // Build daily report
+        $dailyReport = [];
+        $presentCount = 0;
+        $absentCount  = 0;
+        $lateCount    = 0;
+        $leaveCount   = 0;
+        $holidayCount = 0;
+        $weekendCount = 0;
+
+        $current = $startOfMonth->copy();
+        while ($current->lte($endOfMonth)) {
+            $dateStr   = $current->format('Y-m-d');
+            $dayName   = $current->format('l'); // Monday, Tuesday...
+            $dayLower  = strtolower($dayName);  // sunday, monday etc.
+            $dayKey    = $dayLower . '_in_date';
+
+            $shiftTime = $employee->$dayKey ?? null;
+
+            // Check if this day is a working day for the employee (0 = off / weekend)
+            $isWorkingDay = isset($employee->$dayLower) ? (int)$employee->$dayLower : 1;
+
+            $record = $attendanceRecords->get($dateStr);
+
+            $status       = 'absent';
+            $punchIn      = null;
+            $punchOut     = null;
+            $workingHours = null;
+            $isLate       = false;
+            $leaveInfo    = $leaveMap[$dateStr] ?? null;
+            $holidayName  = $holidayMap[$dateStr] ?? null;
+
+            if ($holidayName) {
+                $status = 'holiday';
+                $holidayCount++;
+            } elseif ($leaveInfo) {
+                $status = 'leave';
+                $leaveCount += $leaveInfo['day_type'] ?? 1;
+            } elseif ($isWorkingDay === 0) {
+                // Off day / Weekend (Sunday etc.)
+                $status = 'weekend';
+                $weekendCount++;
+            } elseif ($record) {
+                $punchIn  = $record->punchin_time  ? Carbon::parse($record->punchin_time)->format('H:i:s')  : null;
+                $punchOut = $record->punchout_time ? Carbon::parse($record->punchout_time)->format('H:i:s') : null;
+
+                if ($punchIn && $punchOut) {
+                    $status = 'present';
+                    $presentCount++;
+
+                    /*
+                     * F-170. This read
+                     *
+                     *     Carbon::parse($punchout)->diffInMinutes(Carbon::parse($punchin))
+                     *
+                     * with no second argument. Under Carbon 3 (composer.json
+                     * allows ^2.71 || ^3.0) diffInMinutes is SIGNED, and the
+                     * operands are the wrong way round, so a normal day came
+                     * back negative: for 09:59:16 -> 18:20:15 the difference is
+                     * -501, floor(-501/60) is -9, -501 % 60 is -21 in PHP, and
+                     * the sprintf produced "-9:-21" as the working hours.
+                     *
+                     * The rest of this codebase already knows: every other call
+                     * site passes `true` for the absolute value, and three of
+                     * them (HrmsController 523/529, 886/888, 912/916) still
+                     * carry the un-absolute line commented out directly above
+                     * the fixed one. This is the site that was missed.
+                     */
+                    $diffMinutes = (int) Carbon::parse($record->punchin_time)
+                        ->diffInMinutes(Carbon::parse($record->punchout_time), true);
+                    $hours = intdiv($diffMinutes, 60);
+                    $mins  = $diffMinutes % 60;
+                    $workingHours = sprintf('%02d:%02d', $hours, $mins);
+
+                    // Late check
+                    if ($shiftTime && $punchIn > $shiftTime) {
+                        $isLate = true;
+                        $lateCount++;
+                    }
+                } elseif ($punchIn) {
+                    $status = 'incomplete';
+                }
+            } else {
+                // Working day but no attendance record → Absent
+                $status = 'absent';
+                $absentCount++;
+            }
+
+            $dailyReport[] = [
+                'date'           => $dateStr,
+                'day_name'       => $dayName,
+                'status'         => $status,
+                'punchin_time'   => $punchIn,
+                'punchout_time'  => $punchOut,
+                'working_hours'  => $workingHours,
+                'is_late'        => $isLate,
+                'shift_time'     => $shiftTime,
+                'leave'          => $leaveInfo,
+                'holiday_name'   => $holidayName,
+            ];
+
+            $current->addDay();
+        }
+
+        $totalDays     = $startOfMonth->daysInMonth;
+        $scheduledWorkingDays = $totalDays - $weekendCount - $holidayCount;
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Success',
+            'data'    => [
+                'employee' => [
+                    'id'           => $employee->id,
+                    'name'         => trim(($employee->first_name ?? '') . ' ' . ($employee->middle_name ?? '') . ' ' . ($employee->last_name ?? '')),
+                    'employee_id'  => $employee->employee_id,
+                ],
+                'month'    => $month,
+                'summary'  => [
+                    'total_days'      => $totalDays,
+                    'present_days'    => $presentCount,
+                    'absent_days'     => $absentCount,
+                    'leave_days'      => $leaveCount,
+                    'holiday_days'    => $holidayCount,
+                    'late_days'       => $lateCount,
+                    'weekend_days'    => $weekendCount,
+                    'working_days'    => max(0, $scheduledWorkingDays),
+                ],
+                'daily_report' => $dailyReport
+            ]
         ]);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\school_setup\sub_std_mapModel;
@@ -13,11 +14,13 @@ use App\Models\libraries\skillJobroleMap;
 
 class SkillMatchingController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getUserRejectedTasks(Request $request)
     {
         try {
             $userId = $request->input('user_id');
-            $subInstituteId = $request->input('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
 
             if (!$userId || !$subInstituteId) {
                 return response()->json([
@@ -201,7 +204,7 @@ class SkillMatchingController extends Controller
         // Keeping it as-is for backward compatibility
         try {
             $userId = $request->input('user_id');
-            $subInstituteId = $request->input('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
 
             if (!$userId || !$subInstituteId) {
                 return response()->json([

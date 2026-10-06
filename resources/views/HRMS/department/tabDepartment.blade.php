@@ -66,34 +66,34 @@
                                     @endif
                                 </select>
                             </div>
-                            <!-- sub department select  -->
+                            <!-- job role select  -->
                             <div class="col-md-4 form-group">
-                                <label for="selectSubDepartment">Select Sub Department</label>
-                                <select name="arr[0][selSubDepartment]" id="selSubDepartment0"
-                                    class="form-control selSubDepartment" data-val="0">
+                                <label for="selectJobRole">Job Role</label>
+                                <select name="arr[0][jobrole]" id="selJobRole0"
+                                    class="form-control selJobRole" data-val="0" required>
+                                    <option value="">Select Job Role</option>
                                 </select>
+                            </div>
+                            <!-- task title select  -->
+                            <div class="col-md-4 form-group">
+                                <label for="taskTitle">Task Title</label>
+                                <select name="arr[0][TASK_TITLE]" id="taskTitle0" class="form-control taskTitle"
+                                    data-val="0" required>
+                                    <option value="">Select Task Title</option>
+                                </select>
+                            </div>
+                            <!-- task description -->
+                            <div class="col-md-4  form-group">
+                                <label for="task">Task Description</label>
+                                <textarea name="arr[0][TASK_DESCRIPTION]" id="TASK_DESCRIPTION0" class="form-control taskDescription" data-val="0" readonly></textarea>
                             </div>
                             <!-- employee select  -->
                             <div class="col-md-4 form-group">
-                                <label for="selEmployees">Select Employee</label>
+                                <label for="selEmployees">Assign To</label>
                                 <select name="arr[0][TASK_ALLOCATED_TO][]" id="selEmployees0"
                                     class="form-control selEmployees" data-val="0" required>
                                     <option value="">Select Employee</option>
-
                                 </select>
-                            </div>
-                            <!-- add task  -->
-                            <div class="col-md-4  form-group">
-                                <label for="task">Task</label>
-                                <input type="text" name="arr[0][TASK_TITLE]" id="task0" class="form-control task"
-                                    data-val="0" required autocomplete="off" list="taskDatalist0">
-                                <datalist id="taskDatalist0"></datalist>
-
-                            </div>
-                            <!-- add task Description -->
-                            <div class="col-md-4  form-group">
-                                <label for="task">Task Description</label>
-                                <textarea name="arr[0][TASK_DESCRIPTION]" id="TASK_DESCRIPTION0" class="form-control" data-val="0"></textarea>
                             </div>
                             <!-- task attachment -->
                             <div class="col-md-4  form-group">
@@ -487,33 +487,39 @@
             }
         })
 
+        function resetTaskFields(dataVal) {
+            $('#selJobRole' + dataVal).html('<option value="">Select Job Role</option>');
+            $('#taskTitle' + dataVal).html('<option value="">Select Task Title</option>');
+            $('#TASK_DESCRIPTION' + dataVal).val('');
+            $('#selEmployees' + dataVal).html('<option value="">Select Employee</option>');
+        }
+
         $('.selDepartment').on('change', function() {
             var depId = $(this).val();
             var dataVal = $(this).attr('data-val');
-            // get sub dep 
-            $('#selSubDepartment' + dataVal).empty();
+
+            resetTaskFields(dataVal);
+
             $.ajax({
-                url: "{{ route('subDepartmentList') }}",
+                url: "{{ route('departmentJobRoles') }}",
                 data: {
                     depId: depId
                 },
                 type: "GET",
                 success: function(response) {
                     if (Array.isArray(response)) {
-                        $('#selSubDepartment' + dataVal).append(
-                            `<option value="">Select Sub Department</option>`)
-                        response.forEach(function(department, index) {
-                            $('#selSubDepartment' + dataVal).append(
-                                `<option value="${department.id}">${department.department}</option>`
-                                );
+                        $('#selJobRole' + dataVal).html('<option value="">Select Job Role</option>');
+                        response.forEach(function(jobRole) {
+                            $('#selJobRole' + dataVal).append(
+                                `<option value="${jobRole.id}">${jobRole.jobrole}</option>`
+                            );
                         });
                     } else {
-                        console.error('Response is not an array for sub dep');
+                        console.error('Response is not an array for job roles');
                     }
                 }
-            })
-            //    get emp 
-            $('#selEmployees' + dataVal).empty();
+            });
+
             $.ajax({
                 url: "{{ route('departmentEmployeeList') }}",
                 data: {
@@ -521,51 +527,56 @@
                 },
                 type: "GET",
                 success: function(response) {
-                    $('#selEmployees' + dataVal).append(
-                        `<option value="">Select any one</option>`);
-
+                    $('#selEmployees' + dataVal).html('<option value="">Select Employee</option>');
                     if (Array.isArray(response)) {
-                        response.forEach(function(employee, index) {
+                        response.forEach(function(employee) {
                             $('#selEmployees' + dataVal).append(
                                 `<option value="${employee.id}">${employee.name}</option>`
-                                );
+                            );
                         });
                     } else {
-                        console.error('Response is not an array for sub dep');
+                        console.error('Response is not an array for employees');
                     }
                 }
-            })
+            });
         })
-        // sub dep 
-        $('.selSubDepartment').on('change', function() {
+
+        $('.selJobRole').on('change', function() {
             var dataVal = $(this).attr('data-val');
-            var depId = $('#selDepartment' + dataVal).val();
-            var subDepId = $('#selSubDepartment' + dataVal).val();
+            var jobrole = $(this).val();
 
-            // get emp 
-            $('#selEmployees' + dataVal).empty();
+            $('#taskTitle' + dataVal).html('<option value="">Select Task Title</option>');
+            $('#TASK_DESCRIPTION' + dataVal).val('');
+
+            if (!jobrole) {
+                return;
+            }
+
             $.ajax({
-                url: "{{ route('departmentEmployeeList') }}",
+                url: "{{ route('jobRoleTasks') }}",
                 data: {
-                    depId: depId,
-                    subDepId: subDepId
+                    jobrole: jobrole
                 },
                 type: "GET",
                 success: function(response) {
-                    $('#selEmployees' + dataVal).append(
-                        `<option value="">Select any one</option>`);
                     if (Array.isArray(response)) {
-                        response.forEach(function(employee, index) {
-                            $('#selEmployees' + dataVal).append(
-                                `<option value="${employee.id}">${employee.name}</option>`
-                                );
+                        response.forEach(function(task) {
+                            $('#taskTitle' + dataVal).append(
+                                `<option value="${task.task_title}" data-description="${task.task_description ?? ''}">${task.task_title}</option>`
+                            );
                         });
                     } else {
-                        console.error('Response is not an array for sub dep');
+                        console.error('Response is not an array for tasks');
                     }
                 }
-            })
-        })
+            });
+        });
+
+        $('.taskTitle').on('change', function() {
+            var dataVal = $(this).attr('data-val');
+            var description = $(this).find('option:selected').attr('data-description') || '';
+            $('#TASK_DESCRIPTION' + dataVal).val(description);
+        });
     });
 
     function getEmpModel(emp_ids, dep_name, type) {
@@ -719,3 +730,4 @@
         }
     }
 </script>
+

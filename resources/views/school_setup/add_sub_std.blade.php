@@ -98,6 +98,10 @@
                             </div> 
                         </div>
                         <div class="col-md-3 form-group">
+                            <label>Content Quantity</label>
+                            <input type="number" min="0" id="content_quantity" name="content_quantity" value="@if(isset($data['mapped_data']['content_quantity'])){{$data['mapped_data']['content_quantity']}}@endif" class="form-control">
+                        </div>
+                        <div class="col-md-3 form-group">
                             <label>Subject Category</label>                            
                             <select class="form-control" data-style="form-control" name="subject_category" id="subject_category">
                                 @foreach($data['content_category'] as $key =>$val)

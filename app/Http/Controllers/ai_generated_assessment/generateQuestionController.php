@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\ai_generated_assessment;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
 use App\Models\ai_generated_assessment\QuestionMaster;
@@ -10,6 +11,8 @@ use App\Models\ai_generated_assessment\AnswerMaster;
 
 class generateQuestionController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         $type = $request->type;
@@ -26,7 +29,7 @@ class generateQuestionController extends Controller
                 return response()->json(['message' => 'Invalid token'], 401);
             }
         }
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
         $questions = QuestionMaster::with('answers')->where('sub_institute_id', $subInstituteId)->get();
 
         return response()->json([
@@ -97,7 +100,7 @@ class generateQuestionController extends Controller
                 return response()->json(['message' => 'Invalid token'], 401);
             }
         }
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
 
         // Check if it's bulk or single
         if ($request->has('questions') && is_array($request->questions)) {

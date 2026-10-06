@@ -1,0 +1,3632 @@
+[
+    [
+        "CsrfCookieController@show",
+        "sanctum/csrf-cookie",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "UserProfileController@show",
+        "api/user/profile",
+        "SCOPED",
+        "bodies differ (906 vs 928 bytes)"
+    ],
+    [
+        "generateQuestionController@index",
+        "api/ai-generated-assessment/question/index",
+        "SCOPED",
+        "bodies differ (102138 vs 378694 bytes)"
+    ],
+    [
+        "generateAssessmentController@index",
+        "api/ai-generated-assessment/assessment/index",
+        "SCOPED",
+        "bodies differ (227671 vs 370191 bytes)"
+    ],
+    [
+        "talent_interviewschedulescontroller@index",
+        "api/interview-schedules",
+        "SCOPED",
+        "bodies differ (45 vs 1357 bytes)"
+    ],
+    [
+        "talent_interviewschedulescontroller@create",
+        "api/interview-schedules/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "talent_interviewschedulescontroller@candidatepipeline",
+        "api/candidate-pipeline",
+        "SCOPED",
+        "bodies differ (400 vs 398 bytes)"
+    ],
+    [
+        "talent_jobapplicationcontroller@getShortlistedCandidates",
+        "api/job-applications/shortlisted",
+        "SCOPED",
+        "bodies differ (39557 vs 2666 bytes)"
+    ],
+    [
+        "talent_jobapplicationcontroller@index",
+        "api/job-applications",
+        "SCOPED",
+        "bodies differ (154737 vs 82369 bytes)"
+    ],
+    [
+        "talent_jobapplicationcontroller@create",
+        "api/job-applications/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "talent_jobpostingcontroller@index",
+        "api/job-postings",
+        "SCOPED",
+        "bodies differ (79327 vs 84878 bytes)"
+    ],
+    [
+        "talent_jobpostingcontroller@create",
+        "api/job-postings/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "talent_jobpostingcontroller@getHiringStatus",
+        "api/talent/team-overview",
+        "SCOPED",
+        "bodies differ (780 vs 1623 bytes)"
+    ],
+    [
+        "TalentOfferController@index",
+        "api/offers",
+        "SCOPED",
+        "bodies differ (21316 vs 9959 bytes)"
+    ],
+    [
+        "TalentOfferController@getTemplates",
+        "api/talent-templates",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "jobroletaskcontroller@index",
+        "api/job-role-tasks",
+        "SCOPED",
+        "bodies differ (54 vs 132 bytes)"
+    ],
+    [
+        "jobroletaskcontroller@create",
+        "api/job-role-tasks/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "jobroletexonomycontroller@index",
+        "api/jobroletexonomies",
+        "SCOPED",
+        "bodies differ (221 vs 672 bytes)"
+    ],
+    [
+        "jobroletexonomycontroller@create",
+        "api/jobroletexonomies/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "skillcontroller@index",
+        "api/skills",
+        "SCOPED",
+        "bodies differ (84363 vs 297582 bytes)"
+    ],
+    [
+        "skillcontroller@create",
+        "api/skills/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "jobrolecontroller@searchskills",
+        "api/skills/search",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "IndustryController@index",
+        "api/industries",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (7191 bytes)"
+    ],
+    [
+        "CompetencyDashboardController@index",
+        "api/competency-dashboard",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (7045 bytes)"
+    ],
+    [
+        "SkillDevelopmentController@getSkillProgress",
+        "api/skill-development/progress",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (204 bytes)"
+    ],
+    [
+        "SkillDevelopmentController@getLearningStreak",
+        "api/skill-development/streak",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (268 bytes)"
+    ],
+    [
+        "SkillDevelopmentController@getWeeklyLearningGoal",
+        "api/skill-development/weekly-goal",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (317 bytes)"
+    ],
+    [
+        "SkillDevelopmentController@getUserAchievements",
+        "api/skill-development/achievements",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (465 bytes)"
+    ],
+    [
+        "SkillDevelopmentController@getPeerComparison",
+        "api/skill-development/peer-comparison",
+        "UNTESTABLE",
+        "redirect/auth 404/404"
+    ],
+    [
+        "SkillDevelopmentController@getLearningCalendar",
+        "api/skill-development/calendar",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (226 bytes)"
+    ],
+    [
+        "SkillDevelopmentController@getRecentActivity",
+        "api/skill-development/recent-activity",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (210 bytes)"
+    ],
+    [
+        "CompetencyDashboardController@getWorkloadHeatmap",
+        "api/competency/workload-heatmap",
+        "SCOPED",
+        "bodies differ (978 vs 822 bytes)"
+    ],
+    [
+        "CompetencyDashboardController@getKPI",
+        "api/competency/kpi",
+        "SCOPED",
+        "bodies differ (178 vs 179 bytes)"
+    ],
+    [
+        "CompetencyDashboardController@getRoleSimilarity",
+        "api/competency/role-similarity",
+        "SCOPED",
+        "bodies differ (5857 vs 6621 bytes)"
+    ],
+    [
+        "CompetencyDashboardController@getCoverageScorecards",
+        "api/competency/coverage-scorecards",
+        "SCOPED",
+        "bodies differ (737 vs 735 bytes)"
+    ],
+    [
+        "CompetencyDashboardController@getHealthRadar",
+        "api/competency/health-radar",
+        "SCOPED",
+        "bodies differ (1447 vs 1413 bytes)"
+    ],
+    [
+        "CompetencyDashboardController@getSkillsManagementFunnel",
+        "api/competency/skills-management-funnel",
+        "SCOPED",
+        "bodies differ (466 vs 476 bytes)"
+    ],
+    [
+        "CompetencyDashboardController@getAlignment",
+        "api/competency/alignment",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "CommandCenterController@index",
+        "api/competency/command-center",
+        "SCOPED",
+        "bodies differ (2346 vs 2404 bytes)"
+    ],
+    [
+        "CommandCenterController@filters",
+        "api/competency/command-center/filters",
+        "SCOPED",
+        "bodies differ (12188 vs 30321 bytes)"
+    ],
+    [
+        "ApprovalController@index",
+        "api/competency/approvals",
+        "SCOPED",
+        "bodies differ (114 vs 114 bytes)"
+    ],
+    [
+        "LibraryController@meta",
+        "api/competency/library/meta",
+        "SCOPED",
+        "bodies differ (9196 vs 21593 bytes)"
+    ],
+    [
+        "LibraryController@skillTaxonomyTree",
+        "api/competency/library/skill-taxonomy-tree",
+        "SCOPED",
+        "bodies differ (12521 vs 24069 bytes)"
+    ],
+    [
+        "LibraryController@levelsOfResponsibility",
+        "api/competency/library/levels-of-responsibility",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (176993 bytes)"
+    ],
+    [
+        "LibraryController@workFunctions",
+        "api/competency/library/work-functions",
+        "SCOPED",
+        "bodies differ (2185 vs 16376 bytes)"
+    ],
+    [
+        "LibraryController@skills",
+        "api/competency/library/skills",
+        "SCOPED",
+        "bodies differ (28401 vs 49242 bytes)"
+    ],
+    [
+        "LibraryController@jobroles",
+        "api/competency/library/jobroles",
+        "SCOPED",
+        "bodies differ (36580 vs 45684 bytes)"
+    ],
+    [
+        "LibraryController@jobroleTasks",
+        "api/competency/library/jobrole-tasks",
+        "SCOPED",
+        "bodies differ (10566 vs 11778 bytes)"
+    ],
+    [
+        "LibraryController@invisible",
+        "api/competency/library/invisible",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (34092 bytes)"
+    ],
+    [
+        "AssessmentCycleController@index",
+        "api/competency/assessment-cycles",
+        "SCOPED",
+        "bodies differ (65 vs 231 bytes)"
+    ],
+    [
+        "AssessmentCycleController@metrics",
+        "api/competency/assessment-cycles/metrics",
+        "SCOPED",
+        "bodies differ (214 vs 214 bytes)"
+    ],
+    [
+        "AssessmentCycleController@participantRatings",
+        "api/competency/assessment-cycles/participant-ratings",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (75 bytes)"
+    ],
+    [
+        "AssessmentCycleController@calibration",
+        "api/competency/assessment-cycles/calibration",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (73 bytes)"
+    ],
+    [
+        "AssessmentCycleController@approvals",
+        "api/competency/assessment-cycles/approvals",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (71 bytes)"
+    ],
+    [
+        "AssessmentCycleController@closed",
+        "api/competency/assessment-cycles/closed",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (72 bytes)"
+    ],
+    [
+        "AssessmentCycleController@configuration",
+        "api/competency/assessment-cycles/configuration",
+        "SCOPED",
+        "bodies differ (1019 vs 1019 bytes)"
+    ],
+    [
+        "CompetencyController@index",
+        "api/competency/competencies",
+        "SCOPED",
+        "bodies differ (4753 vs 4641 bytes)"
+    ],
+    [
+        "FrameworkController@index",
+        "api/competency/frameworks",
+        "SCOPED",
+        "bodies differ (128 vs 404 bytes)"
+    ],
+    [
+        "AssessmentController@index",
+        "api/competency/assessments",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (129 bytes)"
+    ],
+    [
+        "CertificationController@index",
+        "api/competency/certifications",
+        "SCOPED",
+        "bodies differ (132 vs 825 bytes)"
+    ],
+    [
+        "DevelopmentPlanController@index",
+        "api/competency/development-plans",
+        "SCOPED",
+        "bodies differ (135 vs 697 bytes)"
+    ],
+    [
+        "DevelopmentPlanController@metrics",
+        "api/competency/development-plans/metrics",
+        "SCOPED",
+        "bodies differ (335 vs 338 bytes)"
+    ],
+    [
+        "DevelopmentPlanController@owners",
+        "api/competency/development-plans/owners",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (67 bytes)"
+    ],
+    [
+        "DevelopmentPlanController@employees",
+        "api/competency/employee-options",
+        "SCOPED",
+        "bodies differ (13786 vs 15554 bytes)"
+    ],
+    [
+        "CareerPathController@explorer",
+        "api/competency/career-paths/explorer",
+        "SCOPED",
+        "bodies differ (203 vs 620 bytes)"
+    ],
+    [
+        "CareerPathController@roleOptions",
+        "api/competency/career-paths/role-options",
+        "SCOPED",
+        "bodies differ (16063 vs 42283 bytes)"
+    ],
+    [
+        "CareerPathController@index",
+        "api/competency/career-paths",
+        "SCOPED",
+        "bodies differ (130 vs 397 bytes)"
+    ],
+    [
+        "LearningAssignmentController@courses",
+        "api/competency/learning-assignments/courses",
+        "SCOPED",
+        "bodies differ (427 vs 6561 bytes)"
+    ],
+    [
+        "LearningAssignmentController@index",
+        "api/competency/learning-assignments",
+        "SCOPED",
+        "bodies differ (138 vs 648 bytes)"
+    ],
+    [
+        "StudioController@summary",
+        "api/competency/studio/summary",
+        "SCOPED",
+        "bodies differ (334 vs 346 bytes)"
+    ],
+    [
+        "StudioController@frameworkStructure",
+        "api/competency/studio/framework-structure",
+        "SCOPED",
+        "bodies differ (1360 vs 1533 bytes)"
+    ],
+    [
+        "StudioController@proficiencyScale",
+        "api/competency/studio/proficiency-scale",
+        "SCOPED",
+        "bodies differ (8077 vs 8077 bytes)"
+    ],
+    [
+        "StudioController@weights",
+        "api/competency/studio/weights",
+        "SCOPED",
+        "bodies differ (154 vs 547 bytes)"
+    ],
+    [
+        "StudioController@weightingConfig",
+        "api/competency/studio/weighting-config",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (1086 bytes)"
+    ],
+    [
+        "RoleMappingController@roles",
+        "api/competency/role-mapping/roles",
+        "SCOPED",
+        "bodies differ (891 vs 858 bytes)"
+    ],
+    [
+        "RoleMappingController@matrix",
+        "api/competency/role-mapping/matrix",
+        "SCOPED",
+        "bodies differ (22640 vs 44706 bytes)"
+    ],
+    [
+        "MappingReviewController@index",
+        "api/competency/mapping-reviews",
+        "SCOPED",
+        "bodies differ (182 vs 182 bytes)"
+    ],
+    [
+        "CertificationController@metrics",
+        "api/competency/certifications/metrics",
+        "SCOPED",
+        "bodies differ (279 vs 281 bytes)"
+    ],
+    [
+        "CertificationController@filters",
+        "api/competency/certifications/filters",
+        "SCOPED",
+        "bodies differ (795 vs 922 bytes)"
+    ],
+    [
+        "CertificationController@export",
+        "api/competency/certifications/export",
+        "SCOPED",
+        "bodies differ (71 vs 764 bytes)"
+    ],
+    [
+        "CertificationRequirementController@index",
+        "api/competency/certification-requirements",
+        "SCOPED",
+        "bodies differ (144 vs 507 bytes)"
+    ],
+    [
+        "AuditController@metrics",
+        "api/competency/audit/metrics",
+        "SCOPED",
+        "bodies differ (184 vs 185 bytes)"
+    ],
+    [
+        "AuditController@filters",
+        "api/competency/audit/filters",
+        "SCOPED",
+        "bodies differ (969 vs 2566 bytes)"
+    ],
+    [
+        "AuditController@export",
+        "api/competency/audit/export",
+        "SCOPED",
+        "bodies differ (6876 vs 65234 bytes)"
+    ],
+    [
+        "AuditController@userActions",
+        "api/competency/audit/user-actions",
+        "SCOPED",
+        "bodies differ (263 vs 845 bytes)"
+    ],
+    [
+        "AuditController@index",
+        "api/competency/audit",
+        "SCOPED",
+        "bodies differ (7439 vs 13597 bytes)"
+    ],
+    [
+        "AttendanceApiController@weeklySummary",
+        "api/attendance-weekly",
+        "SCOPED",
+        "bodies differ (279 vs 450 bytes)"
+    ],
+    [
+        "AttendanceApiController@KPI",
+        "api/KPI-HRITDashboard",
+        "SCOPED",
+        "bodies differ (70 vs 72 bytes)"
+    ],
+    [
+        "AttendanceApiController@employeeMonthlyReport",
+        "api/employee-attendance-monthly-report",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "JobroleApiController@getDepartmentWise",
+        "api/jobroles-by-department",
+        "SCOPED",
+        "bodies differ (72250 vs 241415 bytes)"
+    ],
+    [
+        "LeaveDistribution@leaveDistribution",
+        "api/leave-distribution",
+        "SCOPED",
+        "bodies differ (74 vs 148 bytes)"
+    ],
+    [
+        "LeaveDashboardController@index",
+        "api/leave/dashboard",
+        "SCOPED",
+        "bodies differ (251 vs 2113 bytes)"
+    ],
+    [
+        "LeaveDashboardController@trend",
+        "api/leave/trend",
+        "SCOPED",
+        "bodies differ (966 vs 967 bytes)"
+    ],
+    [
+        "LeaveDashboardController@departmentSummary",
+        "api/leave/department-summary",
+        "SCOPED",
+        "bodies differ (86 vs 399 bytes)"
+    ],
+    [
+        "LeaveDashboardController@typeDistribution",
+        "api/leave/type-distribution",
+        "SCOPED",
+        "bodies differ (86 vs 392 bytes)"
+    ],
+    [
+        "LeaveDashboardController@upcomingHolidays",
+        "api/leave/holidays/upcoming",
+        "SCOPED",
+        "bodies differ (73 vs 207 bytes)"
+    ],
+    [
+        "LeaveOptionsController@index",
+        "api/leave/options",
+        "SCOPED",
+        "bodies differ (23265 vs 16724 bytes)"
+    ],
+    [
+        "LeaveOptionsController@balances",
+        "api/leave/balances",
+        "SCOPED",
+        "bodies differ (161 vs 412 bytes)"
+    ],
+    [
+        "LeaveRequestApiController@index",
+        "api/leave/requests",
+        "SCOPED",
+        "bodies differ (144 vs 6360 bytes)"
+    ],
+    [
+        "LeaveReportApiController@summary",
+        "api/leave/reports/summary",
+        "SCOPED",
+        "bodies differ (219 vs 886 bytes)"
+    ],
+    [
+        "LeaveReportApiController@register",
+        "api/leave/reports/register",
+        "SCOPED",
+        "bodies differ (92 vs 5693 bytes)"
+    ],
+    [
+        "LeaveReportApiController@balance",
+        "api/leave/reports/balance",
+        "SCOPED",
+        "bodies differ (114 vs 35134 bytes)"
+    ],
+    [
+        "LeaveTypeApiController@index",
+        "api/leave/leave-types",
+        "SCOPED",
+        "bodies differ (79 vs 607 bytes)"
+    ],
+    [
+        "HolidayApiController@index",
+        "api/leave/holidays",
+        "SCOPED",
+        "bodies differ (64 vs 526 bytes)"
+    ],
+    [
+        "HolidayApiController@weekdays",
+        "api/leave/weekdays",
+        "SCOPED",
+        "bodies differ (443 vs 446 bytes)"
+    ],
+    [
+        "LeaveWorkflowApiController@workflow",
+        "api/leave/workflow",
+        "SCOPED",
+        "bodies differ (304 vs 304 bytes)"
+    ],
+    [
+        "LeaveWorkflowApiController@roles",
+        "api/leave/roles",
+        "SCOPED",
+        "bodies differ (1656 vs 1654 bytes)"
+    ],
+    [
+        "LeaveDistributionApiController@index",
+        "api/leave/distribution",
+        "SCOPED",
+        "bodies differ (74 vs 321 bytes)"
+    ],
+    [
+        "AttendanceTrackingApiController@myAttendance",
+        "api/attendance/my-attendance",
+        "SCOPED",
+        "bodies differ (6933 vs 6947 bytes)"
+    ],
+    [
+        "AttendanceReportApiController@filters",
+        "api/attendance/report-filters",
+        "SCOPED",
+        "bodies differ (890 vs 2388 bytes)"
+    ],
+    [
+        "AttendanceReportApiController@employees",
+        "api/attendance/employees",
+        "SCOPED",
+        "bodies differ (28219 vs 15846 bytes)"
+    ],
+    [
+        "AttendanceDashboardApiController@weeklySummary",
+        "api/attendance/weekly-summary",
+        "SCOPED",
+        "bodies differ (303 vs 474 bytes)"
+    ],
+    [
+        "AttendanceDashboardApiController@kpi",
+        "api/attendance/kpi",
+        "SCOPED",
+        "bodies differ (70 vs 72 bytes)"
+    ],
+    [
+        "LmsCourseEnrollController@index",
+        "api/enroll",
+        "SCOPED",
+        "bodies differ (826 vs 11288 bytes)"
+    ],
+    [
+        "LmsCourseEnrollController@index",
+        "api/enrolled_courses",
+        "SCOPED",
+        "bodies differ (826 vs 11288 bytes)"
+    ],
+    [
+        "LmsCourseEnrollController@available",
+        "api/available_courses",
+        "SCOPED",
+        "bodies differ (864 vs 12676 bytes)"
+    ],
+    [
+        "assignmentController@stats",
+        "api/lmsAssignment/stats",
+        "SCOPED",
+        "bodies differ (106 vs 106 bytes)"
+    ],
+    [
+        "assignmentController@learners",
+        "api/lmsAssignment/learners",
+        "SCOPED",
+        "bodies differ (5874 vs 4294 bytes)"
+    ],
+    [
+        "assignmentController@enrollments",
+        "api/lmsAssignment/enrollments",
+        "SCOPED",
+        "bodies differ (28184 vs 51100 bytes)"
+    ],
+    [
+        "assignmentController@index",
+        "api/lmsAssignment",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "LmsGovernanceController@kpis",
+        "api/lms/governance/kpis",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (138 bytes)"
+    ],
+    [
+        "LmsGovernanceController@systemHealth",
+        "api/lms/governance/system-health",
+        "SCOPED",
+        "bodies differ (429 vs 429 bytes)"
+    ],
+    [
+        "LmsGovernanceController@auditLogs",
+        "api/lms/governance/audit-logs",
+        "UNTESTABLE",
+        "redirect/auth 403/403"
+    ],
+    [
+        "LmsGovernanceController@users",
+        "api/lms/governance/users",
+        "UNTESTABLE",
+        "redirect/auth 403/403"
+    ],
+    [
+        "LmsGovernanceController@roles",
+        "api/lms/governance/roles",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (404 bytes)"
+    ],
+    [
+        "LmsGovernanceController@permissions",
+        "api/lms/governance/permissions",
+        "UNTESTABLE",
+        "redirect/auth 403/403"
+    ],
+    [
+        "LmsPartnerController@trainers",
+        "api/lms/governance/trainers",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "LmsPartnerController@vendors",
+        "api/lms/governance/vendors",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "LmsPartnerController@integrations",
+        "api/lms/governance/integrations",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "LmsAssessmentController@questions",
+        "api/lms/assessments/questions",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "LmsAssessmentController@index",
+        "api/lms/assessments",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "LmsCourseController@kpis",
+        "api/lms/courses/kpis",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (165 bytes)"
+    ],
+    [
+        "LmsCourseController@filters",
+        "api/lms/courses/filters",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (575 bytes)"
+    ],
+    [
+        "LmsCourseController@index",
+        "api/lms/courses",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (2024 bytes)"
+    ],
+    [
+        "LmsLearningController@courses",
+        "api/lms/learning/courses",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (366 bytes)"
+    ],
+    [
+        "LmsLearningController@assessments",
+        "api/lms/learning/assessments",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "LmsLearningController@notes",
+        "api/lms/learning/notes",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "LmsLearningController@certificates",
+        "api/lms/learning/certificates",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (67 bytes)"
+    ],
+    [
+        "LmsLearningController@discussions",
+        "api/lms/learning/discussions",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "LmsSessionController@stats",
+        "api/lms/sessions/stats",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (130 bytes)"
+    ],
+    [
+        "LmsSessionController@deadlines",
+        "api/lms/sessions/deadlines",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "LmsSessionController@index",
+        "api/lms/sessions",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (72 bytes)"
+    ],
+    [
+        "AiCourseController@status",
+        "api/lms/ai/status",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (108 bytes)"
+    ],
+    [
+        "AiCourseController@outlines",
+        "api/lms/ai/outlines",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (18711 bytes)"
+    ],
+    [
+        "DepartmentManagementController@index",
+        "api/departments-management",
+        "SCOPED",
+        "bodies differ (6595 vs 20932 bytes)"
+    ],
+    [
+        "DepartmentManagementController@create",
+        "api/departments-management/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "DepartmentSkillController@index",
+        "api/department-skills",
+        "SCOPED",
+        "bodies differ (49528 vs 99403 bytes)"
+    ],
+    [
+        "buildwithAIController@index",
+        "api/index",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (141977 bytes)"
+    ],
+    [
+        "GammaApiController@index",
+        "api/gamma-api",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "GammaApiController@create",
+        "api/gamma-api/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "skillLibraryController@competencyLibraryIndex",
+        "api/skill_library/competency-list",
+        "SCOPED",
+        "bodies differ (5025 vs 4489 bytes)"
+    ],
+    [
+        "skillLibraryController@competencyLibraryExport",
+        "api/skill_library/competency-export",
+        "SCOPED",
+        "bodies differ (37716 vs 75197 bytes)"
+    ],
+    [
+        "skillLibraryController@index",
+        "api/skill_library",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@create",
+        "api/skill_library/create",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "InterviewController@getPositions",
+        "api/positions",
+        "SCOPED",
+        "bodies differ (2928 vs 3557 bytes)"
+    ],
+    [
+        "InterviewController@getInterviewers",
+        "api/interviewers",
+        "SCOPED",
+        "bodies differ (4107 vs 339 bytes)"
+    ],
+    [
+        "AJAXController@getUsersMappings",
+        "api/get-employee-tasks",
+        "SCOPED",
+        "bodies differ (44 vs 17260 bytes)"
+    ],
+    [
+        "talent_interviewpanelController@getInterviewers",
+        "api/interview-panel/users",
+        "SCOPED",
+        "bodies differ (21777 vs 12321 bytes)"
+    ],
+    [
+        "talent_interviewpanelController@getInterviewPanel",
+        "api/interview-panel/list",
+        "SCOPED",
+        "bodies differ (9851 vs 9007 bytes)"
+    ],
+    [
+        "candidateController@getCandidate",
+        "api/candidate",
+        "SCOPED",
+        "bodies differ (52433 vs 33690 bytes)"
+    ],
+    [
+        "feedbackController@getAllFeedback",
+        "api/feedback",
+        "SCOPED",
+        "bodies differ (49077 vs 42583 bytes)"
+    ],
+    [
+        "feedbackController@getPendingFeedback",
+        "api/pending-feedback",
+        "UNTESTABLE",
+        "redirect/auth 404/200"
+    ],
+    [
+        "talent_interviewschedulescontroller@index",
+        "api/interview-details",
+        "SCOPED",
+        "bodies differ (45 vs 1357 bytes)"
+    ],
+    [
+        "EmployeeSkillCoverageMatrixController@getKpiMetrics",
+        "api/kpis",
+        "SCOPED",
+        "bodies differ (137 vs 147 bytes)"
+    ],
+    [
+        "EmployeeSkillCoverageMatrixController@skillGaps",
+        "api/skill-gaps",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "KpiController@index",
+        "api/reports/kpi",
+        "SCOPED",
+        "bodies differ (95 vs 93 bytes)"
+    ],
+    [
+        "HiringAnalyticsController@getHiringTrends",
+        "api/reports/hiring-analytics",
+        "SCOPED",
+        "bodies differ (563 vs 563 bytes)"
+    ],
+    [
+        "DepartmentDistributionController@index",
+        "api/reports/departments/distribution",
+        "SCOPED",
+        "bodies differ (152 vs 334 bytes)"
+    ],
+    [
+        "DepartmentDistributionController@getDepartmentSummary",
+        "api/reports/departments/summary",
+        "SCOPED",
+        "bodies differ (109542 vs 109560 bytes)"
+    ],
+    [
+        "DepartmentSizeController@getDepartmentSizes",
+        "api/reports/departments/sizes",
+        "SCOPED",
+        "bodies differ (346 vs 203 bytes)"
+    ],
+    [
+        "EmployeeLifecycleController@getEmployeeLifecycle",
+        "api/reports/employees/lifecycle",
+        "SCOPED",
+        "bodies differ (276 vs 273 bytes)"
+    ],
+    [
+        "OrganizationGrowthController@index",
+        "api/reports/organization/growth",
+        "SCOPED",
+        "bodies differ (155 vs 311 bytes)"
+    ],
+    [
+        "EmployeeSkillCoverageMatrixController@index",
+        "api/reports/skill-coverage/matrix",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "EmployeeSkillCoverageMatrixController@skillTrends",
+        "api/reports/skill-trends",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getKPIs",
+        "api/reports/employee-directory-analytics",
+        "SCOPED",
+        "bodies differ (287 vs 284 bytes)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getGrowthData",
+        "api/reports/employee-directory/growth",
+        "SCOPED",
+        "bodies differ (704 vs 702 bytes)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getStackedGrowth",
+        "api/reports/employee-directory/growth/stacked",
+        "SCOPED",
+        "bodies differ (4493 vs 18689 bytes)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getDepartmentDistribution",
+        "api/reports/employee-directory/departments/distribution",
+        "SCOPED",
+        "bodies differ (1262 vs 3747 bytes)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getJobRoleDistribution",
+        "api/reports/employee-directory/job-roles/distribution",
+        "SCOPED",
+        "bodies differ (244 vs 313 bytes)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getLifecycle",
+        "api/reports/employee-directory/lifecycle",
+        "SCOPED",
+        "bodies differ (380 vs 379 bytes)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getAttritionBreakdown",
+        "api/reports/employee-directory/attrition",
+        "SCOPED",
+        "bodies differ (2284 vs 6771 bytes)"
+    ],
+    [
+        "EmployeeDirectoryAnalyticsController@getSkillMatrix",
+        "api/reports/employee-directory/skills/matrix",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "SkillMatchingController@getUserRejectedTasks",
+        "api/user-rejected-tasks",
+        "UNTESTABLE",
+        "redirect/auth 404/200"
+    ],
+    [
+        "SkillMatchingController@getCoursesForUserRejectedTasksSkills",
+        "api/user-rejected-tasks-courses",
+        "UNTESTABLE",
+        "redirect/auth 404/200"
+    ],
+    [
+        "TaskController@getTaskCounts",
+        "api/tasks/counts",
+        "SCOPED",
+        "bodies differ (426 vs 681 bytes)"
+    ],
+    [
+        "TaskController@getDailyTasks",
+        "api/tasks/daily",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (113 bytes)"
+    ],
+    [
+        "TaskController@getWeeklyTasks",
+        "api/tasks/weekly",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (149 bytes)"
+    ],
+    [
+        "TaskController@getMonthlyTasks",
+        "api/tasks/monthly",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (150 bytes)"
+    ],
+    [
+        "SessionController@show",
+        "api/task-management/session",
+        "SCOPED",
+        "bodies differ (224 vs 204 bytes)"
+    ],
+    [
+        "SessionController@permissions",
+        "api/task-management/permissions",
+        "SCOPED",
+        "bodies differ (1465 vs 1465 bytes)"
+    ],
+    [
+        "TaskOptionController@statuses",
+        "api/task-management/statuses",
+        "SCOPED",
+        "bodies differ (592 vs 708 bytes)"
+    ],
+    [
+        "TaskOptionController@priorities",
+        "api/task-management/priorities",
+        "SCOPED",
+        "bodies differ (354 vs 446 bytes)"
+    ],
+    [
+        "SessionController@integrations",
+        "api/task-management/integrations",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (565 bytes)"
+    ],
+    [
+        "NotificationController@index",
+        "api/task-management/notifications",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (101 bytes)"
+    ],
+    [
+        "TaskListController@index",
+        "api/task-management/tasks",
+        "SCOPED",
+        "bodies differ (162 vs 18158 bytes)"
+    ],
+    [
+        "GlobalSearchController@index",
+        "api/task-management/search",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "TaskTemplateController@index",
+        "api/task-management/templates",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (82 bytes)"
+    ],
+    [
+        "ReportController@productivity",
+        "api/task-management/reports/productivity",
+        "SCOPED",
+        "bodies differ (64 vs 1863 bytes)"
+    ],
+    [
+        "ReportController@delays",
+        "api/task-management/reports/delays",
+        "SCOPED",
+        "bodies differ (77 vs 22659 bytes)"
+    ],
+    [
+        "AuditLogController@index",
+        "api/task-management/audit-logs",
+        "UNTESTABLE",
+        "redirect/auth 403/200"
+    ],
+    [
+        "AuditLogController@export",
+        "api/task-management/audit-logs/export",
+        "UNTESTABLE",
+        "redirect/auth 403/200"
+    ],
+    [
+        "WorkspaceController@index",
+        "api/task-management/workspace",
+        "SCOPED",
+        "bodies differ (4974 vs 35940 bytes)"
+    ],
+    [
+        "WorkspaceController@workload",
+        "api/task-management/workspace/workload",
+        "SCOPED",
+        "bodies differ (77 vs 530 bytes)"
+    ],
+    [
+        "DeadlineExtensionController@index",
+        "api/task-management/deadline-extensions",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (93 bytes)"
+    ],
+    [
+        "DependencyController@index",
+        "api/task-management/dependencies",
+        "SCOPED",
+        "bodies differ (3975 vs 83966 bytes)"
+    ],
+    [
+        "MyTasksController@index",
+        "api/task-management/my-tasks",
+        "SCOPED",
+        "bodies differ (1094 vs 16089 bytes)"
+    ],
+    [
+        "ProjectController@options",
+        "api/task-management/projects/options",
+        "SCOPED",
+        "bodies differ (4991 vs 34861 bytes)"
+    ],
+    [
+        "ProjectController@index",
+        "api/task-management/projects",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (270 bytes)"
+    ],
+    [
+        "SkillHeatmapController@heatmap",
+        "api/skill-heatmap",
+        "SCOPED",
+        "bodies differ (1028 vs 4819 bytes)"
+    ],
+    [
+        "SkillHeatmapController@drill",
+        "api/skill-heatmap/drill",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "ExcelAutomationAgentController@credentialStatus",
+        "api/excel-agent/credentials",
+        "SCOPED",
+        "bodies differ (108 vs 454 bytes)"
+    ],
+    [
+        "ExcelAutomationAgentController@downloadTemplate",
+        "api/excel-agent/template",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "TemplateController@index",
+        "api/templates",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "TemplateController@create",
+        "api/templates/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "CareerJourneyController@getCareerJourney",
+        "api/career-journey",
+        "SCOPED",
+        "bodies differ (308 vs 2128 bytes)"
+    ],
+    [
+        "PerformanceOverviewController@index",
+        "api/performance/overview",
+        "SCOPED",
+        "bodies differ (1010 vs 1018 bytes)"
+    ],
+    [
+        "PerformanceOverviewController@filters",
+        "api/performance/filters",
+        "SCOPED",
+        "bodies differ (12513 vs 11395 bytes)"
+    ],
+    [
+        "PerformanceOverviewController@teamComparison",
+        "api/performance/team-comparison",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "PerformanceOverviewController@timeline",
+        "api/performance/timeline",
+        "SCOPED",
+        "bodies differ (42 vs 1914 bytes)"
+    ],
+    [
+        "PerformanceCycleController@index",
+        "api/performance/cycles",
+        "SCOPED",
+        "bodies differ (42 vs 1152 bytes)"
+    ],
+    [
+        "PerformanceReviewController@board",
+        "api/performance/reviews/board",
+        "SCOPED",
+        "bodies differ (535 vs 54579 bytes)"
+    ],
+    [
+        "PerformanceReviewController@index",
+        "api/performance/reviews",
+        "SCOPED",
+        "bodies differ (104 vs 26632 bytes)"
+    ],
+    [
+        "PerformanceGoalController@index",
+        "api/performance/goals",
+        "SCOPED",
+        "bodies differ (195 vs 785 bytes)"
+    ],
+    [
+        "PerformanceAppraisalController@index",
+        "api/performance/appraisals",
+        "SCOPED",
+        "bodies differ (198 vs 842 bytes)"
+    ],
+    [
+        "PerformanceCompensationController@index",
+        "api/performance/compensation",
+        "SCOPED",
+        "bodies differ (225 vs 794 bytes)"
+    ],
+    [
+        "PerformanceBonusController@index",
+        "api/performance/bonus",
+        "SCOPED",
+        "bodies differ (228 vs 822 bytes)"
+    ],
+    [
+        "PerformanceCalibrationController@index",
+        "api/performance/calibration-sessions",
+        "SCOPED",
+        "bodies differ (181 vs 729 bytes)"
+    ],
+    [
+        "PerformanceActivityController@filters",
+        "api/performance/activity/filters",
+        "SCOPED",
+        "bodies differ (66 vs 484 bytes)"
+    ],
+    [
+        "PerformanceActivityController@index",
+        "api/performance/activity",
+        "SCOPED",
+        "bodies differ (104 vs 8214 bytes)"
+    ],
+    [
+        "PerformanceSavedViewController@index",
+        "api/performance/saved-views",
+        "SCOPED",
+        "bodies differ (42 vs 217 bytes)"
+    ],
+    [
+        "TalentDashboardController@index",
+        "api/talent/dashboard",
+        "SCOPED",
+        "bodies differ (3336 vs 3344 bytes)"
+    ],
+    [
+        "TalentDashboardController@filters",
+        "api/talent/dashboard/filters",
+        "SCOPED",
+        "bodies differ (1358 vs 3692 bytes)"
+    ],
+    [
+        "OnboardingJourneyController@index",
+        "api/talent/onboarding/journeys",
+        "SCOPED",
+        "bodies differ (233 vs 1390 bytes)"
+    ],
+    [
+        "OnboardingTaskController@index",
+        "api/talent/onboarding/tasks",
+        "SCOPED",
+        "bodies differ (170 vs 466 bytes)"
+    ],
+    [
+        "OnboardingDocumentController@index",
+        "api/talent/onboarding/documents",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (93 bytes)"
+    ],
+    [
+        "InternalJobController@index",
+        "api/talent/mobility/internal-jobs",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (104 bytes)"
+    ],
+    [
+        "MobilityRequestController@index",
+        "api/talent/mobility/requests",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (224 bytes)"
+    ],
+    [
+        "SuccessionPlanController@index",
+        "api/talent/succession/plans",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (171 bytes)"
+    ],
+    [
+        "OffboardingCaseController@index",
+        "api/talent/offboarding/cases",
+        "UNTESTABLE",
+        "status 200/500"
+    ],
+    [
+        "OffboardingClearanceController@index",
+        "api/talent/offboarding/clearances",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ExitInterviewController@index",
+        "api/talent/offboarding/exit-interviews",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "AdminWorkflowController@index",
+        "api/talent/admin/workflows",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (112 bytes)"
+    ],
+    [
+        "OnboardingOverviewController@index",
+        "api/onboarding/overview",
+        "SCOPED",
+        "bodies differ (1022 vs 1021 bytes)"
+    ],
+    [
+        "OnboardingOverviewController@filters",
+        "api/onboarding/filters",
+        "SCOPED",
+        "bodies differ (25262 vs 18259 bytes)"
+    ],
+    [
+        "OnboardingJourneyController@index",
+        "api/onboarding/journeys",
+        "SCOPED",
+        "bodies differ (104 vs 938 bytes)"
+    ],
+    [
+        "OnboardingTaskController@workstreams",
+        "api/onboarding/workstreams",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (912 bytes)"
+    ],
+    [
+        "OnboardingTaskController@index",
+        "api/onboarding/tasks",
+        "SCOPED",
+        "bodies differ (161 vs 502 bytes)"
+    ],
+    [
+        "OnboardingProbationController@index",
+        "api/onboarding/probation",
+        "SCOPED",
+        "bodies differ (180 vs 803 bytes)"
+    ],
+    [
+        "MobilityOverviewController@index",
+        "api/mobility/overview",
+        "SCOPED",
+        "bodies differ (547 vs 407 bytes)"
+    ],
+    [
+        "MobilityOverviewController@filters",
+        "api/mobility/filters",
+        "SCOPED",
+        "bodies differ (76727 vs 83189 bytes)"
+    ],
+    [
+        "MobilityJobController@index",
+        "api/mobility/jobs",
+        "SCOPED",
+        "bodies differ (75 vs 665 bytes)"
+    ],
+    [
+        "MobilityApplicationController@index",
+        "api/mobility/applications",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (75 bytes)"
+    ],
+    [
+        "MobilityTransferController@index",
+        "api/mobility/transfers",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (75 bytes)"
+    ],
+    [
+        "MobilityPromotionController@index",
+        "api/mobility/promotions",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (75 bytes)"
+    ],
+    [
+        "MobilitySuccessionController@index",
+        "api/mobility/successions",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (75 bytes)"
+    ],
+    [
+        "MobilityTalentPoolController@index",
+        "api/mobility/pools",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (75 bytes)"
+    ],
+    [
+        "OffboardingController@overview",
+        "api/offboarding/overview",
+        "SCOPED",
+        "bodies differ (795 vs 795 bytes)"
+    ],
+    [
+        "OffboardingController@filters",
+        "api/offboarding/filters",
+        "SCOPED",
+        "bodies differ (14762 vs 16460 bytes)"
+    ],
+    [
+        "OffboardingController@index",
+        "api/offboarding/cases",
+        "SCOPED",
+        "bodies differ (104 vs 1294 bytes)"
+    ],
+    [
+        "AgentController@meta",
+        "api/agentic/agents/meta",
+        "SCOPED",
+        "bodies differ (1186 vs 1244 bytes)"
+    ],
+    [
+        "AgentController@index",
+        "api/agentic/agents",
+        "SCOPED",
+        "bodies differ (30553 vs 36846 bytes)"
+    ],
+    [
+        "RunController@index",
+        "api/agentic/runs",
+        "SCOPED",
+        "bodies differ (122 vs 11853 bytes)"
+    ],
+    [
+        "ToolController@catalogue",
+        "api/agentic/tools",
+        "SCOPED",
+        "bodies differ (1102 vs 1102 bytes)"
+    ],
+    [
+        "ToolController@invocations",
+        "api/agentic/tools/invocations",
+        "SCOPED",
+        "bodies differ (134 vs 4574 bytes)"
+    ],
+    [
+        "AnalyticsController@dashboard",
+        "api/agentic/analytics/dashboard",
+        "SCOPED",
+        "bodies differ (1203 vs 2346 bytes)"
+    ],
+    [
+        "AnalyticsController@overview",
+        "api/agentic/analytics/overview",
+        "SCOPED",
+        "bodies differ (3775 vs 6593 bytes)"
+    ],
+    [
+        "WorkflowController@index",
+        "api/agentic/workflows",
+        "SCOPED",
+        "bodies differ (65 vs 310 bytes)"
+    ],
+    [
+        "WorkflowController@messages",
+        "api/agentic/messages",
+        "SCOPED",
+        "bodies differ (64 vs 527 bytes)"
+    ],
+    [
+        "ReflectionController@index",
+        "api/agentic/reflection",
+        "SCOPED",
+        "bodies differ (556 vs 3681 bytes)"
+    ],
+    [
+        "SkillDashboardController@index",
+        "skill_dashboard",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "SkillDashboardController@create",
+        "skill_dashboard/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "authController@index",
+        "login",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "authController@create",
+        "login/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "dashboardController@index",
+        "dashboard",
+        "UNTESTABLE",
+        "status 401/500"
+    ],
+    [
+        "dashboardController@create",
+        "dashboard/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "orgDashboardContorller@index",
+        "organization_dashboard",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "orgDashboardContorller@create",
+        "organization_dashboard/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "NangoController@googleCallback",
+        "nango/google/callback",
+        "UNTESTABLE",
+        "status 501/501"
+    ],
+    [
+        "authController@menu_lists",
+        "menu_lists",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "skillLibraryController@index",
+        "skill_library",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@create",
+        "skill_library/create",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "jobroleLibraryController@index",
+        "jobrole_library",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "jobroleLibraryController@create",
+        "jobrole_library/create",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "levelOfResponsibilityController@index",
+        "level_of_responsibility",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "levelOfResponsibilityController@create",
+        "level_of_responsibility/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "AJAXController@searchSkill",
+        "search_data",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@index",
+        "jobrole",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@create",
+        "jobrole/create",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@index",
+        "profeciency_level",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@create",
+        "profeciency_level/create",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@index",
+        "knowledge_ability",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@create",
+        "knowledge_ability/create",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@index",
+        "application",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "skillLibraryController@create",
+        "application/create",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "LeaveTypeController@index",
+        "leave-type",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "LeaveTypeController@create",
+        "leave-type/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HolidayController@index",
+        "holiday",
+        "SCOPED",
+        "bodies differ (48 vs 2281 bytes)"
+    ],
+    [
+        "HolidayController@create",
+        "holiday/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "ApplyLeaveController@index",
+        "leave-apply",
+        "SCOPED",
+        "bodies differ (858 vs 4118 bytes)"
+    ],
+    [
+        "ApplyLeaveController@create",
+        "leave-apply/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "ApplyLeaveController@myLeave",
+        "my-leave",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (109 bytes)"
+    ],
+    [
+        "ApplyLeaveController@getYearwiseleave",
+        "get-leave",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "ApplyLeaveController@importLeave",
+        "import-leave",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "HolidayController@getWeekdays",
+        "holiday.weekdays",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ApplyLeaveController@getHolidays",
+        "getHolidays",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "LeaveAuthorisationController@index",
+        "leave-authorisation",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (122 bytes)"
+    ],
+    [
+        "LeaveAuthorisationController@create",
+        "leave-authorisation/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "LeaveAuthorisationController@leaveAuthorisation",
+        "show-leave-authorisation",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "LeaveReportController@leaveReport",
+        "leave-report",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (41600 bytes)"
+    ],
+    [
+        "LeaveSummaryReportController@leaveSummaryReport",
+        "leave-summary-report",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (41512 bytes)"
+    ],
+    [
+        "LeaveSummaryReportController@leaveSummaryReportShow",
+        "leave-summary-report/create",
+        "SCOPED",
+        "bodies differ (245 vs 1009 bytes)"
+    ],
+    [
+        "LeaveSummaryReportController@leaveLists",
+        "leave-list",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "ForgotPasswordController@showForgetPasswordForm",
+        "forget-password",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "masterSetupController@index",
+        "school_setup/master_setup",
+        "SCOPED",
+        "bodies differ (772 vs 34240 bytes)"
+    ],
+    [
+        "masterSetupController@create",
+        "school_setup/master_setup/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "sub_std_mapController@index",
+        "school_setup/sub_std_map",
+        "SCOPED",
+        "bodies differ (2779 vs 47731 bytes)"
+    ],
+    [
+        "sub_std_mapController@create",
+        "school_setup/sub_std_map/create",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (1838 bytes)"
+    ],
+    [
+        "AJAXController@GetTableData",
+        "table_data",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "CustomModuleController@tables",
+        "custom-module/tables",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (558 bytes)"
+    ],
+    [
+        "chapterController@StandardwiseSubject",
+        "custom-module/ajax_StandardwiseSubject",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "SkillMatrixController@index",
+        "custom-module/matrix",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "SkillMatrixController@getKaba",
+        "get-kaba",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "AJAXController@studentLists",
+        "studentLists",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "CustomModuleController@menuLevel2",
+        "menuLevel2",
+        "SCOPED",
+        "bodies differ (128 vs 126 bytes)"
+    ],
+    [
+        "AJAXController@getStandardList",
+        "api/get-standard-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "AJAXController@getSubjectList",
+        "api/get-subject-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "AJAXController@getAllSubjectList",
+        "api/get-all-subject-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "AJAXController@getExamsList",
+        "api/get-exam-name-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "AJAXController@getExamsMasterList",
+        "api/get-exam-master-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "CkeditorFileUploadController@create",
+        "ckeditor/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "AJAXController@ajax_checkEmailExist",
+        "ajax_checkEmailExist",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "AJAXController@getUsersMappings",
+        "getUsersMappings",
+        "SCOPED",
+        "bodies differ (44 vs 17260 bytes)"
+    ],
+    [
+        "AJAXController@DeepSeekChat",
+        "DeepSeekChat",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (116 bytes)"
+    ],
+    [
+        "AJAXController@AIassignTask",
+        "AIassignTask",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (68 bytes)"
+    ],
+    [
+        "AJAXController@getSkillCompetency",
+        "getSkillCompetency",
+        "SCOPED",
+        "bodies differ (2981491 vs 50906185 bytes)"
+    ],
+    [
+        "AJAXController@sendEmail",
+        "sendEmail",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (60 bytes)"
+    ],
+    [
+        "AJAXController@AICourseGeneration",
+        "AICourseGeneration",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "AJAXController@GammaContentGeneration",
+        "gammaContent",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "AJAXController@getSupervisor",
+        "getSupervisor",
+        "UNTESTABLE",
+        "redirect/auth 404/200"
+    ],
+    [
+        "courseRecommandation@index",
+        "courses-recommendation",
+        "SCOPED",
+        "bodies differ (317 vs 5943 bytes)"
+    ],
+    [
+        "ONetOnlineDataController@index",
+        "lms/o-net-data-category",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "ONetOnlineDataController@ONetDataTable",
+        "lms/o-net-data-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@ONetDataTableListDetails",
+        "lms/o-net-data-list-details",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@showCategoryWiseData",
+        "lms/o-net-data-category/show",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@showCategoryWiseOccupationData",
+        "lms/o-net-data-category/show-occupation-detail",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@showCategoryWiseOccupationDataList",
+        "lms/o-net-data-category/show-occupation-detail-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@showCategoryWiseOccupationDataListSummary",
+        "lms/o-net-data-category/show-occupation-detail-list-summary",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@career_counselling",
+        "lms/career_counselling",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@career_counselling_education",
+        "lms/career_counselling_education",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@career_counselling_ky",
+        "lms/career_counselling_knowing-yourself",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "ONetOnlineDataController@career_report",
+        "lms/career_report",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "syllabusController@index",
+        "lms/syllabus",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "syllabusController@create",
+        "lms/syllabus/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "syllabusController@GenrateAISyllabus",
+        "lms/generateSyllabus",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (281 bytes)"
+    ],
+    [
+        "chapterController@index",
+        "lms/chapter_master",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (360 bytes)"
+    ],
+    [
+        "chapterController@create",
+        "lms/chapter_master/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "courseController@index",
+        "lms/course_master",
+        "SCOPED",
+        "bodies differ (3365 vs 28633 bytes)"
+    ],
+    [
+        "courseController@create",
+        "lms/course_master/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "topicController@index",
+        "lms/topic_master",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (130 bytes)"
+    ],
+    [
+        "topicController@create",
+        "lms/topic_master/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "subtopicController@index",
+        "lms/subtopic_master",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "subtopicController@create",
+        "lms/subtopic_master/create",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (52 bytes)"
+    ],
+    [
+        "chapterController@chapter_search",
+        "lms/chapter_search",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (105 bytes)"
+    ],
+    [
+        "contentController@index",
+        "lms/content_master",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (483 bytes)"
+    ],
+    [
+        "contentController@create",
+        "lms/content_master/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "contentController@createChapter",
+        "lms/create_content_master",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (11941 bytes)"
+    ],
+    [
+        "virtualclassroomController@index",
+        "lms/virtual_classroom_master",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (44 bytes)"
+    ],
+    [
+        "virtualclassroomController@create",
+        "lms/virtual_classroom_master/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "contentController@ajax_SubjectwiseChapter",
+        "lms/ajax_SubjectwiseChapter",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (962 bytes)"
+    ],
+    [
+        "contentController@ajax_ChapterwiseTopic",
+        "lms/ajax_ChapterwiseTopic",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lomasterController@ajax_ChapterwiseLOmaster",
+        "lms/ajax_ChapterwiseLOmaster",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsDashboardController@index",
+        "lms/lmsdashboard",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsDashboardController@create",
+        "lms/lmsdashboard/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsDashboardController@teacherIndex",
+        "lms/lmsdashboard_teacher",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lomasterController@index",
+        "lms/lo_master",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lomasterController@create",
+        "lms/lo_master/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "loindicatorController@index",
+        "lms/lo_indicator",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "loindicatorController@create",
+        "lms/lo_indicator/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "locategoryController@index",
+        "lms/lo_category",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "locategoryController@create",
+        "lms/lo_category/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "skillLibraryController1@index",
+        "lms/lms_skill_library",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "skillLibraryController1@create",
+        "lms/lms_skill_library/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "questionmasterController@ajax_multiDeleteQuestion",
+        "lms/multi_delete_questions",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "chapterController@ajax_chapterDependencies",
+        "lms/ajax_chapterDependencies",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "topicController@ajax_topicDependencies",
+        "lms/ajax_topicDependencies",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "questionmasterController@ajax_questionDependencies",
+        "lms/ajax_questionDependencies",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "sub_std_mapController@ajax_subStdMappingDependencies",
+        "lms/ajax_subStdMappingDependencies",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "questionpaperController@ajax_questionpaperDependencies",
+        "lms/ajax_questionpaperDependencies",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "locategoryController@ajax_SubjectwiseLoCategory",
+        "lms/ajax_SubjectwiseLoCategory",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "loindicatorController@ajax_LoMasterwiseLoIndicator",
+        "lms/ajax_LoMasterwiseLoIndicator",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "questionmasterController@index",
+        "lms/question_master",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "questionmasterController@create",
+        "lms/question_master/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "questionmasterController@getMappedValue",
+        "lms/question_mapped_value",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "questionmasterController@indexChapter",
+        "lms/question_chapter_master",
+        "SCOPED",
+        "bodies differ (52716 vs 199087 bytes)"
+    ],
+    [
+        "questionpaperController@index",
+        "lms/question_paper",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (44 bytes)"
+    ],
+    [
+        "questionpaperController@create",
+        "lms/question_paper/create",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (11682 bytes)"
+    ],
+    [
+        "bulk_chapter_uploadController@index",
+        "lms/bulk_chapter_upload",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "bulk_chapter_uploadController@create",
+        "lms/bulk_chapter_upload/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "questionpaperController@ajax_SubjectwiseQuestion",
+        "lms/ajax_SubjectwiseQuestion",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "palController@index",
+        "lms/pal",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "palController@create",
+        "lms/pal/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "contentController@ajax_LMS_MappingValue",
+        "lms/ajax_LMS_MappingValue",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (402 bytes)"
+    ],
+    [
+        "courseController@course_search",
+        "lms/course_search",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "questionpaperController@ajax_LMS_StandardwiseSubject",
+        "lms/ajax_LMS_StandardwiseSubject",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsmappingController@index",
+        "lms/lmsmapping",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (24526 bytes)"
+    ],
+    [
+        "lmsmappingController@create",
+        "lms/lmsmapping/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsexamController@index",
+        "lms/lmsexam",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsexamController@create",
+        "lms/lmsexam/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsActivityStreamController@index",
+        "lms/lmsActivityStream",
+        "SCOPED",
+        "bodies differ (301 vs 32319 bytes)"
+    ],
+    [
+        "lmsActivityStreamController@create",
+        "lms/lmsActivityStream/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCommunicationController@index",
+        "lms/lmsCommunication",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsCommunicationController@create",
+        "lms/lmsCommunication/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsSocialCollabrotiveController@index",
+        "lms/lmsSocialCollabrotive",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (79 bytes)"
+    ],
+    [
+        "lmsSocialCollabrotiveController@create",
+        "lms/lmsSocialCollabrotive/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsVirtualClassroomController@index",
+        "lms/lmsVirtualClassroom",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (44 bytes)"
+    ],
+    [
+        "lmsVirtualClassroomController@create",
+        "lms/lmsVirtualClassroom/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsPortfolioController@index",
+        "lms/lmsPortfolio",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsPortfolioController@create",
+        "lms/lmsPortfolio/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsLeaderboardController@index",
+        "lms/lmsLeaderboard",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (47 bytes)"
+    ],
+    [
+        "lmsLeaderboardController@create",
+        "lms/lmsLeaderboard/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsmappingController@ajax_AddLMS_MappingFromContent",
+        "lms/ajax_AddLMS_MappingFromContent",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "onlineExamController@index",
+        "lms/online_exam",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "onlineExamController@create",
+        "lms/online_exam/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "onlineExamController@online_exam_attempt",
+        "lms/online_exam_attempt",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsPortfolioController@ajax_LMS_SubjectwiseChapter",
+        "lms/ajax_LMS_SubjectwiseChapter",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsPortfolioController@ajax_LMS_ChapterwiseTopic",
+        "lms/ajax_LMS_ChapterwiseTopic",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsDoubtController@index",
+        "lms/lmsDoubt",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsDoubtController@create",
+        "lms/lmsDoubt/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@index",
+        "lms/lmsCounselling",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@create",
+        "lms/lmsCounselling/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "counselling_questionmasterController@index",
+        "lms/lmsCounsellingQuestion",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "counselling_questionmasterController@create",
+        "lms/lmsCounsellingQuestion/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "counsellingExamController@index",
+        "lms/lmsCounsellingExam",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "counsellingExamController@create",
+        "lms/lmsCounsellingExam/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsCounsellingController@lmsIndustryListing",
+        "lms/lmsIndustryListing",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (28388 bytes)"
+    ],
+    [
+        "MBTIController@index",
+        "lms/lmsMBTIPaper",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "MBTIController@create",
+        "lms/lmsMBTIPaper/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "onlineExamController@ajax_getQuestionList",
+        "lms/ajax_getQuestionList",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsDoubtConversationController@index",
+        "lms/lmsDoubtConversation",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsDoubtConversationController@create",
+        "lms/lmsDoubtConversation/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lbMasterController@index",
+        "lms/lb_master",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lbMasterController@create",
+        "lms/lb_master/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "assignmentController@stats",
+        "lms/lmsAssignment/stats",
+        "SCOPED",
+        "bodies differ (106 vs 106 bytes)"
+    ],
+    [
+        "assignmentController@index",
+        "lms/lmsAssignment",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "assignmentController@create",
+        "lms/lmsAssignment/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "assignmentSubmissionController@index",
+        "lms/lmsAssignment_submission",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "assignmentSubmissionController@create",
+        "lms/lmsAssignment_submission/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "annotateAssignmentController@index",
+        "lms/lmsAnnotate_assignment",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "annotateAssignmentController@create",
+        "lms/lmsAnnotate_assignment/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "studentReportController@index",
+        "lms/lmsStudent_report",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "studentReportController@create",
+        "lms/lmsStudent_report/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "examWiseProgressReportController@index",
+        "lms/lmsExamwise_progress_report",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "examWiseProgressReportController@create",
+        "lms/lmsExamwise_progress_report/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "examWiseProgressReportController@ajax_LMS_SubjectWiseExam",
+        "lms/ajax_LMS_SubjectWiseExam",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lms_lessonplanController@index",
+        "lms/lms_lessonplan",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (1976 bytes)"
+    ],
+    [
+        "lms_lessonplanController@create",
+        "lms/lms_lessonplan/create",
+        "UNTESTABLE",
+        "redirect/auth 302/302"
+    ],
+    [
+        "lms_lessonplanController@ajax_Timetable",
+        "lms/ajax_Timetable",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lms_lessonplanController@ajax_DayWiseData",
+        "lms/ajax_daywisedata",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (70603 bytes)"
+    ],
+    [
+        "lms_lessonplanController@ajax_contentMasterData",
+        "lms/ajax_contentmasterdata",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (9057 bytes)"
+    ],
+    [
+        "lms_lessonplanController@ajax_questionPaperData",
+        "lms/ajax_questionpaperdata",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (2686 bytes)"
+    ],
+    [
+        "lms_lessonplanController@ajax_getTeacher",
+        "lms/ajax_getTeacher",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lms_lessonplanController@getChatOutput",
+        "lms/get_chat_data",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (171 bytes)"
+    ],
+    [
+        "questionWiseReportController@index",
+        "lms/questionReport",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (68 bytes)"
+    ],
+    [
+        "lms_contentCategoryController@index",
+        "lms/lms_content_category",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (2143 bytes)"
+    ],
+    [
+        "lms_contentCategoryController@create",
+        "lms/lms_content_category/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "contentController@ajax_getYouTubeSuggestion",
+        "lms/ajax_getYouTubeSuggestion",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lms_teacherResourceController@index",
+        "lms/lms_teacherResource",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lms_teacherResourceController@create",
+        "lms/lms_teacherResource/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "flashcardController@index",
+        "lms/lms_flashcard",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (109 bytes)"
+    ],
+    [
+        "flashcardController@create",
+        "lms/lms_flashcard/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "chapterController@index",
+        "lms/subjectwise_graph",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (360 bytes)"
+    ],
+    [
+        "chapterController@create",
+        "lms/subjectwise_graph/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsCurriculumController@index",
+        "lms/lms_curriculum",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (272 bytes)"
+    ],
+    [
+        "lmsCurriculumController@create",
+        "lms/lms_curriculum/create",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (259 bytes)"
+    ],
+    [
+        "lmsSyllabusController@index",
+        "lms/lms_syllabus",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (47 bytes)"
+    ],
+    [
+        "lmsSyllabusController@create",
+        "lms/lms_syllabus/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "contentLibraryController@index",
+        "lms/content_library",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "contentLibraryController@create",
+        "lms/content_library/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "curriculumLessonplanController@index",
+        "lms/curriculum_lessonplan",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (91 bytes)"
+    ],
+    [
+        "curriculumLessonplanController@create",
+        "lms/curriculum_lessonplan/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "contentLibraryController@getMapVals",
+        "lms/getMapVals",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "contentLibraryController@getSearchedContent",
+        "lms/searchContent",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "H5PController@index",
+        "lms/h5p",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "H5PController@create",
+        "lms/h5p/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lms_apiController@assessment_master",
+        "lms/assessment_master",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (42 bytes)"
+    ],
+    [
+        "lms_apiController@getSuggestedCoursesByUser",
+        "getSuggestedCoursesByUser",
+        "SCOPED",
+        "bodies differ (75 vs 381 bytes)"
+    ],
+    [
+        "taskController@index",
+        "task",
+        "SCOPED",
+        "bodies differ (59 vs 111304 bytes)"
+    ],
+    [
+        "taskController@create",
+        "task/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "taskController@taskAnalysisReport",
+        "task_analysis_report",
+        "SCOPED",
+        "bodies differ (46 vs 845009 bytes)"
+    ],
+    [
+        "lmsActivityStreamController@upcomingActivity",
+        "upcoming",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (43 bytes)"
+    ],
+    [
+        "lmsActivityStreamController@todayActivity",
+        "today",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (43 bytes)"
+    ],
+    [
+        "lmsActivityStreamController@recentActivity",
+        "recent",
+        "SCOPED",
+        "bodies differ (43 vs 16052 bytes)"
+    ],
+    [
+        "lmsCounsellingController@careerExplore",
+        "careerExplore",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@careerExploreResult",
+        "careerExploreResult",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@careerCluster",
+        "careerCluster",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@allOccupation",
+        "allOccupation",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@OccupationDetails",
+        "OccupationDetails",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@getInstituteData",
+        "getInstituteData",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@getCourseData",
+        "getCourseData",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@getEmployerData",
+        "getEmployerData",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@ExploreSector",
+        "ExploreSector",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@ExpertAdvice",
+        "ExpertAdvice",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "lmsCounsellingController@intrestQuestions",
+        "intrestQuestions",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (4699 bytes)"
+    ],
+    [
+        "lmsCounsellingController@intrestResults",
+        "intrestResults",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (1779 bytes)"
+    ],
+    [
+        "lmsCounsellingController@intrestJobzone",
+        "intrestJobzone",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (3868 bytes)"
+    ],
+    [
+        "lmsCounsellingController@intrestCareers",
+        "intrestCareers",
+        "UNTESTABLE",
+        "redirect/auth 422/422"
+    ],
+    [
+        "lmsSyllabusController@getCurriculums",
+        "api/get-curriculum-list",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "lmsCounsellingController@intrestEnterScore",
+        "intrestEnterScore",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (33592 bytes)"
+    ],
+    [
+        "lmsCounsellingController@intrestArea",
+        "intrestArea",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (4022 bytes)"
+    ],
+    [
+        "lmsCounsellingController@matchProfile",
+        "matchProfile",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (2050 bytes)"
+    ],
+    [
+        "contentLibraryController@downloadFile",
+        "download-File",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "questionpaperController@search_question2",
+        "question_paper/search_question",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tblgroupwise_rightsController@index",
+        "user/add_groupwise_rights",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "tblgroupwise_rightsController@create",
+        "user/add_groupwise_rights/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "mobileapp_menu_rightsController@index",
+        "user/add_mobileapp_menu_rights",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (103 bytes)"
+    ],
+    [
+        "mobileapp_menu_rightsController@create",
+        "user/add_mobileapp_menu_rights/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tbluserPastEducationController@index",
+        "user/add_user_past_education",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "tbluserPastEducationController@create",
+        "user/add_user_past_education/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "tbluserProfileWiseMenuController@index",
+        "user/user_profile_wise_menu_rights",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tbluserProfileWiseMenuController@create",
+        "user/user_profile_wise_menu_rights/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "tblmobileAppMenuRightsController@create",
+        "user/mobile_app_menu_rights",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tblgroupwise_rightsController@displayGroupwiseRights",
+        "user/ajax_groupwiserights",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "tbluserPastEducationController@addUpdateUserPastEducation",
+        "user/ajax_pasteducation",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "tblindividual_rightsController@index",
+        "user/add_individual_rights",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tblindividual_rightsController@create",
+        "user/add_individual_rights/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tblindividual_rightsController@profileWiseUsers",
+        "user/ajax_profileWiseUsers",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tblindividual_rightsController@displayIndividualRights",
+        "user/ajax_individualrights",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tbluserProfileWiseMenuController@displayUserProfileWiseRights",
+        "user/ajax_user_profile_wise_rights",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tblmobileAppMenuRightsController@displayMobileAppMenuRights",
+        "user/ajax_mobile_app_menu_rights",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "tblmenumasterG2gController@displaySidebarMenu",
+        "user/ajax_sidebar_menu_g2g",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "tblmenumasterG2gController@displayGroupwiseRightsG2g",
+        "user/ajax_groupwiserights_g2g",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "tblmenumasterG2gController@displayUserProfilesG2g",
+        "user/ajax_user_profiles_g2g",
+        "SCOPED",
+        "bodies differ (281 vs 447 bytes)"
+    ],
+    [
+        "UserRatingDetailController@index",
+        "user/user_rating_details",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "UserRatingDetailController@create",
+        "user/user_rating_details/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "tbluserprofilemasterController@index",
+        "user/add_user_profile",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (44 bytes)"
+    ],
+    [
+        "tbluserprofilemasterController@create",
+        "user/add_user_profile/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "tbluserController@index",
+        "user/add_user",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "tbluserController@create",
+        "user/add_user/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "userReportController@index",
+        "user/user_report",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "userReportController@create",
+        "user/user_report/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "userReportController@employeeReport",
+        "user/employee_report",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "instituteDetailController@index",
+        "settings/institute_detail",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (74 bytes)"
+    ],
+    [
+        "instituteDetailController@create",
+        "settings/institute_detail/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "organizationDetailsController@index",
+        "settings/organization_data",
+        "SCOPED",
+        "bodies differ (421 vs 982 bytes)"
+    ],
+    [
+        "organizationDetailsController@create",
+        "settings/organization_data/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "discliplinaryManagementController@index",
+        "settings/discliplinary_management",
+        "SCOPED",
+        "bodies differ (46 vs 1174 bytes)"
+    ],
+    [
+        "discliplinaryManagementController@create",
+        "settings/discliplinary_management/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "departmentController@index",
+        "hrms/add_department",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (44 bytes)"
+    ],
+    [
+        "departmentController@create",
+        "hrms/add_department/create",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (87 bytes)"
+    ],
+    [
+        "HolidayController@index",
+        "hrms/holiday",
+        "SCOPED",
+        "bodies differ (48 vs 2281 bytes)"
+    ],
+    [
+        "HolidayController@create",
+        "hrms/holiday/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "departmentController@departmentEmpLists",
+        "hrms/department-Emp-Lists",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "departmentController@subDepartmentList",
+        "hrms/sub-department-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "departmentController@departmentEmployeeList",
+        "hrms/department-employee-list",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "departmentController@departmentJobRoles",
+        "hrms/department-jobroles",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "departmentController@jobRoleTasks",
+        "hrms/jobrole-tasks",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HolidayController@getWeekdays",
+        "hrms/holiday_weekdays",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "PayrollController@payrollType",
+        "payroll-type",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "PayrollController@payrollCreate",
+        "payroll-type/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "PayrollController@payrollTypeReport",
+        "payroll-type-report",
+        "SCOPED",
+        "bodies differ (203 vs 1785 bytes)"
+    ],
+    [
+        "PayrollController@payrollTypeReportCreate",
+        "payroll-type-report/create",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (143 bytes)"
+    ],
+    [
+        "PayrollController@employeeSalaryStructure",
+        "employee-salary-structure",
+        "SCOPED",
+        "bodies differ (758219 vs 479236 bytes)"
+    ],
+    [
+        "PayrollController@rollOver",
+        "roll-over",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "PayrollController@salaryStructureReport",
+        "salary-structure-report",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (106 bytes)"
+    ],
+    [
+        "PayrollController@form16",
+        "form16",
+        "SCOPED",
+        "bodies differ (175 vs 3358 bytes)"
+    ],
+    [
+        "PayrollController@payrollDeduction",
+        "payroll-deduction",
+        "SCOPED",
+        "bodies differ (379277 vs 239150 bytes)"
+    ],
+    [
+        "PayrollController@monthlyPayrollReport",
+        "monthly-payroll-report",
+        "SCOPED",
+        "bodies differ (379541 vs 239303 bytes)"
+    ],
+    [
+        "PayrollController@payrollReport",
+        "payroll-report",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (217 bytes)"
+    ],
+    [
+        "PayrollController@employeePayrollHistory",
+        "employee-payroll-history",
+        "SCOPED",
+        "bodies differ (379263 vs 239024 bytes)"
+    ],
+    [
+        "PayrollController@payrollBankWiseReport",
+        "payroll-bank-wise-report",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (268 bytes)"
+    ],
+    [
+        "PayrollController@hrmsSalaryCertificateIndex",
+        "hrms-salary-certificate",
+        "SCOPED",
+        "bodies differ (41572 vs 42519 bytes)"
+    ],
+    [
+        "PayrollController@SalaryCertificatePdfDownload",
+        "salary-certificate-pdf-download",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "HrmsController@hrmsJobTitle",
+        "hrms-job-title",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HrmsController@hrmsCreate",
+        "hrms-job-title/create",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (50 bytes)"
+    ],
+    [
+        "HrmsController@hrmsInOutTime",
+        "hrms-inout-time",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (106 bytes)"
+    ],
+    [
+        "HrmsController@hrmsAttendance",
+        "hrms-attendance",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (57 bytes)"
+    ],
+    [
+        "HrmsController@hrmsAttendanceReportIndex",
+        "hrms-attendance-report",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (41457 bytes)"
+    ],
+    [
+        "HrmsController@earlyGoingHrmsAttendanceReportCreate",
+        "early-going-hrms-attendance-report/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "HrmsController@earlyGoingHrmsAttendanceReportIndex",
+        "early-going-hrms-attendance-report",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (41419 bytes)"
+    ],
+    [
+        "HrmsController@earlyGoingHrmsAttendanceReport",
+        "show-early-going-hrms-attendance-report",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "HrmsController@generalSettingIndex",
+        "hrms-general-setting",
+        "SCOPED",
+        "bodies differ (343 vs 857 bytes)"
+    ],
+    [
+        "HrmsController@departmentAttendanceReport",
+        "departmentwise-attendance-report",
+        "SCOPED",
+        "bodies differ (84 vs 84 bytes)"
+    ],
+    [
+        "HrmsController@departmentAttendanceReportCreate",
+        "departmentwise-attendance-report/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "AJAXController@getDepEmployeeLists",
+        "departmentwise-emplist",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "HrmsController@getHolidays",
+        "get-holidays",
+        "SCOPED",
+        "bodies differ (128 vs 126 bytes)"
+    ],
+    [
+        "HrmsController@getPresentDays",
+        "get-present-days",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HrmsController@getAbsentDays",
+        "get-absent-days",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HrmsController@getHalfDays",
+        "get-half-day",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "PayrollController@monthlyPayroll",
+        "monthly-payroll",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (223 bytes)"
+    ],
+    [
+        "PayrollController@monthlyPayrollCreate",
+        "monthly-payroll/create",
+        "SCOPED",
+        "bodies differ (406725 vs 255518 bytes)"
+    ],
+    [
+        "PayrollController@getEmpMonthlyData",
+        "getMonthlyData",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (59 bytes)"
+    ],
+    [
+        "PayrollController@getTotalDays",
+        "getTotalDays",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "HrmsLeaveController@index",
+        "hrms/designation_leave",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HrmsLeaveController@create",
+        "hrms/designation_leave/create",
+        "SCOPED",
+        "bodies differ (889 vs 2447 bytes)"
+    ],
+    [
+        "leaveEncashmentController@index",
+        "hrms/leave_encashment",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (57 bytes)"
+    ],
+    [
+        "leaveEncashmentController@create",
+        "hrms/leave_encashment/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "shiftMasterController@index",
+        "hrms/user_shift_master",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "shiftMasterController@create",
+        "hrms/user_shift_master/create",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "bulkUserShiftUpdateController@index",
+        "hrms/user_bulk_shift_update",
+        "UNTESTABLE",
+        "status 500/500"
+    ],
+    [
+        "bulkUserShiftUpdateController@create",
+        "hrms/user_bulk_shift_update/create",
+        "NO-SCOPING",
+        "IDENTICAL body for both tenants (59 bytes)"
+    ],
+    [
+        "HrmsController@getAttandanceData",
+        "hrms/attendance-by-id",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HrmsController@multipleAttendanceReportIndex",
+        "hrms/multiple_attendance_report",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HrmsController@multipleAttendanceReportCreate",
+        "hrms/multiple_attendance_report/create",
+        "UNTESTABLE",
+        "redirect/auth 400/400"
+    ],
+    [
+        "HrmsController@DaywiseAttendanceReportIndex",
+        "hrms/daywise_attendance_report",
+        "VACUOUS",
+        "no data payload"
+    ],
+    [
+        "HrmsController@DaywiseAttendanceportCreate",
+        "hrms/daywise_attendance_report/create",
+        "UNTESTABLE",
+        "status 500/500"
+    ]
+]

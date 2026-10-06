@@ -168,7 +168,12 @@
                                                 <option value=""> Select Level </option>
                                                 @if(!empty($levelOfResponsbility))
                                                 @foreach($levelOfResponsbility as $key => $val)
-                                                <option value="{{ $val['level'] }}" @if(isset($data['subject_ids']) && $data['subject_ids']==$val['level']) selected @endif> {{ $val['level'].'-'.$val['guiding_phrase']}} </option>
+                                                {{-- Posts the ROW ID, which is what subject_ids stores and what the
+                                                     HRMS API writes. It used to post $val['level'] (1-7) while every
+                                                     stored value was an id - so the dropdown never showed the saved
+                                                     level back, and saving this form wrote a second, incompatible
+                                                     encoding into the same column. --}}
+                                                <option value="{{ $val['id'] }}" @if(isset($data['subject_ids']) && (int)$data['subject_ids']===(int)$val['id']) selected @endif> {{ $val['level'].'-'.$val['guiding_phrase']}} </option>
                                                 @endforeach
                                                 @endif
                                             </select>

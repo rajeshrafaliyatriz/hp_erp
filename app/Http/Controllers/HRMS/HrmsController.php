@@ -12,6 +12,7 @@ use App\Models\HRMS\general_dataModel;
 use App\Models\user\tbluserModel;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use function App\Helpers\is_mobile;
 use function App\Helpers\employeeDetails;
 use function App\Helpers\getSubCordinates;
@@ -22,6 +23,26 @@ use Laravel\Sanctum\PersonalAccessToken;
 
 class HrmsController extends Controller
 {
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE IN THIS CONTROLLER.
+     *
+     * 38 of the 78 leaking sites in the whole finding were here - half the work in
+     * one file, which is why it was taken alone and merged with O-05.
+     *
+     * SESSION READS ARE LEFT IN PLACE. `resolveApiIdentity()` is token-only and
+     * does not consult the session; replacing `session() ?? $request` wholesale
+     * would return NULL for every Blade caller. Only the request half is gone, so
+     * the precedence is G-SEC-27's: session, then token, and the request never.
+     *
+     * `departmentAttendanceReport` IS DELIBERATELY UNTOUCHED. It was read before
+     * any edit here and cleared: its only request read is `$request->type`, its
+     * tenant comes from the session, and it varies between identical calls
+     * because it embeds `now()`. NON-DETERMINISTIC, never a defect. It is
+     * untouched by construction - the substitution matches request-tenant reads
+     * and that method has none - and the change script asserts it afterwards.
+     */
+    use ResolvesApiIdentity;
+
     public function hrmsJobTitle(Request $request)
     {
         $type = $request->type;
@@ -51,7 +72,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
     }
@@ -86,7 +107,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
         if ($id) {
@@ -131,7 +152,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
        
         $sub_institute_id = $request->session()->get('sub_institute_id');
@@ -184,7 +205,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
      
 
@@ -225,7 +246,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
 
@@ -245,7 +266,7 @@ class HrmsController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $userId = $request->get('user_id');
         }
         // echo "<pre>";print_r(session()->get('data'));exit;
@@ -312,7 +333,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
       
 
@@ -332,7 +353,7 @@ class HrmsController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $userId = $request->get('user_id');
             $punchin_time = $request->input('punchin_time');
             $address_in = $request->input('address_in');
@@ -427,7 +448,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
        
 
@@ -446,7 +467,7 @@ class HrmsController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $userId = $request->get('user_id');
             $punchout_time = $request->input('punchout_time');
             $address_out = $request->input('address_out');
@@ -569,7 +590,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
       
 
@@ -589,7 +610,7 @@ class HrmsController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $userId = $request->get('user_id');
 
             $validator = Validator::make($request->all(), [
@@ -767,7 +788,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
        
 
@@ -833,7 +854,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
      
 
@@ -939,7 +960,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
  
 
@@ -987,7 +1008,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
     
 
@@ -1030,7 +1051,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
        
 
@@ -1181,7 +1202,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
         
@@ -1262,7 +1283,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
 
@@ -1579,7 +1600,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
         $employee_id = $request->get('employee_id');
@@ -1627,15 +1648,25 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
-        $employee_id = ($request->employee_id != 0) ? implode(',', $request->employee_id) : 0;
+        // F-162. This read `employee_id`. Nothing sends that: the frontend sends
+        // `emp_id[]` (services/hrms/index.ts:369) and the Blade branch below
+        // reads `emp_id` too. So under type=API $employee_id was ALWAYS 0 and
+        // the employee filter on this report was silently ignored - the report
+        // answered for the whole department however the user narrowed it.
+        //
+        // `emp_id` first because that is what every caller actually sends;
+        // `employee_id` still honoured so that any caller outside this repo
+        // which did send it keeps working.
+        $emp_param = $request->emp_id ?? $request->employee_id;
+        $employee_id = ($emp_param != 0) ? implode(',', (array) $emp_param) : 0;
         }
         else{
-            
+
         $department_id = ($request->department_id != 0) ? implode(',', $request->department_id) : 0;
-        $employee_id = ($request->emp_id != 0) ? implode(',', $request->emp_id) : 0;
+        $employee_id = ($request->emp_id != 0) ? implode(',', (array) $request->emp_id) : 0;
         }
        
         // echo "<pre>";print_r($request->all());exit; 
@@ -1656,7 +1687,14 @@ class HrmsController extends Controller
         $hrmsList = HrmsAttendance::join('tbluser as u', 'u.id', '=', 'hrms_attendances.user_id')->where('hrms_attendances.sub_institute_id', $sub_institute_id);
 
         if ($employee_id != 0) {
-            echo $employee_id;
+            // F-161. `echo $employee_id;` stood here - left-over debugging. It
+            // wrote the id into the response body BEFORE is_mobile() returned the
+            // JSON, so the body was `12{"employees":...}` and response.json()
+            // threw a SyntaxError on the client. Because the Attendance Report
+            // loads its four datasets in one Promise.all whose catch clears all
+            // four, selecting any single employee blanked the entire screen -
+            // KPIs, charts, table and highlights - while three of the four
+            // endpoints had answered perfectly.
             $hrmsList = $hrmsList->when(isset($employee_id), function ($q) use ($employee_id) {
                 $q->whereRaw('user_id in (' . $employee_id . ')');
             });
@@ -1771,12 +1809,12 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
         
         if (in_array($type, ['API', 'JSON'])) {
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->apiTenantId($request);
         }
         $res['selDepartments'] = $department_ids = $request->department_id;
         $res['emp_id'] = $emp_id = $request->emp_id ?? $request->employee_id;
@@ -1792,8 +1830,24 @@ class HrmsController extends Controller
                 $join->on('hel.user_id', '=', 'ha.user_id')->where('hel.from_date', '>=', $from_date)->where('hel.to_date', '<=', $to_date)->where('hel.sub_institute_id', $sub_institute_id)->where('hel.status', 'approved');
             })
             ->join('hrms_departments as hd', 'tu.department_id', '=', 'hd.id')
+            /*
+             * '>=' and '<=', not '=>'. '=>' is not a SQL operator, and Laravel
+             * does not reject it - Builder::where() sees an unknown operator and
+             * rewrites the clause as `hh.from_date = '=>'`, binding the operator
+             * itself as the value:
+             *
+             *   where `from_date` = ?   bindings: ["=>"]
+             *
+             * No error, no warning, and a condition that can never be true. So
+             * the holiday join has never matched a single row, total_holidays
+             * has always been 0, and working days have always been overstated by
+             * however many holidays fell in the period.
+             *
+             * The direction is the pair the author meant: a holiday counts when
+             * it falls wholly inside the reported range.
+             */
             ->leftJoin('hrms_holidays as hh', function ($join) use ($from_date, $to_date, $sub_institute_id) {
-                $join->on('hh.department', '=', 'hd.id')->where('hh.from_date', '=>', $from_date)->where('hh.to_date', '=>', $to_date)->where(['hh.sub_institute_id' => $sub_institute_id]);
+                $join->on('hh.department', '=', 'hd.id')->where('hh.from_date', '>=', $from_date)->where('hh.to_date', '<=', $to_date)->where(['hh.sub_institute_id' => $sub_institute_id]);
             })
             ->selectRaw('tu.id as user_id, tu.employee_no, CONCAT_WS(" ", COALESCE(tu.first_name, "-"), COALESCE(tu.middle_name, "-"),COALESCE(tu.last_name, "-")) as full_name, tu.sub_institute_id, IFNULL(upm.name, "-") as user_profile, hd.department, COUNT(DISTINCT ha.id) as total_att_day, GROUP_CONCAT(DISTINCT ha.id) as worked_days, COUNT(DISTINCT hel.id) as total_ab_day, GROUP_CONCAT(DISTINCT hel.id) as ab_days, COUNT(DISTINCT hh.id) as total_holidays, GROUP_CONCAT(DISTINCT hh.id) as holidays,GROUP_CONCAT(DISTINCT hd.id) as department_id')
             ->where('tu.sub_institute_id', $sub_institute_id)
@@ -1871,10 +1925,20 @@ class HrmsController extends Controller
                     }
                 }
             }
-            $holidays = $value->holidays ?? 0;
+            /*
+             * total_holidays (a COUNT), not holidays (a GROUP_CONCAT).
+             *
+             * `holidays` is GROUP_CONCAT(DISTINCT hh.id) - a string of ids like
+             * "12,45,7". Subtracting it from a day count made PHP cast it to an
+             * int, which takes the digits up to the first comma: that expression
+             * removed 12 days for three holidays, and would remove 4 days for a
+             * single holiday whose id happened to be 4. The count sitting right
+             * beside it in the same select is what was wanted.
+             */
+            $holidays = (int) ($value->total_holidays ?? 0);
             $newEmpData[$key]->weekday_off = $countSundays;
             $newEmpData[$key]->totalDays = $totalDays;
-            $newEmpData[$key]->workingDays = ($totalDays - $countSundays - $holidays);
+            $newEmpData[$key]->workingDays = max(0, $totalDays - $countSundays - $holidays);
             $newEmpData[$key]->total_ab_day = ($totAb + $attAb);
         }
 
@@ -1921,7 +1985,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         return  $request;
         
@@ -1956,7 +2020,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
     }
@@ -1990,7 +2054,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
     }
@@ -2024,7 +2088,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
     }
@@ -2058,7 +2122,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
     }
@@ -2092,7 +2156,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
 
@@ -2130,7 +2194,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $syear = $request->get('syear');
             $userId = $request->get('user_id');
             $userProfileName = $request->get('user_profile_name');
@@ -2333,7 +2397,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
        
        
@@ -2369,7 +2433,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
            }
 
@@ -2402,7 +2466,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
         
@@ -2537,7 +2601,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
     }
@@ -2571,7 +2635,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
     }
@@ -2605,7 +2669,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
     }
@@ -2639,7 +2703,7 @@ class HrmsController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
         }
         
         // echo "<pre>";print_r($request->all());exit;
@@ -2659,7 +2723,7 @@ class HrmsController extends Controller
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->apiTenantId($request);
             $user_id = $request->get('user_id');
             // $photo_out = $request->input('photo_out');
 

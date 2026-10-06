@@ -3,16 +3,22 @@
 namespace App\Http\Controllers\lms\library;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
 use App\Models\lms\library\jobroleTaskModel;
-use GenTux\Jwt\GetsJwtToken;
 use Validator;
 use Illuminate\Support\Facades\DB;
 
 class jobroleTaskController extends Controller
 {
-    use GetsJwtToken;
+    // Was GenTux\Jwt\GetsJwtToken. That package is absent from
+    // composer.json and not installed, so this class could not be
+    // loaded at all - fatal on every request, and fatal for
+    // route:list / route:cache application-wide. Authentication now
+    // uses Sanctum, like the rest of the codebase.
+    use ResolvesApiIdentity;
+
     /**
      * Display a listing of the resource.
      *
@@ -27,7 +33,7 @@ class jobroleTaskController extends Controller
 
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid()) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 200);
@@ -119,7 +125,7 @@ class jobroleTaskController extends Controller
 
        if(in_array($type,["API","JSON"])){
            try {
-               if (!$this->jwtToken()->validate()) {
+               if (!$this->apiTokenIsValid()) {
                    $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
    
                    return response()->json($response, 200);
@@ -200,7 +206,7 @@ class jobroleTaskController extends Controller
 
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid()) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 200);
@@ -263,7 +269,7 @@ class jobroleTaskController extends Controller
  
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid()) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 200);
@@ -332,7 +338,7 @@ class jobroleTaskController extends Controller
 
         if(in_array($type,["API","JSON"])){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid()) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 200);

@@ -23,3 +23,19 @@ yarn-error.log
 /.zed
 /public/ckeditor_wiris
 /public/plugins
+# Live-database artefacts — never committed.
+# Real production data and host names. Kept locally for rollback only.
+_local-backups/
+docs/phase3/_changes/LIVE-*.sql
+docs/phase3/_changes/*backup*.sql
+
+# Any .env backup, however it is named - one of these blocked a push
+# with a full credential set in it (DB, mail, Spaces, Gemini, DeepSeek).
+.env.bak*
+.env.*.bak
+.env.local
+.env.*.local
+
+# Audit evidence may contain live tokens - never commit it.
+Docs/hrit-audit/_evidence/tokens.tsv
+Docs/hrit-audit/_evidence/unicode-payload.json

@@ -1,0 +1,111 @@
+section,module,screen_name_3x,menu_id,menu_name,confidence,source,decision
+3.1,"Organizational Management","Organization Profile",12,"Organization Profile",HIGH,"exact name match","AUTO | rights row: yes"
+3.1,"Organizational Management","Department Management",13,"Department Management",HIGH,"exact name match","AUTO | rights row: yes"
+3.1,"Organizational Management","Employee Directory",22,"Employee Directory",HIGH,"exact name match","AUTO | rights row: yes"
+3.1,"Organizational Management","Role & Permissions",23,"Role & Permissions",HIGH,"exact name match","AUTO | rights row: yes"
+3.1,"Organizational Management","Group-wise rights",,,NONE,"NO MENU MATCH","SCREEN-TO-BE-BUILT or UNMAPPED=DENIED - declare by hand"
+3.1,"Organizational Management","Individual rights",,,NONE,"NO MENU MATCH","SCREEN-TO-BE-BUILT or UNMAPPED=DENIED - declare by hand"
+3.1,"Organizational Management","Compliance Library",206,"Compliance Library",HIGH,"exact name match","AUTO | rights row: yes"
+3.1,"Organizational Management","Disciplinary Library",207,"Disciplinary Library",HIGH,"exact name match","AUTO | rights row: yes"
+3.1,"Organizational Management","Skill Gap Analysis",26,"Skill Gap Analysis",HIGH,"exact name match","AUTO | rights row: NO RIGHTS ROW"
+3.1,"Organizational Management","Search Employees by Skills",17,"Search Employees by Skills",HIGH,"exact name match","AUTO | rights row: NO RIGHTS ROW"
+3.2,"Competency Management","Command Center",37,"Command Center",HIGH,"exact name match","AUTO | rights row: yes"
+3.2,"Competency Management","Competency Library",34,"Competency Library",HIGH,"exact name match","AUTO | rights row: yes"
+3.2,"Competency Management","Library & Taxonomy",223,"Library & Taxonomy",HIGH,"exact name match","AUTO | rights row: yes"
+3.2,"Competency Management","Framework & Role Mapping",154,"Framework & Role Mapping",HIGH,"exact name match","AUTO | rights row: yes"
+3.2,"Competency Management",Assessments,155,Assessments,HIGH,"exact name match","AUTO | rights row: yes"
+3.2,"Competency Management","Employee Profiles",156,"Employee Profiles",HIGH,"exact name match","AUTO | rights row: yes"
+3.2,"Competency Management","Development & Career Paths",157,"Development & Career Paths",HIGH,"exact name match","AUTO | rights row: yes"
+3.2,"Competency Management",Certifications,25,Certifications,HIGH,"exact name match","AUTO | rights row: NO RIGHTS ROW"
+3.2,"Competency Management","Taxonomy Ontology",43,"Taxonomy Ontology",HIGH,"exact name match","AUTO | rights row: yes"
+3.3,LMS,"Learning Dashboard",80,"Learning Dashboard",HIGH,"exact name match","AUTO | rights row: yes"
+3.3,LMS,"Learning Catalog",182,"Learning Catalog",HIGH,"exact name match","AUTO | rights row: yes"
+3.3,LMS,"My Learning",209,"My Learning",HIGH,"exact name match","AUTO | rights row: yes"
+3.3,LMS,Assignments,81,Assignments,HIGH,"exact name match","AUTO | rights row: yes"
+3.3,LMS,"Sessions & Calendar",82,"Sessions & Calendar",HIGH,"exact name match","AUTO | rights row: yes"
+3.3,LMS,"Certifications & Records",83,"Certifications & Records",HIGH,"exact name match","AUTO | rights row: yes"
+3.3,LMS,"Course Builder",84,"Course Builder",HIGH,"exact name match","AUTO | rights row: yes"
+3.3,LMS,"Administration & Governance",85,"Administration & Governance",HIGH,"exact name match","AUTO | rights row: yes"
+3.4,"Task Management",Dashboard,46,"Talent Dashboard",MEDIUM,"menu contains screen name","BY HAND | rights row: yes"
+3.4,"Task Management","My Tasks",211,"My Tasks",HIGH,"exact name match","AUTO | rights row: yes"
+3.4,"Task Management","Projects & Workstreams",212,"Projects & Workstreams",HIGH,"exact name match","AUTO | rights row: yes"
+3.4,"Task Management","Dependencies & Workstreams",213,"Dependencies & Workstreams",HIGH,"exact name match","AUTO | rights row: yes"
+3.4,"Task Management","Task Calendar",214,"Task Calendar",HIGH,"exact name match","AUTO | rights row: yes"
+3.4,"Task Management","Reports & Analysis",215,"Reports & Analysis",HIGH,"exact name match","AUTO | rights row: yes"
+3.4,"Task Management","Task approvals",,,NONE,"NO MENU MATCH","SCREEN-TO-BE-BUILT or UNMAPPED=DENIED - declare by hand"
+3.4,"Task Management","Status / Priority Management",217,"Status Management",LOW,"fuzzy 79%","BY HAND | rights row: yes"
+3.4,"Task Management",Permission,219,Permision,MEDIUM,"fuzzy 95%","BY HAND | rights row: yes"
+3.4,"Task Management",Integration,220,Integration,HIGH,"exact name match","AUTO | rights row: yes"
+3.4,"Task Management","Audit Log",221,"Audit Log",HIGH,"exact name match","AUTO | rights row: yes"
+3.5,"Talent Management","Talent Dashboard",46,"Talent Dashboard",HIGH,"exact name match","AUTO | rights row: yes"
+3.5,"Talent Management",Recruitment,47,Recruitment,HIGH,"exact name match","AUTO | rights row: yes"
+3.5,"Talent Management",Onboarding,48,Onboarding,HIGH,"exact name match","AUTO | rights row: yes"
+3.5,"Talent Management","Performance Reviews",49,"Performance Reviews & Appraisals",MEDIUM,"menu contains screen name","BY HAND | rights row: yes"
+3.5,"Talent Management","Mobility & Succession",52,"Mobility & Succession",HIGH,"exact name match","AUTO | rights row: yes"
+3.5,"Talent Management",Offboarding,171,Offboarding,HIGH,"exact name match","AUTO | rights row: yes"
+3.5,"Talent Management",Administration,178,Administration,HIGH,"exact name match","AUTO | rights row: yes"
+3.6,HRIT,"Attendance Tracking",100,"Attendance Tracking",HIGH,"exact name match","AUTO | rights row: yes"
+3.6,HRIT,"Attendance Reports",101,"Attendance Reports",HIGH,"exact name match","AUTO | rights row: yes"
+3.6,HRIT,"Leave Dashboard / Requests",102,"Leave Dashboard",LOW,"screen name contains menu","BY HAND | rights row: yes"
+3.6,HRIT,"Leave Reports",104,"Leave Reports",HIGH,"exact name match","AUTO | rights row: yes"
+3.6,HRIT,"Leave Configuration / Allocation",165,"Leave Configuration",LOW,"screen name contains menu","BY HAND | rights row: yes"
+3.6,HRIT,"Holiday Master",167,"Holiday Master",HIGH,"exact name match","AUTO | rights row: NO RIGHTS ROW"
+3.6,HRIT,Payroll,105,"Payroll Type",MEDIUM,"menu contains screen name","BY HAND | rights row: yes"
+3.7,"Consolidated Reports and Agentic AI","Consolidated Reports",6,Reports,REJECTED-CONTAINER,"screen name contains menu [CONTAINER - rejected]","BY HAND | rights row: NO RIGHTS ROW"
+3.7,"Consolidated Reports and Agentic AI","— competency gap report",,,NONE,"NO MENU MATCH","SCREEN-TO-BE-BUILT or UNMAPPED=DENIED - declare by hand"
+3.7,"Consolidated Reports and Agentic AI","— development plan report",,,NONE,"NO MENU MATCH","SCREEN-TO-BE-BUILT or UNMAPPED=DENIED - declare by hand"
+3.7,"Consolidated Reports and Agentic AI","— certification expiry report",,,NONE,"NO MENU MATCH","SCREEN-TO-BE-BUILT or UNMAPPED=DENIED - declare by hand"
+3.7,"Consolidated Reports and Agentic AI","Agentic AI",186,"Agentic AI",REJECTED-CONTAINER,"exact name match [CONTAINER - rejected]","BY HAND | rights row: yes"
+
+"--- MENUS WITH NO RIGHTS ROW (unmapped = denied) ---"
+menu_id,menu_name,kind,status,"DECISION REQUIRED"
+6,Reports,container,0,
+9,"Communication Tools",container,0,
+10,"Template Management",container,0,
+11,"Complaint Mgmt",container,0,
+14,"Admin and Configuration Module",leaf,0,
+15,"Group wise right management",leaf,0,
+16,"Individual right management",leaf,0,
+17,"Search Employees by Skills",leaf,0,
+18,"Task Assignment & Progress",leaf,0,
+19,"Suggestion to organization",leaf,0,
+20,"Suggestion to for department & Department head",leaf,0,
+21,"Suggestion for employee",leaf,0,
+24,Skills,leaf,0,
+25,Certifications,leaf,0,
+26,"Skill Gap Analysis",leaf,0,
+77,"Assesment library",container,0,
+78,"Skill Assessment",container,0,
+79,"Career Explorer",container,0,
+96,"Compliance Management",container,0,
+97,"Document Management System",container,0,
+98,"Organization Handbook",container,0,
+99,"Front Desk Operations",container,0,
+107,"Rollover Salary Structure",leaf,0,
+115,"Deceplinry management",container,0,
+117,"Communication Report",container,0,
+118,"Complaint ",container,0,
+119,"HRMS Reports",container,0,
+120,"Document Report",container,0,
+121,"Log Report",container,0,
+123,"Counselling Report",container,0,
+124,"Frontdesk Report",container,0,
+125,"LMS Report",container,0,
+159,"Task Analysis Report",leaf,0,
+161,"Organization Dashboard",leaf,0,
+162,"Attendance Report",leaf,0,
+163,"Early going Report",leaf,0,
+164,"Department Wise Report",leaf,0,
+166,"Leave Allocation",leaf,0,
+167,"Holiday Master",leaf,0,
+175,"Skill Ontology",leaf,0,
+177,"Compentency Dashboard",leaf,0,
+179,"Talent Onboarding Dashboard",leaf,0,
+180,"Talent Onboarding",container,0,
+181,"HRIT Dashboard",leaf,0,
+183,"Workforce Analytics Report",leaf,0,
+184,"Employee Directory Analytics Report",leaf,0,
+185,"Employee Skill Coverage Matrix Report ",leaf,0,
+187,Pal,leaf,0,
+198,"HR Template Engine",leaf,0,
+199,CRM,container,0,

@@ -3,14 +3,33 @@
 namespace App\Http\Controllers\talent;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\talent\talent_screening_results;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\PersonalAccessToken;
 
+/**
+ * AI screening verdicts for job applicants.
+ *
+ * ── WHY EVERY QUERY IN THIS FILE NAMES A TENANT ─────────────────────────────
+ *
+ * Until Sprint 1 this controller validated that a token existed and then threw
+ * its owner away. None of its four queries filtered by sub_institute_id, and
+ * store() persisted whatever sub_institute_id the caller posted. That was not
+ * theoretical: a tenant-6 employee token reading
+ * GET /api/talent-screening-results/candidate/18 - a row owned by tenant 3 -
+ * returned HTTP 200 with that candidate's skill gaps, ranking score and
+ * recommendation. The correct answer is 404; a 403 would confirm the row exists.
+ *
+ * The rule, copied from ResolvesApiIdentity: the token decides, the request is
+ * never trusted for identity. The tenant predicate lives INSIDE the id lookup,
+ * never as a fetch-then-compare.
+ */
 class talent_screening_results_controller extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function store(Request $request)
     {
         $type = $request->input('type');
@@ -20,19 +39,14 @@ class talent_screening_results_controller extends Controller
             return response()->json(['message' => 'Invalid request type'], 400);
         }
 
-        // Check and validate token
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
-
-        $accessToken = PersonalAccessToken::findToken($token);
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
+        $tenantId = $identity['sub_institute_id'];
 
         $validator = Validator::make($request->all(), [
-            'candidate_id' => 'required|exists:talent_job_applications,id',
+            'candidate_id' => 'required|integer',
             'competency_match' => 'required|integer|min:0|max:100',
             'cultural_fit' => 'required|in:High,Medium,Low',
             'predicted_success' => 'required|in:Highly Likely,Likely,Possible,Unlikely',
@@ -42,31 +56,51 @@ class talent_screening_results_controller extends Controller
             'strengths' => 'nullable|array',
             'recommendation' => 'required|string',
             'deepseek_analysis' => 'nullable|array',
-            'sub_institute_id' => 'required|exists:school_setup,Id',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
         }
 
-        $data = $request->except(['id']);
-        $data['created_by'] = null; // TODO: Set to authenticated user ID
+        // The application must belong to the caller's organisation. `exists:` alone
+        // would only prove the id names SOME real application, not one this caller
+        // may write a verdict against.
+        $ownsApplication = DB::table('talent_job_applications')
+            ->where('id', (int) $request->input('candidate_id'))
+            ->where('sub_institute_id', $tenantId)
+            ->exists();
+
+        if (!$ownsApplication) {
+            return response()->json(['success' => false, 'message' => 'Candidate not found.'], 404);
+        }
+
+        $data = $validator->validated();
+        // From the token, never the request. A caller naming another organisation
+        // here would otherwise file a screening verdict into that organisation.
+        $data['sub_institute_id'] = $tenantId;
+        $data['created_by'] = $identity['user_id'];
 
         $result = talent_screening_results::create($data);
 
         return response()->json(['success' => true, 'data' => $result], 201);
     }
 
-    private function calculateMatchPercentage($candidate_id)
+    private function calculateMatchPercentage($candidate_id, $tenantId)
     {
         // Fetch candidate application data
-        $application = DB::table('talent_job_applications')->where('id', $candidate_id)->first();
+        $application = DB::table('talent_job_applications')
+            ->where('id', $candidate_id)
+            ->where('sub_institute_id', $tenantId)
+            ->first();
         if (!$application) {
             return null;
         }
 
         // Fetch job posting data
-        $jobPosting = DB::table('talent_job_postings')->where('id', $application->job_id)->first();
+        $jobPosting = DB::table('talent_job_postings')
+            ->where('id', $application->job_id)
+            ->where('sub_institute_id', $tenantId)
+            ->first();
         if (!$jobPosting) {
             return null;
         }
@@ -253,18 +287,18 @@ class talent_screening_results_controller extends Controller
             return response()->json(['message' => 'Invalid request type'], 400);
         }
 
-        // Check and validate token
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
         }
+        $tenantId = $identity['sub_institute_id'];
 
-        $accessToken = PersonalAccessToken::findToken($token);
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
-
-        $result = talent_screening_results::where('candidate_id', $candidate_id)->first();
+        // The tenant predicate is part of the lookup, not a check afterwards, so a
+        // row belonging to another organisation is indistinguishable from one that
+        // does not exist. 404, never 403.
+        $result = talent_screening_results::where('candidate_id', $candidate_id)
+            ->where('sub_institute_id', $tenantId)
+            ->first();
 
         if (!$result) {
             return response()->json(['success' => false, 'message' => 'Screening result not found'], 404);
@@ -289,10 +323,13 @@ class talent_screening_results_controller extends Controller
         }
 
         // Get match percentage from scoring pipeline
-        $matchData = $this->calculateMatchPercentage($candidate_id);
+        $matchData = $this->calculateMatchPercentage($candidate_id, $tenantId);
 
         // Fetch candidate data for dynamic bert_parsed_resume
-        $candidateData = DB::table('talent_job_applications')->where('id', $candidate_id)->first();
+        $candidateData = DB::table('talent_job_applications')
+            ->where('id', $candidate_id)
+            ->where('sub_institute_id', $tenantId)
+            ->first();
 
         // Parse candidate data for bert_parsed_resume
         $bertData = $this->parseCandidateDataForBERT($candidateData);

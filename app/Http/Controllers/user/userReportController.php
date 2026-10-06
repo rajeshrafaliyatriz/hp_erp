@@ -263,12 +263,26 @@ class userReportController extends Controller
             return $item;
         });
 
+        /*
+         * APPROVED AND REJECTED WERE REPORTED THE WRONG WAY ROUND.
+         *
+         * This selected `approve_status = 'approved' AS rejected_count` and
+         * `= 'rejected' AS approved_count` — so every employee report showed the
+         * two figures swapped. Not a rounding error or an edge case: an employee
+         * with one rejection was reported as having one approval, and vice versa.
+         *
+         * LOWER() because the column has drifted. Live holds 'approved',
+         * 'rejected' and 'PENDING' — lowercase words beside an uppercase one — so
+         * the old `= 'pending'` comparison silently missed every uppercase row.
+         * A count that quietly omits rows is the same class of wrong as a count
+         * that labels them backwards.
+         */
         $taskDetail = DB::table("task as t")
         ->selectRaw("
             COUNT(t.id) AS total_task,
-            SUM(CASE WHEN t.approve_status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
-            SUM(CASE WHEN t.approve_status = 'approved' THEN 1 ELSE 0 END) AS rejected_count,
-            SUM(CASE WHEN t.approve_status = 'rejected' THEN 1 ELSE 0 END) AS approved_count
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(t.approve_status,''))) = 'pending'  THEN 1 ELSE 0 END) AS pending_count,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(t.approve_status,''))) = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+            SUM(CASE WHEN LOWER(TRIM(COALESCE(t.approve_status,''))) = 'rejected' THEN 1 ELSE 0 END) AS rejected_count
         ")
         ->where("t.SYEAR", $syear)
         ->where("t.TASK_ALLOCATED_TO", $employee_id)

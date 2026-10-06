@@ -12,6 +12,8 @@ use DB;
 
 class HrmsLeaveController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
     //
     //use GetsJwtToken;
 
@@ -92,14 +94,25 @@ class HrmsLeaveController extends Controller
     public function store(Request $request){
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->type;
-        $sub_institute_id = $request->input('sub_institute_id');
         $syear = $request->input('syear');
         $res['formType'] =  $formType = $request->formType;
 
-        if($type=="API"){
-            
-            $sub_institute_id = $request->input('sub_institute_id');
-            $syear = $request->input('syear');            
+        // store() is reachable two ways: POST /api/designation_leave (token
+        // authenticated, see routes/api.php) and the session-authenticated
+        // resource route in routes/hrms.php. It cannot simply take the tenant
+        // from the token, because the web path has no token - and it must not
+        // take it from the request, because the API path let one organisation
+        // write leave allocations into another's departments.
+        //
+        // So: the token decides when there is one, the session decides
+        // otherwise, and a caller who has neither is refused.
+        $sub_institute_id = $this->apiTenantId($request) ?: session('sub_institute_id');
+
+        if (!$sub_institute_id) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Unable to identify your organisation.',
+            ], 401);
         }
         $insert = 0;
         // for department wise starts
@@ -280,98 +293,14 @@ class HrmsLeaveController extends Controller
     }
 
     // 1. MY LEAVE SUMMARY API
-    public function getLeaveDashboard($employeeId)
-    {
-        // Assume employee validation fails
-        if (!$employeeId) {
-            return response()->json([
-                'status' => "0",
-                'message' => "Invalid employee ID",
-                'data' => []
-            ]);
-        }
-
-        // Sample data
-        $leaveSummary = [
-            'total_leaves' => '20',
-            'used_leaves' => '5',
-            'remaining_leaves' => '15',
-        ];
-
-        $leaveTypes = [
-            ['leave_type' => 'Casual Leave', 'used' => '7', 'total' => '14'],
-            ['leave_type' => 'Medical Leave', 'used' => '10', 'total' => '14'],
-            ['leave_type' => 'Earn Leave', 'used' => '40', 'total' => '60'],
-            ['leave_type' => 'Compassionate', 'used' => '3', 'total' => '3'],
-            ['leave_type' => 'Maternity', 'used' => '60', 'total' => '60'],
-            ['leave_type' => 'Replacement', 'used' => '1', 'total' => '1'],
-        ];
-
-        return response()->json([
-            'status' => "1",
-            'message' => "Success",
-            'data' => [
-                'leave_summary' => $leaveSummary,
-                'leave_types' => $leaveTypes
-            ]
-        ]);
-    }
-
-    // 2. LEAVE HISTORY API
-    public function getLeaveHistory($employeeId)
-    {
-        if (!$employeeId) {
-            return response()->json([
-                'status' => "0",
-                'message' => "Invalid employee ID",
-                'data' => []
-            ]);
-        }
-
-        // Example response; replace with actual DB query
-        $history = [
-            [
-                'from_date' => '2025-01-15',
-                'to_date' => '2025-01-16',
-                'leave_type' => 'Medical Leave',
-                'status' => 'Approved',
-                'status_color' => '#009900',
-                'day_type' => '2',
-                'comment' => 'Fever and rest',
-            ],
-            [
-                'from_date' => '2025-03-02',
-                'to_date' => '2025-01-02',
-                'leave_type' => 'Casual Leave',
-                'status' => 'Rejected',
-                'status_color' => '#ffc14d',
-                'day_type' => '1',
-                'comment' => 'Personal work',
-            ],
-            [
-                'from_date' => '2025-04-10',
-                'to_date' => '2025-01-14',
-                'leave_type' => 'Earn Leave',
-                'status' => 'Pending',
-                'status_color' => '#009900',
-                'day_type' => '5',
-                'comment' => 'Own Marriage',
-            ],
-            [
-                'from_date' => '2025-04-10',
-                'to_date' => '2025-01-14',
-                'leave_type' => 'Casual Leave',
-                'status' => 'Cancelled',
-                'status_color' => '#ff3333',
-                'day_type' => '5',
-                'comment' => 'Own Marriage',
-            ],
-        ];
-
-        return response()->json([
-            'status' => "1",
-            'message' => "Success",
-            'data' => $history
-        ]);
-    }
+    /*
+     * getLeaveDashboard() and getLeaveHistory() were DELETED here on 2026-09-05
+     * (HRIT Sprint 1, F-100). Both returned a `// Sample data` block - the same
+     * invented leave balances for every employee in every tenant - from live,
+     * authenticated routes, and both trusted {employeeId} from the URL without
+     * comparing it to the caller.
+     *
+     * The routes that reached them are removed in routes/hrms.php, where the
+     * full reasoning and the endpoints that replace them are recorded.
+     */
 }

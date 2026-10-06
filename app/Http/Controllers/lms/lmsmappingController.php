@@ -14,6 +14,37 @@ use function App\Helpers\is_mobile;
 
 class lmsmappingController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
+    /**
+     * The caller's own organisation. NEVER a literal.
+     *
+     * G-SEC-17. These controllers assigned `$sub_institute_id = 1` outright -
+     * not as a fallback - so any caller reaching the affected method read
+     * TENANT 1's content whatever tenant they belonged to. chapterController
+     * hardcoded the ROLE alongside it (`$user_profile_name = 1`).
+     *
+     * The token wins when one is present; the session is used for the Blade
+     * screens that have no token. When neither identifies the caller this
+     * returns null, so every `where sub_institute_id = ?` matches NOTHING -
+     * failing closed, the same contract ResolvesApiIdentity documents.
+     */
+    private function resolvedTenantId($request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return (int) $fromToken;
+        }
+
+        // hasSession() first: $request->session() THROWS "Session store not set
+        // on request" when there is none, so the null-safe operator never gets a
+        // chance to help. An API call with an unusable token would have died with
+        // a 500 instead of failing closed.
+        $fromSession = $request->hasSession() ? $request->session()->get('sub_institute_id') : null;
+
+        return $fromSession ? (int) $fromSession : null;
+    }
+
     /**
      * Display a listing of the resource.
      *
@@ -41,6 +72,7 @@ class lmsmappingController extends Controller
         $final_data = $res['chapter_topic_data'] = $data = array();
 
         $extra = "";
+        $bindings = [];
 
         if ($request->has("chapter_id")) {
             $chapter_id = $request->get("chapter_id");
@@ -49,7 +81,10 @@ class lmsmappingController extends Controller
                 ->where(['chapter_master.sub_institute_id' => $sub_institute_id, 'chapter_master.id' => $chapter_id])
                 ->get()->toArray();
 
-            $extra .= " AND chapter_id = '".$chapter_id."'";
+            // G-SEC-19: bound, not concatenated. `$extra` is spliced into raw
+            // SQL below, so this value used to reach the database as syntax.
+            $extra .= ' AND chapter_id = ?';
+            $bindings[] = $chapter_id;
 
             $res['chapter_topic_data'] = $chapter_data[0] ?? [];
         }
@@ -61,19 +96,22 @@ class lmsmappingController extends Controller
                 ->where(['topic_master.sub_institute_id' => $sub_institute_id, 'topic_master.id' => $topic_id])
                 ->get()->toArray();
 
-            $extra .= " AND topic_id = '".$topic_id."'";
+            $extra .= ' AND topic_id = ?';
+            $bindings[] = $topic_id;
 
             $res['chapter_topic_data'] = $topic_data[0];
         }
 
         if (! $request->has("chapter_id") && ! $request->has("topic_id")) {
-            $extra .= " AND globally = '1'";
+            $extra .= " AND globally = '1'";   // literal, no request input
         }
 
 
+        // The UNION repeats $extra, so the bindings are supplied twice, in order.
         $data = Db::select('SELECT * FROM lms_mapping_type AS a WHERE a.parent_id=0 '.$extra.'
             UNION 
-            SELECT * FROM lms_mapping_type AS b WHERE b.parent_id != 0 '.$extra);
+            SELECT * FROM lms_mapping_type AS b WHERE b.parent_id != 0 '.$extra,
+            array_merge($bindings, $bindings));
 
         $data = json_decode(json_encode($data), true);
 
@@ -91,10 +129,11 @@ class lmsmappingController extends Controller
     }
     public function getDataPre($request)
     {
-        $sub_institute_id = 1;
+        $sub_institute_id = $this->resolvedTenantId($request);
         $final_data = $res['chapter_topic_data'] = $data = array();
 
         $extra = "";
+        $bindings = [];
 
         if ($request->has("chapter_id")) {
             $chapter_id = $request->get("chapter_id");
@@ -103,7 +142,10 @@ class lmsmappingController extends Controller
                 ->where(['chapter_master.sub_institute_id' => $sub_institute_id, 'chapter_master.id' => $chapter_id])
                 ->get()->toArray();
 
-            $extra .= " AND chapter_id = '".$chapter_id."'";
+            // G-SEC-19: bound, not concatenated. `$extra` is spliced into raw
+            // SQL below, so this value used to reach the database as syntax.
+            $extra .= ' AND chapter_id = ?';
+            $bindings[] = $chapter_id;
 
             $res['chapter_topic_data'] = $chapter_data[0] ?? [];
         }
@@ -115,19 +157,22 @@ class lmsmappingController extends Controller
                 ->where(['topic_master.sub_institute_id' => $sub_institute_id, 'topic_master.id' => $topic_id])
                 ->get()->toArray();
 
-            $extra .= " AND topic_id = '".$topic_id."'";
+            $extra .= ' AND topic_id = ?';
+            $bindings[] = $topic_id;
 
             $res['chapter_topic_data'] = $topic_data[0];
         }
 
         if (! $request->has("chapter_id") && ! $request->has("topic_id")) {
-            $extra .= " AND globally = '1'";
+            $extra .= " AND globally = '1'";   // literal, no request input
         }
 
 
+        // The UNION repeats $extra, so the bindings are supplied twice, in order.
         $data = Db::select('SELECT * FROM lms_mapping_type AS a WHERE a.parent_id=0 '.$extra.'
             UNION 
-            SELECT * FROM lms_mapping_type AS b WHERE b.parent_id != 0 '.$extra);
+            SELECT * FROM lms_mapping_type AS b WHERE b.parent_id != 0 '.$extra,
+            array_merge($bindings, $bindings));
 
         $data = json_decode(json_encode($data), true);
 
@@ -152,7 +197,7 @@ class lmsmappingController extends Controller
     public function create(Request $request)
     {
         $type = $request->input('type');
-        $sub_institute_id = 1;
+        $sub_institute_id = $this->resolvedTenantId($request);
 
         $data = array();
         if ($request->has('chapter_id')) {

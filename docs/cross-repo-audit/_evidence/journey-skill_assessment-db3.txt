@@ -1,0 +1,39 @@
+[DB3 / live / 128.199.17.97] Skill Assessment journey — table existence & row counts
+Command: cd C:/Users/MILAN/Downloads/hp_erp && php artisan tinker --execute="... DB::connection('live')->table(X)->count() ..."
+
+tbluser: 299
+s_user_jobrole: 4894
+jobrole_competency_map: 52
+competency_assessment_test: 1
+competency_assessment_question: 8
+competency_assessment_attempt: 0
+competency_assessment_response: 0
+competency_assessment_rating_proposal: 1
+competency_kasba_item: 312
+competency_kasba_rating: 262
+competency_rating_history: 4
+s_competency_assessment_cycles: 2
+s_competency_assessments: 142
+
+Schema checks (AssessmentScoringService::maybeUpdateCycleScore gating columns):
+Schema::connection('live')->hasColumn('s_competency_assessment_cycles','test_id') => yes
+Schema::connection('live')->hasColumn('s_competency_assessments','attempt_id') => yes
+
+Sample row, competency_assessment_test (the only row):
+id=7, sub_institute_id=6, jobrole_id=4342, scope_type=competency, competency_id=441,
+title="Capability assessment — Software Configuration Management", status=published,
+published_at=2026-09-05 13:37:10
+
+Sample row, competency_assessment_rating_proposal (the only row):
+id=19, sub_institute_id=6, attempt_id=16, test_id=118, user_id=63, subject_type=employee,
+source=lms_quiz, item_id=443, item_label="Secure Software Engineering", questions=8,
+scored_percent=100.00, proposed_rating=5, current_rating=2, status=approved,
+note="Applied automatically to 4 capability item(s): this course has auto_apply_rating on."
+created_at=2026-09-07 04:53:27
+
+Note: this proposal's source=lms_quiz and its attempt_id/test_id (16/118) do not correspond
+to any row in competency_assessment_attempt (0 rows) or to the only competency_assessment_test
+row (id=7). It was written by a different journey (LMS quiz auto-apply-rating), which shares
+the competency_assessment_rating_proposal table but is not the AiAssessmentController flow.
+It is not evidence that the Skill Assessment (mine/start/submit/markMine/myResult) flow has
+ever actually run on this host.

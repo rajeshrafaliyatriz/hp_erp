@@ -19,6 +19,15 @@ class AiCourseOutline extends Model
         'created_by',
         'updated_by',
         'deleted_by',
+        // Presentation generation (see the 2026_07_28 migration).
+        'presentation_platform',
+        'ai_model',
+        'slide_count',
+        'generation_id',
+        'gamma_url',
+        'export_url',
+        'status',
+        'course_id',
     ];
 
     // JSON Casts

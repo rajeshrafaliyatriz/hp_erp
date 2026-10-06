@@ -1,0 +1,62 @@
+=============== Sprint 9 — what the unfinished review found ===============
+
+0. Framing — these must be true before and after. A probe that breaks them has done damage.
+  PASS  no leave sits in a tenant its owner does not belong to
+  PASS  no payslip sits in a tenant its employee does not belong to
+     escalated steps at start: 43 (one-shot — must not move)
+
+1. F-133 — payroll could WRITE a payslip for another tenant's employee
+  PASS  the forged write is refused
+  PASS  and no row was written
+  PASS  no foreign employee is named in the response
+
+2. F-134 — leave:escalate refuses input it cannot trust
+  PASS  --tenant=0 refused
+  PASS  --tenant=abc refused
+  PASS  --tenant=-1 refused
+  PASS  --tenant=03x refused
+  PASS  and nothing was escalated by those attempts
+
+3. F-136 — a leave request in another tenant can no longer be hijacked
+  PASS  a NEW row was created, not an update
+  PASS  leave 221 is byte-identical
+
+4. F-137 — every spelling of a month lands on ONE payslip
+  PASS  'Sep' writes one row
+  PASS  'september' corrects it
+  PASS  'SEP' corrects it again
+  PASS  and the figure is the latest
+  PASS  stored under the canonical spelling
+  PASS  an unrecognised month is refused, not filed
+  PASS  'january' files under the NEXT payroll year, as 'Jan' does
+
+5. F-138 — the duplicates cannot come back, and a correction leaves a trace
+  PASS  no employee-month holds more than one payslip
+  PASS  the database enforces it
+  PASS  the supersession is on the record, with its before-image
+  PASS  and it reached the audit log
+
+6. F-139 — Payroll Type Report is one tenant's, not everyone's
+  PASS  no other tenant's payslips in the report
+
+7. F-141 — the sweep ignores steps whose request is gone
+  PASS  no open step belongs to a deleted or decided request
+
+8. F-105 - the dead shift screens are gone, and the roster they threatened is not
+  PASS  no shift-template route remains
+  PASS  the per-employee roster is untouched
+  PASS  and the Saturday half-days that code would have erased are intact
+  PASS  the roster still reaches the dashboard
+
+9. F-111 - the flat-cap rule is per tenant, and nobody's pay moved
+  PASS  the new rule agrees with the old hardcoded list on every tenant
+  PASS  an unconfigured tenant clamps, which is what it does today
+  PASS  and a listed tenant still pays the excess
+
+10. Framing, re-checked
+  PASS  escalated_at count unchanged across the whole run
+  PASS  still no cross-tenant payslip
+
+==============================================================
+  PASS 34   FAIL 0
+==============================================================

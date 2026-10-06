@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\api\HRITDashboard;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class LeaveDistribution extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function leaveDistribution(Request $request)
     {
         $type = $request->query('type');
@@ -35,7 +38,7 @@ class LeaveDistribution extends Controller
         }
 
         // Get sub institute id (header or params)
-        $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+        $subInstituteId = $this->apiTenantId($request);
 
         if (!$subInstituteId) {
             return response()->json([

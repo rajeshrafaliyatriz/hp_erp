@@ -1,0 +1,55 @@
+Administrator MENU TREE resolves 1 -> 8 -> 23 (rights rows, not access)
+Employee has RIGHTS ROWS for 19 leaf screens (not proven reachable)
+G-LMS-SEC-01: anonymous LMS assignment refused
+G-SEC-15: bounded result set holds
+G-SEC-15: unauthenticated GET refused
+G-SEC-23 route 3: audit user-actions
+G-SEC-23: the three routes NOT DISCLOSING
+G-XPROD-01: no HP Brain rows in G2G audit
+NO SEND SITE BYPASSES THE MAIL GATE
+PRECONDITION: capability_coverage permits gap reporting
+R30 - every evidence script still parses (backslash-mangling guard)
+Skill Library: no user-visible "Competency" string
+X-12 can still read the role -> course link
+anonymous: api/kpis and DeepSeekChat
+catalogue invariants
+chain: required 3, measured 1, gap 2, survives rename
+composer: every dimension resolvable, and the SERVER validates each
+cross-tenant fks s_user_jobrole_task.jobrole_id
+cross-tenant fks s_user_skill_jobrole.jobrole_id
+cross-tenant fks s_user_skill_jobrole.skill_id
+deferred events are not silently re-wired
+divya: level NULL and gap NULL — NOT 0
+email channel is OFF (tripwire, not a correctness test)
+emit -> project -> re-project (idempotent)
+employee cannot read a colleague gap
+employee sees NO Payroll / Employee Directory / Talent
+every SHIPPED consumer names a class that exists
+every content-map accessLink resolves to a live menu row
+every level travels with its coverage
+every notified event has a resolver AND a template
+g2gActorId has exactly ONE implementation
+gap view: a level cannot render without its coverage
+gap view: unmeasured renders words, never a number or bar
+hpbrain_audit_logs untouched (342)
+link resolution s_user_jobrole_task.jobrole_id
+link resolution s_user_skill_jobrole.jobrole_id
+link resolution s_user_skill_jobrole.skill_id
+nine logins: SIDEBAR RENDERS (navigation, not capability)
+nine roles RENDER A MENU, none empty (menus, not capability)
+no PRIVATE helper reads a request tenant at all
+no account has a NULL or zero tenant
+no action link points at a route that does not exist
+no method resolves identity then reads request tenant
+notification bell: fetched data, no hardcoded badge or empty state
+php -l on changed controllers/services
+reactor THROWS in replay mode
+rename: DASHBOARD counts still resolve
+reporting_manager_id has exactly ONE guarded write path
+role map: save 3, re-read 3, remove 1, re-read 2
+route-to-menu map coverage
+task.status has exactly ONE guarded write path
+tenant data cannot reach the template engine
+vikram gap = 4 required / 1 met / 2 gap / 1 unmeasured
+vikram reading divya gap: 403
+working tree matches its baseline (50 foreign files, LISTED)

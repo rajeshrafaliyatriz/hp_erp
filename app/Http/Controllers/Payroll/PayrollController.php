@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Payroll;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Models\EmployeeMonthlySalaryData;
 use App\Models\EmployeeSalaryStructure;
 use App\Models\payroll\PayrollType;
@@ -10,6 +11,8 @@ use App\Models\HrmsDepartment;
 use App\Models\user\tbluserModel;
 use App\Http\Controllers\HRMS\HrmsController;
 use App\Traits\Helpers;
+use App\Services\Documents\DocumentStorageService;
+use App\Services\Documents\Extraction\TextExtractionManager;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -34,13 +37,77 @@ use Dompdf\Options;
 
 class PayrollController extends Controller
 {
+    // Was GenTux\Jwt\GetsJwtToken. That package is absent from
+    // composer.json and not installed, so this class could not be
+    // loaded at all - fatal on every request, and fatal for
+    // route:list / route:cache application-wide. Authentication now
+    // uses Sanctum, like the rest of the codebase.
+    use ResolvesApiIdentity;
+
+    /**
+     * The acting tenant, for a controller that serves BOTH surfaces.
+     *
+     * G-SEC-10. This controller imported ResolvesApiIdentity and then never
+     * called it: its only trait usage was apiTokenIsValid(), which asks "is this
+     * token valid?" and not "whose is it?" - C22's proxy defect reproduced in
+     * application code. Tenant came from the request at ~17 sites, including an
+     * explicit branch that handed API callers whatever tenant they asked for.
+     *
+     * apiTenantId() alone is not enough here: 40 of these routes are Blade
+     * screens in routes/hrms.php authenticated by session, with no token at all,
+     * and a null tenant would silently return them nothing.
+     *
+     * Order is therefore token, then session, and NEVER the request body.
+     * Both sources are things the server established; the request body is a
+     * claim by the caller.
+     */
+    private function payrollTenantId(Request $request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+
+        $fromSession = $request->session()->get('sub_institute_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
+    /**
+     * The ACTING user, resolved the same way as the tenant.
+     *
+     * Same shape as payrollTenantId, and needed for the same reason: this
+     * controller serves both the token-authenticated API and the session-
+     * authenticated Blade screens, so the token is tried first and the session
+     * is the fallback.
+     *
+     * This exists because $request->get('user_id') was feeding created_by and
+     * updated_by directly - so a caller could attribute their own write to
+     * somebody else, and the audit trail would record it as fact. "Who did
+     * this" is an identity claim, never a request parameter.
+     */
+    private function payrollActorId(Request $request): ?int
+    {
+        $fromToken = $this->apiUserId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+
+        $fromSession = $request->session()->get('user_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
     
     public function payrollType(Request $request)
     {
         $type = $request->type;
         $sub_institute_id = session()->get('sub_institute_id');
           if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only, the one
+            // place a login token should never travel.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -64,7 +131,7 @@ class PayrollController extends Controller
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
         }
         $data['data'] = PayrollType::where('sub_institute_id',$sub_institute_id)->whereNull('deleted_at')->get();
         // return view('payroll.payroll_type.index', ["data" => $data]);
@@ -77,8 +144,18 @@ class PayrollController extends Controller
         $sub_institute_id = session()->get('sub_institute_id');
 
         if ($id) {
-            $payrollType = PayrollType::find($id);
-            // echo "<pre>";print_r($payrollType);exit;
+            // F-146: the legacy edit form read any pay head by id regardless of
+            // which organisation owned it. Web-session only - there is no
+            // type=API branch here - but scoped for the same reason as the
+            // write paths, and so the three cannot drift apart.
+            $payrollType = PayrollType::where('id', $id)
+                ->where('sub_institute_id', $sub_institute_id)
+                ->first();
+
+            if (!$payrollType) {
+                return redirect('payroll-type');
+            }
+
             return view('payroll.payroll_type.create', compact('payrollType'));
         }
         $payrollType['payroll_type'] = 1;
@@ -100,7 +177,9 @@ class PayrollController extends Controller
         $user_id = session()->get('user_id');
 
 if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -126,12 +205,36 @@ if($type=="API"){
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
-            $user_id = $request->get('user_id');
+            $sub_institute_id = $this->payrollTenantId($request);
+            $user_id = $this->payrollActorId($request);   // identity, not a parameter
 
         }
         if ($request->id > 0) {
-            $payrollType = PayrollType::find($request->id);
+            /*
+             * F-146. find() is global and this method reassigns sub_institute_id
+             * a few lines below, so an unscoped lookup did not merely let an
+             * administrator EDIT another organisation's pay head - it MOVED it
+             * into the caller's tenant, and every salary structure referencing
+             * that head id in the original organisation lost it.
+             *
+             * Refused rather than falling through to a new head: a save that
+             * quietly does something other than what was asked is how F-109 went
+             * unnoticed for three sprints.
+             */
+            $payrollType = PayrollType::where('id', $request->id)
+                ->where('sub_institute_id', $sub_institute_id)
+                ->first();
+
+            if (!$payrollType) {
+                $res = [
+                    'status_code' => 0,
+                    'message'     => 'That pay head does not belong to this organisation.',
+                ];
+
+                return $type === 'API'
+                    ? response()->json($res, 404)
+                    : redirect('payroll-type')->with($res);
+            }
         } else {
             $payrollType = new PayrollType();
         }
@@ -172,7 +275,9 @@ if($type=="API"){
         $sub_institute_id = session()->get('sub_institute_id');
         $user_id = session()->get('user_id');
         if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -197,15 +302,67 @@ if($type=="API"){
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
-            $user_id = $request->get('user_id');
+            $sub_institute_id = $this->payrollTenantId($request);
+            $user_id = $this->payrollActorId($request);   // identity, not a parameter
 
         }
         $res['status_code'] = 0;
         $res['message'] = "Failed to Delete";
         if ($id > 0) {
             // PayrollType::where('id', $id)->delete();
-            $delete = PayrollType::where('id', $id)->update(['deleted_at'=>now(),'deleted_by'=>$user_id]);
+            /*
+             * F-150. REFUSE TO DELETE A HEAD THAT SALARIES STILL DEPEND ON.
+             *
+             * Deleting a pay head removes it from the Payroll Type list (:131
+             * filters deleted_at) but NOT from the calculation, which selects
+             * on status alone. So a deleted head keeps being applied to pay,
+             * invisibly, forever.
+             *
+             * Six of the eight salary structures on live already reference
+             * soft-deleted heads, and they are load-bearing: excluding them
+             * would take tenant 1's employees 1, 2 and 3 from a net of 3500 to
+             * 1000 - a 71% cut - because heads 1 and 5 are deleted ALLOWANCES
+             * their structures still depend on.
+             *
+             * So the calculation is deliberately NOT changed here: that would
+             * move real salaries and is Q10, for the customer. What is fixed is
+             * the cause - a head that live structures reference can no longer
+             * be deleted, so the situation cannot get worse while they decide.
+             *
+             * Checked in PHP rather than with a JSON query: employee_salary_data
+             * is keyed by head id, and one deployment runs MariaDB 10.1, which
+             * has no JSON functions.
+             */
+            $dependent = 0;
+
+            foreach (DB::table('employee_salary_structures')
+                        ->where('sub_institute_id', $sub_institute_id)
+                        ->whereNull('deleted_at')
+                        ->pluck('employee_salary_data') as $json) {
+                $heads = json_decode((string) $json, true) ?: [];
+                if (array_key_exists((string) $id, $heads)) {
+                    $dependent++;
+                }
+            }
+
+            if ($dependent > 0) {
+                $res['status_code'] = 0;
+                $res['message'] = 'This pay head is still used by ' . $dependent
+                    . ' salary structure(s). Remove it from those structures first - '
+                    . 'deleting it here would leave it silently applied to their pay.';
+
+                if ($type == "API") {
+                    return response()->json($res, 409);
+                }
+
+                return redirect('payroll-type')->with($res);
+            }
+
+            // F-146: without the tenant clause any admin or HR user could
+            // soft-delete another organisation's pay head by id.
+            $delete = PayrollType::where('id', $id)
+                ->where('sub_institute_id', $sub_institute_id)
+                ->update(['deleted_at'=>now(),'deleted_by'=>$user_id]);
             if($delete){
                 $res['status_code'] = 1;
                 $res['message'] = "Data Deleted Successfully";
@@ -220,7 +377,7 @@ if($type=="API"){
     public function employeeSalaryStructure(Request $request)
     {
         // return $request;exit;
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $type=$request->input('type');
         $status=$request->input('emp_status') ?? 1;
         $syear = $request->get('syear');
@@ -228,7 +385,9 @@ if($type=="API"){
         $department_id= ($request->department_id!=0) ? implode(',',$request->department_id) : '';
 
         if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -253,7 +412,7 @@ if($type=="API"){
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->get('syear');
         }
 
@@ -296,7 +455,9 @@ if($type=="API"){
         $sub_institute_id =$request->session()->get('sub_institute_id');
         $type=$request->input('type');
         if($type=="API"){
-            $token = $request->input('token');  // get token from input field 'token'
+            // Header first, matching the fix already applied at line ~3390 -
+            // this was reading the token from the URL/query only.
+            $token = $request->bearerToken() ?: $request->input('token');
 
             // Check if token is provided
             if (!$token) {
@@ -321,7 +482,7 @@ if($type=="API"){
                 return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
             }
        
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
             $year = $request->get('syear');
 
         }
@@ -354,7 +515,11 @@ if($type=="API"){
                     if($key!=0){
                        $payroll_type_id = $value[0];
 
-                       if($amount_type==1 && $Per_Flat!=0 && $value[1] > $Per_Flat && $sub_institute_id==47){
+                       // F-111: was `$sub_institute_id==47`, inline. Same tenant,
+                       // same arithmetic - the id now lives in config/payroll.php
+                       // where it can be read and changed. See Q1 before touching
+                       // either branch; both are somebody's payslip.
+                       if($amount_type==1 && $Per_Flat!=0 && $value[1] > $Per_Flat && app(\App\Services\Payroll\FlatCapRule::class)->paysExcessOverCap((int) $sub_institute_id)){
                         $amount = ($value[1]-$Per_Flat);
                        }
                        elseif($amount_type==1 && $Per_Flat!=0){ // added for another institutes on 14-05-2025
@@ -485,9 +650,12 @@ if($type=="API"){
 
     public function salaryStructureReport(Request $request)
     {
-        $sub_institute_id = session()->get('sub_institute_id');
+        // F-160. session() only, so under type=API this was null. The variable is
+        // unused in this method, but it is left resolved the same way as its POST
+        // sibling so the two cannot drift apart again.
+        $sub_institute_id = $this->payrollTenantId($request);
         $type = $request->type;
-     
+
         $res['years'] = Helpers::getPairYears();
         return is_mobile($type, "payroll/salary_structure_report/index", $res, "view");
     }
@@ -501,7 +669,11 @@ if($type=="API"){
         $emp_id = ($request->emp_id!=0) ? implode(',',$request->emp_id) : 0;
         $department_id = ($request->department_id!=0) ? implode(',',$request->department_id) : 0;
 
-        $sub_institute_id = session()->get('sub_institute_id');
+        // F-160. This read session() with no type=API branch, so an API caller
+        // resolved to null, every `where sub_institute_id = null` matched nothing,
+        // and the report came back empty however it was filtered. It is not that
+        // the screen was never built - the endpoint could not have fed one.
+        $sub_institute_id = $this->payrollTenantId($request);
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->orderBy('sort_order')->get();
 
         $header = [];
@@ -542,7 +714,7 @@ if($type=="API"){
         $syear = session()->get('syear');
         if($type=="API"){
             try {
-                if (!$this->jwtToken()->validate()) {
+                if (!$this->apiTokenIsValid()) {
                     $response = ['status' => '2', 'message' => 'Token Auth Failed', 'data' => []];
     
                     return response()->json($response, 401);
@@ -552,7 +724,7 @@ if($type=="API"){
     
                 return response()->json($response, 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->get('syear');
         }   
         $res['payrollTypes'] = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->get();
@@ -564,9 +736,32 @@ if($type=="API"){
         return is_mobile($type, "payroll.form16.index", $res, "view");       
     }
 
+    /**
+     * The employee picker behind Form 16 (POST /form16-get-employees-list).
+     *
+     * F-149. This read the tenant from the SESSION with no type=API branch. A
+     * token caller has no session, so sub_institute_id resolved to null, the
+     * query filtered on null, and the response was
+     * {"employees":[]} with HTTP 200 - an empty picker and no error to explain
+     * it. Form 16 could not list a single employee through the API.
+     *
+     * The audit recorded this method as "dead but broken - nothing calls it".
+     * It is routed at routes/hrms.php:89 and Form 16 is its caller, so it was
+     * live and broken. HrmsController::getEmployeeLists - the other copy of
+     * this same method - already had the branch, which is exactly the hazard
+     * Q6 raises about duplicated controller pairs: the two drifted, and only
+     * one of them worked.
+     *
+     * payrollTenantId() is used rather than the request's sub_institute_id,
+     * for the same reason every other method here does: the caller's own
+     * organisation is an identity, not a parameter.
+     */
     public function getEmployeeLists(Request $request)
     {
-        $sub_institute_id = $request->session()->get('sub_institute_id');
+        $sub_institute_id = $request->input('type') === 'API'
+            ? $this->payrollTenantId($request)
+            : $request->session()->get('sub_institute_id');
+
         $department_id = $request->input('department_id');
 	    $employee_id = $request->get('employee_id');
 	
@@ -587,7 +782,7 @@ if($type=="API"){
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->input('type');
         if ($type == 'API') {
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->input('syear');
         } else {
             $sub_institute_id = $request->session()->get('sub_institute_id');
@@ -625,10 +820,55 @@ if($type=="API"){
 
         $employees = tbluserModel::where('sub_institute_id', $sub_institute_id)->where('department_id', $department_id)->where('status',1)->get()->toArray(); // 23-04-24 by uma
 
-        $get_map_year = DB::table('fees_map_years')->selectRaw('from_month, to_month')->where(['sub_institute_id' => $sub_institute_id, 'syear' => $year])->first();
+        /*
+         * F-210. THIS LINE MADE FORM 16 IMPOSSIBLE TO PRODUCE, FOR ANYONE.
+         *
+         * `fees_map_years` does not exist on either host - checked against
+         * information_schema on 202.47.117.220 and 128.199.17.97, and no
+         * migration in this repository creates it. This was its only reference
+         * in app/. So every call to /form16-report threw
+         *
+         *   SQLSTATE[42S02]: Base table or view not found: 1146
+         *   Table 'hp_erp.fees_map_years' doesn't exist
+         *
+         * and died here, ten lines before it would have returned anything.
+         * Not "Form 16 is incomplete": Form 16 has never once been generated,
+         * by an employee or by HR, on either deployment.
+         *
+         * The `?? date('m')` fallbacks below say the author expected the row to
+         * be optional. They were simply unreachable, because a missing TABLE
+         * throws where a missing ROW returns null. So the table is checked
+         * rather than assumed, and the query only runs when it is there.
+         *
+         * AND THE FALLBACK ITSELF IS CORRECTED. date('m') is the current
+         * calendar month, which would have produced a period running from this
+         * month of $year to this month of $year+1 - a twelve-month window that
+         * moves every time it is read, on a tax document. April to March is what
+         * the surrounding code already assumes: `$next_year = $year + 1` two
+         * lines down only makes sense for a year that ENDS in the following
+         * calendar year, and Helpers::getPairYears() labels these years '2025-2026'
+         * for the same reason.
+         *
+         * Schema::hasTable is avoided on purpose - this deployment includes
+         * MariaDB 10.1, where the Schema builder's introspection is unreliable;
+         * information_schema is queried directly, as elsewhere in this audit.
+         */
+        $get_map_year = null;
 
-        $from_month = $get_map_year->from_month ?? date('m');
-        $to_month = $get_map_year->to_month ?? date('m');
+        $hasMapYears = DB::selectOne(
+            'select count(*) as c from information_schema.tables where table_schema = database() and table_name = ?',
+            ['fees_map_years']
+        );
+
+        if ((int) ($hasMapYears->c ?? 0) > 0) {
+            $get_map_year = DB::table('fees_map_years')
+                ->selectRaw('from_month, to_month')
+                ->where(['sub_institute_id' => $sub_institute_id, 'syear' => $year])
+                ->first();
+        }
+
+        $from_month = $get_map_year->from_month ?? 4;   // April
+        $to_month = $get_map_year->to_month ?? 3;       // to March of $year + 1
 
         // Assuming $from_month and $to_month are integers
         $from_date = Carbon::createFromDate($year, $from_month, 1)->format('d/M/Y');
@@ -647,7 +887,29 @@ if($type=="API"){
         $res['get_employee_salary'] = DB::table('employee_salary_structures')->where(['employee_id' => $employee_id, 'sub_institute_id' => $sub_institute_id,'year'=>$year])->first();
         // echo "<pre>";print_r($res['get_employee_salary']);exit;
         $res['get_school_detail'] = DB::table('school_setup')->where('id', $sub_institute_id)->first();
-        $res['get_employee_detail'] = DB::table('tbluser')->where('id', $employee_id)->first();
+        /*
+         * F-211. An explicit select, because `->first()` on tbluser returns 99
+         * columns and this response is rendered in a browser. Among them:
+         * `password` - the bcrypt hash - plus `plain_password`, `otp` and
+         * `fcm_token`. No account on either host currently stores a plaintext
+         * password (checked: 0 of 2,373 on 202.47.117.220, 0 of 299 on
+         * 128.199.17.97), so what was actually shipped is the hash. That is
+         * still a credential leaving the database for a Form 16 screen that
+         * never asked for it, and the column would start carrying plaintext the
+         * day anything populated it.
+         *
+         * The list is what the two consumers read and nothing else: the React
+         * hook uses first/middle/last name, employee_no and pan_no
+         * (hooks/use-form16.ts), and the Blade view additionally prints
+         * address.
+         */
+        $res['get_employee_detail'] = DB::table('tbluser')
+            ->where('id', $employee_id)
+            ->first([
+                'id', 'first_name', 'middle_name', 'last_name', 'employee_no',
+                'pan_no', 'join_year', 'address', 'email', 'mobile',
+                'department_id', 'jobtitle_id', 'joined_date',
+            ]);
 
         $res['years'] = Helpers::getPairYears();
         $res['search'] = 1;
@@ -671,7 +933,7 @@ if($type=="API"){
     public function hrmsSalaryCertificateIndex(Request $request)
     {
         $type = $request->input('type');
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $res['employee_id'] = $request->input('employee_id');
         $res['month_ids'] = [1=>"Jan",2=>"Feb",3=>"Mar",4=>"Apr",5=>"May",6=>"Jun",7=>"Jul",8=>"Aug",9=>"Sep",10=>"Oct",11=>"Nov",12=>"Dec"];
 
@@ -688,7 +950,7 @@ if($type=="API"){
         // echo "<pre>";print_r($request->all());exit;
         $type = $request->input('type');
         if ($type == 'API') {
-            $sub_institute_id = $request->input('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
         } else {
             $sub_institute_id = $request->session()->get('sub_institute_id');
         }
@@ -700,11 +962,61 @@ if($type=="API"){
 	    $payroll_type_ids = $request->get('payroll_type_id');
 	    $reason = $request->get('reason');
         
+        /*
+         * F-147. month_id and payroll_type_id are read straight into implode()
+         * and whereIn() further down, so omitting either produced
+         * "count(): Argument #1 must be Countable|array, null given" - a
+         * TypeError rendered as HTTP 500. A missing required field is a 422,
+         * which is the same correction F-106 made for leave and F-110's own
+         * guard made a few lines below.
+         */
+        $certValidator = Validator::make($request->all(), [
+            'employee_id'       => 'required|integer',
+            'year'              => 'required',
+            'month_id'          => 'required|array|min:1',
+            'payroll_type_id'   => 'required|array|min:1',
+        ], [
+            'month_id.required'        => 'Choose at least one month for the certificate.',
+            'payroll_type_id.required' => 'Choose at least one pay head to state on the certificate.',
+        ]);
+
+        if ($certValidator->fails()) {
+            $res = ['status_code' => 0, 'message' => $certValidator->errors()->first()];
+
+            return $type === 'API'
+                ? response()->json($res, 422)
+                : redirect()->back()->withErrors($certValidator);
+        }
+
         $get_salaray_certificate = DB::table('hrms_salary_certificate')->where(['department_id' => $department_id, 'employee_id' => $employee_id, 'sub_institute_id' => $sub_institute_id, 'year' => $year])->first();
 
         $res['pdfName'] = $filename = 'SC' . '_' . $year . '_' . $employee_id.'.pdf';
         
         $get_salary_certificate_html = $this->get_salary_certificate_html($employee_id,$year,$sub_institute_id,$month_ids,$department_id,$payroll_type_ids,$filename);
+
+        // F-110. null means "this employee has no salary structure for that
+        // year", which is a configuration gap rather than a failure - the
+        // structure IS the salary breakdown a certificate states. Refused with
+        // a sentence that says what to do, at 422, and nothing is written.
+        if ($get_salary_certificate_html === null) {
+            $employeeName = DB::table('tbluser')
+                ->selectRaw("TRIM(CONCAT_WS(' ', first_name, last_name)) AS n")
+                ->where('id', $employee_id)
+                ->value('n') ?: 'This employee';
+
+            $res = [
+                'status_code' => 0,
+                'message'     => $employeeName . ' has no salary structure for ' . $year . ', so there '
+                    . 'is no salary breakdown to certify. Add one under Salary Structure for that '
+                    . 'year, then generate the certificate again.',
+            ];
+
+            if ($type === 'API') {
+                return response()->json(array_merge($res, ['status' => '0']), 422);
+            }
+
+            return back()->with('error', $res['message']);
+        }
 
         // return $get_salary_certificate_html;exit;
 
@@ -716,10 +1028,37 @@ if($type=="API"){
                     'payroll_type_id' => implode(',', $request->get('payroll_type_id')),
                     'reason' => $reason ?? '',
                     'pdf_file_name' => $filename,
-                    'pdf_html' => $get_salary_certificate_html
+                    'pdf_html' => $get_salary_certificate_html,
+                    // F-148. A certificate an employee takes to a bank recorded
+                    // neither who issued it nor when. payrollActorId() resolves
+                    // the caller under type=API, where session() is empty -
+                    // the same correction F-138 made for the payslip upsert.
+                    'updated_by' => $this->payrollActorId($request),
+                    'updated_at' => now(),
                 ]);
 
-            $request->session()->flash('success', 'Salary Certificate Updated Successfully.');
+            /*
+             * F-213. Guarded, because there is not always a session to flash to.
+             *
+             * These legacy payroll routes live on the WEB router, which runs
+             * StartSession, so this was safe for as long as the only callers
+             * were Blade screens and the React console proxying through
+             * routes/hrms.php. The employee's own salary certificate is served
+             * from the `api` group, which has no session middleware at all, and
+             * `$request->session()` throws
+             *
+             *   RuntimeException: Session store not set on request.
+             *
+             * AFTER the certificate had already been written. So the row was
+             * filed correctly and the caller still got a 500 - the worst of both
+             * outcomes, and invisible to anyone testing through the HR screen.
+             *
+             * A flash message is for the next rendered page; an API caller has
+             * no next page, and the JSON response already carries the outcome.
+             */
+            if ($request->hasSession()) {
+                $request->session()->flash('success', 'Salary Certificate Updated Successfully.');
+            }
         }
         else
         {
@@ -734,10 +1073,35 @@ if($type=="API"){
                 'sub_institute_id' => $sub_institute_id,
                 'pdf_file_name' => $filename,
                 'pdf_html' => $get_salary_certificate_html,
-                'created_by' => session()->get('user_id')
+                // F-148. session()->get('user_id') is NULL under type=API, so
+                // every certificate generated through the API was filed with no
+                // author at all. created_at was never set either.
+                'created_by' => $this->payrollActorId($request),
+                'created_at' => now(),
             ]);
 
-            $request->session()->flash('success', 'Salary Certificate Generated Successfully.');
+            /*
+             * F-213. Guarded, because there is not always a session to flash to.
+             *
+             * These legacy payroll routes live on the WEB router, which runs
+             * StartSession, so this was safe for as long as the only callers
+             * were Blade screens and the React console proxying through
+             * routes/hrms.php. The employee's own salary certificate is served
+             * from the `api` group, which has no session middleware at all, and
+             * `$request->session()` throws
+             *
+             *   RuntimeException: Session store not set on request.
+             *
+             * AFTER the certificate had already been written. So the row was
+             * filed correctly and the caller still got a 500 - the worst of both
+             * outcomes, and invisible to anyone testing through the HR screen.
+             *
+             * A flash message is for the next rendered page; an API caller has
+             * no next page, and the JSON response already carries the outcome.
+             */
+            if ($request->hasSession()) {
+                $request->session()->flash('success', 'Salary Certificate Generated Successfully.');
+            }
         }
 
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->where('payroll_type', 1)->get()->toArray();
@@ -773,10 +1137,17 @@ if($type=="API"){
     {
         $employee_id = $request->get('employee_id');
 	    $year = $request->get('year');
-	    $sub_institute_id = $request->get('sub_institute_id');
+	    $sub_institute_id = $this->payrollTenantId($request);
 
         $get_salary_certificate_pdf_file = DB::table('hrms_salary_certificate')->where([['employee_id', $employee_id], ['year', $year], ['sub_institute_id', $sub_institute_id]])->first();
-        
+
+        // F-110. Same unguarded dereference as the builder had, one screen later:
+        // downloading a certificate that was never generated fatalled on ->pdf_html.
+        // The table held ZERO rows, so this was every download.
+        if (!$get_salary_certificate_pdf_file) {
+            abort(404, 'No salary certificate has been generated for this employee and year yet.');
+        }
+
         $pdf = PDF::loadHTML($get_salary_certificate_pdf_file->pdf_html);
     
         $filename = 'SC' . '_' . $year . '_' . $employee_id.'.pdf';
@@ -798,6 +1169,41 @@ if($type=="API"){
             ->where('ess.sub_institute_id', $sub_institute_id)
             ->get()->toArray();
 
+        /*
+         * F-110. THIS IS WHY hrms_salary_certificate HELD ZERO ROWS PLATFORM-WIDE.
+         *
+         * $get_all_details[0] was dereferenced below with no guard, so an
+         * employee with no salary structure FOR THAT YEAR produced
+         *
+         *   ErrorException: Undefined array key 0
+         *
+         * and the request died before reaching the insert. The audit recorded
+         * the table as empty and left "is it unused or unusable?" open (Q5).
+         * It is UNUSABLE: employee_salary_structures holds 8 rows for the whole
+         * platform, so almost every (employee, year) a user could pick has no
+         * structure, and the screen fatalled on all of them. Confirmed by
+         * calling it: the one combination that HAS a structure - employee 10,
+         * tenant 3, 2026 - succeeded and wrote the first row this table has ever
+         * held.
+         *
+         * A certificate cannot be produced without a structure: the structure IS
+         * the salary breakdown the certificate states. So: refuse with a
+         * sentence that says what to do, rather than a stack trace.
+         */
+        if ($get_all_details === []) {
+            /*
+             * null, NOT an exception. The first version of this guard threw a
+             * RuntimeException, which Laravel renders as HTTP 500 with an
+             * "exception" key - so a message that correctly said "add a salary
+             * structure" arrived looking like a crash, and the probe rightly
+             * failed it. "You have not set this up yet" is a 422, not a 500.
+             *
+             * The caller turns this into the refusal; see
+             * hrmsSalaryCertificateReport.
+             */
+            return null;
+        }
+
         $pay_type= DB::table('payroll_types')->where('payroll_type', 1)->whereIn('id',$payroll_type_ids)->get()->pluck('payroll_name','id'); 
 
         // Constructing the HTML string
@@ -805,7 +1211,23 @@ if($type=="API"){
         $html .= "<p>&nbsp;</p>";
         $html .= "<p>Date: <b>$date</b>,</p>";
         $html .= "<p style='text-align:center;'><u>TO WHOMESOEVER IT MAY CONCERN</u></p>";
-        $html .= "<p>This is to certify that, <b>{$get_all_details[0]->employee_name}</b> is currently working with our institution as an <b>{$get_all_details[0]->department_name}</b> since <b>{$get_all_details[0]->joining_year}</b>. Her monthly salary breakup is as follows:</p>";
+        /*
+         * F-131. "Her monthly salary breakup" was hardcoded here, on a document
+         * an employee takes to a bank. The gender WAS being read - $his is
+         * computed from u.gender in the loop below - and then only used further
+         * down, so this sentence called every employee "her" regardless.
+         *
+         * Unknown or unrecorded gender gets "Their", not a guess: a certificate
+         * that misgenders someone is worse than one that is neutral, and this
+         * one goes to a third party under the institution's name.
+         */
+        $possessive = match (strtoupper((string) ($get_all_details[0]->gender ?? ''))) {
+            'M'     => 'His',
+            'F'     => 'Her',
+            default => 'Their',
+        };
+
+        $html .= "<p>This is to certify that, <b>{$get_all_details[0]->employee_name}</b> is currently working with our institution as an <b>{$get_all_details[0]->department_name}</b> since <b>{$get_all_details[0]->joining_year}</b>. {$possessive} monthly salary breakup is as follows:</p>";
 
         // HTML table for salary details
         $html .= "<div style='margin: 0 auto; width: fit-content;'>";
@@ -1027,7 +1449,7 @@ if($type=="API"){
 
     // ✅ Fix: get sub_institute_id correctly for API vs Web
     if ($type == "API") {
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = $this->payrollTenantId($request);
     } else {
         $sub_institute_id = session()->get('sub_institute_id');
     }
@@ -1100,6 +1522,35 @@ if($type=="API"){
         $year = $request->year;
         $deductAmt = $request->deductAmt;
         $i=0;
+        /*
+         * F-143. The calculation matches this table's `month` EXACTLY, against
+         * the spelling the screen posts ('Aug'). Eleven of the twelve rows on
+         * live are spelled "8", "2" or "3" and can therefore never be found -
+         * adjustments worth up to 50,000 each, entered on a screen that
+         * reported success and silently ignored by every payroll run since.
+         *
+         * That is F-137's defect in a second table, and F-137's repair did not
+         * reach it. This is the same guard F-137 put on the payslip: one
+         * canonical spelling, and a month this system cannot name is not a
+         * month it will file an adjustment under.
+         *
+         * The eleven existing rows are NOT repaired here. "3" could be March or
+         * a March-year convention and only the tenant knows which; guessing at
+         * money is the one thing this audit does not do (Q9).
+         */
+        $canonicalMonth = \App\Traits\Helpers::canonicalMonth($month);
+
+        if ($canonicalMonth === null) {
+            $res = [
+                'status_code' => 0,
+                'message'     => 'Choose a month before saving. "' . $month . '" is not one this system can file under.',
+            ];
+
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        $month = $canonicalMonth;
+
         foreach ($deductAmt as $employee_id => $amount) {
             $checkArr = [
                 "month"=>$month,
@@ -1134,6 +1585,182 @@ if($type=="API"){
             $res['message']='Failed To Add !!';
         }
         return is_mobile($type, "payroll_deduction.index", $res);
+    }
+
+    /**
+     * Q9 / F-173. The payroll adjustments the calculation has never been able
+     * to find.
+     *
+     * hrms_emp_payroll_deduction.month is matched EXACTLY against the spelling
+     * the screen posts ('Aug'). Eleven of the twelve live rows are spelled
+     * "8", "2" or "3", so every payroll run since they were entered has
+     * skipped them - 343,001 in adjustments that the person who typed them
+     * watched succeed.
+     *
+     * F-143 stopped new ones being written. It deliberately did NOT repair the
+     * existing eleven, because "3" could be March, or a March-year convention,
+     * and only the tenant knows which. Guessing at money is the one thing this
+     * audit does not do.
+     *
+     * So this lists them for a human to resolve, and resolveDeductionOrphan()
+     * below applies only what that human chooses.
+     */
+    public function payrollDeductionOrphans(Request $request)
+    {
+        $type = $request->type;
+        $sub_institute_id = $this->payrollTenantId($request);
+
+        $valid = \App\Traits\Helpers::getMonths();
+
+        $rows = DB::table('hrms_emp_payroll_deduction as d')
+            ->leftJoin('tbluser as u', 'u.id', '=', 'd.employee_id')
+            ->leftJoin('payroll_types as p', 'p.id', '=', 'd.deduction_type')
+            ->whereNull('d.deleted_at')
+            ->where('d.sub_institute_id', $sub_institute_id)
+            ->whereNotIn('d.month', $valid)
+            ->orderBy('d.id')
+            ->get([
+                'd.id',
+                'd.month',
+                'd.year',
+                'd.employee_id',
+                'd.deduction_type',
+                'd.deduction_amount',
+                /*
+                 * When the row was ENTERED, which is the evidence that decides
+                 * what its month meant.
+                 *
+                 * On this deployment the eleven orphans were all created in
+                 * December 2025: four spelled "8" (entered 2025-12-01), four
+                 * spelled "2" with year 2020 (also 2025-12-01), and three
+                 * spelled "3" (2025-12-09). A 2020 adjustment entered in
+                 * December 2025 is not August, and not March either - it tells
+                 * whoever owns this data far more than the month field does.
+                 */
+                'd.created_at',
+                'd.updated_at',
+                DB::raw('TRIM(CONCAT_WS(" ", u.first_name, u.last_name)) as employee_name'),
+                'u.employee_no',
+                'p.payroll_name',
+                'p.status as head_status',
+                'p.deleted_at as head_deleted_at',
+                'p.sub_institute_id as head_tenant',
+            ]);
+
+        $res = [
+            'status_code' => 200,
+            'orphans'     => $rows,
+            'months'      => $valid,
+            'total'       => (float) $rows->sum('deduction_amount'),
+        ];
+
+        return is_mobile($type, 'payroll_deduction.index', $res);
+    }
+
+    /**
+     * Apply one explicit decision to one orphaned adjustment.
+     *
+     * Two actions only, both named by the caller:
+     *   set-month  - file it under a month the caller has chosen
+     *   delete     - soft-delete it
+     *
+     * There is no "repair all". The whole reason these rows are still here is
+     * that no rule can derive the right month from "3", and a bulk action
+     * would be that guess wearing a button.
+     */
+    public function resolveDeductionOrphan(Request $request)
+    {
+        $type = $request->type;
+        $sub_institute_id = $this->payrollTenantId($request);
+        $actorId = $this->payrollActorId($request);
+
+        $id     = (int) $request->input('id');
+        $action = (string) $request->input('action');
+
+        // Tenant-scoped by id, the F-146 rule: a by-id operation that does not
+        // name the tenant is a cross-tenant write waiting to happen.
+        $row = DB::table('hrms_emp_payroll_deduction')
+            ->where('id', $id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row) {
+            $res = ['status_code' => 0, 'message' => 'That adjustment was not found.'];
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        if ($action === 'delete') {
+            DB::table('hrms_emp_payroll_deduction')->where('id', $id)->update([
+                'deleted_at' => now(),
+                'deleted_by' => $actorId,
+                'updated_at' => now(),
+            ]);
+
+            $res = [
+                'status_code' => 200,
+                'message'     => 'Adjustment removed. It was never applied to a payslip.',
+            ];
+
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        if ($action !== 'set-month') {
+            $res = ['status_code' => 0, 'message' => 'Choose whether to re-date this adjustment or remove it.'];
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        // The SAME guard new writes go through (F-143). A month this system
+        // cannot name is not a month it will file an adjustment under, however
+        // it arrives.
+        $month = \App\Traits\Helpers::canonicalMonth($request->input('month'));
+
+        if ($month === null) {
+            $res = [
+                'status_code' => 0,
+                'message'     => 'Choose a month. "' . $request->input('month') . '" is not one this system can file under.',
+            ];
+
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        // Re-dating onto a month that already has an adjustment for the same
+        // employee and head would create the duplicate payrollDeductionStore
+        // upserts away from. Refused rather than merged: which amount wins is
+        // the caller's decision, not this method's.
+        $clash = DB::table('hrms_emp_payroll_deduction')
+            ->where('sub_institute_id', $sub_institute_id)
+            ->where('employee_id', $row->employee_id)
+            ->where('deduction_type', $row->deduction_type)
+            ->where('month', $month)
+            ->where('year', $row->year)
+            ->whereNull('deleted_at')
+            ->where('id', '!=', $id)
+            ->exists();
+
+        if ($clash) {
+            $res = [
+                'status_code' => 0,
+                'message'     => 'There is already an adjustment for that employee, head and month. '
+                               . 'Remove one of them, or choose a different month.',
+            ];
+
+            return is_mobile($type, 'payroll_deduction.index', $res);
+        }
+
+        DB::table('hrms_emp_payroll_deduction')->where('id', $id)->update([
+            'month'      => $month,
+            'updated_by' => $actorId,
+            'updated_at' => now(),
+        ]);
+
+        $res = [
+            'status_code' => 200,
+            'message'     => 'Filed under ' . $month . ' ' . $row->year
+                           . '. It will be applied the next time that month is generated.',
+        ];
+
+        return is_mobile($type, 'payroll_deduction.index', $res);
     }
 
     public function rollOver(Request $request)
@@ -1183,7 +1810,7 @@ if($type=="API"){
 
     public function rolloverEmployeeSalaryStructure(Request $request)
 {
-    $sub_institute_id = $request->input('sub_institute_id') ?? session()->get('sub_institute_id');
+    $sub_institute_id = $this->payrollTenantId($request) ?? session()->get('sub_institute_id');
     $currentYear = $request->input('year') ?? Carbon::now()->format('Y');
 
     $employeeIds = $request->input('employee_id', []);
@@ -1238,10 +1865,10 @@ if($type=="API"){
     public function monthlyPayrollReport(Request $request)
     {
         $type= $request->type;
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $user_profile = $request->get('user_profile_name');
         if($type=="API"){
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->payrollTenantId($request);
             $user_profile = $request->user_profile_name;
         }
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->orderBy('sort_order')->get();
@@ -1420,7 +2047,7 @@ if($type=="API"){
 
         $type = $request->input('type');
             if ($type === "API") {
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->payrollTenantId($request);
             }
         if($request->month && $request->year) {
             $list['month'] = $request->month;
@@ -1435,11 +2062,30 @@ if($type=="API"){
             ->whereNotNull('total_payment')
             ->get();//->toArray();
         
-            //$employeeData = [];
+            /*
+             * F-207. This called employeeDetails() ONCE PER PAYSLIP.
+             *
+             * employeeDetails() runs a joined query against tbluser and
+             * tbluserprofilemaster, so a 500-employee month issued 500
+             * sequential round-trips to the database. Measured on the app's own
+             * host with a seeded 500-employee tenant: 2,085 ms for the loop
+             * alone, against 16 ms for the payslip query it decorates. The
+             * screen was over two seconds slower than it needed to be, and the
+             * cost grows linearly - a 1,000-employee month would be four.
+             *
+             * It was invisible until now because the largest tenant on this
+             * deployment had ONE payslip.
+             *
+             * One call, keyed by employee_id. employeeDetails() already accepts
+             * an empty $employee_id to mean "everyone in the tenant", and it
+             * applies the same status and visibility rules either way, so this
+             * returns exactly the same rows - it just stops asking 500 times.
+             */
+            $allUsers = collect(employeeDetails($sub_institute_id))->keyBy('id');
+
             foreach ($employeeSalaryData as $key => $value) {
                 $employeeData[$key] = $value;
-                $getUserData = employeeDetails($sub_institute_id, $value->employee_id);
-                $employeeData[$key]->usersDetails = isset($getUserData[0]) ? $getUserData[0] : [];
+                $employeeData[$key]->usersDetails = $allUsers->get($value->employee_id, []);
             }
         }
         $currentYear = date('Y');
@@ -1468,12 +2114,40 @@ if($type=="API"){
     public function monthlyPayrollPdf(Request $request,$id, $month, $year,$pdfType='')
     {
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $syear = $request->get('syear');
         
         $employeeSalaryData = EmployeeMonthlySalaryData::with('getUser')->where([['employee_id', $id],[ 'sub_institute_id', $sub_institute_id],['month', $month],['year', $year]])->first();
 
         $employeeSalaryStructure = EmployeeSalaryStructure::where([['employee_id', $id],[ 'sub_institute_id', $sub_institute_id]])->first();
+
+        /*
+         * F-125. ->first() returns null for any employee with no salary
+         * structure, and line ~1610 below dereferenced it unguarded:
+         *
+         *   Attempt to read property "employee_salary_data" on null
+         *
+         * From monthlyPayrollStore that fatal lands AFTER the month's row has
+         * been written, so the caller sees a 500 for a save that partly
+         * succeeded - the worst of both. Reproduced on live with employee 582,
+         * who has no structure.
+         *
+         * A payslip cannot be produced without a structure: the structure is
+         * where the per-head figures come from, and inventing zeroes would
+         * print a payslip that says the employee earned nothing. So: no PDF for
+         * this employee, and the caller is told which employees were skipped
+         * rather than the whole request failing.
+         */
+        if (!$employeeSalaryStructure) {
+            Log::warning('Payslip skipped: no salary structure', [
+                'employee_id'      => $id,
+                'sub_institute_id' => $sub_institute_id,
+                'month'            => $month,
+                'year'             => $year,
+            ]);
+
+            return null;
+        }
 
         $get_school_name = DB::table('school_setup')->select('ReceiptHeader')->where(['id' => $sub_institute_id])->first();
 
@@ -1518,7 +2192,7 @@ if($type=="API"){
             }
             // if not attandance found add day in lwp 01-03-2025
             $request2 = new Request(['type'=>"API",'sub_institute_id'=>$sub_institute_id ,'syear'=>$syear,'from_date'=>$startOfMonth,'to_date'=>$endOfMonth,'department_id'=>$get_user_detail->department_id,'emp_id'=>$get_user_detail->id]);
-            $emp_att = $this->getTotalDays($request2);
+            $emp_att = $this->getTotalDays($request2, $sub_institute_id);
             if(isset($emp_att['totalDays'])){
                 $carbonDate = Carbon::createFromFormat('M Y', $request->month . ' ' . $request->year);
                 $totalMonthDays = $carbonDate->daysInMonth;
@@ -1587,19 +2261,28 @@ $dompdf->render();
 if ($pdfType == 'storeDoc') {
     $pdfContent = $dompdf->output();
     $fileName = 'emp_' . $id . '_payslip_' . $month . '_' . $year . '.pdf';
-    $file_path = 'public/staff_document/' . $fileName;
 
-    // Delete if already exists
-    if (Storage::disk('digitalocean')->exists($file_path)) {
-        Storage::disk('digitalocean')->delete($file_path);
-    }
+    /*
+     * Written through DocumentStorageService now, not a hand-rolled
+     * `public/staff_document/` path - that folder was one of three
+     * divergent conventions `staff_document`'s writers each used (see
+     * the document_library migration's docblock). The payslip is now a
+     * document_library row; the caller (monthlyPayrollStore) inserts it
+     * using the metadata returned here, same as any other upload.
+     */
+    $stored = (new DocumentStorageService())->storeGenerated(
+        $pdfContent,
+        $fileName,
+        'application/pdf',
+        (int) $id
+    );
 
-    // Store PDF in DigitalOcean Space
-    Storage::disk('digitalocean')->put($file_path, $pdfContent, 'public', [
-        'Cache-Control' => 'max-age=0, no-cache, no-store'
-    ]);
-
-    return $fileName;
+    return [
+        'file_name' => $fileName,
+        'storage_path' => $stored['storage_path'],
+        'size' => $stored['size'],
+        'checksum_sha256' => $stored['checksum_sha256'],
+    ];
 } else {
     // Download PDF directly
     return $dompdf->stream('salary.pdf');
@@ -1676,7 +2359,7 @@ if ($pdfType == 'storeDoc') {
         $sub_institute_id = $request->session()->get('sub_institute_id');
         if($type=="API"){
            
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->payrollTenantId($request);
         }
         $res['months'] = Helpers::getMonths();
         $res['years']= Helpers::getPairYears();
@@ -1699,7 +2382,16 @@ if ($pdfType == 'storeDoc') {
                     $q->whereIn('u.department_id',$request->department_id);
                 });
             })
-            ->selectRaw('employee_monthly_salary_data.*,u.id,CONCAT_WS(" ",COALESCE(u.first_name, "-"),COALESCE(u.middle_name, "-"),COALESCE(u.last_name, "-")) as full_name,u.employee_no,u.department_id as department_ids')
+            /*
+             * F-172. `u.id` was selected bare, AFTER
+             * employee_monthly_salary_data.*, so it overwrote the payslip's own
+             * `id`: the Aug 2025 row is payslip 22 and this reported id 6, the
+             * user id. Same class as F-168 on employee-payroll-history, and the
+             * value was redundant either way - the join is `u.id =
+             * employee_id`, so employee_id already carries it. Aliased rather
+             * than deleted, in case a Blade view reads it.
+             */
+            ->selectRaw('employee_monthly_salary_data.*,u.id as user_id,CONCAT_WS(" ",COALESCE(u.first_name, "-"),COALESCE(u.middle_name, "-"),COALESCE(u.last_name, "-")) as full_name,u.employee_no,u.department_id as department_ids')
             ->where([['employee_monthly_salary_data.month',$request->month],['employee_monthly_salary_data.year',$searchedYear],['employee_monthly_salary_data.sub_institute_id',$sub_institute_id]])
             ->get()->toArray();
             // dd(DB::getQueryLog($empData));
@@ -1840,7 +2532,7 @@ if ($pdfType == 'storeDoc') {
         $type = $request->type;
         $sub_institute_id = $request->session()->get('sub_institute_id');
         if($type=="API"){
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->payrollTenantId($request);
         }
         $employeeLists = employeeDetails($sub_institute_id);
         $payrollTypes = PayrollType::where('sub_institute_id',$sub_institute_id)->where('status', 1)->orderBy('sort_order')->get();
@@ -1868,6 +2560,26 @@ if ($pdfType == 'storeDoc') {
                     $q->where('u.department_id',$request->department_id);
                     });
                 })
+                /*
+                 * F-168. An explicit select, because tbluser has its OWN
+                 * `employee_id` column - a staff code - and with no select the
+                 * join let it shadow employee_monthly_salary_data.employee_id.
+                 * Payslip 22 belongs to employee 6 and this endpoint reported
+                 * employee_id 11, which is tbluser.employee_id for that person.
+                 * Anything following that id - a drill-through, a payslip PDF
+                 * link - lands on the wrong employee or on nothing.
+                 *
+                 * The payslip's columns come first so its employee_id wins; the
+                 * four name columns are the only ones the mapping below reads
+                 * from tbluser.
+                 */
+                ->select(
+                    'employee_monthly_salary_data.*',
+                    'u.employee_no',
+                    'u.first_name',
+                    'u.middle_name',
+                    'u.last_name'
+                )
                 ->when($request->emp_id!=0,function($q) use($request){
                     $q->where('employee_monthly_salary_data.employee_id',$request->emp_id);
                 })
@@ -1947,7 +2659,9 @@ public function payrollTypeReport(Request $request)
     $type = $request->input('type');
 
     if ($type === "API") {
-        $token = $request->input('token');
+        // Header first, matching the fix already applied at line ~3390 - this
+        // was reading the token from the URL/query only.
+        $token = $request->bearerToken() ?: $request->input('token');
         if (!$token) {
             return response()->json(['message' => 'Token not provided'], 401);
         }
@@ -1958,7 +2672,7 @@ public function payrollTypeReport(Request $request)
         }
 
         // Use sub_institute_id from request
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
 
         $res = [];
         $res['months'] = Helpers::getMonths();
@@ -1991,10 +2705,19 @@ public function payrollTypeReport(Request $request)
 
     public function payrollTypeReportCreate(Request $request){
         $type=$request->type;
-        $sub_institute_id=session()->get('sub_institute_id');
 
-        // echo "<pre>";print_r($request->all());exit;
-        $res['selectedMonth']=$month=$request->month;
+        /*
+         * F-139. Tenant from the token first, session second.
+         *
+         * This read `session()->get('sub_institute_id')` alone, so an API caller
+         * - who has no session - resolved null. Combined with the missing tenant
+         * predicate below, the report then returned EVERY organisation's payroll
+         * to anyone who asked. payrollTenantId() is the resolver every other
+         * method in this controller already uses.
+         */
+        $sub_institute_id = $this->payrollTenantId($request);
+
+        $res['selectedMonth']=$month=\App\Traits\Helpers::canonicalMonth($request->month) ?? $request->month;
         $res['selectedYear']=$year=$request->year;
         $res['selectedPayrollType']=$payrollTypes=$request->payroll_type;
         $res['payrollHeads'] =PayrollType::where('sub_institute_id',$sub_institute_id)->orderBy('sort_order')
@@ -2008,6 +2731,23 @@ public function payrollTypeReport(Request $request)
             })
             ->join('tbluserprofilemaster as up','up.id','=','u.user_profile_id')
             ->selectRaw('emsd.*,concat_ws(" ",COALESCE(u.first_name,"-"),COALESCE(u.last_name,"-")) as emp_name,u.employee_no,up.name as profile_name')
+            /*
+             * F-139. THE TENANT PREDICATE THAT WAS NOT HERE.
+             *
+             * This filtered on month and year alone, so Payroll Type Report
+             * showed every organisation's payslip figures - names, employee
+             * numbers, gross, deductions - to any tenant that opened it. The
+             * join to tbluser is filtered on status only, not on tenant, so it
+             * did not narrow anything either.
+             *
+             * Filtered on BOTH sides: emsd for the payslip's tenant, u for the
+             * employee's. They should never disagree - and after F-133 closed
+             * the write that made them disagree, nothing new can create a row
+             * where they do. Checking both is what makes that a guarantee here
+             * rather than an assumption about somewhere else.
+             */
+            ->where('emsd.sub_institute_id', $sub_institute_id)
+            ->where('u.sub_institute_id', $sub_institute_id)
             ->where(['emsd.month'=>$month,'emsd.year'=>$year])->get()->toArray();
 
             if(empty($res['payrollData'])){
@@ -2023,7 +2763,7 @@ public function payrollTypeReport(Request $request)
         $sub_institute_id = session()->get('sub_institute_id');
         $syear = session()->get('syear');
         if($type=="API"){
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->syear;
         }
         $res = session()->get('data');
@@ -2049,13 +2789,41 @@ public function payrollTypeReport(Request $request)
         $res['selMonth'] = $month = $request->month;
 
         if($type=="API"){
-            $sub_institute_id = $request->sub_institute_id;
+            $sub_institute_id = $this->payrollTenantId($request);
             $syear = $request->syear;
-            $userProfile = $request->user_profile_name;
-            $profileUserId = $request->user_id;
+            $profileUserId = $this->payrollActorId($request);
+
+            /*
+             * F-132. THE PROFILE NAME IS RESOLVED HERE, NOT TAKEN FROM THE REQUEST.
+             *
+             * This read $request->user_profile_name, and the React screen sends
+             * `user.role` - which is a ROLE_KEY ('administrator', 'hr_manager').
+             * employeeDetails() compares that against PROFILE NAMES:
+             *
+             *     $profileArr = ["Admin","Super Admin","School Admin","Assistant Admin"];
+             *
+             * 'administrator' is not in that list, so every HR and admin caller
+             * fell through to the subordinate filter - which returns the caller
+             * plus anyone whose tbluser.employee_id points at them. Measured on
+             * live: Monthly Payroll returned **2 of tenant 3's 122 employees**
+             * to an administrator. Payroll was being run for two people.
+             *
+             * NOT caused by Sprint 1's role_key migration - before it the value
+             * was 'admin' (lowercase), and in_array() is case-sensitive, so that
+             * missed the list too. This has always been broken.
+             *
+             * Resolving it from the caller's own profile also removes an
+             * identity claim from the request body: "which profile am I" is not
+             * something a caller should be able to assert, and sending
+             * "Admin" would previously have widened the result set.
+             */
+            $userProfile = DB::table('tbluser as u')
+                ->join('tbluserprofilemaster as p', 'p.id', '=', 'u.user_profile_id')
+                ->where('u.id', $profileUserId)
+                ->value('p.name') ?? '';
         }
-       
-        // get emp by search 
+
+        // get emp by search
         $employeeDetails = employeeDetails($sub_institute_id,$employee_id,'',$department_id,$userProfile,$profileUserId);
 
         // empData with val 
@@ -2064,13 +2832,35 @@ public function payrollTypeReport(Request $request)
         if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
             $searchedYear = ($request->year+1);
         }
+        /*
+         * F-121. ONE QUERY FOR THE WHOLE MONTH, not one per employee.
+         *
+         * This lookup was inside the loop below - a separate SELECT for each of
+         * tenant 3's 122 employees, against a database on another host. The
+         * measured round trip to 202.47.117.220 is 39.7 ms, so 122 employees
+         * cost roughly 4.8 seconds of pure latency for data that is one query.
+         *
+         * Sprint 2 collapsed this method's much larger inner loop (~3,172
+         * attendance queries) and stopped the endpoint timing out. This is the
+         * next layer of the same shape, and it is the last N+1 left in the
+         * request path.
+         *
+         * Keyed by employee_id: employee_monthly_salary_data is unique on
+         * (employee, month, year, tenant) as of F-109, so one row per key is
+         * now a property of the data rather than an assumption made here.
+         */
+        $monthlyByEmployee = DB::table('employee_monthly_salary_data')
+            ->where('sub_institute_id', $sub_institute_id)
+            ->where('year', $searchedYear)
+            ->where('month', $month)
+            ->whereIn('employee_id', array_column($employeeDetails, 'id'))
+            ->get()
+            ->keyBy('employee_id');
+
         foreach ($employeeDetails as $key => $value) {
             # store all details of employee
             $newData[$key] = $value;
-            // get monthly salary Data and add into newData array
-            // db::enableQueryLog();
-            $newData[$key]['monthlyData'] = DB::table('employee_monthly_salary_data')->where(['sub_institute_id'=>$sub_institute_id,'year'=>$searchedYear])->where('employee_id',$value['id'])->where('month',$month)->first();
-            // dd(db::getQueryLog( $newData[$key]['monthlyData']));
+            $newData[$key]['monthlyData'] = $monthlyByEmployee->get($value['id']);
 
             if(isset($newData[$key]['monthlyData']->total_day)){
                 $newData[$key]['totalDay'] = round($newData[$key]['monthlyData']->total_day,2);
@@ -2099,7 +2889,7 @@ public function payrollTypeReport(Request $request)
                 // $AttTotalAb = isset($attResponse['empData'][0]['total_ab_day']) ? $attResponse['empData'][0]['total_ab_day'] : 0;
 
                 // $emp_att = ($AttTotalDays - $AttTotalAb);
-                $emp_att = $this->getTotalDays($request2);
+                $emp_att = $this->getTotalDays($request2, $sub_institute_id);
                 $newData[$key]['totalDay'] = round($emp_att['totalDays'],2);
                 $newData[$key]['json'] = $emp_att['json'] ?? '';
             }
@@ -2141,7 +2931,7 @@ public function payrollTypeReport(Request $request)
 
     function getEmpMonthlyData(Request $request){
         // echo "<pre>";print_r($request->all());exit;
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->payrollTenantId($request);
         $totalDay = $request->totalDay;
         $searchedYear = $request->year;
         if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
@@ -2181,11 +2971,25 @@ public function payrollTypeReport(Request $request)
 
                 $checkDeduction = DB::table('hrms_emp_payroll_deduction')->where('employee_id',$request->emp_id)->where(['sub_institute_id'=>$sub_institute_id,'month'=>$request->month,'year'=>$searchedYear,'deduction_type'=>$payrollType->id])->first();
                 // echo "<pre>";print_r($checkDeduction);exit;
-                if($request->month=="Feb" && $payrollType->id==2){
-                    $payrollAmount=300;
-                }else{
-                    $payrollAmount=$employeeSalaryDetails[$payrollType->id];
-                }
+                /*
+                 * F-144. Deleted: a hardcoded February rule that forced pay head
+                 * id 2 to 300 for EVERY organisation on the platform.
+                 *
+                 *     if ($request->month == "Feb" && $payrollType->id == 2) { $payrollAmount = 300; }
+                 *
+                 * Head ids are global and carry no tenant, so this fired for
+                 * whoever happened to own head 2 - which is tenant 3's
+                 * 'daycount gg', soft-deleted since 2025-09-18. The branch was
+                 * dead only because a customer deleted a pay head, not because
+                 * anyone disabled the rule.
+                 *
+                 * Removing it changes nobody's pay: the calculation filters
+                 * status = 1, and no active head has id 2. If an organisation
+                 * genuinely needs a February override, that is FlatCapRule's
+                 * pattern - a tenant_setting resolved per organisation, which
+                 * Sprint 9 already built for F-111.
+                 */
+                $payrollAmount = $employeeSalaryDetails[$payrollType->id];
                 if(isset($checkDeduction->deduction_amount)){
                     $payrollAmount = ($payrollAmount + $checkDeduction->deduction_amount);
                 }
@@ -2275,6 +3079,7 @@ public function payrollTypeReport(Request $request)
         return $res;
     }
 
+//     /**
 //     public function monthlyPayrollStore(Request $request){
         
 //         $type=$request->type;
@@ -2378,33 +3183,307 @@ public function payrollTypeReport(Request $request)
 //         return is_mobile($type,'monthly_payroll.index',$res);
 //     }
 
+/**
+ * GET|POST /monthly-payroll-lock   — the month's lock state, lock it, or reopen it.
+ *
+ * F-129. One endpoint for three verbs because they are one decision about one
+ * thing, and splitting them would let a screen show a state it did not fetch
+ * from the same place that enforces it.
+ *
+ *   action = status   (default) what is this month's state?
+ *   action = lock     declare it finished
+ *   action = reopen   make it writable again, WITH A REASON
+ *
+ * Gated by the same hrit.role:admin,hr as every other payroll route. Locking a
+ * month is a payroll act, not a reporting one.
+ */
+public function monthlyPayrollLock(Request $request)
+{
+    $type = $request->input('type');
+    $sub_institute_id = $type === 'API'
+        ? $this->payrollTenantId($request)
+        : $request->session()->get('sub_institute_id');
+
+    $actor = $this->payrollActorId($request);
+
+    $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+        'month'  => 'required|string|max:20',
+        'year'   => 'required|integer|min:2000|max:2100',
+        'action' => 'nullable|in:status,lock,reopen',
+        // Required only when reopening, and deliberately so: a lock that can be
+        // lifted silently is not a lock.
+        'reason' => 'required_if:action,reopen|nullable|string|max:255',
+    ]);
+
+    if ($validator->fails()) {
+        $res = ['status_code' => 0, 'message' => $validator->errors()->first()];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
+    }
+
+    $lock   = app(\App\Services\Payroll\PayrollMonthLock::class);
+    $month  = $request->input('month');
+    $year   = (int) $request->input('year');
+    $action = $request->input('action', 'status');
+
+    if ($action === 'lock') {
+        $lock->lock($sub_institute_id, $month, $year, (int) $actor);
+    } elseif ($action === 'reopen') {
+        if (!$lock->isLocked($sub_institute_id, $month, $year)) {
+            $res = ['status_code' => 0, 'message' => $month . ' ' . $year . ' is not locked.'];
+
+            return is_mobile($type, 'monthly_payroll.index', $res);
+        }
+
+        $lock->reopen($sub_institute_id, $month, $year, (int) $actor, (string) $request->input('reason'));
+    }
+
+    $state = $lock->state($sub_institute_id, $month, $year);
+
+    $res = array_merge($state, [
+        'status_code' => 1,
+        'month'       => $month,
+        'year'        => $year,
+        'message'     => match ($action) {
+            'lock'   => $month . ' ' . $year . ' is locked. Saving it again will be refused until it is reopened.',
+            'reopen' => $month . ' ' . $year . ' is open again. The reason has been recorded against it.',
+            default  => $state['locked'] ? $month . ' ' . $year . ' is locked.' : $month . ' ' . $year . ' is open.',
+        },
+    ]);
+
+    return is_mobile($type, 'monthly_payroll.index', $res);
+}
+
 public function monthlyPayrollStore(Request $request)
 {
     $type = $request->type;
     $sub_institute_id = session()->get('sub_institute_id');
     if ($type == "API") {
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = $this->payrollTenantId($request);
+    }
+
+    /*
+     * F-137. ONE SPELLING OF THE MONTH, decided here, before anything reads it.
+     *
+     * `month` is a free-form varchar and live data holds two formats - 'Aug' and
+     * 'july'. Everything downstream matches on it exactly: the duplicate-
+     * collapsing upsert below, the lock, the payslip delete, the PDF lookup and
+     * My HR's ordering. The seventeen rows stored as 'july' were invisible to
+     * every one of them, which is why F-109's fix never collapsed the duplicates
+     * it was written for.
+     *
+     * Refused rather than guessed: a month this system cannot name is not a
+     * month it should file a payslip under.
+     */
+    $month = \App\Traits\Helpers::canonicalMonth($request->month);
+
+    if ($month === null) {
+        $res = [
+            'status_code' => 0,
+            'message'     => 'Unrecognised month "' . $request->month . '". Expected one of '
+                . implode(', ', \App\Traits\Helpers::getMonths()) . '.',
+        ];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
+    }
+
+    // Case-insensitive now: `in_array($request->month, ['Jan','Feb','Mar'])`
+    // filed a lowercase 'january' under the wrong payroll year.
+    $searchedYearForLock = \App\Traits\Helpers::isNextCalendarYearMonth($month)
+        ? ($request->year + 1)
+        : $request->year;
+
+    /*
+     * F-129. A LOCKED MONTH IS NOT WRITABLE, and this is where that is decided.
+     *
+     * Sprint 6 stopped a re-save duplicating a month. It did not stop a re-save
+     * happening - and once salaries are paid, silently rewriting the figures
+     * behind them is its own defect. The check is HERE, at the write, and not
+     * only on the screen: F-91 already found this module's payroll gated by a
+     * React component and nothing else.
+     */
+    $lock = app(\App\Services\Payroll\PayrollMonthLock::class);
+
+    if ($lock->isLocked($sub_institute_id, $month, (int) $searchedYearForLock)) {
+        $state = $lock->state($sub_institute_id, $month, (int) $searchedYearForLock);
+
+        $res = [
+            'status_code' => 0,
+            'message'     => $month . ' ' . $searchedYearForLock . ' is locked'
+                . ($state['locked_by'] ? ' by ' . $state['locked_by'] : '')
+                . ($state['locked_at'] ? ' on ' . $state['locked_at'] : '')
+                . '. Reopen the month with a reason before changing it.',
+            'locked'      => true,
+        ];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
     }
 
     $payrollVal = $request->payrollVal;
+
+    if (!is_array($payrollVal) || $payrollVal === []) {
+        $res = ['status_code' => 0, 'message' => 'No payroll rows were submitted.'];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
+    }
+
+    /*
+     * F-133, THE HALF THAT MATTERED MORE.
+     *
+     * The first fix for this finding scoped the "no payslip" NAME lookup to the
+     * tenant, which stopped the response disclosing other organisations' staff.
+     * It did not touch the write, and the write is worse: `payrollVal`'s keys
+     * are employee ids taken straight from the request and never validated,
+     * while tbluser ids are globally unique across tenants.
+     *
+     * So a tenant-3 administrator could POST payrollVal={"1":{...}} - employee 1
+     * belongs to tenant 1 - and the loop below would INSERT a payslip for that
+     * employee, filed under tenant 3, with figures the caller chose. Verified on
+     * live before this fix: it created row 34 for employee 1 under tenant 3, and
+     * the row was removed by hand.
+     *
+     * Not a disclosure. A forged payroll record for somebody else's employee.
+     *
+     * The caller's own tenant decides who may appear in the payload. Ids that do
+     * not belong to it are dropped and reported, not written - the same shape as
+     * bulkDecision()'s scope filter, which drops what the caller may not act on
+     * and reports the count so a partial application stays visible.
+     */
+    $submittedIds = array_map('intval', array_keys($payrollVal));
+
+    $ownIds = DB::table('tbluser')
+        ->whereIn('id', $submittedIds)
+        ->where('sub_institute_id', $sub_institute_id)
+        ->pluck('id')
+        ->map(fn ($id) => (int) $id)
+        ->all();
+
+    $foreignIds = array_values(array_diff($submittedIds, $ownIds));
+
+    $payrollVal = array_filter(
+        $payrollVal,
+        fn ($id) => in_array((int) $id, $ownIds, true),
+        ARRAY_FILTER_USE_KEY
+    );
+
+    if ($payrollVal === []) {
+        $res = [
+            'status_code' => 0,
+            'message'     => 'None of the submitted employees belong to this organisation.',
+        ];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
+    }
+
+    /*
+     * F-142. THE SERVER RECOMPUTES, AND THE POSTED TOTALS ARE A CHECKSUM.
+     *
+     * This method used to file total_payment, total_deduction and total_day
+     * exactly as posted. The arithmetic existed only to DRAW the screen
+     * (getEmpMonthlyData): the figures travelled to the browser and back, and
+     * whatever came back was stored. Reconciling the live rows found that NO
+     * payslip agreed with its own stored components - six of six - because
+     * nothing recomputed on either side of the wire.
+     *
+     * The fix deliberately does NOT silently replace the caller's numbers with
+     * the server's. It recomputes, compares, and REFUSES the whole save when
+     * they disagree, naming the difference. Two reasons:
+     *
+     *   - a payslip that changes when you press save, without saying so, is a
+     *     worse failure than one that is refused; and
+     *
+     *   - existing payslips are untouched either way, so this closes the hole
+     *     without answering Q8, which is about what to do with the six already
+     *     on file and belongs to the customer.
+     *
+     * getEmpMonthlyData is CALLED rather than reimplemented. A second copy of
+     * this arithmetic would drift from the first, which is exactly what F-149
+     * found in getEmployeeLists - two copies of one method, only one correct.
+     */
+    $mismatches = [];
+
+    foreach ($payrollVal as $employee_id => $value) {
+        $verify = new Request([
+            'type'             => 'API',
+            // bearerToken() FIRST. This request may have authenticated by
+            // Authorization header rather than a token field, and a synthetic
+            // Request carries no headers - so reading input('token') alone left
+            // the sub-request anonymous, payrollTenantId() returned null, no
+            // structure was found and the verification below silently skipped.
+            // It passed a forged payslip once before this line was right.
+            'token'            => $request->bearerToken() ?: $request->input('token'),
+            'sub_institute_id' => $sub_institute_id,
+            'user_id'          => $request->input('user_id'),
+            'emp_id'           => $employee_id,
+            'month'            => $month,
+            'year'             => $request->input('year'),
+            'totalDay'         => $value['total_day'] ?? 0,
+        ]);
+        $verify->setLaravelSession($request->hasSession() ? $request->session() : app('session.store'));
+
+        $computed = $this->getEmpMonthlyData($verify)['salaryData'] ?? [];
+
+        // No structure means there is nothing to compute against. That employee
+        // is already reported through $noPayslip below; leaving the existing
+        // behaviour alone here rather than turning a warning into a refusal.
+        if (!isset($computed['total_payment'], $computed['total_deduction'])) {
+            continue;
+        }
+
+        $postedPay = round((float) ($value['total_payment'] ?? 0), 2);
+        $postedDed = round((float) ($value['total_deduction'] ?? 0), 2);
+        $realPay   = round((float) $computed['total_payment'], 2);
+        $realDed   = round((float) $computed['total_deduction'], 2);
+
+        if (abs($postedPay - $realPay) >= 0.01 || abs($postedDed - $realDed) >= 0.01) {
+            $mismatches[] = [
+                'employee_id'      => (int) $employee_id,
+                'sent_payment'     => $postedPay,
+                'computed_payment' => $realPay,
+                'sent_deduction'   => $postedDed,
+                'computed_deduction' => $realDed,
+            ];
+            continue;
+        }
+
+        // Agreed - so store the SERVER's figures. Identical by definition here,
+        // and it means the stored row can never be the client's number.
+        $payrollVal[$employee_id]['total_payment']   = $realPay;
+        $payrollVal[$employee_id]['total_deduction'] = $realDed;
+    }
+
+    if ($mismatches !== []) {
+        $res = [
+            'status'      => '0',
+            'status_code' => 0,
+            'message'     => count($mismatches) . ' employee(s) had figures that do not match '
+                . 'the salary structure held for that employee and month. Nothing was saved.',
+            'mismatches'  => $mismatches,
+        ];
+
+        return is_mobile($type, 'monthly_payroll.index', $res);
+    }
+
     $jsonVal = [];
+
+    /** Employees whose month saved but whose payslip could not be produced. F-125. */
+    $noPayslip = [];
 
     // make json for payroll head
     foreach ($payrollVal as $employee_id => $value) {
-        $jsonVal[$employee_id] = json_encode($value['payrollHead']);
+        $jsonVal[$employee_id] = json_encode($value['payrollHead'] ?? []);
     }
 
     $i = 0;
 
-      $searchedYear = $request->year;
-        if(isset($request->month) &&  in_array($request->month, ['Jan', 'Feb', 'Mar'])){
-            $searchedYear = ($request->year+1);
-        }
+    // Already computed above from the canonical month; kept as its own name
+    // because the loop below reads it many times.
+    $searchedYear = $searchedYearForLock;
 
     // insert payroll data
     foreach ($payrollVal as $employee_id => $value) {
         $dataArr = [
-            'month' => $request->month,
+            'month' => $month,
             'year' => $searchedYear,
             'employee_id' => $employee_id,
             'sub_institute_id' => $sub_institute_id,
@@ -2416,47 +3495,217 @@ public function monthlyPayrollStore(Request $request)
             'created_at' => now(),
         ];
 
-        // insert into employee_monthly_salary_data
-        $insert = DB::table("employee_monthly_salary_data")->insert($dataArr);
+        /*
+         * F-109. This was an unconditional INSERT, so saving the same month
+         * twice produced two payslips for the same employee for the same month
+         * and every downstream report summed both. The frontend documented the
+         * hazard rather than avoiding it (services/hrms/payroll.ts:663-666,
+         * "will create duplicates if run twice").
+         *
+         * (employee, month, year, tenant) identifies a payslip. Re-running a
+         * month now REPLACES that month's figures, which is what "save" has
+         * always looked like on the screen.
+         *
+         * created_at is only set on insert - the row's identity does not change
+         * when its figures are corrected, and updated_at records the correction.
+         */
+        $key = [
+            'employee_id'      => $employee_id,
+            // F-137: the canonical spelling, not the raw request. This is the
+            // line that made F-109's collapse unreachable for the seventeen
+            // rows stored as 'july'.
+            'month'            => $month,
+            'year'             => $searchedYear,
+            'sub_institute_id' => $sub_institute_id,
+        ];
+
+        $figures = [
+            'total_deduction'      => $dataArr['total_deduction'],
+            'total_payment'        => $dataArr['total_payment'],
+            'received_by'          => $dataArr['received_by'],
+            'total_day'            => $dataArr['total_day'],
+            'employee_salary_data' => $dataArr['employee_salary_data'],
+            'updated_at'           => now(),
+            // WHO overwrote these figures. payrollActorId() exists for exactly
+            // this and the original write did not use it, so a corrected payslip
+            // recorded when it changed and never by whom.
+            'updated_by'           => $this->payrollActorId($request),
+        ];
+
+        /*
+         * F-138. ONE TRANSACTION, AND NOTHING IS DESTROYED.
+         *
+         * Three defects in the original block, all in the same eight lines:
+         *
+         *   - the update and the delete were not wrapped, so a failure between
+         *     them left the month with new figures on one row and stale
+         *     duplicates on the rest. deleteMonthlyPayrolls in this same file
+         *     already uses DB::transaction; this did not.
+         *   - the delete was a HARD delete of a payslip. deleted_at/deleted_by
+         *     exist on this table and were unused, so the superseded figures
+         *     were gone with no trace that they had ever been different.
+         *   - nothing recorded who did it.
+         *
+         * Money is not something to overwrite silently. The superseded rows are
+         * soft-deleted and attributed, so "what did this payslip say before, and
+         * who changed it" is answerable from the table.
+         */
+        DB::transaction(function () use ($key, $figures, $dataArr, $request) {
+            $existingRows = DB::table('employee_monthly_salary_data')
+                ->where($key)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->pluck('id')
+                ->all();
+
+            if ($existingRows === []) {
+                DB::table('employee_monthly_salary_data')->insert(array_merge($key, $figures, [
+                    'created_at' => $dataArr['created_at'],
+                ]));
+
+                return;
+            }
+
+            // Keep the earliest - it holds the original created_at, so the
+            // payslip's identity survives a correction to its figures.
+            $keepId = array_shift($existingRows);
+
+            DB::table('employee_monthly_salary_data')->where('id', $keepId)->update($figures);
+
+            if ($existingRows !== []) {
+                /*
+                 * SUPERSESSION IS RECORDED AS AN EVENT, NOT AS A TOMBSTONE ROW.
+                 *
+                 * A soft delete was the obvious answer and it is the wrong one
+                 * here: MariaDB has no partial indexes and NULLs are DISTINCT in
+                 * a UNIQUE key, so tombstoned rows would either collide with the
+                 * survivor or force deleted_at into the key - which would leave
+                 * the live rows unconstrained and defeat the index entirely.
+                 *
+                 * The before-image goes to the event store instead. g2g_event is
+                 * append-only by design (EventRecorder: "no UPDATE, no DELETE"),
+                 * AuditLogProjector::handles() returns true for every type, and
+                 * events:project runs every five minutes - so this lands in
+                 * g2g_audit_log with no new wiring.
+                 *
+                 * That closes three things at once: the "no trace" half of this
+                 * finding, the audit trail payroll never had (leave got one in
+                 * Sprint 7; attendance and payroll emit nothing), and the clean
+                 * table the unique index needs.
+                 */
+                $superseded = DB::table('employee_monthly_salary_data')
+                    ->whereIn('id', $existingRows)
+                    ->get();
+
+                try {
+                    app(\App\Services\Events\EventRecorder::class)->record(
+                        'payroll.payslip.superseded',
+                        (int) $key['sub_institute_id'],
+                        'employee_monthly_salary_data',
+                        (int) $keepId,
+                        $this->payrollActorId($request),
+                        [
+                            'employee_id' => (int) $key['employee_id'],
+                            'month'       => $key['month'],
+                            'year'        => (int) $key['year'],
+                            'kept_id'     => (int) $keepId,
+                            // The complete before-image, so the removal is
+                            // recoverable from the record rather than only from
+                            // a backup taken at the right moment.
+                            'superseded'  => $superseded->map(fn ($r) => (array) $r)->all(),
+                        ],
+                        null,
+                        'payroll.payslip.superseded:' . $key['sub_institute_id'] . ':'
+                            . $key['employee_id'] . ':' . $key['month'] . ':' . $key['year']
+                            . ':' . implode(',', $existingRows)
+                    );
+                } catch (\Throwable $e) {
+                    // The event is the trace, not the transaction. Losing it must
+                    // not lose the payroll correction - but it must be loud.
+                    Log::warning('Payslip supersession not recorded in the event store', [
+                        'kept_id' => $keepId, 'superseded' => $existingRows, 'error' => $e->getMessage(),
+                    ]);
+                }
+
+                DB::table('employee_monthly_salary_data')->whereIn('id', $existingRows)->delete();
+            }
+        });
+
         $i++;
 
         // generate PDF if total_day is not 0
         if ($dataArr['total_day'] != 0) {
-            $pdfName = $this->monthlyPayrollPdf($request, $employee_id, $request->month, $searchedYear, 'storeDoc');
+            $pdfResult = $this->monthlyPayrollPdf($request, $employee_id, $month, $searchedYear, 'storeDoc');
 
-            if (isset($pdfName)) {
+            // F-125. null now means "this employee has no salary structure, so no
+            // payslip could be produced" rather than a fatal. Collected and
+            // reported below - a silently missing payslip is how somebody does
+            // not get paid.
+            if ($pdfResult === null) {
+                $noPayslip[] = $employee_id;
+            }
+
+            if (isset($pdfResult) && is_array($pdfResult)) {
                 $docTitle = 'Payslip ' . $request->month . ' ' . $searchedYear;
 
-                $checkDoc = DB::table('staff_document')
+                /*
+                 * document_library, not staff_document - payslips are now
+                 * one of the writers this table has (see the
+                 * document_library migration's docblock). Matched by
+                 * owner + type + title + tenant, the same key the old
+                 * staff_document upsert used, so re-saving a month still
+                 * replaces that month's slip instead of duplicating it.
+                 */
+                $existing = DB::table('document_library')
                     ->where([
                         'sub_institute_id' => $sub_institute_id,
-                        'document_type_id' => 56,
-                        'user_id' => $employee_id,
-                        'file_name' => $pdfName
+                        'document_type' => 'payslip',
+                        'owner_id' => $employee_id,
+                        'title' => $docTitle,
                     ])
-                    ->first();
+                    ->whereNull('deleted_at')
+                    ->first(['id']);
+
+                $extractor = new TextExtractionManager();
+                // The PDF bytes are already written to the disk, not kept in
+                // memory here - extract straight from the stored object so
+                // this does not duplicate monthlyPayrollPdf's render.
+                try {
+                    $localCopy = tempnam(sys_get_temp_dir(), 'payslip_');
+                    file_put_contents($localCopy, Storage::disk((new DocumentStorageService())->disk())->get($pdfResult['storage_path']));
+                    $extractedText = $extractor->extract($localCopy, 'pdf');
+                    @unlink($localCopy);
+                } catch (\Throwable $e) {
+                    $extractedText = '';
+                }
 
                 $pdfData = [
-                    'document_title' => $docTitle,
                     'sub_institute_id' => $sub_institute_id,
-                    'document_type_id' => 56,
-                    'user_id' => $employee_id,
-                    'file_name' => $pdfName
+                    'owner_id' => $employee_id,
+                    'title' => $docTitle,
+                    'original_file_name' => $pdfResult['file_name'],
+                    'mime_type' => 'application/pdf',
+                    'size' => $pdfResult['size'],
+                    'checksum_sha256' => $pdfResult['checksum_sha256'],
+                    'storage_path' => $pdfResult['storage_path'],
+                    'category' => 'personnel',
+                    'document_type' => 'payslip',
+                    'document_date' => now()->toDateString(),
+                    'period_label' => $month . ' ' . $searchedYear,
+                    'extracted_text' => $extractedText !== '' ? $extractedText : null,
+                    'visibility' => 'private',
+                    'processing_status' => 'done',
+                    'updated_at' => now(),
                 ];
 
-                if (empty($checkDoc)) {
+                if (!$existing) {
+                    $pdfData['current_version'] = 1;
                     $pdfData['created_at'] = now();
-                    DB::table('staff_document')->insert($pdfData);
+                    // NULL means SYSTEM - nobody filed this by hand, payroll did.
+                    $pdfData['created_by'] = null;
+                    DB::table('document_library')->insert($pdfData);
                 } else {
-                    $pdfData['updated_at'] = now();
-                    DB::table('staff_document')
-                        ->where([
-                            'sub_institute_id' => $sub_institute_id,
-                            'document_type_id' => 56,
-                            'user_id' => $employee_id,
-                            'file_name' => $pdfName
-                        ])
-                        ->update($pdfData);
+                    DB::table('document_library')->where('id', $existing->id)->update($pdfData);
                 }
             }
         }
@@ -2468,7 +3717,67 @@ public function monthlyPayrollStore(Request $request)
         $res['message'] = "Not able to add data";
     } else {
         $res['status_code'] = 1;
-        $res['message'] = "Inserted Successfully";
+        // F-109: "Inserted" was inaccurate as well as duplicating - re-saving a
+        // month replaces its figures, and the message should say so.
+        // The canonical month, not the raw input: "saved for september 2026"
+        // when the row says 'Sep' invites exactly the confusion F-137 was about.
+        $res['message'] = $i . " employee(s) saved for " . $month . " " . $searchedYear . ".";
+    }
+
+    /*
+     * F-125. Named, not counted: "3 employees have no payslip" sends someone
+     * hunting; naming them is the difference between a warning and a task.
+     *
+     * F-133 - AND THE NAME LOOKUP IS TENANT SCOPED, which it was not when this
+     * was written in Sprint 8.
+     *
+     * The ids in $noPayslip come from $request->payrollVal, whose keys are never
+     * validated, and tbluser ids are globally unique across tenants. So the
+     * lookup below was an employee-name oracle: an HR user in tenant 1 posting
+     * payrollVal={"582":{...}} - employee 582 belongs to tenant 3 - got back
+     * "no payslip was generated for them: Vikram Sethi". Iterating ids
+     * enumerated staff names across every organisation on the platform.
+     *
+     * This sprint introduced that. The response used to be the constant
+     * "Inserted Successfully"; making it useful made it leak.
+     *
+     * Two changes, and the first is the one that matters:
+     *   - the query is filtered by tenant, so a foreign id resolves to nothing;
+     *   - ids that are not this tenant's are dropped from the reported list
+     *     entirely, so the count cannot disagree with the names either (which
+     *     was a second, cosmetic defect in the same block).
+     */
+    if ($noPayslip !== []) {
+        $ownEmployees = DB::table('tbluser')
+            ->whereIn('id', $noPayslip)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->selectRaw("id, TRIM(CONCAT_WS(' ', first_name, last_name)) AS n")
+            ->get();
+
+        // Rebuilt from what the tenant actually owns, not from what was posted.
+        $noPayslip = $ownEmployees->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        // A blank name column would otherwise render as an empty entry in the
+        // sentence - "have no payslip: , Vikram Sethi" - so fall back to the id.
+        $names = $ownEmployees
+            ->map(fn ($row) => trim((string) $row->n) !== '' ? $row->n : 'Employee #' . $row->id)
+            ->all();
+    }
+
+    if ($noPayslip !== []) {
+        $res['no_payslip']     = $noPayslip;
+        $res['warning']        = count($noPayslip) . ' employee(s) have no salary structure, so no payslip was '
+            . 'generated for them: ' . implode(', ', $names) . '. Add a salary structure and save the month again.';
+        $res['message']       .= ' ' . $res['warning'];
+    }
+
+    // F-133. Reported, not silently dropped - a save that quietly skipped rows
+    // would look like it had done more than it did. The ids are echoed back but
+    // NOT the names: naming them is the disclosure this finding is about.
+    if ($foreignIds !== []) {
+        $res['not_your_employees'] = $foreignIds;
+        $res['message'] .= ' ' . count($foreignIds) . ' submitted employee(s) do not belong to this '
+            . 'organisation and were ignored.';
     }
 
     return is_mobile($type, 'monthly_payroll.index', $res);
@@ -2483,7 +3792,7 @@ public function deleteMonthlyPayrolls(Request $request, $month)
     $sub_institute_id = session()->get('sub_institute_id');
 
     if ($type == "API") {
-        $sub_institute_id = $request->sub_institute_id ?? $sub_institute_id;
+        $sub_institute_id = $this->payrollTenantId($request) ?? $sub_institute_id;
     }
 
     // Validation
@@ -2516,15 +3825,18 @@ public function deleteMonthlyPayrolls(Request $request, $month)
                     $docTitle = 'Payslip ' . $month . ' ' . $year;
 
                     // Debug logs
-                    Log::info("Attempting to delete staff document for user_id=$empId, title=$docTitle");
+                    Log::info("Attempting to delete payslip document for user_id=$empId, title=$docTitle");
 
-                    // Delete staff document if exists
-                    DB::table('staff_document')->where([
-                        'user_id' => $empId,
-                        'document_type_id' => 56,
-                        'document_title' => $docTitle,
-                        'sub_institute_id' => $sub_institute_id
-                    ])->delete();
+                    // Soft-delete the document_library row if it exists (payslips moved off
+                    // staff_document - see the document_library migration's docblock).
+                    DB::table('document_library')->where([
+                        'owner_id' => $empId,
+                        'document_type' => 'payslip',
+                        'title' => $docTitle,
+                        'sub_institute_id' => $sub_institute_id,
+                    ])->whereNull('deleted_at')->update([
+                        'deleted_at' => now(),
+                    ]);
 
                     // Delete monthly salary record
                     $deleted = DB::table('employee_monthly_salary_data')->where('id', $dataId)->delete();
@@ -2562,10 +3874,33 @@ public function deleteMonthlyPayrolls(Request $request, $month)
     }
 }
 
-    // 2024-08-20 getTotal Days
-    public function getTotalDays(Request $request){
-        
-        $sub_institute_id=$request->sub_institute_id;
+    /**
+     * 2024-08-20 getTotal Days
+     *
+     * $tenantId exists because this method is called TWO ways, and one of them
+     * has no identity to resolve (F-93):
+     *
+     *   - as a route, GET /getTotalDays, with a real authenticated request; and
+     *   - internally, from monthlyPayrollCreate():2157 and the LWP path at
+     *     :1582, both of which hand it `new Request([...])` - a synthetic
+     *     request carrying `type=API` and a sub_institute_id but NO token and
+     *     NO session.
+     *
+     * payrollTenantId() correctly refuses to trust a request body, so on the
+     * synthetic request it found no token, fell through to $request->session(),
+     * and a synthetic Request has no session store: RuntimeException, HTTP 500,
+     * on every call. Monthly Payroll Report could not open for ANY role,
+     * administrators included, which is consistent with
+     * employee_monthly_salary_data holding 22 rows platform-wide.
+     *
+     * The caller already knows the tenant - it resolved it from the real
+     * request before building the synthetic one - so it passes it rather than
+     * asking a request that cannot answer. The route call is unchanged and
+     * still resolves identity the strict way.
+     */
+    public function getTotalDays(Request $request, ?int $tenantId = null){
+
+        $sub_institute_id = $tenantId ?: $this->payrollTenantId($request);
         $syear=$request->syear;
 
         $from_date = $request->input('from_date') ? Carbon::parse($request->input('from_date')) : null;
@@ -2573,8 +3908,12 @@ public function deleteMonthlyPayrolls(Request $request, $month)
         //echo $from_date."-".$to_date;exit;
         $user_id=$request->emp_id;
         $department_id=$request->department_id;
-        // getUserData 
-        $userData = DB::table('tbluser')->where('id',$user_id)->first();
+        /*
+         * F-121. `$userData` is assigned here and never read again anywhere in
+         * this method - grep it - so it was one wasted round trip per employee,
+         * 122 of them per month on tenant 3. Removed rather than left as
+         * decoration; the variable had no other reader.
+         */
         // get weekDays
         $startDate = Carbon::parse($from_date);
         $endDate = Carbon::parse($to_date);
@@ -2623,13 +3962,46 @@ public function deleteMonthlyPayrolls(Request $request, $month)
         $noAtt=$attArr=  [];
         $astartDate = Carbon::parse($from_date);
         $aendDate = Carbon::parse($to_date);
+        /*
+         * F-121. THE N+1 THAT MADE MONTHLY PAYROLL UNUSABLE.
+         *
+         * This loop used to run one COUNT query per non-Sunday day:
+         *
+         *     $attData = DB::table('hrms_attendances')
+         *         ->where([...,'user_id'=>$user_id])->where('day',$searchDate)
+         *         ->groupBy('day')->count();
+         *
+         * getTotalDays() is called once PER EMPLOYEE by monthlyPayrollCreate(),
+         * so one month for tenant 3 was 26 days x 122 employees = ~3,200
+         * round trips to a database on another host. Measured: 28s on a good
+         * run, and 60-66s on three consecutive runs afterwards - past PHP's
+         * 60s limit, so the screen 500'd with "Maximum execution time
+         * exceeded". Fixing the session bug (F-93) only revealed this; before
+         * that it failed in milliseconds.
+         *
+         * One grouped query for the whole range instead. Deliberately the same
+         * shape as the original - COUNT per day, not a presence check - because
+         * $totalAtt SUMS these, so a day with two rows must still contribute
+         * two. And no `whereNull('deleted_at')` was added: the original did not
+         * filter soft deletes, and this is a performance fix, not a change of
+         * answer.
+         */
+        $attendanceCounts = DB::table('hrms_attendances')
+            ->where('sub_institute_id', $sub_institute_id)
+            ->where('user_id', $user_id)
+            ->whereBetween('day', [$astartDate->format('Y-m-d'), $aendDate->format('Y-m-d')])
+            ->groupBy('day')
+            ->selectRaw('day, COUNT(*) as attendance_rows')
+            ->pluck('attendance_rows', 'day')
+            ->mapWithKeys(fn ($count, $day) => [Carbon::parse($day)->format('Y-m-d') => (int) $count])
+            ->all();
+
         for ($date = $astartDate; $date->lte($aendDate); $date->addDay()) {
             if ($date->isSunday()) {
                 $countSundays++;
             }else{
                 $searchDate = Carbon::parse($date)->format('Y-m-d');
-                $attData = DB::table('hrms_attendances')
-                ->where(['sub_institute_id'=>$sub_institute_id,'user_id'=>$user_id])->where('day',$searchDate)->groupBy('day')->count();
+                $attData = $attendanceCounts[$searchDate] ?? 0;
                 if($attData>0){
                     if(!in_array($searchDate,$holidayDates)){
                         $totalAtt += $attData;

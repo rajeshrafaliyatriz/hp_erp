@@ -1,0 +1,159 @@
+MENU ROWS PARSED: 182   |   registered ids: 59   registered accessLinks: 59
+
+CONTENT MAP FILES AND LOADER REGISTRATION
+----------------------------------------------------------------------------------------------------
+  m0   entries=1    loader keys: m0
+  m1   entries=6    loader keys: 1
+  m2   entries=12   loader keys: 2
+  m3   entries=8    loader keys: 3
+  m4   entries=8    loader keys: 4
+  m5   entries=12   loader keys: 5
+  m6   entries=11   loader keys: 204
+  m7   entries=8    loader keys: 186
+
+BROKEN NAVIGATION - user can SEE and CLICK it, and nothing renders
+(effectively visible = itself and every ancestor status=1; leaf = has no children)
+----------------------------------------------------------------------------------------------------
+  TOTAL: 0
+
+CONTAINER NODES WITH NO SCREEN (expected - they only expand a submenu)
+----------------------------------------------------------------------------------------------------
+  id=186   Agentic AI                                     /module/agentic-ai
+  id=2     Competency Management                          /module/competency-management
+  id=5     HRIT Management                                /module/hrit-solutions
+  id=93    Attendance Management                          /module/hrit-solutions/attendance-management
+  id=94    Leave management                               /module/hrit-solutions/leave-management
+  id=95    Payroll Management                             /module/hrit-solutions/payroll-management
+  id=4     LMS                                            /module/lms
+  id=76    Administration                                 /module/lms/administration
+  id=74    Learning                                       /module/lms/learning
+  id=75    Training & Records                             /module/lms/training-and-records
+  id=1     Organizational Management                      /module/organizational-management
+  id=205   Compliance & Discipline                        /module/organizational-management/compliance-and-discipline
+  id=7     Organization Setup                             /module/organizational-management/organization-setup
+  id=8     User Management                                /module/organizational-management/user-management
+  id=3     Talent Management                              /module/talent-management
+  id=204   Task Management                                /module/task-management
+  TOTAL: 16
+
+HIDDEN BY AN ANCESTOR - status=1 itself but an ancestor is status=0
+----------------------------------------------------------------------------------------------------
+  id=86    Assessment List                            (blocked by: Assesment library)
+  id=132   Attendance Report                          (blocked by: HRMS Reports)
+  id=143   Bankwise Payroll Report                    (blocked by: HRMS Reports)
+  id=89    Career Awareness                           (blocked by: Career Explorer)
+  id=92    Career Explorer                            (blocked by: Career Explorer)
+  id=111   Complaince library                         (blocked by: Compliance Management)
+  id=33    Complaint Mgmt                             (blocked by: Complaint Mgmt)
+  id=131   Complaint Report                           (blocked by: Complaint)
+  id=149   Counselling Report                         (blocked by: Counselling Report)
+  id=116   Deceplinary action and their management    (blocked by: Deceplinry management)
+  id=135   Dept.wise Attendance Report                (blocked by: HRMS Reports)
+  id=146   Document Report                            (blocked by: Document Report)
+  id=134   Early Going Report                         (blocked by: HRMS Reports)
+  id=126   Email Report                               (blocked by: Communication Report)
+  id=151   Employee Analysis Report                   (blocked by: LMS Report)
+  id=148   Employee Info Report                       (blocked by: Organization Management Report)
+  id=169   Employee Onboarding                        (blocked by: Talent Onboarding)
+  id=114   Front Desk                                 (blocked by: Front Desk Operations)
+  id=150   Frontdesk Report                           (blocked by: Frontdesk Report)
+  id=195   HR Workforce Analysis Report               (blocked by: Organization Management Report)
+  id=196   Human Productivity & Operational Excellenc (blocked by: Organization Management Report)
+  id=90    Intrest Profiler                           (blocked by: Career Explorer)
+  id=91    Knowing Yourself                           (blocked by: Career Explorer)
+  id=201   Leads                                      (blocked by: Marketing)
+  id=138   Leave Encashment                           (blocked by: HRMS Reports)
+  id=136   Leave Report                               (blocked by: HRMS Reports)
+  id=137   Leave Summery Report                       (blocked by: HRMS Reports)
+  id=147   Log Report                                 (blocked by: Log Report)
+  id=112   Manage Document                            (blocked by: Document Management System)
+  id=113   Manage Handbook                            (blocked by: Organization Handbook)
+  id=200   Marketing                                  (blocked by: CRM)
+  id=202   Master Fields                              (blocked by: CRM)
+  id=145   Monthly Attendance Report                  (blocked by: HRMS Reports)
+  id=197   My Learning Report                         (blocked by: Organization Management Report)
+  id=133   New Attendance Report                      (blocked by: HRMS Reports)
+  id=129   Notification Report                        (blocked by: Communication Report)
+  id=122   Organization Management Report             (blocked by: Reports)
+  id=141   Payroll Report                             (blocked by: HRMS Reports)
+  id=142   Payroll Type Report                        (blocked by: HRMS Reports)
+  id=153   Question wise Report                       (blocked by: LMS Report)
+  id=152   Quiz Progress Report                       (blocked by: LMS Report)
+  id=128   Register User Report                       (blocked by: Communication Report)
+  id=139   Salary Structure Report                    (blocked by: HRMS Reports)
+  id=87    Search skill                               (blocked by: Skill Assessment)
+  id=88    Self skill rating                          (blocked by: Skill Assessment)
+  id=30    Send Email Other User                      (blocked by: Communication Tools)
+  id=29    Send Email User                            (blocked by: Communication Tools)
+  id=28    Send Notification User                     (blocked by: Communication Tools)
+  id=127   Send SMS Report                            (blocked by: Communication Report)
+  id=27    Send SMS to User                           (blocked by: Communication Tools)
+  id=31    Send WhatsApp User                         (blocked by: Communication Tools)
+  id=160   Task Analysis Report                       (blocked by: Organization Management Report)
+  id=32    Template Management                        (blocked by: Template Management)
+  id=144   User Payroll History                       (blocked by: HRMS Reports)
+  id=130   WhatsApp Report                            (blocked by: Communication Report)
+  TOTAL: 55
+
+DISABLED MENU ENTRIES (status=0 - built or planned, hidden from users)
+----------------------------------------------------------------------------------------------------
+  id=14    lvl=3  Admin and Configuration Module                 /module/organizational-management/organization-setup/admin-a
+  id=77    lvl=2  Assesment library                              /module/lms/assesment-library
+  id=162   lvl=3  Attendance Report                              /module/hrit-solutions/attendance-management/attendance-repo
+  id=199   lvl=1  CRM                                            /module/crm
+  id=79    lvl=2  Career Explorer                                /module/lms/career-explorer
+  id=25    lvl=3  Certifications                                 /module/organizational-management/user-management/certificat
+  id=117   lvl=2  Communication Report                           /module/reports/communication-report
+  id=9     lvl=2  Communication Tools                            /module/organizational-management/communication-tools
+  id=50    lvl=2  Compensation                                   /module/talent-management/compensation
+  id=118   lvl=2  Complaint                                      /module/reports/complaint
+  id=11    lvl=2  Complaint Mgmt                                 /module/organizational-management/complaint-mgmt
+  id=96    lvl=2  Compliance Management                          /module/hrit-solutions/compliance-management
+  id=123   lvl=2  Counselling Report                             /module/reports/counselling-report
+  id=115   lvl=2  Deceplinry management                          /module/hrit-solutions/deceplinry-management
+  id=164   lvl=3  Department Wise Report                         /module/hrit-solutions/attendance-management/department-wise
+  id=97    lvl=2  Document Management System                     /module/hrit-solutions/document-management-system
+  id=120   lvl=2  Document Report                                /module/reports/document-report
+  id=163   lvl=3  Early going Report                             /module/hrit-solutions/attendance-management/early-going-rep
+  id=184   lvl=3  Employee Directory Analytics Report            /module/reports/organization-management-report/employee-dire
+  id=185   lvl=3  Employee Skill Coverage Matrix Report          /module/reports/organization-management-report/employee-skil
+  id=99    lvl=2  Front Desk Operations                          /module/hrit-solutions/front-desk-operations
+  id=124   lvl=2  Frontdesk Report                               /module/reports/frontdesk-report
+  id=15    lvl=3  Group wise right management                    /module/organizational-management/organization-setup/group-w
+  id=198   lvl=2  HR Template Engine                             /module/talent-management/hr-template-engine
+  id=181   lvl=2  HRIT Dashboard                                 /module/hrit-solutions/hrit-dashboard
+  id=119   lvl=2  HRMS Reports                                   /module/reports/hrms-reports
+  id=167   lvl=3  Holiday Master                                 /module/hrit-solutions/leave-management/holiday-master
+  id=16    lvl=3  Individual right management                    /module/organizational-management/organization-setup/individ
+  id=125   lvl=2  LMS Report                                     /module/reports/lms-report
+  id=166   lvl=3  Leave Allocation                               /module/hrit-solutions/leave-management/leave-allocation
+  id=121   lvl=2  Log Report                                     /module/reports/log-report
+  id=161   lvl=2  Organization Dashboard                         /module/organizational-management/organization-dashboard
+  id=98    lvl=2  Organization Handbook                          /module/hrit-solutions/organization-handbook
+  id=187   lvl=2  Pal                                            https://learningagent-kxvkny4y8p5ud4abjappvx7.streamlit.app/
+  id=6     lvl=1  Reports                                        /module/reports
+  id=107   lvl=3  Rollover Salary Structure                      /module/hrit-solutions/payroll-management/rollover-salary-st
+  id=17    lvl=3  Search Employees by Skills                     /module/organizational-management/organization-setup/search-
+  id=78    lvl=2  Skill Assessment                               /module/lms/skill-assessment
+  id=26    lvl=3  Skill Gap Analysis                             /module/organizational-management/user-management/skill-gap-
+  id=24    lvl=3  Skills                                         https://form-scholar-clone.vercel.app/submit/9b13d496-362e-4
+  id=21    lvl=3  Suggestion for employee                        /module/organizational-management/organization-setup/suggest
+  id=20    lvl=3  Suggestion to for department & Department head /module/organizational-management/organization-setup/suggest
+  id=19    lvl=3  Suggestion to organization                     /module/organizational-management/organization-setup/suggest
+  id=180   lvl=2  Talent Onboarding                              /module/talent-management/talent-onboarding
+  id=179   lvl=2  Talent Onboarding Dashboard                    /module/talent-management/talent-onboarding-dashboard
+  id=159   lvl=2  Task Analysis Report                           /module/reports/task-analysis-report
+  id=18    lvl=3  Task Assignment & Progress                     /module/organizational-management/organization-setup/task-as
+  id=10    lvl=2  Template Management                            /module/organizational-management/template-management
+  id=183   lvl=3  Workforce Analytics Report                     /module/reports/organization-management-report/workforce-ana
+  TOTAL: 49
+
+EXTERNAL LINKS IN NAVIGATION (leaves the product)
+----------------------------------------------------------------------------------------------------
+  id=24    status=0 Skills                         https://form-scholar-clone.vercel.app/submit/9b13d496-362e-45b4-b9f8-de0867b9452
+  id=187   status=0 Pal                            https://learningagent-kxvkny4y8p5ud4abjappvx7.streamlit.app/
+
+DUPLICATE access_link VALUES (two menu items pointing at the same screen)
+----------------------------------------------------------------------------------------------------
+
+SUMMARY: wired=63  broken-nav=0  containers=16  hidden-by-ancestor=55  disabled=49  external=2

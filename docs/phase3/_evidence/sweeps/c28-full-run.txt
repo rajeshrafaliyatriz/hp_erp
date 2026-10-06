@@ -1,0 +1,61 @@
+<pre></pre><pre></pre>
+=== C23 read-half guard ===
+LEAK-NOSCOPE 4
+FAIL        46
+PASS        319
+VACUOUS     89
+UNTESTABLE  454
+
+--- FAILURES (the worklist) ---
+  [NOSCOPE] buildwithAIController@index            api/index                                tenant B data present with NO impersonation: Community Care Associate | Senior Community Care Associate
+  [NOSCOPE] lms_lessonplanController@ajax_DayWiseData lms/ajax_daywisedata                     tenant B data present with NO impersonation: Community Care Associate | Senior Community Care Associate
+  [NOSCOPE] lms_lessonplanController@ajax_contentMasterData lms/ajax_contentmasterdata               tenant B data present with NO impersonation: Community Care Associate | Ambulance Readiness and Maintenance
+  [NOSCOPE] lms_lessonplanController@ajax_questionPaperData lms/ajax_questionpaperdata               tenant B data present with NO impersonation: Community Care Associate | Senior Community Care Associate
+  jobroletaskcontroller@index                    api/job-role-tasks                           response CHANGED with tenant B (54 vs 132 bytes, delta 78)
+  jobroletexonomycontroller@index                api/jobroletexonomies                        response CHANGED with tenant B (221 vs 672 bytes, delta 451)
+  skillcontroller@index                          api/skills                                   tenant B data returned when impersonating: Community Care Associate | Ambulance Readiness and Maintenance
+  CompetencyDashboardController@getRoleSimilarity api/competency/role-similarity               response CHANGED with tenant B (5857 vs 5857 bytes, delta 0)
+  AuditController@export                         api/competency/audit/export                  response CHANGED with tenant B (4797 vs 5297 bytes, delta 500)
+  assignmentController@stats                     api/lmsAssignment/stats                      response CHANGED with tenant B (106 vs 106 bytes, delta 0)
+  assignmentController@learners                  api/lmsAssignment/learners                   response CHANGED with tenant B (5874 vs 4294 bytes, delta 1580)
+  assignmentController@enrollments               api/lmsAssignment/enrollments                tenant B data returned when impersonating: Ambulance Readiness and Maintenance
+  assignmentController@index                     api/lmsAssignment                            response CHANGED with tenant B (25 vs 466 bytes, delta 441)
+  DepartmentManagementController@index           api/departments-management                   response CHANGED with tenant B (6595 vs 20932 bytes, delta 14337)
+  talent_interviewpanelController@getInterviewPanel api/interview-panel/list                     tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate
+  EmployeeDirectoryAnalyticsController@getKPIs   api/reports/employee-directory-analytics     response CHANGED with tenant B (287 vs 287 bytes, delta 0)
+  ExcelAutomationAgentController@credentialStatus api/excel-agent/credentials                  response CHANGED with tenant B (108 vs 58 bytes, delta 50)
+  ExcelAutomationAgentController@downloadTemplate api/excel-agent/template                     response CHANGED with tenant B (0 vs 58 bytes, delta 58)
+  TemplateController@index                       api/templates                                response CHANGED with tenant B (2 vs 893654 bytes, delta 893652)
+  LeaveTypeController@index                      leave-type                                   response CHANGED with tenant B (21 vs 817 bytes, delta 796)
+  HolidayController@index                        holiday                                      response CHANGED with tenant B (48 vs 2281 bytes, delta 2233)
+  ApplyLeaveController@index                     leave-apply                                  response CHANGED with tenant B (858 vs 3152 bytes, delta 2294)
+  LeaveSummaryReportController@leaveSummaryReportShow leave-summary-report/create                  response CHANGED with tenant B (245 vs 1009 bytes, delta 764)
+  masterSetupController@index                    school_setup/master_setup                    tenant B data returned when impersonating: Ambulance Readiness and Maintenance | Care Assistance
+  sub_std_mapController@index                    school_setup/sub_std_map                     tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate
+  CustomModuleController@menuLevel2              menuLevel2                                   response CHANGED with tenant B (128 vs 128 bytes, delta 0)
+  AJAXController@getSkillCompetency              getSkillCompetency                           tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate
+  courseRecommandation@index                     courses-recommendation                       response CHANGED with tenant B (317 vs 82 bytes, delta 235)
+  courseController@index                         lms/course_master                            tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate
+  questionmasterController@indexChapter          lms/question_chapter_master                  tenant B data returned when impersonating: Community Care Associate | Senior Community Care Associate
+  assignmentController@stats                     lms/lmsAssignment/stats                      response CHANGED with tenant B (106 vs 106 bytes, delta 0)
+  assignmentController@index                     lms/lmsAssignment                            response CHANGED with tenant B (25 vs 466 bytes, delta 441)
+  taskController@taskAnalysisReport              task_analysis_report                         tenant B data returned when impersonating: Care Assistance | Support Service to Seniors
+  tblmenumasterG2gController@displayUserProfilesG2g user/ajax_user_profiles_g2g                  response CHANGED with tenant B (281 vs 447 bytes, delta 166)
+  organizationDetailsController@index            settings/organization_data                   response CHANGED with tenant B (421 vs 982 bytes, delta 561)
+  discliplinaryManagementController@index        settings/discliplinary_management            response CHANGED with tenant B (46 vs 1174 bytes, delta 1128)
+  HolidayController@index                        hrms/holiday                                 response CHANGED with tenant B (48 vs 2281 bytes, delta 2233)
+  PayrollController@payrollType                  payroll-type                                 response CHANGED with tenant B (11 vs 937 bytes, delta 926)
+  PayrollController@payrollTypeReport            payroll-type-report                          response CHANGED with tenant B (203 vs 1785 bytes, delta 1582)
+  PayrollController@employeeSalaryStructure      employee-salary-structure                    response CHANGED with tenant B (758219 vs 479236 bytes, delta 278983)
+  PayrollController@form16                       form16                                       response CHANGED with tenant B (175 vs 3358 bytes, delta 3183)
+  PayrollController@payrollDeduction             payroll-deduction                            response CHANGED with tenant B (379277 vs 239150 bytes, delta 140127)
+  PayrollController@monthlyPayrollReport         monthly-payroll-report                       response CHANGED with tenant B (379541 vs 239303 bytes, delta 140238)
+  PayrollController@employeePayrollHistory       employee-payroll-history                     response CHANGED with tenant B (379263 vs 239024 bytes, delta 140239)
+  PayrollController@hrmsSalaryCertificateIndex   hrms-salary-certificate                      response CHANGED with tenant B (41572 vs 42519 bytes, delta 947)
+  HrmsController@generalSettingIndex             hrms-general-setting                         response CHANGED with tenant B (343 vs 857 bytes, delta 514)
+  HrmsController@departmentAttendanceReport      departmentwise-attendance-report             response CHANGED with tenant B (84 vs 84 bytes, delta 0)
+  HrmsController@getHolidays                     get-holidays                                 response CHANGED with tenant B (128 vs 128 bytes, delta 0)
+  PayrollController@monthlyPayrollCreate         monthly-payroll/create                       response CHANGED with tenant B (406725 vs 255518 bytes, delta 151207)
+  HrmsLeaveController@create                     hrms/designation_leave/create                response CHANGED with tenant B (889 vs 2447 bytes, delta 1558)
+
+full results -> c23-result.json (912 rows)

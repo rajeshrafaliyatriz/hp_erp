@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\ai_generated_assessment;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\lms\questionpaperModel;
@@ -12,6 +13,24 @@ use App\Models\ai_generated_assessment\AnswerMaster;
 
 class generateAssessmentController extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     public function index(Request $request)
     {
         $query = questionpaperModel::query();
@@ -26,7 +45,7 @@ class generateAssessmentController extends Controller
         }
 
         if ($request->filled('sub_institute_id')) {
-            $query->where('sub_institute_id', $request->sub_institute_id);
+            $query->where('sub_institute_id', $this->apiTenantId($request));
         }
 
         $papers = $query->orderBy('created_on', 'desc')->get();
@@ -111,8 +130,8 @@ class generateAssessmentController extends Controller
                             'mapping_type_id' => $mappingData['mapping_type_id'],
                             'mapping_value_id' => $mappingData['mapping_value_id'],
                             'reasons' => $mappingData['reasons'] ?? null,
-                            'created_by' => $request->created_by,
-                            'sub_institute_id' => $request->sub_institute_id,
+                            'created_by' => $this->g2gActorId($request),
+                            'sub_institute_id' => $this->apiTenantId($request),
                         ]);
                         Log::info('Created mapping id: ' . $mapping->id . ' stored type: ' . $mapping->mapping_type_id . ' value: ' . $mapping->mapping_value_id);
                     }

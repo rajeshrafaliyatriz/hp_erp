@@ -4,18 +4,83 @@ use App\Http\Controllers\Api\IndustryController;
 use App\Http\Controllers\Api\jobrolecontroller;
 use App\Http\Controllers\Api\skillcontroller;
 use App\Http\Controllers\Api\SkillDevelopmentController;
+use App\Http\Controllers\Api\LmsAssessmentController;
+use App\Http\Controllers\Api\LmsCourseController;
+use App\Http\Controllers\Api\LmsGovernanceController;
+use App\Http\Controllers\Api\LmsPartnerController;
+use App\Http\Controllers\Api\AiCourseController;
+use App\Http\Controllers\Api\LmsLearningController;
+use App\Http\Controllers\Api\LmsSessionController;
 use App\Http\Controllers\libraries\jobroletexonomycontroller;
 use App\Http\Controllers\libraries\jobroletaskcontroller;
 use App\Http\Controllers\libraries\jobroleskillcontroller;
 use App\Http\Controllers\HRMS\HrmsController;
-use App\Http\Controllers\Api\CompetencyDashboardController;
 use App\Http\Controllers\Api\CompetencyDashboard\CompetencyDashboardController as SubCompetencyDashboardController;
+use App\Http\Controllers\Api\Competency\CommandCenterController as CompetencyCommandCenterController;
+// NAMED FOR WHAT IT DOES. CompetencyController manages SKILL LIBRARY entries -
+// its store() inserts into s_users_skills, a flat skill row. It does NOT create a
+// competency in Q-A2's sense (a named bundle of KASBA items); that is
+// CompetencyDefinitionController, on /competency/definitions.
+use App\Http\Controllers\Api\Competency\CompetencyController as SkillLibraryCrudController;
+use App\Http\Controllers\Api\Competency\JobRoleMergeController;
+use App\Http\Controllers\Api\Competency\FrameworkController as CompetencyFrameworkController;
+use App\Http\Controllers\Api\Competency\AssessmentController as CompetencyAssessmentController;
+use App\Http\Controllers\Api\Competency\AssessmentCycleController as CompetencyAssessmentCycleController;
+use App\Http\Controllers\Api\Competency\EmployeeCompetencyProfileController;
+use App\Http\Controllers\Api\Competency\CertificationController as CompetencyCertificationController;
+use App\Http\Controllers\Api\Competency\CertificationRequirementController as CompetencyCertificationRequirementController;
+use App\Http\Controllers\Api\Competency\DevelopmentPlanController as CompetencyDevelopmentPlanController;
+use App\Http\Controllers\Api\Competency\StudioController as CompetencyStudioController;
+use App\Http\Controllers\Api\Competency\RoleMappingController as CompetencyRoleMappingController;
+use App\Http\Controllers\Api\Competency\MappingReviewController as CompetencyMappingReviewController;
+use App\Http\Controllers\Api\Competency\CareerPathController as CompetencyCareerPathController;
+use App\Http\Controllers\Api\Competency\LearningAssignmentController as CompetencyLearningAssignmentController;
+use App\Http\Controllers\Api\Competency\AuditController as CompetencyAuditController;
+use App\Http\Controllers\Api\Competency\LibraryController as CompetencyLibraryController;
+use App\Http\Controllers\Api\Competency\ApprovalController as CompetencyApprovalController;
+use App\Http\Controllers\Api\Agentic\AgentController as AgenticAgentController;
+use App\Http\Controllers\Api\Agentic\ConfigController as AgenticConfigController;
+use App\Http\Controllers\Api\Agentic\RunController as AgenticRunController;
+use App\Http\Controllers\Api\Agentic\ToolController as AgenticToolController;
+use App\Http\Controllers\Api\Agentic\WorkflowController as AgenticWorkflowController;
+use App\Http\Controllers\Api\Agentic\AnalyticsController as AgenticAnalyticsController;
+use App\Http\Controllers\Api\Agentic\ReflectionController as AgenticReflectionController;
+// Talent Management -> Performance & Rewards Center (new module, see the route
+// block at the end of this file).
+use App\Http\Controllers\Api\Performance\PerformanceOverviewController;
+use App\Http\Controllers\Api\Performance\PerformanceCycleController;
+use App\Http\Controllers\Api\Performance\PerformanceReviewController;
+use App\Http\Controllers\Api\Performance\PerformanceGoalController;
+use App\Http\Controllers\Api\Performance\PerformanceAppraisalController;
+use App\Http\Controllers\Api\Performance\PerformanceCompensationController;
+use App\Http\Controllers\Api\Performance\PerformanceBonusController;
+use App\Http\Controllers\Api\Performance\PerformanceCalibrationController;
+use App\Http\Controllers\Api\Performance\PerformanceActivityController;
+use App\Http\Controllers\Api\Performance\PerformanceSavedViewController;
+// Talent Management: dashboard, onboarding, mobility & succession, offboarding
+// (routes in the "Talent Management -> Lifecycle" block at the end of this file).
+use App\Http\Controllers\Api\TalentDashboardController;
+use App\Http\Controllers\Api\Talent\AdminWorkflowController;
+// Talent Management -> Onboarding & Employee Lifecycle Center (route block at the
+// end of this file).
+use App\Http\Controllers\Api\Onboarding\OnboardingOverviewController;
+use App\Http\Controllers\Api\Onboarding\OnboardingJourneyController as V2OnboardingJourneyController;
+use App\Http\Controllers\Api\Onboarding\OnboardingTaskController as V2OnboardingTaskController;
+use App\Http\Controllers\Api\Onboarding\OnboardingDocumentController as V2OnboardingDocumentController;
+use App\Http\Controllers\Api\Onboarding\OnboardingNoteController;
+use App\Http\Controllers\Api\Onboarding\OnboardingProbationController;
 use App\Http\Controllers\Api\DBController;
 use App\Http\Controllers\talent\talent_jobpostingcontroller;
 use App\Http\Controllers\talent\talent_jobapplicationcontroller;
 use App\Http\Controllers\talent\talent_interviewschedulescontroller;
 use App\Http\Controllers\talent\talent_screening_results_controller;
+use App\Http\Controllers\Api\Onboarding\OnboardingWorkstreamController;
+use App\Http\Controllers\Api\Talent\TalentAssessmentController;
+use App\Http\Controllers\talent\CandidateAssessmentResponseController;
 use App\Http\Controllers\talent\TalentOfferController;
+use App\Http\Controllers\talent\CareersController;
+use App\Http\Controllers\talent\PosterController;
+use App\Http\Controllers\talent\OfferResponseController;
 use App\Http\Controllers\talent\TalentAcquisition\TalentAcquisitionController;
 use App\Http\Controllers\talent\TalentAcquisition\CandidateDropoffController;
 use App\Http\Controllers\AJAXController;
@@ -24,9 +89,12 @@ use App\Http\Controllers\Api\HRITDashboard\JobroleApiController;
 use App\Http\Controllers\Api\HRITDashboard\LeaveDistribution;
 use App\Http\Controllers\HRMS\HrmsLeaveController;
 use App\Http\Controllers\HRMS\DepartmentManagementController;
+use App\Http\Controllers\HRMS\EmployeeDirectoryController;
 use App\Http\Controllers\build_with_AI\buildwithAIController;
 use App\Http\Controllers\Api\GammaApiController;
 use App\Http\Controllers\Api\Gemini\AnalyzeJDController;
+use App\Http\Controllers\Api\Gemini\SaveJDController;
+use App\Http\Controllers\Api\Gemini\GenerateQuestionsController;
 use App\Http\Controllers\Api\SkillMatchingController;
 use App\Http\Controllers\Api\SuggestedCourseController;
 use App\Http\Controllers\user\UserSkillController;
@@ -46,56 +114,318 @@ use App\Http\Controllers\Reports\EmployeeLifecycleController;
 use App\Http\Controllers\Reports\OrganizationGrowthController;
 use App\Http\Controllers\Reports\EmployeeSkillCoverageMatrix\EmployeeSkillCoverageMatrixController;
 use App\Http\Controllers\Reports\EmployeeDirectoryAnalytics\EmployeeDirectoryAnalyticsController;
+use App\Http\Controllers\front_desk\BulkTaskController;
 use App\Http\Controllers\JobRoleGraphController;
 use App\Http\Controllers\OrganizationGraphController;
 use App\Http\Controllers\DepartmentGraphController;
 use App\Http\Controllers\Api\TaskController;
+use App\Http\Controllers\Api\TaskManagement\MyTasksController;
+use App\Http\Controllers\Api\TaskManagement\CapacityController;
+use App\Http\Controllers\Api\TaskManagement\ActivityController;
+use App\Http\Controllers\Api\TaskManagement\TaskListController;
+use App\Http\Controllers\Api\TaskManagement\ReportController;
+use App\Http\Controllers\Api\TaskManagement\AuditLogController;
+use App\Http\Controllers\Api\TaskManagement\TaskAttachmentVersionController;
+use App\Http\Controllers\Api\TaskManagement\GlobalSearchController;
+use App\Http\Controllers\Api\TaskManagement\TaskScheduleController;
+use App\Http\Controllers\Api\TaskManagement\VersionedLegacyTaskController;
+use App\Http\Controllers\Api\TaskManagement\IdempotentTaskController;
+use App\Http\Controllers\Api\TaskManagement\TaskRecurrenceController;
+use App\Http\Controllers\Api\TaskManagement\TaskTemplateController;
+use App\Http\Controllers\Api\TaskManagement\TaskSubtaskController;
+use App\Http\Controllers\Api\TaskManagement\TaskTimeTrackingController;
+use App\Http\Controllers\Api\TaskManagement\NotificationController;
+use App\Http\Controllers\Api\TaskManagement\LegacyTaskController;
+use App\Http\Controllers\Api\TaskManagement\SessionController;
+use App\Http\Controllers\Api\TaskManagement\ProjectController;
+use App\Http\Controllers\Api\TaskManagement\BacklogController;
+use App\Http\Controllers\Api\TaskManagement\WorkstreamController;
+use App\Http\Controllers\Api\TaskManagement\WorkstreamRecordController;
+use App\Http\Controllers\Api\TaskManagement\WorkspaceController;
+use App\Http\Controllers\Api\TaskManagement\DependencyController;
+use App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController;
+use App\Http\Controllers\Api\TaskManagement\TaskOptionController;
 use App\Http\Controllers\Api\UserJourneyLogController;
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
 use App\Http\Controllers\Api\SkillHeatmapController;
 use App\Http\Controllers\signupOtpController;
 use App\Http\Controllers\Api\UserImportController;
+use App\Http\Controllers\user\tbluserController;
+use App\Http\Controllers\Api\ExcelAutomationAgentController;
+use App\Http\Controllers\Api\GoogleAuthController;
+use App\Http\Controllers\Api\UserProfileController;
 use App\Http\Controllers\HRMS\DepartmentJobRoleExportController;
+use App\Http\Controllers\HRMS\DepartmentSkillController;
+use App\Http\Controllers\HRMS\DepartmentSopController;
+use App\Http\Controllers\HRMS\DepartmentPolicyController;
+use App\Http\Controllers\HRMS\DepartmentRuleController;
+use App\Http\Controllers\HRMS\DepartmentProcessController;
+use App\Http\Controllers\HRMS\DepartmentProcessRunController;
+use App\Http\Controllers\HRTemplates\TemplateController;
+use App\Http\Controllers\NewsletterController;
+use App\Http\Controllers\CareerJourneyController;
+use App\Http\Controllers\Api\Leave\LeaveDashboardController;
+use App\Http\Controllers\Api\Leave\LeaveRequestApiController;
+use App\Http\Controllers\Api\Leave\LeaveOptionsController;
+use App\Http\Controllers\Api\Leave\LeaveReportApiController;
+use App\Http\Controllers\Api\Leave\LeaveTypeApiController;
+use App\Http\Controllers\Api\Leave\HolidayApiController;
+use App\Http\Controllers\Api\Leave\LeaveWorkflowApiController;
+use App\Http\Controllers\Api\Leave\LeaveAllocationApiController;
+use App\Http\Controllers\Api\Leave\LeaveDistributionApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceTrackingApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceReportApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceRegularisationApiController;
 
+
+/*
+|--------------------------------------------------------------------------
+| Careers - the candidate surface. PUBLIC, and deliberately so.
+|--------------------------------------------------------------------------
+|
+| A candidate is not a user of this product: no account, no token, no tenant of
+| their own. Until Sprint 4a that meant they had no surface at all, and every
+| application had to be typed in by somebody inside the company.
+|
+| These three routes are the entire public surface. The tenant comes from the
+| careers slug in the PATH - which is the resource identifier, uniquely indexed,
+| and used only to scope reads and to stamp a new application. It is not the
+| "tenant from the request" defect: there is no token here to contradict.
+|
+| RATE LIMITED, which is a new control rather than an existing pattern - the
+| application had no throttling anywhere. Reads are generous; apply is tight
+| because it writes a row and accepts a file upload.
+|
+| Everything else about recruitment stays authenticated and role-gated: see the
+| block further down for job-applications, candidates and offers.
+*/
+Route::middleware('throttle:30,1')->group(function () {
+    Route::get('/careers/{slug}', [CareersController::class, 'organisation']);
+    Route::get('/careers/{slug}/postings/{id}', [CareersController::class, 'posting'])->whereNumber('id');
+
+    /*
+     * The hiring poster. Same surface and the same allow-list as the two reads
+     * above - it prints what the careers page already shows, so it belongs on
+     * the public side rather than behind a token that Next.js server code
+     * cannot read anyway.
+     */
+    Route::get('/careers/{slug}/poster-content', [PosterController::class, 'content']);
+});
+
+/*
+| The poster PDF, throttled harder than the reads above: dompdf renders
+| synchronously and a poster is downloaded once, never polled.
+*/
+Route::middleware('throttle:10,1')->group(function () {
+    Route::get('/careers/{slug}/poster.pdf', [PosterController::class, 'pdf']);
+});
+/*
+| A candidate following their OWN application. Public, and the token is the
+| credential - the same contract as the offer and assessment links.
+|
+| Declared BEFORE nothing and constrained to 64 alphanumerics so it can never
+| collide with /careers/{slug}: a slug is a hyphenated name, never 64 characters
+| of [A-Za-z0-9]. Unknown, expired and malformed all answer 410 alike.
+*/
+Route::get('/careers/track/{token}', [CareersController::class, 'track'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:30,1');
+Route::post('/careers/{slug}/postings/{id}/apply', [CareersController::class, 'apply'])
+    ->whereNumber('id')
+    ->middleware('throttle:5,1');
+
+/*
+| The offer decision, answered by the candidate themselves.
+|
+| The 64-character token in the path IS the authorisation: its sha256 is the
+| unique key of exactly one acceptance row, and it expires and burns on use. It
+| opens one offer and nothing else - it cannot list, cannot reach another offer,
+| and cannot read the application behind it.
+|
+| Throttled harder than the careers reads because the token is the only secret:
+| 20/min is ample for a person reading their own offer and useless for guessing
+| a 64-character string.
+*/
+Route::get('/offer-response/{token}', [OfferResponseController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:20,1');
+Route::post('/offer-response/{token}', [OfferResponseController::class, 'respond'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:10,1');
+
+/*
+| The assessment, sat by the candidate themselves. Same contract as the offer
+| link above: the 64-character token IS the authorisation, its sha256 is the
+| unique key of exactly one row, and unknown / expired / used all return 410.
+|
+| The answer route is throttled MORE GENEROUSLY than the offer's write, because
+| it is an autosave: a candidate typing a long written answer saves repeatedly,
+| and 10/min would start rejecting saves mid-sitting and lose their work.
+| Submit stays tight - it is once per sitting by definition.
+*/
+Route::get('/candidate-assessment/{token}', [CandidateAssessmentResponseController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:20,1');
+Route::post('/candidate-assessment/{token}/answer', [CandidateAssessmentResponseController::class, 'saveAnswer'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:120,1');
+Route::post('/candidate-assessment/{token}/submit', [CandidateAssessmentResponseController::class, 'submit'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:10,1');
 
 Route::post('/send-otp', [signupOtpController::class, 'sendOtp']);
 Route::post('/verify-otp', [signupOtpController::class, 'verifyOtp']);
+Route::post('/newsletter/send', [NewsletterController::class, 'sendNewsletter'])->middleware('api.token');
+Route::match(['get', 'post'], '/user/profile', [UserProfileController::class, 'show']);
 
-Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show']);
-Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show']);
-Route::get('/departments/{deptId}/graph', [DepartmentGraphController::class, 'show']);
+Route::get('/jobroles/{jobRoleId}/graph', [JobRoleGraphController::class, 'show'])->middleware('api.token');
+Route::get('/organizations/{orgId}/graph', [OrganizationGraphController::class, 'show'])->middleware('api.token');
+Route::get('/departments/{deptId}/graph', [DepartmentGraphController::class, 'show'])->middleware('api.token');
 Route::post('/ai-generated-assessment/question/store',[generateQuestionController::class, 'store']);
 Route::get('/ai-generated-assessment/question/index',[generateQuestionController::class, 'index']);
 
-Route::post('/ai-generated-assessment/assessment/store', [generateAssessmentController::class, 'store']);
-Route::get('/ai-generated-assessment/assessment/index',[generateAssessmentController::class, 'index']);
+Route::post('/ai-generated-assessment/assessment/store', [generateAssessmentController::class, 'store'])->middleware('api.token');
+Route::get('/ai-generated-assessment/assessment/index',[generateAssessmentController::class, 'index'])->middleware('api.token');
 
 
-Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
-Route::get('/candidate-pipeline', [talent_interviewschedulescontroller::class, 'candidatepipeline']);
+/*
+|--------------------------------------------------------------------------
+| Recruitment - candidate data is personal data about non-users
+|--------------------------------------------------------------------------
+|
+| These endpoints carry applicants' names, email addresses, mobile numbers,
+| expected salary and CV paths. Until Sprint 1 they were reachable by any
+| authenticated employee: a token whose profile is "Employee" (role_key
+| employee, data_scope self) returned all 22 live applications for its tenant.
+|
+| profile:admin,hr,recruiter resolves through RequireProfile::ALIASES to
+| administrator, hr_manager, hr_executive and recruiter. A hiring manager who
+| needs candidate visibility should be granted it deliberately, by adding a
+| role here - not by the absence of a gate.
+|
+| The candidate-facing apply flow does NOT go through these routes; it gets its
+| own public, throttled endpoint in Sprint 4a.
+*/
+Route::resource('interview-schedules', talent_interviewschedulescontroller::class)
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/candidate-pipeline', [talent_interviewschedulescontroller::class, 'candidatepipeline'])
+    ->middleware('profile:admin,hr,recruiter');
 
-Route::get('job-applications/shortlisted', [talent_jobapplicationcontroller::class, 'getShortlistedCandidates']);
-Route::resource('job-applications', talent_jobapplicationcontroller::class);
+Route::get('job-applications/shortlisted', [talent_jobapplicationcontroller::class, 'getShortlistedCandidates'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::resource('job-applications', talent_jobapplicationcontroller::class)
+    ->middleware('profile:admin,hr,recruiter');
 
 Route::resource('job-postings', talent_jobpostingcontroller::class);
 Route::get('/talent/team-overview', [talent_jobpostingcontroller::class, 'getHiringStatus']);
+// ROUND 5. The internal sign-off talent.recruitment.requisition declares,
+// for a posting a platform chain has gated before it can go live.
+Route::post('job-postings/{id}/decision', [talent_jobpostingcontroller::class, 'decideRequisition'])
+    ->whereNumber('id');
 
-Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store']);
-Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show']);
+Route::post('talent-screening-results', [talent_screening_results_controller::class, 'store'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent-screening-results/candidate/{candidate_id}', [talent_screening_results_controller::class, 'show'])
+    ->middleware('profile:admin,hr,recruiter');
 
-Route::get('offers', [TalentOfferController::class, 'index']);
-Route::post('talent-offers', [TalentOfferController::class, 'store']);
-Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject']);
-Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter']);
-Route::get('talent-templates', [TalentOfferController::class, 'getTemplates']);
+/*
+| A recruiter's own review of one CV - the score, the keywords, the comments and
+| the reviewer's name. Distinct from talent-screening-results above, which is the
+| AI verdict on a candidate; these two sit side by side in the Screening tab.
+|
+| Same gate as the rest of the recruitment surface: this is candidate PII plus a
+| hiring judgement, and F-53 was exactly the finding that this class of data was
+| readable by any employee.
+*/
+Route::middleware('profile:admin,hr,recruiter')->group(function () {
+    Route::get('talent/resume-screenings', [App\Http\Controllers\talent\ResumeScreeningController::class, 'index']);
+    Route::post('talent/resume-screenings', [App\Http\Controllers\talent\ResumeScreeningController::class, 'store']);
+    Route::put('talent/resume-screenings/{id}', [App\Http\Controllers\talent\ResumeScreeningController::class, 'update'])->whereNumber('id');
+    Route::delete('talent/resume-screenings/{id}', [App\Http\Controllers\talent\ResumeScreeningController::class, 'destroy'])->whereNumber('id');
+});
 
-Route::get('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis']);
-Route::get('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
-Route::get('/talent-acquisition/funnel', [CandidateDropoffController::class, 'getFunnelData']);
-Route::get('/talent-acquisition/requisitions', [CandidateDropoffController::class, 'getRequisitions']);
+/*
+| Who in this institute recruits, screens and interviews.
+|
+| Reads are gated too, not just writes: the roster names individual employees and
+| what they are trusted to do in hiring. Admin and HR maintain it; a recruiter can
+| see who else is on the team without being able to change it.
+*/
+Route::get('talent/hiring-team', [App\Http\Controllers\talent\HiringTeamController::class, 'index'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::middleware('profile:admin,hr')->group(function () {
+    Route::post('talent/hiring-team', [App\Http\Controllers\talent\HiringTeamController::class, 'store']);
+    Route::put('talent/hiring-team/{id}', [App\Http\Controllers\talent\HiringTeamController::class, 'update'])->whereNumber('id');
+    Route::delete('talent/hiring-team/{id}', [App\Http\Controllers\talent\HiringTeamController::class, 'destroy'])->whereNumber('id');
+});
 
-Route::post('designation_leave', [HrmsLeaveController::class, 'store']);
+// Offers carry salary, start date and the candidate's identity - same class as
+// /job-applications above. job-postings deliberately stays open: a posting is the
+// thing a candidate is meant to read, and it becomes the public careers page.
+Route::get('offers', [TalentOfferController::class, 'index'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('talent-offers', [TalentOfferController::class, 'store'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('talent-offers/{id}/reject', [TalentOfferController::class, 'reject'])
+    ->middleware('profile:admin,hr,recruiter');
+// ROUND 4. The INTERNAL sign-off talent.recruitment.offer declares, distinct
+// from reject()/accept() above (the candidate's own answer). Only does
+// anything when a real approval step is open for this offer.
+Route::post('talent-offers/{id}/decision', [TalentOfferController::class, 'decideOffer'])
+    ->middleware('profile:admin,hr,recruiter');
+// The other half of the decision. Until Sprint 2 an offer could be rejected but
+// never accepted, so the hire stopped here and the employee was retyped by hand.
+Route::post('talent-offers/{id}/accept', [TalentOfferController::class, 'accept'])
+    ->middleware('profile:admin,hr,recruiter');
+// Mint (or re-issue) the candidate's link and try to email it. Re-issuing
+// invalidates the previous link - the stored hash is overwritten.
+Route::post('talent-offers/{id}/candidate-link', [TalentOfferController::class, 'candidateLink'])
+    ->middleware('profile:admin,hr,recruiter');
+/*
+| Candidate assessment, HR side.
+|
+| Same role gate as offers: a blueprint sets the pass mark that decides who
+| reaches an interview, and an invitation reveals a candidate's email address.
+| Both are recruiting decisions, so both are admin/hr/recruiter only.
+|
+| The candidate's own side of this is the PUBLIC token route further up the
+| file - it carries no session and must never be inside this middleware.
+*/
+Route::get('talent/assessment/blueprints', [TalentAssessmentController::class, 'blueprints'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('talent/assessment/blueprints', [TalentAssessmentController::class, 'storeBlueprint'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::delete('talent/assessment/blueprints/{id}', [TalentAssessmentController::class, 'destroyBlueprint'])
+    ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+// The Assessment sub-module's own tab: every assessment sent, who sent it, and
+// how it ended. Same role gate - a candidate's score and email are both on it.
+Route::get('talent/assessment/candidates', [TalentAssessmentController::class, 'candidates'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent/assessment/applications', [TalentAssessmentController::class, 'applications'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent/assessment/jobroles', [TalentAssessmentController::class, 'jobroles'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('talent/applications/{id}/assessment/invite', [TalentAssessmentController::class, 'invite'])
+    ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent/applications/{id}/assessment', [TalentAssessmentController::class, 'result'])
+    ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+
+Route::get('talent-offer-letter/{offerId}', [TalentOfferController::class, 'getOfferLetter'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('talent-templates', [TalentOfferController::class, 'getTemplates'])
+    ->middleware('profile:admin,hr,recruiter');
+
+Route::post('/talent-acquisition/kpis', [TalentAcquisitionController::class, 'getKpis'])->middleware('api.token');
+Route::post('/talent-acquisition/dropoff', [CandidateDropoffController::class, 'getDropoff']);
+Route::post('/talent-acquisition/funnel', [CandidateDropoffController::class, 'getFunnelData']);
+Route::post('/talent-acquisition/requisitions', [CandidateDropoffController::class, 'getRequisitions']);
+
+Route::post('designation_leave', [HrmsLeaveController::class, 'store'])->middleware('api.token');
 
 Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
 
@@ -107,43 +437,643 @@ Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
 
 Route::resource('skills', skillcontroller::class);
 
-Route::resource('interview-schedules', talent_interviewschedulescontroller::class);
-Route::put('/interview-schedules', [talent_interviewschedulescontroller::class, 'customUpdate']);
-Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::class, 'updateStatus']);
-Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications']);
-Route::resource('job-postings', talent_jobpostingcontroller::class);
-Route::post('designation_leave', [HrmsController::class, 'store']);
-Route::post('/jobrole-skill/store', [jobroleskillcontroller::class, 'storeSkill']);
-Route::resource('job-role-tasks', jobroletaskcontroller::class);
-Route::resource('jobroletexonomies', jobroletexonomycontroller::class);
-Route::resource('skills', skillcontroller::class);
+// Removed duplicate route declaration - exact duplicate of the declaration above.
+Route::put('/interview-schedules', [talent_interviewschedulescontroller::class, 'customUpdate'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('job-applications/{id}/status', [talent_jobapplicationcontroller::class, 'updateStatus'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('job-applications/candidate/{candidate_id}', [talent_jobapplicationcontroller::class, 'getCandidateApplications'])
+    ->middleware('profile:admin,hr,recruiter');
+// Removed duplicate route declaration - exact duplicate.
+// F-158. `Route::post('designation_leave', [HrmsController::class, 'store'])` was
+// here. HrmsController has no `store` method at all, and because this line came
+// AFTER the real registration on line 400, Laravel resolved THIS one - so every
+// call to designation_leave 500'd on a missing method. The earlier dedup pass
+// missed it precisely because it is not an *exact* duplicate: same URI and verb,
+// different controller. That difference is what made it harmful rather than inert.
+// The token-gated HrmsLeaveController@store on line 400 is the real one.
+// Removed duplicate route declaration - exact duplicate of line 402.
+// Removed duplicate route declaration - exact duplicate.
+// Removed duplicate route declaration - exact duplicate.
+// Removed duplicate route declaration - exact duplicate.
 Route::get('skills/search', [jobrolecontroller::class, 'searchskills']);
 Route::get('jobrole/{id}/skills', [jobrolecontroller::class, 'skills']);
 Route::get('/department/{id}/jobroles', [jobrolecontroller::class, 'getJobRolesByDepartment']);
 Route::get('/industry/{id}/departments', [IndustryController::class, 'departments']);
 Route::get('/industries', [IndustryController::class, 'index']);
-Route::get('/competency-dashboard', [CompetencyDashboardController::class, 'index']);
+// REMOVED 2026-08-19: GET /competency-dashboard returned 350 lines of hardcoded
+// mock (total_roles=247, completion_rate="87%") and had zero callers across the
+// frontend. Replaced by /api/dashboard/hr/* below. A live mock that looks
+// plausible is how the wrong endpoint gets wired later.
 Route::get('/skill-development/progress', [SkillDevelopmentController::class, 'getSkillProgress']);
 Route::get('/skill-development/streak', [SkillDevelopmentController::class, 'getLearningStreak']);
 Route::get('/skill-development/weekly-goal', [SkillDevelopmentController::class, 'getWeeklyLearningGoal']);
 Route::get('/skill-development/achievements', [SkillDevelopmentController::class, 'getUserAchievements']);
 Route::get('/skill-development/peer-comparison', [SkillDevelopmentController::class, 'getPeerComparison']);
 Route::get('/skill-development/calendar', [SkillDevelopmentController::class, 'getLearningCalendar']);
+Route::get('/skill-development/recent-activity', [SkillDevelopmentController::class, 'getRecentActivity']);
 
-Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap']);
-Route::get('/competency/kpi', [SubCompetencyDashboardController::class, 'getKPI']);
-Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity']);
-Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards']);
-Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar']);
-Route::get('/competency/skills-management-funnel', [SubCompetencyDashboardController::class, 'getSkillsManagementFunnel']);
-Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'getAlignment']);
+Route::get('/competency/workload-heatmap', [SubCompetencyDashboardController::class, 'getWorkloadHeatmap'])->middleware('api.token');
+Route::get('/competency/kpi', [SubCompetencyDashboardController::class, 'getKPI'])->middleware('api.token');
+Route::get('/competency/role-similarity', [SubCompetencyDashboardController::class, 'getRoleSimilarity'])->middleware('api.token');
+Route::get('/competency/coverage-scorecards', [SubCompetencyDashboardController::class, 'getCoverageScorecards'])->middleware('api.token');
+Route::get('/competency/health-radar', [SubCompetencyDashboardController::class, 'getHealthRadar'])->middleware('api.token');
+Route::get('/competency/skills-management-funnel', [SubCompetencyDashboardController::class, 'getSkillsManagementFunnel'])->middleware('api.token');
+Route::get('/competency/alignment', [SubCompetencyDashboardController::class, 'getAlignment'])->middleware('api.token');
+
+/*
+| Competency Command Center + domain CRUD (token authenticated, tenant scoped
+| via App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext).
+| Additive - does not touch the read-only /competency/* analytics routes above.
+*/
+Route::get('/competency/command-center', [CompetencyCommandCenterController::class, 'index']);
+Route::get('/competency/command-center/filters', [CompetencyCommandCenterController::class, 'filters']);
+
+/*
+| Libraries & Taxonomy - the eight library tabs (Skill, Jobrole, Jobrole Task,
+| Knowledge, Ability, Attitude, Behaviour, Invisible), their taxonomy editors
+| and the skill taxonomy tree.
+|
+| Fixed segments (meta, taxonomy, skill-taxonomy-tree) are declared before the
+| {id} routes so they are never read as an id, and every {id} is whereNumber.
+*/
+/*
+| Approval queue. One inbox governing competencies and frameworks; the existing
+| role-mapping reviews are unioned in for reading and still actioned through
+| /competency/mapping-reviews.
+*/
+Route::get('/competency/approvals', [CompetencyApprovalController::class, 'index']);
+Route::post('/competency/approvals', [CompetencyApprovalController::class, 'store']);
+Route::post('/competency/approvals/bulk-approve', [CompetencyApprovalController::class, 'bulkApprove'])->middleware('subject:record_owners');
+Route::get('/competency/approvals/for/{type}/{id}', [CompetencyApprovalController::class, 'forSubject'])->whereNumber('id');
+Route::put('/competency/approvals/{id}', [CompetencyApprovalController::class, 'update'])->whereNumber('id')->middleware('subject:record_owners');
+
+Route::get('/competency/library/meta', [CompetencyLibraryController::class, 'meta']);
+Route::get('/competency/library/skill-taxonomy-tree', [CompetencyLibraryController::class, 'skillTaxonomyTree']);
+Route::get('/competency/library/levels-of-responsibility', [CompetencyLibraryController::class, 'levelsOfResponsibility']);
+Route::get('/competency/library/work-functions', [CompetencyLibraryController::class, 'workFunctions']);
+
+Route::get('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'taxonomy']);
+Route::post('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'storeTaxonomy']);
+Route::put('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'updateTaxonomy']);
+Route::delete('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'destroyTaxonomy']);
+
+Route::get('/competency/library/skills', [CompetencyLibraryController::class, 'skills']);
+Route::post('/competency/library/skills', [CompetencyLibraryController::class, 'storeSkill']);
+Route::get('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'showSkill'])->whereNumber('id');
+Route::put('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'updateSkill'])->whereNumber('id');
+Route::delete('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'destroySkill'])->whereNumber('id');
+
+Route::get('/competency/library/jobroles', [CompetencyLibraryController::class, 'jobroles']);
+Route::post('/competency/library/jobroles', [CompetencyLibraryController::class, 'storeJobrole']);
+Route::get('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'showJobrole'])->whereNumber('id');
+Route::put('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'updateJobrole'])->whereNumber('id');
+Route::delete('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'destroyJobrole'])->whereNumber('id');
+
+/*
+ * MERGING TWO JOB ROLES.
+ *
+ * Literal segments before any resource route, or /{id}/merge dispatches to
+ * showJobrole($id = 'merge').
+ *
+ * Gated profile:admin,hr. The department merge deliberately is NOT - its only
+ * gate is the frontend hiding the button - but merging a job role retires a
+ * role, moves every employee on it and rewrites tens of thousands of rows, so
+ * it is gated the same way the neighbouring competency routes already are.
+ */
+/*
+ * What deleting a job role would cost, asked before the dialog opens.
+ *
+ * Literal segment before the resource routes, for the same reason merge-impact is:
+ * otherwise /{id}/impact dispatches to showJobrole($id = 'impact').
+ *
+ * Not gated like the merge pair - it reads only who holds a role, which the
+ * directory already shows to any token-holder. The delete itself refuses on its
+ * own, so this endpoint is not what protects anything.
+ */
+Route::get('/competency/library/jobroles/{id}/impact', [CompetencyLibraryController::class, 'jobroleImpact'])->whereNumber('id');
+
+Route::get('/competency/library/jobroles/{id}/merge-impact', [JobRoleMergeController::class, 'impact'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/library/jobroles/{id}/merge', [JobRoleMergeController::class, 'merge'])->whereNumber('id')->middleware('profile:admin,hr');
+
+Route::get('/competency/library/jobrole-tasks', [CompetencyLibraryController::class, 'jobroleTasks']);
+Route::post('/competency/library/jobrole-tasks', [CompetencyLibraryController::class, 'storeJobroleTask']);
+Route::get('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'showJobroleTask'])->whereNumber('id');
+Route::put('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'updateJobroleTask'])->whereNumber('id');
+Route::delete('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryController::class, 'destroyJobroleTask'])->whereNumber('id');
+
+// One set of routes for all four KASA tabs: {type} is knowledge|ability|attitude|behaviour.
+Route::get('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'kasa']);
+Route::post('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'storeKasa']);
+// Where a knowledge / ability / attitude / behaviour item is actually used:
+// which skills reference it, at which levels, and the job roles that inherit
+// it. Declared before the {id} show route so 'usage' is not read as an id.
+Route::get('/competency/library/kasa/{type}/{id}/usage', [CompetencyLibraryController::class, 'usageKasa'])->whereNumber('id');
+Route::get('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'showKasa'])->whereNumber('id');
+Route::put('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'updateKasa'])->whereNumber('id');
+Route::delete('/competency/library/kasa/{type}/{id}', [CompetencyLibraryController::class, 'destroyKasa'])->whereNumber('id');
+
+Route::get('/competency/library/invisible', [CompetencyLibraryController::class, 'invisible']);
+Route::post('/competency/library/invisible', [CompetencyLibraryController::class, 'storeInvisible']);
+Route::post('/competency/library/invisible/{id}/clone', [CompetencyLibraryController::class, 'cloneInvisible'])->whereNumber('id');
+Route::get('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'showInvisible'])->whereNumber('id');
+Route::put('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'updateInvisible'])->whereNumber('id');
+Route::delete('/competency/library/invisible/{id}', [CompetencyLibraryController::class, 'destroyInvisible'])->whereNumber('id');
+
+Route::get('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'index']);
+Route::post('/competency/assessment-cycles', [CompetencyAssessmentCycleController::class, 'store']);
+Route::get('/competency/assessment-cycles/metrics', [CompetencyAssessmentCycleController::class, 'metrics']);
+Route::get('/competency/assessment-cycles/participant-ratings', [CompetencyAssessmentCycleController::class, 'participantRatings']);
+Route::get('/competency/assessment-cycles/calibration', [CompetencyAssessmentCycleController::class, 'calibration']);
+Route::get('/competency/assessment-cycles/approvals', [CompetencyAssessmentCycleController::class, 'approvals']);
+Route::get('/competency/assessment-cycles/closed', [CompetencyAssessmentCycleController::class, 'closed']);
+Route::put('/competency/assessment-cycles/assessments/{id}/review', [CompetencyAssessmentCycleController::class, 'reviewAssessment'])->whereNumber('id')->middleware('subject:record_owners');
+// "View Configuration" - declared BEFORE /{id} so the word is not read as an id.
+Route::get('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'configuration']);
+Route::put('/competency/assessment-cycles/configuration', [CompetencyAssessmentCycleController::class, 'saveConfiguration']);
+Route::get('/competency/assessment-cycles/{id}/participants', [CompetencyAssessmentCycleController::class, 'participants'])->whereNumber('id');
+// Campaign detail panel: Overview / Edit / Ratings / Calibration / Audit Trail.
+Route::get('/competency/assessment-cycles/{id}/ratings', [CompetencyAssessmentCycleController::class, 'ratings'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}/calibration-queue', [CompetencyAssessmentCycleController::class, 'calibrationQueue'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}/audit-trail', [CompetencyAssessmentCycleController::class, 'auditTrail'])->whereNumber('id');
+Route::get('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleController::class, 'show'])->whereNumber('id');
+Route::put('/competency/assessment-cycles/{id}', [CompetencyAssessmentCycleController::class, 'update'])->whereNumber('id');
+
+// The employee LIST. Employee Profiles took a userId prop and nothing ever passed
+// one, because no index endpoint existed - only show/{id}. HR saw their own record.
+Route::get('/competency/employee-profiles', [EmployeeCompetencyProfileController::class, 'index'])->middleware('profile:admin,hr');
+Route::get('/competency/employee-profiles/{id}', [EmployeeCompetencyProfileController::class, 'show'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/available-skills', [EmployeeCompetencyProfileController::class, 'availableSkills'])->whereNumber('id');
+Route::post('/competency/employee-profiles/{id}/skills', [EmployeeCompetencyProfileController::class, 'addSkill'])->whereNumber('id')->middleware('profile:admin,hr,manager');
+// BEFORE the {matrixId} route: '/skills/by-skill/...' would otherwise be a
+// candidate for it, and whereNumber('matrixId') is the only thing stopping the
+// router from trying. Declared first, it wins outright.
+Route::put('/competency/employee-profiles/{id}/skills/by-skill/{skillId}', [EmployeeCompetencyProfileController::class, 'upsertSkillBySkillId'])->whereNumber('id')->whereNumber('skillId')->middleware('profile:admin,hr,manager');
+Route::put('/competency/employee-profiles/{id}/skills/{matrixId}', [EmployeeCompetencyProfileController::class, 'updateSkill'])->whereNumber('id')->whereNumber('matrixId')->middleware('profile:admin,hr,manager');
+Route::get('/competency/employee-profiles/{id}/skills/{skillId}/history', [EmployeeCompetencyProfileController::class, 'skillHistory'])->whereNumber('id')->whereNumber('skillId');
+Route::get('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'notes'])->whereNumber('id');
+Route::put('/competency/employee-profiles/{id}/notes', [EmployeeCompetencyProfileController::class, 'saveNotes'])->whereNumber('id')->middleware('profile:admin,hr,manager');
+Route::get('/competency/employee-profiles/{id}/certifications', [EmployeeCompetencyProfileController::class, 'certifications'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/development-plans', [EmployeeCompetencyProfileController::class, 'developmentPlans'])->whereNumber('id');
+Route::get('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'evidence'])->whereNumber('id');
+Route::post('/competency/employee-profiles/{id}/evidence', [EmployeeCompetencyProfileController::class, 'storeEvidence'])->whereNumber('id')->middleware('profile:admin,hr,manager');
+Route::delete('/competency/employee-profiles/{id}/evidence/{evidenceId}', [EmployeeCompetencyProfileController::class, 'deleteEvidence'])->whereNumber('id')->whereNumber('evidenceId')->middleware('profile:admin,hr,manager');
+Route::get('/competency/employee-profiles/{id}/career-path', [EmployeeCompetencyProfileController::class, 'careerPath'])->whereNumber('id');
+
+/* SLICE 1 item 1 - competency DEFINITIONS (competency + competency_kasba_item).
+ * Distinct from /competency/competencies above, which serves the SKILL library
+ * (s_users_skills). Writes are HR/Admin only; the gate is RequireProfile, exact
+ * role_key matching since G-AUTH-02. */
+/* SLICE 1 item 7 - THE GAP. Read-only, so no profile gate: an employee may read
+ * their OWN gap (competencySubject), anyone else needs an elevated role_key. */
+Route::get('/competency/gap', [\App\Http\Controllers\Api\Competency\CompetencyGapController::class, 'show']);
+
+/* SLICE 1 item 3 - what a job role REQUIRES. jobrole_competency_map holds NO
+ * text key, which is what makes the rename proof possible. Writes are HR/Admin. */
+Route::get('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'index']);
+Route::post('/competency/role-map', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/role-map/{id}', [\App\Http\Controllers\Api\Competency\RoleCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+// COURSE -> COMPETENCY. The table had two shipped consumers (LearningAssigner,
+// RemediationRecommender) and NO writer: 56 seeded rows and no way to add a 57th.
+// R-03 - the development plan report. Built STANDALONE: the plan says it gates
+// on R-01 (a 'consolidated reporting home'), and measurement says R-01 is a
+// container rather than a gate. 160 real plans, never reported on.
+Route::get('/competency/reports/development-plans', [\App\Http\Controllers\Api\Competency\DevelopmentPlanReportController::class, 'index']);
+Route::get('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'index']);
+Route::post('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+// KASBA RATINGS - the write half of the last link before the gap.
+// competency_kasba_rating had 160 seeded rows and NO writer anywhere: both
+// existing rating routes are GET and ProficiencyService only LEFT JOINs it.
+// These are NEW routes; the assessment-cycle GETs are untouched.
+// THE EMPLOYEE'S OWN CAPABILITY. Guarded by api.token only - every authenticated
+// employee may see their own, and no profile is required for that. It takes NO
+// user_id, so there is no subject to authorise: the endpoint cannot return
+// anybody else's data because it has no way to name anybody else.
+Route::get('/competency/my-capability', [\App\Http\Controllers\Api\Competency\MyCapabilityController::class, 'index'])->middleware('api.token');
+/*
+ * How somebody's capability got to where it is - the history behind the number.
+ *
+ * Defaults to the caller and applies competencySubject(), so the employee's own
+ * profile, the HR drawer and the Talent progress record share one endpoint
+ * without any of them being able to read a record they should not.
+ */
+Route::get('/competency/capability-progress/roster', [\App\Http\Controllers\Api\Competency\CapabilityProgressController::class, 'roster'])->middleware('api.token');
+Route::get('/competency/capability-progress', [\App\Http\Controllers\Api\Competency\CapabilityProgressController::class, 'index'])->middleware('api.token');
+
+// SELF-RATING. `api.token`, like the read above and for the same reason: these
+// accept NO user_id, so there is no subject to tamper with and nothing for a
+// profile guard to protect. Employees could always SEE their capability and
+// never record a view of it — every kasba-rating write route is admin-only, so
+// self-rating returned 403 while `source = 'self'` rows sat in the table.
+// THE EMPLOYEE'S OWN CERTIFICATIONS. Read-only, `api.token`, and it takes NO
+// user_id - same reasoning as my-capability above, and for a sharper reason.
+//
+// The Certification Center's "My Certifications" TAB filters on a user_id sent
+// by the browser, over an endpoint that accepts any id it is handed. So an
+// administrator granting that module to an employee so they can see their own
+// certificate also grants edit, verify, revoke and delete on everyone else's;
+// withholding it leaves the employee unable to see their own at all. A tab
+// cannot express ownership - only a separate endpoint can.
+//
+// Documents come back inside this response rather than from
+// /certifications/{id}/documents, which is tenant-scoped only and would hand
+// every employee a read of any colleague's evidence one id at a time.
+Route::get('/competency/my-certifications', [\App\Http\Controllers\Api\Competency\MyCertificationsController::class, 'index'])->middleware('api.token');
+
+Route::post('/competency/my-rating', [\App\Http\Controllers\Api\Competency\MyRatingController::class, 'store'])->middleware('api.token');
+Route::delete('/competency/my-rating', [\App\Http\Controllers\Api\Competency\MyRatingController::class, 'destroy'])->middleware('api.token');
+
+// The candidate list the write half never had. Guarded the same as the write:
+// a rating names a person, so reading who can be rated is not a public question.
+Route::get('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'index'])->middleware('profile:admin,hr');
+Route::post('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'store'])->middleware('profile:admin,hr');
+// Rate a LIBRARY ITEM directly, by (kasba_type, item_id), rather than by a
+// competency link that mostly does not exist yet - see storeByItem(). Declared
+// before nothing in particular, but guarded identically to its siblings: a
+// rating names a person either way.
+Route::post('/competency/kasba-rating/by-item', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'storeByItem'])->middleware('profile:admin,hr');
+Route::delete('/competency/kasba-rating', [\App\Http\Controllers\Api\Competency\KasbaRatingController::class, 'destroy'])->middleware('profile:admin,hr');
+
+// L-14: the TASK CATALOGUE -> COMPETENCY write path. Mirrors role-map one level
+// down. jobrole_task_id points at s_jobrole_task, a GLOBAL seed library with no
+// tenant column, so the task is checked for EXISTENCE and the competency for
+// OWNERSHIP - see the controller header.
+// Per-role browse for the task->competency panel. `index()` answers what is
+// MAPPED; these answer what EXISTS, including the unmapped tasks that by
+// definition have no row in the map.
+Route::get('/competency/task-map/roles', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'roles']);
+Route::get('/competency/task-map/tasks', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'tasks']);
+// What ONE task exercises, plus where the person being assigned it stands.
+// Built for the assign-task modal: the mapping belongs where the judgement is
+// made, not on a matrix screen somebody must remember to open.
+Route::get('/competency/task-map/for-task', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'forTask'])->middleware('api.token');
+// Read-only, and an employee may read their OWN readiness - so `api.token`,
+// with the elevated-role check applied per subject inside competencySubject().
+// A blanket profile gate here would lock a person out of their own answer.
+Route::get('/competency/task-map/readiness', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'readiness'])->middleware('api.token');
+Route::get('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'index']);
+Route::post('/competency/task-map', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
+Route::delete('/competency/task-map/{id}', [\App\Http\Controllers\Api\Competency\JobroleTaskCompetencyMapController::class, 'destroy'])->middleware('profile:admin,hr');
+
+Route::get('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'index']);
+Route::post('/competency/definitions', [\App\Http\Controllers\Api\Competency\CompetencyDefinitionController::class, 'store'])->middleware('profile:admin,hr');
+
+Route::get('/competency/competencies', [SkillLibraryCrudController::class, 'index']);
+Route::post('/competency/competencies', [SkillLibraryCrudController::class, 'store']);
+Route::delete('/competency/competencies/{id}', [SkillLibraryCrudController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/frameworks', [CompetencyFrameworkController::class, 'index']);
+Route::post('/competency/frameworks', [CompetencyFrameworkController::class, 'store']);
+Route::delete('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'destroy'])->whereNumber('id');
+
+Route::get('/competency/assessments', [CompetencyAssessmentController::class, 'index']);
+Route::post('/competency/assessments', [CompetencyAssessmentController::class, 'store'])->middleware('subject:people_managers');
+Route::delete('/competency/assessments/{id}', [CompetencyAssessmentController::class, 'destroy'])->whereNumber('id')->middleware('subject:people_managers');
+
+Route::get('/competency/certifications', [CompetencyCertificationController::class, 'index']);
+Route::post('/competency/certifications', [CompetencyCertificationController::class, 'store'])->middleware('subject:record_owners');
+Route::delete('/competency/certifications/{id}', [CompetencyCertificationController::class, 'destroy'])->whereNumber('id')->middleware('subject:record_owners');
+
+Route::get('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'index']);
+Route::post('/competency/development-plans', [CompetencyDevelopmentPlanController::class, 'store'])->middleware('subject:people_managers');
+Route::delete('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'destroy'])->whereNumber('id')->middleware('subject:people_managers');
+
+/*
+| Development & Career Path Workspace (token authenticated, tenant scoped).
+| Additive on top of the three development-plan routes above, which keep their
+| existing contract. Reuses s_skill_matrix + s_user_skill_jobrole for gaps,
+| s_competency_activity_log for history, career_journey + s_user_jobrole for the
+| progression graph and sub_std_map + lms_assignments for learning; adds
+| s_competency_plan_actions and s_competency_career_paths/_steps.
+*/
+
+// Static segments first so they cannot be swallowed by /{id}.
+Route::get('/competency/development-plans/metrics', [CompetencyDevelopmentPlanController::class, 'metrics']);
+Route::get('/competency/development-plans/owners', [CompetencyDevelopmentPlanController::class, 'owners']);
+Route::get('/competency/employee-options', [CompetencyDevelopmentPlanController::class, 'employees']);
+
+Route::get('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'show'])->whereNumber('id');
+Route::put('/competency/development-plans/{id}', [CompetencyDevelopmentPlanController::class, 'update'])->whereNumber('id')->middleware('subject:people_managers');
+Route::get('/competency/development-plans/{id}/gaps', [CompetencyDevelopmentPlanController::class, 'gaps'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/history', [CompetencyDevelopmentPlanController::class, 'history'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'actions'])->whereNumber('id');
+Route::post('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'storeAction'])->whereNumber('id')->middleware('subject:people_managers');
+Route::put('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'updateAction'])->whereNumber('id')->whereNumber('actionId')->middleware('subject:people_managers');
+Route::delete('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'destroyAction'])->whereNumber('id')->whereNumber('actionId')->middleware('subject:people_managers');
+
+// Named career paths + the Career Path Explorer.
+Route::get('/competency/career-paths/explorer', [CompetencyCareerPathController::class, 'explorer']);
+Route::get('/competency/career-paths/role-options', [CompetencyCareerPathController::class, 'roleOptions']);
+Route::get('/competency/career-paths', [CompetencyCareerPathController::class, 'index']);
+Route::post('/competency/career-paths', [CompetencyCareerPathController::class, 'store']);
+Route::get('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'show'])->whereNumber('id');
+Route::put('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'update'])->whereNumber('id');
+Route::delete('/competency/career-paths/{id}', [CompetencyCareerPathController::class, 'destroy'])->whereNumber('id');
+
+// Learning assignments (lms_assignments rows tagged source='competency').
+Route::get('/competency/learning-assignments/courses', [CompetencyLearningAssignmentController::class, 'courses']);
+Route::get('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'index']);
+Route::post('/competency/learning-assignments', [CompetencyLearningAssignmentController::class, 'store'])->middleware('subject:people_managers');
+Route::put('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'update'])->whereNumber('id')->middleware('subject:people_managers');
+Route::delete('/competency/learning-assignments/{id}', [CompetencyLearningAssignmentController::class, 'destroy'])->whereNumber('id')->middleware('subject:people_managers');
+
+/*
+| Framework & Role Mapping Studio (token authenticated, tenant scoped).
+| Additive: reuses existing tables (s_users_skills, s_user_jobrole,
+| s_user_skill_jobrole, s_proficiency_levels, s_competency_frameworks/_items)
+| plus two new studio tables (s_competency_framework_weights, _mapping_reviews).
+*/
+Route::get('/competency/studio/summary', [CompetencyStudioController::class, 'summary']);
+Route::get('/competency/studio/framework-structure', [CompetencyStudioController::class, 'frameworkStructure']);
+// The requirements grid on COMPETENCIES: rows are `competency`, columns are job
+// roles by id and scoped to a department, cells are the effective target with
+// `source` saying whether it was chosen for the role or inherited from its
+// framework. `/competency/role-mapping/matrix` stays for the skill grid.
+Route::get('/competency/studio/requirements-matrix', [CompetencyStudioController::class, 'requirementsMatrix']);
+// The broken links between frameworks and roles, as rows rather than counts.
+Route::get('/competency/studio/reconciliation', [CompetencyStudioController::class, 'reconciliation']);
+Route::get('/competency/studio/proficiency-scale', [CompetencyStudioController::class, 'proficiencyScale']);
+Route::post('/competency/studio/proficiency-scale', [CompetencyStudioController::class, 'storeLevel']);
+Route::put('/competency/studio/proficiency-scale/{id}', [CompetencyStudioController::class, 'updateLevel'])->whereNumber('id');
+Route::delete('/competency/studio/proficiency-scale/{id}', [CompetencyStudioController::class, 'deleteLevel'])->whereNumber('id');
+Route::get('/competency/studio/weights', [CompetencyStudioController::class, 'weights']);
+Route::put('/competency/studio/weights', [CompetencyStudioController::class, 'saveWeights']);
+// Scoring rules behind the weights (s_competency_settings, scope='weighting').
+Route::get('/competency/studio/weighting-config', [CompetencyStudioController::class, 'weightingConfig']);
+Route::put('/competency/studio/weighting-config', [CompetencyStudioController::class, 'saveWeightingConfig']);
+
+// Framework show / update / clone / items / weighting (list/create/delete are above).
+Route::get('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'show'])->whereNumber('id');
+Route::put('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'update'])->whereNumber('id');
+Route::post('/competency/frameworks/{id}/clone', [CompetencyFrameworkController::class, 'clone'])->whereNumber('id');
+Route::get('/competency/frameworks/{id}/items', [CompetencyFrameworkController::class, 'items'])->whereNumber('id');
+Route::post('/competency/frameworks/{id}/items', [CompetencyFrameworkController::class, 'storeItem'])->whereNumber('id');
+Route::delete('/competency/frameworks/{id}/items/{itemId}', [CompetencyFrameworkController::class, 'destroyItem'])->whereNumber('id')->whereNumber('itemId');
+Route::get('/competency/frameworks/{id}/weights', [CompetencyFrameworkController::class, 'weights'])->whereNumber('id');
+Route::put('/competency/frameworks/{id}/weights', [CompetencyFrameworkController::class, 'saveWeights'])->whereNumber('id');
+
+// Role mapping matrix (cells live on s_user_skill_jobrole).
+Route::get('/competency/role-mapping/roles', [CompetencyRoleMappingController::class, 'roles']);
+Route::get('/competency/role-mapping/matrix', [CompetencyRoleMappingController::class, 'matrix']);
+Route::put('/competency/role-mapping/cell', [CompetencyRoleMappingController::class, 'upsertCell']);
+Route::delete('/competency/role-mapping/cell', [CompetencyRoleMappingController::class, 'deleteCell']);
+
+// Mapping-change approval workflow.
+Route::get('/competency/mapping-reviews', [CompetencyMappingReviewController::class, 'index']);
+Route::post('/competency/mapping-reviews', [CompetencyMappingReviewController::class, 'store']);
+Route::put('/competency/mapping-reviews/{id}', [CompetencyMappingReviewController::class, 'update'])->whereNumber('id');
+Route::post('/competency/mapping-reviews/bulk-approve', [CompetencyMappingReviewController::class, 'bulkApprove']);
+
+/*
+| Certification & Compliance Center (token authenticated, tenant scoped).
+| Additive on top of the three certification routes above, which keep their
+| paths and response envelope. Reads/writes s_competency_certifications, the
+| new s_competency_certification_requirements policy table, the shared
+| s_competency_evidence table for documents and s_competency_activity_log for
+| history. Static segments are declared BEFORE the /{id} routes so the numeric
+| show/update route cannot swallow metrics / filters / export / bulk.
+*/
+Route::get('/competency/certifications/metrics', [CompetencyCertificationController::class, 'metrics']);
+Route::get('/competency/certifications/filters', [CompetencyCertificationController::class, 'filters']);
+Route::get('/competency/certifications/export', [CompetencyCertificationController::class, 'export']);
+Route::post('/competency/certifications/bulk', [CompetencyCertificationController::class, 'bulk'])->middleware('subject:record_owners');
+
+Route::get('/competency/certifications/{id}', [CompetencyCertificationController::class, 'show'])->whereNumber('id');
+Route::put('/competency/certifications/{id}', [CompetencyCertificationController::class, 'update'])->whereNumber('id')->middleware('subject:record_owners');
+Route::post('/competency/certifications/{id}/notes', [CompetencyCertificationController::class, 'addNote'])->whereNumber('id')->middleware('subject:record_owners');
+Route::get('/competency/certifications/{id}/compliance', [CompetencyCertificationController::class, 'compliance'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/requirements', [CompetencyCertificationController::class, 'requirements'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/history', [CompetencyCertificationController::class, 'history'])->whereNumber('id');
+Route::get('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'documents'])->whereNumber('id');
+Route::post('/competency/certifications/{id}/documents', [CompetencyCertificationController::class, 'storeDocument'])->whereNumber('id')->middleware('subject:record_owners');
+Route::delete('/competency/certifications/{id}/documents/{documentId}', [CompetencyCertificationController::class, 'destroyDocument'])->whereNumber('id')->whereNumber('documentId')->middleware('subject:record_owners');
+
+// Certification requirements - the "which role must hold what" policy master.
+Route::get('/competency/certification-requirements', [CompetencyCertificationRequirementController::class, 'index']);
+Route::post('/competency/certification-requirements', [CompetencyCertificationRequirementController::class, 'store']);
+Route::put('/competency/certification-requirements/{id}', [CompetencyCertificationRequirementController::class, 'update'])->whereNumber('id');
+Route::delete('/competency/certification-requirements/{id}', [CompetencyCertificationRequirementController::class, 'destroy'])->whereNumber('id');
+
+/*
+| Audit & Activity Center (token authenticated, tenant scoped).
+| Read-only over s_competency_activity_log - the feed every competency
+| controller already writes to via ResolvesCompetencyContext - plus
+| tbl_user_journey_logs for the User Actions Log tab's screen-access history.
+| The only write is the export event the export endpoint logs about itself.
+| Static segments are declared BEFORE /{id} so user-actions is not swallowed.
+|
+| GATED profile:admin,hr - ADDED 2026-08-31, AND IT WAS OVERDUE.
+|
+| These seven carried NO middleware whatsoever. The controller self-guards to the
+| extent that ResolvesApiIdentity refuses a missing or expired token with a 401,
+| so they were never anonymous - but any authenticated employee could read their
+| whole organisation's competency activity log (2,038 rows dev / 1,987 live) and,
+| via user-actions/{userId}, any named colleague's screen-by-screen history.
+|
+| That was latent only because the screen behind it has never been reachable:
+| CmAudit is mapped on a menu id that exists on neither database. The same change
+| that creates menu 208 turns this from a URL nobody visits into a live screen, so
+| the gate has to land in the same release, not after it.
+|
+| admin,hr and not admin,hr,manager: an activity log naming every employee's
+| actions is an administrative record. Managers are excluded for the same reason
+| ResolvesCompetencyContext excludes them from COMPETENCY_ELEVATED - their honest
+| scope is "my team", and that cannot be enforced today: tbluser.reporting_manager_id is populated on 8 of 2345
+| rows on the application database (tenant 3 only) and 0 of 299 on live - so
+| team scope is technically evaluable and resolves to almost nobody, which is
+| not the same as unevaluable. Measured 2026-09-30; ResolvesLeaveAuthority:28-38
+| carries the same correction.
+| Granting org-wide reach in the meantime would be a wider grant than the one
+| being closed. Note that SubjectAuthority::PEOPLE_MANAGERS deliberately DOES
+| make that wider grant, for the performance and offboarding guards, because a
+| manager who cannot rate their reports cannot do the job the module exists for.
+*/
+Route::middleware('profile:admin,hr')->group(function () {
+    Route::get('/competency/audit/metrics', [CompetencyAuditController::class, 'metrics']);
+    Route::get('/competency/audit/filters', [CompetencyAuditController::class, 'filters']);
+    Route::get('/competency/audit/export', [CompetencyAuditController::class, 'export']);
+    Route::get('/competency/audit/user-actions', [CompetencyAuditController::class, 'userActions']);
+    Route::get('/competency/audit/user-actions/{userId}', [CompetencyAuditController::class, 'userActivity'])->whereNumber('userId');
+    Route::get('/competency/audit', [CompetencyAuditController::class, 'index']);
+    Route::get('/competency/audit/{id}', [CompetencyAuditController::class, 'show'])->whereNumber('id');
+});
 
 //HRIT dashboard
+// weeklySummary and KPI carry no route gate, and that is survivable: both resolve
+// the tenant with apiTenantId(), which reads the TOKEN, so a caller without one
+// gets null and a 400 rather than another organisation's rows. They are dead
+// (superseded by /api/attendance/*) but not dangerous, so they stay - deleting
+// them would reverse a deliberate earlier decision recorded in
+// AttendanceDashboardApiController and LeaveDistributionApiController, and could
+// break a consumer outside this repo.
 Route::get('/attendance-weekly', [AttendanceApiController::class, 'weeklySummary']);
 Route::get('/KPI-HRITDashboard', [AttendanceApiController::class, 'KPI']);
+// F-159. employeeMonthlyReport is NOT in that category. It takes user_id from the
+// request and returns that person's punch times, lateness and leave *reasons*, so
+// it needs an identity gate, not just a tenant one. Its own `if ($type === "API")`
+// check is skipped entirely by a caller who omits `type`; api.token is not
+// optional. The HR-or-self rule lives in the controller, because "or self" is
+// about which row is asked for and middleware cannot see that.
+Route::get('/employee-attendance-monthly-report', [AttendanceApiController::class, 'employeeMonthlyReport'])
+    ->middleware('api.token');
 
-Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise']);
+Route::get('/jobroles-by-department', [JobroleApiController::class, 'getDepartmentWise'])->middleware('api.token');
 Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution']);
+
+/*
+|--------------------------------------------------------------------------
+| Leave Management API
+|--------------------------------------------------------------------------
+| Token authenticated endpoints backing the Next.js Leave Management module
+| (Dashboard, Leave Requests, Reports, Configuration). Every endpoint is
+| scoped by sub_institute_id and the April-March leave year - see
+| App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveContext.
+*/
+Route::prefix('leave')->group(function () {
+    // Dashboard
+    Route::get('/dashboard', [LeaveDashboardController::class, 'index']);
+    Route::get('/trend', [LeaveDashboardController::class, 'trend']);
+    Route::get('/department-summary', [LeaveDashboardController::class, 'departmentSummary']);
+    Route::get('/type-distribution', [LeaveDashboardController::class, 'typeDistribution']);
+    Route::get('/holidays/upcoming', [LeaveDashboardController::class, 'upcomingHolidays']);
+
+    // Shared lookups
+    Route::get('/options', [LeaveOptionsController::class, 'index']);
+    Route::get('/balances', [LeaveOptionsController::class, 'balances']);
+
+    // Leave requests
+    Route::get('/requests', [LeaveRequestApiController::class, 'index']);
+    Route::post('/requests', [LeaveRequestApiController::class, 'store']);
+    Route::post('/requests/bulk-decision', [LeaveRequestApiController::class, 'bulkDecision']);
+    Route::get('/requests/{id}', [LeaveRequestApiController::class, 'show'])->whereNumber('id');
+    Route::post('/requests/{id}/decision', [LeaveRequestApiController::class, 'decision'])->whereNumber('id');
+    /*
+    | Cancel APPROVED leave that has not started. The status enum has had
+    | `cancelled` since the table was created and no code path ever reached it -
+    | "cancel after approval" is a FAIL in the audit's golden transactions.
+    | Distinct from DELETE /requests/{id}, which withdraws a PENDING request.
+    */
+    Route::post('/requests/{id}/cancel', [LeaveRequestApiController::class, 'cancel'])->whereNumber('id');
+    Route::delete('/requests/{id}', [LeaveRequestApiController::class, 'destroy'])->whereNumber('id');
+
+    // Reports
+    // What reports exist, and their category counts - so the screen stops
+    // computing them from a frozen frontend constant.
+    Route::get('/reports/catalog', [LeaveReportApiController::class, 'catalog']);
+    Route::get('/reports/summary', [LeaveReportApiController::class, 'summary']);
+    Route::get('/reports/register', [LeaveReportApiController::class, 'register']);
+    Route::get('/reports/balance', [LeaveReportApiController::class, 'balance']);
+
+    // Configuration - leave types
+    Route::get('/leave-types', [LeaveTypeApiController::class, 'index']);
+    Route::post('/leave-types', [LeaveTypeApiController::class, 'store']);
+    Route::put('/leave-types/{id}', [LeaveTypeApiController::class, 'store'])->whereNumber('id');
+    Route::patch('/leave-types/{id}/status', [LeaveTypeApiController::class, 'toggleStatus'])->whereNumber('id');
+    Route::delete('/leave-types/{id}', [LeaveTypeApiController::class, 'destroy'])->whereNumber('id');
+
+    // Configuration - holidays and weekly off pattern
+    Route::get('/holidays', [HolidayApiController::class, 'index']);
+    Route::post('/holidays', [HolidayApiController::class, 'store']);
+    Route::put('/holidays/{id}', [HolidayApiController::class, 'update'])->whereNumber('id');
+    Route::delete('/holidays/{id}', [HolidayApiController::class, 'destroy']);
+    Route::get('/weekdays', [HolidayApiController::class, 'weekdays']);
+    Route::post('/weekdays', [HolidayApiController::class, 'storeWeekdays']);
+
+    /*
+    | Configuration - leave entitlement. F-96, the module's missing front door.
+    |
+    | hrms_leave_allocation is what every balance is computed from, it holds one
+    | row for the entire platform, and nothing but a private side effect of
+    | saving a leave type has ever written to it. These two give it a screen.
+    */
+    Route::get('/allocations', [LeaveAllocationApiController::class, 'index']);
+    Route::put('/allocations', [LeaveAllocationApiController::class, 'save']);
+
+    // Configuration - approval workflow and role access
+    Route::get('/workflow', [LeaveWorkflowApiController::class, 'workflow']);
+    Route::put('/workflow', [LeaveWorkflowApiController::class, 'saveWorkflow']);
+    Route::get('/roles', [LeaveWorkflowApiController::class, 'roles']);
+    Route::put('/roles', [LeaveWorkflowApiController::class, 'saveRoles']);
+
+    // Distribution - new controller, GET /api/leave-distribution above is
+    // untouched and still serves its existing consumers.
+    Route::get('/distribution', [LeaveDistributionApiController::class, 'index']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Attendance Management API
+|--------------------------------------------------------------------------
+| Token authenticated, session free endpoints backing the Next.js Attendance
+| Management module (Attendance Tracking + Attendance Reports).
+|
+| These are additive: the legacy web routes hrms-attendance,
+| hrms-attendance-in-time/store, hrms-attendance-out-time/store,
+| hrms-attendance-report and get-employees-list still point at
+| App\Http\Controllers\HRMS\HrmsController, and /api/attendance-weekly plus
+| /api/KPI-HRITDashboard still point at
+| App\Http\Controllers\Api\HRITDashboard\AttendanceApiController.
+*/
+Route::prefix('attendance')->group(function () {
+    // Self service - my attendance calendar and punches
+    Route::get('/my-attendance', [AttendanceTrackingApiController::class, 'myAttendance']);
+    Route::post('/punch-in', [AttendanceTrackingApiController::class, 'punchIn']);
+    Route::post('/punch-out', [AttendanceTrackingApiController::class, 'punchOut']);
+
+    /*
+    | Self summary - the caller's roster for today, their real alerts, and the
+    | count of their own outstanding requests. HRIT Sprint 2, closing F-98 and
+    | F-113: those three widgets rendered hardcoded arrays and a fixed date.
+    |
+    | Leave balance and upcoming holidays are deliberately NOT here. They have
+    | correct endpoints already (/api/leave/balances, /api/leave/holidays/
+    | upcoming) and the dashboard calls those - a second implementation of a
+    | number the product must agree with itself about is how they drift.
+    */
+    Route::get('/self-summary', [AttendanceTrackingApiController::class, 'selfSummary']);
+
+    /*
+    | Attendance regularisation - request, review, apply. F-107.
+    |
+    | The correction itself already existed (POST update_user_att) with no
+    | caller; what was missing was the ask, the queue and the record. Approval
+    | reuses the leave permission matrix - see the controller's docblock for
+    | why that is a deliberate reuse rather than a new column no screen sets.
+    */
+    Route::get('/regularisations', [AttendanceRegularisationApiController::class, 'index']);
+    Route::post('/regularisations', [AttendanceRegularisationApiController::class, 'store']);
+    Route::post('/regularisations/{id}/decision', [AttendanceRegularisationApiController::class, 'decision'])->whereNumber('id');
+    Route::delete('/regularisations/{id}', [AttendanceRegularisationApiController::class, 'destroy'])->whereNumber('id');
+
+    /*
+    | Reporting. F-120, and it is gated here as well as on the legacy routes -
+    | closing it on one surface only would move the hole rather than shut it.
+    | These four are what the Attendance Reports screen reads; an `employee`
+    | token used to get 200 from all of them, including the full employee list
+    | and the organisation's attendance totals.
+    |
+    | The role list matches REPORTING in the frontend's gtg-nav-visibility.ts,
+    | so the menu and the API agree. `profile:` rather than `hrit.role:` because
+    | these are /api routes and always carry a token; there is no Blade surface
+    | to keep working.
+    |
+    | Everything above this - my-attendance, punch-in, punch-out, self-summary
+    | and the regularisation endpoints - stays open. It is the caller's own
+    | data, and the controllers resolve the subject as the caller.
+    */
+    Route::middleware('profile:admin,hr,executive,auditor')->group(function () {
+        // Report lookups
+        Route::get('/report-filters', [AttendanceReportApiController::class, 'filters']);
+        Route::get('/employees', [AttendanceReportApiController::class, 'employees']);
+
+        // Dashboard analytics (department + employee scoped)
+        Route::get('/weekly-summary', [AttendanceDashboardApiController::class, 'weeklySummary']);
+        Route::get('/kpi', [AttendanceDashboardApiController::class, 'kpi']);
+    });
+});
 
 
 
@@ -152,12 +1082,484 @@ Route::get('/leave-distribution', [LeaveDistribution::class, 'leaveDistribution'
 
 Route::get('/enroll', [LmsCourseEnrollController::class, 'index']);
 Route::get('/enrolled_courses', [LmsCourseEnrollController::class, 'index']);
+Route::get('/available_courses', [LmsCourseEnrollController::class, 'available']);
+
+/*
+| LMS Assignments – token-authenticated assignment management.
+| These sit in api.php (not lms.php) so they resolve under the /api prefix
+| that the Next.js frontend expects.
+*/
+Route::get('/lmsAssignment/stats', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'stats']);
+Route::post('/lmsAssignment/bulkUpdateStatus', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'bulkUpdateStatus']);
+Route::post('/lmsAssignment/updateStatus/{id}', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'updateStatus']);
+Route::post('/lmsAssignment/import', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'import']);
+Route::get('/lmsAssignment/learners', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'learners']);
+Route::get('/lmsAssignment/enrollments', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'enrollments']);
+Route::post('/lmsAssignment/request', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'requestEnrollment']);
+Route::post('/lmsAssignment/review/{id}', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'review']);
+Route::post('/lmsAssignment/bulkReview', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'bulkReview']);
+Route::get('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'index']);
+Route::post('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'store']);
+
+/*
+| Learning Catalog - token-authenticated course management. The equivalent
+| school_setup/sub_std_map web routes stay untouched for the Blade admin UI.
+| Static segments are declared before /{id} so they are not captured by it.
+*/
+/*
+| Administration & Governance.
+|
+| Users, roles and the permission matrix all have controllers already, but
+| those live in routes/user.php behind ['auth','session','menu'] - session
+| authenticated and CSRF protected, so unusable cross-origin for writes.
+| Trainers, vendors and integrations are new entities with no prior model.
+| routes/user.php is untouched, so the old frontend keeps working.
+*/
+Route::get('/lms/governance/kpis', [LmsGovernanceController::class, 'kpis']);
+Route::get('/lms/governance/system-health', [LmsGovernanceController::class, 'systemHealth']);
+Route::get('/lms/governance/audit-logs', [LmsGovernanceController::class, 'auditLogs']);
+
+Route::get('/lms/governance/users', [LmsGovernanceController::class, 'users']);
+Route::post('/lms/governance/users', [LmsGovernanceController::class, 'storeUser']);
+// Stays ahead of /users/{id} so the wildcard does not swallow it.
+Route::post('/lms/governance/users/import', [LmsGovernanceController::class, 'importUsers']);
+Route::put('/lms/governance/users/{id}', [LmsGovernanceController::class, 'updateUser']);
+Route::delete('/lms/governance/users/{id}', [LmsGovernanceController::class, 'destroyUser']);
+
+Route::get('/lms/governance/roles', [LmsGovernanceController::class, 'roles']);
+Route::post('/lms/governance/roles', [LmsGovernanceController::class, 'storeRole']);
+Route::put('/lms/governance/roles/{id}', [LmsGovernanceController::class, 'updateRole']);
+Route::delete('/lms/governance/roles/{id}', [LmsGovernanceController::class, 'destroyRole']);
+
+Route::get('/lms/governance/permissions', [LmsGovernanceController::class, 'permissions']);
+Route::post('/lms/governance/permissions', [LmsGovernanceController::class, 'savePermissions']);
+
+Route::get('/lms/governance/trainers', [LmsPartnerController::class, 'trainers']);
+Route::post('/lms/governance/trainers', [LmsPartnerController::class, 'storeTrainer']);
+Route::put('/lms/governance/trainers/{id}', [LmsPartnerController::class, 'updateTrainer']);
+Route::delete('/lms/governance/trainers/{id}', [LmsPartnerController::class, 'destroyTrainer']);
+
+Route::get('/lms/governance/vendors', [LmsPartnerController::class, 'vendors']);
+Route::post('/lms/governance/vendors', [LmsPartnerController::class, 'storeVendor']);
+Route::put('/lms/governance/vendors/{id}', [LmsPartnerController::class, 'updateVendor']);
+Route::delete('/lms/governance/vendors/{id}', [LmsPartnerController::class, 'destroyVendor']);
+
+Route::get('/lms/governance/integrations', [LmsPartnerController::class, 'integrations']);
+Route::post('/lms/governance/integrations', [LmsPartnerController::class, 'storeIntegration']);
+Route::put('/lms/governance/integrations/{id}', [LmsPartnerController::class, 'updateIntegration']);
+Route::delete('/lms/governance/integrations/{id}', [LmsPartnerController::class, 'destroyIntegration']);
+
+/*
+| Course Builder assessments. An additive /api surface over question_paper -
+| that table's own routes live in routes/lms.php as CSRF-protected web routes,
+| which a cross-origin call cannot use. routes/lms.php is left untouched, so the
+| old frontend's Assessment Library is unaffected.
+| The static /questions segment stays ahead of the /{id} wildcard.
+*/
+Route::get('/lms/assessments/questions', [LmsAssessmentController::class, 'questions']);
+Route::get('/lms/assessments', [LmsAssessmentController::class, 'index']);
+Route::post('/lms/assessments', [LmsAssessmentController::class, 'store']);
+/*
+ * Question authoring — the half of the quiz builder that did not exist.
+ *
+ * Declared BEFORE /lms/assessments/{id} so the static `questions` segment is
+ * never swallowed by the id parameter, and constrained with whereNumber for the
+ * same reason.
+ */
+/*
+ * LMS reports.
+ *
+ * Three menu rows have pointed at these since tblmenumaster_g2g was written,
+ * under a disabled parent with no screen. Two of the three had no data to
+ * report on until lms_quiz_attempt and quiz authoring existed.
+ */
+Route::get('/lms/reports/employee-analysis', [App\Http\Controllers\Api\LmsReportController::class, 'employeeAnalysis']);
+Route::get('/lms/reports/quiz-progress', [App\Http\Controllers\Api\LmsReportController::class, 'quizProgress']);
+Route::get('/lms/reports/question-wise', [App\Http\Controllers\Api\LmsReportController::class, 'questionWise']);
+
+Route::get('/lms/assessments/{id}/questions', [LmsAssessmentController::class, 'paperQuestions'])->whereNumber('id');
+/*
+ * Declared BEFORE the plain POST .../questions route so the static `generate`
+ * segment is matched first — Laravel takes the first match, and the two paths
+ * differ only by that trailing segment.
+ */
+Route::post('/lms/assessments/{id}/questions/generate', [LmsAssessmentController::class, 'generateQuestions'])->whereNumber('id');
+Route::post('/lms/assessments/{id}/questions', [LmsAssessmentController::class, 'storeQuestion'])->whereNumber('id');
+Route::put('/lms/assessments/{id}/questions/{questionId}', [LmsAssessmentController::class, 'updateQuestion'])->whereNumber('id')->whereNumber('questionId');
+Route::delete('/lms/assessments/{id}/questions/{questionId}', [LmsAssessmentController::class, 'destroyQuestion'])->whereNumber('id')->whereNumber('questionId');
+
+Route::put('/lms/assessments/{id}', [LmsAssessmentController::class, 'update']);
+Route::delete('/lms/assessments/{id}', [LmsAssessmentController::class, 'destroy']);
+
+Route::get('/lms/courses/kpis', [LmsCourseController::class, 'kpis']);
+Route::get('/lms/courses/filters', [LmsCourseController::class, 'filters']);
+Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk']);
+// Who a course is for. Declared BEFORE /lms/courses/{id} so "audience" is not
+// captured as an id.
+Route::get('/lms/courses/{id}/audience/preview', [LmsCourseController::class, 'audiencePreview'])->whereNumber('id');
+/*
+ * Which modules this organisation uses.
+ *
+ * Gated profile:admin - it writes the rights rows that decide what every role
+ * can see. The tenant comes from the token; the request cannot name another.
+ */
+/*
+ * How far this organisation has got with setting itself up.
+ *
+ * status is readable by any authenticated member - it is a checklist of the
+ * organisation's own configuration, and an HR user needs to see what is
+ * outstanding. Creating the standard roles writes to tbluserprofilemaster, so
+ * that one is admin-only.
+ */
+Route::get('/organization/setup-status', [\App\Http\Controllers\Api\Organization\OrganizationSetupController::class, 'status'])->middleware('api.token');
+Route::post('/organization/setup/roles', [\App\Http\Controllers\Api\Organization\OrganizationSetupController::class, 'createRoles'])->middleware('profile:admin');
+
+/*
+ * ORGANISATION SETTINGS and the AUDIT TRAIL.
+ *
+ * The settings are `profile:admin` - they change how the product behaves for
+ * everybody in the organisation, and raising the password minimum is a security
+ * decision, not an HR one.
+ *
+ * The audit reader is deliberately OUTSIDE that group. An auditor must be able
+ * to read the trail and must not be able to change a setting, and that is two
+ * different answers to two different questions - so the method carries its own
+ * role check rather than borrowing this one.
+ */
+Route::middleware(['api.token', 'profile:admin'])->group(function () {
+    Route::get('/organization/settings', [\App\Http\Controllers\Api\Organization\OrganizationSettingsController::class, 'show']);
+    Route::put('/organization/settings', [\App\Http\Controllers\Api\Organization\OrganizationSettingsController::class, 'update']);
+});
+
+/*
+ * ROLES & ACCESS. `profile:admin` - a role's data scope and landing page are
+ * organisation-wide decisions, and one of them is nominally about who can see
+ * whose records.
+ *
+ * WHICH SCREENS a role reaches is NOT here. That is the rights matrix, edited in
+ * Role & Permissions, and two screens writing the same rows with no rule about
+ * which wins is how permissions drift.
+ */
+Route::middleware(['api.token', 'profile:admin'])->group(function () {
+    Route::get('/organization/roles', [\App\Http\Controllers\Api\Organization\RoleSettingsController::class, 'index']);
+    Route::put('/organization/roles/{id}', [\App\Http\Controllers\Api\Organization\RoleSettingsController::class, 'update'])
+        ->whereNumber('id');
+});
+
+Route::get('/organization/audit', [\App\Http\Controllers\Api\Organization\OrganizationSettingsController::class, 'audit'])
+    ->middleware(['api.token', 'platformright:/settings?s=audit,view']);
+
+/*
+ * DELIVERY — how this organisation sends email.
+ *
+ * `profile:admin,hr`, matching the Settings rail: HR is who chases people who
+ * have not signed in, so HR is who needs to be able to make the invite actually
+ * arrive rather than hand out a link.
+ *
+ * The test send is throttled. It is the one endpoint here that causes an
+ * outbound message, and an unlimited "send me a test" button is a way to have
+ * the organisation's own mailbox rate-limited by its provider.
+ */
+Route::middleware(['api.token', 'profile:admin,hr'])->group(function () {
+    Route::get('/organization/delivery', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'show']);
+    Route::put('/organization/delivery', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'update']);
+    Route::post('/organization/delivery/test', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'test'])
+        ->middleware('throttle:4,1');
+});
+
+Route::get('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'index'])->middleware('profile:admin');
+Route::post('/organization/modules', [\App\Http\Controllers\Api\Organization\ModuleEnablementController::class, 'store'])->middleware('profile:admin');
+
+/*
+ * THE ORGANISATION'S OWN DETAILS, on the API stack.
+ *
+ * settings\organizationDetailsController serves the same data from
+ * routes/settings.php under ['auth','session','menu'] - the WEB stack - and then
+ * reads a Sanctum token out of the body. It therefore needs a browser session
+ * AND a token, and the Next.js frontend has only the token. That is why
+ * Organization Profile is a finished screen nobody can save from, and why
+ * org_details holds 4 rows for 12 live organisations.
+ *
+ * Reading is open to any authenticated member (an employee may see who they
+ * work for); writing is admin and HR, matching the rights the menu grants.
+ */
+Route::get('/organization/profile', [\App\Http\Controllers\Api\Organization\OrganizationProfileController::class, 'show'])->middleware('api.token');
+Route::post('/organization/profile', [\App\Http\Controllers\Api\Organization\OrganizationProfileController::class, 'save'])->middleware('profile:admin,hr');
+
+/*
+ * FIRST-RUN GUIDANCE - what THIS person should do next.
+ *
+ * `api.token` and no profile guard, unlike everything above it. That is the
+ * point: an employee's next step is as real as an administrator's, and all nine
+ * roles get an answer. The role is read from the TOKEN'S OWNER and decides the
+ * content, so there is nothing a caller can send to see somebody else's list -
+ * and the per-step permission check (does this profile have can_view on the
+ * screen the step links to?) is finer than any route guard could be.
+ */
+Route::get('/onboarding/next-steps', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'index'])->middleware('api.token');
+Route::post('/onboarding/next-steps/dismiss', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'dismiss'])->middleware('api.token');
+Route::post('/onboarding/next-steps/restore', [\App\Http\Controllers\Api\Onboarding\NextStepsController::class, 'restore'])->middleware('api.token');
+
+Route::get('/lms/courses/{id}/audience/suggested', [LmsCourseController::class, 'suggestedAudience'])->whereNumber('id');
+Route::post('/lms/courses/{id}/audience', [LmsCourseController::class, 'assignAudience'])->whereNumber('id');
+Route::get('/lms/courses', [LmsCourseController::class, 'index']);
+Route::post('/lms/courses', [LmsCourseController::class, 'store']);
+Route::get('/lms/courses/{id}', [LmsCourseController::class, 'show']);
+Route::put('/lms/courses/{id}', [LmsCourseController::class, 'update']);
+Route::delete('/lms/courses/{id}', [LmsCourseController::class, 'destroy']);
+
+/*
+| Build with AI - outline generation (DeepSeek) and presentation rendering
+| (Gamma). Both previously lived in the old frontend's Next.js API routes.
+*/
+/*
+| My Learning - the course player. Progress and notes are new entities; the
+| chapter/content writes exist as web routes but are CSRF-blocked cross-origin.
+*/
+Route::get('/lms/learning/courses', [LmsLearningController::class, 'courses']);
+Route::get('/lms/learning/assessments', [LmsLearningController::class, 'assessments']);
+Route::post('/lms/learning/progress', [LmsLearningController::class, 'saveProgress']);
+// The learner declaring themselves finished. Separate from the certificate,
+// which still requires every lesson.
+Route::post('/lms/learning/courses/{courseId}/complete', [LmsLearningController::class, 'completeCourse'])->whereNumber('courseId');
+
+/*
+ * The course quiz — the gate between finishing the lessons and earning the
+ * certificate. `/quiz/{attemptId}` is declared with whereNumber so it can never
+ * shadow a future static segment under the same prefix.
+ */
+Route::get('/lms/learning/courses/{courseId}/quiz', [App\Http\Controllers\Api\LmsQuizController::class, 'show'])->whereNumber('courseId');
+Route::post('/lms/learning/courses/{courseId}/quiz/start', [App\Http\Controllers\Api\LmsQuizController::class, 'start'])->whereNumber('courseId');
+Route::post('/lms/learning/quiz/{attemptId}/submit', [App\Http\Controllers\Api\LmsQuizController::class, 'submit'])->whereNumber('attemptId');
+Route::get('/lms/learning/quiz/{attemptId}', [App\Http\Controllers\Api\LmsQuizController::class, 'result'])->whereNumber('attemptId');
+Route::get('/lms/learning/notes', [LmsLearningController::class, 'notes']);
+Route::post('/lms/learning/notes', [LmsLearningController::class, 'storeNote']);
+Route::put('/lms/learning/notes/{id}', [LmsLearningController::class, 'updateNote']);
+Route::delete('/lms/learning/notes/{id}', [LmsLearningController::class, 'destroyNote']);
+Route::post('/lms/learning/chapters', [LmsLearningController::class, 'storeChapter']);
+Route::put('/lms/learning/chapters/{id}', [LmsLearningController::class, 'updateChapter']);
+Route::delete('/lms/learning/chapters/{id}', [LmsLearningController::class, 'destroyChapter']);
+// Upload a lesson file. Until this existed a lesson could only ever be a
+// public URL, so an author with a PDF on their laptop could not make one.
+Route::post('/lms/learning/content/upload', [LmsLearningController::class, 'uploadContent']);
+Route::post('/lms/learning/content', [LmsLearningController::class, 'storeContent']);
+Route::put('/lms/learning/content/{id}', [LmsLearningController::class, 'updateContent']);
+Route::delete('/lms/learning/content/{id}', [LmsLearningController::class, 'destroyContent']);
+Route::get('/lms/learning/certificates', [LmsLearningController::class, 'certificates']);
+Route::post('/lms/learning/certificates', [LmsLearningController::class, 'issueCertificate']);
+// Public by design: checking whether a credential is genuine must not require
+// the checker to hold an account. Returns only the fields printed on the
+// certificate itself, never the wider learner record.
+Route::get('/lms/learning/certificates/verify/{code}', [LmsLearningController::class, 'verifyCertificate']);
+Route::get('/lms/learning/certificates/{id}/download', [LmsLearningController::class, 'downloadCertificate']);
+Route::post('/lms/learning/certificates/{id}/reissue', [LmsLearningController::class, 'reissueCertificate']);
+// Public: a credential nobody outside the org can check is worth nothing.
+Route::get('/verify/certificate/{code}', [LmsLearningController::class, 'verifyCertificate']);
+Route::get('/lms/learning/discussions', [LmsLearningController::class, 'discussions']);
+Route::post('/lms/learning/discussions', [LmsLearningController::class, 'storeDiscussion']);
+Route::post('/lms/learning/discussions/{id}/replies', [LmsLearningController::class, 'replyToDiscussion']);
+Route::delete('/lms/learning/discussions/{id}', [LmsLearningController::class, 'destroyDiscussion']);
+Route::get('/lms/learning/courses/{courseId}', [LmsLearningController::class, 'course']);
+
+/*
+| Sessions & Calendar. Sessions live in lms_virtual_classroom; attendees in
+| lms_session_registrations. Static segments precede /{id}.
+*/
+// Both static segments stay ahead of /lms/sessions/{id} so they are not
+// swallowed by the wildcard.
+Route::get('/lms/sessions/stats', [LmsSessionController::class, 'stats']);
+Route::get('/lms/sessions/deadlines', [LmsSessionController::class, 'deadlines']);
+Route::get('/lms/sessions', [LmsSessionController::class, 'index']);
+Route::post('/lms/sessions', [LmsSessionController::class, 'store']);
+Route::get('/lms/sessions/{id}/attendees', [LmsSessionController::class, 'attendees']);
+Route::post('/lms/sessions/{id}/register', [LmsSessionController::class, 'register']);
+Route::post('/lms/sessions/{id}/attendance', [LmsSessionController::class, 'markAttendance']);
+Route::delete('/lms/sessions/{id}/register', [LmsSessionController::class, 'cancelRegistration']);
+Route::put('/lms/sessions/{id}', [LmsSessionController::class, 'update']);
+Route::delete('/lms/sessions/{id}', [LmsSessionController::class, 'destroy']);
+
+// Everything the Build-with-AI form needs to be dropdowns rather than free text.
+Route::get('/lms/ai/scope-options', [App\Http\Controllers\Api\AiCourseController::class, 'scopeOptions']);
+Route::get('/lms/ai/status', [AiCourseController::class, 'status']);
+Route::post('/lms/ai/outline', [AiCourseController::class, 'generateOutline']);
+Route::get('/lms/ai/outlines', [AiCourseController::class, 'outlines']);
+Route::post('/lms/ai/outlines/{id}/publish', [AiCourseController::class, 'publish']);
+Route::post('/lms/ai/presentation', [AiCourseController::class, 'generatePresentation']);
+Route::get('/lms/ai/presentation/{generationId}', [AiCourseController::class, 'generationStatus']);
 Route::post('/enroll', [LmsCourseEnrollController::class, 'store']);
 Route::put('/enroll/{id}', [LmsCourseEnrollController::class, 'update']);
 Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
 
 
-Route::resource('departments-management', DepartmentManagementController::class);
+/*
+ * Department Management.
+ *
+ * ORDER MATTERS. The literal paths are declared BEFORE the resource, because
+ * Route::resource registers `departments-management/{id}` for show() and the
+ * router takes the first match: registered after the resource,
+ * `/departments-management/export` would be dispatched to show() with
+ * $id = "export".
+ *
+ * The resource itself is limited to the five methods that exist. It previously
+ * registered create() and edit() too, which this controller has never had.
+ */
+Route::prefix('departments-management')->group(function () {
+    Route::get('/export', [DepartmentManagementController::class, 'export']);
+    Route::get('/employees', [DepartmentManagementController::class, 'employees']);
+    Route::post('/reorder', [DepartmentManagementController::class, 'reorder']);
+    Route::patch('/{id}/head', [DepartmentManagementController::class, 'setHead']);
+    Route::patch('/{id}/parent', [DepartmentManagementController::class, 'setParent']);
+    // Move employees in / out. Both log an s_mobility_transfers row per
+    // employee, so a headcount never changes without a record of who moved.
+    Route::post('/{id}/employees', [DepartmentManagementController::class, 'assignEmployees']);
+    Route::delete('/{id}/employees', [DepartmentManagementController::class, 'unassignEmployees']);
+    // What is attached, before anything is done to it. ?mode=delete counts the
+    // subtree (delete cascades); ?mode=merge counts only this department.
+    Route::get('/{id}/impact', [DepartmentManagementController::class, 'impact']);
+    // The alternative to deleting: everything becomes the target's.
+    Route::post('/{id}/merge', [DepartmentManagementController::class, 'merge']);
+});
+
+Route::resource('departments-management', DepartmentManagementController::class)
+    ->only(['index', 'store', 'show', 'update', 'destroy']);
+
+/*
+ * Employee Directory.
+ *
+ * The sibling of departments-management, and the same ORDER MATTERS rule
+ * applies: /reference-data is declared before the resource, or the router
+ * dispatches it to show() with $id = "reference-data".
+ *
+ * Reads need only a valid token. Writes are gated on profile, because
+ * creating an employee mints a login and suspending one revokes access -
+ * neither is something an ordinary employee should be able to do by calling
+ * the endpoint directly. Hiding the button is not a control.
+ */
+Route::prefix('employees-management')->middleware('api.token')->group(function () {
+    Route::get('/reference-data', [EmployeeDirectoryController::class, 'referenceData']);
+
+    Route::middleware('profile:admin,hr')->group(function () {
+        /*
+         * SOMEBODY ELSE'S DOCUMENTS - and gated twice, deliberately.
+         *
+         * `profile:admin,hr` (administrator, hr_manager, hr_executive) says WHO may
+         * ask. The controller re-checks the target employee against the caller's
+         * OWN tenant, which says WHOM they may ask about. Neither is sufficient: an
+         * HR manager is HR for one organisation, not for all twelve, and a route
+         * gate alone cannot know that.
+         *
+         * The download is NOT here - it is on /account/documents/{id}/download,
+         * which resolves the same two permissions from the row itself. One reader,
+         * one rule.
+         */
+        Route::get('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'forEmployee'])->whereNumber('id');
+
+        /*
+         * HR files and removes an employee's document.
+         *
+         * These replace the legacy `POST /user/user_document/{id}`
+         * (tbluserController::addUserDocument), which wrote the object PUBLIC
+         * into the same folder this controller writes PRIVATE, recorded no
+         * file_path, and trusted sub_institute_id from the request body. Two
+         * writers with opposite visibility is why a download worked or failed
+         * depending on which screen had filed the document.
+         *
+         * The delete is separate from /account/documents/{id} on purpose: that
+         * one is owner-only by design, and widening it would have let any
+         * employee delete by guessing an id. This one is gated by role AND by
+         * the employee-in-my-tenant check inside the controller.
+         */
+        Route::post('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'storeForEmployee'])->whereNumber('id');
+        Route::delete('/{employee}/documents/{document}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroyForEmployee'])
+            ->whereNumber('employee')->whereNumber('document');
+        Route::post('/{employee}/documents/{document}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreForEmployee'])
+            ->whereNumber('employee')->whereNumber('document');
+        Route::post('/', [EmployeeDirectoryController::class, 'store']);
+        Route::put('/{id}', [EmployeeDirectoryController::class, 'update'])->whereNumber('id');
+        Route::patch('/{id}/status', [EmployeeDirectoryController::class, 'setStatus'])->whereNumber('id');
+        Route::post('/{id}/invite', [EmployeeDirectoryController::class, 'invite'])->whereNumber('id');
+
+        /*
+         * Who holds an account they have never been able to open. Declared
+         * BEFORE `/{id}` so a literal path is never read as an id - `whereNumber`
+         * already prevents that collision, but relying on the order of two
+         * separate route groups to keep it that way is how it comes back.
+         */
+        Route::get('/pending-access', [EmployeeDirectoryController::class, 'pendingAccess']);
+    });
+
+    Route::get('/', [EmployeeDirectoryController::class, 'index']);
+    Route::get('/{id}', [EmployeeDirectoryController::class, 'show'])->whereNumber('id');
+});
+
+// Per-department content: SOPs, Policies and Rules.
+// These three tabs previously had no backend at all - they rendered hardcoded
+// arrays and discarded every edit. See DepartmentContentController.
+Route::prefix('department-sops')->group(function () {
+    Route::get('/', [DepartmentSopController::class, 'index']);
+    Route::post('/', [DepartmentSopController::class, 'store']);
+    Route::get('/{id}/download', [DepartmentSopController::class, 'download']);
+    Route::delete('/{id}/document', [DepartmentSopController::class, 'removeDocument']);
+    // POST rather than PUT: the edit form can carry a file, and PHP does not
+    // populate $_FILES for PUT bodies. The client sends _method=PUT when it
+    // has no upload; this accepts both.
+    Route::post('/{id}', [DepartmentSopController::class, 'update']);
+    Route::put('/{id}', [DepartmentSopController::class, 'update']);
+    Route::delete('/{id}', [DepartmentSopController::class, 'destroy']);
+});
+
+Route::prefix('department-policies')->group(function () {
+    Route::get('/', [DepartmentPolicyController::class, 'index']);
+    Route::post('/', [DepartmentPolicyController::class, 'store']);
+    Route::put('/{id}', [DepartmentPolicyController::class, 'update']);
+    Route::delete('/{id}', [DepartmentPolicyController::class, 'destroy']);
+});
+
+Route::prefix('department-rules')->group(function () {
+    Route::get('/categories', [DepartmentRuleController::class, 'categories']);
+    Route::get('/', [DepartmentRuleController::class, 'index']);
+    Route::post('/', [DepartmentRuleController::class, 'store']);
+    Route::put('/{id}', [DepartmentRuleController::class, 'update']);
+    Route::delete('/{id}', [DepartmentRuleController::class, 'destroy']);
+});
+
+// Department Process Builder: a department's own visual, versioned
+// processes (steps + branching edges). SOPs/Policies/Rules above are
+// referenced from a step by id rather than duplicated - see
+// DepartmentProcessController and department_process_steps.linked_*_id.
+// /templates is declared before /{id} for the same ORDER MATTERS reason as
+// elsewhere in this file - otherwise the router reads "templates" as an id.
+Route::prefix('department-processes')->group(function () {
+    Route::get('/templates', [DepartmentProcessController::class, 'templates']);
+    Route::get('/', [DepartmentProcessController::class, 'index']);
+    Route::post('/', [DepartmentProcessController::class, 'store']);
+    Route::get('/{id}', [DepartmentProcessController::class, 'show']);
+    Route::put('/{id}', [DepartmentProcessController::class, 'update']);
+    Route::delete('/{id}', [DepartmentProcessController::class, 'destroy']);
+    Route::post('/{id}/duplicate', [DepartmentProcessController::class, 'duplicate']);
+    Route::put('/{id}/canvas', [DepartmentProcessController::class, 'updateCanvas']);
+    Route::post('/{id}/publish', [DepartmentProcessController::class, 'publish']);
+    Route::get('/{id}/history', [DepartmentProcessController::class, 'history']);
+    Route::post('/{id}/history/{version}/restore', [DepartmentProcessController::class, 'restoreVersion']);
+    Route::get('/{id}/runs', [DepartmentProcessRunController::class, 'index']);
+    Route::post('/{id}/runs', [DepartmentProcessRunController::class, 'start']);
+});
+
+// Department Process execution engine: a launched run of a published
+// process, walked forward one step action at a time. See
+// DepartmentProcessRunController for why every transition is recorded twice
+// (this run's own timeline, plus the org-wide g2g_event history).
+Route::prefix('department-process-runs')->group(function () {
+    Route::get('/', [DepartmentProcessRunController::class, 'index']);
+    Route::get('/{id}', [DepartmentProcessRunController::class, 'show']);
+    Route::post('/{id}/cancel', [DepartmentProcessRunController::class, 'cancel']);
+    Route::post('/{id}/steps/{nodeKey}/claim', [DepartmentProcessRunController::class, 'claimStep']);
+    Route::post('/{id}/steps/{nodeKey}/complete', [DepartmentProcessRunController::class, 'completeStep']);
+    Route::post('/{id}/steps/{nodeKey}/skip', [DepartmentProcessRunController::class, 'skipStep']);
+});
+
+// Department Skills API Routes
+Route::get('/department-skills', [DepartmentSkillController::class, 'index']);
 
 Route::post('/save-generated-course', [buildwithAIController::class, 'store']);
 Route::get('/index', [buildwithAIController::class, 'index']);
@@ -165,29 +1567,96 @@ Route::get('/index', [buildwithAIController::class, 'index']);
 Route::resource('gamma-api', GammaApiController::class);
 Route::get('gamma-api/sub-institute/{subInstituteId}', [GammaApiController::class, 'getBySubInstituteId']);
 
-Route::resource('skill_library', skillLibraryController::class);
+// Competency Library JSON API (additive; a competency == an approved skill on
+// s_users_skills). Registered BEFORE the skill_library resource so these paths
+// are not swallowed by the resource's /skill_library/{id} show route.
+Route::get('skill_library/competency-list', [skillLibraryController::class, 'competencyLibraryIndex']);
+Route::get('skill_library/competency-export', [skillLibraryController::class, 'competencyLibraryExport']);
+Route::post('skill_library/competency-import', [skillLibraryController::class, 'competencyLibraryImport']);
+Route::get('skill_library/competency/{id}/detail', [skillLibraryController::class, 'competencyLibraryDetail'])->whereNumber('id');
+Route::post('skill_library/competency/{id}/clone', [skillLibraryController::class, 'competencyLibraryClone'])->whereNumber('id');
+Route::put('skill_library/competency/{id}/archive', [skillLibraryController::class, 'competencyLibraryArchive'])->whereNumber('id');
+Route::get('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryShow'])->whereNumber('id');
+Route::post('skill_library/competency', [skillLibraryController::class, 'competencyLibraryStore']);
+Route::put('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryUpdate'])->whereNumber('id');
+Route::delete('skill_library/competency/{id}', [skillLibraryController::class, 'competencyLibraryDestroy'])->whereNumber('id');
+
+// Removed duplicate route declaration - unnamed duplicate; the ->names('api.skill_library') declaration below is the one to keep, and this one collided with web.php's holiday/skill_library names.
+/*
+| Named api.skill_library, not skill_library.
+|
+| routes/web.php registers a resource on the same name, so both generated
+| skill_library.index / .store / ... and `php artisan route:cache` aborted with
+| "Another route has already been assigned name [skill_library.index]" - which
+| breaks any deploy that caches routes.
+|
+| Renaming the API copy also fixes the blade views under
+| resources/views/lms/library/skill_library/, whose {{ route('skill_library.store') }}
+| form actions were resolving to whichever registration happened to win. URLs
+| are unchanged; only the generated route name differs.
+*/
+Route::resource('skill_library', skillLibraryController::class)->names('api.skill_library');
 Route::get('/positions', [InterviewController::class, 'getPositions']);
 Route::get('/interviewers', [InterviewController::class, 'getInterviewers']);
-Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings']);
+Route::get('/get-employee-tasks', [AJAXController::class, 'getUsersMappings'])->middleware('api.token');
 
-Route::get('/interview-panel/users', [talent_interviewpanelController::class, 'getInterviewers']);
-Route::post('/interview-panel/store', [talent_interviewpanelController::class, 'storeinterviewer']);
-Route::put('/interview-panel/update/{id}', [talent_interviewpanelController::class, 'update']);
-Route::delete('/interview-panel/delete/{id}', [talent_interviewpanelController::class, 'destroy']);
-Route::get('/interview-panel/list', [talent_interviewpanelController::class, 'getInterviewPanel']);
-Route::get('/candidate', [candidateController::class,'getCandidate']);
-Route::get('/feedback', [feedbackController::class, 'getAllFeedback']);
-Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback']);
+Route::get('/interview-panel/users', [talent_interviewpanelController::class, 'getInterviewers'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('/interview-panel/store', [talent_interviewpanelController::class, 'storeinterviewer'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::put('/interview-panel/update/{id}', [talent_interviewpanelController::class, 'update'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::delete('/interview-panel/delete/{id}', [talent_interviewpanelController::class, 'destroy'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/interview-panel/list', [talent_interviewpanelController::class, 'getInterviewPanel'])
+    ->middleware('profile:admin,hr,recruiter');
+// Candidate PII, same class as /job-applications above - see the note there.
+Route::get('/candidate', [candidateController::class,'getCandidate'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/feedback', [feedbackController::class, 'getAllFeedback'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/feedback/{id}', [feedbackController::class, 'getFeedback'])
+    ->middleware('profile:admin,hr,recruiter');
+
+/*
+| DELIBERATELY NOT role-gated: an interview panel member submits their own
+| feedback, and a panellist is an ordinary employee - talent_interview_panel
+| stores available_interviewers as a list of user ids, not a role. Gating this
+| on admin,hr,recruiter would stop interviewers doing the one thing they are
+| there to do.
+|
+| It is not correctly guarded either: the controller does not check that the
+| caller is on the panel for the interview being scored. That check belongs
+| with the decision-payload fix in Sprint 3, which already rewrites this
+| contract. Recorded here so the gap is visible at the point the route is
+| declared, rather than looking like an oversight.
+*/
 Route::post('/evaluation', [feedbackController::class, 'storeFeedback']);
-Route::get('/pending-feedback', [feedbackController::class, 'getPendingFeedback']);
-Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'index']);
-Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback']);
-Route::post('/interviews/{id}/decision', [InterviewController::class, 'recordDecision']);
+
+Route::get('/pending-feedback', [feedbackController::class, 'getPendingFeedback'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::get('/interview-details', [talent_interviewschedulescontroller::class, 'index'])
+    ->middleware('profile:admin,hr,recruiter');
+Route::put('/feedback/{id}', [feedbackController::class, 'updateFeedback'])
+    ->middleware('profile:admin,hr,recruiter');
+// The interview drawer has had a confirmed Delete button pointed at this route
+// since it was built; the route did not exist, so the confirmation led to a 405.
+Route::delete('/feedback/{id}', [feedbackController::class, 'deleteFeedback'])
+    ->whereNumber('id')
+    ->middleware('profile:admin,hr,recruiter');
+Route::post('/interviews/{id}/decision', [InterviewController::class, 'recordDecision'])
+    ->middleware('profile:admin,hr,recruiter');
 
 Route::get('/kpis', [EmployeeSkillCoverageMatrixController::class, 'getKpiMetrics']);
 Route::get('/skill-gaps', [EmployeeSkillCoverageMatrixController::class, 'skillGaps']);
 
-Route::group(['prefix' => 'reports'], function () {
+// Workforce reporting: headcount, growth, attrition, lifecycle, skill coverage.
+// Every endpoint in here reads organisation-wide employee data, so all of them
+// need a token. Without one the controllers already resolved a null tenant and
+// returned an empty set - safe, but a 200 with `data: []` reads as "your
+// organisation has no employees" rather than "you are not signed in", which
+// hides authentication failures from callers.
+Route::group(['prefix' => 'reports', 'middleware' => 'api.token'], function () {
     Route::get('/kpi', [KpiController::class, 'index']);
     Route::get('/hiring-analytics', [HiringAnalyticsController::class, 'getHiringTrends']);
     Route::get('/departments/distribution', [DepartmentDistributionController::class, 'index']);
@@ -207,35 +1676,466 @@ Route::group(['prefix' => 'reports'], function () {
     Route::get('/employee-directory/skills/matrix', [EmployeeDirectoryAnalyticsController::class, 'getSkillMatrix']);
 });
 
-Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze']);
+Route::post('/gemini/analyze-jd', [AnalyzeJDController::class, 'analyze'])->middleware('api.token');
+Route::post('/gemini/save-jd', [SaveJDController::class, 'save'])->middleware('api.token');
+Route::post('/gemini/generate-questions', [GenerateQuestionsController::class, 'generate'])->middleware('api.token');
 
-Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks']);
-Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills']);
+Route::get('/user-rejected-tasks', [SkillMatchingController::class, 'getUserRejectedTasks'])->middleware('api.token');
+Route::get('/user-rejected-tasks-courses', [SkillMatchingController::class, 'getCoursesForUserRejectedTasksSkills'])->middleware('api.token');
 
-Route::post('/employee/course-suggestions', [SuggestedCourseController::class, 'store']);
+Route::post('/employee/course-suggestions', [SuggestedCourseController::class, 'store'])->middleware('api.token');
 
 // Task API Routes
 Route::get('/tasks/counts', [TaskController::class, 'getTaskCounts']);
 Route::get('/tasks/daily', [TaskController::class, 'getDailyTasks']);
 Route::get('/tasks/weekly', [TaskController::class, 'getWeeklyTasks']);
 Route::get('/tasks/monthly', [TaskController::class, 'getMonthlyTasks']);
+Route::prefix('task-management')->middleware('task.sanitize')->group(function () {
+    Route::get('/session', [SessionController::class, 'show']);
+    // Module metadata for the Administration screens: the permission matrix
+    // as enforced, and which integrations are configured (never their keys).
+    Route::get('/permissions', [SessionController::class, 'permissions'])->middleware('task.permission:report.view');
+    // Tenant status/priority vocabularies. System entries are constants; the
+    // CRUD below manages the tenant's custom additions.
+    Route::get('/statuses', [TaskOptionController::class, 'statuses']);
+    Route::post('/statuses', [TaskOptionController::class, 'storeStatus'])->middleware('task.permission:notification.manage');
+    Route::put('/statuses/{id}', [TaskOptionController::class, 'updateStatus'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::delete('/statuses/{id}', [TaskOptionController::class, 'destroyStatus'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::get('/priorities', [TaskOptionController::class, 'priorities']);
+    Route::post('/priorities', [TaskOptionController::class, 'storePriority'])->middleware('task.permission:notification.manage');
+    Route::put('/priorities/{id}', [TaskOptionController::class, 'updatePriority'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::delete('/priorities/{id}', [TaskOptionController::class, 'destroyPriority'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::get('/integrations', [SessionController::class, 'integrations'])->middleware('task.permission:report.view');
+    Route::delete('/session', [SessionController::class, 'destroy'])->middleware('task.permission:notification.manage');
+    Route::post('/bulk-tasks/import', [BulkTaskController::class, 'import'])->middleware('task.permission:task.create');
+    Route::post('/assignment-capacity', [CapacityController::class, 'check'])->middleware('task.permission:task.create');
+    Route::post('/legacy-tasks', [LegacyTaskController::class, 'store'])->middleware('task.permission:task.create');
+    Route::post('/legacy-tasks/idempotent', [IdempotentTaskController::class, 'store'])->middleware('task.permission:task.create');
+    Route::put('/legacy-tasks/{id}', [LegacyTaskController::class, 'update'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::put('/legacy-tasks/{id}/versioned', [VersionedLegacyTaskController::class, 'update'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::delete('/legacy-tasks/{id}', [LegacyTaskController::class, 'destroy'])->middleware('task.permission:task.delete')->whereNumber('id');
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->middleware('task.permission:notification.manage');
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markRead'])->middleware('task.permission:notification.manage')->whereNumber('id');
+    Route::get('/tasks', [TaskListController::class, 'index']);
+    Route::get('/search', [GlobalSearchController::class, 'index']);
+    Route::get('/templates', [TaskTemplateController::class, 'index']);
+    Route::post('/templates', [TaskTemplateController::class, 'store'])->middleware('task.permission:task.create');
+    Route::delete('/templates/{id}', [TaskTemplateController::class, 'destroy'])->middleware('task.permission:task.create')->whereNumber('id');
+    // GATED: these read EVERY employee's numbers, org-wide. They were open to
+    // any token holder, so an employee could pull the whole productivity table.
+    // /workspace, /my-tasks and /dependencies are deliberately NOT gated -
+    // those are a person's own work and gating them would 403 employees out of
+    // their own task list.
+    Route::get('/reports/productivity', [ReportController::class, 'productivity'])->middleware('task.permission:report.view');
+    Route::get('/reports/delays', [ReportController::class, 'delays'])->middleware('task.permission:report.view');
+    // Admin-only: the audit trail is org-wide and the export is the whole
+    // thing as a file. Gated with the same privileged ability the other
+    // Administration routes use.
+    Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('task.permission:notification.manage');
+    Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->middleware('task.permission:notification.manage');
+    Route::get('/workspace', [WorkspaceController::class, 'index']);
+    Route::get('/workspace/workload', [WorkspaceController::class, 'workload']);
+    Route::get('/workspace/{id}', [WorkspaceController::class, 'show'])->whereNumber('id');
+    Route::get('/workspace/{id}/activity', [ActivityController::class, 'index'])->whereNumber('id');
+    Route::put('/workspace/{id}', [WorkspaceController::class, 'update'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::delete('/workspace/{id}', [WorkspaceController::class, 'destroy'])->middleware('task.permission:task.delete')->whereNumber('id');
+    Route::patch('/workspace/{id}/approval', [WorkspaceController::class, 'approve'])->middleware('task.permission:task.approve')->whereNumber('id');
+    Route::post('/workspace/{id}/comments', [WorkspaceController::class, 'comment'])->middleware('task.permission:task.comment')->whereNumber('id');
+    Route::get('/workspace/{id}/time-entries', [TaskTimeTrackingController::class, 'index'])->whereNumber('id');
+    Route::post('/workspace/{id}/time-entries/start', [TaskTimeTrackingController::class, 'start'])->middleware('task.permission:task.status')->whereNumber('id');
+    Route::post('/workspace/{id}/time-entries/stop', [TaskTimeTrackingController::class, 'stop'])->middleware('task.permission:task.status')->whereNumber('id');
+    Route::get('/workspace/{id}/subtasks', [TaskSubtaskController::class, 'index'])->whereNumber('id');
+    Route::post('/workspace/{id}/subtasks', [TaskSubtaskController::class, 'store'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::patch('/workspace/{id}/subtasks/{subtask}', [TaskSubtaskController::class, 'toggle'])->middleware('task.permission:task.status')->whereNumber(['id','subtask']);
+    Route::delete('/workspace/{id}/subtasks/{subtask}', [TaskSubtaskController::class, 'destroy'])->middleware('task.permission:task.update')->whereNumber(['id','subtask']);
+    Route::get('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'show'])->whereNumber('id');
+    Route::put('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'upsert'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::delete('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'destroy'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::get('/workspace/{id}/schedule', [TaskScheduleController::class, 'show'])->whereNumber('id');
+    Route::put('/workspace/{id}/schedule', [TaskScheduleController::class, 'update'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::get('/workspace/{id}/attachments', [TaskAttachmentVersionController::class, 'index'])->whereNumber('id');
+    Route::post('/workspace/{id}/attachments', [TaskAttachmentVersionController::class, 'store'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::get('/workspace/{id}/attachments/{version}', [TaskAttachmentVersionController::class, 'download'])->whereNumber(['id', 'version']);
+    Route::post('/workspace/{id}/attachments/{version}/restore', [TaskAttachmentVersionController::class, 'restore'])->middleware('task.permission:task.update')->whereNumber(['id', 'version']);
+    // Deadline extensions: the executor requests more time, the observer
+    // decides. The old frontend had this whole flow pointed at an endpoint
+    // that never existed; these are its backend.
+    Route::get('/deadline-extensions', [DeadlineExtensionController::class, 'index']);
+    Route::post('/deadline-extensions', [DeadlineExtensionController::class, 'store']);
+    Route::patch('/deadline-extensions/{id}/decision', [DeadlineExtensionController::class, 'decide'])->middleware('task.permission:task.approve')->whereNumber('id');
+
+    Route::get('/dependencies', [DependencyController::class, 'index']);
+    Route::post('/dependencies', [DependencyController::class, 'store'])->middleware('task.permission:dependency.manage');
+    Route::put('/dependencies/{id}', [DependencyController::class, 'update'])->middleware('task.permission:dependency.manage')->whereNumber('id');
+    Route::delete('/dependencies/{id}', [DependencyController::class, 'destroy'])->middleware('task.permission:dependency.manage')->whereNumber('id');
+    // Reading milestones is not a privileged act - anyone who can see the
+    // dependency graph can already see them inside it. Only the writes below
+    // carry milestone.manage.
+    Route::get('/milestones', [DependencyController::class, 'indexMilestones']);
+    Route::post('/milestones', [DependencyController::class, 'storeMilestone'])->middleware('task.permission:milestone.manage');
+    Route::put('/milestones/{id}', [DependencyController::class, 'updateMilestone'])->middleware('task.permission:milestone.manage')->whereNumber('id');
+    Route::delete('/milestones/{id}', [DependencyController::class, 'destroyMilestone'])->middleware('task.permission:milestone.manage')->whereNumber('id');
+    Route::get('/my-tasks', [MyTasksController::class, 'index']);
+    Route::get('/my-tasks/{id}', [MyTasksController::class, 'show'])->whereNumber('id');
+    Route::patch('/my-tasks/{id}/status', [MyTasksController::class, 'updateStatus'])->middleware('task.permission:task.status')->whereNumber('id');
+    Route::get('/projects/options', [ProjectController::class, 'options']);
+    Route::get('/projects', [ProjectController::class, 'index']);
+    Route::post('/projects', [ProjectController::class, 'store'])->middleware('task.permission:project.create');
+    Route::get('/projects/{id}', [ProjectController::class, 'show'])->whereNumber('id');
+    Route::put('/projects/{id}', [ProjectController::class, 'update'])->middleware('task.permission:project.manage')->whereNumber('id');
+    Route::patch('/projects/{id}/archive', [ProjectController::class, 'archive'])->middleware('task.permission:project.manage')->whereNumber('id');
+    Route::put('/projects/{id}/members', [ProjectController::class, 'syncProjectMembers'])->middleware('task.permission:project.manage')->whereNumber('id');
+    // Candidates for the Link task picker, with whether each is already on
+    // another project. Read-only, so ungated like the other project reads.
+    Route::get('/projects/{id}/linkable-tasks', [ProjectController::class, 'linkableTasks'])->whereNumber('id');
+    // DEPRECATED — replaces the project's whole task list. See the docblock on
+    // ProjectController::syncTasks; attachTask/detachTask are the safe pair.
+    Route::put('/projects/{id}/tasks', [ProjectController::class, 'syncTasks'])->middleware('task.permission:project.manage')->whereNumber('id');
+    // Attach a single task without disturbing the project's other tasks.
+    Route::post('/projects/{id}/tasks', [ProjectController::class, 'attachTask'])->middleware('task.permission:project.manage')->whereNumber('id');
+    // Unlink ONE task. syncTasks replaces a project's whole list, so detaching
+    // one task through it means resending every other - and losing whatever a
+    // concurrent editor just linked. See ProjectController::detachTask.
+    Route::delete('/projects/{id}/tasks/{taskId}', [ProjectController::class, 'detachTask'])->middleware('task.permission:project.manage')->whereNumber(['id', 'taskId']);
+    /*
+    |------------------------------------------------------------------------
+    | WORKSTREAMS — the 360 lifecycle
+    |------------------------------------------------------------------------
+    |
+    | THE THREE WRITE URLS BELOW ARE UNCHANGED. They have moved off
+    | ProjectController onto WorkstreamController, whose workstream methods were
+    | deleted, so no client needs editing for them.
+    |
+    | READS ARE UNGATED, WRITES ARE NOT. Reading a plan is not a privileged act —
+    | the same call the milestone routes above make. Tenancy still binds
+    | absolutely: every one of these resolves through
+    | ResolvesWorkstreamScope::workstreamScope(), which is the only thing between
+    | a guessed id and another organisation's plan, because none of the eight
+    | workstream child tables carries a tenant column of its own.
+    |
+    | Static segments are declared BEFORE /workstreams/{id} so `options` is not
+    | swallowed by the show route.
+    */
+    /*
+    |--------------------------------------------------------------------------
+    | Backlog — work written down before it has an owner
+    |--------------------------------------------------------------------------
+    |
+    | Reads are open to the tenant, the same as projects. Writes gate on
+    | `task.create` rather than `project.manage`: capturing an idea is a
+    | lighter act than assigning one, and an item with no project cannot be
+    | scoped against a project's permissions anyway.
+    |
+    | Every route resolves the row by id AND tenant, returning 404 on a miss —
+    | never 403, which would confirm the row exists. The table carries its own
+    | `sub_institute_id` because `project_id` is nullable, so an unfiled item
+    | has no parent to inherit tenancy from.
+    */
+    Route::get('/backlog', [BacklogController::class, 'index']);
+    Route::post('/backlog', [BacklogController::class, 'store'])->middleware('task.permission:task.create');
+    Route::put('/backlog/{id}', [BacklogController::class, 'update'])->middleware('task.permission:task.create')->whereNumber('id');
+    Route::delete('/backlog/{id}', [BacklogController::class, 'destroy'])->middleware('task.permission:task.create')->whereNumber('id');
+    Route::patch('/backlog/{id}/rank', [BacklogController::class, 'rank'])->middleware('task.permission:task.create')->whereNumber('id');
+    Route::patch('/backlog/{id}/assign', [BacklogController::class, 'assign'])->middleware('task.permission:task.create')->whereNumber('id');
+
+    Route::get('/workstreams/options', [WorkstreamController::class, 'options']);
+    Route::get('/projects/{id}/workstreams', [WorkstreamController::class, 'index'])->whereNumber('id');
+    Route::get('/workstreams/{id}', [WorkstreamController::class, 'show'])->whereNumber('id');
+
+    Route::post('/projects/{id}/workstreams', [WorkstreamController::class, 'store'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/projects/{projectId}/workstreams/{workstreamId}', [WorkstreamController::class, 'update'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
+    Route::delete('/projects/{projectId}/workstreams/{workstreamId}', [WorkstreamController::class, 'destroy'])->middleware('task.permission:workstream.manage')->whereNumber('projectId')->whereNumber('workstreamId');
+
+    // The workstream graph — what makes the lifecycle diagram data rather than
+    // a picture drawn in JSX.
+    Route::post('/projects/{id}/workstream-links', [WorkstreamController::class, 'storeLink'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::delete('/workstream-links/{id}', [WorkstreamController::class, 'destroyLink'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+
+    /*
+    | The nine fields' child records. `members` and `statements` are whole-list
+    | replaces because they are authored as lists; everything else is per-record
+    | because each carries its own status, owner and dates.
+    */
+    Route::put('/workstreams/{id}/members', [WorkstreamRecordController::class, 'saveMembers'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/statements', [WorkstreamRecordController::class, 'saveStatements'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+
+    Route::post('/workstreams/{id}/deliverables', [WorkstreamRecordController::class, 'storeDeliverable'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/deliverables/{recordId}', [WorkstreamRecordController::class, 'updateDeliverable'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/deliverables/{recordId}', [WorkstreamRecordController::class, 'destroyDeliverable'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+
+    Route::post('/workstreams/{id}/checkpoints', [WorkstreamRecordController::class, 'storeCheckpoint'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/checkpoints/{recordId}', [WorkstreamRecordController::class, 'updateCheckpoint'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/checkpoints/{recordId}', [WorkstreamRecordController::class, 'destroyCheckpoint'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+
+    // `measurement` is declared BEFORE the generic {recordId} PUT: recording a
+    // reading and redefining what is measured are different acts.
+    Route::patch('/workstreams/{id}/kpis/{recordId}/measurement', [WorkstreamRecordController::class, 'recordMeasurement'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::post('/workstreams/{id}/kpis', [WorkstreamRecordController::class, 'storeKpi'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/kpis/{recordId}', [WorkstreamRecordController::class, 'updateKpi'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/kpis/{recordId}', [WorkstreamRecordController::class, 'destroyKpi'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+
+    Route::post('/workstreams/{id}/risks', [WorkstreamRecordController::class, 'storeRisk'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/risks/{recordId}', [WorkstreamRecordController::class, 'updateRisk'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/risks/{recordId}', [WorkstreamRecordController::class, 'destroyRisk'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+
+    Route::post('/workstreams/{id}/dependencies', [WorkstreamRecordController::class, 'storeDependency'])->middleware('task.permission:workstream.manage')->whereNumber('id');
+    Route::put('/workstreams/{id}/dependencies/{recordId}', [WorkstreamRecordController::class, 'updateDependency'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+    Route::delete('/workstreams/{id}/dependencies/{recordId}', [WorkstreamRecordController::class, 'destroyDependency'])->middleware('task.permission:workstream.manage')->whereNumber(['id', 'recordId']);
+});
 Route::get('/user-skills/{user_id}', [UserSkillController::class, 'getUserSkills']);
 
 // User Journey Log API Routes
 Route::post('/user-journey-logs', [UserJourneyLogController::class, 'store']);
 Route::post('/user-journey-logs/bulk', [UserJourneyLogController::class, 'storeBulk']);
 
-// School Setup API Routes
-Route::post('/school-setup', [SchoolSetupController::class, 'store']);
+/*
+ * YOUR OWN ACCOUNT.
+ *
+ * `api.token` and no role guard, deliberately: the subject is always the
+ * token's owner, so there is nothing a caller can send to reach somebody else's
+ * record. Every one of these was missing - the only self-service write in the
+ * whole product was POST /update-fcm-token.
+ *
+ * Not attached to tbluserController, whose route chain (`auth` + `menu`) has no
+ * role check at all for a `type=API` caller and can write most of the table.
+ */
+Route::middleware('api.token')->group(function () {
+    Route::get('/account/me', [\App\Http\Controllers\Api\Account\AccountController::class, 'me']);
+    Route::put('/account/profile', [\App\Http\Controllers\Api\Account\AccountController::class, 'updateProfile']);
+    Route::post('/account/profile', [\App\Http\Controllers\Api\Account\AccountController::class, 'updateProfile']);
+    Route::put('/account/preferences', [\App\Http\Controllers\Api\Account\AccountController::class, 'updatePreferences']);
+    /*
+     * PER-DEVICE APPEARANCE. Both take the device id from the request body and
+     * the person from the token, so neither can reach another account.
+     */
+    Route::post('/account/preferences/promote', [\App\Http\Controllers\Api\Account\AccountController::class, 'promotePreferences']);
+    Route::delete('/account/preferences/device', [\App\Http\Controllers\Api\Account\AccountController::class, 'forgetDevicePreferences']);
+    /*
+     * THROTTLED, unlike the rest of the group.
+     *
+     * The only secret this endpoint checks is the plaintext current password,
+     * and this application never calls `$middleware->throttleApi()` in
+     * bootstrap/app.php - so without an explicit limiter there is nothing at all
+     * between a stolen session and an unlimited guessing loop against the one
+     * credential that would let it be made permanent.
+     *
+     * 6 a minute matches the limiter already used on the auth routes.
+     */
+    Route::post('/account/password', [\App\Http\Controllers\Api\Account\AccountController::class, 'changePassword'])
+        ->middleware('throttle:6,1');
+    /*
+     * A person's OWN security history. No id parameter: the subject is the
+     * token's owner, so there is nothing for a caller to point at somebody else.
+     * Alongside `sessions` because the two answer one question together - where am
+     * I signed in, and what has happened to this account.
+     */
+    /*
+     * TWO-STEP VERIFICATION.
+     *
+     * `start` and `confirm` need only a session: asking for a password to ADD
+     * protection discourages people from adding it. `recovery-codes` and the
+     * DELETE both take the current password, because each hands somebody who has
+     * borrowed a session a way PAST the second factor - which is the one thing it
+     * exists to prevent.
+     */
+    Route::post('/account/2fa/start', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'start']);
+    Route::post('/account/2fa/confirm', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'confirm']);
+    Route::post('/account/2fa/recovery-codes', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'recoveryCodes']);
+    /*
+     * POST, NOT DELETE, and the reason is the password.
+     *
+     * `apiClient.delete()` puts its parameters in the QUERY STRING - it has no
+     * body. This codebase already documents why that is unacceptable for a
+     * credential, in `api-client.ts`: "A URL is not a private place: it is written
+     * to web server access logs, browser history, proxy and CDN logs, and leaks
+     * through the Referer header." A password there is worse than the token that
+     * note was written about.
+     *
+     * A DELETE route is not offered at all, so there is no path a future caller
+     * could reach with the password in the URL.
+     */
+    Route::post('/account/2fa/disable', [\App\Http\Controllers\Api\Account\TwoFactorController::class, 'destroy']);
 
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * YOUR OWN DOCUMENTS. NO ID PARAMETER, BY CONSTRUCTION.
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * The subject is the token's owner, the same way `/account/me` works. There
+     * is no id to tamper with, so this cannot be an IDOR however it is called.
+     *
+     * That matters because the route it replaces - POST /user/user_document/{id}
+     * on the web stack - took an arbitrary id AND its tenant from the request,
+     * with no role gate: any authenticated employee could file a document against
+     * any user in any organisation.
+     *
+     * Reads and writes are both open to any token holder here, because the only
+     * thing reachable is the caller's own record.
+     */
+    Route::get('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'mine']);
+    Route::post('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'store']);
+    // Static segment BEFORE /account/documents/{id} - same ordering rule as
+    // /documents/activity below. whereNumber('id') already makes "trash"
+    // un-matchable there regardless of order, but the convention stays one
+    // convention everywhere in this file, not "usually, except here."
+    Route::get('/account/documents/trash', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'trash']);
+    Route::get('/account/documents/{id}/download', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'download'])->whereNumber('id');
+    Route::match(['put', 'patch'], '/account/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'update'])->whereNumber('id');
+    Route::delete('/account/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroy'])->whereNumber('id');
+    Route::post('/account/documents/{id}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restore'])->whereNumber('id');
+    Route::post('/account/documents/{id}/versions', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'uploadVersion'])->whereNumber('id');
+    Route::post('/account/documents/{id}/versions/{historyId}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreVersion'])->whereNumber(['id', 'historyId']);
 
-Route::post('/user-signup', [UserSignupController::class, 'store']);
-Route::get('/user-signup/{id}', [UserSignupController::class, 'show']);
-Route::put('/user-signup/{id}', [UserSignupController::class, 'update']);
-Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy']);
+    /*
+     * One search box over the whole Document Library, self-service and admin
+     * alike. `DocumentAccess` (inside the controller) decides what a given
+     * caller may see - a non-elevated caller gets their own + organisation-
+     * visible documents, HR/admin additionally sees the whole tenant - so
+     * this needs no separate admin route or role gate of its own.
+     */
+    Route::get('/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'search']);
+
+    /*
+     * Static segment BEFORE the /documents/{id} family below - the exact
+     * ordering gotcha this codebase has already been bitten by elsewhere
+     * (see the g2g-platform-services-rights history): a route for
+     * `/documents/{id}` registered first would swallow `/documents/activity`
+     * with id = "activity".
+     */
+    Route::get('/documents/activity', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'activity']);
+
+    /*
+     * Folders - DocumentAccess's folder-aware methods decide what a caller
+     * may see/manage internally (same reasoning as /documents search just
+     * above: no separate admin route needed). Static segments
+     * (tree/resolve-path) registered before any numeric {id} route in this
+     * prefix, same convention as /documents/activity above.
+     */
+    Route::get('/documents/folders/tree', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'tree']);
+    Route::post('/documents/folders/resolve-path', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'resolvePath']);
+    Route::get('/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'index']);
+    Route::post('/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'store']);
+    Route::patch('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'update'])->whereNumber('id');
+    Route::post('/documents/folders/{id}/move', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'move'])->whereNumber('id');
+    Route::delete('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'destroy'])->whereNumber('id');
+
+    /*
+     * Tenant-wide trash, for HR/admin - unlike `/documents` (search) above,
+     * this genuinely needs its own gate: a non-elevated caller's trash view
+     * is `/account/documents/trash` (their own rows only), and nothing about
+     * a deleted-but-not-yet-purged row should be reachable through the
+     * ordinary visibility rules `DocumentAccess` applies to live documents.
+     */
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::get('/documents/trash', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'trashVisible']);
+    });
+
+    Route::get('/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'show'])->whereNumber('id');
+    Route::get('/documents/{id}/history', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'history'])->whereNumber('id');
+    Route::get('/documents/{id}/related', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'related'])->whereNumber('id');
+
+    Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
+
+    /*
+     * END THIS SESSION ON THE SERVER, not just in the browser.
+     *
+     * There was no logout endpoint in this application at all. "Sign out" cleared
+     * localStorage and the token stayed valid for its full 30-day window - so
+     * anybody who recovered it from a shared machine was still authenticated.
+     *
+     * POST because it changes state. It revokes only the CALLING token, so signing
+     * out of a laptop does not sign the same person out of their phone;
+     * `/account/sessions` is the separate, deliberate "everywhere else" action.
+     *
+     * `RequireTwoFactorEnrolment` already allow-lists this path, so somebody who
+     * has not yet enrolled under an organisation policy can still leave.
+     */
+    Route::post('/account/logout', [\App\Http\Controllers\Api\Account\AccountController::class, 'logout']);
+
+    Route::get('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'sessions']);
+    Route::delete('/account/sessions/{id}', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions'])->whereNumber('id');
+    Route::delete('/account/sessions', [\App\Http\Controllers\Api\Account\AccountController::class, 'endSessions']);
+});
+
+/*
+ * SETTING A PASSWORD - deliberately unauthenticated.
+ *
+ * Somebody who cannot log in is the whole audience, so a token guard here would
+ * defeat the purpose. The credential is the one-time token in the URL.
+ *
+ * The equivalents on routes/web.php stay for the Blade screens; they sit behind
+ * session + CSRF middleware, which is why the Next.js frontend could never
+ * reach them and why "Forgot password?" has been a dead link.
+ *
+ * Rate limiting matters more than usual on these three: `throttle` caps how fast
+ * an address list can be walked or a token guessed. 6 a minute is generous for a
+ * person and useless for a script.
+ */
+Route::middleware('throttle:6,1')->group(function () {
+    Route::get('/auth/invite/{token}', [\App\Http\Controllers\Api\Auth\PasswordController::class, 'check'])
+        ->where('token', '[A-Za-z0-9]{16,128}');
+    Route::post('/auth/set-password', [\App\Http\Controllers\Api\Auth\PasswordController::class, 'setPassword']);
+    Route::post('/auth/forgot-password', [\App\Http\Controllers\Api\Auth\PasswordController::class, 'forgot']);
+});
+
+/*
+ * THE INTERNAL OPERATOR'S SURFACE — creating an organisation.
+ *
+ * One transactional call that does what /school-setup and /user-signup did in
+ * two uncorrelated ones, plus the four things neither did: all nine roles, an
+ * org_details row, an academic year, and an administrator who can actually sign
+ * in. `platform.owner` because this is an act above the tenants, and no
+ * tenant-scoped role_key can authorise it.
+ */
+// Answers "may I create organisations?" for anybody signed in, so the avatar
+// menu can decide whether to show the entry. Not a guard - the guard is on the
+// routes below, which still refuse everyone else with a 404.
+Route::get('/platform/me', [\App\Http\Controllers\Api\Platform\PlatformOrganizationController::class, 'me'])
+    ->middleware('api.token');
+
+Route::get('/platform/organizations', [\App\Http\Controllers\Api\Platform\PlatformOrganizationController::class, 'index'])
+    ->middleware(['api.token', 'platform.owner']);
+
+Route::post('/platform/organizations', [\App\Http\Controllers\Api\Platform\PlatformOrganizationController::class, 'store'])
+    ->middleware(['api.token', 'platform.owner']);
+
+/*
+ * CREATING AN ORGANISATION, AND ITS FIRST USER.
+ *
+ * ── BOTH OF THESE WERE ANONYMOUS ────────────────────────────────────────────
+ *
+ * `/school-setup` creates a tenant, a client, three role profiles and 24 rights
+ * rows. `/user-signup` creates a user with a hashed password - and reads
+ * `is_admin` STRAIGHT OFF THE REQUEST BODY, so the caller decided whether the
+ * account they were creating was an administrator.
+ *
+ * Neither carried any middleware at all. Anybody who could reach the host could
+ * create organisations in this database indefinitely, and hand themselves the
+ * admin flag while doing it.
+ *
+ * They are now `platform.owner` - membership in `platform_owners`, which is
+ * deliberately not any tenant role, because creating an organisation is not an
+ * act inside one. `api.token` first so an unauthenticated caller gets 401 rather
+ * than the deliberately vague 404 the owner gate returns.
+ *
+ * Nothing breaks: a sweep of g2gv0 finds no caller for either. The real client
+ * of tenant creation is POST /api/platform/organizations, which does in one
+ * transaction what these two do in two uncorrelated calls.
+ */
+Route::post('/school-setup', [SchoolSetupController::class, 'store'])
+    ->middleware(['api.token', 'platform.owner']);
+
+Route::post('/user-signup', [UserSignupController::class, 'store'])
+    ->middleware(['api.token', 'platform.owner']);
+Route::get('/user-signup/{id}', [UserSignupController::class, 'show'])->middleware('api.token');
+Route::put('/user-signup/{id}', [UserSignupController::class, 'update'])->middleware('api.token');
+Route::delete('/user-signup/{id}', [UserSignupController::class, 'destroy'])->middleware('api.token');
+
+Route::post('/update-fcm-token', [tbluserController::class, 'updateFcmToken'])->middleware('api.token');
 
 // Skill Heatmap API Routes
-Route::prefix('skill-heatmap')->group(function () {
+Route::prefix('skill-heatmap')->middleware('api.token')->group(function () {
     // Main heatmap data — departments × skills matrix
     Route::get('/', [SkillHeatmapController::class, 'heatmap']);
 
@@ -245,8 +2145,1118 @@ Route::prefix('skill-heatmap')->group(function () {
 });
 
 Route::post('/import-users', [UserImportController::class, 'importUsers']);
+// These 5 carried no route-level login check at all — tokenUser() only read the
+// token from the request body/query, never the standard Authorization header.
+// api.token adds the same check every other guarded route uses; tokenUser()
+// itself is also fixed to accept the header first (see its own comment).
+Route::middleware('api.token')->group(function () {
+    Route::get('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'credentialStatus']);
+    Route::post('/excel-agent/credentials', [ExcelAutomationAgentController::class, 'saveCredentials']);
+    Route::post('/excel-agent/test-connection', [ExcelAutomationAgentController::class, 'testConnection']);
+    Route::post('/excel-agent/upload', [ExcelAutomationAgentController::class, 'upload']);
+    // Blank workbook using this organisation's own template headers, so the file
+    // a user downloads is always the file upload() will accept.
+    Route::get('/excel-agent/template', [ExcelAutomationAgentController::class, 'downloadTemplate']);
+});
 // Course Recommendation API - Get courses based on logged-in user's job role
 
 // Department Job Role Export API - Export department and job role data to CSV
-Route::get('/export-department-jobroles/{subInstituteId}', [DepartmentJobRoleExportController::class, 'exportToCsv']);
+// The tenant is a path segment here and the controller has no token check of
+// its own, so this exported any organisation's departments and job roles to
+// anyone who could guess an id.
+Route::get('/export-department-jobroles/{subInstituteId}', [DepartmentJobRoleExportController::class, 'exportToCsv'])->middleware('api.token');
 
+// Template API Routes
+Route::resource('templates', TemplateController::class)->middleware('api.token');
+Route::get('templates/{id}/versions', [TemplateController::class, 'versions'])->middleware('api.token');
+Route::post('templates/{id}/restore/{version}', [TemplateController::class, 'restore'])->middleware('api.token');
+
+Route::get('/career-journey', [CareerJourneyController::class, 'getCareerJourney'])->middleware('api.token');
+
+// Bulk Task Import API
+Route::post('bulk-task/import', [BulkTaskController::class, 'import'])->middleware('api.token');
+// Path the legacy frontend posts deadline-extension requests to.
+Route::post('/deadline-extension', [App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController::class, 'store']);
+
+// Nango Google Calendar OAuth API
+Route::post('nango/google/check-connection', [App\Http\Controllers\NangoController::class, 'checkConnection']);
+Route::post('nango/google/oauth-url', [App\Http\Controllers\NangoController::class, 'getOauthUrl']);
+
+// Task Google Calendar Re-sync API
+Route::post('task/resync-google-calendar', [App\Http\Controllers\front_desk\taskController::class, 'resyncTaskToGoogleCalendar']);
+
+Route::post('/auth/google', [GoogleAuthController::class, 'login']);
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Performance & Rewards Center
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/competency/* and /api/leave/*.
+|
+| Entirely NEW surface: this module had no routes, controllers, models or tables
+| before. Nothing below touches an existing endpoint, so no current consumer is
+| affected. Backed by the 11 s_performance_* tables created in
+| 2026_07_30_100000_create_performance_module_tables, plus READ-ONLY reuse of
+| tbluser, hrms_departments, org_designation, s_competency_assessments (job-role
+| derivation) and employee_salary_structures (current CTC).
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR. The subject employee
+| travels as `user_id_target` on writes and `user_id_filter` on reads.
+*/
+
+// Header: KPI cards, shared filter options, team comparison, cycle timeline.
+Route::get('/performance/overview', [PerformanceOverviewController::class, 'index']);
+Route::get('/performance/filters', [PerformanceOverviewController::class, 'filters']);
+Route::get('/performance/team-comparison', [PerformanceOverviewController::class, 'teamComparison']);
+Route::get('/performance/timeline', [PerformanceOverviewController::class, 'timeline']);
+
+// Review cycles - the cycle selector and the Create / Launch button.
+Route::get('/performance/cycles', [PerformanceCycleController::class, 'index']);
+Route::post('/performance/cycles', [PerformanceCycleController::class, 'store'])->middleware('profile:admin,hr');
+Route::get('/performance/cycles/{id}', [PerformanceCycleController::class, 'show'])->whereNumber('id');
+Route::put('/performance/cycles/{id}', [PerformanceCycleController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/performance/cycles/{id}/launch', [PerformanceCycleController::class, 'launch'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/performance/cycles/{id}/close', [PerformanceCycleController::class, 'close'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::delete('/performance/cycles/{id}', [PerformanceCycleController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+// Employee reviews - the main table, the Review Board and the sidebar.
+// Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+Route::get('/performance/reviews/board', [PerformanceReviewController::class, 'board']);
+Route::post('/performance/reviews/bulk', [PerformanceReviewController::class, 'bulk'])->middleware('profile:admin,hr');
+Route::get('/performance/reviews', [PerformanceReviewController::class, 'index']);
+Route::get('/performance/reviews/{id}', [PerformanceReviewController::class, 'show'])->whereNumber('id');
+Route::put('/performance/reviews/{id}', [PerformanceReviewController::class, 'update'])->whereNumber('id');
+Route::post('/performance/reviews/{id}/advance', [PerformanceReviewController::class, 'advance'])->whereNumber('id')->middleware('profile:admin,hr,manager');
+// Nudging somebody is a manager act - nobody reminds themselves. Matches the
+// tier on `advance` directly above.
+Route::post('/performance/reviews/{id}/reminder', [PerformanceReviewController::class, 'sendReminder'])->whereNumber('id')->middleware('subject:people_managers');
+Route::delete('/performance/reviews/{id}', [PerformanceReviewController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+// Comments / Notes and Attachments, both scoped to a review.
+Route::get('/performance/reviews/{reviewId}/notes', [PerformanceActivityController::class, 'notes'])->whereNumber('reviewId');
+Route::post('/performance/reviews/{reviewId}/notes', [PerformanceActivityController::class, 'storeNote'])->whereNumber('reviewId');
+Route::put('/performance/notes/{id}', [PerformanceActivityController::class, 'updateNote'])->whereNumber('id');
+Route::delete('/performance/notes/{id}', [PerformanceActivityController::class, 'destroyNote'])->whereNumber('id');
+
+Route::get('/performance/reviews/{reviewId}/attachments', [PerformanceActivityController::class, 'attachments'])->whereNumber('reviewId');
+Route::post('/performance/reviews/{reviewId}/attachments', [PerformanceActivityController::class, 'storeAttachment'])->whereNumber('reviewId');
+Route::delete('/performance/attachments/{id}', [PerformanceActivityController::class, 'destroyAttachment'])->whereNumber('id');
+
+// Goals tab (KRA / KPI / OKR).
+//
+// S7: store() took `user_id_target` free-form and none of the three writes had
+// a gate, so any employee could create, retarget or delete a colleague's goals.
+// There is no employee goals surface in the frontend, so the writes are a
+// manager act; the read stays open and is scoped to the caller in the
+// controller, because an employee has a legitimate view of their own goals.
+Route::get('/performance/goals', [PerformanceGoalController::class, 'index']);
+Route::middleware('subject:people_managers')->group(function () {
+    Route::post('/performance/goals', [PerformanceGoalController::class, 'store']);
+    Route::put('/performance/goals/{id}', [PerformanceGoalController::class, 'update'])->whereNumber('id');
+    Route::delete('/performance/goals/{id}', [PerformanceGoalController::class, 'destroy'])->whereNumber('id');
+});
+
+// Appraisals tab.
+//
+// S6: `decision` with action=approve stamped approver_id with the caller's
+// own id and had no gate - self-approval of a colleague's record, and of
+// one's own. Every write here is HR's act; there is no legitimate employee
+// write anywhere in this tab. The read stays open and is scoped to the
+// caller in the controller.
+Route::get('/performance/appraisals', [PerformanceAppraisalController::class, 'index']);
+Route::middleware('subject:record_owners')->group(function () {
+    Route::post('/performance/appraisals/bulk', [PerformanceAppraisalController::class, 'bulk']);
+    Route::post('/performance/appraisals', [PerformanceAppraisalController::class, 'store']);
+    Route::put('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'update'])->whereNumber('id');
+    Route::put('/performance/appraisals/{id}/decision', [PerformanceAppraisalController::class, 'decision'])->whereNumber('id');
+    Route::delete('/performance/appraisals/{id}', [PerformanceAppraisalController::class, 'destroy'])->whereNumber('id');
+});
+
+// Compensation tab.
+//
+// S6: `decision` with action=approve stamped approver_id with the caller's
+// own id and had no gate - self-approval of a colleague's record, and of
+// one's own. Every write here is HR's act; there is no legitimate employee
+// write anywhere in this tab. The read stays open and is scoped to the
+// caller in the controller.
+Route::get('/performance/compensation', [PerformanceCompensationController::class, 'index']);
+Route::middleware('subject:record_owners')->group(function () {
+    Route::post('/performance/compensation/bulk', [PerformanceCompensationController::class, 'bulk']);
+    Route::post('/performance/compensation', [PerformanceCompensationController::class, 'store']);
+    Route::put('/performance/compensation/{id}', [PerformanceCompensationController::class, 'update'])->whereNumber('id');
+    Route::put('/performance/compensation/{id}/decision', [PerformanceCompensationController::class, 'decision'])->whereNumber('id');
+    Route::delete('/performance/compensation/{id}', [PerformanceCompensationController::class, 'destroy'])->whereNumber('id');
+});
+
+// Bonus tab.
+//
+// S6: `decision` with action=approve stamped approver_id with the caller's
+// own id and had no gate - self-approval of a colleague's record, and of
+// one's own. Every write here is HR's act; there is no legitimate employee
+// write anywhere in this tab. The read stays open and is scoped to the
+// caller in the controller.
+Route::get('/performance/bonus', [PerformanceBonusController::class, 'index']);
+Route::middleware('subject:record_owners')->group(function () {
+    Route::post('/performance/bonus/bulk', [PerformanceBonusController::class, 'bulk']);
+    Route::post('/performance/bonus', [PerformanceBonusController::class, 'store']);
+    Route::put('/performance/bonus/{id}', [PerformanceBonusController::class, 'update'])->whereNumber('id');
+    Route::put('/performance/bonus/{id}/decision', [PerformanceBonusController::class, 'decision'])->whereNumber('id');
+    Route::delete('/performance/bonus/{id}', [PerformanceBonusController::class, 'destroy'])->whereNumber('id');
+});
+
+// Calibration tab.
+//
+// S2: `calibrate` overwrote overall_rating across an arbitrary set of reviews
+// through `ratings[]`, scoped only by session and tenant - then `lock` made the
+// result immutable, so a tampered grid could be sealed. Bulk, irreversible and
+// ungated. A calibration meeting is HR-run end to end, including the grid read,
+// which shows every participant's rating side by side.
+// READS at the wider tier: a calibration grid is exactly what an auditor is
+// for. WRITES at the narrower one - overwriting a set of ratings and then
+// sealing them is HR's act, and S2 was that it was nobody's.
+Route::middleware('subject:hr_elevated')->group(function () {
+    Route::get('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'index']);
+    Route::get('/performance/calibration-sessions/{id}/grid', [PerformanceCalibrationController::class, 'grid'])->whereNumber('id');
+});
+
+Route::middleware('subject:record_owners')->group(function () {
+    Route::post('/performance/calibration-sessions', [PerformanceCalibrationController::class, 'store']);
+    Route::put('/performance/calibration-sessions/{id}/calibrate', [PerformanceCalibrationController::class, 'calibrate'])->whereNumber('id');
+    Route::post('/performance/calibration-sessions/{id}/lock', [PerformanceCalibrationController::class, 'lock'])->whereNumber('id');
+    Route::put('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'update'])->whereNumber('id');
+    Route::delete('/performance/calibration-sessions/{id}', [PerformanceCalibrationController::class, 'destroy'])->whereNumber('id');
+});
+
+// Activity Feed / Audit Trail.
+Route::get('/performance/activity/filters', [PerformanceActivityController::class, 'filters']);
+Route::get('/performance/activity', [PerformanceActivityController::class, 'index']);
+
+// Saved Views (named filter presets per tab).
+Route::get('/performance/saved-views', [PerformanceSavedViewController::class, 'index']);
+Route::post('/performance/saved-views', [PerformanceSavedViewController::class, 'store']);
+Route::put('/performance/saved-views/{id}', [PerformanceSavedViewController::class, 'update'])->whereNumber('id');
+Route::delete('/performance/saved-views/{id}', [PerformanceSavedViewController::class, 'destroy'])->whereNumber('id');
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Lifecycle (Dashboard, Onboarding, Mobility, Offboarding)
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/performance/*, /api/competency/*
+| and /api/leave/*.
+|
+| Entirely NEW surface. None of these modules had routes, controllers, models or
+| tables before: grepping the backend for onboarding-journey, mobility,
+| succession, resignation or clearance returned only menu labels. Nothing below
+| touches an existing endpoint, so no current consumer is affected - in
+| particular /api/talent-acquisition/{kpis,funnel,dropoff,requisitions},
+| /api/job-postings, /api/job-applications, /api/interview-schedules and
+| /api/talent-offers are all left exactly as they were.
+|
+| Backed by the 9 tables created in:
+|   2026_07_30_120000_create_talent_onboarding_tables
+|   2026_07_30_130000_create_talent_mobility_tables
+|   2026_07_30_140000_create_talent_offboarding_tables
+| plus READ-ONLY reuse of talent_job_postings, talent_job_applications,
+| talent_offers, talent_interview_schedules, talent_evaluation_form,
+| s_performance_*, tbluser, hrms_departments and org_designation.
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR. The subject employee
+| always travels as an explicit field (employee_id, owner_id, incumbent_id).
+*/
+
+// Executive dashboard - one aggregate across all five talent modules.
+Route::get('/talent/dashboard', [TalentDashboardController::class, 'index']);
+Route::get('/talent/dashboard/filters', [TalentDashboardController::class, 'filters']);
+
+/*
+ * The v1 Talent routes that stood here - onboarding journeys/tasks/documents,
+ * mobility internal-jobs/requests, succession, and offboarding
+ * cases/clearances/exit-interviews - were deleted in Sprint 6.
+ *
+ * They were a superseded generation. Every screen reads the v2 modules
+ * (/api/onboarding/*, /api/mobility/*, /api/offboarding/*) instead, and the v1
+ * OffboardingCaseController could not execute at all: it wrote five columns
+ * that do not exist on talent_offboarding_cases.
+ *
+ * The two blocks either side of this note are LIVE and deliberately kept:
+ * /talent/dashboard* above, /talent/admin/workflows* below.
+ */
+
+// Administration & Governance: Workflows
+/*
+| The Administration screen's Audit Logs tab, reading the event store directly.
+| No new table: g2g_event is already the append-only record, written in the same
+| transaction as the change it describes, with no UPDATE or DELETE path.
+*/
+Route::get('/talent/admin/audit-logs', [AdminWorkflowController::class, 'auditLogs']);
+Route::get('/talent/admin/workflows', [AdminWorkflowController::class, 'index']);
+/*
+| The detail route was never registered, so opening a workflow in Administration
+| & Governance 404'd. The controller method has existed all along.
+|
+| ── WHY THERE IS NO whereNumber HERE ────────────────────────────────────────
+|
+| It had one, and that reintroduced the very 404 the line above says was fixed.
+| index() hands the list PREFIXED ids - AdminWorkflowController@index builds
+| 'wf-' . $w->id - so the screen requests /talent/admin/workflows/wf-12, which a
+| numeric constraint refuses at the router. show() already strips the prefix
+| itself, and was simply never reached. Constrained to the shape the client
+| actually sends instead: wf-12 or 12, nothing else.
+*/
+Route::get('/talent/admin/workflows/{id}', [AdminWorkflowController::class, 'show'])
+    ->where('id', '(wf-)?[0-9]+');
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Onboarding & Employee Lifecycle Center
+|--------------------------------------------------------------------------
+| Token authenticated (Sanctum token as the `token` query param) and tenant
+| scoped by sub_institute_id, exactly like /api/performance/* and
+| /api/competency/*.
+|
+| Entirely NEW surface: this module had no routes, controllers or models before.
+| Nothing below touches an existing endpoint, so no current consumer is affected.
+| Backed by 2026_07_31_100000_create_onboarding_module_tables, which ADOPTS the
+| two orphan tables talent_onboarding_journeys / talent_onboarding_tasks (present
+| in the database with 0 rows, no migration and zero code references) and adds
+| talent_onboarding_journey_stages / _documents / _notes / _activity_log.
+| Read-only reuse of tbluser, hrms_departments, org_designation, document_type,
+| talent_offers and talent_job_applications; the ONLY write outside this module's
+| own tables is tbluser.probation_period_from/to, set on an explicit probation
+| decision by OnboardingProbationController.
+|
+| NOTE: `user_id` on every route here is the CONTEXT ACTOR, never the subject.
+| The subject employee is `employee_id` on a journey and `owner_id` on a task.
+*/
+
+// This whole block had no role check at all - any logged-in user of any role
+// could manage any employee's onboarding. Wrapped in the same profile:admin,hr
+// gate every comparable HR-management block in this file already uses (see
+// talent/hiring-team above). This is HR's own management screen (the journey
+// list sheet + profile sidebar, per the comment below) - not an employee's
+// self-service view, so this does not affect a regular employee's own access.
+Route::middleware('profile:admin,hr')->group(function () {
+    // Header: the 5 KPI cards and every dropdown on the screen.
+    Route::get('/onboarding/overview', [OnboardingOverviewController::class, 'index']);
+    Route::get('/onboarding/filters', [OnboardingOverviewController::class, 'filters']);
+
+    // Journeys - the journey list sheet, the profile sidebar and "Start onboarding".
+    Route::get('/onboarding/journeys', [V2OnboardingJourneyController::class, 'index']);
+    Route::post('/onboarding/journeys', [V2OnboardingJourneyController::class, 'store']);
+    Route::post('/onboarding/journeys/from-offer/{offerId}', [V2OnboardingJourneyController::class, 'storeFromOffer'])->whereNumber('offerId');
+    Route::get('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'show'])->whereNumber('id');
+    Route::put('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'update'])->whereNumber('id');
+    Route::delete('/onboarding/journeys/{id}', [V2OnboardingJourneyController::class, 'destroy'])->whereNumber('id');
+
+    // Journey stages - the "Onboarding Journey Progress" timeline.
+    Route::get('/onboarding/journeys/{journeyId}/stages', [V2OnboardingJourneyController::class, 'stages'])->whereNumber('journeyId');
+    Route::put('/onboarding/stages/{id}', [V2OnboardingJourneyController::class, 'updateStage'])->whereNumber('id');
+    Route::post('/onboarding/stages/{id}/complete', [V2OnboardingJourneyController::class, 'completeStage'])->whereNumber('id');
+
+    // Key Contacts card and the Lifecycle Timeline tab.
+    Route::get('/onboarding/journeys/{journeyId}/contacts', [V2OnboardingJourneyController::class, 'contacts'])->whereNumber('journeyId');
+    Route::get('/onboarding/journeys/{journeyId}/timeline', [V2OnboardingJourneyController::class, 'timeline'])->whereNumber('journeyId');
+
+    // Preboarding tasks - the main table, its row actions and the Add Task sheet.
+    // Static segments are registered BEFORE /{id} so the wildcard cannot swallow them.
+    Route::get('/onboarding/workstreams', [V2OnboardingTaskController::class, 'workstreams']);
+
+    /*
+    | The DATA behind the five workstream cards.
+    |
+    | The cards above are a rollup of task counts; these carry what was actually
+    | recorded - which laptop, which policy version, whose UAN. Three of the five
+    | write to tables created for them; payroll writes the tbluser columns that
+    | already existed, and learning only READS what LearningAssigner assigned.
+    */
+    Route::get('/onboarding/journeys/{journeyId}/workstream-data', [OnboardingWorkstreamController::class, 'show'])
+        ->whereNumber('journeyId');
+    Route::post('/onboarding/journeys/{journeyId}/assets', [OnboardingWorkstreamController::class, 'storeAsset'])
+        ->whereNumber('journeyId');
+    Route::post('/onboarding/assets/{assetId}/return', [OnboardingWorkstreamController::class, 'returnAsset'])
+        ->whereNumber('assetId');
+    Route::post('/onboarding/journeys/{journeyId}/benefits', [OnboardingWorkstreamController::class, 'storeBenefit'])
+        ->whereNumber('journeyId');
+    Route::post('/onboarding/journeys/{journeyId}/acknowledge-policy', [OnboardingWorkstreamController::class, 'acknowledgePolicy'])
+        ->whereNumber('journeyId');
+    Route::put('/onboarding/journeys/{journeyId}/payroll', [OnboardingWorkstreamController::class, 'savePayroll'])
+        ->whereNumber('journeyId');
+    Route::post('/onboarding/tasks/bulk', [V2OnboardingTaskController::class, 'bulk']);
+    Route::get('/onboarding/tasks', [V2OnboardingTaskController::class, 'index']);
+    Route::post('/onboarding/tasks', [V2OnboardingTaskController::class, 'store']);
+    Route::put('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'update'])->whereNumber('id');
+    Route::post('/onboarding/tasks/{id}/complete', [V2OnboardingTaskController::class, 'complete'])->whereNumber('id');
+    Route::delete('/onboarding/tasks/{id}', [V2OnboardingTaskController::class, 'destroy'])->whereNumber('id');
+
+    // Documents card. POST accepts multipart; PUT doubles as the upload endpoint for
+    // an existing request (browsers cannot send multipart PUT, so the frontend posts
+    // with _method=PUT, which Laravel's method spoofing resolves).
+    Route::get('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'index'])->whereNumber('journeyId');
+    Route::post('/onboarding/journeys/{journeyId}/documents', [V2OnboardingDocumentController::class, 'store'])->whereNumber('journeyId');
+    Route::match(['put', 'post'], '/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'update'])->whereNumber('id');
+    Route::delete('/onboarding/documents/{id}', [V2OnboardingDocumentController::class, 'destroy'])->whereNumber('id');
+
+    // Notes card.
+    Route::get('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'index'])->whereNumber('journeyId');
+    Route::post('/onboarding/journeys/{journeyId}/notes', [OnboardingNoteController::class, 'store'])->whereNumber('journeyId');
+    Route::put('/onboarding/notes/{id}', [OnboardingNoteController::class, 'update'])->whereNumber('id');
+    Route::delete('/onboarding/notes/{id}', [OnboardingNoteController::class, 'destroy'])->whereNumber('id');
+
+    // Probation & Confirmation tab.
+    Route::get('/onboarding/probation', [OnboardingProbationController::class, 'index']);
+    Route::put('/onboarding/probation/{journeyId}', [OnboardingProbationController::class, 'update'])->whereNumber('journeyId');
+    Route::post('/onboarding/probation/{journeyId}/confirm', [OnboardingProbationController::class, 'confirm'])->whereNumber('journeyId');
+    Route::post('/onboarding/probation/{journeyId}/extend', [OnboardingProbationController::class, 'extend'])->whereNumber('journeyId');
+    Route::post('/onboarding/probation/{journeyId}/terminate', [OnboardingProbationController::class, 'terminate'])->whereNumber('journeyId');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Internal Mobility & Succession Center
+|--------------------------------------------------------------------------
+| Sanctum token query param authenticated and tenant scoped by sub_institute_id.
+*/
+/*
+|--------------------------------------------------------------------------
+| Internal Mobility & Succession
+|--------------------------------------------------------------------------
+|
+| Reads are open to any authenticated member of the tenant: an internal job
+| board is meant to be browsed by the people who might apply to it.
+|
+| WRITES ARE NOT. Until Sprint 1b this whole group carried no role gate at all,
+| and two of these endpoints write the HR master:
+|
+|   MobilityPromotionController::completePromotionInProfile()  -> tbluser + org_designation
+|   MobilityTransferController::completeTransferInProfile()    -> tbluser
+|
+| Both fire when a promotion or transfer is saved with status "Completed", which
+| is one click on the Mobility screen. So any authenticated employee could
+| rewrite a colleague's job role, grade, designation and department. The
+| recruitment block above was gated in Sprint 1; this group was missed.
+*/
+Route::prefix('mobility')->group(function () {
+    // ── Reads: any authenticated member of the tenant ──────────────────────
+    Route::get('/overview', [App\Http\Controllers\Api\Mobility\MobilityOverviewController::class, 'index']);
+    Route::get('/filters', [App\Http\Controllers\Api\Mobility\MobilityOverviewController::class, 'filters']);
+
+    Route::get('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'index']);
+    Route::get('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'show'])->whereNumber('id');
+    /*
+     * S10 - these three DO have a "mine" view, so they are scoped in their
+     * controllers rather than gated here: an employee has a real interest in
+     * their own internal application, transfer and promotion history, and
+     * refusing it outright would remove a legitimate view in order to close an
+     * illegitimate one. An elevated caller is not narrowed at all.
+     */
+    Route::get('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'index']);
+    Route::get('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'index']);
+    Route::get('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'index']);
+    /*
+     * S9 - SUCCESSION AND TALENT POOLS ARE NOT THE JOB BOARD.
+     *
+     * The comment opening this block is right that an internal job board is
+     * meant to be browsed, and /jobs stays open for exactly that reason. It
+     * never claimed to cover these three.
+     *
+     * A succession slate is the most sensitive list HR keeps: it says who is
+     * being groomed to replace whom. Talent-pool membership is the same kind of
+     * fact. Neither has a "mine" view that would make scoping the right answer
+     * instead - being on a slate is information about you that you are
+     * specifically not meant to have, and there is no caller column to narrow
+     * by. So these are gated, not scoped.
+     */
+    Route::middleware('subject:hr_elevated')->group(function () {
+        Route::get('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'index']);
+        Route::get('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'index']);
+        Route::get('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'members'])->whereNumber('id');
+    });
+
+    // ── Writes: HR and administrators only ─────────────────────────────────
+    // An employee applying to an internal job is deliberately inside this gate
+    // too: /applications POST records a decision about a person, and today the
+    // screen only exposes it to HR. If self-service application is wanted later
+    // that is a separate, deliberate route.
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/jobs', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'store']);
+        Route::put('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'update'])->whereNumber('id');
+        Route::delete('/jobs/{id}', [App\Http\Controllers\Api\Mobility\MobilityJobController::class, 'destroy'])->whereNumber('id');
+
+        Route::post('/applications', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'store']);
+        Route::put('/applications/{id}', [App\Http\Controllers\Api\Mobility\MobilityApplicationController::class, 'update'])->whereNumber('id');
+
+        Route::post('/transfers', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'store']);
+        Route::put('/transfers/{id}', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'update'])->whereNumber('id');
+        // ROUND 4. The internal sign-off talent.mobility.transfer declares,
+        // for completing a transfer a platform chain has gated.
+        Route::post('/transfers/{id}/completion-decision', [App\Http\Controllers\Api\Mobility\MobilityTransferController::class, 'decideTransfer'])->whereNumber('id');
+
+        Route::post('/promotions', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'store']);
+        Route::put('/promotions/{id}', [App\Http\Controllers\Api\Mobility\MobilityPromotionController::class, 'update'])->whereNumber('id');
+
+        Route::post('/successions', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'store']);
+        Route::put('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'update'])->whereNumber('id');
+        Route::delete('/successions/{id}', [App\Http\Controllers\Api\Mobility\MobilitySuccessionController::class, 'destroy'])->whereNumber('id');
+
+        Route::post('/pools', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'store']);
+        Route::post('/pools/{id}/members', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'addMember'])->whereNumber('id');
+        Route::delete('/pools/{id}/members/{userId}', [App\Http\Controllers\Api\Mobility\MobilityTalentPoolController::class, 'removeMember'])->whereNumber('id')->whereNumber('userId');
+    });
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| Talent Management -> Offboarding Center
+|--------------------------------------------------------------------------
+*/
+/*
+ * S4 - THIS GROUP HAD NO ROLE GATE AT ALL.
+ *
+ * Fourteen routes, ten of them writes: POST /cases takes a client-supplied
+ * employee_id, and updateExitInterview, uploadDocument and destroy all take an
+ * id straight from the route. So any authenticated employee could open an
+ * involuntary-exit case against a colleague with a reason and a last working
+ * day, write their exit-interview record, attach a document to their exit
+ * file, or delete a live case. ResolvesOffboardingContext enforced the tenant
+ * and nothing else.
+ *
+ * The sibling Onboarding block above was explicitly wrapped for exactly this
+ * reason ("any logged-in user of any role could manage any employee's
+ * onboarding"). Offboarding was missed in that pass. This is that fix.
+ *
+ * `subject:hr_elevated` rather than `profile:admin,hr` so that auditor and
+ * executive keep READ access - an auditor exists to read the organisation and
+ * change nothing, and gating them out of exit records is a different bug, not
+ * this fix. The tier matches offboardingSubject()'s, so the gate and the guard
+ * cannot disagree.
+ *
+ * Verified before gating: offboarding-center.tsx is the only consumer of
+ * services/talent/offboarding.ts, and there is no self-service resignation
+ * route, so no employee surface depends on these.
+ */
+Route::prefix('offboarding')->middleware('subject:hr_elevated')->group(function () {
+    /*
+     * READS at the wider tier so an auditor and an executive can see exit
+     * records without being able to touch one. An auditor who cannot read
+     * is not an auditor; the Onboarding precedent used profile:admin,hr and
+     * would have excluded them from both.
+     */
+    Route::get('/overview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'overview']);
+    Route::get('/filters', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'filters']);
+    Route::get('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'index']);
+    Route::get('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'show'])->whereNumber('id');
+
+    /*
+     * WRITES at the narrower tier. Opening an involuntary-exit case, writing
+     * somebody's exit interview, attaching a document to their exit file or
+     * deleting a live case are HR's acts - not a read-only oversight role's.
+     *
+     * offboardingSubject() uses RECORD_OWNERS too, so the gate and the guard
+     * agree: a guard narrower than its gate 403s the people the gate let in.
+     */
+    Route::middleware('subject:record_owners')->group(function () {
+        Route::post('/cases', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'store']);
+        Route::put('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'update'])->whereNumber('id');
+        Route::post('/cases/{id}/status', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateStatus'])->whereNumber('id');
+        // ROUND 4. The internal sign-off talent.offboarding.clearance declares,
+        // for closing a case a platform chain has gated. Only does anything when
+        // a real approval step is open for this case.
+        Route::post('/cases/{id}/closure-decision', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'decideClearance'])->whereNumber('id');
+        Route::post('/cases/{id}/clearance', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateClearance'])->whereNumber('id');
+        Route::post('/cases/{id}/documents', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateDocuments'])->whereNumber('id');
+        // The real file. The screen's upload dialog had no file input at all, so a
+        // document reached 'Submitted' on a typed string - see uploadDocument().
+        Route::post('/cases/{id}/documents/{docId}/upload', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'uploadDocument'])
+            ->whereNumber('id')->where('docId', '[A-Za-z0-9_-]{1,40}');
+        Route::post('/cases/{id}/comments', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'addComment'])->whereNumber('id');
+        Route::post('/cases/{id}/exit-interview', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'updateExitInterview'])->whereNumber('id');
+        Route::delete('/cases/{id}', [App\Http\Controllers\Api\Offboarding\OffboardingController::class, 'destroy'])->whereNumber('id');
+    });
+});
+
+
+
+/*
+|--------------------------------------------------------------------------
+| Agentic AI (module m7)
+|--------------------------------------------------------------------------
+| Agent registry, runs and traces, tool invocations, multi-agent workflows,
+| analytics and the reflection system.
+|
+| Token authenticated + tenant scoped through
+| App\Http\Controllers\Api\Agentic\Concerns\ResolvesAgenticContext. The screens
+| this serves previously talked to two public HuggingFace Spaces with neither,
+| so any browser could read or delete any organisation's agents.
+|
+| Fixed segments are declared before the {id} routes so they are never read as
+| an id, and every {id} is whereNumber.
+*/
+Route::prefix('agentic')->group(function () {
+    // Agents
+    Route::get('/agents/meta', [AgenticAgentController::class, 'meta']);
+    Route::get('/agents', [AgenticAgentController::class, 'index']);
+    Route::post('/agents', [AgenticAgentController::class, 'store']);
+    Route::post('/agents/{id}/clone', [AgenticAgentController::class, 'clone'])->whereNumber('id');
+    Route::patch('/agents/{id}/status', [AgenticAgentController::class, 'setStatus'])->whereNumber('id');
+    Route::post('/agents/{id}/run', [AgenticRunController::class, 'start'])->whereNumber('id');
+
+    // Per-tenant setup. A shared catalogue agent is connected to each
+    // organisation's own sheet / workspace / key here rather than by cloning it.
+    Route::get('/agents/{id}/config', [AgenticConfigController::class, 'show'])->whereNumber('id');
+    Route::post('/agents/{id}/config', [AgenticConfigController::class, 'update'])->whereNumber('id');
+    Route::put('/agents/{id}/config', [AgenticConfigController::class, 'update'])->whereNumber('id');
+    Route::delete('/agents/{id}/config', [AgenticConfigController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/agents/{id}', [AgenticAgentController::class, 'show'])->whereNumber('id');
+    Route::put('/agents/{id}', [AgenticAgentController::class, 'update'])->whereNumber('id');
+    Route::delete('/agents/{id}', [AgenticAgentController::class, 'destroy'])->whereNumber('id');
+
+    // Runs + traces
+    Route::get('/runs', [AgenticRunController::class, 'index']);
+    Route::get('/runs/{id}/trace', [AgenticRunController::class, 'trace'])->whereNumber('id');
+    Route::post('/runs/{id}/tasks', [AgenticRunController::class, 'addTask'])->whereNumber('id');
+    Route::post('/runs/{id}/cancel', [AgenticRunController::class, 'cancel'])->whereNumber('id');
+    Route::get('/runs/{id}', [AgenticRunController::class, 'show'])->whereNumber('id');
+    Route::put('/runs/{id}', [AgenticRunController::class, 'update'])->whereNumber('id');
+    Route::delete('/runs/{id}', [AgenticRunController::class, 'destroy'])->whereNumber('id');
+
+    // Tools
+    Route::get('/tools', [AgenticToolController::class, 'catalogue']);
+    Route::get('/tools/invocations', [AgenticToolController::class, 'invocations']);
+    Route::get('/tools/invocations/{id}', [AgenticToolController::class, 'showInvocation'])->whereNumber('id');
+    Route::post('/tools/{tool}/invoke', [AgenticToolController::class, 'invoke']);
+
+    // Analytics
+    Route::get('/analytics/dashboard', [AgenticAnalyticsController::class, 'dashboard']);
+    Route::get('/analytics/overview', [AgenticAnalyticsController::class, 'overview']);
+
+    // Multi-agent workflows
+    Route::get('/workflows', [AgenticWorkflowController::class, 'index']);
+    Route::post('/workflows', [AgenticWorkflowController::class, 'store']);
+    Route::post('/workflows/{id}/steps', [AgenticWorkflowController::class, 'addStep'])->whereNumber('id');
+    Route::put('/workflows/{id}/steps/{stepId}', [AgenticWorkflowController::class, 'updateStep'])->whereNumber('id')->whereNumber('stepId');
+    Route::delete('/workflows/{id}/steps/{stepId}', [AgenticWorkflowController::class, 'deleteStep'])->whereNumber('id')->whereNumber('stepId');
+    Route::post('/workflows/{id}/run', [AgenticWorkflowController::class, 'run'])->whereNumber('id');
+    Route::get('/workflows/{id}', [AgenticWorkflowController::class, 'show'])->whereNumber('id');
+    Route::put('/workflows/{id}', [AgenticWorkflowController::class, 'update'])->whereNumber('id');
+    Route::delete('/workflows/{id}', [AgenticWorkflowController::class, 'destroy'])->whereNumber('id');
+
+    Route::get('/workflow-runs/{id}', [AgenticWorkflowController::class, 'showRun'])->whereNumber('id');
+    Route::put('/workflow-runs/{id}/steps/{stepRunId}', [AgenticWorkflowController::class, 'updateStepRun'])->whereNumber('id')->whereNumber('stepRunId');
+
+    // Inter-agent messages
+    Route::get('/messages', [AgenticWorkflowController::class, 'messages']);
+    Route::post('/messages', [AgenticWorkflowController::class, 'storeMessage']);
+
+    // Reflection
+    Route::get('/reflection', [AgenticReflectionController::class, 'index']);
+    Route::post('/reflection/analyse', [AgenticReflectionController::class, 'analyse']);
+    Route::put('/reflection/optimizations/{id}', [AgenticReflectionController::class, 'updateOptimization'])->whereNumber('id');
+});
+
+/*
+|--------------------------------------------------------------------------
+| X-06 — notifications and terminology
+|--------------------------------------------------------------------------
+| NO MIDDLEWARE GROUP, DELIBERATELY. Every method resolves the caller from
+| their own token and scopes to that person's inbox, so there is no "who may
+| call this" question separate from "whose rows come back" - the two are the
+| same question here, and the controller is the only place that can answer it.
+|
+| /api/terminology is read by screen labels and report headings, not only by
+| notifications. It is placed here because X-06 built it; the contract is the
+| path, not the namespace behind it.
+*/
+Route::get('/notifications', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'index']);
+Route::get('/notifications/unread-count', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'unreadCount']);
+Route::patch('/notifications/read-all', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'markAllRead']);
+Route::patch('/notifications/{id}/read', [App\Http\Controllers\Api\Notifications\NotificationController::class, 'markRead'])->whereNumber('id');
+
+Route::get('/terminology', [App\Http\Controllers\Api\Notifications\TerminologyController::class, 'index']);
+Route::put('/terminology', [App\Http\Controllers\Api\Notifications\TerminologyController::class, 'update'])->middleware('profile:admin,hr');
+
+/*
+|--------------------------------------------------------------------------
+| X-16 — reporting-line assignment
+|--------------------------------------------------------------------------
+| THE WRITE PATH ReportingLineValidator NEVER HAD. F-05a asked for the
+| validator to be called from every write path that sets reporting_manager_id;
+| there were none, which is why it sat NOT STARTED from Gate B (G-ORG-01/02).
+|
+| Coverage is readable by anyone authenticated - it is a health figure, not a
+| secret. Writes need admin/hr: a reporting line decides whose data a manager
+| can see, so assigning one is a permission change in effect.
+*/
+Route::get('/reporting-line/coverage', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'coverage']);
+Route::post('/reporting-line/assign', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'assign'])->middleware('profile:admin,hr');
+Route::post('/reporting-line/bulk', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'bulkAssign'])->middleware('profile:admin,hr');
+Route::post('/reporting-line/department-head', [App\Http\Controllers\Api\Org\ReportingLineController::class, 'setDepartmentHead'])->middleware('profile:admin,hr');
+
+// L-06 — what depends on a library row, counted BY KEY (G-LIB-09). Read-only and
+// authenticated; the controller scopes the subject to the caller's organisation.
+Route::get('/competency/library/dependants', [\App\Http\Controllers\Api\Competency\LibraryDependantsController::class, 'index']);
+
+// The 9-box's second axis (G-FLOW-26). Read-only; the controller scopes to the
+// caller's organisation. Elevated roles only - it shows every employee's rating.
+Route::get('/competency/nine-box', [\App\Http\Controllers\Api\Competency\NineBoxController::class, 'index'])->middleware('profile:admin,hr');
+
+// X-08(a) — what a seed-library import would give you, before you run it.
+// Reports only; imports nothing (G-SEED-01 R5).
+Route::get('/competency/seed-library/preview', [\App\Http\Controllers\Api\Competency\SeedLibraryPreviewController::class, 'index'])->middleware('profile:admin,hr');
+
+// X-08(b) part 1 — bring-your-own framework, DRY RUN ONLY. Writes nothing.
+// Not skillLibraryController::competencyLibraryImport, which writes flat skill
+// rows; this one is KASBA-aware across all five dimensions.
+Route::post('/competency/framework-import/dry-run', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'dryRun'])->middleware('profile:admin,hr');
+Route::post('/competency/framework-import/commit', [\App\Http\Controllers\Api\Competency\FrameworkImportController::class, 'commitImport'])->middleware('profile:admin,hr');
+
+// ADOPT — the write half that seed-library/preview above never had.
+//
+// Signup used to copy the whole catalogue into every new organisation: 98-99%
+// of everything a new tenant received on live, none of it asked for. That copy
+// is gone from SchoolSetupController, and this is what replaces it - the
+// customer names the roles and skills they want, and only those move.
+//
+// Each adopted row records the catalogue id it came from, so adopting the same
+// rows twice does nothing instead of duplicating them. Role-skill mappings,
+// tasks and departments are NOT copied.
+// BROWSE is what makes the two below reachable from the product. Both take
+// catalogue ids, and nothing else in the API hands a client one: the seed-library
+// preview returns counts with no rows, and jobrolecontroller selects the name
+// without the id. Paged and searched - the catalogue is 3,347 roles and 5,640 skills.
+Route::get('/competency/catalogue-adopt/browse', [\App\Http\Controllers\Api\Competency\CatalogueAdoptController::class, 'browse'])->middleware('profile:admin,hr');
+Route::post('/competency/catalogue-adopt/preview', [\App\Http\Controllers\Api\Competency\CatalogueAdoptController::class, 'preview'])->middleware('profile:admin,hr');
+Route::post('/competency/catalogue-adopt/commit', [\App\Http\Controllers\Api\Competency\CatalogueAdoptController::class, 'adopt'])->middleware('profile:admin,hr');
+
+// X-07d - readiness gates, admin surface. The guard is the EXISTING
+// profile:admin,hr middleware (exact role_key match, alias map for legacy
+// profiles); the controller deliberately does not re-implement it.
+/*
+ * ── THE FIRST ROUTES TO ENFORCE A MENU RIGHT ────────────────────────────
+ *
+ * `menuright:` was registered in bootstrap/app.php and attached to nothing -
+ * every occurrence in this file was a comment saying RE-ADD WITH THE MENU.
+ * So menu rights drove the sidebar and nothing else: the endpoint behind a
+ * hidden screen stayed callable by anyone holding a token.
+ *
+ * Two things had to be true before it could be switched on anywhere, and both
+ * now are:
+ *
+ *   1. THE MENU EXISTS. Readiness Gates is menu 304 on both databases, and
+ *      the migration that created it granted view to administrator and HR
+ *      in the same step - so the row and its grant arrived together. Menu 225
+ *      was rolled back precisely because it did not.
+ *   2. THE LOOKUP TOLERATES LEGACY ROWS. RequireMenuRight filtered strictly
+ *      on sub_institute_id, and seven of twelve live tenants hold only 4
+ *      stamped rows against ~149 menus - enforcing that would have refused
+ *      those tenants on nearly every screen. It now prefers the stamped row
+ *      and falls back to a legacy one.
+ *
+ * Deliberately only these two routes. Attaching menuright across the API is a
+ * separate piece of work with its own blast radius; this is the beachhead
+ * that proves the mechanism on a screen whose rights were created correctly.
+ * `edit` is not used for acknowledge: the migration grants view only, and the
+ * controller gates the acknowledgement itself.
+ */
+Route::get('/readiness/gates', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'index'])->middleware(['profile:admin,hr', 'menuright:304,view']);
+// ⚠ THE MATRIX GUARD IS TEMPORARILY UNWIRED FROM THESE TWO ROUTES.
+//
+// They carried menuright:225,view / :225,edit. Menu 225 was created to prove the
+// guard and then ROLLED BACK - so no rights row exists, and the precedence tail
+// is DENY. The result: /api/readiness/gates returned 403 TO EVERYONE, the
+// administrator included.
+//
+// A GUARD THAT NAMES A MENU IS A DEPENDENCY ON A ROW. Committing the guard while
+// rolling back the row left a correct guard pointing at nothing, and "deny when
+// undeclared" - which is the right default - turned that into a dead endpoint.
+//
+// RE-ADD BOTH when G-NAV-02 is re-run. The guard itself is unchanged and proven;
+// only its wiring is deferred, and it is deferred because the data it depends on
+// is deliberately absent.
+// MATRIX-ENFORCED. `menuright:225,edit` consults tblgroupwise_rights_g2g: menu 225 is
+// Readiness Gates, and acknowledging is an EDIT. hr_manager holds can_view=1 and
+// can_edit=0 there, so HR is refused BY THE ROW - flip the row and the answer
+// flips. profile:admin,hr STAYS as the outer coarse guard; the menu right is the
+// finer one inside it.
+Route::post('/readiness/gates/acknowledge', [\App\Http\Controllers\Api\Readiness\ReadinessGateController::class, 'acknowledge'])->middleware(['profile:admin,hr', 'menuright:304,view']);
+
+// ── AI-generated capability assessment ────────────────────────────────────────
+// GENERATE is admin/hr: it creates content for a whole job role.
+// MINE and SUBMIT are api.token only - any authenticated employee may take their
+// own test, and NEITHER ENDPOINT ACCEPTS A user_id, so there is no subject to
+// authorise and nothing to tamper with.
+Route::post('/competency/ai-assessment/generate', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'generate'])->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/mine', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'mine'])->middleware('api.token');
+Route::post('/competency/ai-assessment/submit', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'submit'])->middleware('api.token');
+// PUBLISH is admin/hr and deliberately separate from generate(): an LLM wrote the
+// questions and a person should read them before an employee is assessed on them.
+Route::post('/competency/ai-assessment/publish', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'publish'])->middleware('profile:admin,hr');
+// The tenant's job roles with ids, and how many competencies each has — the list
+// generate() needs and nothing on the frontend could previously produce.
+Route::get('/competency/ai-assessment/jobroles', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'jobroles'])->middleware('profile:admin,hr');
+// What one role CONTAINS - its competencies and their KASBA items - so the
+// generator can offer a scope narrower than the whole role.
+Route::get('/competency/ai-assessment/scope-options', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'scopeOptions'])->middleware('profile:admin,hr');
+
+/*
+ * TAKING one: START anchors the clock server-side, MY-RESULT is what the person
+ * scored. Both are api.token and NEITHER TAKES A user_id, so like mine() and
+ * submit() there is no subject to point at somebody else.
+ */
+Route::post('/competency/ai-assessment/start', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'start'])->middleware('api.token');
+Route::get('/competency/ai-assessment/my-result', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'myResult'])->middleware('api.token');
+// Marking is its own request so a slow model delays a SCORE, never a SUBMISSION.
+Route::post('/competency/ai-assessment/attempts/{id}/mark', [\App\Http\Controllers\Api\Competency\AiAssessmentController::class, 'markMine'])->whereNumber('id')->middleware('api.token');
+
+/*
+ * REVIEWING one - every route below is about SOMEBODY ELSE, so every route
+ * below is profile:admin,hr.
+ *
+ * `tests/{id}` is the only endpoint in the system that returns correct answers
+ * and model answers. That is deliberate and it is why it is gated here: the
+ * draft/publish split exists so a person reads what the model wrote, and that
+ * cannot be done without seeing what it marks against.
+ */
+Route::get('/competency/ai-assessment/tests', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'index'])->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/tests/{id}', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'show'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/ai-assessment/tests/{id}/assign', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'assign'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/attempts', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'attempts'])->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/attempts/{id}/answers', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'answers'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/ai-assessment/responses/{id}/score', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'scoreAnswer'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::get('/competency/ai-assessment/proposals', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'proposals'])->middleware('profile:admin,hr');
+Route::post('/competency/ai-assessment/proposals/{id}/decide', [\App\Http\Controllers\Api\Competency\AssessmentReviewController::class, 'decide'])->whereNumber('id')->middleware('profile:admin,hr');
+
+/*
+ * ESO — HOW A JOB ROLE'S WORK IS EXECUTED.
+ *
+ * A job role task has been a sentence and nothing else. These five endpoints
+ * add the execution model behind it: which tasks a person must do, which a
+ * machine could, at what risk, and what a role's work is actually composed of.
+ *
+ * ALL FIVE ARE admin/hr. The composition map states what share of a role could
+ * be automated - that is a workforce-planning statement about people's jobs and
+ * it does not belong to every token holder. `profile:admin,hr` is the same gate
+ * the Capability Library that hosts these screens already sits behind.
+ *
+ * `classify` calls DeepSeek and writes proposals. It NEVER writes 'Approved';
+ * `review` is the only path to that, and it is the one a person walks.
+ */
+Route::post('/competency/task-execution/classify', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'classify'])->middleware('profile:admin,hr');
+Route::get('/competency/task-execution', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'index'])->middleware('profile:admin,hr');
+Route::get('/competency/task-execution/roles', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'roles'])->middleware('profile:admin,hr');
+Route::get('/competency/task-execution/composition', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'composition'])->middleware('profile:admin,hr');
+Route::post('/competency/task-execution/review', [\App\Http\Controllers\Api\Competency\TaskExecutionController::class, 'review'])->middleware('profile:admin,hr');
+
+/*
+ * ESO — the execution model itself (§5 of the ESO v1 document).
+ *
+ * task-execution above answers HOW MUCH of a role could be automated. These
+ * answer HOW a task is actually done: steps, controls, inputs, evidence.
+ *
+ * `generate` drafts one with AI and always lands it as `Draft` / `ai-generated`.
+ * Templates are shared across every tenant and are READ-ONLY through this API —
+ * see EsoController::refuseIfNotWritable, which is the cross-tenant boundary.
+ */
+Route::get('/competency/eso', [\App\Http\Controllers\Api\Competency\EsoController::class, 'index'])->middleware('profile:admin,hr');
+Route::post('/competency/eso', [\App\Http\Controllers\Api\Competency\EsoController::class, 'store'])->middleware('profile:admin,hr');
+Route::post('/competency/eso/generate', [\App\Http\Controllers\Api\Competency\EsoController::class, 'generate'])->middleware('profile:admin,hr');
+// Read-only: which model this server actually resolves to. `deepseek-chat` is an
+// alias and can move without this repo changing, and live cannot be shelled into
+// — so the configuration has to be answerable over HTTP. Never echoes the key.
+// MUST stay above /competency/eso/{id}: that route is whereNumber-constrained, so
+// it would not capture 'diagnostics' today, but the ordering is not left to luck.
+Route::get('/competency/eso/diagnostics', [\App\Http\Controllers\Api\Competency\EsoController::class, 'diagnostics'])->middleware('profile:admin,hr');
+Route::get('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'show'])->whereNumber('id')->middleware('profile:admin,hr');
+// Two formats, two readers: md carries YAML front matter for an agent to parse,
+// pdf is a printable SOP for a person. Both state status and source inside the
+// file, because an exported document loses the UI that would otherwise warn you.
+Route::get('/competency/eso/{id}/export', [\App\Http\Controllers\Api\Competency\EsoController::class, 'export'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::put('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+
+/*
+ * THE EMPLOYEE'S VIEW OF THE PROCEDURE.
+ *
+ * Every other ESO route is profile:admin,hr. This pair is api.token, because
+ * the person who most needs the instructions is the one doing the work and they
+ * are not an administrator. Access is scoped by OWNERSHIP inside the controller
+ * - assignee, assigner, or admin/hr - which is the whole security story there.
+ *
+ * It returns the procedure WITHOUT the executability score or risk class: an
+ * employee opening their own task should not be told in passing that a machine
+ * could do it.
+ */
+Route::get('/competency/task-instructions/{taskId}', [\App\Http\Controllers\Api\Competency\TaskInstructionController::class, 'show'])->whereNumber('taskId')->middleware('api.token');
+Route::get('/competency/task-instructions/{taskId}/download', [\App\Http\Controllers\Api\Competency\TaskInstructionController::class, 'download'])->whereNumber('taskId')->middleware('api.token');
+
+/*
+ * REFERENCE DOCUMENTS ON A TASK.
+ *
+ * Distinct from the task ATTACHMENT (task.task_attachment and its versions):
+ * the attachment is the work, these are the material you need to do the work.
+ *
+ * api.token, not profile:admin,hr — the person who needs a checklist is the one
+ * performing the task. Ownership is enforced inside the controller (assignee,
+ * assigner, or admin/hr), and upload/delete are additionally gated to admin/hr
+ * there: an employee who could attach a document to their own task could put
+ * anything in front of whoever reviews it.
+ */
+Route::get('/task-management/tasks/{taskId}/documents', [\App\Http\Controllers\Api\TaskManagement\TaskDocumentController::class, 'index'])->whereNumber('taskId')->middleware('api.token');
+Route::post('/task-management/tasks/{taskId}/documents', [\App\Http\Controllers\Api\TaskManagement\TaskDocumentController::class, 'store'])->whereNumber('taskId')->middleware('api.token');
+Route::get('/task-management/tasks/{taskId}/documents/{id}/download', [\App\Http\Controllers\Api\TaskManagement\TaskDocumentController::class, 'download'])->whereNumber(['taskId', 'id'])->middleware('api.token');
+Route::delete('/task-management/tasks/{taskId}/documents/{id}', [\App\Http\Controllers\Api\TaskManagement\TaskDocumentController::class, 'destroy'])->whereNumber(['taskId', 'id'])->middleware('api.token');
+Route::post('/competency/eso/{id}/status', [\App\Http\Controllers\Api\Competency\EsoController::class, 'setStatus'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::delete('/competency/eso/{id}', [\App\Http\Controllers\Api\Competency\EsoController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+/*
+ * THE COMPETENCY LIBRARY — real competencies behind the rich library screen.
+ *
+ * Same six endpoints and the same response shape the screen already consumes,
+ * served from `competency` instead of `s_users_skills`. The 1,799-line screen
+ * needs no change: only its service BASE moves from /skill_library to here.
+ *
+ * The /skill_library routes are LEFT IN PLACE. Skill management has no other
+ * home, and re-pointing the menu without a replacement would orphan creation,
+ * editing, import and the taxonomy editor with no error to say so.
+ */
+Route::prefix('competency-library')->group(function () {
+    Route::get('/competency-list', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'index'])->middleware('api.token');
+    /*
+     * THE FIVE THE SERVICE ALREADY CALLED AND NOBODY REGISTERED.
+     *
+     * When library.ts moved its BASE here, six routes came with it and five did
+     * not — so the detail drawer, Export Library, Import Competencies, Clone and
+     * Archive/Restore have been 404ing on menu 34 ever since.
+     *
+     * Static and sub-resource paths are declared BEFORE /competency/{id} so the
+     * show route does not swallow `/competency/{id}/detail`, exactly as the
+     * /skill_library block above documents for the same reason.
+     */
+    Route::get('/competency-export', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'export'])->middleware('api.token');
+    Route::post('/competency-import', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'import'])->middleware('profile:admin,hr');
+    Route::get('/competency/{id}/detail', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'detail'])->whereNumber('id')->middleware('api.token');
+    Route::post('/competency/{id}/clone', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'clone'])->whereNumber('id')->middleware('profile:admin,hr');
+    Route::put('/competency/{id}/archive', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'archive'])->whereNumber('id')->middleware('profile:admin,hr');
+    Route::get('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'show'])->whereNumber('id')->middleware('api.token');
+    Route::post('/competency', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'store'])->middleware('profile:admin,hr');
+    Route::put('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'update'])->whereNumber('id')->middleware('profile:admin,hr');
+    Route::delete('/competency/{id}', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
+
+    // What L1 vs L4 means FOR THIS COMPETENCY. Sparse: a level with no row
+    // inherits the organisation's generic descriptor, which the read returns
+    // alongside so an editor can show what it would be overriding.
+    Route::get('/competency/{id}/levels', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'levels'])->whereNumber('id')->middleware('api.token');
+    Route::put('/competency/{id}/levels', [\App\Http\Controllers\Api\Competency\CompetencyLibraryCrudController::class, 'saveLevels'])->whereNumber('id')->middleware('profile:admin,hr');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Home dashboard - HR / Admin
+|--------------------------------------------------------------------------
+| Sectioned rather than one aggregate: /summary is cheap and paints first,
+| /workforce carries the six-month attendance scan, /signals carries the feeds.
+| A slow or failing section then degrades only itself instead of blanking the
+| whole page.
+|
+| profile:admin,hr matches EXACTLY on tbluserprofilemaster.role_key
+| (administrator, hr_manager, hr_executive) - the same guard /api/readiness/gates
+| already uses. The profile_id the frontend sends on every request comes from
+| localStorage; it is a UI hint and is NEVER consulted for authorisation.
+|
+| The prefix is /hr from the first line so the employee dashboard can land at
+| /api/dashboard/me/* beside it with no rename and no client churn.
+*/
+Route::prefix('dashboard')->group(function () {
+    Route::prefix('hr')->middleware('profile:admin,hr')->group(function () {
+        Route::get('/filters',   [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'filters']);
+        Route::get('/summary',   [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'summary']);
+        Route::get('/workforce', [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'workforce']);
+        Route::get('/signals',   [\App\Http\Controllers\Api\Dashboard\HrDashboardController::class, 'signals']);
+    });
+
+    /*
+    | Home dashboard - the employee's own
+    |
+    | GUARDED ONLY BY api.token, and that is deliberate rather than an omission.
+    | These routes accept NO user_id, no employee_id and no subject of any kind:
+    | the caller is resolved from the token and every query is bound to them. An
+    | endpoint with no subject to name cannot be pointed at somebody else, so
+    | there is nothing for a profile guard to protect. Adding one would only stop
+    | employees seeing their own figures.
+    |
+    | The section split mirrors /hr for the same reason - /summary is cheap and
+    | paints first, /signals carries the six-month attendance scan - so a slow or
+    | failing section degrades only itself.
+    */
+    Route::prefix('me')->middleware('api.token')->group(function () {
+        Route::get('/summary', [\App\Http\Controllers\Api\Dashboard\MeDashboardController::class, 'summary']);
+        Route::get('/growth',  [\App\Http\Controllers\Api\Dashboard\MeDashboardController::class, 'growth']);
+        Route::get('/signals', [\App\Http\Controllers\Api\Dashboard\MeDashboardController::class, 'signals']);
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| My HR — employee self-service. F-130.
+|--------------------------------------------------------------------------
+|
+| The audit's Part D gap: an employee could not see their own payslip. Not
+| "it was hard to find" — `monthlyPayrollPdf` lives inside routes/hrms.php's
+| `hrit.role:admin,hr` group, so the only path to a payslip was through the HR
+| console and an employee asking about last month's pay had to ask a person.
+|
+| NO ROLE GATE HERE, ON PURPOSE. These endpoints serve every authenticated
+| employee, and what makes them safe is not a role — it is that the SUBJECT is
+| always the caller. There is no `employee_id` parameter on any of them; the id
+| comes from the token. A gate would be the wrong tool: the point is not that
+| some roles may read a payslip, it is that everyone may read exactly one.
+*/
+Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
+    Route::get('/summary', [App\Http\Controllers\Api\MyHrController::class, 'summary']);
+    Route::get('/payslips', [App\Http\Controllers\Api\MyHrController::class, 'payslips']);
+    Route::get('/payslips/{month}/{year}/pdf', [App\Http\Controllers\Api\MyHrController::class, 'payslipPdf'])
+        ->whereNumber('year');
+
+    /*
+     * F-209. The three things an employee could not get for themselves.
+     *
+     * Each existed only inside routes/hrms.php's `hrit.role:admin,hr` group, so
+     * the only route to your own pay breakdown, your own salary certificate or
+     * your own Form 16 was to ask HR to operate a screen on your behalf - and
+     * in the case of Form 16 that screen threw a 500 for them too (F-210).
+     *
+     * They are added HERE rather than by widening that group, and the
+     * difference is the whole point: widening it would let any employee read
+     * any colleague's pay, because those endpoints take an employee_id. These
+     * do not have one. The subject is the token's owner and there is no
+     * parameter with which to name anybody else.
+     */
+    Route::get('/pay-breakdown', [App\Http\Controllers\Api\MyHrController::class, 'payBreakdown']);
+
+    Route::get('/salary-certificate/{year}', [App\Http\Controllers\Api\MyHrController::class, 'salaryCertificate'])
+        ->whereNumber('year');
+
+    Route::get('/form-16/{year}', [App\Http\Controllers\Api\MyHrController::class, 'form16'])
+        ->whereNumber('year');
+
+    /*
+     * Renders the figures above to a PDF and files it into the Document
+     * Library, so a previous year's Form 16 is something to download rather
+     * than something to regenerate on screen every time. POST because it
+     * writes a document_library row, not just computes a response.
+     */
+    Route::post('/form-16/{year}/generate', [App\Http\Controllers\Api\MyHrController::class, 'generateForm16'])
+        ->whereNumber('year');
+});
+
+/*
+ * AI Signals Engine (Department Management -> Signals tab).
+ *
+ * Literal paths are declared BEFORE `/{id}` (same ORDER MATTERS rule as
+ * departments-management), and `whereNumber` backs that up.
+ *
+ * Reads need a valid token. Generating spends AI budget, so it is gated on profile
+ * AND throttled; reviewing/dismissing is gated on profile. The tenant always comes
+ * from the token (see SignalController).
+ */
+Route::prefix('signals')->middleware('api.token')->group(function () {
+    Route::get('/status', [\App\Http\Controllers\Api\Signals\SignalController::class, 'status']);
+    Route::get('/runs', [\App\Http\Controllers\Api\Signals\SignalController::class, 'runs']);
+    Route::post('/generate', [\App\Http\Controllers\Api\Signals\SignalController::class, 'generate'])
+        ->middleware(['profile:admin,hr', 'throttle:6,1']);
+
+    Route::get('/', [\App\Http\Controllers\Api\Signals\SignalController::class, 'index']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\Signals\SignalController::class, 'show'])->whereNumber('id');
+
+    Route::middleware('profile:admin,hr,manager')->group(function () {
+        Route::patch('/{id}/review', [\App\Http\Controllers\Api\Signals\SignalController::class, 'review'])->whereNumber('id');
+        Route::patch('/{id}/dismiss', [\App\Http\Controllers\Api\Signals\SignalController::class, 'dismiss'])->whereNumber('id');
+    });
+});
+
+/*
+ * Company Opportunity Intelligence + Manual Ingestion (Signals tab).
+ *
+ * All literal paths; none can collide with `/signals/{id}` (which is whereNumber).
+ *
+ *  - Product profile / research runs / opportunity review: admin, hr, manager can read
+ *    and review; only admin, hr can change the profile or start research (it spends
+ *    search and AI budget).
+ *  - Ingestion handles private documents, so ALL of it is admin/hr only.
+ * The tenant always comes from the token.
+ */
+Route::prefix('signals')->middleware('api.token')->group(function () {
+    $opp = \App\Http\Controllers\Api\Signals\OpportunityController::class;
+    $ing = \App\Http\Controllers\Api\Signals\IngestionController::class;
+
+    Route::middleware('profile:admin,hr,manager')->group(function () use ($opp) {
+        Route::get('/product-profile', [$opp, 'showProfile']);
+        Route::get('/research/status', [$opp, 'status']);
+        Route::get('/providers', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'show']);
+        Route::get('/research/runs', [$opp, 'runs']);
+        Route::get('/research/runs/{id}', [$opp, 'showRun'])->whereNumber('id');
+        Route::get('/research/runs/{id}/sources', [$opp, 'runSources'])->whereNumber('id');
+        Route::get('/opportunities', [$opp, 'index']);
+        Route::get('/opportunities/{id}', [$opp, 'show'])->whereNumber('id');
+        Route::patch('/opportunities/{id}/{action}', [$opp, 'act'])->whereNumber('id')->whereIn('action', ['review', 'dismiss', 'follow-up']);
+    });
+
+    Route::middleware('profile:admin,hr')->group(function () use ($opp, $ing) {
+        Route::put('/product-profile', [$opp, 'saveProfile']);
+        Route::post('/research/run', [$opp, 'run'])->middleware('throttle:6,1');
+        Route::post('/providers/ai/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testAi'])->middleware('throttle:6,1');
+        Route::post('/providers/search/test', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'testSearch'])->middleware('throttle:6,1');
+
+        Route::get('/ingestion/sources', [$ing, 'index']);
+        Route::get('/ingestion/findings', [$ing, 'findings']);
+        Route::get('/ingestion/sources/{id}', [$ing, 'show'])->whereNumber('id');
+        Route::post('/ingestion/upload', [$ing, 'upload'])->middleware('throttle:20,1');
+        Route::post('/ingestion/url', [$ing, 'url'])->middleware('throttle:20,1');
+        Route::post('/ingestion/sources/{id}/analyze', [$ing, 'analyze'])->whereNumber('id')->middleware('throttle:10,1');
+        Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id');
+        Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss']);
+    });
+});
+
+/*
+ * Product Portfolio & Partner Network API.
+ * Foundation data for Phase 1: Business Opportunity Intelligence.
+ */
+Route::prefix('portfolio')->middleware('api.token')->group(function () {
+    $port = \App\Http\Controllers\Api\Portfolio\PortfolioController::class;
+    $part = \App\Http\Controllers\Api\Portfolio\PartnerController::class;
+
+    Route::get('/taxonomy', [$port, 'taxonomy']);
+    Route::get('/stats', [$port, 'stats']);
+    Route::get('/offers', [$port, 'index']);
+    Route::get('/offers/{id}', [$port, 'show']);
+
+    Route::get('/partners/stats', [$part, 'stats']);
+    Route::get('/partners', [$part, 'index']);
+    Route::get('/partners/{id}', [$part, 'show']);
+
+    Route::middleware('profile:admin,hr')->group(function () use ($port, $part) {
+        Route::post('/offers', [$port, 'store']);
+        Route::put('/offers/{id}', [$port, 'update']);
+        Route::delete('/offers/{id}', [$port, 'destroy']);
+        Route::post('/import', [$port, 'import']);
+
+        Route::post('/partners', [$part, 'store']);
+        Route::put('/partners/{id}', [$part, 'update']);
+        Route::delete('/partners/{id}', [$part, 'destroy']);
+    });
+});
+
+/*
+ * Business Opportunity Intelligence & Signal Matching API.
+ */
+Route::prefix('signals')->middleware('api.token')->group(function () {
+    $intel = \App\Http\Controllers\Api\Portfolio\OpportunityIntelligenceController::class;
+
+    Route::get('/{id}/opportunity-matches', [$intel, 'matchSignal'])->whereNumber('id');
+    Route::get('/opportunities/{id}/opportunity-matches', [$intel, 'matchOpportunity'])->whereNumber('id');
+    Route::get('/ingestion/findings/{id}/opportunity-matches', [$intel, 'matchFinding'])->whereNumber('id');
+    Route::get('/opportunity-matches', [$intel, 'listMatches']);
+    Route::post('/matches/action', [$intel, 'actOnMatch']);
+});

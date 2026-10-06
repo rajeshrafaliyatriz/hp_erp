@@ -11,6 +11,8 @@ use App\Models\auth\academicSectionModel;
 
 class UserSignupController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
     /**
      * Store a newly created user and academic year.
      *
@@ -32,7 +34,19 @@ class UserSignupController extends Controller
         $user_profile_id = intval($data['user_profile_id'] ?? 0);
         $sub_institute_id = intval($data['sub_institute_id'] ?? 0);
         // $client_id = intval($data['client_id'] ?? 0); // Removed - not in tbluser table
-        $is_admin = intval($data['is_admin'] ?? 0);
+        /*
+         * `is_admin` IS NO LONGER READ FROM THE REQUEST.
+         *
+         * It used to be `intval($data['is_admin'] ?? 0)` on a route that carried
+         * no middleware, so any caller could create an account and mark it an
+         * administrator in the same breath. A permission a caller can grant
+         * themselves is not a permission.
+         *
+         * It is derived instead, from the profile the account is being given:
+         * `is_admin` means "the administrator of this organisation", and whether
+         * that is true is already recorded on tbluserprofilemaster.role_key. One
+         * fact, one place, and nothing for a request to assert.
+         */
         $status = intval($data['status'] ?? 1);
         $allocated_standard = $data['allocated_standards'] ?? null;
         $department_id = intval($data['department_id'] ?? 0);
@@ -46,6 +60,14 @@ class UserSignupController extends Controller
                 'message' => 'Missing required fields'
             ], 422);
         }
+
+        // Derived, not asserted. See the note above.
+        $is_admin = DB::table('tbluserprofilemaster')
+            ->where('id', $user_profile_id)
+            ->where(function ($q) {
+                $q->where('role_key', 'administrator')->orWhere('name', 'Admin');
+            })
+            ->exists() ? 1 : 0;
 
         try {
             // ✅ Insert using DB directly
@@ -101,10 +123,32 @@ class UserSignupController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
-    public function show($id)
+    /**
+     * G-SEC-23, CHAIN B — AUTHENTICATED AND THEN NOT TENANT-SCOPED.
+     *
+     * This route carries `api.token` (routes/api.php:967), so a reviewer
+     * skimming the route file would call it guarded - and it IS authenticated.
+     * It simply never asked which organisation the caller belongs to: the method
+     * did not even receive the Request, and `find($id)` returned any user in the
+     * database. An Employee in tenant 7 read tenant 3's full user record,
+     * 4,224 bytes with profile, organization and client relations attached.
+     *
+     * THE FIX IS NOT "ADD AUTH". It is the missing layer of G-SEC-09, in a place
+     * that looks protected.
+     */
+    public function show(Request $request, $id)
     {
         try {
-            $user = tbluserModel::with('userProfile', 'organization', 'client', 'yearData')->find($id);
+            $subInstituteId = $this->apiTenantId($request);
+
+            if (!$subInstituteId) {
+                return response()->json(['success' => false, 'message' => 'Unauthenticated.'], 401);
+            }
+
+            $user = tbluserModel::with('userProfile', 'organization', 'client', 'yearData')
+                ->where('id', $id)
+                ->where('sub_institute_id', $subInstituteId)
+                ->first();
 
             if (!$user) {
                 return response()->json([

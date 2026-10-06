@@ -66,6 +66,11 @@ return [
             'endpoint' => env('DO_SPACES_ENDPOINT'),
             'region' => env('DO_SPACES_REGION'),
             'bucket' => env('DO_SPACES_BUCKET'),
+            // Public base URL, so Storage::disk('digitalocean')->url($path) can
+            // resolve a browsable link for API responses. Additive: no existing
+            // caller invokes ->url() on this disk (uploads are written with
+            // putFileAs/put and the Blade views hardcode the CDN host).
+            'url' => rtrim(env('DO_PATH', ''), '/') ?: null,
             'throw' => true,
             'verify' => false,
         ],

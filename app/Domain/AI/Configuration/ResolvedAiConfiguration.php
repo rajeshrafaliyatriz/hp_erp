@@ -1,0 +1,92 @@
+<?php
+
+namespace App\Domain\AI\Configuration;
+
+/**
+ * What one AI module should call, and where that answer came from.
+ *
+ * `source` is not decoration. When an administrator saves "Conversational AI uses
+ * OpenRouter" and the next answer still comes back from Gemini, the only useful
+ * question is which rule won — and without this field the answer is a debugging
+ * session. It is carried on the object, logged with the call, and shown on the admin
+ * screen beside each module.
+ */
+final class ResolvedAiConfiguration
+{
+    public function __construct(
+        public readonly string $provider,
+        public readonly ?string $model,
+        public readonly ?string $apiKey,
+        /** `module` | `module_platform` | `pool` | `pool_platform` | `env` | `config` */
+        public readonly string $source,
+        /** The `ai_api_keys` row this resolved through, when it resolved through one. */
+        public readonly int|string|null $keyId = null,
+        /** `institute` | `platform` | `env` | `config` */
+        public readonly string $scope = 'config',
+        public readonly ?int $maxOutputTokens = null,
+        /**
+         * Further credentials for the same provider, owned by the same organisation tier,
+         * that failover may move to. Holds secrets: never serialised (see toArray()).
+         *
+         * @var list<array{api_key:string, api_limit:int|null, id:int|string|null, scope:string}>
+         */
+        public readonly array $alternates = [],
+    ) {
+    }
+
+    /** The same configuration, calling with one specific credential. */
+    public function withCredential(string $apiKey, int|string|null $keyId): self
+    {
+        $maxTokens = $this->maxOutputTokens;
+
+        return new self(
+            provider: $this->provider,
+            model: $this->model,
+            apiKey: $apiKey,
+            source: $this->source,
+            keyId: $keyId,
+            scope: $this->scope,
+            maxOutputTokens: $maxTokens,
+        );
+    }
+
+    public function hasKey(): bool
+    {
+        return $this->apiKey !== null
+            && trim($this->apiKey) !== ''
+            && ! self::isPlaceholder($this->apiKey);
+    }
+
+    /**
+     * A template value such as YOUR_GEMINI_API_KEY is not a credential. Counting it as
+     * one made every AI feature report "configured" and then fail at the provider with
+     * an authentication error; treating it as absent gives the accurate answer.
+     */
+    public static function isPlaceholder(string $key): bool
+    {
+        return preg_match('/^(your[_\-\s]|<|changeme|change[_-]me|replace[_-]me|xxx+$|todo$)/i', trim($key)) === 1;
+    }
+
+    /**
+     * The configuration without its credential, for logs, audit rows and API responses.
+     *
+     * There is no method on this class that returns the key inside an array. That is
+     * deliberate: `toArray()` is what gets reached for when something needs to be
+     * logged or serialised, and a key that can ride along in it will eventually ride
+     * into a log file. Callers that need the credential read `$config->apiKey`
+     * explicitly, which is a line that stands out in review.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'provider' => $this->provider,
+            'model' => $this->model,
+            'source' => $this->source,
+            'scope' => $this->scope,
+            'key_id' => $this->keyId,
+            'has_key' => $this->hasKey(),
+        ];
+    }
+}

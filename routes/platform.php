@@ -1,0 +1,228 @@
+<?php
+
+use App\Http\Controllers\Platform\CustomFieldValueController;
+use App\Http\Controllers\Platform\EventBusController;
+use App\Http\Controllers\Platform\FieldConfigController;
+use App\Http\Controllers\Platform\IntegrationController;
+use App\Http\Controllers\Platform\ProcessController;
+use App\Http\Controllers\Platform\RegistryController;
+use App\Http\Controllers\Platform\SchedulerController;
+use App\Http\Controllers\Platform\WorkflowController;
+use App\Http\Middleware\AiAuth;
+use App\Http\Middleware\AiContextHydrator;
+use App\Http\Middleware\AiRateLimit;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Platform Services API
+|--------------------------------------------------------------------------
+|
+| Every route here sits behind the same middleware stack, in this order and for
+| these reasons:
+|
+|   AiAuth                     validates the Sanctum token and resolves who is calling.
+|   platformright:<link>,view  restricts the route to callers tblgroupwise_rights_g2g
+|                              actually grants view rights on — see below.
+|   AiRateLimit:platform       throttles per user, in its OWN bucket.
+|   AiContextHydrator          turns that identity into the scope the controllers read.
+|
+| Controllers read the organisation from that scope and never from request input, so an
+| authenticated caller cannot name someone else's organisation. A route added to this
+| file without the stack would have no scope at all and fail loudly — `scope()` raises
+| when the hydrator did not run — rather than quietly reading a tenant from a query
+| string.
+|
+| ── WHY THE AI MIDDLEWARE AND NOT A PARALLEL SET ───────────────────────────
+|
+| `AiAuth` and `AiContextHydrator` are not AI-specific in anything but their names: one
+| validates a Sanctum token, the other resolves a tenant scope from it. Writing
+| `PlatformAuth` and `PlatformContextHydrator` beside them would be two more classes
+| doing the same job, to be kept in step by hand, so that a future fix to token handling
+| has two places to be applied and one to be forgotten.
+|
+| ── `:platform` ON THE RATE LIMITER IS LOAD-BEARING ────────────────────────
+|
+| The limiter keyed on `'ai:'.$userId` and nothing else. Sharing that bucket would mean
+| an administrator browsing the Event Bus spends the AI console's sixty-a-minute, and the
+| AI screens then answer 429 for a reason nothing on either screen could explain. The
+| parameter was added to the middleware for this route file.
+|
+| Registered bare in bootstrap/app.php, like routes/ai.php and routes/user-api.php: these
+| routes are reached by the token-authenticated frontend and a session guard would 401
+| them.
+|
+*/
+
+/*
+| WHY THE GROUP READS `tblgroupwise_rights_g2g` INSTEAD OF BEING ADMIN-ONLY
+|
+| These endpoints report the platform's own operation: every event this organisation has
+| recorded, who acted, which consumers are failing and what the server runs on a timer.
+| That is an operator's view of the estate's plumbing, not every employee's — but who,
+| specifically, gets to see it is exactly the question Role & Permissions exists to
+| answer for every OTHER screen in this product, and hardcoding it to 'administrator'
+| here meant an admin could never grant it to anyone else without a code change.
+|
+| Two real `tblmenumaster_g2g` rows now back this group: one per module for everything
+| except Event Bus (`2026_09_29_100000_seed_decentralized_platform_services_menu.php`,
+| consolidated by `2026_09_29_170000_...`), and a dedicated one for Event Bus itself
+| (`2026_09_30_110000_create_event_bus_and_audit_menu_rights.php` — seeded
+| administrator-only there, since its event stream carries actor ids across every
+| module and is more sensitive than the rest; an admin can still widen it from Role &
+| Permissions like any other row). `platformright:<access_link>,view` — see
+| `RequirePlatformRight` — resolves the right row at request time and checks it exactly
+| like `menuright` does everywhere else, rather than a second opinion the API never asks.
+|
+| It sits after AiAuth so an unauthenticated caller gets 401 rather than 403 — "who are
+| you" is a different answer from "not you".
+|
+| The frontend now shows/hides each entry based on this same matrix (see
+| `usePlatformServicesAccess` / `gtg-user-menu.tsx`) rather than a hardcoded role check.
+| Hiding a button is still not a control on its own — this middleware is.
+*/
+Route::prefix('api/platform')
+    ->middleware(['api', AiAuth::class, AiRateLimit::class . ':platform', AiContextHydrator::class])
+    ->group(function () {
+
+        /*
+        | Event Bus — read-only, over `g2g_event` and `g2g_event_delivery`.
+        |
+        | There is deliberately no replay, redrive or publish route. A projector is pure
+        | and re-running it is harmless; a reactor enrols people on courses, issues
+        | certificates and sends notifications, so replaying one does those things again.
+        | `events:project` and `events:react` are separate commands for that reason, and
+        | a button on a screen would hand that distinction to whoever clicks it.
+        |
+        | `/catalogue` and `/options` are declared before nothing in particular — there
+        | are no wildcards in this block — but the ordering habit is kept so a future
+        | `/{event}` cannot capture them.
+        |
+        | No `{module}` here — Event Bus has no per-module concept (its consumers are
+        | cross-cutting), so it checks one fixed row instead.
+        */
+        Route::middleware('platformright:/platform-services/event-bus,view')->group(function () {
+            Route::get('/events/summary', [EventBusController::class, 'summary']);
+            Route::get('/events/stream', [EventBusController::class, 'stream']);
+            Route::get('/events/consumers', [EventBusController::class, 'consumers']);
+            Route::get('/events/failures', [EventBusController::class, 'failures']);
+            Route::get('/events/catalogue', [EventBusController::class, 'catalogue']);
+            Route::get('/events/options', [EventBusController::class, 'options']);
+            Route::post('/events/replay', [EventBusController::class, 'replay']);
+        });
+
+        /*
+        | Everything else shares the six module-scoped "Platform Services" rows —
+        | `?module=` resolves which one; see RequirePlatformRight's own docblock for
+        | what happens when a request carries none (most id-based writes below).
+        */
+        Route::middleware('platformright:/platform-services/workflow?module={module},view')->group(function () {
+
+            /*
+            | Scheduler — what is registered, when it next runs, and what the queue holds.
+            |
+            | Reads Laravel's live schedule rather than a list copied out of
+            | routes/console.php, so a task added there appears here without an edit. See
+            | ScheduleReader for why that matters in this codebase specifically.
+            */
+            Route::get('/scheduler/tasks', [SchedulerController::class, 'index']);
+            Route::post('/scheduler/tasks', [SchedulerController::class, 'save']);
+            Route::post('/scheduler/tasks/run', [SchedulerController::class, 'runNow']);
+
+            /*
+            | The catalogue every screen renders and every write below validates against.
+            |
+            | One endpoint over config/platform_services.php, so a screen physically cannot
+            | offer a setting the API would refuse — both read the same declaration, and
+            | neither has a second copy to drift from.
+            */
+            Route::get('/registry', [RegistryController::class, 'index']);
+
+            /*
+            | Workflow — approval chains against the points the registry declares.
+            |
+            | A POINT is ours and is declared in config; a CHAIN is the organisation's and
+            | lives in g2g_platform_workflows. `points` returns every point INCLUDING the
+            | ungoverned ones, because "which of our approvals has nobody signing them off"
+            | is the question this screen exists to answer.
+            |
+            | `/points` before `/{id}` so it is not matched as an id — the numeric constraint
+            | would reject it, but at the router rather than the handler, and the resulting
+            | 404 would be confusing.
+            */
+            Route::get('/workflow/points', [WorkflowController::class, 'index']);
+            Route::post('/workflow/simulate', [WorkflowController::class, 'simulate']);
+            Route::post('/workflow', [WorkflowController::class, 'store']);
+            Route::put('/workflow/{id}', [WorkflowController::class, 'update'])->whereNumber('id');
+            Route::delete('/workflow/{id}', [WorkflowController::class, 'destroy'])->whereNumber('id');
+            Route::get('/workflow/{id}/history', [WorkflowController::class, 'history'])->whereNumber('id');
+
+            /*
+            | Fields Configuration — over tblcustom_fields, which has existed for a year
+            | with no API in front of it.
+            |
+            | The table a field may be attached to is checked against an ALLOWLIST in
+            | config/platform_services.php. LMS K-12's equivalent validates that field as
+            | `required|string|max:50` and then runs ALTER TABLE on it; see
+            | FieldConfigController for why this one does not.
+            */
+            Route::get('/fields', [FieldConfigController::class, 'index']);
+            Route::post('/fields', [FieldConfigController::class, 'store']);
+            Route::put('/fields/{id}', [FieldConfigController::class, 'update'])->whereNumber('id');
+            Route::delete('/fields/{id}', [FieldConfigController::class, 'destroy'])->whereNumber('id');
+
+            /*
+            | The ANSWERS, which is what makes the definitions above worth having.
+            |
+            | A field nobody can fill in is a row in a table. These two endpoints are
+            | what a form calls to render a record's custom fields and save them, and
+            | the employee record is the first caller.
+            |
+            | Declared AFTER `/fields/{id}` so `values` cannot be captured as an id —
+            | the numeric constraint would reject it, but at the router rather than the
+            | handler, and the resulting 404 would be confusing.
+            |
+            | `{record}` is constrained to word characters: it is a table name, checked
+            | against the registry allowlist inside the service, and a path segment that
+            | can contain anything is a path segment somebody will try to put a slash in.
+            */
+            Route::get('/fields/values/{record}/{id}', [CustomFieldValueController::class, 'show'])
+                ->where('record', '[a-z_]+')->whereNumber('id');
+            Route::post('/fields/values/{record}/{id}', [CustomFieldValueController::class, 'store'])
+                ->where('record', '[a-z_]+')->whereNumber('id');
+
+            /*
+            | Add Process — a written procedure, turned into tasks somebody can do.
+            |
+            | `convert` stores NOTHING: somebody pasting a procedure wants to see what
+            | was understood before committing to it, and a convert that saved would
+            | leave a trail of drafts from people who were only looking.
+            |
+            | `publish` is the one action here that creates work in other people's
+            | queues. It is guarded twice — a unique key on (process, step) and an
+            | idempotency key per task — so a retry replays rather than raising a
+            | second set. See ProcessController.
+            |
+            | `/convert` before `/{id}` so it is not captured as an id.
+            */
+            Route::post('/process/convert', [ProcessController::class, 'convert']);
+            Route::get('/process', [ProcessController::class, 'index']);
+            Route::post('/process', [ProcessController::class, 'store']);
+            Route::get('/process/{id}', [ProcessController::class, 'show'])->whereNumber('id');
+            Route::put('/process/{id}', [ProcessController::class, 'update'])->whereNumber('id');
+            Route::delete('/process/{id}', [ProcessController::class, 'destroy'])->whereNumber('id');
+            Route::post('/process/{id}/publish', [ProcessController::class, 'publish'])->whereNumber('id');
+            Route::get('/process/{id}/history', [ProcessController::class, 'history'])->whereNumber('id');
+
+            /*
+            | Integrations — every third-party connection the platform declares, real
+            | status for the readonly/stub/existing kinds, and real save + test for the
+            | two new `credential` providers. See config/platform_services.php and
+            | IntegrationController for the full account of what this consolidates.
+            */
+            Route::get('/integrations', [IntegrationController::class, 'index']);
+            Route::post('/integrations/{key}', [IntegrationController::class, 'upsert']);
+            Route::post('/integrations/{key}/test', [IntegrationController::class, 'test']);
+            Route::delete('/integrations/{key}', [IntegrationController::class, 'destroy']);
+        });
+    });

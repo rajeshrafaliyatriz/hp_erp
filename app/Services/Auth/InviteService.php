@@ -1,0 +1,309 @@
+<?php
+
+namespace App\Services\Auth;
+
+use App\Support\MailGate;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+
+/**
+ * GETTING A CREDENTIAL TO A NEW PERSON — the part that was missing entirely.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * WHAT THIS REPLACES
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `EmployeeFactory::issueInvite()` did this:
+ *
+ *     DB::table('password_reset_tokens')->insert([...]);
+ *     return ['sent' => true, 'error' => null];
+ *
+ * There is no mail call in it. None. It wrote a token nothing read, reported
+ * success, and the screen told the new employee *"An invite was sent to you"*
+ * and *"They will be emailed a link to set their own password."*
+ *
+ * Their password is `bin2hex(random_bytes(12))`, hashed and discarded. So the
+ * combined effect of those two facts is that **every employee ever created
+ * through Employee Directory has been unable to log in**, and been told
+ * otherwise.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * WHY THE LINK IS RETURNED, NOT JUST EMAILED
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Because email does not work here, and pretending otherwise is what got us
+ * into this. Measured: `G2G_NOTIFY_EMAIL` is absent from `.env`, one tenant is
+ * on the per-tenant allowlist, and `smtp_details` holds ONE row for twelve live
+ * organisations.
+ *
+ * An invite that can only be delivered by email is an invite that does not work
+ * for eleven of twelve customers. So this returns the link as well, for the
+ * administrator to hand over however they actually communicate with their
+ * people — and the caller shows it.
+ *
+ *     'email'  it was sent, and the link is NOT returned
+ *     'link'   nothing was sent; here is the link, give it to them yourself
+ *     'failed' nothing was sent and there is no link — with the reason
+ *
+ * Three states, because the difference between them is exactly what the old
+ * boolean destroyed.
+ *
+ * ── THE LINK IS NOT RETURNED WHEN IT WAS EMAILED ────────────────────────────
+ *
+ * Deliberate. A one-time credential that has been delivered to its owner should
+ * not also sit in an administrator's browser tab, in a screenshot, or in a
+ * server log. If the email went, the email is the delivery.
+ */
+class InviteService
+{
+    /** How long an invite link stays usable. Mirrors ForgotPasswordController. */
+    public const TOKEN_HOURS = 24;
+
+    /**
+     * Mint a set-password link for somebody, and deliver it if we can.
+     *
+     * NEVER THROWS. An employee who exists but was not invited is a recoverable
+     * situation an administrator can fix from the People screen; an exception
+     * thrown after their record was committed is not.
+     *
+     * @return array{delivered:'email'|'link'|'failed', link:?string, error:?string, expires_hours:int}
+     */
+    /**
+     * Create a set-password link for `$email`, and send it to `$deliverTo`.
+     *
+     * ═══════════════════════════════════════════════════════════════════════
+     * THE ADDRESS THE TOKEN IS KEYED ON IS NOT ALWAYS THE MAILBOX
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * `$email` decides WHOSE PASSWORD the link sets:
+     * `password_reset_tokens.email` is the primary key, `consume()` returns it, and
+     * `PasswordController::setPassword` then does
+     * `DB::table('tbluser')->where('email', $email)` and writes that user's
+     * password, revoking all their tokens.
+     *
+     * `$deliverTo` decides only where the message goes.
+     *
+     * ── WHY THESE HAD TO BE SEPARATED ───────────────────────────────────────
+     *
+     * A request to "send the set-password link to kalpesh@triz.co.in" for an
+     * account whose address is kalpesh@scholarclone.com. With one parameter the
+     * only way to honour it would be to issue the invite FOR
+     * `kalpesh@triz.co.in` - and that address belongs to a different account: the
+     * administrator of another organisation entirely. Whoever opened the link would
+     * have taken over THAT account and signed it out everywhere.
+     *
+     * One parameter conflated "who this is for" with "where to send it", and the two
+     * are not the same question. `$deliverTo` defaults to `$email`, so every
+     * existing caller behaves exactly as before.
+     *
+     * A caller passing `$deliverTo` is asserting that the recipient is entitled to
+     * set that account's password. Nothing here can verify that, which is why it is
+     * an explicit, separate argument rather than something inferred.
+     */
+    public function issue(
+        ?string $email,
+        ?int $tenantId,
+        string $purpose = 'invite',
+        ?string $deliverTo = null
+    ): array {
+        $email = trim((string) $email);
+
+        if ($email === '') {
+            return $this->failed('This person has no email address, so there is nothing to send a link to. Add one first.');
+        }
+
+        // The mailbox. Defaults to the account's own address, which is the case for
+        // every caller but the deliberate hand-over described above.
+        $deliverTo = trim((string) $deliverTo) ?: $email;
+
+        $base = rtrim((string) config('app.frontend_url'), '/');
+
+        if ($base === '') {
+            return $this->failed('No application address is configured (FRONTEND_URL), so a set-password link cannot be built.');
+        }
+
+        try {
+            $token = Str::random(64);
+
+            /*
+             * One live token per address. Re-inviting invalidates the previous
+             * link rather than leaving two valid ways in - the table's primary
+             * key is `email`, so this is also what keeps the insert legal.
+             */
+            DB::table('password_reset_tokens')->where('email', $email)->delete();
+            DB::table('password_reset_tokens')->insert([
+                'email' => $email,
+                'token' => $token,
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->failed('The invite could not be created: ' . $e->getMessage());
+        }
+
+        $link = $base . '/set-password/' . $token . '?email=' . rawurlencode($email);
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * A LINK NOBODY ELSE CAN OPEN IS NOT A WORKING INVITE
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * `FRONTEND_URL` defaults to `http://localhost:3000`. Every invite built
+         * from it points at the RECIPIENT'S OWN MACHINE, where nothing is
+         * running - so the link is dead on arrival for everybody except the
+         * developer who generated it.
+         *
+         * The invite still gets created and sent, because refusing would be
+         * worse: the token is real and an administrator on the same machine can
+         * use it. But the caller is TOLD, so "the invite does not work" stops
+         * being a mystery and becomes one line of configuration.
+         */
+        $unreachable = null;
+        $host = parse_url($base, PHP_URL_HOST) ?: '';
+
+        if (in_array(strtolower($host), ['localhost', '127.0.0.1', '::1', '0.0.0.0'], true)) {
+            $unreachable = 'This link points at ' . $base . ', which only works on the machine '
+                . 'that generated it - so nobody you invite can open it. Set FRONTEND_URL on '
+                . 'the server to the address people actually use (for this installation: '
+                . 'https://g2g.scholarclone.com) and send the invite again.';
+        }
+
+        if (!MailGate::allowedForTenant($tenantId)) {
+            // Not a failure. The link exists and works; it just has to travel by
+            // hand. Saying so plainly is the whole point of this class.
+            return [
+                'delivered' => 'link',
+                'link' => $link,
+                'error' => $unreachable,
+                'expires_hours' => self::TOKEN_HOURS,
+            ];
+        }
+
+        try {
+            // $deliverTo, NOT $email: the link already carries whose account it is
+            // for, and this decides only which mailbox receives it.
+            $this->mail($deliverTo, $link, $purpose);
+        } catch (\Throwable $e) {
+            /*
+             * Mail was permitted and still did not go. The link is handed back
+             * rather than swallowed, so the administrator is not stuck: the
+             * person can still be let in while somebody looks at the mail
+             * configuration.
+             */
+            Log::warning('Invite email failed; falling back to a copyable link.', [
+                'tenant' => $tenantId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'delivered' => 'link',
+                'link' => $link,
+                'error' => 'The email could not be sent (' . $e->getMessage() . '), so use the link instead.',
+                'expires_hours' => self::TOKEN_HOURS,
+            ];
+        }
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════
+         * THE LINK IS RETURNED EVEN WHEN THE EMAIL WENT
+         * ═══════════════════════════════════════════════════════════════════
+         *
+         * It used to be withheld here, reasoning that an administrator who can
+         * read somebody's reset link can take their account. That reasoning does
+         * not survive contact with the two guards `invite()` now has: the target
+         * must have NEVER SIGNED IN, and must rank below the caller. An
+         * administrator who can invite this account can already credential it -
+         * withholding the link protects nothing and costs a great deal.
+         *
+         * What it cost: `Mail::send` returning without throwing is not proof of
+         * delivery. It means the message reached the transport. When the mailbox
+         * is misconfigured, the address bounces, or the link host is unreachable,
+         * the screen said "emailed" and handed back NOTHING - so the invite had
+         * visibly failed and the administrator had no way to finish the job.
+         *
+         * Now they always have a link to fall back on, and the screen says the
+         * email went as well.
+         */
+        return [
+            'delivered' => 'email',
+            'link' => $link,
+            'error' => $unreachable,
+            'expires_hours' => self::TOKEN_HOURS,
+        ];
+    }
+
+    /**
+     * Is this token good, and whose is it?
+     *
+     * @return array{valid:bool, email:?string, reason:?string}
+     */
+    public function check(string $token): array
+    {
+        $row = DB::table('password_reset_tokens')->where('token', $token)->first();
+
+        if (!$row) {
+            // The same answer for "never existed" and "already used", so a
+            // caller cannot probe for which tokens were real.
+            return ['valid' => false, 'email' => null, 'reason' => 'This link is not valid. Ask for a new one.'];
+        }
+
+        if ($row->created_at !== null
+            && \Carbon\Carbon::parse($row->created_at)->addHours(self::TOKEN_HOURS)->isPast()) {
+
+            DB::table('password_reset_tokens')->where('token', $token)->delete();
+
+            return ['valid' => false, 'email' => null, 'reason' => 'This link has expired. Ask for a new one.'];
+        }
+
+        return ['valid' => true, 'email' => $row->email, 'reason' => null];
+    }
+
+    /** Spend a token. Returns the email it belonged to, or null. */
+    public function consume(string $token): ?string
+    {
+        $check = $this->check($token);
+
+        if (!$check['valid']) {
+            return null;
+        }
+
+        DB::table('password_reset_tokens')->where('token', $token)->delete();
+
+        return $check['email'];
+    }
+
+    private function failed(string $reason): array
+    {
+        return ['delivered' => 'failed', 'link' => null, 'error' => $reason, 'expires_hours' => self::TOKEN_HOURS];
+    }
+
+    /**
+     * The message itself.
+     *
+     * `Mail::raw` rather than a Mailable, matching every other send in this
+     * codebase - there are exactly two Mailables and both are candidate-facing.
+     * A template is worth adding when there is a second account email to share
+     * it with; there is not yet.
+     */
+    private function mail(string $email, string $link, string $purpose): void
+    {
+        $subject = $purpose === 'reset'
+            ? 'Reset your password'
+            : 'Set your password';
+
+        $opening = $purpose === 'reset'
+            ? 'Somebody asked to reset the password for this account.'
+            : 'An account has been created for you.';
+
+        \Illuminate\Support\Facades\Mail::raw(
+            $opening . "\n\n"
+            . "Use this link to set a password:\n"
+            . $link . "\n\n"
+            . 'The link works once and expires in ' . self::TOKEN_HOURS . " hours.\n\n"
+            . "If you were not expecting this, you can ignore it - nothing changes until the link is used.",
+            function ($message) use ($email, $subject) {
+                $message->to($email)->subject($subject);
+            }
+        );
+    }
+}

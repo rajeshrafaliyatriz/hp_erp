@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\talent\interview_panel;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -11,6 +12,39 @@ use App\Models\talent\talent_interviewschedules;
 
 class talent_interviewpanelController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    /**
+     * The caller's organisation, resolved from the TOKEN, never from the request.
+     *
+     * This controller serves both the token-authenticated API and the
+     * session-authenticated Blade screens, so the token is tried first and the
+     * session is the fallback - the same shape as payrollTenantId (D-004).
+     *
+     * G-SEC-11 / the C27 class. Every `if ($type == "API")` branch below used to
+     * validate that a token EXISTED and then take sub_institute_id from the
+     * request body, which is the G-SEC-09 defect: the token's owner was
+     * discarded. Confirmed by execution, not inference - the C23 guard recorded
+     * `api/interview-panel/list` returning another tenant's data when
+     * impersonating.
+     *
+     * Interview panel records cover CANDIDATES - people outside the company who
+     * never agreed to be in the system - which is why this was fixed first by
+     * data class rather than by route count.
+     */
+    private function panelTenantId(Request $request): ?int
+    {
+        $fromToken = $this->apiTenantId($request);
+        if ($fromToken) {
+            return $fromToken;
+        }
+
+        $fromSession = $request->session()->get('sub_institute_id');
+
+        return is_numeric($fromSession) ? (int) $fromSession : null;
+    }
+
+
     
 public function getInterviewPanel(Request $request)
 {
@@ -30,7 +64,7 @@ public function getInterviewPanel(Request $request)
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->panelTenantId($request);
     }
 
     // 👉 Fetch Panel + Interview Date & Time
@@ -63,7 +97,7 @@ public function getInterviewPanel(Request $request)
             if (!$accessToken) {
                 return response()->json(['message' => 'Invalid token'], 401);
             }
-            $sub_institute_id = $request->get('sub_institute_id');
+            $sub_institute_id = $this->panelTenantId($request);
         }
         $users = DB::table('tbluser')
                 ->leftJoin('s_user_jobrole', 'tbluser.allocated_standards', '=', 's_user_jobrole.id')
@@ -75,7 +109,7 @@ public function getInterviewPanel(Request $request)
                     's_users_skills.title as skill'
                 )
                 ->where('tbluser.status', 1)
-                ->where('tbluser.sub_institute_id', $request->sub_institute_id)
+                ->where('tbluser.sub_institute_id', $this->apiTenantId($request))
                 ->get()
                 ->groupBy('id')
                 ->map(function ($group) {
@@ -109,7 +143,7 @@ public function getInterviewPanel(Request $request)
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->panelTenantId($request);
         $user_id = $accessToken->tokenable_id;
     } else {
         $user_id = auth()->id();
@@ -136,7 +170,7 @@ public function getInterviewPanel(Request $request)
     }
     $target_positions = $request->target_positions;
     $panel = TalentInterviewPanel::create([
-        'sub_institute_id'       => $request->sub_institute_id,
+        'sub_institute_id'       => $this->apiTenantId($request),
         'panel_name'             => $request->panel_name,
         'target_positions'       => $target_positions,
         'description'            => $request->description,
@@ -162,7 +196,7 @@ public function getInterviewPanel(Request $request)
         $accessToken = PersonalAccessToken::findToken($token);
         if (!$accessToken) return response()->json(['message' => 'Invalid token'], 401);
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->panelTenantId($request);
     }
 
     $panel = TalentInterviewPanel::find($id);
@@ -225,7 +259,7 @@ public function destroy(Request $request, $id)
         if (!$accessToken) {
             return response()->json(['message' => 'Invalid token'], 401);
         }
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->panelTenantId($request);
         $user_id = $accessToken->tokenable_id;
     } else {
         $user_id = auth()->id();

@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class jobrolecontroller extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function getJobRolesByDepartment(request $request,$id)
 {
      // --- Token Authentication Check ---
@@ -37,7 +40,9 @@ class jobrolecontroller extends Controller
      public function skills(Request $request, $id)
     {
 
-        $token = $request->input('token');
+        // Header first, matching the fix already applied in PayrollController -
+        // this was reading the token from the URL/query only.
+        $token = $request->bearerToken() ?: $request->input('token');
         if (!$token) {
             return response()->json(['message' => 'Token not provided'], 401);
         }
@@ -51,10 +56,10 @@ class jobrolecontroller extends Controller
         $skills = DB::table('s_user_skill_jobrole as a')
                 ->join('s_users_skills as b', function ($join) use ($request){
                     $join->on('b.title', '=', 'a.skill')
-                        ->where('b.sub_institute_id', $request->sub_institute_id)
+                        ->where('b.sub_institute_id', $this->apiTenantId($request))
                         ->whereNull('b.deleted_at');
                         })
-                        ->where('a.sub_institute_id', $request->sub_institute_id)
+                        ->where('a.sub_institute_id', $this->apiTenantId($request))
                         ->whereNull('a.deleted_at')
                         ->where('a.jobrole', $id)
                         ->select('a.skill')   
@@ -86,10 +91,10 @@ class jobrolecontroller extends Controller
                  ->join('s_users_skills as b', function($join) use ($request)
                  {
                     $join->on('b.title', '=', 'a.skill')
-                        ->where('b.sub_institute_id',$request->sub_institute_id)
+                        ->where('b.sub_institute_id',$this->apiTenantId($request))
                         ->whereNull('b.deleted_at');
                             })
-                            ->where('a.sub_institute_id',$request->sub_institute_id)
+                            ->where('a.sub_institute_id',$this->apiTenantId($request))
                             ->whereNull('a.deleted_at')
                             ->where('a.skill', 'LIKE', "%{$skill}%")
                             ->groupBy('a.skill')

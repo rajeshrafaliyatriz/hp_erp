@@ -1,0 +1,487 @@
+DB3 SCHEMA AUDIT — talent_competency group
+Connection: Laravel connection literally named "live" (config/database.php, reads DB3_HOST/DB3_PORT/DB3_DATABASE/DB3_USERNAME/DB3_PASSWORD from .env)
+Host: 128.199.17.97 | Engine: MariaDB 10.1.48
+Method: DB::connection('live')->select('DESCRIBE <table>') + DB::connection('live')->table('<table>')->count()
+Captured: 2026-09-28
+
+===== TABLE: talent_job_postings =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+title | varchar(255) | NO |  |  |
+department_id | bigint(20) unsigned | YES | MUL |  |
+jobrole_id | bigint(20) unsigned | YES | MUL |  |
+location | varchar(255) | YES |  |  |
+employment_type | enum('Full-Time','Part-Time','Internship','Contract') | YES |  | Full-Time |
+work_mode | varchar(20) | YES |  |  |
+experience | varchar(100) | YES |  |  |
+education | varchar(255) | YES |  |  |
+priority_level | enum('High','Medium','Low') | YES |  | Medium |
+positions | int(11) | YES |  | 1 |
+start_date | date | YES |  |  |
+min_salary | decimal(10,2) | YES |  |  |
+max_salary | decimal(10,2) | YES |  |  |
+deadline | date | YES |  |  |
+skills | text | YES |  |  |
+certifications | text | YES |  |  |
+benefits | text | YES |  |  |
+description | longtext | YES |  |  |
+status | enum('Active','Draft','Closed','Inactive') | YES |  | Draft |
+sub_institute_id | bigint(20) unsigned | YES | MUL |  |
+created_by | bigint(20) unsigned | YES |  |  |
+updated_by | bigint(20) unsigned | YES |  |  |
+deleted_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | NO |  | CURRENT_TIMESTAMP |
+updated_at | timestamp | NO |  | CURRENT_TIMESTAMP | on update CURRENT_TIMESTAMP
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 133
+
+===== TABLE: talent_job_applications =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+job_id | bigint(20) unsigned | NO | MUL |  |
+candidate_id | bigint(20) unsigned | YES | MUL |  |
+first_name | varchar(100) | NO |  |  |
+middle_name | varchar(100) | YES |  |  |
+last_name | varchar(100) | NO |  |  |
+email | varchar(255) | NO |  |  |
+mobile | varchar(15) | YES |  |  |
+current_location | varchar(255) | YES |  |  |
+employment_type | varchar(100) | YES |  |  |
+work_mode | varchar(20) | YES |  |  |
+experience | varchar(100) | YES |  |  |
+education | varchar(255) | YES |  |  |
+expected_salary | decimal(10,2) | YES |  |  |
+skills | text | YES |  |  |
+certifications | text | YES |  |  |
+resume_path | varchar(255) | YES |  |  |
+applied_date | datetime | YES |  | CURRENT_TIMESTAMP |
+status | varchar(30) | YES |  | Pending Review |
+sub_institute_id | bigint(20) unsigned | YES | MUL |  |
+created_by | bigint(20) unsigned | YES |  |  |
+updated_by | bigint(20) unsigned | YES |  |  |
+deleted_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | NO |  | CURRENT_TIMESTAMP |
+updated_at | timestamp | NO |  | CURRENT_TIMESTAMP | on update CURRENT_TIMESTAMP
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 281
+
+===== TABLE: talent_candidates =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+syear | varchar(50) | NO |  |  |
+email | varchar(255) | NO |  |  |
+email_key | char(64) | NO |  |  |
+first_name | varchar(100) | YES |  |  |
+middle_name | varchar(100) | YES |  |  |
+last_name | varchar(100) | YES |  |  |
+mobile | varchar(20) | YES |  |  |
+current_location | varchar(255) | YES |  |  |
+experience | varchar(100) | YES |  |  |
+education | varchar(255) | YES |  |  |
+expected_salary | decimal(12,2) | YES |  |  |
+skills | text | YES |  |  |
+certifications | text | YES |  |  |
+resume_path | varchar(500) | YES |  |  |
+consent_to_retain | tinyint(1) | NO |  | 0 |
+consent_at | datetime | YES |  |  |
+source | varchar(30) | NO |  | careers |
+applications_count | int(10) unsigned | NO |  | 0 |
+last_applied_at | datetime | YES |  |  |
+created_by | bigint(20) unsigned | YES |  |  |
+updated_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 216
+
+===== TABLE: talent_interview_schedules =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+panel_id | bigint(20) unsigned | YES |  |  |
+job_id | bigint(20) unsigned | NO | MUL |  |
+applicant_id | bigint(20) unsigned | NO | MUL |  |
+round_no | tinyint(4) | YES |  | 1 |
+interview_date | datetime | YES |  |  |
+interviewer_id | longtext | YES |  |  |
+status | enum('Scheduled','Completed','Under Review','Pending Review','Rejected','Selected') | YES |  | Scheduled |
+rating | decimal(3,2) | YES |  |  |
+feedback | text | YES |  |  |
+time | time | YES |  |  |
+location | varchar(50) | YES |  |  |
+duration | int(11) | YES |  |  |
+additional_notes | longtext | YES |  |  |
+sub_institute_id | bigint(20) unsigned | YES |  |  |
+created_by | bigint(20) unsigned | YES |  |  |
+updated_by | bigint(20) unsigned | YES |  |  |
+deleted_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | NO |  | CURRENT_TIMESTAMP |
+updated_at | timestamp | NO |  | CURRENT_TIMESTAMP | on update CURRENT_TIMESTAMP
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 144
+
+===== TABLE: talent_offers =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+application_id | bigint(20) unsigned | NO | MUL |  |
+job_id | bigint(20) unsigned | NO | MUL |  |
+template_id | varchar(50) | YES |  |  |
+position | varchar(255) | NO |  |  |
+salary | varchar(100) | YES |  |  |
+start_date | date | YES |  |  |
+expires_at | date | YES |  |  |
+status | enum('draft','sent','rejected','expired') | NO |  | sent |
+offer_letter_url | varchar(500) | YES |  |  |
+notes | text | YES |  |  |
+sub_institute_id | bigint(20) unsigned | YES | MUL |  |
+created_by | bigint(20) unsigned | NO | MUL |  |
+reportmanager | bigint(20) unsigned | YES |  |  |
+punchintime | time | YES |  |  |
+punchouttime | time | YES |  |  |
+sent_at | datetime | YES |  |  |
+rejected_at | datetime | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+ROW COUNT: 71
+NOTE: no deleted_at, no updated_by on this table.
+
+===== TABLE: talent_screening_results =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+candidate_id | bigint(20) unsigned | NO | MUL |  |
+competency_match | int(10) unsigned | NO |  |  |
+cultural_fit | enum('High','Medium','Low') | NO |  |  |
+predicted_success | enum('Highly Likely','Likely','Possible','Unlikely') | NO |  |  |
+overall_fit_score | int(10) unsigned | NO |  |  |
+ranking_score | int(10) unsigned | NO |  |  |
+skill_gaps | longtext | NO |  |  |
+strengths | longtext | NO |  |  |
+recommendation | text | NO |  |  |
+deepseek_analysis | longtext | NO |  |  |
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+created_by | bigint(20) | YES |  |  |
+updated_by | bigint(20) | YES |  |  |
+deleted_by | bigint(20) | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 286
+
+===== TABLE: s_competency_frameworks =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+name | varchar(191) | NO |  |  |
+description | text | YES |  |  |
+version | varchar(30) | NO |  | v1.0 |
+status | varchar(30) | NO | MUL | draft |
+department_id | bigint(20) unsigned | YES | MUL |  |
+jobrole_id | bigint(20) unsigned | YES | MUL |  |
+jobrole | varchar(191) | YES |  |  |
+created_by | bigint(20) unsigned | YES | MUL |  |
+updated_by | bigint(20) unsigned | YES | MUL |  |
+deleted_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 35
+
+===== TABLE: s_competency_assessments =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+title | varchar(191) | NO |  |  |
+framework_id | bigint(20) unsigned | YES | MUL |  |
+cycle_id | bigint(20) unsigned | YES | MUL |  |
+attempt_id | bigint(20) unsigned | YES | MUL |  |
+round | int(10) unsigned | YES |  |  |
+user_id | bigint(20) unsigned | YES | MUL |  |
+assessor_id | bigint(20) unsigned | YES |  |  |
+department_id | bigint(20) unsigned | YES | MUL |  |
+jobrole | varchar(191) | YES |  |  |
+jobrole_id | bigint(20) unsigned | YES | MUL |  |
+status | varchar(30) | NO | MUL | open |
+review_status | varchar(30) | YES | MUL |  |
+score | decimal(5,2) | YES |  |  |
+due_date | date | YES |  |  |
+completed_at | datetime | YES |  |  |
+created_by | bigint(20) unsigned | YES | MUL |  |
+updated_by | bigint(20) unsigned | YES | MUL |  |
+deleted_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 142
+
+===== TABLE: s_competency_development_plans =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+title | varchar(191) | NO |  |  |
+objective | text | YES |  |  |
+focus_areas | text | YES |  |  |
+user_id | bigint(20) unsigned | YES | MUL |  |
+competency_id | bigint(20) unsigned | YES | MUL |  |
+framework_id | bigint(20) unsigned | YES | MUL |  |
+career_path_id | bigint(20) unsigned | YES | MUL |  |
+department_id | bigint(20) unsigned | YES | MUL |  |
+jobrole | varchar(191) | YES |  |  |
+jobrole_id | bigint(20) unsigned | YES | MUL |  |
+status | varchar(30) | NO | MUL | active |
+progress | tinyint(3) unsigned | NO |  | 0 |
+start_date | date | YES |  |  |
+due_date | date | YES | MUL |  |
+completed_at | datetime | YES |  |  |
+approver_id | bigint(20) unsigned | YES | MUL |  |
+approval_status | varchar(30) | YES | MUL |  |
+mentor_id | bigint(20) unsigned | YES |  |  |
+created_by | bigint(20) unsigned | YES | MUL |  |
+updated_by | bigint(20) unsigned | YES | MUL |  |
+deleted_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 165
+
+===== TABLE: s_competency_certifications =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+name | varchar(191) | NO |  |  |
+user_id | bigint(20) unsigned | YES | MUL |  |
+competency_id | bigint(20) unsigned | YES | MUL |  |
+requirement_id | bigint(20) unsigned | YES | MUL |  |
+issuing_body | varchar(191) | YES |  |  |
+certification_type | varchar(100) | YES | MUL |  |
+credential_id | varchar(191) | YES |  |  |
+department_id | bigint(20) unsigned | YES | MUL |  |
+jobrole | varchar(191) | YES |  |  |
+jobrole_id | bigint(20) unsigned | YES | MUL |  |
+status | varchar(30) | NO | MUL | valid |
+verification_status | varchar(30) | YES | MUL |  |
+verified_by | bigint(20) unsigned | YES |  |  |
+verified_at | datetime | YES |  |  |
+issued_date | date | YES |  |  |
+expiry_date | date | YES | MUL |  |
+notes | text | YES |  |  |
+created_by | bigint(20) unsigned | YES | MUL |  |
+updated_by | bigint(20) unsigned | YES | MUL |  |
+deleted_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+certification_type_id | bigint(20) unsigned | YES |  |  |
+ROW COUNT: 222
+
+===== TABLE: competency_rating_history =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+user_id | bigint(20) unsigned | NO |  |  |
+kasba_item_id | bigint(20) unsigned | YES | MUL |  |
+kasba_type | varchar(20) | YES |  |  |
+item_id | bigint(20) unsigned | YES |  |  |
+item_label | varchar(191) | YES |  |  |
+competency_id | bigint(20) unsigned | YES |  |  |
+course_id | bigint(20) unsigned | YES | MUL |  |
+old_rating | tinyint(3) unsigned | YES |  |  |
+new_rating | tinyint(3) unsigned | NO |  |  |
+source | varchar(32) | NO |  | manual |
+source_ref_id | bigint(20) unsigned | YES |  |  |
+assessor_id | bigint(20) unsigned | YES |  |  |
+note | text | YES |  |  |
+changed_at | datetime | NO |  |  |
+created_at | timestamp | YES |  |  |
+ROW COUNT: 4
+NOTE: no updated_at, no deleted_at (append-only by design per migration docblock).
+
+===== TABLE: competency_kasba_rating =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+user_id | bigint(20) unsigned | NO |  |  |
+kasba_item_id | bigint(20) unsigned | YES | MUL |  |
+kasba_type | varchar(20) | YES |  |  |
+item_id | bigint(20) unsigned | YES |  |  |
+cycle_id | bigint(20) unsigned | YES | MUL |  |
+round | int(10) unsigned | YES |  |  |
+rating | tinyint(4) | NO |  |  |
+assessor_id | bigint(20) unsigned | YES |  |  |
+source | varchar(32) | NO |  | manual |
+source_ref_id | bigint(20) unsigned | YES |  |  |
+note | text | YES |  |  |
+rated_at | datetime(3) | NO |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+ROW COUNT: 262
+NOTE: UNIQUE(sub_institute_id,user_id,kasba_item_id) per its migration docblock — one current row per employee per item, no deleted_at.
+
+===== TABLE: s_users_skills =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+department | varchar(191) | YES | MUL |  |
+sub_department | varchar(191) | YES | MUL |  |
+department_id | int(11) | YES | MUL |  |
+category | varchar(191) | YES | MUL |  |
+competency_type | varchar(50) | YES | MUL |  |
+sub_category | varchar(191) | YES | MUL |  |
+micro_category | varchar(191) | YES |  |  |
+title | varchar(191) | NO | MUL |  |
+description | text | YES |  |  |
+skill_code | varchar(50) | YES |  |  |
+related_skills | tinytext | YES |  |  |
+bussiness_links | varchar(191) | YES |  |  |
+custom_tags | tinytext | YES |  |  |
+proficiency_level | tinytext | YES |  |  |
+job_titles | tinytext | YES |  |  |
+learning_resources | tinytext | YES |  |  |
+assesment_method | tinytext | YES |  |  |
+certification_qualifications | tinytext | YES |  |  |
+experience_project | tinytext | YES |  |  |
+skill_maps | tinytext | YES |  |  |
+skill_status | varchar(50) | YES |  |  |
+skill_importance | varchar(50) | YES |  |  |
+legal_compliance_relevance | varchar(100) | YES |  |  |
+sop_practice_link | tinytext | YES |  |  |
+performance_metrics | varchar(191) | YES |  |  |
+common_errors_tips | varchar(191) | YES |  |  |
+sme_contacts | varchar(100) | YES |  |  |
+sub_skills | varchar(100) | YES |  |  |
+skill_flow | varchar(191) | YES |  |  |
+tasklist | tinytext | YES |  |  |
+status | enum('Active','Inactive') | YES | MUL |  |
+approve_status | enum('Approved','Pending','Cancelled') | YES | MUL |  |
+sub_institute_id | bigint(20) unsigned | YES | MUL |  |
+created_by | bigint(20) unsigned | YES | MUL |  |
+updated_by | bigint(20) unsigned | YES | MUL |  |
+deleted_by | bigint(20) unsigned | YES | MUL |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+catalogue_skill_id | bigint(20) unsigned | YES | MUL |  |
+ROW COUNT: 4466
+NOTE: this is the master skill catalogue/definition row (title, per-skill metadata), NOT a per-user skill rating.
+
+===== TABLE: s_skill_matrix =====
+id | bigint(20) unsigned | NO | PRI |  |auto_increment
+user_id | bigint(20) unsigned | YES | MUL |  |
+type | enum('skill','knowledge','ability','attitude','behaviour') | YES |  |  |
+skill_id | bigint(20) unsigned | YES | MUL |  |
+skill_level | varchar(191) | YES | MUL |  |
+interest_level | bigint(20) unsigned | YES | MUL |  |
+knowledge | text | YES |  |  |
+ability | text | YES |  |  |
+behaviour | text | YES |  |  |
+attitude | text | YES |  |  |
+created_by | bigint(20) unsigned | YES | MUL |  |
+updated_by | bigint(20) unsigned | YES | MUL |  |
+deleted_by | bigint(20) unsigned | YES | MUL |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 169
+NOTE: NO sub_institute_id / tenant column — this is the per-user skill-rating table (the actual "skill heatmap" data) but is not tenant-scoped on DB3.
+
+===== TABLE: s_user_skill_application =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+skill | varchar(191) | NO | MUL |  |
+skill_id | int(11) | NO |  | 0 |
+proficiency_level | varchar(191) | YES | MUL |  |
+application | text | YES |  |  |
+sub_institute_id | bigint(20) unsigned | YES | MUL |  |
+created_by | bigint(20) unsigned | YES | MUL |  |
+updated_by | bigint(20) unsigned | YES | MUL |  |
+deleted_by | bigint(20) unsigned | YES | MUL |  |
+deleted_at | timestamp | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+ROW COUNT: 577
+
+===== TABLE: s_jobrole_task =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sector | varchar(50) | YES | MUL |  |
+track | varchar(50) | YES | MUL |  |
+jobrole | varchar(191) | YES | MUL |  |
+critical_work_function | varchar(191) | YES | MUL |  |
+task | varchar(191) | YES | MUL |  |
+task_type | varchar(25) | YES |  |  |
+type | enum('S','O','E','F','G') | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+ROW COUNT: 55961
+NOTE: no PK id column beyond id; NO sub_institute_id — this is the shared/global catalogue of tasks (no tenant, no FK id columns, no soft-delete, no audit created_by/updated_by). 55,961 rows, "task_type" uniformly 'Medium' per migration docblock comment (verified against jobrole_task_execution migration's own note, not independently re-verified here).
+
+===== TABLE: s_user_jobrole_task =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sector | varchar(50) | YES | MUL |  |
+track | varchar(50) | YES | MUL |  |
+jobrole | varchar(191) | YES | MUL |  |
+critical_work_function | varchar(191) | YES | MUL |  |
+task | varchar(191) | YES | MUL |  |
+task_type | varchar(25) | YES |  |  |
+sub_institute_id | bigint(20) unsigned | YES | MUL |  |
+created_by | bigint(20) unsigned | YES | MUL |  |
+updated_by | bigint(20) unsigned | YES | MUL |  |
+deleted_by | bigint(20) unsigned | YES | MUL |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+task_category | varchar(255) | YES |  |  |
+jobrole_id | bigint(20) unsigned | YES |  |  |
+catalogue_task_id | bigint(20) unsigned | YES | MUL |  |
+ROW COUNT: 91540
+NOTE: tenant's own copy of s_jobrole_task, with catalogue_task_id linking back; this is the FK target ("user_jobrole_task_id") used by jobrole_task_execution and eso.
+
+===== TABLE: jobrole_task_execution =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+sub_institute_id | bigint(20) unsigned | NO | MUL |  |
+user_jobrole_task_id | bigint(20) unsigned | NO |  |  |
+catalogue_task_id | bigint(20) unsigned | YES | MUL |  |
+eso_template_id | bigint(20) unsigned | YES | MUL |  |
+execution_mode_current | varchar(20) | YES |  |  |
+execution_mode_target | varchar(20) | YES |  |  |
+digital_input | tinyint(3) unsigned | YES |  |  |
+rule_clarity | tinyint(3) unsigned | YES |  |  |
+judgment_required | tinyint(3) unsigned | YES |  |  |
+error_consequence | tinyint(3) unsigned | YES |  |  |
+ai_executability_score | tinyint(3) unsigned | YES |  |  |
+risk_class | varchar(12) | YES |  |  |
+automation_rationale | text | YES |  |  |
+human_effort_current_min | int(10) unsigned | YES |  |  |
+human_effort_target_min | int(10) unsigned | YES |  |  |
+classification_status | varchar(20) | NO |  | AI-proposed |
+model | varchar(100) | YES |  |  |
+classified_at | timestamp | YES |  |  |
+classified_by | bigint(20) unsigned | YES |  |  |
+reviewed_by | bigint(20) unsigned | YES |  |  |
+reviewed_at | timestamp | YES |  |  |
+review_note | text | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+ROW COUNT: 3572
+NOTE: no deleted_at (no soft delete by design, per migration UNIQUE(sub_institute_id,user_jobrole_task_id)).
+
+===== TABLE: eso =====
+id | bigint(20) unsigned | NO | PRI |  | auto_increment
+scope | varchar(10) | NO | MUL | Template |
+sub_institute_id | bigint(20) unsigned | YES |  |  |
+catalogue_task_id | bigint(20) unsigned | YES | MUL |  |
+user_jobrole_task_id | bigint(20) unsigned | YES | MUL |  |
+eso_template_id | bigint(20) unsigned | YES | MUL |  |
+title | varchar(191) | NO |  |  |
+version | int(11) | NO |  | 1 |
+status | varchar(12) | NO |  | Draft |
+execution_mode | varchar(20) | YES | MUL |  |
+objective | text | YES |  |  |
+expected_outcome | text | YES |  |  |
+human_responsibility | text | YES |  |  |
+agent_responsibility | text | YES |  |  |
+human_decision_points | longtext | YES |  |  |
+escalation_triggers | longtext | YES |  |  |
+steps | longtext | YES |  |  |
+inputs | longtext | YES |  |  |
+outputs | longtext | YES |  |  |
+required_controls | longtext | YES |  |  |
+prohibited_actions | longtext | YES |  |  |
+evidence_emitted | longtext | YES |  |  |
+source | varchar(16) | NO |  | human |
+model | varchar(100) | YES |  |  |
+created_by | bigint(20) unsigned | YES |  |  |
+updated_by | bigint(20) unsigned | YES |  |  |
+created_at | timestamp | YES |  |  |
+updated_at | timestamp | YES |  |  |
+deleted_at | timestamp | YES |  |  |
+ROW COUNT: 9
+NOTE: sub_institute_id NULLable by design (NULL = Template row, shared IP; non-NULL = tenant Instance).
+
+===== TABLE: task_automation_classification =====
+NOT VERIFIED (table does not exist on live) — this table was dropped by migration 2026_08_27_100000_create_jobrole_task_execution.php's up() step because it was already empty (0 rows) and unreferenced by any controller/model/route in either repo; jobrole_task_execution replaced it. Absence confirmed live: information_schema lookup returned no row for this table name.
+
+===== DONE =====

@@ -23,6 +23,7 @@ class sub_std_mapModel extends Model
         'optional_type',
         'add_content',
         'allow_content',
+        'content_quantity',
         'subject_category',
         'display_image',
         'sort_order',

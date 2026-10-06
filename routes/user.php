@@ -1,4 +1,3 @@
-
 <?php
 
 use App\Http\Controllers\user\mobileapp_menu_rightsController;
@@ -7,10 +6,10 @@ use App\Http\Controllers\user\tblindividual_rightsController;
 use App\Http\Controllers\user\tbluserController;
 use App\Http\Controllers\user\tbluserPastEducationController;
 use App\Http\Controllers\user\tbluserprofilemasterController;
-use App\Http\Controllers\user\tbluserContactDetails;
 use App\Http\Controllers\user\userReportController;
 use App\Http\Controllers\user\tbluserProfileWiseMenuController;
 use App\Http\Controllers\user\tblmobileAppMenuRightsController;
+use App\Http\Controllers\user\tblmenumasterG2gController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\user\UserRatingDetailController;
 
@@ -21,7 +20,9 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
     Route::resource('add_user_past_education', tbluserPastEducationController::class);
     Route::resource('user_profile_wise_menu_rights', tbluserProfileWiseMenuController::class);
 
-    Route::resource('user_contact_details', tbluserContactDetails::class);
+    // Removed: tbluserContactDetails does not exist - no such controller
+    // anywhere. This resource declared 7 routes that all threw on dispatch and
+    // broke route:cache. Nothing referenced `user_contact_details`.
     
     Route::get('mobile_app_menu_rights', [tblmobileAppMenuRightsController::class, 'create'])->name("mobile_app_menu_rights");
     Route::post('mobile_app_menu_rights/store', [tblmobileAppMenuRightsController::class, 'store'])->name("mobile_app_menu_rights.store");
@@ -39,6 +40,8 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
         [tbluserProfileWiseMenuController::class, 'displayUserProfileWiseRights'])->name('ajax_user_profile_wise_rights');
     Route::get('ajax_mobile_app_menu_rights',
         [tblmobileAppMenuRightsController::class, 'displayMobileAppMenuRights'])->name('ajax_mobile_app_menu_rights');
+    Route::get('ajax_sidebar_menu_g2g',
+        [tblmenumasterG2gController::class, 'displaySidebarMenu'])->name('ajax_sidebar_menu_g2g');
     Route::resource('user_rating_details', UserRatingDetailController::class);
 
 
@@ -54,4 +57,8 @@ Route::group(['prefix' => 'user', 'middleware' => ['auth','session','menu']], fu
     Route::get('employee_report', [userReportController::class,'employeeReport'])->name('employee_report');
 });
 
-Route::post('/teacherListAPI', [tbluserController::class, 'teacherListAPI']);
+// Was reachable with no login check at all, and the token check that used to
+// exist here was commented out (see the method itself) rather than removed.
+// api.token restores the same login requirement every neighboring group above
+// already has.
+Route::post('/teacherListAPI', [tbluserController::class, 'teacherListAPI'])->middleware('api.token');

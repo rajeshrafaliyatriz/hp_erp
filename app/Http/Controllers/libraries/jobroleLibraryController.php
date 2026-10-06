@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\libraries;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use App\Models\libraries\industryModel;
 use App\Models\libraries\userSkills;
@@ -18,6 +19,24 @@ use Illuminate\Support\Facades\Validator;
 
 class jobroleLibraryController extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     //
     public function index(Request $request)
     {
@@ -292,6 +311,11 @@ class jobroleLibraryController extends Controller
                 'jobrole' => $request->jobrole,
                 'jobrole_category' => $request->jobrole_category,
                 'description' => $request->description,
+                'job_level' => $request->job_level,
+                'sequence_order' => $request->sequence_order,
+                'has_vertical_progression' => $request->has_vertical_progression,
+                'has_lateral_movement' => $request->has_lateral_movement,
+                'progression_type' => $request->progression_type,
                 'performance_expectation' => $request->performance_expectation,
                 'company_information' => $request->company_information,
                 'contact_information' => $request->contact_information,
@@ -305,7 +329,7 @@ class jobroleLibraryController extends Controller
                 'keyword_tags' => $request->keyword_tags,
                 'internal_tracking' => $request->internal_tracking,
                 'sub_institute_id' => $request->sub_institute_id,
-                'created_by' => $request->user_id,
+                'created_by' => $this->g2gActorId($request),
                 'created_at' => now(),
             ];
 
@@ -432,6 +456,11 @@ class jobroleLibraryController extends Controller
                 'jobrole' => $request->jobrole,
                 'jobrole_category' => $request->jobrole_category,
                 'description' => $request->description,
+                'job_level' => $request->job_level,
+                'sequence_order' => $request->sequence_order,
+                'has_vertical_progression' => $request->has_vertical_progression,
+                'has_lateral_movement' => $request->has_lateral_movement,
+                'progression_type' => $request->progression_type,
                 'performance_expectation' => $request->performance_expectation,
                 'company_information' => $request->company_information,
                 'contact_information' => $request->contact_information,
@@ -448,7 +477,7 @@ class jobroleLibraryController extends Controller
                 'training' => $request->training,
                 'experience' => $request->experience,
                 'sub_institute_id' => $request->sub_institute_id,
-                'updated_by' => $request->user_id,
+                'updated_by' => $this->g2gActorId($request),
                 'updated_at' => now(),
             ];
 
@@ -468,116 +497,99 @@ class jobroleLibraryController extends Controller
             // Update or insert skills
             foreach ($request->skillName as $key => $skillName) {
                 $skillDescription = $request->description[$key] ?? null;
-                $checkSkillExits = userSkills::where('title', $request->skillName)->where('sub_institute_id', $request->sub_institute_id)->first();
-                if (!$checkSkillExits) {
-                    $insertData = [
-                        'department' => $request->department,
-                        'sub_department' => $request->sub_department,
-                        'category' => $request->category [$key] ?? null,
-                        'sub_category' => $request->sub_category [$key] ?? null,
-                        'title' => $skillName,
-                        'description' => $skillDescription,
-                        'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
-                        'created_at' => now(),
-                        'status' => 'Active',
-                        'approve_status' => 'approved'
-                    ];
-                    $lastInsertedId = userSkills::insertGetId($insertData);
-                    if ($lastInsertedId && $lastInsertedId != 0) {
-                        // $insertArray = [
-                        //     'skill' => $skillName,
-                        //     'jobrole' => $request->jobrole,
-                        //     'description' => null,
-                        //     'sub_institute_id' => $request->sub_institute_id,
-                        //     'created_by' => $request->user_id,
-                        //     'created_at' => now(),
-                        // ];
-                         $insertArray = [
-                             'skill' => $skillName,
-                            'jobrole' =>  $request->jobrole,
-                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
-                            'sub_institute_id' => $request->sub_institute_id,
-                            'created_by' => $request->user_id,
-                            'created_at' => now(),
-                        ];
-                        $insert = skillJobroleMap::insert($insertArray);
-                    }
-                } else if($request->has('id')) {
-                    // return $request->all();exit;
-                    $checkSkillExits = skillJobroleMap::where('id', $request->id)->first();
-                    // return $checkSkillExits;exit;
-
-                    // If skill-jobrole mapping exists, update skill
-                    if (isset($checkSkillExits->skill)) {
-
+                $skillId = $request->skill_id[$key] ?? null;
+                $checkSkillExits = userSkills::where('title', $skillName)->where('sub_institute_id', $request->sub_institute_id)->first();
+                if (!$checkSkillExits || $skillId) {
+                    if ($skillId) {
+                        // Update existing skill
                         $updateData = [
                             'department' => $request->department,
+                            'department_id' => $request->department_id,
                             'sub_department' => $request->sub_department,
-                            'category' => $request->category [$key] ?? null,
-                            'sub_category' => $request->sub_category [$key] ?? null,
+                            'category' => $request->category[$key] ?? null,
+                            'sub_category' => $request->sub_category[$key] ?? null,
                             'title' => $skillName,
                             'description' => $skillDescription,
                             'sub_institute_id' => $request->sub_institute_id,
-                            'updated_by' => $request->user_id,
+                            'updated_by' => $this->g2gActorId($request),
                             'updated_at' => now(),
                             'status' => 'Active',
                             'approve_status' => 'approved'
                         ];
-                    // return $updateData;exit;
-
-                        $lastInsertedId = userSkills::where('id', $request->skill_id)->update($updateData);
-                         $updateArray = [
-                            'skill' => $skillName,
-                            'jobrole' =>  $request->jobrole,
-                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
+                        $lastInsertedId = userSkills::where('id', $skillId)->update($updateData);
+                        if ($lastInsertedId) {
+                            $updateArray = [
+                                'skill' => $skillName,
+                                'jobrole' => $request->jobrole,
+                                'proficiency_level' => $request->proficiency_level[$key] ?? null,
+                                'sub_institute_id' => $request->sub_institute_id,
+                                'updated_by' => $this->g2gActorId($request),
+                                'updated_at' => now(),
+                            ];
+                            $update = skillJobroleMap::where('skill', $skillName)->where('jobrole', $request->jobrole)->where('sub_institute_id', $request->sub_institute_id)->update($updateArray);
+                        }
+                    } else {
+                        // Insert new skill
+                        $insertData = [
+                            'department' => $request->department,
+                            'department_id' => $request->department_id,
+                            'sub_department' => $request->sub_department,
+                            'category' => $request->category[$key] ?? null,
+                            'sub_category' => $request->sub_category[$key] ?? null,
+                            'title' => $skillName,
+                            'description' => $skillDescription,
                             'sub_institute_id' => $request->sub_institute_id,
-                            'updated_by' => $request->user_id,
-                            'updated_at' => now(),
-                        ];
-                        $update = skillJobroleMap::where('id', $request->id)->update($updateArray);
-                    }
-                }else{
-                     $insertArray = [
-                            'skill' => $skillName,
-                            'jobrole' =>  $request->jobrole,
-                            'proficiency_level' => $request->proficiency_level[$key] ?? null,
-                            'sub_institute_id' => $request->sub_institute_id,
-                            'created_by' => $request->user_id,
+                            'created_by' => $this->g2gActorId($request),
                             'created_at' => now(),
+                            'status' => 'Active',
+                            'approve_status' => 'approved'
                         ];
-                        $insert = skillJobroleMap::insert($insertArray);
+                        $lastInsertedId = userSkills::insertGetId($insertData);
+                        if ($lastInsertedId && $lastInsertedId != 0) {
+                            $insertArray = [
+                                'skill' => $skillName,
+                                'jobrole' => $request->jobrole,
+                                'proficiency_level' => $request->proficiency_level[$key] ?? null,
+                                'sub_institute_id' => $request->sub_institute_id,
+                                'created_by' => $this->g2gActorId($request),
+                                'created_at' => now(),
+                            ];
+                            $insert = skillJobroleMap::insert($insertArray);
+                        }
+                    }
                 }
             }
             $i++;
         } else if ($request->formType == "tasks") {
             // Update or insert tasks
             foreach ($request->taskName as $key => $taskName) {
-                $checkTaskExits = userJobroleTask::where('jobrole', $request->jobrole)->where('task', $request->taskName)->first();
-                if (!$checkTaskExits && !isset($request->id)) {
-                    $insertData = [
-                        'sector' => $request->sector[$key] ?? null,
-                        'track' => $request->track[$key] ?? null,
-                        'jobrole' => $request->jobrole,
-                        'critical_work_function' => $request->critical_work_function[$key] ?? null,
-                        'task' => $taskName,
-                        'sub_institute_id' => $request->sub_institute_id,
-                        'created_by' => $request->user_id,
-                        'created_at' => now(),
-                    ];
-                    $lastInsertedId = userJobroleTask::insertGetId($insertData);
+                $checkTaskExits = userJobroleTask::where('jobrole', $request->jobrole)->where('task', $taskName)->first();
+                if (!isset($request->id)) {
+                    if (!$checkTaskExits) {
+                        $insertData = [
+                            'sector' => $request->sector[$key] ?? null,
+                            'track' => $request->track[$key] ?? null,
+                            'jobrole' => $request->jobrole,
+                            'critical_work_function' => $request->critical_work_function[$key] ?? null,
+                            'task' => $taskName,
+                            'sub_institute_id' => $request->sub_institute_id,
+                            'created_by' => $this->g2gActorId($request),
+                            'created_at' => now(),
+                        ];
+                        $lastInsertedId = userJobroleTask::insertGetId($insertData);
+                    }
                 } else {
-                    $insertData = [
+                    $updateData = [
                         'sector' => $request->sector[$key] ?? null,
                         'track' => $request->track[$key] ?? null,
                         'jobrole' => $request->jobrole,
                         'critical_work_function' => $request->critical_work_function[$key] ?? null,
                         'task' => $taskName,
                         'sub_institute_id' => $request->sub_institute_id,
-                        'updated_by' => $request->user_id,
+                        'updated_by' => $this->g2gActorId($request),
                         'updated_at' => now(),
                     ];
-                    $lastInsertedId = userJobroleTask::where('id', $request->id)->update($insertData);
+                    $lastInsertedId = userJobroleTask::where('id', $request->id)->update($updateData);
                 }
             }
             $i++;
@@ -635,21 +647,21 @@ class jobroleLibraryController extends Controller
 
         // If deleting a skill
         if ($request->has('formType') && $request->formType == "skills") {
-            $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userSkills::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         // If deleting a task
         if ($request->has('formType') && $request->formType == "tasks") {
-            $delete = userJobroleTask::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userJobroleTask::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }
         }
         // If deleting a user jobrole
         if ($request->has('formType') && $request->formType == "user") {
-            $delete = userJobroleModel::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $request->user_id]);
+            $delete = userJobroleModel::where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $this->g2gActorId($request)]);
             if ($delete) {
                 $i++;
             }

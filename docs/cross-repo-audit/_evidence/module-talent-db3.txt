@@ -1,0 +1,83 @@
+[DB3 / live / 128.199.17.97] Talent Management module — table verification
+Run via: cd hp_erp && php artisan tinker --execute="DB::connection('live')->table(...)..."
+Connection used: Laravel connection literally named "live" (config/database.php, DB3_* env vars)
+
+=== Row counts (DB::connection('live')->table(x)->count()) ===
+talent_job_postings: 133
+talent_job_applications: 281
+talent_offers: 71
+talent_team_members: 6
+talent_onboarding_journeys: 1
+talent_offer_acceptances: 0
+
+=== DESCRIBE talent_job_postings ===
+id | bigint(20) unsigned | NO | PRI
+title | varchar(255) | NO |
+department_id | bigint(20) unsigned | YES | MUL
+jobrole_id | bigint(20) unsigned | YES | MUL
+location | varchar(255) | YES |
+employment_type | enum('Full-Time','Part-Time','Internship','Contract') | YES |
+work_mode | varchar(20) | YES |
+experience | varchar(100) | YES |
+education | varchar(255) | YES |
+priority_level | enum('High','Medium','Low') | YES |
+positions | int(11) | YES |
+start_date | date | YES |
+min_salary | decimal(10,2) | YES |
+max_salary | decimal(10,2) | YES |
+deadline | date | YES |
+skills | text | YES |
+certifications | text | YES |
+benefits | text | YES |
+description | longtext | YES |
+status | enum('Active','Draft','Closed','Inactive') | YES |
+sub_institute_id | bigint(20) unsigned | YES | MUL
+created_by | bigint(20) unsigned | YES |
+updated_by | bigint(20) unsigned | YES |
+deleted_by | bigint(20) unsigned | YES |
+created_at | timestamp | NO |
+updated_at | timestamp | NO |
+deleted_at | timestamp | YES |
+
+=== DESCRIBE talent_offers ===
+id | bigint(20) unsigned | NO | PRI
+application_id | bigint(20) unsigned | NO | MUL
+job_id | bigint(20) unsigned | NO | MUL
+template_id | varchar(50) | YES |
+position | varchar(255) | NO |
+salary | varchar(100) | YES |
+start_date | date | YES |
+expires_at | date | YES |
+status | enum('draft','sent','rejected','expired') | NO |
+offer_letter_url | varchar(500) | YES |
+notes | text | YES |
+sub_institute_id | bigint(20) unsigned | YES | MUL
+created_by | bigint(20) unsigned | NO | MUL
+reportmanager | bigint(20) unsigned | YES |
+punchintime | time | YES |
+punchouttime | time | YES |
+sent_at | datetime | YES |
+rejected_at | datetime | YES |
+created_at | timestamp | YES |
+updated_at | timestamp | YES |
+NOTE: enum has no 'accepted' state — acceptance is tracked separately in
+talent_offer_acceptances (0 rows currently; table exists, per code at
+TalentOfferController::accept -> OfferAcceptanceService).
+
+=== DESCRIBE talent_team_members ===
+id | bigint(20) unsigned | NO | PRI
+sub_institute_id | bigint(20) unsigned | NO | MUL
+user_id | bigint(20) unsigned | NO | MUL
+department_id | bigint(20) unsigned | YES |
+role | varchar(30) | YES |
+active | tinyint(1) | YES |
+created_at | timestamp | NO |
+updated_at | timestamp | NO |
+deleted_at | timestamp | YES |
+
+Other tables referenced by module controllers (grepped from DB::table() calls,
+not individually counted in this pass): talent_job_applications,
+talent_onboarding_journeys, talent_onboarding_tasks, talent_interview_schedules,
+talent_offer_templates, hrms_departments, s_user_jobrole, tbluser,
+s_performance_reviews, s_mobility_transfers, s_mobility_promotions,
+s_mobility_applications, talent_offboarding_cases.

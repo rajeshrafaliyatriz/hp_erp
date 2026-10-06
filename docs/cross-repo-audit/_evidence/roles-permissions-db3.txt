@@ -1,0 +1,70 @@
+[DB3 / live / 128.199.17.97] Role & Permission audit raw evidence
+Generated: 2026-09-28
+Connection verified: config('database.connections.live.host') = 128.199.17.97
+select version() -> 10.1.48-MariaDB
+
+=== DESCRIBE tbluserprofilemaster ===
+id | bigint(20) unsigned | NO
+parent_id | bigint(20) | YES
+name | varchar(191) | YES
+description | varchar(191) | YES
+sort_order | int(11) | YES
+status | int(11) | YES
+sub_institute_id | bigint(20) unsigned | YES
+client_id | bigint(20) unsigned | YES
+deleted_at | timestamp | YES
+created_at | timestamp | YES
+updated_at | timestamp | YES
+role_key | varchar(50) | YES  <-- nullable varchar, no FK/enum constraint
+data_scope | enum('self','team','department','organization') | YES
+is_system | tinyint(1) | YES
+
+=== DESCRIBE tbluser (relevant columns) ===
+status | tinyint(1) | YES | Default=1   <-- integer 1/0, NOT a string
+deleted_at | timestamp | YES
+
+=== tbluserprofilemaster counts ===
+TOTAL_PROFILES=42
+NULL_ROLE_KEY=30
+EMPTY_STRING_ROLE_KEY=0
+NON_NULL_NON_EMPTY_ROLE_KEY=12
+
+=== tbluserprofilemaster role_key population per tenant (sub_institute_id) ===
+sub_institute_id=1  total=3 null_role_key=0 has_role_key=3
+sub_institute_id=2  total=3 null_role_key=3 has_role_key=0
+sub_institute_id=3  total=3 null_role_key=3 has_role_key=0
+sub_institute_id=4  total=3 null_role_key=3 has_role_key=0
+sub_institute_id=5  total=3 null_role_key=3 has_role_key=0
+sub_institute_id=6  total=9 null_role_key=0 has_role_key=9
+sub_institute_id=7  total=3 null_role_key=3 has_role_key=0
+sub_institute_id=8  total=3 null_role_key=3 has_role_key=0
+sub_institute_id=9  total=3 null_role_key=3 has_role_key=0
+sub_institute_id=10 total=3 null_role_key=3 has_role_key=0
+sub_institute_id=13 total=3 null_role_key=3 has_role_key=0
+sub_institute_id=14 total=3 null_role_key=3 has_role_key=0
+(Only tenants 1 and 6 have role_key populated; 10 of 12 tenants are 100% NULL)
+
+=== Populated role_key rows (detail) ===
+sub_institute_id=1 id=1  name=Admin             role_key=administrator   status=1  is_system=NULL
+sub_institute_id=1 id=2  name=HR                role_key=hr_manager      status=1  is_system=NULL
+sub_institute_id=1 id=3  name=Employee          role_key=employee        status=1  is_system=NULL
+sub_institute_id=6 id=50 name=Auditor           role_key=auditor         status=NULL is_system=1
+sub_institute_id=6 id=49 name=Executive         role_key=executive       status=NULL is_system=1
+sub_institute_id=6 id=48 name=HR Executive      role_key=hr_executive    status=NULL is_system=1
+sub_institute_id=6 id=47 name=Department Head   role_key=department_head status=NULL is_system=1
+sub_institute_id=6 id=46 name=Reporting Manager role_key=reporting_manager status=NULL is_system=1
+sub_institute_id=6 id=18 name=HR                role_key=hr_manager      status=1  is_system=NULL
+sub_institute_id=6 id=17 name=Employee          role_key=employee        status=1  is_system=NULL
+sub_institute_id=6 id=16 name=Admin             role_key=administrator   status=1  is_system=NULL
+sub_institute_id=6 id=51 name=Recruiter         role_key=recruiter       status=NULL is_system=1
+
+=== tbluser status trap confirmation ===
+TOTAL_USERS=299
+DISTINCT_STATUS_VALUES: 0, 1 (integers only -- never 'active'/'inactive' strings)
+ACTIVE (correct query: status=1 and deleted_at is null) = 188
+STATUS_0 (disabled) count = 11
+STATUS_1 (enabled) count = 288
+WRONG_QUERY (status = 'active') result count = 11   <-- exactly matches STATUS_0 count.
+  MariaDB casts the string 'active' to 0 for numeric comparison against a tinyint column,
+  so "where status = 'active'" silently returns the 11 DISABLED users, not the 288 enabled ones.
+  This is the documented tbluser.status trap, empirically reproduced on this host.

@@ -9,8 +9,15 @@ use App\Http\Controllers\dashboardController;
 use App\Http\Controllers\loginController;
 use App\Http\Controllers\leave\HrmsDepartment;
 use App\Http\Controllers\school_setup\batchController;
-use App\Http\Controllers\school_setup\changePasswordController;
-use App\Http\Controllers\school_setup\chapterController;
+/*
+ * `use App\Http\Controllers\school_setup\changePasswordController;` was here.
+ *
+ * THAT CLASS DOES NOT EXIST - app/Http/Controllers/school_setup/ holds only
+ * masterSetupController and sub_std_mapController - and no route referenced it.
+ * An import of a missing class is harmless until somebody reads this file
+ * looking for where passwords are changed and concludes there is a controller
+ * for it. There is not; that is what this work is building.
+ */
 use App\Http\Controllers\school_setup\classteacherController;
 use App\Http\Controllers\school_setup\classteacherReportController;
 use App\Http\Controllers\easy_com\send_birthday_notification\send_birthday_notification_controller;
@@ -100,11 +107,32 @@ Route::get('/', function () {
 });
 
 Route::resource('login', authController::class);
+
+/*
+ * THE SIGN-OUT LINK THAT TWO VIEWS HAVE POINTED AT ALL ALONG.
+ *
+ * `header.blade.php:242` renders `<a href="{{ url('/logout') }}">` and
+ * `footer.blade.php:27` navigates to `/logout`. Neither route existed: the resource
+ * above declares login.index/store/show/edit/update/destroy and nothing named
+ * logout. So the ERP's Sign out returned a 404 and left the person signed in - a
+ * broken button hiding a real hole, because `authMiddleware` is satisfied by
+ * `session('user_id')` and that key was never removed.
+ *
+ * GET rather than POST, because that is what the two existing links send and the
+ * point is to make them work. Deliberately outside any middleware group: somebody
+ * whose session is half broken must still be able to leave, and a guard that
+ * refused them would trap them in it.
+ */
+Route::get('/logout', [authController::class, 'logout'])->name('logout');
 Route::post('user_login', [authController::class, 'user_login']);
 Route::post('user_check_otp', [authController::class, 'user_check_otp']);
 Route::middleware(['auth','session','menu'])->group(function () {
     Route::resource('dashboard', dashboardController::class);
     Route::resource('organization_dashboard', orgDashboardContorller::class);
+
+    // Nango Google OAuth routes
+    Route::get('nango/google/connect/{userId}', [App\Http\Controllers\NangoController::class, 'connectGoogle'])->name('nango.google.connect');
+    Route::get('nango/google/callback', [App\Http\Controllers\NangoController::class, 'googleCallback'])->name('nango.google.callback');
     
     Route::get('menu_lists', [authController::class, 'menu_lists'])->name('menu_lists');
     Route::resource('skill_library', skillLibraryController::class);
@@ -126,16 +154,21 @@ Route::middleware(['auth','session','menu'])->group(function () {
     Route::resource('application', skillLibraryController::class);
 
     Route::resource('leave-type', LeaveTypeController::class);
-    Route::resource('holiday', HolidayController::class);
+    // Also declared in routes/hrms.php, which serves the same controller under
+    // the hrms/ prefix. Two resources cannot share the holiday.* names -
+    // route:cache refuses to serialise the second - and hrms.php loads last, so
+    // it is the one route('holiday.index') already resolved to. This keeps the
+    // /holiday URLs working under distinct names rather than removing them.
+    Route::resource('holiday', HolidayController::class)->names('web.holiday');
     Route::resource('leave-apply', ApplyLeaveController::class);
     Route::post('/get-employees', [ApplyLeaveController::class, 'getEmployees'])->name('get-employees');
     Route::get('my-leave', [ApplyLeaveController::class,'myLeave'])->name('my-leave');
     Route::post('my-leave-update', [ApplyLeaveController::class,'updateLeave'])->name('my_leave_update');
     Route::get('get-leave', [ApplyLeaveController::class,'getYearwiseleave'])->name('get-leave');
     Route::get('import-leave', [ApplyLeaveController::class,'importLeave'])->name('import-leave');
-    Route::post('import-leave', [ApplyLeaveController::class,'importOldLeave'])->name('import-leave');
-    Route::get('holiday.weekdays', [HolidayController::class,'getWeekdays'])->name('holiday.weekdays');
-    Route::post('holiday.weekdays', [HolidayController::class,'storeWeekdays'])->name('holiday.weekdays');
+    Route::post('import-leave', [ApplyLeaveController::class,'importOldLeave']);
+    Route::get('holiday.weekdays', [HolidayController::class,'getWeekdays']);
+    Route::post('holiday.weekdays', [HolidayController::class,'storeWeekdays']);
     
     //Get Holiday Ajax
     Route::get('/getHolidays',[ApplyLeaveController::Class,'getHolidays'])->name('getHolidays');
@@ -160,7 +193,15 @@ Route::middleware(['auth','session','menu'])->group(function () {
 
 // Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','menu']]), function () {
 // route::resource('forget_password',ForgotPasswordController::class);
-Route::get('forget-password', [ForgotPasswordController::class, 'showForgetPasswordForm'])->name('forget.password.get');
+/*
+ * The GET route is gone. It pointed at `showForgetPasswordForm()`, which is
+ * COMMENTED OUT in the controller - so `GET /forget-password` raised
+ * BadMethodCallException and returned a 500 to anybody who reached it. That
+ * broken entry point is why the login screen could not offer a working
+ * "Forgot password?" link.
+ *
+ * The form now lives in the Next.js app, which posts to the route below.
+ */
 Route::post('forget-password', [ForgotPasswordController::class, 'submitForgetPasswordForm'])->name('forget.password.post');
 Route::get('reset-password/{token}/{email}', [ForgotPasswordController::class, 'showResetPasswordForm'])->name('reset.password.get');
 Route::post('reset-password', [ForgotPasswordController::class, 'submitResetPasswordForm'])->name('reset.password.post');
@@ -169,13 +210,16 @@ Route::group(['prefix' => 'school_setup', 'middleware' => ['auth','session','men
     Route::resource('master_setup', masterSetupController::class);
     Route::post('insert_data', [masterSetupController::class, 'insert_data'])->name('insert_data');
     Route::resource('sub_std_map', sub_std_mapController::class);
+    Route::post('sub_std_map/store', [sub_std_mapController::class, 'store']);
 });
-Route::post('/sub_std_map/store', [sub_std_mapController::class, 'store']);
 Route::post('collectsct', [AJAXController::class, 'collectsct'])->name('collectsct');
 
 Route::get('table_data',[AJAXController::class, 'GetTableData'])->name('table_data');
 
-Route::group(['prefix' => 'custom-module'], function () {
+// Was missing the login check every sibling group here has (see school_setup
+// above) — every endpoint in this group read the tenant straight from the
+// session with nothing verifying a real, logged-in session even existed.
+Route::group(['prefix' => 'custom-module', 'middleware' => ['auth','session','menu']], function () {
     Route::get('/tables',[CustomModuleController::class,'tables'])->name('custom-module.tables');
     Route::get('/table-create/{id?}',[CustomModuleController::class,'tableCreate'])->name('custom_module_table.create');
     Route::post('/table-store',[CustomModuleController::class,'tableStore'])->name('custom_module_table.store');
@@ -194,12 +238,37 @@ Route::group(['prefix' => 'custom-module'], function () {
     Route::get('/create-view/{id}/update/{recordId}',[CustomModuleController::class,'crudCreate']);
     Route::post('/create-view-store/{id}',[CustomModuleController::class,'crudStore'])->name('custom_module_crud.store');
     Route::delete('/view-delete/{id}',[CustomModuleController::class,'viewDelete'])->name('custom_module_crud.delete');
-    Route::get('ajax_StandardwiseSubject', [chapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
+    // StandardwiseSubject lives on the LMS chapter controller - the
+    // school_setup\chapterController this used to reference does not exist.
+    Route::get('ajax_StandardwiseSubject', [LmsChapterController::class, 'StandardwiseSubject'])->name('ajax_StandardwiseSubject');
     Route::get('/matrix', [SkillMatrixController::class, 'index'])->name('matrix');
 });
 
-Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->name('skill-matrix.store-bulk');
-Route::get('/get-kaba', [SkillMatrixController::class, 'getKaba']);
+/*
+ * THESE TWO WERE OPEN TO THE INTERNET.
+ *
+ * Both sat outside the ['auth','session','menu'] group that closes above, and
+ * routes/web.php is registered with only the `web` group - so neither had any
+ * authentication at all.
+ *
+ *   /get-kaba            read seven TENANTED tables by raw id, taking
+ *                        sub_institute_id from the query string, with no
+ *                        tenant filter on the rows it returned. Any caller
+ *                        could read any organisation's job roles, tasks,
+ *                        skills, knowledge, abilities, attitudes and
+ *                        behaviours.
+ *   /skill-matrix/store-bulk  wrote competency ratings for any user_id
+ *                        against any skill_id, with no caller identity at all.
+ *
+ * The write hole was not theoretical: live carries 20 rows where the rated
+ * employee's tenant differs from the rated skill's tenant, and 52 rows whose
+ * user_id matches no employee.
+ *
+ * `api.token` requires a valid Sanctum token; the controllers now take the
+ * tenant from that token and ignore any sub_institute_id in the request.
+ */
+Route::post('/skill-matrix/store-bulk', [SkillMatrixController::class, 'storeBulk'])->middleware('api.token')->name('skill-matrix.store-bulk');
+Route::get('/get-kaba', [SkillMatrixController::class, 'getKaba'])->middleware('api.token');
 Route::get('studentLists', [AJAXController::class, 'studentLists'])->name('studentLists');
 
 Route::get('menuLevel2', [CustomModuleController::class, 'menuLevel2'])->name('menuLevel2.index');
@@ -225,10 +294,10 @@ Route::get('sendEmail', [AJAXController::class, 'sendEmail'])->name('sendEmail')
 Route::post('gemini_chat',[AJAXController::class,'geminiChat']);
 Route::get('AICourseGeneration',[AJAXController::class,'AICourseGeneration']);
 Route::get('gammaContent',[AJAXController::class,'GammaContentGeneration']);
-
 Route::get('/import-data',[ImportController::class,'getImport'])->name('import.data');
 Route::get('/marks-import',[ImportController::class,'Import']);
 Route::post('/custom_import_parse', [ImportController::class,'customParseImport'])->name('custom_import_parse');
 Route::post('/import_parse', [ImportController::class,'parseImport'])->name('import_parse');
 Route::post('/import_parse_fields', [ImportController::class,'matchFields'])->name('update.match_fields');
 Route::post('/import_process', [ImportController::class,'processImport'])->name('import_process');
+Route::get('getSupervisor',[AJAXController::class,'getSupervisor']);

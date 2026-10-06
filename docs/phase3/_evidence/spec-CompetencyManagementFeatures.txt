@@ -1,0 +1,153 @@
+https://claude.ai/chat/1a1b68eb-f86a-46fa-a420-8664cdb5db91 
+ 
+Competency Management — Role-Wise Feature List 
+ 
+ 
+ADMIN 
+ 
+Category 
+Feature 
+Core 
+Competency Framework setup, Proficiency Scaling configuration, 
+Skill Gap Analysis engine setup, Targeted Training Plan templates 
+Master Data 
+KASAB dictionary management (create/edit competencies by 
+Knowledge, Ability, Skill, Attitude, Behavior) 
+Master Data 
+Proficiency scale/descriptor configuration (e.g., 1–5 levels with 
+behavioral anchors) 
+Mapping 
+Competency-to-Job Role/Position matrix builder 
+Access 
+Control 
+Role & permission management (who rates, approves, views) 
+Workflow 
+Approval chain configuration for assessments and certifications 
+Data 
+Management 
+Bulk import/export (Excel/CSV) for competencies, job profiles, 
+employee mappings 
+Governance 
+Audit logs & version control for framework changes 
+Integration 
+Connect to LMS, Performance Management, Succession 
+Planning, Recruitment modules 
+Automation 
+Notification/reminder engine for assessment cycles & deadlines 
+Configuration 
+Competency weighting (core vs. functional vs. leadership) 
+System 
+User account provisioning/deactivation 
+ 
+ 
+
+ 
+ 
+ 
+EXECUTIVES (C-Suite/Senior Leadership) 
+ 
+Category 
+Feature 
+Core 
+View organization-wide framework, proficiency standards, gap 
+analysis, training plan outcomes 
+Dashboards 
+Org-wide competency dashboard / heat maps by 
+division/department 
+Strategic 
+Reporting 
+Workforce capability & future-readiness reports 
+Succession 
+Succession pipeline view — competency readiness of 
+high-potentials 
+Benchmarking 
+Internal vs. industry competency benchmarking 
+Financial 
+Training/L&D cost vs. competency uplift ROI view 
+Risk 
+Management 
+Critical skill shortage / risk indicators affecting business 
+continuity 
+Analytics 
+Trend analysis — competency growth/decline over time 
+Reporting 
+Board-level export formats (PPT/PDF summaries) 
+Strategic 
+Planning 
+Scenario modeling (e.g., impact of attrition on critical 
+competencies) 
+DEPARTMENT HEAD 
+ 
+Category 
+Feature 
+Core 
+Apply framework to team, use proficiency scale to rate, run 
+gap analysis, assign/approve training plans 
+Assessment 
+Rate direct reports (self / manager / 360-degree input) 
+
+Visualization 
+Team-level competency matrix (strengths/gaps at a glance) 
+Approval 
+Sign-off on individual development plans & training 
+nominations 
+Decision Support 
+Identify team members ready for new projects/promotions 
+based on fit 
+Analytics 
+Comparative team analytics — benchmark members against 
+each other/role requirements 
+Succession 
+Department-level succession/backup readiness view 
+Calibration 
+Participate in calibration sessions to normalize ratings 
+Communication 
+Feedback/comment tool tied to each competency rating 
+HR MANAGER 
+ 
+Category 
+Feature 
+Core 
+Own/maintain framework, manage proficiency scale standards, 
+run org-wide gap analysis, design & track training plans 
+Cycle 
+Management 
+Launch, monitor, and close competency assessment campaigns 
+Feedback 
+360-degree feedback administration & coordination 
+Integration 
+Link competency scores with performance appraisal module 
+Career 
+Development 
+Career pathing — map competencies required for next-level roles 
+Compliance 
+Track mandatory competency certifications 
+(regulatory/compliance-driven) 
+Reporting 
+Full reporting suite — org-wide, department-wise, individual gap 
+reports 
+Recruitment 
+Competency-based candidate screening (compare profiles to role 
+requirements) 
+Talent 
+Management 
+9-box grid / talent pool integration (performance + competency) 
+
+Historical 
+Tracking 
+Employee competency growth history across tenure 
+Admin Support Manage rater assignments and assessment timelines 
+ 
+ 
+Cross-Role / Shared Features 
+These don't belong to one role exclusively but should exist system-wide: 
+●​ Self-assessment portal (employee-facing, visible to Dept Head/HR) 
+●​ Evidence repository — attach certifications, project work as proof of 
+competency 
+●​ Auto-recommended learning — system suggests courses/content based on 
+identified gaps 
+●​ Mobile access — for ratings, approvals, and dashboard viewing on the go 
+●​ Notification center — assessment due dates, approval pending alerts 
+(role-specific views) 
+ 
+ 

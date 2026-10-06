@@ -1,0 +1,192 @@
+TOTAL ROWS: 188 | RENDERED IN TREE: 182 | ORPHANS: 6
+==============================================================================================================
+Organizational Management                      id=1     lvl=1  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management
+    Organization Dashboard                         id=161   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-dashboard
+    Organization Setup                             id=7     lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup
+        Suggestion for employee                        id=21    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/suggestion-for-employee
+        Organization Profile                           id=12    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/organization-profile
+        Department Management                          id=13    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/department-management
+        Admin and Configuration Module                 id=14    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/admin-and-configuration-module
+        Group wise right management                    id=15    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/group-wise-right-management
+        Individual right management                    id=16    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/individual-right-management
+        Search Employees by Skills                     id=17    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/search-employees-by-skills
+        Task Assignment & Progress                     id=18    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/task-assignment-and-progress
+        Suggestion to organization                     id=19    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/suggestion-to-organization
+        Suggestion to for department & Department head id=20    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/organization-setup/suggestion-to-for-department-and-department-head
+    User Management                                id=8     lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/user-management
+        Employee Directory                             id=22    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/user-management/employee-directory
+        Role & Permissions                             id=23    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/user-management/role-and-permissions
+        Skills                                         id=24    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 https://form-scholar-clone.vercel.app/submit/9b13d496-362e-45b4-b9f8-de0867b94521
+        Certifications                                 id=25    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/user-management/certifications
+        Skill Gap Analysis                             id=26    lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/user-management/skill-gap-analysis
+    Compliance & Discipline                        id=205   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/compliance-and-discipline
+        Compliance Library                             id=206   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/compliance-and-discipline/compliance-library
+        Disciplinary Library                           id=207   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/compliance-and-discipline/disciplinary-library
+    Communication Tools                            id=9     lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/communication-tools
+        Send SMS to User                               id=27    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/communication-tools/send-sms-to-user
+        Send Notification User                         id=28    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/communication-tools/send-notification-user
+        Send Email User                                id=29    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/communication-tools/send-email-user
+        Send Email Other User                          id=30    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/communication-tools/send-email-other-user
+        Send WhatsApp User                             id=31    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/communication-tools/send-whatsapp-user
+    Template Management                            id=10    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/template-management
+        Template Management                            id=32    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/template-management/template-management
+    Complaint Mgmt                                 id=11    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/complaint-mgmt
+        Complaint Mgmt                                 id=33    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/organizational-management/complaint-mgmt/complaint-mgmt
+CRM                                            id=199   lvl=1  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/crm
+    Marketing                                      id=200   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/crm/marketing
+        Leads                                          id=201   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/crm/marketing/leads
+    Master Fields                                  id=202   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/crm/master-fields
+Competency Management                          id=2     lvl=1  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management
+    Competency Library                             id=34    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library
+    Command Center                                 id=37    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/command-center
+    Skill Taxonomy                                 id=41    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/skill-taxonomy
+    Taxonomy Ontology                              id=43    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/taxonomy-ontology
+    Framework & Role Mapping                       id=154   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/framework-and-role-mapping
+    Assessments                                    id=155   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/assessments
+    Employee Profiles                              id=156   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/employee-profiles
+    Development & Career Paths                     id=157   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/development-and-career-paths
+    Certifications                                 id=158   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/certifications
+    Library & Taxonomy                             id=223   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/competency-management/competency-library/libraries-and-taxonomy
+Talent Management                              id=3     lvl=1  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management
+    Talent Dashboard                               id=46    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/talent-dashboard
+    Recruitment                                    id=47    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/recruitment
+    Onboarding                                     id=48    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/onboarding
+    Talent Onboarding Dashboard                    id=179   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/talent-onboarding-dashboard
+    Performance Reviews & Appraisals               id=49    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/performance-reviews-and-appraisals
+    Talent Onboarding                              id=180   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/talent-onboarding
+        Employee Onboarding                            id=169   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/talent-onboarding/employee-onboarding
+    Compensation                                   id=50    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/compensation
+    Mobility & Succession                          id=52    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/mobility-and-succession
+    Offboarding                                    id=171   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/offboarding
+    HR Template Engine                             id=198   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/hr-template-engine
+    Administration                                 id=178   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/talent-management/administration
+LMS                                            id=4     lvl=1  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms
+    Learning                                       id=74    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/learning
+        Learning Dashboard                             id=80    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/learning/learning-dashboard
+        Learning Catalog                               id=182   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/learning/learning-catalog
+        My Learning                                    id=209   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/learning/my-learning
+    Training & Records                             id=75    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/training-and-records
+        Assignments                                    id=81    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/training-and-records/assignments
+        Sessions & Calendar                            id=82    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/training-and-records/sessions-and-calendar
+        Certifications & Records                       id=83    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/training-and-records/certifications-and-records
+    Administration                                 id=76    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/administration
+        Course Builder                                 id=84    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/administration/course-builder
+        Administration & Governance                    id=85    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/administration/administration-and-governance
+    Assesment library                              id=77    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/assesment-library
+        Assessment List                                id=86    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/assesment-library/assessment-list
+    Skill Assessment                               id=78    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/skill-assessment
+        Search skill                                   id=87    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/skill-assessment/search-skill
+        Self skill rating                              id=88    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/skill-assessment/self-skill-rating
+    Career Explorer                                id=79    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/career-explorer
+        Career Awareness                               id=89    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/career-explorer/career-awareness
+        Intrest Profiler                               id=90    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/career-explorer/intrest-profiler
+        Knowing Yourself                               id=91    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/career-explorer/knowing-yourself
+        Career Explorer                                id=92    lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/lms/career-explorer/career-explorer
+HRIT Management                                id=5     lvl=1  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions
+    Deceplinry management                          id=115   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/deceplinry-management
+        Deceplinary action and their management        id=116   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/deceplinry-management/deceplinary-action-and-their-management
+    HRIT Dashboard                                 id=181   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/hrit-dashboard
+    Attendance Management                          id=93    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/attendance-management
+        Attendance Tracking                            id=100   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/attendance-management/attendance-tracking
+        Attendance Reports                             id=101   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/attendance-management/attendance-reports
+        Attendance Report                              id=162   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/attendance-management/attendance-report
+        Early going Report                             id=163   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/attendance-management/early-going-report
+        Department Wise Report                         id=164   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/attendance-management/department-wise-report
+    Leave management                               id=94    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/leave-management
+        Leave Dashboard                                id=102   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/leave-management/leave-dashboard
+        Leave Requests                                 id=103   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/leave-management/leave-requests
+        Leave Reports                                  id=104   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/leave-management/leave-reports
+        Leave Configuration                            id=165   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/leave-management/leave-configuration
+        Leave Allocation                               id=166   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/leave-management/leave-allocation
+        Holiday Master                                 id=167   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/leave-management/holiday-master
+    Payroll Management                             id=95    lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/payroll-management
+        Payroll Type                                   id=105   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/payroll-management/payroll-type
+        Salary Structure                               id=106   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/payroll-management/salary-structure
+        Rollover Salary Structure                      id=107   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/payroll-management/rollover-salary-structure
+        Payroll Deduction                              id=108   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/payroll-management/payroll-deduction
+        Form 16                                        id=109   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/payroll-management/form-16
+        Salary Certificate                             id=110   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/payroll-management/salary-certificate
+        Monthly Payroll Report                         id=140   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/payroll-management/monthly-payroll-report
+    Compliance Management                          id=96    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/compliance-management
+        Complaince library                             id=111   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/compliance-management/complaince-library
+    Document Management System                     id=97    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/document-management-system
+        Manage Document                                id=112   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/document-management-system/manage-document
+    Organization Handbook                          id=98    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/organization-handbook
+        Manage Handbook                                id=113   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/organization-handbook/manage-handbook
+    Front Desk Operations                          id=99    lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/front-desk-operations
+        Front Desk                                     id=114   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/hrit-solutions/front-desk-operations/front-desk
+Reports                                        id=6     lvl=1  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports
+    Communication Report                           id=117   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/communication-report
+        Email Report                                   id=126   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/communication-report/email-report
+        Send SMS Report                                id=127   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/communication-report/send-sms-report
+        Register User Report                           id=128   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/communication-report/register-user-report
+        Notification Report                            id=129   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/communication-report/notification-report
+        WhatsApp Report                                id=130   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/communication-report/whatsapp-report
+    Complaint                                      id=118   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/complaint
+        Complaint Report                               id=131   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/complaint/complaint-report
+    HRMS Reports                                   id=119   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports
+        Attendance Report                              id=132   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/attendance-report
+        New Attendance Report                          id=133   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/new-attendance-report
+        Early Going Report                             id=134   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/early-going-report
+        Dept.wise Attendance Report                    id=135   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/dept-wise-attendance-report
+        Leave Report                                   id=136   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/leave-report
+        Leave Summery Report                           id=137   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/leave-summery-report
+        Leave Encashment                               id=138   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/leave-encashment
+        Salary Structure Report                        id=139   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/salary-structure-report
+        Payroll Report                                 id=141   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/payroll-report
+        Payroll Type Report                            id=142   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/payroll-type-report
+        Bankwise Payroll Report                        id=143   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/bankwise-payroll-report
+        User Payroll History                           id=144   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/user-payroll-history
+        Monthly Attendance Report                      id=145   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/hrms-reports/monthly-attendance-report
+    Document Report                                id=120   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/document-report
+        Document Report                                id=146   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/document-report/document-report
+    Log Report                                     id=121   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/log-report
+        Log Report                                     id=147   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/log-report/log-report
+    Organization Management Report                 id=122   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report
+        Employee Info Report                           id=148   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report/employee-info-report
+        Employee Directory Analytics Report            id=184   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report/employee-directory-analytics-report
+        Employee Skill Coverage Matrix Report          id=185   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report/employee-skill-coverage-matrix-report
+        Workforce Analytics Report                     id=183   lvl=3  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report/workforce-analytics-report
+        Task Analysis Report                           id=160   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report/task-analysis-report
+        HR Workforce Analysis Report                   id=195   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report/hr-workforce-analysis-report
+        Human Productivity & Operational Excellence    id=196   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report/human-productivity-and-operational-excellence
+        My Learning Report                             id=197   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/organization-management-report/my-learning-report
+    Counselling Report                             id=123   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/counselling-report
+        Counselling Report                             id=149   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/counselling-report/counselling-report
+    Frontdesk Report                               id=124   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/frontdesk-report
+        Frontdesk Report                               id=150   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/frontdesk-report/frontdesk-report
+    LMS Report                                     id=125   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/lms-report
+        Employee Analysis Report                       id=151   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/lms-report/employee-analysis-report
+        Quiz Progress Report                           id=152   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/lms-report/quiz-progress-report
+        Question wise Report                           id=153   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/lms-report/question-wise-report
+    Task Analysis Report                           id=159   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/reports/task-analysis-report
+Task Management                                id=204   lvl=1  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management
+    Task Management Dashboard                      id=210   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/task-management-dashboard
+    My Tasks                                       id=211   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/my-tasks
+    Projects & Workstreams                         id=212   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/projects-and-workstreams
+    Dependencies & Workstreams                     id=213   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/dependencies-and-workstreams
+    Task Calendar                                  id=214   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/task-calendar
+    Reports & Analysis                             id=215   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/reports-and-analysis
+    Administration                                 id=222   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 (no access_link)
+        Status Management                              id=217   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/administration/task-status
+        Priority Management                            id=218   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/administration/task-priority
+        Permision                                      id=219   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/task-permission
+        Integration                                    id=220   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/administration/task-integrations
+        Audit Log                                      id=221   lvl=3  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/task-management/administration/task-audit-logs
+Agentic AI                                     id=186   lvl=1  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/agentic-ai
+    Pal                                            id=187   lvl=2  status=0  tenant=1,2,3,4,5,6,7,8,9,10,11 https://learningagent-kxvkny4y8p5ud4abjappvx7.streamlit.app/
+    Agentic Library                                id=194   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/agentic-ai/agentic-library
+    Agent Dashboard                                id=188   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/agentic-ai/agent-dashboard
+    Create Agent                                   id=189   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/agentic-ai/create-agent
+    Run Log                                        id=190   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/agentic-ai/run-log
+    Analytics                                      id=191   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/agentic-ai/analytics
+    Multi-Agent                                    id=192   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/agentic-ai/multi-agent
+    Reflection                                     id=193   lvl=2  status=1  tenant=1,2,3,4,5,6,7,8,9,10,11 /module/agentic-ai/reflection
+
+ORPHANED (parent_id points at a row that does not exist - unreachable):
+  id=44    parent=35    Peer-to-peer skill endorsements and project-based skill tracking. /module/competency-management/collaboration-tools/peer-to-peer-skill-endorsements-and-project-based-skill-tracking
+  id=45    parent=36    Role-based competency frameworks.        /module/competency-management/competeancy-management/role-based-competency-frameworks
+  id=71    parent=51    Internal & External Talent Database      /module/talent-management/talent-pool-management/internal-and-external-talent-database
+  id=72    parent=51    AI-Based Recommendations                 /module/talent-management/talent-pool-management/ai-based-recommendations
+  id=175   parent=173   Skill Ontology                           /module/competency-management/skill-ontology/skill-ontology
+  id=177   parent=176   Compentency Dashboard                    /module/competency-management/competency-dashboard/compentency-dashboard

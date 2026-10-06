@@ -1,0 +1,40 @@
+DB3 ACCESS: connection 'live' (config/database.php, DB3_* env vars), host 128.199.17.97, MariaDB 10.1.48
+Command: cd C:/Users/MILAN/Downloads/hp_erp && php artisan tinker --execute="..."
+Method: DB::connection('live')->table($t)->count() per table (no information_schema estimates used).
+
+Raw output:
+tbluser: 299
+tbluserprofilemaster: 42
+employee_monthly_salary_data: 6
+payroll_types: 13
+employee_salary_structures: 10
+hrms_emp_payroll_deduction: 12
+payroll_month_locks: 0
+school_setup: 12
+hrms_emp_leaves: 41
+staff_document: 8
+
+Table -> controller method mapping (from grep of app/Http/Controllers/Payroll/PayrollController.php
+and app/Services/Payroll/PayrollMonthLock.php):
+
+- monthlyPayrollCreate (line 2754): tbluser, tbluserprofilemaster (profile name resolution, F-132),
+  employee_monthly_salary_data (existing month data), payroll_types (PayrollType model, header columns)
+- getEmpMonthlyData (line 2908): payroll_types, employee_salary_structures (EmployeeSalaryStructure),
+  hrms_emp_payroll_deduction
+- monthlyPayrollLock (line 3176, via PayrollMonthLock service): payroll_month_locks
+- monthlyPayrollStore (line 3233): tbluser (ownership check, F-133), employee_monthly_salary_data
+  (upsert-by-key, F-109/F-138), calls getEmpMonthlyData internally (payroll_types, employee_salary_structures)
+- monthlyPayrollPdf (line 2101): employee_monthly_salary_data (EmployeeMonthlySalaryData model),
+  employee_salary_structures (EmployeeSalaryStructure model), school_setup, tbluser + tbluserprofilemaster
+  (joined get_user_detail), payroll_types, hrms_emp_leaves (LWP calc)
+- deleteMonthlyPayrolls (line 3737): staff_document (payslip doc delete), employee_monthly_salary_data (row delete)
+
+Notes:
+- payroll_types / EmployeeSalaryStructure model classes have no explicit $table property, so Eloquent's
+  default snake_case-plural convention applies: PayrollType -> payroll_types, EmployeeSalaryStructure ->
+  employee_salary_structures. Verified these names are queryable and non-empty on DB3/live.
+- payroll_month_locks has 0 rows on DB3/live: this is a legitimate "nothing has ever been locked" state
+  (PayrollMonthLock::state() treats a missing row as locked=false), not evidence of a broken table.
+- employee_salary_structures (10 rows) is far smaller than tbluser (299 rows): most employees on this
+  tenant/host have no salary structure at all, which is the exact condition F-125 already guards against
+  (monthlyPayrollPdf returns null and logs rather than fataling when EmployeeSalaryStructure::first() is empty).

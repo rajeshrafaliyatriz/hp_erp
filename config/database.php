@@ -74,14 +74,68 @@ return [
             'strict' => false,
         ],
 
+        /*
+         * NO FALLBACK VALUES ON THIS CONNECTION, DELIBERATELY.
+         *
+         * `password` previously read env('DB2_PASSWORD', 'dev@sql') — a real
+         * password as a hardcoded default, in a tracked file, on origin/main.
+         * The same string opened the live database, so it was not a throwaway
+         * dev credential; it was a working one, published in every clone and in
+         * the full commit history.
+         *
+         * A DEFAULT CREDENTIAL DOES NOT FAIL — IT CONNECTS. That is what makes
+         * it dangerous: a missing DB2_PASSWORD silently succeeded with a known
+         * password instead of stopping. Host, database and username carried the
+         * same problem in smaller form, naming real infrastructure to anyone
+         * with the repository.
+         *
+         * Now every value must come from the environment. A missing variable
+         * fails loudly, which is the correct behaviour for a credential.
+         *
+         * REMOVING THIS LINE DOES NOT UNDO THE EXPOSURE — the old commits still
+         * contain it. Rotation is the only thing that closes it.
+         */
         'mysql_Dev' => [
             'driver' => 'mysql',
             'url' => env('DB2_URL'),
-            'host' => env('DB2_HOST', '192.168.0.2'),
+            'host' => env('DB2_HOST'),
             'port' => env('DB2_PORT', '3306'),
-            'database' => env('DB2_DATABASE', 'triz_erp_21'),
-            'username' => env('DB2_USERNAME', 'dev_db'),
-            'password' => env('DB2_PASSWORD', 'dev@sql'),
+            'database' => env('DB2_DATABASE'),
+            'username' => env('DB2_USERNAME'),
+            'password' => env('DB2_PASSWORD'),
+        ],
+
+        /*
+         * The live/production database.
+         *
+         * DB3_* has been in .env since before this connection existed, but
+         * nothing in this file read it, so the credentials were inert: the
+         * application could not reach live through Laravel at all, and schema
+         * changes made against dev had no supported path to production.
+         *
+         * NO FALLBACK VALUES, for the reason spelled out on mysql_Dev above.
+         *
+         * IMPORTANT — this connection is NOT `migrate`-safe as a whole. Live is
+         * far behind dev on the migrations table, so a bare
+         * `php artisan migrate --database=live` would run every unrelated
+         * pending migration at once. Always target one file:
+         *
+         *     php artisan migrate --database=live --path=database/migrations/<file>.php
+         */
+        'live' => [
+            'driver' => 'mysql',
+            'url' => env('DB3_URL'),
+            'host' => env('DB3_HOST'),
+            'port' => env('DB3_PORT', '3306'),
+            'database' => env('DB3_DATABASE'),
+            'username' => env('DB3_USERNAME'),
+            'password' => env('DB3_PASSWORD'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => false,
+            'engine' => null,
         ],
 
         'mariadb' => [

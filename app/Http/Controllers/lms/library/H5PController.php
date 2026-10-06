@@ -6,13 +6,11 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
 use App\Models\lms\library\jobOccupation;
-use GenTux\Jwt\GetsJwtToken;
 use Validator;
 use Illuminate\Support\Facades\DB;
 
 class H5PController extends Controller
 {
-    use GetsJwtToken;
     /**
      * Display a listing of the resource.
      *

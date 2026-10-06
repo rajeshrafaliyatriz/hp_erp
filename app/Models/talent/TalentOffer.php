@@ -20,6 +20,9 @@ class TalentOffer extends Model
         'notes',
         'sub_institute_id',
         'created_by',
+        'reportmanager',
+        'punchintime',
+        'punchouttime',
         'sent_at',
         'rejected_at',
     ];

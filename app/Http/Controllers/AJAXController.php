@@ -25,15 +25,191 @@ use PHPMailer\PHPMailer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
 class AJAXController extends Controller
 {
+    use \App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+
+    /** Default and hard ceiling for getSkillCompetency's page size (G-SEC-15). */
+    private const SKILL_COMPETENCY_PAGE = 500;
+    private const SKILL_COMPETENCY_MAX  = 2000;
+
+    /**
+     * Columns table_data must never return, whatever table is asked for.
+     *
+     * Credentials and government/financial identifiers. No screen renders any
+     * of these - the old frontend reads tbluser for names, emails and profile
+     * ids - so stripping them breaks nothing while closing the exposure.
+     */
+    private const TABLE_DATA_DENIED_COLUMNS = [
+        'password', 'plain_password', 'otp', 'remember_token', 'fcm_token',
+        'aadhar_no', 'pan_no', 'account_no', 'ifsc_code', 'bank_name',
+        'esic_no', 'uan_no', 'pf_no',
+    ];
+
+    /**
+     * Presence of any of these marks a table as sensitive: it holds credentials
+     * or government/financial identity, so it is readable only by an
+     * authenticated caller.
+     *
+     * Derived from the schema rather than a hand-kept table list so that a
+     * payroll or KYC table added next month is covered the day it is created,
+     * without anyone remembering to update this file.
+     */
+    private const TABLE_DATA_SENSITIVE_COLUMNS = [
+        'password', 'plain_password', 'otp', 'remember_token',
+        'aadhar_no', 'pan_no', 'account_no', 'ifsc_code',
+        'esic_no', 'uan_no', 'pf_no',
+    ];
+
+    /** Per-request memo for information_schema lookups, keyed "table.column". */
+    private array $tableDataColumnCache = [];
+
+    /** True when $table has $column. Each pair is looked up at most once. */
+    private function tableDataHasColumn(string $table, string $column): bool
+    {
+        $key = $table . '.' . $column;
+
+        if (!array_key_exists($key, $this->tableDataColumnCache)) {
+            $this->tableDataColumnCache[$key] = DB::table('information_schema.columns')
+                ->where('table_schema', DB::raw('DATABASE()'))
+                ->where('table_name', $table)
+                ->where('column_name', $column)
+                ->exists();
+        }
+
+        return $this->tableDataColumnCache[$key];
+    }
+
+    /** True when $table carries credentials or identity documents. */
+    private function tableDataIsSensitive(string $table): bool
+    {
+        foreach (self::TABLE_DATA_SENSITIVE_COLUMNS as $column) {
+            if ($this->tableDataHasColumn($table, $column)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Treats 0 and '' as "no tenant".
+     *
+     * Multi-institute admins are stored with sub_institute_id = 0 (see
+     * authController::index), and a falsy check that conflates 0 with null is
+     * what locked every admin out of this endpoint.
+     */
+    private function tableDataNormaliseTenant($value)
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return ($value === '' || $value === '0') ? null : $value;
+    }
+
+    /**
+     * The tenant proven by the caller's own identity, or null.
+     *
+     * Deliberately ignores any sub_institute_id in the query string: that is
+     * caller-controlled, and trusting it is what let one tenant read another's
+     * rows. The value is derived from the session or the bearer token instead.
+     */
+    private function tableDataTenant(Request $request)
+    {
+        if (session()->has('user_id')) {
+            $sessionTenant = $this->tableDataNormaliseTenant(session()->get('sub_institute_id'));
+            if ($sessionTenant !== null) {
+                return $sessionTenant;
+            }
+        }
+
+        $token = $request->input('token') ?: $request->bearerToken();
+        if ($token && ($accessToken = PersonalAccessToken::findToken($token))) {
+            return $this->tableDataNormaliseTenant(optional($accessToken->tokenable)->sub_institute_id);
+        }
+
+        return null;
+    }
+
+    /**
+     * The tenant the caller asked for, from either shape the frontends send:
+     * filters[sub_institute_id] (most screens) or a bare sub_institute_id
+     * (the onboarding-tour calls).
+     *
+     * Only consulted when identity does not settle the question - see
+     * GetTableData for the precedence.
+     */
+    private function tableDataRequestedTenant(Request $request)
+    {
+        $filters = $request->input('filters');
+        if (is_array($filters) && isset($filters['sub_institute_id'])) {
+            $requested = $this->tableDataNormaliseTenant($filters['sub_institute_id']);
+            if ($requested !== null) {
+                return $requested;
+            }
+        }
+
+        return $this->tableDataNormaliseTenant($request->input('sub_institute_id'));
+    }
+
+    /** True when the caller has a session or a valid personal access token. */
+    private function tableDataAuthenticated(Request $request): bool
+    {
+        if (session()->has('user_id') && session()->get('user_id')) {
+            return true;
+        }
+
+        $token = $request->input('token') ?: $request->bearerToken();
+
+        return $token && PersonalAccessToken::findToken($token) !== null;
+    }
+
+    /**
+     * Generic table reader.
+     *
+     * Previously this answered any request, from anyone, for any table: no
+     * authentication, no tenant filter, and every column returned verbatim.
+     * `?table=tbluser` alone returned every user in every tenant along with
+     * their password hash, plain_password, Aadhaar and bank details.
+     *
+     * Four guards now apply:
+     *   1. the schema listing (all_tables=1) requires authentication;
+     *   2. tables holding credentials or identity documents require
+     *      authentication - detected from their columns, not a fixed list;
+     *   3. every tenant-scoped table is pinned to exactly one tenant. An
+     *      authenticated caller is pinned to their own and cannot widen it;
+     *      an anonymous caller must name one, so no request can ever sweep
+     *      every tenant at once;
+     *   4. credential and identity columns are stripped from every response.
+     *
+     * Guard 3 still honours filters[sub_institute_id] for anonymous callers.
+     * That is a deliberate compatibility window: roughly a hundred call sites
+     * in the production frontend send no token at all, and blocking them
+     * outright took working screens down. Anonymous reads are logged (see
+     * below) so those call sites can be found and migrated; once the log is
+     * quiet, the anonymous branch can be deleted and this becomes token-only.
+     */
     public function GetTableData(Request $request)
     {
+        $authenticated = $this->tableDataAuthenticated($request);
+
+        // The schema dump names every table and column in the database. It is
+        // a mapping tool for an attacker and no screen needs it anonymously.
         if($request->has('all_tables') && $request->all_tables==1){
+            if (!$authenticated) {
+                return response()->json([
+                    'error' => 'Authentication is required to list tables.',
+                ], 401);
+            }
+
             // Get all tables
             $tables = DB::select('SHOW TABLES');
 
@@ -88,8 +264,57 @@ class AJAXController extends Controller
             return response()->json(['error' => 'An internal server error occurred while validating the table.'], 500);
         }
 
+        // Credentials and identity documents are never readable anonymously,
+        // whatever tenant is named. tbluser and the payroll tables land here.
+        if (!$authenticated && $this->tableDataIsSensitive($table)) {
+            return response()->json([
+                'error' => 'Authentication is required to read "' . $table . '".',
+            ], 401);
+        }
+
         // Start query using the validated table name
         $query = DB::table($table);
+
+        // Pin the query to exactly one tenant whenever the table is
+        // tenant-scoped. Applied here, before any caller-supplied filter.
+        $tenantColumnExists = $this->tableDataHasColumn($table, 'sub_institute_id');
+
+        if ($tenantColumnExists) {
+            // Precedence matters. A proven identity wins outright, so a
+            // logged-in caller cannot read another tenant by passing
+            // filters[sub_institute_id]. The request is consulted only when
+            // identity leaves the question open: an anonymous legacy caller,
+            // or a multi-institute admin whose own sub_institute_id is 0.
+            $tenantId = $this->tableDataTenant($request)
+                ?? $this->tableDataRequestedTenant($request);
+
+            if ($tenantId === null) {
+                return response()->json([
+                    'error' => 'sub_institute_id is required to read "' . $table . '".',
+                ], 400);
+            }
+
+            if (!$authenticated) {
+                // The migration worklist: every legacy call site that still
+                // reads without a token, with enough context to find it.
+                Log::info('table_data anonymous read', [
+                    'table'   => $table,
+                    'tenant'  => $tenantId,
+                    'referer' => $request->headers->get('referer'),
+                    'ip'      => $request->ip(),
+                ]);
+            }
+
+            // Two conventions live in this schema: most tables store a single
+            // id, but shared-catalogue tables such as tblmenumaster store a
+            // comma-separated list of the tenants a row applies to
+            // ("1,2,3,...,11"). Matching only on equality would hide every row
+            // of the second kind, so both forms are accepted.
+            $query->where(function ($scope) use ($table, $tenantId) {
+                $scope->where($table . '.sub_institute_id', $tenantId)
+                      ->orWhereRaw('FIND_IN_SET(?, ' . $table . '.sub_institute_id)', [$tenantId]);
+            });
+        }
 
         // Apply filters if provided
         if ($request->has('filters') && is_array($request->filters)) {
@@ -101,24 +326,24 @@ class AJAXController extends Controller
                     // OR: return response()->json(['error' => 'Invalid column name format in filters.'], 400);
                 }
 
+                // Already pinned by the tenant scope above. Re-applying it here
+                // as plain equality would break the comma-separated tables
+                // (tblmenumaster stores "1,2,3,...,11"), where the scope
+                // matched via FIND_IN_SET and equality never can.
+                if ($column === 'sub_institute_id' && $tenantColumnExists) {
+                    continue;
+                }
+
                 // 5. Manually validate if the column exists to bypass Schema::hasColumn()
                 try {
                     //check table has deleted_at
-                    $hasDeletedAt = DB::table('information_schema.columns')
-                        ->where('table_schema', DB::raw('DATABASE()'))
-                        ->where('table_name', $table)
-                        ->where('column_name', 'deleted_at')
-                        ->exists();
+                    $hasDeletedAt = $this->tableDataHasColumn($table, 'deleted_at');
 
                     if ($hasDeletedAt) {
                         $query->whereNull('deleted_at');
                     }
                     // other column
-                    $columnExists = DB::table('information_schema.columns')
-                        ->where('table_schema', DB::raw('DATABASE()'))
-                        ->where('table_name', $table)
-                        ->where('column_name', $column)
-                        ->exists();
+                    $columnExists = $this->tableDataHasColumn($table, $column);
 
                     if ($columnExists) {
                         $query->where($column, $value);
@@ -137,11 +362,7 @@ class AJAXController extends Controller
         if ($request->has('item_type')) {
             // Validate item_type column exists
             try {
-                $itemTypeExists = DB::table('information_schema.columns')
-                    ->where('table_schema', DB::raw('DATABASE()'))
-                    ->where('table_name', $table)
-                    ->where('column_name', 'item_type')
-                    ->exists();
+                $itemTypeExists = $this->tableDataHasColumn($table, 'item_type');
 
                 if ($itemTypeExists) {
                     $query->where('item_type', $request->item_type);
@@ -189,6 +410,16 @@ class AJAXController extends Controller
         if ($data->isEmpty()) {
             return response()->json(['message' => 'Data not found'], 404);
         }
+
+        // Strip credential and identity columns from every row before it leaves.
+        // Done on the result rather than as a select list so it holds for any
+        // table, including ones added later.
+        $data = $data->map(function ($row) {
+            foreach (self::TABLE_DATA_DENIED_COLUMNS as $denied) {
+                unset($row->$denied);
+            }
+            return $row;
+        });
 
         return response()->json($data);
     }
@@ -417,8 +648,12 @@ class AJAXController extends Controller
 
         $getClass = [];
 
+        // `is_active` is not a column on hrms_departments - the flag is
+        // `status`. This threw "Unknown column 'is_active' in 'where clause'"
+        // on every single call, so whatever screen depends on it has never
+        // worked.
         $query = DB::table('hrms_departments')
-            ->where(['sub_institute_id' => $sub_institute_id, 'is_active' => 1])
+            ->where(['sub_institute_id' => $sub_institute_id, 'status' => 1])
             ->whereNull('deleted_at');
         // $query->where("grade_id", $request->grade_id);
 
@@ -564,10 +799,29 @@ class AJAXController extends Controller
         // }
     }
 
+    /**
+     * GET /api/get-employee-tasks - the tasks or skills mapped to one employee.
+     *
+     * `user_id` is genuinely the SUBJECT here (a manager looking at somebody
+     * else's record), so unlike the other fixes in this pass it is left coming
+     * from the request. What was wrong is that the route carried no
+     * authentication at all and took the tenant from the request too, so
+     * anyone could read any employee in any organisation.
+     *
+     * The route now requires a token (see routes/api.php), and the tenant is
+     * taken from that token. The existing `where u.sub_institute_id` filter
+     * then does the rest: a subject outside the caller's organisation simply
+     * does not match.
+     */
     public function getUsersMappings(Request $request)
     {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
         $emp_id = $request->user_id ?? $request->emp_id;
-        $sub_institute_id = $request->sub_institute_id;
+        $sub_institute_id = $identity['sub_institute_id'];
         $getType = $request->getType ?? 'tasks'; // skills or tasks, default to tasks
         $res['status_code'] = 0;
         $res['message'] = 'User not found';
@@ -619,16 +873,33 @@ class AJAXController extends Controller
     // deepseek chat API integrtion
     public function DeepSeekChat(Request $request)
     {
-        //rp2164394@gmail.com - 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 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
+        // G-SEC-25. AN OPEN DOOR THAT SPENDS MONEY.
+        //
+        // This proxied to a paid AI API with NO AUTHENTICATION - anyone could
+        // call it and bill the account. Not disclosure: cost and abuse. It also
+        // returned the upstream provider's error body to the caller.
+        //
+        // ⚠ THE API KEYS WERE HARDCODED IN THIS FILE, four of them, and they are
+        // in git history. Removing them from source does NOT un-leak them:
+        // THEY MUST BE ROTATED. Flagged in the register as an action for Triz.
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
 
-        // pasi pasi - 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
-
-        // rp  - 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 openai/gpt-oss-20b:free
+        $apiKey = (string) env('OPENROUTER_API_KEY', '');
+        if ($apiKey === '') {
+            // Refused rather than falling back to a key in source.
+            return response()->json([
+                'status'  => 0,
+                'message' => 'AI chat is not configured.',
+            ], 503);
+        }
 
         $prompt = $request->message;
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer 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',
+            'Authorization' => 'Bearer ' . $apiKey,
             'HTTP-Referer' => env('APP_URL'),
         ])
             ->timeout(90)
@@ -800,9 +1071,33 @@ class AJAXController extends Controller
 
     public function getSkillCompetency(Request $request)
     {
-        //$subInstituteId = $request->get('sub_institute_id', 4); // default 3
-        $type = $request->input('type');
-        $sub_institute_id = $request->sub_institute_id ?? 2;
+        // G-SEC-15. This endpoint had THREE defects at once and all three are
+        // closed here, because any one of them alone leaves it exploitable:
+        //
+        //   1. NO AUTHENTICATION. Declared in routes/web.php ("Rajesh for only
+        //      API temporary created for data fetch") with no middleware, so it
+        //      answered anonymous callers.
+        //   2. UNBOUNDED RESULT SET. A four-way join over the largest tables
+        //      ending in ->get() with no limit. An unauthenticated GET
+        //      exhausted a 512MB memory limit inside Connection::execute().
+        //      One URL, repeated from a browser, is a denial of service needing
+        //      no credential.
+        //   3. TENANT FROM THE REQUEST, defaulting to a hardcoded `?? 2` - so an
+        //      absent parameter silently served tenant 2's data.
+        //
+        // Auth alone would still let an authenticated user exhaust memory; a
+        // bound alone would leave the door open. Both, not either.
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $sub_institute_id = $identity['sub_institute_id'];
+
+        // Bounded, and paginated so the data stays reachable in pages rather
+        // than being truncated silently.
+        $limit  = min(max((int) $request->input('limit', self::SKILL_COMPETENCY_PAGE), 1), self::SKILL_COMPETENCY_MAX);
+        $offset = max((int) $request->input('offset', 0), 0);
 
         $jobRoles = DB::table('s_user_jobrole')
             ->select('jobrole')
@@ -846,11 +1141,16 @@ class AJAXController extends Controller
                 's.classification_sub_category',
                 's.classification_item'
             ])
+            ->offset($offset)
+            ->limit($limit)
             ->get();
 
         return response()->json([
             'status' => 'success',
-            'data' => $data
+            'limit'  => $limit,
+            'offset' => $offset,
+            'count'  => $data->count(),
+            'data'   => $data
         ]);
     }
 
@@ -932,9 +1232,7 @@ class AJAXController extends Controller
         // Fallback model list - ordered from preferred → fallback (Feb 2026 reality)
         $modelsToTry = [
             'gemini-2.5-flash',         // Fast, cheap, stable GA
-            'gemini-flash-latest',      // Alias to newest Flash (good longevity)
-            'gemini-2.5-pro',           // Stronger reasoning when needed
-            'gemini-3-flash-preview',   // Newer preview (if your project allows)
+               // Newer preview (if your project allows)
             // Add more previews/experimental if needed: 'gemini-3-pro-preview', etc.
         ];
 
@@ -1110,9 +1408,36 @@ class AJAXController extends Controller
             // Find the token in the database
             $accessToken = PersonalAccessToken::findToken($token);
             if (!$accessToken) {
-                
+
                 return response()->json(['message' => 'Invalid token'], 401);
             }
+
+            /*
+             * ── THE TOKEN'S OWNER DECIDES THE TENANT, NOT THE REQUEST ───────
+             *
+             * This route carries `web` middleware only, and the check above
+             * asks nothing more than "does this token string exist" - it never
+             * looked at WHOSE it was. Meanwhile $sub_institute_id and $user_id
+             * were read straight from the query string and used to insert into
+             * hrms_departments, academic_section and sub_std_map, and then
+             * passed down into the chapter and content controllers.
+             *
+             * So any holder of any live token, from any organisation, could
+             * create courses and content inside any other organisation by
+             * naming it in the URL - and have the rows attributed to any user
+             * they chose.
+             *
+             * The token's owner now supplies both. A token that resolves to no
+             * user is refused outright rather than falling through to whatever
+             * the caller asked for.
+             */
+            $tokenOwner = $accessToken->tokenable;
+            if (! $tokenOwner) {
+                return response()->json(['message' => 'Invalid token'], 401);
+            }
+
+            $sub_institute_id = $tokenOwner->sub_institute_id ?: $sub_institute_id;
+            $user_id = $tokenOwner->id;
 
             // First, check if a course already exists for this skill and subject in sub_std_map
             $existingCourse = DB::table('sub_std_map')
@@ -1165,13 +1490,20 @@ class AJAXController extends Controller
             if ($checkStandard) {
                 $standard = $checkStandard->id;
             } else {
+                // `name` and `short_name` are not columns on hrms_departments -
+                // they were copied from the academic_section insert above. The
+                // real column is `department`, and it is NOT NULL, so this
+                // statement could never execute.
                 $standardInsert = DB::table('hrms_departments')->insertGetId([
                     'sub_institute_id' => $sub_institute_id,
-                    'name' => $skill_department,
-                    'short_name' => $skill_department,
-                    'sort_order' => '1',
+                    'department' => $skill_department,
+                    'parent_id' => 0,
+                    'status' => 1,
+                    'is_calculated' => 0,
+                    'sort_order' => 1,
                     'created_by' => $user_id,
-                    'created_at' => now()
+                    'created_at' => now(),
+                    'updated_at' => now()
                 ]);
                 $standard = $standardInsert;
             }
@@ -2352,5 +2684,123 @@ class AJAXController extends Controller
         }
         
         return rtrim($slideStructure, '; ');
+    }
+
+    public function getSupervisor(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|integer',
+            'sub_institute_id' => 'required|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => $validator->errors()->first()
+            ], 400);
+        }
+
+        $user_id = $request->user_id;
+        $sub_institute_id = $request->sub_institute_id;
+
+        // 🔹 Step 1: Get user
+        $user = DB::table('tbluser')
+            ->where('id', $user_id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$user) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        // 🔹 Step 2: no supervisor recorded.
+        //
+        // THIS IS 200, NOT 404. The user WAS found - they simply have nobody
+        // recorded as their manager. 404 means "this resource does not exist",
+        // so the caller treats a normal, common state as a failure: the assign
+        // form logs a red error every time an employee is picked.
+        //
+        // MEASURED, because "common" is a claim: 17 of 19 tenant-6 users and 352
+        // of 1,400 overall have no employee_id. This is the majority case for
+        // some organisations, not an edge case.
+        //
+        // ABSENT AND BROKEN ARE DIFFERENT ANSWERS. The caller can now tell them
+        // apart: supervisor === null with a reason, versus a real error status.
+        /*
+         * ── WHICH COLUMN ACTUALLY HOLDS THE MANAGER ────────────────────────
+         *
+         * `tbluser` carries THREE names for one fact, and this method was
+         * reading the one the product no longer writes:
+         *
+         *   supervisor_opt        the Employee Directory form writes this, and
+         *                         labels it "Reporting manager"
+         *                         (EmployeeDirectoryController:587, :619)
+         *   employee_id           legacy
+         *   reporting_manager_id  written by nothing, read by nothing
+         *
+         * Measured on live tenant 6 (20 employees): supervisor_opt set for 10,
+         * employee_id for 6, reporting_manager_id for 0.
+         *
+         * So a manager assigned through the Employee Directory never reached
+         * the assign-task form, which then reported "no reporting manager set"
+         * - saying something untrue about data the user had just entered.
+         *
+         * supervisor_opt FIRST because it is what the current form writes;
+         * employee_id second so existing rows keep working. Same shape as
+         * Concerns\ResolvesEmployeeJobRole, which exists for exactly this
+         * problem one table over.
+         */
+        $supervisorId = $user->supervisor_opt ?: ($user->employee_id ?: null);
+
+        if (empty($supervisorId)) {
+            return response()->json([
+                'status_code' => 1,
+                'message' => 'No supervisor is recorded for this employee.',
+                'supervisor' => null,
+                'data' => null,
+                'empty_is_expected' => true,
+                'empty_reason' => 'This employee has no reporting manager set. Add one in the Employee Directory to have observers suggested automatically.',
+            ]);
+        }
+
+        // 🔥 Step 3: Correct Query (id wise search)
+        $supervisor = DB::table('tbluser')
+            ->where('id', $supervisorId)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$supervisor) {
+            return response()->json([
+                'status_code' => 0,
+                'message' => 'Supervisor not found',
+            ], 404);
+        }
+
+        // 🔹 Step 4: Full name
+        $fullName = trim(
+            ($supervisor->name_suffix ?? '') . ' ' .
+            ($supervisor->first_name ?? '') . ' ' .
+            ($supervisor->middle_name ?? '') . ' ' .
+            ($supervisor->last_name ?? '')
+        );
+
+        // 🔹 Step 5: Response
+        return response()->json([
+            'status_code' => 1,
+            'message' => 'Supervisor found',
+            'data' => [
+                'id' => $supervisor->id,
+                'name' => preg_replace('/\s+/', ' ', $fullName),
+                'email' => $supervisor->email,
+                'mobile' => $supervisor->mobile,
+            ]
+        ]);
     }
 }

@@ -1,0 +1,31 @@
+============ F-132 / F-121 ============
+
+1. The roster is complete for everyone the payroll gate admits
+   (the screen sends user.role — a role_key — which never matched the profile-name list)
+     administrator    122 employees
+  PASS  administrator sees the whole institute
+     hr_manager       122 employees
+  PASS  hr_manager sees the whole institute
+     hr_executive     122 employees
+  PASS  hr_executive sees the whole institute
+
+2. And the gate itself is unchanged
+  PASS  department_head is still refused
+  PASS  reporting_manager is still refused
+  PASS  employee is still refused
+  PASS  auditor is still refused
+
+3. F-121 — the audit's case, finally measurable
+     audit: 500 at 60.5s / 61.0s / 66.1s   ·   after Sprint 2: 200 at 58.7s / 39.5s / 30.8s
+     run 1: HTTP 200  2.896717s  280170 bytes
+     run 2: HTTP 200  3.137871s  280170 bytes
+     run 3: HTTP 200  2.919093s  280170 bytes
+  PASS  byte-identical across runs
+
+4. The department names are right, not just present
+     fallback "-" in the response: 4
+  PASS  the collapsed lookup matches the database exactly
+
+==============================================================
+  PASS 9   FAIL 0
+==============================================================

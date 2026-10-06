@@ -15,6 +15,23 @@ class tbluserModel extends Model
     protected $table = "tbluser";
     protected $appends = ['full_name'];
 
+    /**
+     * Never serialised. F-92, HRIT Sprint 1.
+     *
+     * employeeDetails() (app/Helpers/helpers.php) selects `tbluser.*` and its
+     * result is returned verbatim by GET /employee-salary-structure and
+     * GET /payroll-deduction, so every caller of those endpoints received every
+     * employee's bcrypt hash - 122 of them per request on tenant 3 - plus the
+     * live login OTP. Hiding them here fixes every consumer of the model at
+     * once, which an explicit column list in one helper would not.
+     *
+     * $hidden affects array/JSON output only. authController still compares
+     * Hash::check($password, $user->password) as an attribute, and the mobile
+     * login still returns `otp` because it reads through DB::table(), not this
+     * model. Both verified before this was added.
+     */
+    protected $hidden = ['password', 'remember_token', 'otp'];
+
     protected $fillable = [
         'id',
         'user_name',
@@ -35,7 +52,6 @@ class tbluserModel extends Model
         'user_profile_id',
         'join_year',
         'image',
-        'plain_password',
         'sub_institute_id',
         'client_id',
         'is_admin',
@@ -92,12 +108,32 @@ class tbluserModel extends Model
         'sunday_out_date',
         'bank_name',
         'account_no',
-        'ifsc_code'
+        'ifsc_code',
+        'fcm_token'
     ];
 
+    /**
+     * The employee's display name.
+     *
+     * FILTERED, not concatenated. The old version glued all three parts with
+     * spaces unconditionally, so the 95% of rows with no middle name rendered
+     * as "Milan  Baldaniya" - a double space visible in the Employee
+     * Directory, the profile header and every picker that shows a name.
+     *
+     * This is an APPENDED ATTRIBUTE, never a column. tbluser has no full_name
+     * and a query that selects one is rejected outright - which is exactly how
+     * /user/add_user came to answer 500 for every API caller.
+     */
     public function getFullNameAttribute()
     {
-        return $this->first_name . ' ' . $this->middle_name . ' ' . $this->last_name;
+        // (string) before trim: these columns are nullable, and PHP 8.2
+        // deprecates passing null to trim().
+        $parts = array_filter(
+            array_map(fn ($part) => trim((string) $part), [$this->first_name, $this->middle_name, $this->last_name]),
+            fn ($part) => $part !== '',
+        );
+
+        return implode(' ', $parts);
     }
 
     public function organization()

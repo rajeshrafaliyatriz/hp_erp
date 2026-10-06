@@ -29,6 +29,15 @@ class signupOtpController extends Controller
             ]
         );
 
+        // THE GATE. This is the ONLY anonymous send path in the codebase - the
+        // pre-authentication signup flow, which cannot hold a token by nature. It
+        // sends a fixed four-digit OTP to one address, so the blast radius is
+        // small, but it consulted the flag zero times and "email is off" was
+        // believed to cover it.
+        if (!\App\Support\MailGate::allowed()) {
+            return response()->json(['status' => false, 'message' => \App\Support\MailGate::reason()], 503);
+        }
+
         // Send email
         Mail::raw("Your OTP is: $otp", function ($message) use ($email) {
             $message->to($email)

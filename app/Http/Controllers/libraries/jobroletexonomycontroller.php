@@ -3,6 +3,24 @@
 namespace App\Http\Controllers\libraries;
 
 use App\Http\Controllers\Controller;
+
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -12,6 +30,24 @@ use function App\Helpers\is_mobile;
 
 class jobroletexonomycontroller extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
   
     public function index(Request $request)
     {
@@ -42,7 +78,7 @@ class jobroletexonomycontroller extends Controller
                     ], 400);
                 }
 
-                $sub_institute_id = $request->sub_institute_id;
+                $sub_institute_id = $this->apiTenantId($request);
 
                 // fetch jobrole data from table
                 $jobroles = DB::table('s_user_jobrole as a')
@@ -89,7 +125,7 @@ class jobroletexonomycontroller extends Controller
             return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         // $validator = Validator::make($request->all(), [
         //     'jobrole_category' => 'required|string|max:255',
@@ -150,7 +186,7 @@ public function storeskill(Request $request)
                  return response()->json(['message' => 'Invalid token'], 401);
         }
 
-        $sub_institute_id = $request->get('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
 
           $validator = Validator::make($request->all(), [
@@ -229,7 +265,7 @@ public function storeskill(Request $request)
         //     }
         //     // Update only the fields you send
             
-        //     $update = $category->update(['updated_by' => $request->user_id,
+        //     $update = $category->update(['updated_by' => $this->g2gActorId($request),
         //                         'updated_at'=>now(),
         //                         'category' => $request->jobrole_category]);
         //     if(!$update){
@@ -244,10 +280,10 @@ public function storeskill(Request $request)
         //     return response()->json(['error' => $e->getMessage()], 500);
         // }
 
-        $getAllCategory = jobroletexonomy::where(['sub_institute_id'=>$request->sub_institute_id,    'jobrole_category'=>$jobrole_category])  ->get();
+        $getAllCategory = jobroletexonomy::where(['sub_institute_id'=>$this->apiTenantId($request),    'jobrole_category'=>$jobrole_category])  ->get();
 
         if($getAllCategory){
-            $update = jobroletexonomy::where(['sub_institute_id'=>$request->sub_institute_id,'jobrole_category'=>$jobrole_category])->update(['updated_by' => $request->user_id,
+            $update = jobroletexonomy::where(['sub_institute_id'=>$this->apiTenantId($request),'jobrole_category'=>$jobrole_category])->update(['updated_by' => $this->g2gActorId($request),
                                 'updated_at'=>now(),
                                 'jobrole_category' => $request->jobrole_category]);
 
@@ -278,7 +314,7 @@ public function storeskill(Request $request)
 //         // $deletedBy = $request->input('deleted_by', null);
     
    
-//         $category->update(['deleted_by' => $request->user_id,
+//         $category->update(['deleted_by' => $this->g2gActorId($request),
 //                             'deleted_at'=>now()]);
 
 //         return response()->json([
@@ -291,10 +327,10 @@ public function storeskill(Request $request)
 // }
 {
 
-    $getAllCategory = jobroletexonomy::where(['sub_institute_id'=>$request->sub_institute_id,'jobrole_category'=>$jobrole_category])->get();    
+    $getAllCategory = jobroletexonomy::where(['sub_institute_id'=>$this->apiTenantId($request),'jobrole_category'=>$jobrole_category])->get();    
         
         if($getAllCategory){
-            $update = jobroletexonomy::where(['sub_institute_id'=>$request->sub_institute_id,'jobrole_category'=>$jobrole_category])->update(['updated_by' => $request->user_id,
+            $update = jobroletexonomy::where(['sub_institute_id'=>$this->apiTenantId($request),'jobrole_category'=>$jobrole_category])->update(['updated_by' => $this->g2gActorId($request),
                                 'deleted_at'=>now(),
                                 'jobrole_category' => $request->jobrole_category]);
 

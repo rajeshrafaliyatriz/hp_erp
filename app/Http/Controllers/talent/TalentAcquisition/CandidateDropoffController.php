@@ -2,63 +2,94 @@
 
 namespace App\Http\Controllers\talent\TalentAcquisition;
 
+use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Http\Controllers\Controller;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class CandidateDropoffController extends Controller
 {
+    use ResolvesApiIdentity;
+
+    private function maskSensitiveData(array $data): array
+    {
+        $masked = $data;
+        $sensitiveFields = ['token', 'password', 'secret'];
+
+        foreach ($sensitiveFields as $field) {
+            if (isset($masked[$field])) {
+                $masked[$field] = '***MASKED***';
+            }
+        }
+
+        return $masked;
+    }
+
     public function getDropoff(Request $request)
     {
         try {
-            $type = $request->type;
+            // Log request safely (payload masked)
+            \Illuminate\Support\Facades\Log::info('Talent Acquisition Dropoff request', [
+                'payload' => $this->maskSensitiveData($request->all()),
+            ]);
 
-            if ($type == "API") {
-                $token = $request->input('token');
-                if (!$token) {
+            $type = $request->input('type');
+
+            if ($type == 'API') {
+                $token = $request->bearerToken();
+                if (! $token) {
                     return response()->json(['message' => 'Token not provided'], 401);
                 }
 
                 $accessToken = PersonalAccessToken::findToken($token);
-                if (!$accessToken) {
+                if (! $accessToken) {
                     return response()->json(['message' => 'Invalid token'], 401);
                 }
             }
 
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
+            $departmentId = $request->input('department_id');
+            $experience = $request->input('experience');
 
-            // Fetch aggregated drop-off data filtered by sub_institute_id
-            $data = DB::table('talent_job_applications')
+            // Fetch aggregated drop-off data filtered by sub_institute_id and optionally department_id and experience
+            $data = DB::table('talent_job_applications as a')
+                ->join('talent_job_postings as jp', 'a.job_id', '=', 'jp.id')
                 ->select(
                     DB::raw("CASE
-                        WHEN status = 'Pending Review' THEN 'Application'
-                        WHEN status = 'Shortlisted' THEN 'Shortlist'
-                        WHEN status = 'Interview Scheduled' THEN 'Interview'
-                        WHEN status = 'Hired' THEN 'Offer'
-                        WHEN status = 'Rejected' THEN 'Rejected'
-                        ELSE status
+                        WHEN a.status = 'Pending Review' THEN 'Application'
+                        WHEN a.status = 'Shortlisted' THEN 'Shortlist'
+                        WHEN a.status = 'Completed' THEN 'Interview'
+                        WHEN a.status = 'Hired' THEN 'Offer'
+                        WHEN a.status = 'Rejected' THEN 'Rejected'
+                        ELSE a.status
                     END as stage"),
                     DB::raw('0 as voluntary'),
                     DB::raw('COUNT(*) as involuntary')
                 )
-                ->where('sub_institute_id', $subInstituteId)
-                ->whereIn('status', ['Pending Review', 'Under Review', 'Shortlisted', 'Interview Scheduled', 'Hired', 'Rejected'])
+                ->where('a.sub_institute_id', $subInstituteId)
+                ->whereIn('a.status', ['Pending Review', 'Under Review', 'Shortlisted', 'Completed', 'Hired', 'Rejected'])
+                ->when($departmentId, function ($query) use ($departmentId) {
+                    return $query->where('jp.department_id', $departmentId);
+                })
+                ->when($experience, function ($query) use ($experience) {
+                    return $query->where('a.experience', 'like', '%' . $experience . '%');
+                })
                 ->groupBy(DB::raw("CASE
-                    WHEN status = 'Pending Review' THEN 'Application'
-                    WHEN status = 'Shortlisted' THEN 'Shortlist'
-                    WHEN status = 'Interview Scheduled' THEN 'Interview'
-                    WHEN status = 'Hired' THEN 'Offer'
-                    WHEN status = 'Rejected' THEN 'Rejected'
-                    ELSE status
+                    WHEN a.status = 'Pending Review' THEN 'Application'
+                    WHEN a.status = 'Shortlisted' THEN 'Shortlist'
+                    WHEN a.status = 'Completed' THEN 'Interview'
+                    WHEN a.status = 'Hired' THEN 'Offer'
+                    WHEN a.status = 'Rejected' THEN 'Rejected'
+                    ELSE a.status
                 END"))
                 ->orderByRaw("FIELD(CASE
-                    WHEN status = 'Pending Review' THEN 'Application'
-                    WHEN status = 'Shortlisted' THEN 'Shortlist'
-                    WHEN status = 'Interview Scheduled' THEN 'Interview'
-                    WHEN status = 'Hired' THEN 'Offer'
-                    WHEN status = 'Rejected' THEN 'Rejected'
-                    ELSE status
+                    WHEN a.status = 'Pending Review' THEN 'Application'
+                    WHEN a.status = 'Shortlisted' THEN 'Shortlist'
+                    WHEN a.status = 'Completed' THEN 'Interview'
+                    WHEN a.status = 'Hired' THEN 'Offer'
+                    WHEN a.status = 'Rejected' THEN 'Rejected'
+                    ELSE a.status
                 END, 'Application', 'Shortlist', 'Interview', 'Offer', 'Rejected')")
                 ->get();
 
@@ -70,20 +101,20 @@ class CandidateDropoffController extends Controller
                 $stageData[] = [
                     'stage' => $stage,
                     'voluntary' => $existing ? $existing->voluntary : 0,
-                    'involuntary' => $existing ? $existing->involuntary : 0
+                    'involuntary' => $existing ? $existing->involuntary : 0,
                 ];
             }
 
             return response()->json([
                 'status' => true,
-                'data' => $stageData
+                'data' => $stageData,
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
                 'message' => 'Failed to load drop-off data',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -91,66 +122,82 @@ class CandidateDropoffController extends Controller
     public function getFunnelData(Request $request)
     {
         try {
-            $type = $request->type;
+            // Log request safely (payload masked)
+            \Illuminate\Support\Facades\Log::info('Talent Acquisition Funnel request', [
+                'payload' => $this->maskSensitiveData($request->all()),
+            ]);
 
-            if ($type == "API") {
-                $token = $request->input('token');
-                if (!$token) {
+            $type = $request->input('type');
+
+            if ($type == 'API') {
+                $token = $request->bearerToken();
+                if (! $token) {
                     return response()->json(['message' => 'Token not provided'], 401);
                 }
 
                 $accessToken = PersonalAccessToken::findToken($token);
-                if (!$accessToken) {
+                if (! $accessToken) {
                     return response()->json(['message' => 'Invalid token'], 401);
                 }
             }
 
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
+            $departmentId = $request->input('department_id');
+            $experience = $request->input('experience');
 
-            // Query counts from talent_job_applications table
-            $applications = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
+            // Build base query with joins to get department filtering
+            $baseQuery = DB::table('talent_job_applications as a')
+                ->join('talent_job_postings as jp', 'a.job_id', '=', 'jp.id')
+                ->where('a.sub_institute_id', $subInstituteId);
+
+            // Apply department filter if provided
+            if ($departmentId) {
+                $baseQuery->where('jp.department_id', $departmentId);
+            }
+
+            // Apply experience filter if provided
+            if ($experience) {
+                $baseQuery->where('a.experience', 'like', '%' . $experience . '%');
+            }
+
+            // Query counts from talent_job_applications table with department filter
+            $applications = (clone $baseQuery)->count();
+
+            $shortlisted = (clone $baseQuery)
+                ->where('a.status', 'Shortlisted')
                 ->count();
 
-            $shortlisted = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 'Shortlisted')
+            $interviewed = (clone $baseQuery)
+                ->where('a.status', 'Completed')
                 ->count();
 
-            $interviewed = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 'Interview Scheduled')
+            $offers = (clone $baseQuery)
+                ->where('a.status', 'offered')
                 ->count();
 
-            $offers = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 'Hired')
-                ->count();
-
-            $hired = DB::table('talent_job_applications')
-                ->where('sub_institute_id', $subInstituteId)
-                ->where('status', 'Hired')
+            $hired = (clone $baseQuery)
+                ->where('a.status', 'Hired')
                 ->count();
 
             // Build funnel response
             $funnel = [
-                ["name" => "Applications", "value" => $applications],
-                ["name" => "Shortlisted", "value" => $shortlisted],
-                ["name" => "Interviewed", "value" => $interviewed],
-                ["name" => "Offers", "value" => $offers],
-                ["name" => "Hired", "value" => $hired],
+                ['name' => 'Applications', 'value' => $applications],
+                ['name' => 'Shortlisted', 'value' => $shortlisted],
+                ['name' => 'Interviewed', 'value' => $interviewed],
+                ['name' => 'Offers', 'value' => $offers],
+                ['name' => 'Hired', 'value' => $hired],
             ];
 
             return response()->json([
-                "success" => true,
-                "data" => $funnel
+                'success' => true,
+                'data' => $funnel,
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
-                "success" => false,
-                "message" => "Server error while fetching recruitment funnel.",
-                "error" => $e->getMessage()
+                'success' => false,
+                'message' => 'Server error while fetching recruitment funnel.',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -158,44 +205,49 @@ class CandidateDropoffController extends Controller
     public function getRequisitions(Request $request)
     {
         try {
-            $type = $request->type;
+            // Log request safely (payload masked)
+            \Illuminate\Support\Facades\Log::info('Talent Acquisition Requisitions request', [
+                'payload' => $this->maskSensitiveData($request->all()),
+            ]);
 
-            if ($type == "API") {
-                $token = $request->input('token');
-                if (!$token) {
+            $type = $request->input('type');
+
+            if ($type == 'API') {
+                $token = $request->bearerToken();
+                if (! $token) {
                     return response()->json(['message' => 'Token not provided'], 401);
                 }
 
                 $accessToken = PersonalAccessToken::findToken($token);
-                if (!$accessToken) {
+                if (! $accessToken) {
                     return response()->json(['message' => 'Invalid token'], 401);
                 }
             }
 
-            $subInstituteId = $request->sub_institute_id ?? $request->header('sub_institute_id');
+            $subInstituteId = $this->apiTenantId($request);
 
             // ---------------------------------------
             // 1. READ QUERY PARAMETERS
             // ---------------------------------------
-            $page       = $request->get('page', 1);
-            $limit      = $request->get('limit', 10);
+            $page = $request->get('page', 1);
+            $limit = $request->get('limit', 10);
 
             $department = $request->get('department', 'all-dept');
-            $location   = $request->get('location', 'all-loc');
+            $location = $request->get('location', 'all-loc');
             $timePeriod = $request->get('timePeriod', 'monthly');
-            $jobLevel   = $request->get('jobLevel', 'all-level');
-            $diversity  = $request->get('diversity', 'all-gender');
-            $status     = $request->get('status', 'active');
+            $jobLevel = $request->get('jobLevel', 'all-level');
+            $diversity = $request->get('diversity', 'all-gender');
+            $status = $request->get('status', 'active');
+            $experience = $request->get('experience', null);
 
-            $sortBy     = $request->get('sortBy', 'age');   // age | title | interviewed | offers | hires
-            $order      = $request->get('order', 'desc');   // asc | desc
-
+            $sortBy = $request->get('sortBy', 'age');   // age | title | interviewed | offers | hires
+            $order = $request->get('order', 'desc');   // asc | desc
 
             // ---------------------------------------
             // 2. BUILD BASE QUERY
             // ---------------------------------------
             $query = DB::table('talent_job_postings as r')
-                ->selectRaw("
+                ->selectRaw('
                     r.id,
                     r.title,
                     d.department as department,
@@ -206,17 +258,16 @@ class CandidateDropoffController extends Controller
                     COUNT(DISTINCT i.id) AS interviewed,
                     COUNT(DISTINCT o.id) AS offers,
                     COUNT(DISTINCT h.id) AS hires
-                ")
+                ')
                 ->leftJoin('hrms_departments as d', 'r.department_id', '=', 'd.id')
                 ->leftJoin('talent_interview_schedules as i', 'i.job_id', '=', 'r.id')
                 ->leftJoin('talent_offers as o', 'o.job_id', '=', 'r.id')
-                ->leftJoin('talent_job_applications as h', function($join) {
+                ->leftJoin('talent_job_applications as h', function ($join) {
                     $join->on('h.job_id', '=', 'r.id')
-                         ->where('h.status', '=', 'Hired');
+                        ->where('h.status', '=', 'Hired');
                 })
                 ->where('r.sub_institute_id', $subInstituteId)
                 ->groupBy('r.id', 'd.department', 'r.title', 'r.location', 'r.priority_level', 'r.status', 'r.created_at');
-
 
             // ---------------------------------------
             // 3. APPLY FILTERS
@@ -231,11 +282,26 @@ class CandidateDropoffController extends Controller
             }
 
             if ($jobLevel !== 'all-level') {
-                $query->where('r.job_level', $jobLevel);
+                $query->where('r.priority_level', $jobLevel);
             }
 
-            if ($status !== 'all') {
-                $query->where('r.status', ucfirst($status)); // Active / Closed
+            if (!$request->has('status')) {
+                /*
+                 * ROUND 5. A requisition AWAITING approval is exactly what
+                 * this tab exists to surface, not something to hide behind
+                 * the implicit 'active' default — the frontend never sends
+                 * a status param, so 'Requested' rows would otherwise be
+                 * invisible on the one screen meant to show them. A caller
+                 * that explicitly asks for ?status=active (or any other
+                 * value) still gets an exact match, unchanged.
+                 */
+                $query->whereIn('r.status', ['Active', 'Requested']);
+            } elseif ($status !== 'all') {
+                $query->where('r.status', ucfirst($status)); // Active / Closed / Draft / Inactive / Requested
+            }
+
+            if ($experience) {
+                $query->where('r.experience', 'like', '%' . $experience . '%');
             }
 
             // Time period filtering (last 30 days, last 7 days, etc.)
@@ -283,21 +349,48 @@ class CandidateDropoffController extends Controller
                 ->limit($limit)
                 ->get();
 
+            /*
+             * ROUND 5 FOLLOW-UP. Same read-side addition as every other
+             * decision endpoint this and last round — surface the chain a
+             * 'Requested' requisition is actually waiting on, so the
+             * frontend can offer the real decision endpoint instead of
+             * leaving it with no visible way forward. `null` for every row
+             * with no active chain.
+             */
+            $requisitionWorkflow = app(\App\Services\Talent\RequisitionApprovalWorkflow::class);
+            foreach ($records as $record) {
+                $record->approval = null;
+                if (strcasecmp((string) $record->status, 'Requested') !== 0) {
+                    continue;
+                }
+                $steps = $requisitionWorkflow->stepsFor((int) $record->id);
+                if ($steps === []) {
+                    continue;
+                }
+                $current = $requisitionWorkflow->currentStep((int) $record->id);
+                $record->approval = [
+                    'pending' => $current !== null,
+                    'step_name' => $current['step_name'] ?? null,
+                    'approver_role' => $current['approver_role'] ?? null,
+                    'step' => $current['step_order'] ?? null,
+                    'of' => count($steps),
+                ];
+            }
 
             return response()->json([
-                "success" => true,
-                "page"    => $page,
-                "limit"   => $limit,
-                "total"   => $total,
-                "data"    => $records
+                'success' => true,
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'data' => $records,
             ]);
 
         } catch (\Exception $e) {
 
             return response()->json([
-                "success" => false,
-                "message" => "Failed to fetch requisitions",
-                "error"   => $e->getMessage()
+                'success' => false,
+                'message' => 'Failed to fetch requisitions',
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

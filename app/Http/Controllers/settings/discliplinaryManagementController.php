@@ -3,6 +3,24 @@
 namespace App\Http\Controllers\settings;
 
 use App\Http\Controllers\Controller;
+
+    /**
+     * G-SEC-29. THE REQUEST IS NO LONGER A TENANT SOURCE.
+     *
+     * Every `$request->...sub_institute_id` became `$this->apiTenantId($request)`,
+     * which resolves the tenant FROM THE TOKEN. Confirmed by execution before the
+     * change: a tenant-7 caller asking for tenant 3 received tenant 3's rows.
+     *
+     * THE SESSION READS ARE LEFT WHERE THEY ARE, DELIBERATELY. This controller
+     * reads `session() ?? $request`, and `resolveApiIdentity()` is TOKEN-ONLY - it
+     * does not consult the session. Replacing the whole expression would have
+     * broken every Blade/web caller, who has a session and no token.
+     *
+     * So the precedence is now exactly G-SEC-27's ruling: SESSION, THEN TOKEN,
+     * AND THE REQUEST NEVER. The server-side source stays first; the
+     * caller-controlled one is gone.
+     */
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use function App\Helpers\is_mobile;
 use App\Models\settings\discliplinaryManagementModel;
@@ -12,6 +30,24 @@ use Illuminate\Support\Facades\DB;
 
 class discliplinaryManagementController extends Controller
 {
+    use ResolvesApiIdentity;
+    use \App\Http\Controllers\Concerns\ResolvesG2gActor;
+
+    /**
+     * The ACTING user, resolved from the token and never from the request.
+     *
+     * G-SEC-12. created_by / updated_by were taken from request input, so a caller
+     * could attribute their own write to another user and the audit trail would
+     * record it as fact. A leak exposes data; this corrupts the record of who did
+     * what - the evidence you would rely on when investigating a leak.
+     *
+     * Blocks the event store: actor_id on every event has to be trustworthy or the
+     * store inherits a corrupted audit trail on day one.
+     *
+     * Same shape as payrollActorId (D-004): token first, session fallback.
+     */
+
+
     public function index(Request $request)
     {
         $type = $request->type;
@@ -39,7 +75,7 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
@@ -124,14 +160,39 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
         $res['message'] = "Failed To Add Data";
 
         $insertData = $request->except('_token','type','token','user_id');
-        $insertData['created_by'] = $request->reported_by;
+
+        /*
+         * THE RESOLVED TENANT IS ACTUALLY USED NOW.
+         *
+         * $sub_institute_id was computed from the token three lines above and
+         * then discarded: the insert took `$request->except(...)`, so whatever
+         * sub_institute_id the client sent was written. A caller could file a
+         * disciplinary record - the most sensitive record in this module -
+         * into another organisation.
+         *
+         * Forced rather than validated, for the same reason the rest of the
+         * platform ignores a request tenant: a stale value in localStorage is
+         * common and must not fail the write, and overwriting it is safe
+         * because the caller's value never reaches a query.
+         */
+        $insertData['sub_institute_id'] = $sub_institute_id;
+
+        /*
+         * The ACTOR, not a field the caller filled in. `reported_by` is who the
+         * reporter says raised the incident; `created_by` is who saved the row.
+         * Taking the audit column from caller-controlled input means the audit
+         * trail records whatever the caller wanted it to say - on records that
+         * decide people's employment. g2gActorId() was already used in
+         * destroy(); it is used here too now.
+         */
+        $insertData['created_by'] = $this->g2gActorId($request) ?? $request->reported_by;
         $insertData['created_at'] = now();
 
         $addData = discliplinaryManagementModel::insert([$insertData]);
@@ -171,7 +232,7 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
@@ -242,17 +303,31 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
         $res['message'] = "Failed To Update Data";
 
         $insertData = $request->except('_token','type','token','user_id','method_field');
-        $insertData['updated_by'] = $request->reported_by;
+
+        // A record cannot be moved to another organisation by editing it, and
+        // the audit column names the actor. See store().
+        $insertData['sub_institute_id'] = $sub_institute_id;
+        $insertData['updated_by'] = $this->g2gActorId($request) ?? $request->reported_by;
         $insertData['updated_at'] = now();
 
-        $addData = discliplinaryManagementModel::where('id',$id)->update($insertData);
+        /*
+         * SCOPED BY TENANT. This filtered on `id` alone, so any authenticated
+         * user could rewrite another organisation's disciplinary record by
+         * guessing an id. A row belonging to somebody else now matches nothing
+         * and the caller is told the update failed - the same answer a
+         * non-existent id gives, so the response cannot be used to discover
+         * whether another tenant's record exists.
+         */
+        $addData = discliplinaryManagementModel::where('id',$id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->update($insertData);
 
         if($addData){
             $res['status_code'] = 1;
@@ -289,13 +364,16 @@ class discliplinaryManagementController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 400);
         }
 
-        $sub_institute_id = $request->input('sub_institute_id');
+        $sub_institute_id = $this->apiTenantId($request);
 
         $res = [];
         $res['status_code'] = 0;
         $res['message'] = "Failed To Deleted Data";
 
-        $addData = discliplinaryManagementModel::where('id',$id)->update(['deleted_at'=>now(),'deleted_by'=>$request->reported_by]);
+        // Scoped by tenant - see update(). This deleted by id alone.
+        $addData = discliplinaryManagementModel::where('id',$id)
+            ->where('sub_institute_id', $sub_institute_id)
+            ->update(['deleted_at'=>now(),'deleted_by'=>$this->g2gActorId($request)]);
 
         if($addData){
             $res['status_code'] = 1;

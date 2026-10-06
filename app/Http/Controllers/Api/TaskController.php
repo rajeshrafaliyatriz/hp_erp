@@ -3,28 +3,51 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\PersonalAccessToken;
 
 class TaskController extends Controller
 {
+    use ResolvesApiIdentity;
+
     /**
      * Validate the API token
      */
     private function validateToken($request)
     {
-        $token = $request->input('token');
-        if (!$token) {
-            return response()->json(['message' => 'Token not provided'], 401);
-        }
+        // Was findToken() with the owner discarded, and no expiry check.
+        $identity = $this->resolveApiIdentity($request);
 
-        $accessToken = PersonalAccessToken::findToken($token);
-        if (!$accessToken) {
-            return response()->json(['message' => 'Invalid token'], 401);
-        }
+        return is_array($identity) ? null : $identity;
+    }
 
-        return null;
+    /**
+     * The tenant every query MUST be filtered by.
+     *
+     * @return int|\Illuminate\Http\JsonResponse
+     *
+     * This was request-FIRST: whatever sub_institute_id arrived in the query
+     * string won, and the token's own user was consulted only as a fallback.
+     * That is the same defect the module traits had - one query parameter
+     * reached another organisation's tasks - written out by hand, which is why
+     * fixing the traits did not fix it here.
+     */
+    private function resolveTenant($request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        return is_array($identity) ? $identity['sub_institute_id'] : $identity;
+    }
+
+    /**
+     * The caller themselves. These endpoints report "my" task counts and daily,
+     * weekly and monthly tasks, so user_id was never meant to name anyone else;
+     * taken from the request, it returned any colleague's workload.
+     */
+    private function resolveUserId($request): ?int
+    {
+        return $this->apiUserId($request);
     }
 
     /**
@@ -40,8 +63,11 @@ class TaskController extends Controller
             return $validationError;
         }
 
-        $userId = $request->input('user_id');
-        $subInstituteId = $request->input('sub_institute_id');
+        $userId = $this->resolveUserId($request);
+        $subInstituteId = $this->resolveTenant($request);
+        if (!is_int($subInstituteId)) {
+            return $subInstituteId;
+        }
 
         // Get date ranges
         $today = now()->toDateString();
@@ -241,8 +267,11 @@ class TaskController extends Controller
         }
 
         $today = now()->toDateString();
-        $userId = $request->input('user_id');
-        $subInstituteId = $request->input('sub_institute_id');
+        $userId = $this->resolveUserId($request);
+        $subInstituteId = $this->resolveTenant($request);
+        if (!is_int($subInstituteId)) {
+            return $subInstituteId;
+        }
         $allowedStatuses = ['Completed', 'In Progress', 'Pending'];
 
         $query = DB::table('task')
@@ -288,8 +317,11 @@ class TaskController extends Controller
 
         $startOfWeek = now()->startOfWeek()->toDateString();
         $endOfWeek = now()->endOfWeek()->toDateString();
-        $userId = $request->input('user_id');
-        $subInstituteId = $request->input('sub_institute_id');
+        $userId = $this->resolveUserId($request);
+        $subInstituteId = $this->resolveTenant($request);
+        if (!is_int($subInstituteId)) {
+            return $subInstituteId;
+        }
         $allowedStatuses = ['Completed', 'In Progress', 'Pending'];
 
         $query = DB::table('task')
@@ -338,8 +370,11 @@ class TaskController extends Controller
 
         $startOfMonth = now()->startOfMonth()->toDateString();
         $endOfMonth = now()->endOfMonth()->toDateString();
-        $userId = $request->input('user_id');
-        $subInstituteId = $request->input('sub_institute_id');
+        $userId = $this->resolveUserId($request);
+        $subInstituteId = $this->resolveTenant($request);
+        if (!is_int($subInstituteId)) {
+            return $subInstituteId;
+        }
         $allowedStatuses = ['Completed', 'In Progress', 'Pending'];
 
         $query = DB::table('task')

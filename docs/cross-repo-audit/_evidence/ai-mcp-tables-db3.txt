@@ -1,0 +1,50 @@
+[DB3 / live / 128.199.17.97] AI/MCP/knowledge table verification
+Connection: Laravel connection 'live' (config/database.php, reads DB3_HOST/DB3_PORT/DB3_DATABASE/DB3_USERNAME/DB3_PASSWORD from .env)
+Method: php artisan tinker --execute="..." using Schema::connection('live')->hasTable() and DB::connection('live')->table()->count()
+Date: 2026-09-28
+
+--- SHOW TABLES LIKE '%ai_%' (raw, unfiltered substring match) ---
+Onboarding_tour_details
+ai_api_keys
+ai_course_outlines
+ai_daily_used_api
+ai_generated_reports
+ai_models
+ai_module_model_bindings
+ai_modules
+ai_policies
+ai_policy_assignments
+failed_jobs
+institute_detail
+lms_trainers
+org_details
+org_sister_details
+s_performance_appraisals
+sms_api_details
+smtp_details
+user_rating_details
+
+--- SHOW TABLES LIKE '%mcp_%' ---
+(no rows returned)
+
+--- SHOW TABLES LIKE '%knowledge_%' ---
+s_skill_knowledge_ability
+talent_policy_acknowledgements
+
+--- Per-table verification against Word-doc claim list (table | exists | row count) ---
+ai_api_keys | EXISTS | 0
+ai_models | EXISTS | 0
+ai_module_model_bindings | EXISTS | 0
+ai_templates | NOT FOUND | -
+ai_policies | EXISTS | 0
+ai_policy_rules | NOT FOUND | -
+ai_policy_assignments | EXISTS | 0
+ai_agents | NOT FOUND | -
+ai_recommendations | NOT FOUND | -
+ai_conversations | NOT FOUND | -
+ai_generation_requests | NOT FOUND | -
+ai_generation_outputs | NOT FOUND | -
+ai_generated_reports | EXISTS | 0
+ai_audit_logs | NOT FOUND | -
+mcp_audit_logs | NOT FOUND | -
+knowledge_base | NOT FOUND | -

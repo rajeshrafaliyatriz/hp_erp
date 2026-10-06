@@ -1,0 +1,782 @@
+[
+    {
+        "table": "s_user_jobrole_task",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 85663,
+        "populated": 85662
+    },
+    {
+        "table": "s_user_skill_jobrole",
+        "column": "skill",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 79295,
+        "populated": 79295
+    },
+    {
+        "table": "s_user_skill_jobrole",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 79295,
+        "populated": 79294
+    },
+    {
+        "table": "s_user_skill_jobrole",
+        "column": "skill_code",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 79295,
+        "populated": 79187
+    },
+    {
+        "table": "s_jobrole_skills",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 62208,
+        "populated": 62208
+    },
+    {
+        "table": "s_jobrole_skills",
+        "column": "skill",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 62208,
+        "populated": 62208
+    },
+    {
+        "table": "s_jobrole_task",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 55961,
+        "populated": 55961
+    },
+    {
+        "table": "s_jobrole_skills",
+        "column": "skill_code",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 62208,
+        "populated": 54053
+    },
+    {
+        "table": "master_skills",
+        "column": "skill_type",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 5640,
+        "populated": 5640
+    },
+    {
+        "table": "s_user_jobrole",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": true,
+        "rows": 4610,
+        "populated": 4610
+    },
+    {
+        "table": "s_user_jobrole",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 4610,
+        "populated": 4609
+    },
+    {
+        "table": "s_user_jobrole",
+        "column": "sub_department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": true,
+        "rows": 4610,
+        "populated": 4602
+    },
+    {
+        "table": "s_users_skills",
+        "column": "skill_code",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 3976,
+        "populated": 3961
+    },
+    {
+        "table": "s_users_skills",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": true,
+        "rows": 3976,
+        "populated": 3884
+    },
+    {
+        "table": "s_users_skills",
+        "column": "sub_department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": true,
+        "rows": 3976,
+        "populated": 3884
+    },
+    {
+        "table": "s_jobrole",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 3347,
+        "populated": 3347
+    },
+    {
+        "table": "s_library_map",
+        "column": "skill_ids",
+        "type": "text",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 3320,
+        "populated": 3270
+    },
+    {
+        "table": "s_jobrole_knowledge",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 2775,
+        "populated": 2775
+    },
+    {
+        "table": "master_skills",
+        "column": "skill_code",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 5640,
+        "populated": 2394
+    },
+    {
+        "table": "s_user_jobrole",
+        "column": "jobrole_category",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 4610,
+        "populated": 1764
+    },
+    {
+        "table": "s_user_jobrole",
+        "column": "related_jobrole",
+        "type": "mediumtext",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 4610,
+        "populated": 1760
+    },
+    {
+        "table": "task",
+        "column": "required_skills",
+        "type": "text",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": true,
+        "rows": 2271,
+        "populated": 1749
+    },
+    {
+        "table": "hrms_departments",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 1177,
+        "populated": 1177
+    },
+    {
+        "table": "s_users_skills",
+        "column": "skill_status",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 3976,
+        "populated": 938
+    },
+    {
+        "table": "s_users_skills",
+        "column": "skill_importance",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 3976,
+        "populated": 938
+    },
+    {
+        "table": "s_users_skills",
+        "column": "sub_skills",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 3976,
+        "populated": 938
+    },
+    {
+        "table": "s_users_skills",
+        "column": "skill_flow",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 3976,
+        "populated": 938
+    },
+    {
+        "table": "s_jobrole",
+        "column": "jobrole_category",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 3347,
+        "populated": 840
+    },
+    {
+        "table": "s_jobrole",
+        "column": "related_jobrole",
+        "type": "text",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 3347,
+        "populated": 840
+    },
+    {
+        "table": "s_user_knowledge",
+        "column": "certification_options",
+        "type": "mediumtext",
+        "entity": "certification",
+        "owner_table": "s_competency_certifications",
+        "has_matching_id_column": false,
+        "rows": 6950,
+        "populated": 804
+    },
+    {
+        "table": "s_user_skill_application",
+        "column": "skill",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": true,
+        "rows": 577,
+        "populated": 577
+    },
+    {
+        "table": "s_skill_application",
+        "column": "skill",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 450,
+        "populated": 450
+    },
+    {
+        "table": "s_industries",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 317,
+        "populated": 317
+    },
+    {
+        "table": "s_industries",
+        "column": "sub_department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 317,
+        "populated": 317
+    },
+    {
+        "table": "talent_screening_results",
+        "column": "skill_gaps",
+        "type": "longtext",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 285,
+        "populated": 285
+    },
+    {
+        "table": "talent_job_applications",
+        "column": "skills",
+        "type": "text",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 279,
+        "populated": 279
+    },
+    {
+        "table": "talent_job_applications",
+        "column": "certifications",
+        "type": "text",
+        "entity": "certification",
+        "owner_table": "s_competency_certifications",
+        "has_matching_id_column": false,
+        "rows": 279,
+        "populated": 266
+    },
+    {
+        "table": "s_competency_certifications",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 221,
+        "populated": 221
+    },
+    {
+        "table": "s_competency_certifications",
+        "column": "certification_type",
+        "type": "varchar",
+        "entity": "certification",
+        "owner_table": "s_competency_certifications",
+        "has_matching_id_column": false,
+        "rows": 221,
+        "populated": 220
+    },
+    {
+        "table": "user_rating_details",
+        "column": "skill_ids",
+        "type": "mediumtext",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 202,
+        "populated": 202
+    },
+    {
+        "table": "s_skill_matrix",
+        "column": "skill_level",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": true,
+        "rows": 169,
+        "populated": 167
+    },
+    {
+        "table": "s_competency_development_plans",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 161,
+        "populated": 161
+    },
+    {
+        "table": "s_competency_assessments",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 140,
+        "populated": 140
+    },
+    {
+        "table": "talent_job_postings",
+        "column": "skills",
+        "type": "text",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 126,
+        "populated": 126
+    },
+    {
+        "table": "talent_job_postings",
+        "column": "certifications",
+        "type": "text",
+        "entity": "certification",
+        "owner_table": "s_competency_certifications",
+        "has_matching_id_column": false,
+        "rows": 126,
+        "populated": 116
+    },
+    {
+        "table": "s_user_jobrole",
+        "column": "required_skill_experience",
+        "type": "mediumtext",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 4610,
+        "populated": 85
+    },
+    {
+        "table": "sub_std_map",
+        "column": "jobrole",
+        "type": "longtext",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 96,
+        "populated": 73
+    },
+    {
+        "table": "s_competency_career_path_steps",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": true,
+        "rows": 72,
+        "populated": 72
+    },
+    {
+        "table": "ai_course_outlines",
+        "column": "course_type",
+        "type": "varchar",
+        "entity": "course",
+        "owner_table": "sub_std_map",
+        "has_matching_id_column": true,
+        "rows": 59,
+        "populated": 59
+    },
+    {
+        "table": "s_competency_frameworks",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 25,
+        "populated": 24
+    },
+    {
+        "table": "s_competency_mapping_reviews",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 20,
+        "populated": 20
+    },
+    {
+        "table": "s_competency_mapping_reviews",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": true,
+        "rows": 20,
+        "populated": 18
+    },
+    {
+        "table": "hrms_holidays",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 18,
+        "populated": 15
+    },
+    {
+        "table": "s_competency_certification_requirements",
+        "column": "certification_type",
+        "type": "varchar",
+        "entity": "certification",
+        "owner_table": "s_competency_certifications",
+        "has_matching_id_column": false,
+        "rows": 15,
+        "populated": 15
+    },
+    {
+        "table": "s_competency_certification_requirements",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 15,
+        "populated": 13
+    },
+    {
+        "table": "suggested_course",
+        "column": "course_name",
+        "type": "varchar",
+        "entity": "course",
+        "owner_table": "sub_std_map",
+        "has_matching_id_column": true,
+        "rows": 12,
+        "populated": 12
+    },
+    {
+        "table": "s_performance_reviews",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 228,
+        "populated": 12
+    },
+    {
+        "table": "s_competency_career_paths",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": true,
+        "rows": 13,
+        "populated": 12
+    },
+    {
+        "table": "institute_detail",
+        "column": "total_department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 6,
+        "populated": 5
+    },
+    {
+        "table": "standard",
+        "column": "course_duration",
+        "type": "varchar",
+        "entity": "course",
+        "owner_table": "sub_std_map",
+        "has_matching_id_column": false,
+        "rows": 71,
+        "populated": 4
+    },
+    {
+        "table": "s_performance_appraisals",
+        "column": "jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 5,
+        "populated": 4
+    },
+    {
+        "table": "s_mobility_jobs",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": true,
+        "rows": 1,
+        "populated": 1
+    },
+    {
+        "table": "hrms_departments_mapping",
+        "column": "department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "hrms_departments_mapping",
+        "column": "much_skill",
+        "type": "varchar",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "master_skills",
+        "column": "related_skills",
+        "type": "text",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 5640,
+        "populated": 0
+    },
+    {
+        "table": "master_skills",
+        "column": "certification_qualifications",
+        "type": "text",
+        "entity": "certification",
+        "owner_table": "s_competency_certifications",
+        "has_matching_id_column": false,
+        "rows": 5640,
+        "populated": 0
+    },
+    {
+        "table": "master_skills",
+        "column": "skill_maps",
+        "type": "text",
+        "entity": "skill",
+        "owner_table": "s_users_skills",
+        "has_matching_id_column": false,
+        "rows": 5640,
+        "populated": 0
+    },
+    {
+        "table": "s_library_map",
+        "column": "jobrole_ids",
+        "type": "text",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 3320,
+        "populated": 0
+    },
+    {
+        "table": "lms_certificates",
+        "column": "course_title",
+        "type": "varchar",
+        "entity": "course",
+        "owner_table": "sub_std_map",
+        "has_matching_id_column": true,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "talent_offboarding_clearances",
+        "column": "department_key",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "lms_course_settings",
+        "column": "restrict_departments",
+        "type": "longtext",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "talent_mobility_requests",
+        "column": "from_jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "talent_mobility_requests",
+        "column": "to_jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "s_mobility_transfers",
+        "column": "from_department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "s_mobility_transfers",
+        "column": "to_department",
+        "type": "varchar",
+        "entity": "department",
+        "owner_table": "hrms_departments",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "s_mobility_transfers",
+        "column": "from_jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "s_mobility_transfers",
+        "column": "to_jobrole",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    },
+    {
+        "table": "s_mobility_succession_plans",
+        "column": "critical_jobrole_name",
+        "type": "varchar",
+        "entity": "jobrole",
+        "owner_table": "s_user_jobrole",
+        "has_matching_id_column": false,
+        "rows": 0,
+        "populated": 0
+    }
+]

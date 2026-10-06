@@ -1,0 +1,119 @@
+Schema audit — payroll functional group
+Connection: Laravel connection literally named "live" (config/database.php, reads DB3_HOST/DB3_PORT/DB3_DATABASE/DB3_USERNAME/DB3_PASSWORD)
+Host: 128.199.17.97 (MariaDB 10.1.48)
+Method: cd C:/Users/MILAN/Downloads/hp_erp && php artisan tinker --execute="DB::connection('live')->select('DESCRIBE <table>')" and DB::connection('live')->table('<table>')->count()
+Date: 2026-09-28
+
+Tables identified from app/Http/Controllers/Payroll/PayrollController.php and matching migrations under database/migrations:
+  - employee_monthly_salary_data  (migrations: 2025_09_11_052852_employee_monthly_salary_data.php, 2025_09_25_060836_add_fields_to_employee_monthly_salary_data_table.php, 2026_09_07_110000_canonicalise_payroll_month.php)
+  - payroll_types                 (migration: 2025_09_11_053450_payroll_types.php)
+  - hrms_emp_payroll_deduction    (migration: 2025_09_11_053252_hrms_emp_payroll_deduction.php)
+  - hrms_salary_certificate       (migration: 2025_09_11_053333_hrms_salary_certificate.php)
+  - payroll_month_locks           (migration: 2026_09_05_220000_create_payroll_month_locks_table.php)
+
+Tables referenced by PayrollController.php but belonging to OTHER functional groups (not audited here):
+  tbluser, tbluserprofilemaster, hrms_departments, hrms_emp_leaves, hrms_attendances,
+  hrms_holidays, staff_document
+
+=== employee_monthly_salary_data ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default= | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+total_deduction | decimal(10,2) | Null=YES | Key= | Default= | Extra=
+total_payment | decimal(10,2) | Null=YES | Key= | Default= | Extra=
+employee_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+received_by | varchar(191) | Null=YES | Key= | Default= | Extra=
+month | varchar(20) | Null=YES | Key= | Default= | Extra=
+total_day | decimal(10,2) | Null=YES | Key= | Default= | Extra=
+year | year(4) | Null=YES | Key= | Default= | Extra=
+employee_salary_data | longtext | Null=YES | Key= | Default= | Extra=
+salary_amount | decimal(10,2) | Null=YES | Key= | Default= | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+created_at | timestamp | Null=YES | Key= | Default= | Extra=
+updated_at | timestamp | Null=YES | Key= | Default= | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default= | Extra=
+ROW COUNT: 6
+
+SHOW INDEX FROM employee_monthly_salary_data:
+PRIMARY | id | Non_unique=0
+employee_monthly_salary_data_period_unique | sub_institute_id | Non_unique=0
+employee_monthly_salary_data_period_unique | employee_id | Non_unique=0
+employee_monthly_salary_data_period_unique | year | Non_unique=0
+employee_monthly_salary_data_period_unique | month | Non_unique=0
+employee_monthly_salary_data_sub_institute_id_index | sub_institute_id | Non_unique=1
+employee_monthly_salary_data_employee_id_index | employee_id | Non_unique=1
+employee_monthly_salary_data_created_by_index | created_by | Non_unique=1
+employee_monthly_salary_data_updated_by_index | updated_by | Non_unique=1
+employee_monthly_salary_data_deleted_by_index | deleted_by | Non_unique=1
+(confirms the 2026_09_07 canonicalise_payroll_month migration's composite UNIQUE key IS present on DB3)
+
+=== payroll_types ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default= | Extra=auto_increment
+payroll_type | int(11) | Null=YES | Key= | Default= | Extra=
+payroll_name | varchar(191) | Null=YES | Key= | Default= | Extra=
+amount_type | int(11) | Null=YES | Key= | Default= | Extra=
+status | tinyint(4) | Null=YES | Key= | Default= | Extra=
+sort_order | int(11) | Null=YES | Key= | Default= | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+payroll_percentage | varchar(191) | Null=YES | Key= | Default= | Extra=
+day_count | char(1) | Null=YES | Key= | Default= | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+created_at | timestamp | Null=YES | Key= | Default= | Extra=
+updated_at | timestamp | Null=YES | Key= | Default= | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default= | Extra=
+ROW COUNT: 13
+
+=== hrms_emp_payroll_deduction ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default= | Extra=auto_increment
+month | varchar(20) | Null=YES | Key= | Default= | Extra=
+year | year(4) | Null=YES | Key= | Default= | Extra=
+employee_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+deduction_type | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+deduction_amount | bigint(20) | Null=YES | Key= | Default= | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+created_at | timestamp | Null=YES | Key= | Default= | Extra=
+updated_at | timestamp | Null=YES | Key= | Default= | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default= | Extra=
+ROW COUNT: 12
+NOTE: migration declared a column named "deduction_type_id" (unsignedBigInteger, FK -> tbluser) but the actual
+DB3 column is named "deduction_type" (bigint(20) unsigned, no FK in DESCRIBE/index list besides the plain index) -
+migration file's field order/name does not match what's live on DB3.
+
+=== hrms_salary_certificate ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default= | Extra=auto_increment
+department_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+employee_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+year | year(4) | Null=YES | Key= | Default= | Extra=
+month | varchar(64) | Null=YES | Key= | Default= | Extra=
+payroll_type_id | varchar(255) | Null=YES | Key= | Default= | Extra=
+reason | varchar(255) | Null=YES | Key= | Default= | Extra=
+sub_institute_id | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+pdf_file_name | varchar(255) | Null=YES | Key= | Default= | Extra=
+pdf_html | text | Null=YES | Key= | Default= | Extra=
+created_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+updated_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+deleted_by | bigint(20) unsigned | Null=YES | Key=MUL | Default= | Extra=
+created_at | timestamp | Null=YES | Key= | Default= | Extra=
+updated_at | timestamp | Null=YES | Key= | Default= | Extra=
+deleted_at | timestamp | Null=YES | Key= | Default= | Extra=
+ROW COUNT: 0
+
+=== payroll_month_locks ===
+id | bigint(20) unsigned | Null=NO | Key=PRI | Default= | Extra=auto_increment
+sub_institute_id | bigint(20) unsigned | Null=NO | Key=MUL | Default= | Extra=
+month | varchar(20) | Null=NO | Key= | Default= | Extra=
+year | year(4) | Null=NO | Key= | Default= | Extra=
+locked_at | timestamp | Null=YES | Key= | Default= | Extra=
+locked_by | bigint(20) unsigned | Null=YES | Key= | Default= | Extra=
+reopened_at | timestamp | Null=YES | Key= | Default= | Extra=
+reopened_by | bigint(20) unsigned | Null=YES | Key= | Default= | Extra=
+reopen_reason | varchar(255) | Null=YES | Key= | Default= | Extra=
+created_at | timestamp | Null=YES | Key= | Default= | Extra=
+updated_at | timestamp | Null=YES | Key= | Default= | Extra=
+ROW COUNT: 0

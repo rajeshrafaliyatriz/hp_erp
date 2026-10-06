@@ -1,0 +1,203 @@
+Schema audit: menu_rights functional group
+Connection: Laravel connection "live" (config/database.php, DB3_* env vars)
+Host: 128.199.17.97 | Engine: MariaDB 10.1.48 | DB name: hp_erp (value read via config, not printed raw)
+Captured: 2026-09-28 via `php artisan tinker --execute=...` against DB::connection('live')
+
+=== tblmenumaster ===
+id | bigint(20) unsigned | NO | PRI | NULL | auto_increment
+menu_name | varchar(191) | NO |  | NULL |
+parent_id | bigint(20) unsigned | YES | MUL | 0 |
+level | int(11) | YES |  | 1 |
+page_type | enum('blade','page','link') | YES |  | NULL |
+access_link | varchar(191) | YES | MUL | NULL |
+icon | varchar(191) | YES |  | NULL |
+status | tinyint(1) | NO | MUL | 1 |
+sort_order | int(11) | NO |  | 1 |
+sub_institute_id | text | YES |  | NULL |
+menu_type | varchar(191) | YES | MUL | NULL |
+deleted_at | timestamp | YES |  | NULL |
+created_at | timestamp | YES |  | NULL |
+updated_at | timestamp | YES |  | NULL |
+ROW COUNT: 196
+
+=== tblmenumaster_g2g ===
+id | bigint(20) unsigned | NO | PRI | NULL | auto_increment
+menu_name | varchar(191) | NO |  | NULL |
+parent_id | bigint(20) unsigned | YES | MUL | 0 |
+level | int(11) | YES |  | 1 |
+page_type | enum('blade','page','link') | YES |  | NULL |
+access_link | varchar(191) | YES | MUL | NULL |
+icon | varchar(191) | YES |  | NULL |
+status | tinyint(1) | NO | MUL | 1 |
+sort_order | int(11) | NO |  | 1 |
+sub_institute_id | text | YES |  | NULL |
+menu_type | varchar(191) | YES | MUL | NULL |
+deleted_at | timestamp | YES |  | NULL |
+created_at | timestamp | YES |  | NULL |
+updated_at | timestamp | YES |  | NULL |
+ROW COUNT: 199
+
+=== tblgroupwise_rights ===
+id | bigint(20) unsigned | NO | PRI | NULL | auto_increment
+menu_id | bigint(20) unsigned | YES | MUL | NULL |
+profile_id | bigint(20) unsigned | YES | MUL | NULL |
+can_view | int(11) | YES | MUL | 0 |
+can_add | int(11) | YES | MUL | 0 |
+can_edit | int(11) | YES | MUL | 0 |
+can_delete | int(11) | YES | MUL | 0 |
+dashboard_right | int(11) | YES | MUL | NULL |
+is_mobile | int(11) | YES |  | NULL |
+sub_institute_id | bigint(20) unsigned | YES | MUL | NULL |
+sort_order | int(11) | YES | MUL | NULL |
+deleted_at | timestamp | YES |  | NULL |
+created_at | timestamp | YES |  | NULL |
+updated_at | timestamp | YES |  | NULL |
+ROW COUNT: 1328
+
+=== tblgroupwise_rights_g2g ===
+id | bigint(20) unsigned | NO | PRI | NULL | auto_increment
+menu_id | bigint(20) unsigned | NO | MUL | NULL |
+profile_id | bigint(20) unsigned | NO | MUL | NULL |
+can_view | tinyint(1) | NO |  | 0 |
+can_add | tinyint(1) | NO |  | 0 |
+can_edit | tinyint(1) | NO |  | 0 |
+can_delete | tinyint(1) | NO |  | 0 |
+dashboard_right | tinyint(1) | NO |  | 0 |
+is_mobile | tinyint(1) | NO |  | 0 |
+sub_institute_id | text | YES |  | NULL |
+created_at | timestamp | YES |  | NULL |
+right_view | enum('allow','deny') | YES |  | NULL |
+right_add | enum('allow','deny') | YES |  | NULL |
+right_edit | enum('allow','deny') | YES |  | NULL |
+right_delete | enum('allow','deny') | YES |  | NULL |
+right_dashboard | enum('allow','deny') | YES |  | NULL |
+ROW COUNT: 4980
+
+=== tblindividual_rights ===
+id | bigint(20) unsigned | NO | PRI | NULL | auto_increment
+user_id | bigint(20) unsigned | YES | MUL | NULL |
+menu_id | bigint(20) unsigned | YES | MUL | NULL |
+profile_id | bigint(20) unsigned | YES | MUL | NULL |
+can_view | int(11) | YES | MUL | 0 |
+can_add | int(11) | YES | MUL | 0 |
+can_edit | int(11) | YES | MUL | 0 |
+can_delete | int(11) | YES | MUL | 0 |
+dashboard_right | int(11) | YES | MUL | NULL |
+sub_institute_id | bigint(20) unsigned | YES | MUL | NULL |
+sort_order | int(11) | YES | MUL | NULL |
+deleted_at | timestamp | YES |  | NULL |
+created_at | timestamp | YES |  | NULL |
+updated_at | timestamp | YES |  | NULL |
+right_view | enum('allow','deny') | YES |  | NULL |
+right_add | enum('allow','deny') | YES |  | NULL |
+right_edit | enum('allow','deny') | YES |  | NULL |
+right_delete | enum('allow','deny') | YES |  | NULL |
+right_dashboard | enum('allow','deny') | YES |  | NULL |
+ROW COUNT: 0
+
+=== tbluserprofilemaster ===
+id | bigint(20) unsigned | NO | PRI | NULL | auto_increment
+parent_id | bigint(20) | YES | MUL | NULL |
+name | varchar(191) | YES |  | NULL |
+description | varchar(191) | YES |  | NULL |
+sort_order | int(11) | YES |  | NULL |
+status | int(11) | YES | MUL | NULL |
+sub_institute_id | bigint(20) unsigned | YES | MUL | NULL |
+client_id | bigint(20) unsigned | YES | MUL | NULL |
+deleted_at | timestamp | YES |  | NULL |
+created_at | timestamp | YES |  | NULL |
+updated_at | timestamp | YES |  | NULL |
+role_key | varchar(50) | YES |  | NULL |
+data_scope | enum('self','team','department','organization') | YES |  | NULL |
+is_system | tinyint(1) | YES |  | NULL |
+ROW COUNT: 42
+
+=== tbluser ===
+id | bigint(20) unsigned | NO | PRI | NULL | auto_increment
+user_name | varchar(191) | YES | MUL | NULL |
+password | varchar(191) | NO |  | NULL |
+name_suffix | varchar(191) | YES |  | NULL |
+first_name | varchar(191) | YES | MUL | NULL |
+middle_name | varchar(191) | YES |  | NULL |
+last_name | varchar(191) | YES | MUL | NULL |
+email | varchar(191) | NO | UNI | NULL |
+mobile | varchar(191) | YES | MUL | NULL |
+gender | varchar(1) | YES |  | NULL |
+birthdate | date | YES |  | NULL |
+address | text | YES |  | NULL |
+city | varchar(191) | YES | MUL | NULL |
+state | varchar(191) | YES | MUL | NULL |
+pincode | varchar(191) | YES | MUL | NULL |
+otp | varchar(191) | YES |  | NULL |
+user_profile_id | bigint(20) unsigned | NO | MUL | NULL |
+join_year | varchar(191) | YES |  | NULL |
+image | varchar(191) | YES |  | NULL |
+plain_password | varchar(191) | YES |  | NULL |
+sub_institute_id | bigint(20) unsigned | YES | MUL | NULL |
+client_id | bigint(20) unsigned | YES | MUL | NULL |
+is_admin | tinyint(1) | YES | MUL | 0 |
+portal_user | varchar(5) | YES | MUL | NULL |
+status | tinyint(1) | YES | MUL | 1 |
+last_login | varchar(20) | YES |  | NULL |
+login_ip | varchar(191) | YES |  | NULL |
+landmark | varchar(191) | YES |  | NULL |
+address_2 | varchar(191) | YES |  | NULL |
+expire_date | date | YES |  | NULL |
+total_lecture | int(11) | YES |  | NULL |
+subject_ids | text | YES |  | NULL |
+allocated_standards | text | YES |  | NULL |
+bank_name | varchar(191) | YES |  | NULL |
+branch_name | varchar(191) | YES |  | NULL |
+amount | decimal(10,2) | YES |  | NULL |
+transfer_type | varchar(191) | YES |  | NULL |
+account_no | varchar(191) | YES |  | NULL |
+ifsc_code | varchar(191) | YES |  | NULL |
+jobtitle_id | bigint(20) unsigned | YES | MUL | NULL |
+department_id | bigint(20) unsigned | YES | MUL | NULL |
+employee_no | varchar(191) | YES | MUL | NULL |
+qualification | varchar(191) | YES |  | NULL |
+occupation | varchar(191) | YES |  | NULL |
+pan_no | varchar(191) | YES | MUL | NULL |
+aadhar_no | varchar(191) | YES | MUL | NULL |
+pf_no | varchar(191) | YES |  | NULL |
+esic_no | varchar(191) | YES |  | NULL |
+uan_no | varchar(191) | YES |  | NULL |
+tds_deduction | char(191) | YES |  | NULL |
+pf_deduction | char(191) | YES |  | NULL |
+pt_deduction | char(191) | YES |  | NULL |
+joined_date | date | YES | MUL | NULL |
+probation_period_from | date | YES |  | NULL |
+probation_period_to | date | YES |  | NULL |
+terminated_date | date | YES |  | NULL |
+termination_reason | text | YES |  | NULL |
+notice_fromdate | date | YES |  | NULL |
+notice_todate | date | YES |  | NULL |
+noticereason | text | YES |  | NULL |
+openingleave | int(11) | YES |  | NULL |
+relieving_date | date | YES |  | NULL |
+relieving_reason | text | YES |  | NULL |
+CL_opening_leave | int(11) | YES |  | NULL |
+supervisor_opt | varchar(191) | YES |  | NULL |
+employee_id | bigint(20) unsigned | YES | MUL | NULL |
+load | int(11) | YES |  | NULL |
+reporting_method | varchar(191) | YES |  | NULL |
+monday..sunday | tinyint(1) | YES |  | 0  (7 weekday flag columns)
+monday_in_date..sunday_out_date | time | YES |  | NULL  (14 in/out time columns)
+total_experience | varchar(10) | YES |  | NULL |
+employee_deposite | decimal(10,2) | YES |  | NULL |
+created_by | bigint(20) | YES | MUL | NULL |
+updated_by | bigint(20) | YES | MUL | NULL |
+deleted_by | bigint(20) | YES | MUL | NULL |
+deleted_at | timestamp | YES |  | NULL |
+created_at | timestamp | YES |  | NULL |
+updated_at | timestamp | YES |  | NULL |
+fcm_token | varchar(255) | YES |  | NULL |
+reporting_manager_id | bigint(20) unsigned | YES |  | NULL |
+ROW COUNT: 299
+
+Notes from source inspection (app/Models/tblmenumaster_g2gModel.php doc comments):
+- tblmenumaster_g2g.sub_institute_id was historically a hard-coded comma-list
+  ('1,2,3,...,11') on both databases the author compared against; migration
+  2026_08_22_110000_make_g2g_menu_catalogue_global nulled it out so the model's
+  scopeVisibleToTenant() now treats NULL/empty as "global" instead of a guest list.
+- tblindividual_rights currently has 0 rows on this host (feature scaffolded but unused here).

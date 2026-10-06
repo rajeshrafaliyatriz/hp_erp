@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -10,6 +11,8 @@ use App\Models\TblUserJourneyLog;
 
 class UserJourneyLogController extends Controller
 {
+    use ResolvesApiIdentity;
+
     /**
      * Validate the API token
      */
@@ -63,7 +66,7 @@ class UserJourneyLogController extends Controller
         // Create the user journey log
         $journeyLog = new TblUserJourneyLog();
         $journeyLog->user_id = $request->user_id;
-        $journeyLog->sub_institute_id = $request->sub_institute_id;
+        $journeyLog->sub_institute_id = $this->apiTenantId($request);
         $journeyLog->menu_id = $request->menu_id;
         $journeyLog->access_link = $request->access_link;
         $journeyLog->event_type = $request->event_type;

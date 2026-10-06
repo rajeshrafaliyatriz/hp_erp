@@ -1,0 +1,1354 @@
+<?php
+
+namespace App\Http\Controllers\Api\Competency;
+
+use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+
+/**
+ * Development plans (s_competency_development_plans) for the Development &
+ * Career Path Workspace.
+ *
+ * index/store/destroy already backed the Command Center's "Create Development
+ * Plan" quick action; the workspace additionally needs plan metrics, a single
+ * plan's detail, edit, the competency gaps behind the plan, its action items
+ * and its history. All of that is additive - index() keeps the same route and
+ * the same {status,message,data,pagination} envelope and only widens the row
+ * shape, so existing consumers keep reading the fields they already read.
+ */
+class DevelopmentPlanController extends Controller
+{
+    use \App\Http\Controllers\Concerns\ResolvesJobRoleId;
+
+    use ResolvesCompetencyContext;
+    // The ONE gap rule, shared with CompetencyGapController. This controller
+    // used to implement its own, from the skill library, scoring unmeasured as
+    // zero - see gaps().
+    use ResolvesCompetencyGap;
+
+    private const TABLE = 's_competency_development_plans';
+
+    /** Raw DB status -> the label the workspace renders. */
+    private const STATUS_LABELS = [
+        'active'    => 'In Progress',
+        'completed' => 'Completed',
+        'overdue'   => 'Overdue',
+        'on_hold'   => 'On Hold',
+    ];
+
+    private const SORTABLE = [
+        'title'      => 'title',
+        'status'     => 'status',
+        'progress'   => 'progress',
+        'due_date'   => 'due_date',
+        'created_at' => 'created_at',
+    ];
+
+    /**
+     * Columns worth reporting in the Audit Center's Change Summary, with the
+     * label that card shows. Bookkeeping columns (updated_by/_at, completed_at)
+     * are left out: they move on every edit and would bury the real change.
+     */
+    private const CHANGE_LABELS = [
+        'title'           => 'Plan Title',
+        'objective'       => 'Objective',
+        'focus_areas'     => 'Focus Areas',
+        'user_id'         => 'Employee',
+        'competency_id'   => 'Linked Competency',
+        'framework_id'    => 'Framework',
+        'career_path_id'  => 'Career Path',
+        'department_id'   => 'Department',
+        'jobrole'         => 'Job Role',
+        'status'          => 'Status',
+        'progress'        => 'Progress',
+        'start_date'      => 'Start Date',
+        'due_date'        => 'Due Date',
+        'approver_id'     => 'Approver',
+        'approval_status' => 'Approval Status',
+    ];
+
+    /* ================================================================== *
+     * List
+     * ================================================================== */
+
+    /**
+     * GET /competency/development-plans
+     *
+     * Filters: status, search, department_id, approver_id (plan owner), user_id,
+     *          jobrole, career_path_id
+     * Sort:    sort=title|status|progress|due_date|created_at, direction=asc|desc
+     */
+    public function index(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $perPage = min(max((int) $request->input('per_page', 15), 1), 200);
+        $page = max((int) $request->input('page', 1), 1);
+
+        $query = DB::table(self::TABLE)
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at');
+
+        if ($status = $this->activeFilter($request->input('status'))) {
+            $query->where('status', $status);
+        }
+        if ($search = $this->activeFilter($request->input('search'))) {
+            $query->where('title', 'like', "%{$search}%");
+        }
+        if ($departmentId = $this->activeFilter($request->input('department_id'))) {
+            $query->where('department_id', $departmentId);
+        }
+        if ($approverId = $this->activeFilter($request->input('approver_id'))) {
+            $query->where('approver_id', $approverId);
+        }
+        if ($userId = $this->activeFilter($request->input('user_id_filter'))) {
+            $query->where('user_id', $userId);
+        }
+        if ($jobrole = $this->activeFilter($request->input('jobrole'))) {
+            $query->where('jobrole', $jobrole);
+        }
+        if ($pathId = $this->activeFilter($request->input('career_path_id'))) {
+            $query->where('career_path_id', $pathId);
+        }
+        // Drill-through from a competency's detail panel ("Development Plans").
+        if ($competencyId = $this->activeFilter($request->input('competency_id'))) {
+            $query->where('competency_id', $competencyId);
+        }
+        // Command Center drilldown: "Pending My Approvals".
+        if ($this->activeFilter($request->input('pending_approval'))) {
+            $query->where('approval_status', 'pending_approval');
+        }
+
+        $total = (clone $query)->count();
+
+        $sortKey = (string) $request->input('sort', 'created_at');
+        $column = self::SORTABLE[$sortKey] ?? 'id';
+        $direction = strtolower((string) $request->input('direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $rows = $query->orderBy($column, $direction)->orderByDesc('id')
+            ->forPage($page, $perPage)->get();
+
+        return response()->json([
+            'status'     => 1,
+            'message'    => 'Development plans fetched successfully',
+            'data'       => $this->decorateRows($rows, $sid),
+            'pagination' => [
+                'page'      => $page,
+                'per_page'  => $perPage,
+                'total'     => $total,
+                'last_page' => (int) max(ceil($total / $perPage), 1),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /competency/development-plans/metrics
+     *
+     * The workspace's five KPI cards. "vs last month" deltas compare the count
+     * created (or, for completed, finished) in the current calendar month with
+     * the previous one.
+     */
+    public function metrics(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $base = fn () => DB::table(self::TABLE)
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at');
+
+        $monthStart = now()->startOfMonth();
+        $prevStart = now()->subMonthNoOverflow()->startOfMonth();
+
+        $createdDelta = function ($table, $column, $extra = null) use ($sid, $monthStart, $prevStart) {
+            $scope = function () use ($table, $sid, $extra) {
+                $q = DB::table($table)->where('sub_institute_id', $sid)->whereNull('deleted_at');
+                if ($extra) {
+                    $extra($q);
+                }
+                return $q;
+            };
+            $current = $scope()->where($column, '>=', $monthStart)->count();
+            $previous = $scope()->where($column, '>=', $prevStart)->where($column, '<', $monthStart)->count();
+            return $current - $previous;
+        };
+
+        // 1. Active development plans
+        $active = (clone $base())->where('status', 'active')->count();
+
+        // 2. In progress = started but not finished; the ring is their mean progress.
+        $inProgressQuery = (clone $base())->where('status', 'active')
+            ->where('progress', '>', 0)->where('progress', '<', 100);
+        $inProgress = (clone $inProgressQuery)->count();
+        $avgProgress = (float) ((clone $inProgressQuery)->avg('progress') ?? 0);
+
+        // 3. Completed
+        $completed = (clone $base())->where('status', 'completed')->count();
+        $completedCurrent = (clone $base())->where('status', 'completed')
+            ->whereRaw('COALESCE(completed_at, updated_at) >= ?', [$monthStart])->count();
+        $completedPrevious = (clone $base())->where('status', 'completed')
+            ->whereRaw('COALESCE(completed_at, updated_at) >= ?', [$prevStart])
+            ->whereRaw('COALESCE(completed_at, updated_at) < ?', [$monthStart])->count();
+
+        // 4. Career paths
+        $careerPaths = DB::table('s_competency_career_paths')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->where('status', '!=', 'archived')->count();
+
+        // 5. Learning assigned by this module (source='competency' keeps the
+        //    LMS module's own assignments out of the competency count).
+        $learningQuery = fn () => DB::table('lms_assignments')
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->where('source', 'competency');
+        $learning = $learningQuery()->count();
+        $learningCurrent = $learningQuery()->where('created_at', '>=', $monthStart)->count();
+        $learningPrevious = $learningQuery()
+            ->where('created_at', '>=', $prevStart)->where('created_at', '<', $monthStart)->count();
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Development plan metrics fetched successfully',
+            'data'    => [
+                'active_plans'          => $active,
+                'active_plans_delta'    => $createdDelta(self::TABLE, 'created_at', fn ($q) => $q->where('status', 'active')),
+                'in_progress'           => $inProgress,
+                'in_progress_percent'   => (int) round($avgProgress),
+                'completed'             => $completed,
+                'completed_delta'       => $completedCurrent - $completedPrevious,
+                'career_paths'          => $careerPaths,
+                'career_paths_delta'    => $createdDelta('s_competency_career_paths', 'created_at'),
+                'learning_assigned'     => $learning,
+                'learning_delta'        => $learningCurrent - $learningPrevious,
+                'total_plans'           => (clone $base())->count(),
+                'overdue'               => (clone $base())->where('status', 'overdue')->count(),
+                'on_hold'               => (clone $base())->where('status', 'on_hold')->count(),
+                'pending_approval'      => (clone $base())->where('approval_status', 'pending_approval')->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /competency/development-plans/owners
+     *
+     * The "Plan Owner: All" dropdown - only users who actually own a plan in
+     * this tenant, so the filter can never produce an empty result set.
+     */
+    public function owners(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $ids = DB::table(self::TABLE)
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->whereNotNull('approver_id')->where('approver_id', '!=', 0)
+            ->distinct()->pluck('approver_id')->all();
+
+        $users = $this->userMap($ids);
+
+        $data = [];
+        foreach ($ids as $id) {
+            $user = $users[$id] ?? null;
+            $data[] = [
+                'value' => (string) $id,
+                'label' => $user['name'] ?? ('User ' . $id),
+            ];
+        }
+        usort($data, fn ($a, $b) => strcasecmp($a['label'], $b['label']));
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Plan owners fetched successfully',
+            'data'    => $data,
+        ]);
+    }
+
+    /**
+     * GET /competency/employee-options
+     *
+     * Employee picker for "Create Development Plan" and "Assign Learning".
+     * Their current job role is resolved the same way the rest of the module
+     * does it - jobtitle_id first, then allocated_standards, which is what this
+     * tenant actually populates.
+     */
+    public function employees(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $query = DB::table('tbluser')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at');
+
+        if ($search = $this->activeFilter($request->input('search'))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('employee_no', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $query->orderBy('first_name')->limit(500)
+            ->get(['id', 'first_name', 'last_name', 'employee_no', 'jobtitle_id', 'department_id', 'allocated_standards']);
+
+        $roleIds = [];
+        foreach ($users as $u) {
+            $roleId = $u->jobtitle_id ?: $this->firstNumeric($u->allocated_standards);
+            if ($roleId) {
+                $roleIds[$u->id] = $roleId;
+            }
+        }
+
+        $roles = $roleIds
+            ? DB::table('s_user_jobrole')->whereIn('id', array_values($roleIds))->whereNull('deleted_at')
+                ->pluck('jobrole', 'id')->all()
+            : [];
+
+        $data = $users->map(function ($u) use ($roleIds, $roles) {
+            $first = trim((string) $u->first_name);
+            $last = trim((string) $u->last_name);
+            $name = trim($first . ' ' . $last) ?: ('User ' . $u->id);
+            $roleId = $roleIds[$u->id] ?? null;
+
+            return [
+                'id'            => (int) $u->id,
+                'name'          => $name,
+                'initials'      => strtoupper(substr($first ?: $name, 0, 1) . substr($last, 0, 1)) ?: strtoupper(substr($name, 0, 2)),
+                'employee_no'   => $u->employee_no,
+                'jobrole'       => $roleId ? ($roles[$roleId] ?? null) : null,
+                'jobrole_id'    => $roleId ? (int) $roleId : null,
+                'department_id' => $u->department_id ? (int) $u->department_id : null,
+            ];
+        })->all();
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Employees fetched successfully',
+            'data'    => $data,
+        ]);
+    }
+
+    /* ================================================================== *
+     * Single plan
+     * ================================================================== */
+
+    /** GET /competency/development-plans/{id} */
+    public function show(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $plan = $this->findPlan($id, $sid);
+        if (!$plan) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        $data = $this->decorateRows(collect([$plan]), $sid)[0];
+
+        // Next milestone = earliest still-open action.
+        $next = DB::table('s_competency_plan_actions')
+            ->where('plan_id', $plan->id)->whereNull('deleted_at')
+            ->whereIn('status', ['pending', 'in_progress'])
+            ->orderByRaw('due_date IS NULL, due_date asc')
+            ->orderBy('sequence')->first();
+
+        $data['objective'] = $plan->objective;
+        $data['focus_areas'] = $this->splitList($plan->focus_areas);
+        $data['career_path'] = $plan->career_path_id
+            ? DB::table('s_competency_career_paths')
+                ->where('id', $plan->career_path_id)->whereNull('deleted_at')
+                ->select('id', 'name', 'status')->first()
+            : null;
+        $data['next_milestone'] = $next ? [
+            'id'       => (int) $next->id,
+            'title'    => $next->title,
+            'status'   => $next->status,
+            'due_date' => $this->humanDate($next->due_date),
+        ] : null;
+        $data['action_counts'] = [
+            'total'     => DB::table('s_competency_plan_actions')->where('plan_id', $plan->id)->whereNull('deleted_at')->count(),
+            'completed' => DB::table('s_competency_plan_actions')->where('plan_id', $plan->id)->whereNull('deleted_at')->where('status', 'completed')->count(),
+        ];
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Development plan fetched successfully',
+            'data'    => $data,
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $validator = Validator::make($request->all(), $this->planRules(true));
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+
+        /*
+         * THE SUBJECT MUST BE SOMEBODY IN THIS ORGANISATION.
+         *
+         * `user_id_target` was validated only as `integer`, so a foreign-tenant id
+         * could be written into the owner column while the row carried THIS
+         * tenant's sub_institute_id - the same defect as
+         * LearningAssignmentController's unchecked user_ids[].
+         *
+         * competencySubject() answers both halves: 404 for an id outside the
+         * caller's tenant, 403 for a subject a non-elevated caller may not
+         * touch. The route gate limits this to managers and HR, so in practice this is
+         * the tenant half - which is exactly the half a role gate cannot do.
+         */
+        $subjectId = (int) ($request->input('user_id_target') ?: $request->input('user_id'));
+
+        if ($subjectId > 0) {
+            $subject = $this->competencyPeopleSubject($context, $subjectId);
+
+            if (!is_int($subject)) {
+                return $subject;
+            }
+        }
+        $id = DB::table(self::TABLE)->insertGetId([
+            'sub_institute_id' => $context['sub_institute_id'],
+            'title'            => $request->input('title'),
+            'objective'        => $request->input('objective'),
+            'focus_areas'      => $this->joinList($request->input('focus_areas')),
+            'user_id'          => $request->input('user_id_target') ?: $request->input('user_id'),
+            'competency_id'    => $request->input('competency_id'),
+            'framework_id'     => $request->input('framework_id'),
+            'career_path_id'   => $request->input('career_path_id'),
+            'department_id'    => $request->input('department_id'),
+            // The id is what the merge, renames and every id-based reader use;
+            // the name stays because ~20 screens still read it. NULL when the
+            // name is ambiguous - ResolvesJobRoleId refuses to guess.
+            'jobrole'          => $request->input('jobrole'),
+            'jobrole_id' => $this->resolveJobRoleIdFromRequest($request, (int) $context['sub_institute_id']),
+            'status'           => $request->input('status', 'active'),
+            'progress'         => (int) $request->input('progress', 0),
+            'start_date'       => $request->input('start_date'),
+            'due_date'         => $request->input('due_date'),
+            'approver_id'      => $request->input('approver_id'),
+            'approval_status'  => $request->input('approver_id') ? 'pending_approval' : null,
+            'created_by'       => $context['user_id'],
+            'updated_by'       => $context['user_id'],
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $this->logCompetencyActivity(
+            $context['sub_institute_id'],
+            $context['user_id'],
+            'created_development_plan',
+            'Created development plan "' . $request->input('title') . '"',
+            'development_plan',
+            $id,
+            $request->input('title')
+        );
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Development plan created successfully',
+            'data'    => ['id' => $id],
+        ], 201);
+    }
+
+    /** PUT /competency/development-plans/{id} */
+    public function update(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $plan = $this->findPlan($id, $sid);
+        if (!$plan) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), $this->planRules(false));
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $update = ['updated_by' => $context['user_id'], 'updated_at' => now()];
+
+        foreach (['title', 'objective', 'competency_id', 'framework_id', 'career_path_id',
+                  'department_id', 'jobrole', 'start_date', 'due_date', 'approver_id'] as $field) {
+            if ($request->has($field)) {
+                $value = $request->input($field);
+                // The editor submits "" to clear a field; store that as NULL so
+                // the detail panel falls back to its empty state.
+                $update[$field] = ($value === '' && $field !== 'title') ? null : $value;
+            }
+        }
+        if ($request->has('focus_areas')) {
+            $update['focus_areas'] = $this->joinList($request->input('focus_areas'));
+        }
+        if ($request->has('user_id_target')) {
+            // Same tenant + ownership check as store(): a retarget is a
+            // create in every respect that matters here.
+            $newOwner = (int) $request->input('user_id_target');
+
+            if ($newOwner > 0) {
+                $subject = $this->competencyPeopleSubject($context, $newOwner);
+
+                if (!is_int($subject)) {
+                    return $subject;
+                }
+            }
+
+            $update['user_id'] = $request->input('user_id_target');
+        }
+        if ($request->has('progress')) {
+            $update['progress'] = (int) $request->input('progress');
+        }
+        if ($request->has('status')) {
+            $update['status'] = $request->input('status');
+            // Stamp/clear the completion time so the "Plans Completed vs last
+            // month" metric stays truthful.
+            if ($request->input('status') === 'completed' && !$plan->completed_at) {
+                $update['completed_at'] = now();
+                $update['progress'] = 100;
+            } elseif ($request->input('status') !== 'completed') {
+                $update['completed_at'] = null;
+            }
+        }
+        if ($request->has('approver_id')) {
+            $update['approval_status'] = $request->input('approver_id') ? ($plan->approval_status ?: 'pending_approval') : null;
+        }
+        if ($request->has('approval_status')) {
+            $update['approval_status'] = $this->activeFilter($request->input('approval_status'));
+        }
+
+        DB::table(self::TABLE)->where('id', $plan->id)->update($update);
+
+        $this->logCompetencyActivity(
+            $sid,
+            $context['user_id'],
+            'updated_development_plan',
+            'Updated development plan "' . ($update['title'] ?? $plan->title) . '"',
+            'development_plan',
+            (int) $plan->id,
+            $update['title'] ?? $plan->title,
+            $this->diffChanges($plan, $update, self::CHANGE_LABELS)
+        );
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Development plan updated successfully',
+            'data'    => ['id' => (int) $plan->id],
+        ]);
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $plan = $this->findPlan($id, $context['sub_institute_id']);
+        if (!$plan) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        DB::table(self::TABLE)->where('id', $plan->id)->update([
+            'deleted_at' => now(),
+            'deleted_by' => $context['user_id'],
+        ]);
+
+        $this->logCompetencyActivity(
+            $context['sub_institute_id'],
+            $context['user_id'],
+            'deleted_development_plan',
+            'Deleted development plan "' . $plan->title . '"',
+            'development_plan',
+            (int) $plan->id,
+            $plan->title
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Development plan deleted successfully']);
+    }
+
+    /* ================================================================== *
+     * Plan detail tabs
+     * ================================================================== */
+
+    /**
+     * GET /competency/development-plans/{id}/gaps
+     *
+     * "Competency Gaps" tab. Computed, not stored: the employee's current levels
+     * (s_skill_matrix) against the levels their job role requires
+     * (s_user_skill_jobrole) - exactly the comparison
+     * EmployeeCompetencyProfileController@show already makes for the profile
+     * screen, narrowed to the gaps this plan exists to close.
+     */
+    public function gaps(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $plan = $this->findPlan($id, $sid);
+        if (!$plan) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        if (!$plan->user_id) {
+            return response()->json([
+                'status'  => 1,
+                'message' => 'Competency gaps fetched successfully',
+                'data'    => [
+                    'jobrole'          => $plan->jobrole,
+                    'jobrole_id'       => null,
+                    'competency_gaps'  => ['items' => [], 'summary' => $this->emptyGapSummary()],
+                    'skill_gaps'       => ['items' => [], 'summary' => $this->emptyGapSummary()],
+                    'items'            => [],
+                    'summary'          => $this->emptyGapSummary(),
+                ],
+            ]);
+        }
+
+        /*
+         * ── TWO ARMS, NAMED, AND THEY ARE NOT THE SAME QUESTION ─────────────
+         *
+         * This method used to return ONE unlabelled list built from the SKILL
+         * library, under a heading that said "Competency". It was a second gap
+         * engine standing beside `CompetencyGapController`, and it disagreed
+         * with it in the way that matters most:
+         *
+         *     $currentLevel = $held ? (int) $held->skill_level : 0;
+         *
+         * Measured on live before this change: **3,873 gap rows, of which 3,328
+         * (85.9%) were items nobody had ever assessed, shown as shortfalls**,
+         * and 55 of 164 plans displayed a person failing every requirement when
+         * the truth was that nobody had rated them.
+         *
+         *   competency_gaps - the ASSESSMENT arm. ProficiencyService over
+         *                     jobrole_competency_map, through the one shared
+         *                     rule in ResolvesCompetencyGap. No arithmetic here.
+         *   skill_gaps      - the GUIDANCE arm. s_user_skill_jobrole against
+         *                     s_skill_matrix, kept because it is what 161 of 164
+         *                     plans actually have - but NEVER called a
+         *                     competency gap, and no longer scoring unrated
+         *                     items as zero.
+         */
+
+        // ── the assessment arm ──────────────────────────────────────────────
+        $jobroleId = $plan->jobrole_id
+            ?? $this->resolveJobroleIdByName($sid, $plan->jobrole);
+
+        $competencyGaps = $jobroleId
+            ? $this->competencyGapFor((int) $sid, (int) $plan->user_id, (int) $jobroleId)
+            : ['competencies' => [], 'mandatory_below_required' => [], 'coverage' => []];
+
+        $compItems = array_map(fn ($c) => [
+            'competency_id' => $c['competency_id'],
+            'name'          => $c['competency_name'],
+            'code'          => $c['competency_code'],
+            'required'      => $c['required_proficiency'],
+            // NULL means UNMEASURED. Never 0 - a zero asserts a score of
+            // nothing, which is a different and much worse claim.
+            'current'       => $c['measured_level'],
+            'gap'           => $c['gap'],
+            'state'         => $c['state'],
+            'is_mandatory'  => $c['is_mandatory'],
+            'coverage'      => $c['coverage'],
+            'is_focus'      => $this->isFocusArea((string) $c['competency_name'], $plan->focus_areas),
+        ], $competencyGaps['competencies']);
+
+        // ── the guidance arm ────────────────────────────────────────────────
+        $required = $plan->jobrole
+            ? DB::table('s_user_skill_jobrole')
+                ->where('sub_institute_id', $sid)
+                ->where('jobrole', $plan->jobrole)
+                ->whereNull('deleted_at')
+                ->get()
+                ->keyBy('skill')
+            : collect();
+
+        $current = DB::table('s_skill_matrix as m')
+            ->join('s_users_skills as s', 'm.skill_id', '=', 's.id')
+            ->where('m.user_id', $plan->user_id)
+            ->whereNull('m.deleted_at')
+            ->whereNull('s.deleted_at')
+            ->get(['s.id as skill_id', 's.title', 's.category', 'm.skill_level', 'm.updated_at'])
+            ->keyBy('title');
+
+        $skillItems = [];
+        foreach ($required as $skillName => $row) {
+            /*
+             * `s_user_skill_jobrole.proficiency_level` IS A VARCHAR holding a
+             * mixture. Measured on live: 84,222 numeric (1-6), plus 35
+             * "Advanced", 96 "Intermediate", 26 "Basic" and one empty.
+             *
+             * `(int) 'Advanced'` is 0 - and the old code then compared an
+             * unrated skill's 0 against that 0 and called it **MET**. That is
+             * how 54 requirements on live were reported as satisfied by people
+             * nobody had assessed against targets nobody could read.
+             *
+             * A word is not a level on this scale. It is NOT guessed at a
+             * number - mapping Basic/Intermediate/Advanced onto 1-6 would
+             * invent a target somebody could then be measured against, the same
+             * refusal `FrameworkController::normaliseProficiency()` makes when
+             * it turns an out-of-scale value into NULL rather than clamping it.
+             */
+            $requiredLevel = is_numeric($row->proficiency_level) && (int) $row->proficiency_level > 0
+                ? (int) $row->proficiency_level
+                : null;
+
+            $held = $current->get($skillName);
+
+            // THE FIX. `$held ? ... : 0` is gone: an unrated skill is
+            // NOT ASSESSED and has no gap, because there is nothing to
+            // subtract from. It is counted in its own bucket below.
+            $currentLevel = $held ? (int) $held->skill_level : null;
+
+            $state = match (true) {
+                $requiredLevel === null           => 'no_target',
+                $currentLevel === null            => 'not_assessed',
+                $currentLevel >= $requiredLevel   => 'met',
+                default                           => 'gap',
+            };
+
+            $skillItems[] = [
+                // `skill_id`, NOT `competency_id`. This field was named for one
+                // id-space and filled from another, and those ids were then
+                // saved onto plan actions - 47 action rows and 14 plan rows on
+                // live hold a skill id in a competency column because of it.
+                'skill_id'      => $held ? (int) $held->skill_id : null,
+                'name'          => (string) $skillName,
+                'category'      => $held->category ?? null,
+                'required'      => $requiredLevel,
+                // The stored text, shown as-is where it is not a number, so a
+                // reader sees "Advanced" and knows to fix it rather than
+                // wondering why the row has no target.
+                'required_raw'  => (string) $row->proficiency_level,
+                'current'       => $currentLevel,
+                'gap'           => $state === 'gap' ? $requiredLevel - $currentLevel : null,
+                'state'         => $state,
+                'is_focus'      => $this->isFocusArea((string) $skillName, $plan->focus_areas),
+                'last_assessed' => $held && $held->updated_at ? $this->humanDate($held->updated_at) : null,
+            ];
+        }
+
+        // Biggest shortfall first, then the states with nothing to act on -
+        // a known shortfall is more actionable than an unknown one.
+        $rank = fn (array $i) => match ($i['state']) {
+            'gap' => 0, 'met' => 1, 'not_assessed' => 2, default => 3,
+        };
+        $order = fn (array $a, array $b) => [$rank($a), -($a['gap'] ?? 0)]
+            <=> [$rank($b), -($b['gap'] ?? 0)]
+                ?: strcasecmp($a['name'], $b['name']);
+        usort($skillItems, $order);
+        usort($compItems, $order);
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Competency gaps fetched successfully',
+            'data'    => [
+                'jobrole'    => $plan->jobrole,
+                'jobrole_id' => $jobroleId ? (int) $jobroleId : null,
+
+                'competency_gaps' => [
+                    'items'                    => $compItems,
+                    'summary'                  => $this->gapSummary($compItems),
+                    'mandatory_below_required' => $competencyGaps['mandatory_below_required'],
+                    // Distinguishes "this role has no competency requirements
+                    // yet" from "this role is fully met" - identical on screen
+                    // otherwise, and only the first has a next action.
+                    'has_requirements'         => $compItems !== [],
+                    'jobrole_resolved'         => $jobroleId !== null,
+                ],
+
+                'skill_gaps' => [
+                    'items'   => $skillItems,
+                    'summary' => $this->gapSummary($skillItems),
+                ],
+
+                /*
+                 * LEGACY KEYS, kept so an un-deployed client does not break on
+                 * the way past. They carry the SKILL arm, which is what they
+                 * always carried - but with `not_assessed` no longer counted as
+                 * a gap, so even an old client stops reporting false shortfalls.
+                 */
+                'items'   => $skillItems,
+                'summary' => $this->gapSummary($skillItems),
+            ],
+        ]);
+    }
+
+    /**
+     * One summary shape for both arms.
+     *
+     * `not_assessed` IS ITS OWN NUMBER and is not folded into either `met` or
+     * `gaps`. `met_percent` is the share of what was MEASURED, so a role with
+     * two of thirty items assessed cannot report 93% met by counting the
+     * twenty-eight nobody looked at.
+     */
+    private function gapSummary(array $items): array
+    {
+        $count = fn (string $state) => count(array_filter($items, fn ($i) => $i['state'] === $state));
+
+        $met         = $count('met');
+        $gaps        = $count('gap');
+        // `unmeasured` is the competency arm's word for it, `not_assessed` the
+        // skill arm's. One summary counts both rather than each arm carrying a
+        // shape of its own.
+        $notAssessed = $count('not_assessed') + $count('unmeasured');
+        $noTarget    = $count('no_target');
+        $measured    = $met + $gaps;
+
+        return [
+            'total'        => count($items),
+            'met'          => $met,
+            'gaps'         => $gaps,
+            'not_assessed' => $notAssessed,
+            // A requirement whose level is not a number on this scale - live
+            // holds 157 reading "Advanced" / "Intermediate" / "Basic". Counted
+            // apart because the fix is to correct the data, not to assess
+            // somebody.
+            'no_target'    => $noTarget,
+            'measured'     => $measured,
+            // The share of what was MEASURED. A role with two of thirty items
+            // assessed cannot report 93% met by counting the twenty-eight
+            // nobody looked at.
+            'met_percent'  => $measured > 0 ? (int) round($met / $measured * 100) : 0,
+        ];
+    }
+
+    /** GET /competency/development-plans/{id}/actions */
+    public function actions(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        if (!$this->findPlan($id, $sid)) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        $rows = DB::table('s_competency_plan_actions as a')
+            ->leftJoin('s_users_skills as s', 's.id', '=', 'a.competency_id')
+            ->where('a.plan_id', $id)
+            ->where('a.sub_institute_id', $sid)
+            ->whereNull('a.deleted_at')
+            ->orderBy('a.sequence')
+            ->orderBy('a.id')
+            ->get(['a.*', 's.title as competency_name']);
+
+        $owners = $this->userMap($rows->pluck('owner_id')->filter()->all());
+
+        $data = $rows->map(fn ($r) => [
+            'id'              => (int) $r->id,
+            'title'           => $r->title,
+            'description'     => $r->description,
+            'action_type'     => $r->action_type,
+            'status'          => $r->status,
+            'competency_id'   => $r->competency_id ? (int) $r->competency_id : null,
+            'competency_name' => $r->competency_name,
+            'owner_id'        => $r->owner_id ? (int) $r->owner_id : null,
+            'owner_name'      => $r->owner_id ? ($owners[$r->owner_id]['name'] ?? null) : null,
+            'due_date'        => $r->due_date,
+            'due_date_label'  => $this->humanDate($r->due_date),
+            'completed_at'    => $this->humanDate($r->completed_at),
+            'sequence'        => (int) $r->sequence,
+        ])->all();
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Plan actions fetched successfully',
+            'data'    => $data,
+        ]);
+    }
+
+    /** POST /competency/development-plans/{id}/actions */
+    public function storeAction(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $plan = $this->findPlan($id, $sid);
+        if (!$plan) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'title'         => 'required|string|max:191',
+            'description'   => 'nullable|string',
+            'action_type'   => 'nullable|in:milestone,training,mentoring,project,reading,other',
+            'status'        => 'nullable|in:pending,in_progress,completed,blocked',
+            'competency_id' => 'nullable|integer',
+            'owner_id'      => 'nullable|integer',
+            'due_date'      => 'nullable|date',
+            'sequence'      => 'nullable|integer|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $status = $request->input('status', 'pending');
+
+        $actionId = DB::table('s_competency_plan_actions')->insertGetId([
+            'sub_institute_id' => $sid,
+            'plan_id'          => (int) $plan->id,
+            'title'            => $request->input('title'),
+            'description'      => $request->input('description'),
+            'action_type'      => $request->input('action_type', 'milestone'),
+            'status'           => $status,
+            'competency_id'    => $request->input('competency_id'),
+            'owner_id'         => $request->input('owner_id') ?: $plan->user_id,
+            'due_date'         => $request->input('due_date'),
+            'completed_at'     => $status === 'completed' ? now() : null,
+            'sequence'         => (int) $request->input('sequence', 0),
+            'created_by'       => $context['user_id'],
+            'updated_by'       => $context['user_id'],
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ]);
+
+        $progress = $this->syncPlanProgress((int) $plan->id, $sid, $context['user_id']);
+
+        $this->logCompetencyActivity(
+            $sid,
+            $context['user_id'],
+            'added_plan_action',
+            'Added action "' . $request->input('title') . '" to plan "' . $plan->title . '"',
+            // Stays on the plan, not the action: history() filters this feed by
+            // subject_type='development_plan' + the plan id to build the plan's
+            // own "Notes & History" tab.
+            'development_plan',
+            (int) $plan->id,
+            $plan->title
+        );
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Plan action created successfully',
+            'data'    => ['id' => $actionId, 'plan_progress' => $progress],
+        ], 201);
+    }
+
+    /** PUT /competency/development-plans/{id}/actions/{actionId} */
+    public function updateAction(Request $request, $id, $actionId)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $plan = $this->findPlan($id, $sid);
+        if (!$plan) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        $action = DB::table('s_competency_plan_actions')
+            ->where('id', $actionId)->where('plan_id', $plan->id)
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')->first();
+
+        if (!$action) {
+            return response()->json(['status' => 0, 'message' => 'Plan action not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'title'         => 'sometimes|required|string|max:191',
+            'description'   => 'nullable|string',
+            'action_type'   => 'nullable|in:milestone,training,mentoring,project,reading,other',
+            'status'        => 'nullable|in:pending,in_progress,completed,blocked',
+            'competency_id' => 'nullable|integer',
+            'owner_id'      => 'nullable|integer',
+            'due_date'      => 'nullable|date',
+            'sequence'      => 'nullable|integer|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $update = ['updated_by' => $context['user_id'], 'updated_at' => now()];
+        foreach (['title', 'description', 'action_type', 'competency_id', 'owner_id', 'due_date', 'sequence'] as $field) {
+            if ($request->has($field)) {
+                $update[$field] = $request->input($field);
+            }
+        }
+        if ($request->has('status')) {
+            $update['status'] = $request->input('status');
+            $update['completed_at'] = $request->input('status') === 'completed'
+                ? ($action->completed_at ?: now())
+                : null;
+        }
+
+        DB::table('s_competency_plan_actions')->where('id', $action->id)->update($update);
+
+        $progress = $this->syncPlanProgress((int) $plan->id, $sid, $context['user_id']);
+
+        $this->logCompetencyActivity(
+            $sid,
+            $context['user_id'],
+            // Completing an action is the milestone worth reading in the feed,
+            // so it gets its own verb rather than a generic update.
+            ($request->input('status') === 'completed' && $action->status !== 'completed')
+                ? 'completed_plan_action'
+                : 'updated_plan_action',
+            ($request->input('status') === 'completed' && $action->status !== 'completed' ? 'Completed' : 'Updated')
+                . ' action "' . ($update['title'] ?? $action->title) . '" on plan "' . $plan->title . '"',
+            'development_plan',
+            (int) $plan->id,
+            $plan->title,
+            $this->diffChanges($action, $update, [
+                'title'         => 'Action Title',
+                'description'   => 'Description',
+                'action_type'   => 'Action Type',
+                'status'        => 'Status',
+                'competency_id' => 'Linked Competency',
+                'owner_id'      => 'Owner',
+                'due_date'      => 'Due Date',
+                'sequence'      => 'Order',
+            ])
+        );
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Plan action updated successfully',
+            'data'    => ['id' => (int) $action->id, 'plan_progress' => $progress],
+        ]);
+    }
+
+    /** DELETE /competency/development-plans/{id}/actions/{actionId} */
+    public function destroyAction(Request $request, $id, $actionId)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $plan = $this->findPlan($id, $sid);
+        if (!$plan) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        $action = DB::table('s_competency_plan_actions')
+            ->where('id', $actionId)->where('plan_id', $plan->id)
+            ->where('sub_institute_id', $sid)->whereNull('deleted_at')->first();
+
+        if (!$action) {
+            return response()->json(['status' => 0, 'message' => 'Plan action not found'], 404);
+        }
+
+        DB::table('s_competency_plan_actions')->where('id', $actionId)->update([
+            'deleted_at' => now(),
+            'deleted_by' => $context['user_id'],
+        ]);
+
+        $progress = $this->syncPlanProgress((int) $plan->id, $sid, $context['user_id']);
+
+        $this->logCompetencyActivity(
+            $sid,
+            $context['user_id'],
+            'deleted_plan_action',
+            'Removed action "' . $action->title . '" from plan "' . $plan->title . '"',
+            'development_plan',
+            (int) $plan->id,
+            $plan->title
+        );
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Plan action deleted successfully',
+            'data'    => ['plan_progress' => $progress],
+        ]);
+    }
+
+    /**
+     * GET /competency/development-plans/{id}/history
+     *
+     * "Notes & History" tab: this plan's slice of the shared competency activity
+     * feed (s_competency_activity_log), newest first.
+     */
+    public function history(Request $request, $id)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $plan = $this->findPlan($id, $sid);
+        if (!$plan) {
+            return response()->json(['status' => 0, 'message' => 'Development plan not found'], 404);
+        }
+
+        $rows = DB::table('s_competency_activity_log')
+            ->where('sub_institute_id', $sid)
+            ->where('subject_type', 'development_plan')
+            ->where('subject_id', $plan->id)
+            ->orderByDesc('id')
+            ->limit(100)
+            ->get();
+
+        $data = $rows->map(fn ($r) => [
+            'id'          => (int) $r->id,
+            'action'      => $r->action,
+            'description' => $r->description,
+            'by'          => $r->actor_name ?: 'System',
+            'date'        => $r->created_at ? date('d M Y, H:i', strtotime($r->created_at)) : null,
+        ])->all();
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Plan history fetched successfully',
+            'data'    => $data,
+        ]);
+    }
+
+    /* ================================================================== *
+     * Helpers
+     * ================================================================== */
+
+    private function planRules(bool $creating): array
+    {
+        return [
+            'title'          => ($creating ? 'required' : 'sometimes|required') . '|string|max:191',
+            'objective'      => 'nullable|string',
+            'user_id_target' => 'nullable|integer',
+            'competency_id'  => 'nullable|integer',
+            'framework_id'   => 'nullable|integer',
+            'career_path_id' => 'nullable|integer',
+            'department_id'  => 'nullable|integer',
+            'jobrole'        => 'nullable|string|max:191',
+            'status'         => 'nullable|in:active,completed,overdue,on_hold',
+            'progress'       => 'nullable|integer|min:0|max:100',
+            'start_date'     => 'nullable|date',
+            'due_date'       => 'nullable|date',
+            'approver_id'    => 'nullable|integer',
+        ];
+    }
+
+    private function findPlan($id, int $sid)
+    {
+        return DB::table(self::TABLE)
+            ->where('id', $id)
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
+    /**
+     * Widen the raw plan rows with the names the workspace table renders.
+     * Employee and owner are resolved in two batched queries, not per row.
+     */
+    private function decorateRows($rows, int $sid): array
+    {
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        $userIds = $rows->pluck('user_id')->merge($rows->pluck('approver_id'))->filter()->unique()->all();
+        $users = $this->userMap($userIds);
+
+        $departmentIds = $rows->pluck('department_id')->filter()->unique()->all();
+        $departments = [];
+        if ($departmentIds) {
+            $departments = DB::table('s_user_jobrole')
+                ->where('sub_institute_id', $sid)
+                ->whereIn('department_id', $departmentIds)
+                ->whereNull('deleted_at')
+                ->pluck('department', 'department_id')
+                ->all();
+        }
+
+        return $rows->map(function ($r) use ($users, $departments) {
+            $employee = $r->user_id ? ($users[$r->user_id] ?? null) : null;
+            $owner = $r->approver_id ? ($users[$r->approver_id] ?? null) : null;
+
+            return [
+                'id'               => (int) $r->id,
+                'title'            => $r->title,
+                'user_id'          => $r->user_id ? (int) $r->user_id : null,
+                'employee_name'    => $employee['name'] ?? null,
+                'employee_initials'=> $employee['initials'] ?? null,
+                'employee_no'      => $employee['employee_no'] ?? null,
+                'jobrole'          => $r->jobrole,
+                'department_id'    => $r->department_id ? (int) $r->department_id : null,
+                'department'       => $r->department_id ? ($departments[$r->department_id] ?? null) : null,
+                'status'           => $r->status,
+                'status_label'     => self::STATUS_LABELS[$r->status] ?? ucfirst((string) $r->status),
+                'progress'         => (int) $r->progress,
+                'start_date'       => $r->start_date,
+                'due_date'         => $r->due_date,
+                'start_date_label' => $this->humanDate($r->start_date),
+                'due_date_label'   => $this->humanDate($r->due_date),
+                'approver_id'      => $r->approver_id ? (int) $r->approver_id : null,
+                'owner_name'       => $owner['name'] ?? null,
+                'owner_initials'   => $owner['initials'] ?? null,
+                'approval_status'  => $r->approval_status,
+                'competency_id'    => $r->competency_id ? (int) $r->competency_id : null,
+                'framework_id'     => $r->framework_id ? (int) $r->framework_id : null,
+                'career_path_id'   => isset($r->career_path_id) && $r->career_path_id ? (int) $r->career_path_id : null,
+                'completed_at'     => $this->humanDate($r->completed_at),
+            ];
+        })->values()->all();
+    }
+
+    /** @return array<int, array{name:string, initials:string, employee_no:?string}> */
+    private function userMap(array $ids): array
+    {
+        $ids = array_values(array_filter(array_unique($ids)));
+        if (!$ids) {
+            return [];
+        }
+
+        return DB::table('tbluser')
+            ->whereIn('id', $ids)
+            ->get(['id', 'first_name', 'last_name', 'employee_no'])
+            ->mapWithKeys(function ($u) {
+                $first = trim((string) $u->first_name);
+                $last = trim((string) $u->last_name);
+                $name = trim($first . ' ' . $last) ?: ('User ' . $u->id);
+                $initials = strtoupper(substr($first ?: $name, 0, 1) . substr($last, 0, 1));
+
+                return [(int) $u->id => [
+                    'name'        => $name,
+                    'initials'    => $initials ?: strtoupper(substr($name, 0, 2)),
+                    'employee_no' => $u->employee_no,
+                ]];
+            })
+            ->all();
+    }
+
+    /**
+     * Recompute plan progress from its action items, so the workspace's progress
+     * bars reflect real completion instead of a typed-in number. Plans with no
+     * actions keep whatever progress was set manually.
+     */
+    private function syncPlanProgress(int $planId, int $sid, ?int $actorId): ?int
+    {
+        $total = DB::table('s_competency_plan_actions')
+            ->where('plan_id', $planId)->where('sub_institute_id', $sid)->whereNull('deleted_at')->count();
+
+        if ($total === 0) {
+            return null;
+        }
+
+        $done = DB::table('s_competency_plan_actions')
+            ->where('plan_id', $planId)->where('sub_institute_id', $sid)->whereNull('deleted_at')
+            ->where('status', 'completed')->count();
+
+        $progress = (int) round($done / $total * 100);
+
+        $update = ['progress' => $progress, 'updated_by' => $actorId, 'updated_at' => now()];
+        if ($progress === 100) {
+            $update['status'] = 'completed';
+            $update['completed_at'] = now();
+        }
+
+        DB::table(self::TABLE)->where('id', $planId)->update($update);
+
+        return $progress;
+    }
+
+    /** Comma-separated storage <-> array, mirroring s_user_jobrole.related_jobrole. */
+    private function splitList(?string $value): array
+    {
+        if (!$value) {
+            return [];
+        }
+        return array_values(array_filter(array_map('trim', explode(',', $value)), fn ($v) => $v !== ''));
+    }
+
+    private function joinList($value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (is_array($value)) {
+            $value = implode(',', array_filter(array_map('trim', $value), fn ($v) => $v !== ''));
+        }
+        return trim((string) $value) ?: null;
+    }
+
+    private function isFocusArea(string $name, ?string $focusAreas): bool
+    {
+        foreach ($this->splitList($focusAreas) as $area) {
+            if (strcasecmp($area, $name) === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** First numeric entry of a CSV column (tbluser.allocated_standards). */
+    private function firstNumeric($value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        foreach (array_map('trim', explode(',', (string) $value)) as $part) {
+            if (is_numeric($part)) {
+                return (int) $part;
+            }
+        }
+        return null;
+    }
+
+    private function humanDate($value): ?string
+    {
+        return $value ? date('d M Y', strtotime((string) $value)) : null;
+    }
+
+    private function emptyGapSummary(): array
+    {
+        return ['total' => 0, 'met' => 0, 'gaps' => 0, 'met_percent' => 0];
+    }
+}

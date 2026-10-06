@@ -1,0 +1,194 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Services\Leave\LeaveApprovalWorkflow;
+use App\Services\Leave\LeaveNotifier;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
+
+/**
+ * The other half of hrms_leave_workflow_settings. F-124.
+ *
+ * The Leave Configuration screen has always offered "escalate after 24 hours",
+ * every live tenant has it switched on, and nothing has ever escalated anything
+ * - there was no chain to escalate and no job to do it.
+ *
+ *   php artisan leave:escalate            all tenants
+ *   php artisan leave:escalate --tenant=3 one tenant
+ *   php artisan leave:escalate --dry-run  say what would happen, change nothing
+ *
+ * Scheduled hourly in routes/console.php. Hourly, not per-minute: the finest
+ * granularity the screen offers is one hour, so anything more often is work
+ * that cannot change an outcome.
+ */
+class EscalateOverdueLeaveApprovals extends Command
+{
+    protected $signature = 'leave:escalate
+                            {--tenant= : Only this sub_institute_id}
+                            {--dry-run : Report what would escalate without writing}';
+
+    protected $description = 'Escalate leave approvals that have waited longer than the tenant allows';
+
+    /** Forces the dry run's rollback. Not an error condition. */
+    private const DRY_RUN_SENTINEL = '__leave_escalate_dry_run__';
+
+    public function handle(LeaveApprovalWorkflow $workflow, LeaveNotifier $notifier): int
+    {
+        /*
+         * F-134. `(int) $this->option('tenant')` was the whole bug.
+         *
+         * (int)'abc' and (int)'0' are both 0, and 0 is not null, so it was
+         * passed through as if it were a real tenant. escalateOverdue() then
+         * applied the filter with ->when($onlyTenant, ...), and Laravel's
+         * when() skips its closure on ANY falsy value - so the tenant predicate
+         * was dropped and the sweep ran across every organisation.
+         *
+         * That is not a cosmetic mis-scope. escalateOverdue() only considers
+         * steps whereNull('escalated_at'), so the stamp is ONE-SHOT: every step
+         * it touched can never be escalated again. An operator typing
+         * `--tenant=03x` intending one institute would permanently widen HR's
+         * rights over steps in all three, with no way to undo it.
+         *
+         * Refuse the input instead of guessing at it. A tenant id is a positive
+         * integer; anything else is a typo, and a typo on an irreversible
+         * command should stop.
+         */
+        $tenant = null;
+
+        if ($this->option('tenant') !== null) {
+            $raw = trim((string) $this->option('tenant'));
+
+            if (!ctype_digit($raw) || (int) $raw < 1) {
+                $this->error(
+                    "--tenant must be a positive integer; got \"{$raw}\". "
+                    . 'Refusing rather than sweeping every tenant, because escalation cannot be undone.'
+                );
+
+                return self::FAILURE;
+            }
+
+            $tenant = (int) $raw;
+        }
+
+        if ($this->option('dry-run')) {
+            // A dry run must not stamp escalated_at, which is one-shot. So it asks
+            // the same question through the read side and reports, rather than
+            // calling escalateOverdue() and rolling back.
+            $this->info('Dry run - nothing will be written.');
+        }
+
+        $escalated = $this->option('dry-run')
+            ? $this->preview($workflow, $tenant)
+            : $workflow->escalateOverdue($tenant);
+
+        if ($escalated === []) {
+            $this->info('Nothing overdue.');
+
+            return self::SUCCESS;
+        }
+
+        /*
+         * F-128. TELL THE PEOPLE IT WAS ESCALATED TO.
+         *
+         * Escalating without telling anybody is a row in a table, not an
+         * escalation - the whole point is that somebody else now knows they can
+         * act. Skipped on a dry run for the obvious reason: a preview that sends
+         * real notifications is not a preview.
+         */
+        if (!$this->option('dry-run')) {
+            foreach ($escalated as $row) {
+                /*
+                 * Only a real escalation notifies the escalation target — that
+                 * notification says "you may now act on this", which is only true
+                 * when somebody actually gained the right to. A reminder, an
+                 * auto-decision and a skip each mean something different, and
+                 * `LeaveNotifier` has no method that means them yet.
+                 */
+                if (($row['action'] ?? 'escalate') === 'escalate') {
+                    $notifier->escalated($row, $this->hoursWaiting($row['waiting_since']));
+                }
+            }
+        }
+
+        $this->table(
+            ['step', 'leave', 'tenant', 'action', 'from', 'to', 'waiting since'],
+            array_map(fn ($row) => [
+                $row['step_id'],
+                $row['leave_id'],
+                $row['sub_institute_id'],
+                $row['action'] ?? 'escalate',
+                LeaveApprovalWorkflow::label($row['from']),
+                // Null for everything that is not an escalation — a reminder and an
+                // auto-decision have no target. `label(null)` would fatal here.
+                $row['to'] !== null ? LeaveApprovalWorkflow::label($row['to']) : '—',
+                $row['waiting_since'],
+            ], $escalated)
+        );
+
+        $counts = [];
+
+        foreach ($escalated as $row) {
+            $action = $row['action'] ?? 'escalate';
+            $counts[$action] = ($counts[$action] ?? 0) + 1;
+        }
+
+        $this->info(
+            count($escalated) . ' breached step(s): '
+            . ($counts === [] ? 'none' : implode(', ', array_map(
+                fn ($action, $n) => "{$n} {$action}",
+                array_keys($counts),
+                array_values($counts)
+            )))
+        );
+
+        // Said once, loudly, rather than per row: somebody reading this output
+        // needs to know the auto-decisions they configured did not happen.
+        if (($counts['auto_skipped'] ?? 0) > 0) {
+            $this->warn(
+                $counts['auto_skipped'] . ' step(s) were due to be decided automatically and were not. '
+                . 'Set G2G_LEAVE_AUTO_DECIDE=true to allow it, or change those steps to escalate.'
+            );
+        }
+
+        return self::SUCCESS;
+    }
+
+    /** How long the step had been waiting, for the notification body. */
+    private function hoursWaiting(?string $since): int
+    {
+        if (!$since) {
+            return 0;
+        }
+
+        return (int) max(0, now()->diffInHours(\Illuminate\Support\Carbon::parse($since)));
+    }
+
+    /**
+     * What escalateOverdue() would do, without doing it.
+     *
+     * Run inside a transaction that is deliberately rolled back, so the preview
+     * is the real code path rather than a second implementation of the same
+     * rules that could drift from it. The sentinel exception is what forces the
+     * rollback; anything else is a genuine failure and is rethrown.
+     */
+    private function preview(LeaveApprovalWorkflow $workflow, ?int $tenant): array
+    {
+        $result = [];
+
+        try {
+            DB::transaction(function () use ($workflow, $tenant, &$result) {
+                $result = $workflow->escalateOverdue($tenant);
+
+                throw new RuntimeException(self::DRY_RUN_SENTINEL);
+            });
+        } catch (RuntimeException $e) {
+            if ($e->getMessage() !== self::DRY_RUN_SENTINEL) {
+                throw $e;
+            }
+        }
+
+        return $result;
+    }
+}

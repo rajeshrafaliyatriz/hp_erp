@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SkillHeatmapController extends Controller
 {
+    use ResolvesApiIdentity;
+
     /**
      * GET /api/heatmap?sub_institute_id=1
      *
@@ -31,7 +34,7 @@ class SkillHeatmapController extends Controller
             'sub_institute_id' => 'required|integer',
         ]);
 
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
 
         // Step 1: Get all departments where parent_id > 0 (exclude top-level with parent_id = 0)
         $departments = DB::table('hrms_departments')
@@ -135,7 +138,7 @@ class SkillHeatmapController extends Controller
             'level'            => 'required|integer|min:1|max:6',
         ]);
 
-        $subInstituteId = $request->sub_institute_id;
+        $subInstituteId = $this->apiTenantId($request);
         $departmentId   = $request->department_id;
         $targetLevel    = (int) $request->level;
 
