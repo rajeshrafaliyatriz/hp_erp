@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Documents;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use App\Services\Documents\DocumentAccess;
+use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -47,23 +48,33 @@ class DocumentFolderController extends Controller
         $userId = (int) $identity['user_id'];
         $tenantId = (int) $identity['sub_institute_id'];
         $parentId = $request->filled('parent_id') ? (int) $request->input('parent_id') : null;
+        $department = $this->callerDepartment($userId);
 
         if ($parentId !== null) {
             $parent = DB::table('document_folders')->where('id', $parentId)->whereNull('deleted_at')->first();
 
-            if (!$parent || !DocumentAccess::canViewFolder($parent, $userId, $tenantId)) {
+            if (!$parent || !DocumentAccess::canViewFolder($parent, $userId, $tenantId, $department)) {
                 return $this->notFound();
             }
         }
 
-        $department = $this->callerDepartment($userId);
+        // An additional, advisory NARROWING filter - same treatment
+        // DocumentSearchService::applyFilters() already gives documents: it
+        // only restricts WHICH of the already-ACL-visible rows come back, it
+        // never widens what a caller may see. The admin Department tab and
+        // the self-service "My Department Documents" screen both pass this
+        // to show one department's own folder space; the main /documents
+        // page never passes it and sees exactly what it always has.
+        $departmentFilter = $request->filled('department_id') ? (int) $request->input('department_id') : null;
 
-        $foldersQuery = DB::table('document_folders')->where('parent_id', $parentId)->whereNull('deleted_at');
-        $folders = DocumentAccess::visibleFoldersTo($foldersQuery, $userId, $tenantId)
+        $foldersQuery = DB::table('document_folders')->where('parent_id', $parentId)->whereNull('deleted_at')
+            ->when($departmentFilter, fn ($q) => $q->where('department_id', $departmentFilter));
+        $folders = DocumentAccess::visibleFoldersTo($foldersQuery, $userId, $tenantId, $department)
             ->orderBy('sort_order')->orderBy('name')
-            ->get(['id', 'name', 'parent_id', 'owner_id', 'visibility', 'sort_order', 'created_at']);
+            ->get(['id', 'name', 'parent_id', 'owner_id', 'department_id', 'visibility', 'sort_order', 'created_at']);
 
-        $documentsQuery = DB::table('document_library')->where('folder_id', $parentId)->whereNull('deleted_at');
+        $documentsQuery = DB::table('document_library')->where('folder_id', $parentId)->whereNull('deleted_at')
+            ->when($departmentFilter, fn ($q) => $q->where('department_id', $departmentFilter));
         $documents = DocumentAccess::visibleTo($documentsQuery, $userId, $tenantId, $department)
             ->orderByDesc('created_at')
             ->get([
@@ -90,11 +101,16 @@ class DocumentFolderController extends Controller
 
         $userId = (int) $identity['user_id'];
         $tenantId = (int) $identity['sub_institute_id'];
+        $department = $this->callerDepartment($userId);
 
-        $query = DB::table('document_folders')->whereNull('deleted_at');
-        $all = DocumentAccess::visibleFoldersTo($query, $userId, $tenantId)
+        // Same advisory narrowing as index() - see its comment.
+        $departmentFilter = $request->filled('department_id') ? (int) $request->input('department_id') : null;
+
+        $query = DB::table('document_folders')->whereNull('deleted_at')
+            ->when($departmentFilter, fn ($q) => $q->where('department_id', $departmentFilter));
+        $all = DocumentAccess::visibleFoldersTo($query, $userId, $tenantId, $department)
             ->orderBy('sort_order')->orderBy('name')
-            ->get(['id', 'name', 'parent_id', 'owner_id', 'visibility']);
+            ->get(['id', 'name', 'parent_id', 'owner_id', 'department_id', 'visibility']);
 
         $byParent = $all->groupBy(fn ($f) => $f->parent_id ?? 0);
 
@@ -105,6 +121,7 @@ class DocumentFolderController extends Controller
                     'name' => $folder->name,
                     'parent_id' => $folder->parent_id,
                     'owner_id' => $folder->owner_id,
+                    'department_id' => $folder->department_id,
                     'visibility' => $folder->visibility,
                     'children' => $build($folder->id),
                 ];
@@ -123,9 +140,45 @@ class DocumentFolderController extends Controller
             return $identity;
         }
 
-        $userId = (int) $identity['user_id'];
+        return $this->createFolder($request, (int) $identity['user_id'], (int) $identity['sub_institute_id'], null);
+    }
+
+    /**
+     * POST /api/departments-management/{id}/documents/folders — file a
+     * folder AS the caller, tagged to department {id} regardless of the
+     * caller's own department. Route-gated profile:admin,hr; HR_ELEVATED
+     * re-checked inline, same belt-and-suspenders shape as
+     * DocumentLibraryController::storeForDepartment().
+     */
+    public function storeForDepartment(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $actorId = (int) $identity['user_id'];
         $tenantId = (int) $identity['sub_institute_id'];
 
+        if (!SubjectAuthority::userSatisfies($actorId, SubjectAuthority::HR_ELEVATED)) {
+            return $this->notFound();
+        }
+
+        $departmentId = (int) $id;
+        $exists = DB::table('hrms_departments')
+            ->where('id', $departmentId)->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')->exists();
+
+        if (!$exists) {
+            return response()->json(['status' => 0, 'message' => 'That department does not exist.'], 422);
+        }
+
+        return $this->createFolder($request, $actorId, $tenantId, $departmentId);
+    }
+
+    private function createFolder(Request $request, int $userId, int $tenantId, ?int $departmentOverride)
+    {
         $data = $request->validate([
             'name' => 'required|string|max:191',
             'parent_id' => 'nullable|integer',
@@ -133,11 +186,12 @@ class DocumentFolderController extends Controller
         ]);
 
         $parentId = $data['parent_id'] ?? null;
+        $department = $departmentOverride ?? $this->callerDepartment($userId);
 
         if ($parentId !== null) {
             $parent = DB::table('document_folders')->where('id', $parentId)->whereNull('deleted_at')->first();
 
-            if (!$parent || !DocumentAccess::canManageFolder($parent, $userId, $tenantId)) {
+            if (!$parent || !DocumentAccess::canManageFolder($parent, $userId, $tenantId, $department)) {
                 return response()->json(['status' => 0, 'message' => 'That parent folder does not exist.'], 422);
             }
         }
@@ -145,6 +199,7 @@ class DocumentFolderController extends Controller
         $id = DB::table('document_folders')->insertGetId([
             'sub_institute_id' => $tenantId,
             'owner_id' => $userId,
+            'department_id' => $department,
             'parent_id' => $parentId,
             'name' => trim($data['name']),
             'visibility' => $data['visibility'] ?? 'private',
@@ -167,10 +222,11 @@ class DocumentFolderController extends Controller
 
         $userId = (int) $identity['user_id'];
         $tenantId = (int) $identity['sub_institute_id'];
+        $department = $this->callerDepartment($userId);
 
         $folder = DB::table('document_folders')->where('id', (int) $id)->whereNull('deleted_at')->first();
 
-        if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId)) {
+        if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId, $department)) {
             return $this->notFound();
         }
 
@@ -196,11 +252,12 @@ class DocumentFolderController extends Controller
 
         $userId = (int) $identity['user_id'];
         $tenantId = (int) $identity['sub_institute_id'];
+        $department = $this->callerDepartment($userId);
         $folderId = (int) $id;
 
         $folder = DB::table('document_folders')->where('id', $folderId)->whereNull('deleted_at')->first();
 
-        if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId)) {
+        if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId, $department)) {
             return $this->notFound();
         }
 
@@ -214,7 +271,7 @@ class DocumentFolderController extends Controller
 
             $newParent = DB::table('document_folders')->where('id', $newParentId)->whereNull('deleted_at')->first();
 
-            if (!$newParent || !DocumentAccess::canManageFolder($newParent, $userId, $tenantId)) {
+            if (!$newParent || !DocumentAccess::canManageFolder($newParent, $userId, $tenantId, $department)) {
                 return response()->json(['status' => 0, 'message' => 'That destination folder does not exist.'], 422);
             }
 
@@ -248,11 +305,12 @@ class DocumentFolderController extends Controller
 
         $userId = (int) $identity['user_id'];
         $tenantId = (int) $identity['sub_institute_id'];
+        $department = $this->callerDepartment($userId);
         $folderId = (int) $id;
 
         $folder = DB::table('document_folders')->where('id', $folderId)->whereNull('deleted_at')->first();
 
-        if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId)) {
+        if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId, $department)) {
             return $this->notFound();
         }
 
@@ -287,21 +345,59 @@ class DocumentFolderController extends Controller
             return $identity;
         }
 
-        $userId = (int) $identity['user_id'];
+        return $this->resolveFolderPaths($request, (int) $identity['user_id'], (int) $identity['sub_institute_id'], null);
+    }
+
+    /**
+     * POST /api/departments-management/{id}/documents/folders/resolve-path —
+     * the resolve-path twin of storeForDepartment(): a recursive/zip folder
+     * upload from the admin Department tab needs every auto-created folder
+     * tagged to the department being viewed too, not just a single
+     * POST .../folders call.
+     */
+    public function resolvePathForDepartment(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $actorId = (int) $identity['user_id'];
         $tenantId = (int) $identity['sub_institute_id'];
 
+        if (!SubjectAuthority::userSatisfies($actorId, SubjectAuthority::HR_ELEVATED)) {
+            return $this->notFound();
+        }
+
+        $departmentId = (int) $id;
+        $exists = DB::table('hrms_departments')
+            ->where('id', $departmentId)->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')->exists();
+
+        if (!$exists) {
+            return response()->json(['status' => 0, 'message' => 'That department does not exist.'], 422);
+        }
+
+        return $this->resolveFolderPaths($request, $actorId, $tenantId, $departmentId);
+    }
+
+    private function resolveFolderPaths(Request $request, int $userId, int $tenantId, ?int $departmentOverride)
+    {
         $data = $request->validate([
             'paths' => 'required|array|min:1',
             'paths.*' => 'required|string|max:1000',
             'parent_id' => 'nullable|integer',
+            'visibility' => 'nullable|string|in:private,department,organization',
         ]);
 
         $rootParentId = $data['parent_id'] ?? null;
+        $department = $departmentOverride ?? $this->callerDepartment($userId);
 
         if ($rootParentId !== null) {
             $root = DB::table('document_folders')->where('id', $rootParentId)->whereNull('deleted_at')->first();
 
-            if (!$root || !DocumentAccess::canManageFolder($root, $userId, $tenantId)) {
+            if (!$root || !DocumentAccess::canManageFolder($root, $userId, $tenantId, $department)) {
                 return response()->json(['status' => 0, 'message' => 'That parent folder does not exist.'], 422);
             }
         }
@@ -333,12 +429,18 @@ class DocumentFolderController extends Controller
                     ->whereNull('deleted_at')
                     ->value('id');
 
+                // `$data['visibility']` was unconditionally 'private' here -
+                // meaning every folder created by a recursive/zip upload was
+                // invisible to anyone but its uploader regardless of the
+                // caller's chosen visibility (or now, department). Fixed to
+                // actually honor it, same default when omitted.
                 $folderId = $existing ?: DB::table('document_folders')->insertGetId([
                     'sub_institute_id' => $tenantId,
                     'owner_id' => $userId,
+                    'department_id' => $department,
                     'parent_id' => $parentId,
                     'name' => $segment,
-                    'visibility' => 'private',
+                    'visibility' => $data['visibility'] ?? 'private',
                     'created_by' => $userId,
                     'created_at' => now(),
                     'updated_at' => now(),

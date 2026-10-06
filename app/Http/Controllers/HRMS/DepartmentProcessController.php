@@ -4,7 +4,9 @@ namespace App\Http\Controllers\HRMS;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
-use App\Services\Platform\ProcedureParser;
+use App\Services\HRMS\DepartmentProcedureAiNormalizer;
+use App\Services\HRMS\DepartmentProcedureParser;
+use App\Services\Tasks\TaskPublisher;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -29,8 +31,11 @@ class DepartmentProcessController extends Controller
 {
     use ResolvesApiIdentity;
 
-    public function __construct(private readonly ProcedureParser $parser)
-    {
+    public function __construct(
+        private readonly DepartmentProcedureParser $parser,
+        private readonly DepartmentProcedureAiNormalizer $aiNormalizer,
+        private readonly TaskPublisher $taskPublisher,
+    ) {
     }
 
     /**
@@ -52,17 +57,21 @@ class DepartmentProcessController extends Controller
     }
 
     /**
-     * Read a pasted procedure into structure, without storing anything.
+     * Read a pasted SOP procedure into structure, without storing anything.
      *
-     * The K12-style "Source" step of the canvas builder's left panel: a
-     * department describes a process in prose and gets back a parsed
-     * spec (objective/trigger/completion, ordered steps with actor/approval
-     * flags, derived tasks) to review in the Process/Workflow/Tasks sections
-     * before "Apply to Canvas" turns it into real graph nodes. Delegates to
-     * the same ProcedureParser the module-wide Platform Services builder
-     * uses (Platform\ProcessController::convert()) - it is stateless and has
-     * no database coupling, so reusing it here needs no new parsing logic
-     * and no dependency on Platform Services' admin-only rights gate.
+     * The K12-parity "Source" step: a department describes a process in
+     * prose (optionally the rich "Actor | User action | System action |
+     * Decision | Result" form, see DepartmentProcedureParser) and gets back
+     * a full spec - objective/trigger/preconditions/inputs/completion/
+     * outputs/handoffs, ordered steps, resolved business-rule citations, and
+     * tasks already sorted into Readiness/Human gate/Workflow step/Handover -
+     * to review before Apply to Canvas / Assign and Publish act on it.
+     *
+     * `use_ai: true` asks DepartmentProcedureAiNormalizer to re-express text
+     * the deterministic parser couldn't read, ONLY once that first pass has
+     * actually reported issues - never on a clean parse, same as K12. The
+     * AI's answer is re-run through the exact same parser, never trusted
+     * directly; see that normalizer's docblock.
      */
     public function convertSource(Request $request)
     {
@@ -70,9 +79,14 @@ class DepartmentProcessController extends Controller
         if (!is_array($identity)) {
             return $identity;
         }
+        $tenantId = $identity['sub_institute_id'];
+
+        $departmentId = (int) $request->input('department_id');
+        if (!$this->departmentBelongsToTenant($departmentId, $tenantId)) {
+            return response()->json(['status' => 0, 'message' => 'Department not found'], 404);
+        }
 
         $text = trim((string) $request->input('source_text', ''));
-
         if ($text === '') {
             return response()->json([
                 'status'  => 0,
@@ -81,11 +95,161 @@ class DepartmentProcessController extends Controller
             ], 422);
         }
 
-        $spec = $this->parser->parse($text, trim((string) $request->input('name', '')) ?: 'Untitled process');
+        $department = DB::table('hrms_departments')->where('id', $departmentId)->first();
+        $departmentName = $department->department ?? 'This department';
+
+        $categoryKey = trim((string) $request->input('category', ''));
+        $categoryLabel = null;
+        foreach (config('department_processes.categories', []) as $category) {
+            if (($category['key'] ?? null) === $categoryKey) {
+                $categoryLabel = $category['label'] ?? null;
+                break;
+            }
+        }
+        // A free-typed custom category (see the Source panel's "Custom"
+        // option) matches no config entry - its own text IS the label there
+        // is, same as a tenant's free-typed category already works on
+        // department_processes.category itself (an open string column).
+        if ($categoryLabel === null && $categoryKey !== '' && $categoryKey !== 'custom') {
+            $categoryLabel = $categoryKey;
+        }
+
+        $fallbackName = trim((string) $request->input('name', '')) ?: 'Untitled process';
+
+        $spec = $this->parser->parse($text, $departmentId, $departmentName, $categoryLabel, $fallbackName);
+        $source = 'deterministic';
+        $aiStatus = null;
+
+        if ($spec['issues'] !== [] && $request->boolean('use_ai')) {
+            $normalized = $this->aiNormalizer->normalize($text, $tenantId);
+
+            if ($normalized['ok']) {
+                $spec = $this->parser->parse($normalized['text'], $departmentId, $departmentName, $categoryLabel, $fallbackName);
+                $source = 'ai';
+            } else {
+                $aiStatus = ['reason' => $normalized['reason'], 'detail' => $normalized['detail']];
+            }
+        }
 
         return response()->json([
             'status' => 1,
-            'data'   => ['spec' => $spec],
+            'data'   => ['spec' => $spec, 'source' => $source, 'ai_status' => $aiStatus],
+        ]);
+    }
+
+    /**
+     * Raise selected task drafts from a converted process's saved spec as
+     * real `task` rows - K12's "Assign and Publish", the one genuinely new
+     * write path (Save already persists the process itself via store()/
+     * updateCanvas(), same as any other process).
+     *
+     * The task drafts live in `canvas_meta.tasks` on the saved process (the
+     * frontend stashes the full converted spec there when it saves) - never
+     * re-sent by the client, so a publish always acts on what was actually
+     * saved rather than whatever the browser still has in memory.
+     */
+    public function publishTasks(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = $identity['sub_institute_id'];
+        $actorId  = $identity['user_id'];
+
+        $process = $this->findForTenant($id, $tenantId);
+        if (!$process) {
+            return response()->json(['status' => 0, 'message' => 'Process not found'], 404);
+        }
+
+        $assignments = $request->input('assignments');
+        if (!is_array($assignments) || $assignments === []) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Say who each task is for before publishing.',
+                'errors'  => ['assignments' => ['Expected a map of task ref to user id.']],
+            ], 422);
+        }
+
+        $meta = json_decode((string) $process->canvas_meta, true) ?: [];
+        $drafts = collect($meta['tasks'] ?? [])->keyBy('ref');
+
+        $already = DB::table('department_process_task_drafts')->where('process_id', $process->id)->pluck('task_ref')->all();
+
+        $created = [];
+        $skipped = [];
+        $problems = [];
+
+        foreach ($assignments as $ref => $assigneeId) {
+            $ref = (string) $ref;
+            $assigneeId = (int) $assigneeId;
+
+            if (!$drafts->has($ref)) {
+                $problems[] = '"' . $ref . '" is not a task this process derives.';
+                continue;
+            }
+            if (in_array($ref, $already, true)) {
+                $skipped[] = $ref;
+                continue;
+            }
+            if ($assigneeId <= 0) {
+                $problems[] = '"' . $ref . '" has nobody assigned.';
+                continue;
+            }
+
+            // The assignee must be an active member of this tenant - without
+            // this a publish could put work in another organisation's queue.
+            $inTenant = DB::table('tbluser')
+                ->where('id', $assigneeId)
+                ->where('sub_institute_id', $tenantId)
+                ->where('status', 1)
+                ->exists();
+
+            if (!$inTenant) {
+                $problems[] = '"' . $ref . '" names somebody who is not an active member of this organisation.';
+                continue;
+            }
+
+            $task = $drafts->get($ref);
+            $key = sprintf('dept-process-convert-%d-%s', $process->id, $ref);
+
+            $taskId = $this->taskPublisher->publish(
+                title: (string) $task['title'],
+                description: 'Raised from the process "' . mb_substr((string) $process->name, 0, 150) . '".',
+                dueDate: now()->addDays(max(1, (int) ($task['due_in_days'] ?? 7))),
+                assigneeId: $assigneeId,
+                allocatedBy: $actorId,
+                subInstituteId: $tenantId,
+                idempotencyKey: $key,
+                priority: (string) ($task['priority'] ?? 'Medium'),
+                kra: isset($task['kra']) ? (string) $task['kra'] : null,
+                kpa: isset($task['kpa']) ? (string) $task['kpa'] : null,
+            );
+
+            DB::table('department_process_task_drafts')->insert([
+                'process_id'       => $process->id,
+                'department_id'    => $process->department_id,
+                'sub_institute_id' => $tenantId,
+                'task_id'          => $taskId,
+                'task_ref'         => $ref,
+                'category'         => (string) ($task['category'] ?? ''),
+                'title'            => mb_substr((string) $task['title'], 0, 255),
+                'assignee_id'      => $assigneeId,
+                'idempotency_key'  => $key,
+                'created_at'       => now(),
+                'updated_at'       => now(),
+            ]);
+
+            $created[] = ['ref' => $ref, 'task_id' => $taskId];
+        }
+
+        return response()->json([
+            'status' => 1,
+            'data'   => [
+                'created'            => $created,
+                'already_published'  => $skipped,
+                'problems'           => $problems,
+            ],
         ]);
     }
 
