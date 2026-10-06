@@ -1418,6 +1418,23 @@ Route::prefix('departments-management')->group(function () {
     Route::get('/{id}/impact', [DepartmentManagementController::class, 'impact']);
     // The alternative to deleting: everything becomes the target's.
     Route::post('/{id}/merge', [DepartmentManagementController::class, 'merge']);
+
+    /*
+     * A DEPARTMENT'S OWN DOCUMENTS - admin/HR curating ON BEHALF OF a
+     * department, which may not be the caller's own. Gated twice, same
+     * reasoning as employees-management's own document routes just below in
+     * this file: profile:admin,hr says WHO may ask, the controller's own
+     * inline HR_ELEVATED + tenant/existence check says WHICH departments.
+     * This is what lets an upload tag correctly to the department being
+     * VIEWED rather than silently landing under the uploader's own -
+     * storeForDepartment()'s own docblock explains why that distinction
+     * matters.
+     */
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'storeForDepartment'])->whereNumber('id');
+        Route::post('/{id}/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'storeForDepartment'])->whereNumber('id');
+        Route::post('/{id}/documents/folders/resolve-path', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'resolvePathForDepartment'])->whereNumber('id');
+    });
 });
 
 Route::resource('departments-management', DepartmentManagementController::class)
@@ -1988,6 +2005,20 @@ Route::middleware('api.token')->group(function () {
     Route::post('/account/documents/{id}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restore'])->whereNumber('id');
     Route::post('/account/documents/{id}/versions', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'uploadVersion'])->whereNumber('id');
     Route::post('/account/documents/{id}/versions/{historyId}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreVersion'])->whereNumber(['id', 'historyId']);
+
+    /*
+     * "MY DEPARTMENT DOCUMENTS" — same no-id-parameter shape as
+     * /account/documents above, one level narrower: not "mine", but "my
+     * department's". MyDepartmentDocumentsController never reads a
+     * department_id from the request - it is always derived from the
+     * caller's own tbluser.department_id, so this cannot be pointed at a
+     * colleague's department by tampering with any id. Writes reuse
+     * /account/documents and /documents/folders above unchanged - no new
+     * write routes needed here, see that controller's own docblock.
+     */
+    Route::get('/account/department-documents', [\App\Http\Controllers\Documents\MyDepartmentDocumentsController::class, 'index']);
+    Route::get('/account/department-documents/folders', [\App\Http\Controllers\Documents\MyDepartmentDocumentsController::class, 'folderIndex']);
+    Route::get('/account/department-documents/folders/tree', [\App\Http\Controllers\Documents\MyDepartmentDocumentsController::class, 'folderTree']);
 
     /*
      * One search box over the whole Document Library, self-service and admin

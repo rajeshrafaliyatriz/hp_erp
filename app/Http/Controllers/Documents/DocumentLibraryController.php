@@ -120,6 +120,46 @@ class DocumentLibraryController extends Controller
         return $this->fileDocument($request, (int) $id, $tenantId, (int) $identity['user_id']);
     }
 
+    /**
+     * POST /api/departments-management/{id}/documents — file a document AS
+     * the caller, tagged to department {id} regardless of the caller's own
+     * department. Route-gated profile:admin,hr; HR_ELEVATED re-checked
+     * inline, same belt-and-suspenders shape as trashVisible().
+     *
+     * Why this exists: `fileDocument()` has always tagged `department_id`
+     * from the ACTOR's own department (`callerDepartment()`), unconditionally
+     * - correct for every caller up to now, but wrong the moment an admin
+     * views a department that is not their own and uploads something there:
+     * without this override, the file would silently land under the admin's
+     * OWN department instead of the one they were looking at.
+     */
+    public function storeForDepartment(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $actorId = (int) $identity['user_id'];
+        $tenantId = (int) $identity['sub_institute_id'];
+
+        if (!SubjectAuthority::userSatisfies($actorId, SubjectAuthority::HR_ELEVATED)) {
+            return $this->notFound();
+        }
+
+        $departmentId = (int) $id;
+        $exists = DB::table('hrms_departments')
+            ->where('id', $departmentId)->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')->exists();
+
+        if (!$exists) {
+            return response()->json(['status' => 0, 'message' => 'That department does not exist.'], 422);
+        }
+
+        return $this->fileDocument($request, $actorId, $tenantId, $actorId, $departmentId);
+    }
+
     /** DELETE /api/employees-management/{employee}/documents/{document} */
     public function destroyForEmployee(Request $request, $employee, $document)
     {
@@ -847,7 +887,7 @@ class DocumentLibraryController extends Controller
      * OCR (which are not) are Phase 2's concern and run async once a worker
      * is provisioned.
      */
-    private function fileDocument(Request $request, int $subjectId, int $tenantId, int $actorId)
+    private function fileDocument(Request $request, int $subjectId, int $tenantId, int $actorId, ?int $departmentOverride = null)
     {
         $allowedExtensions = (string) config('documents.allowed_extensions');
         $maxKb = (int) config('documents.max_upload_kb');
@@ -889,8 +929,9 @@ class DocumentLibraryController extends Controller
             // access to the destination folder that matters - the employee
             // being filed for may have no access to that folder at all.
             $folder = DB::table('document_folders')->where('id', $folderId)->whereNull('deleted_at')->first();
+            $actorDepartment = $departmentOverride ?? $this->callerDepartment($actorId);
 
-            if (!$folder || !DocumentAccess::canManageFolder($folder, $actorId, $tenantId)) {
+            if (!$folder || !DocumentAccess::canManageFolder($folder, $actorId, $tenantId, $actorDepartment)) {
                 return response()->json(['status' => 0, 'message' => 'That folder does not exist.'], 422);
             }
         }
@@ -907,7 +948,7 @@ class DocumentLibraryController extends Controller
             $extractedText = $extractor->extract($file->getRealPath(), $extension);
         }
 
-        $department = $this->callerDepartment($subjectId);
+        $department = $departmentOverride ?? $this->callerDepartment($subjectId);
         $principals = DocumentAccess::computePrincipals($visibility, $department, []);
 
         // Falls back to the file's own name, the same default this app's

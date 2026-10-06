@@ -103,18 +103,22 @@ class DocumentAccess
 
     /**
      * `document_folders`' own `visibleTo()` twin, not a parallel ACL class -
-     * the rules are the same shape (owner, HR-elevated, organization-wide),
-     * deliberately simpler because folders carry no `department_id`/
-     * `view_principals`/`permissions` columns (a folder is either private to
-     * its owner or visible to the whole organisation - no department or
-     * per-principal sharing in v1, unlike documents themselves).
+     * the rules are the same shape (owner, HR-elevated, organization-wide,
+     * department-matching), simpler than documents' because folders carry no
+     * `view_principals`/`permissions` columns - no per-principal sharing in
+     * v1, unlike documents themselves. A folder's department match is a
+     * straight two-column comparison (`visibility='department' &&
+     * department_id===$departmentId`), the same rule `visibleTo()`/
+     * `canView()` apply to documents - no `view_principals`-equivalent is
+     * needed here because folders never support the per-principal overrides
+     * that column exists for on documents.
      */
-    public static function visibleFoldersTo(Builder $query, int $userId, int $tenantId): Builder
+    public static function visibleFoldersTo(Builder $query, int $userId, int $tenantId, ?int $departmentId = null): Builder
     {
         $isElevated = SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED);
 
         return $query->where('sub_institute_id', $tenantId)
-            ->where(function (Builder $q) use ($userId, $isElevated) {
+            ->where(function (Builder $q) use ($userId, $departmentId, $isElevated) {
                 $q->where('owner_id', $userId);
 
                 if ($isElevated) {
@@ -124,11 +128,17 @@ class DocumentAccess
                 }
 
                 $q->orWhere('visibility', 'organization');
+
+                if ($departmentId) {
+                    $q->orWhere(function (Builder $dq) use ($departmentId) {
+                        $dq->where('visibility', 'department')->where('department_id', $departmentId);
+                    });
+                }
             });
     }
 
     /** May this caller see this one folder? */
-    public static function canViewFolder(object $folder, int $userId, int $tenantId): bool
+    public static function canViewFolder(object $folder, int $userId, int $tenantId, ?int $departmentId = null): bool
     {
         if ((int) $folder->sub_institute_id !== $tenantId) {
             return false;
@@ -142,11 +152,26 @@ class DocumentAccess
             return true;
         }
 
-        return (string) $folder->visibility === 'organization';
+        if ((string) $folder->visibility === 'organization') {
+            return true;
+        }
+
+        return $departmentId !== null
+            && (string) $folder->visibility === 'department'
+            && (int) ($folder->department_id ?? 0) === $departmentId;
     }
 
-    /** May this caller create/rename/move/delete this folder? Owner or HR-elevated only - no `created_by` fallback like documents have, since a folder's `created_by` and `owner_id` are set together and never diverge. */
-    public static function canManageFolder(object $folder, int $userId, int $tenantId): bool
+    /**
+     * May this caller create/rename/move/delete this folder? Owner or
+     * HR-elevated, same as before - no `created_by` fallback like documents
+     * have, since a folder's `created_by` and `owner_id` are set together and
+     * never diverge. NEW: a department_head/reporting_manager (PEOPLE_MANAGERS)
+     * may also manage a `department`-visibility folder tagged to the
+     * department they're viewing, even one they didn't personally create -
+     * otherwise the admin Documents tab would let a department head reorganize
+     * only the folders they happened to make themselves.
+     */
+    public static function canManageFolder(object $folder, int $userId, int $tenantId, ?int $departmentId = null): bool
     {
         if ((int) $folder->sub_institute_id !== $tenantId) {
             return false;
@@ -156,7 +181,14 @@ class DocumentAccess
             return true;
         }
 
-        return SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED);
+        if (SubjectAuthority::userSatisfies($userId, SubjectAuthority::HR_ELEVATED)) {
+            return true;
+        }
+
+        return $departmentId !== null
+            && (string) $folder->visibility === 'department'
+            && (int) ($folder->department_id ?? 0) === $departmentId
+            && SubjectAuthority::userSatisfies($userId, SubjectAuthority::PEOPLE_MANAGERS);
     }
 
     /**
