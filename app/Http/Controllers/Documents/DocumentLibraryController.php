@@ -365,7 +365,7 @@ class DocumentLibraryController extends Controller
         $perPage = min(100, max(1, (int) $request->input('per_page', 24)));
 
         $result = (new DocumentSearchService())->search(
-            $request->only(['q', 'category', 'document_type', 'department_id', 'source_system', 'date_from', 'date_to', 'owner_id']),
+            $request->only(['q', 'category', 'document_type', 'department_id', 'source_system', 'date_from', 'date_to', 'owner_id', 'folder_id']),
             (int) $identity['sub_institute_id'],
             (int) $identity['user_id'],
             $department,
@@ -474,13 +474,29 @@ class DocumentLibraryController extends Controller
             'document_type' => 'sometimes|string|max:64',
             'category' => 'sometimes|string|in:personnel,organization',
             'subject' => 'sometimes|nullable|string|max:191',
+            // Accepts '' as well as an int: the frontend sends '' for "move
+            // to root" rather than relying on this app's API layer to have
+            // turned an empty string into a real null on the way in.
+            'folder_id' => 'sometimes|nullable',
         ]);
+
+        if (array_key_exists('folder_id', $data)) {
+            $data['folder_id'] = $data['folder_id'] !== '' && $data['folder_id'] !== null ? (int) $data['folder_id'] : null;
+        }
 
         $changes = [];
 
         foreach ($data as $field => $value) {
             if ((string) ($row->{$field} ?? '') !== (string) $value) {
                 $changes[$field] = $value;
+            }
+        }
+
+        if (array_key_exists('folder_id', $changes) && $changes['folder_id'] !== null) {
+            $folder = DB::table('document_folders')->where('id', $changes['folder_id'])->whereNull('deleted_at')->first();
+
+            if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, (int) $identity['sub_institute_id'])) {
+                return response()->json(['status' => 0, 'message' => 'That folder does not exist.'], 422);
             }
         }
 
@@ -838,8 +854,19 @@ class DocumentLibraryController extends Controller
 
         $data = $request->validate([
             'document' => 'required|file|mimes:' . $allowedExtensions . '|max:' . $maxKb,
-            'title' => 'required|string|max:191',
-            'document_type' => 'required|string|max:64',
+            // Both optional - see "user should only click Upload": a title
+            // falls back to the filename below, and an unset document_type
+            // is filled in later by ProcessDocumentPipelineJob::classify(),
+            // exactly the way it already fills one in when a human leaves
+            // it blank. document_type's known-types list (config/documents.php)
+            // is advisory only now, same as that config's own docblock
+            // already says of the column itself ("what the upload form
+            // offers, not what the database enforces") - any non-blank
+            // string up to 64 chars is accepted, not just a configured key,
+            // which is also what lets "Other" + a typed label (frontend)
+            // store that label directly instead of the literal word "other".
+            'title' => 'nullable|string|max:191',
+            'document_type' => 'nullable|string|max:64',
             'category' => 'nullable|string|in:personnel,organization',
             'visibility' => 'nullable|string|in:private,department,organization',
             'folder_id' => 'nullable|integer',
@@ -848,14 +875,8 @@ class DocumentLibraryController extends Controller
         $category = $data['category'] ?? 'personnel';
         $visibility = $data['visibility'] ?? 'private';
 
-        $knownTypes = array_merge(
-            array_keys(config('documents.types.personnel', [])),
-            array_keys(config('documents.types.organization', []))
-        );
-
-        if (!in_array($data['document_type'], $knownTypes, true)) {
-            return response()->json(['status' => 0, 'message' => 'That document type does not exist.'], 422);
-        }
+        $titleProvided = !empty(trim((string) ($data['title'] ?? '')));
+        $documentType = !empty(trim((string) ($data['document_type'] ?? ''))) ? trim($data['document_type']) : null;
 
         $folderId = $data['folder_id'] ?? null;
 
@@ -889,12 +910,22 @@ class DocumentLibraryController extends Controller
         $department = $this->callerDepartment($subjectId);
         $principals = DocumentAccess::computePrincipals($visibility, $department, []);
 
+        // Falls back to the file's own name, the same default this app's
+        // upload dropzone already applied client-side before title became
+        // optional - title_source records which happened, so
+        // ProcessDocumentPipelineJob::classify() knows an AI-suggested
+        // title is still free to fill this in (title_source !== 'user'),
+        // while a deliberately-typed one never is.
+        $title = $titleProvided
+            ? trim((string) $data['title'])
+            : mb_substr(pathinfo((string) $stored['original_file_name'], PATHINFO_FILENAME), 0, 191);
+
         $documentId = DB::table('document_library')->insertGetId([
             'sub_institute_id' => $tenantId,
             'owner_id' => $subjectId,
             'folder_id' => $folderId,
-            'title' => $data['title'],
-            'title_source' => 'user',
+            'title' => $title,
+            'title_source' => $titleProvided ? 'user' : 'filename',
             'original_file_name' => $stored['original_file_name'],
             'mime_type' => $stored['mime_type'],
             'size' => $stored['size'],
@@ -902,7 +933,7 @@ class DocumentLibraryController extends Controller
             'storage_path' => $stored['storage_path'],
             'current_version' => 1,
             'category' => $category,
-            'document_type' => $data['document_type'],
+            'document_type' => $documentType,
             'department_id' => $department,
             'extracted_text' => $extractedText !== '' ? $extractedText : null,
             'visibility' => $visibility,

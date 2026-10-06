@@ -1531,6 +1531,7 @@ Route::prefix('department-rules')->group(function () {
 // elsewhere in this file - otherwise the router reads "templates" as an id.
 Route::prefix('department-processes')->group(function () {
     Route::get('/templates', [DepartmentProcessController::class, 'templates']);
+    Route::post('/convert-source', [DepartmentProcessController::class, 'convertSource']);
     Route::get('/', [DepartmentProcessController::class, 'index']);
     Route::post('/', [DepartmentProcessController::class, 'store']);
     Route::get('/{id}', [DepartmentProcessController::class, 'show']);

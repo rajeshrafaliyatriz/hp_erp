@@ -87,6 +87,9 @@ return [
             'timeout' => (int) env('DEEPSEEK_TIMEOUT_SECONDS', 600),
             'max_output_tokens' => (int) env('DEEPSEEK_MAX_OUTPUT_TOKENS', 0),
             'api_type' => env('DEEPSEEK_API_TYPE', 'DEEPSEEK_API_KEY'),
+            // Send `thinking: disabled` for deepseek-flash / deepseek-v4-* so JSON answers are not
+            // swallowed by reasoning tokens. See AiModelClient::callOpenAiCompatible().
+            'disable_thinking' => filter_var(env('DEEPSEEK_DISABLE_THINKING', true), FILTER_VALIDATE_BOOLEAN),
         ],
     ],
 

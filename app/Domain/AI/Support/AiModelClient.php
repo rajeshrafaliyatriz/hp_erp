@@ -462,6 +462,19 @@ final class AiModelClient
             $payload['response_format'] = ['type' => 'json_object'];
         }
 
+        // DeepSeek's current models (deepseek-flash, deepseek-v4-*) THINK BY DEFAULT: the
+        // reasoning consumes the output budget and structured answers come back empty
+        // (finish_reason=length). Signals needs a plain JSON answer, so thinking is switched
+        // off with DeepSeek's documented `thinking` parameter. Older names such as
+        // `deepseek-chat` are left untouched, and DEEPSEEK_DISABLE_THINKING=false opts out.
+        if (
+            $config->provider === 'deepseek'
+            && config('ai.provider.deepseek.disable_thinking', true)
+            && preg_match('/^deepseek-(flash|v4)/i', (string) $config->model) === 1
+        ) {
+            $payload['thinking'] = ['type' => 'disabled'];
+        }
+
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
 
         $response = Http::timeout($this->timeout($config->provider))
