@@ -68,6 +68,14 @@ return [
 
     'visibility' => ['private', 'department', 'organization'],
 
+    'trash' => [
+        // How long a deleted document stays recoverable before
+        // `documents:purge-trash` removes it (and its storage objects, and
+        // every version's) for good. The scheduled command's own `--days`
+        // default mirrors this value - one source of truth either way.
+        'purge_days' => (int) env('DOCUMENTS_TRASH_PURGE_DAYS', 30),
+    ],
+
     'processing' => [
         'queue' => env('DOCUMENTS_QUEUE', 'documents'),
         'ai_module' => env('DOCUMENTS_AI_MODULE', 'document_classification'),
