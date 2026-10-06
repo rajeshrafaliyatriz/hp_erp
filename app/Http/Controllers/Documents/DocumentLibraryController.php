@@ -365,7 +365,7 @@ class DocumentLibraryController extends Controller
         $perPage = min(100, max(1, (int) $request->input('per_page', 24)));
 
         $result = (new DocumentSearchService())->search(
-            $request->only(['q', 'category', 'document_type', 'department_id', 'source_system', 'date_from', 'date_to', 'owner_id']),
+            $request->only(['q', 'category', 'document_type', 'department_id', 'source_system', 'date_from', 'date_to', 'owner_id', 'folder_id']),
             (int) $identity['sub_institute_id'],
             (int) $identity['user_id'],
             $department,
@@ -474,13 +474,29 @@ class DocumentLibraryController extends Controller
             'document_type' => 'sometimes|string|max:64',
             'category' => 'sometimes|string|in:personnel,organization',
             'subject' => 'sometimes|nullable|string|max:191',
+            // Accepts '' as well as an int: the frontend sends '' for "move
+            // to root" rather than relying on this app's API layer to have
+            // turned an empty string into a real null on the way in.
+            'folder_id' => 'sometimes|nullable',
         ]);
+
+        if (array_key_exists('folder_id', $data)) {
+            $data['folder_id'] = $data['folder_id'] !== '' && $data['folder_id'] !== null ? (int) $data['folder_id'] : null;
+        }
 
         $changes = [];
 
         foreach ($data as $field => $value) {
             if ((string) ($row->{$field} ?? '') !== (string) $value) {
                 $changes[$field] = $value;
+            }
+        }
+
+        if (array_key_exists('folder_id', $changes) && $changes['folder_id'] !== null) {
+            $folder = DB::table('document_folders')->where('id', $changes['folder_id'])->whereNull('deleted_at')->first();
+
+            if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, (int) $identity['sub_institute_id'])) {
+                return response()->json(['status' => 0, 'message' => 'That folder does not exist.'], 422);
             }
         }
 
