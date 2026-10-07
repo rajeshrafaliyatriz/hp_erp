@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessDocumentPipelineJob;
 use App\Services\Documents\DocumentAccess;
+use App\Services\Documents\DocumentDuplicator;
 use App\Services\Documents\DocumentStorageService;
 use App\Services\Documents\Extraction\TextExtractionManager;
 use App\Services\Documents\Search\DocumentSearchService;
@@ -385,6 +386,77 @@ class DocumentLibraryController extends Controller
     }
 
     /**
+     * GET /api/documents/recent — documents THIS caller has actually opened
+     * (preview or download — both routes through download(), see its own
+     * docblock), newest-viewed first.
+     *
+     * Zero schema change: every preview-open already writes an audit row
+     * (action='downloaded') via recordAudit() inside download() below. This
+     * just reads that trail back, grouped to the latest view per document,
+     * then re-applies DocumentAccess so a document the caller has since lost
+     * visibility into silently drops off rather than erroring or leaking.
+     */
+    public function recent(Request $request)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenantId = (int) $identity['sub_institute_id'];
+        $department = $this->callerDepartment($userId);
+        $limit = min(50, max(1, (int) $request->input('limit', 20)));
+
+        // Headroom beyond $limit: some of the most-recently-viewed ids may
+        // since have been soft-deleted or ACL-withdrawn and get filtered
+        // out below - asking for more than we need up front means a caller
+        // who genuinely has $limit worth of still-visible recent documents
+        // actually gets $limit back, not fewer.
+        $recent = DB::table('document_library_history')
+            ->select('document_id', DB::raw('MAX(created_at) as last_viewed_at'))
+            ->where('entry_type', 'audit')
+            ->where('action', 'downloaded')
+            ->where('created_by', $userId)
+            ->groupBy('document_id')
+            ->orderByDesc('last_viewed_at')
+            ->limit($limit * 2)
+            ->pluck('last_viewed_at', 'document_id');
+
+        if ($recent->isEmpty()) {
+            return response()->json(['status' => 1, 'data' => []]);
+        }
+
+        $query = DB::table('document_library')->whereIn('id', $recent->keys())->whereNull('deleted_at');
+        DocumentAccess::visibleTo($query, $userId, $tenantId, $department);
+
+        $rows = $query->get([
+            'id', 'title', 'original_file_name', 'mime_type', 'size', 'category',
+            'document_type', 'department_id', 'document_date', 'period_label',
+            'visibility', 'owner_id', 'source_system', 'tags', 'created_at',
+            'processing_status',
+        ]);
+
+        $starred = DB::table('document_library_stars')
+            ->where('user_id', $userId)
+            ->whereIn('document_id', $rows->pluck('id'))
+            ->pluck('document_id')
+            ->all();
+
+        $data = $rows->map(function ($row) use ($recent, $starred) {
+            $out = (array) $row;
+            $out['snippet'] = null;
+            $out['last_viewed_at'] = $recent[$row->id];
+            $out['starred'] = in_array($row->id, $starred, true);
+
+            return $out;
+        })->sortByDesc('last_viewed_at')->take($limit)->values()->all();
+
+        return response()->json(['status' => 1, 'data' => $data]);
+    }
+
+    /**
      * GET /api/documents — search across every document this caller may see.
      *
      * Self-service and admin alike hit this one endpoint; `DocumentAccess`
@@ -559,6 +631,55 @@ class DocumentLibraryController extends Controller
         $this->recordAudit($row->id, $userId, $request, 'updated', ['changed_fields' => array_keys($changes)]);
 
         return response()->json(['status' => 1, 'message' => 'Document updated.']);
+    }
+
+    /**
+     * POST /api/account/documents/{id}/duplicate — Drive's "Make a copy."
+     * {destination_folder_id?}. Gated on canView() (you can copy anything
+     * shared with you, same as starring), not ownership - unlike update()/
+     * destroy() above, a duplicate never touches the original, so there is
+     * nothing here that requires owning it. See DocumentDuplicator's own
+     * docblock for why the copy always lands private regardless of the
+     * original's visibility.
+     */
+    public function duplicate(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenantId = (int) $identity['sub_institute_id'];
+        $department = $this->callerDepartment($userId);
+
+        $row = DB::table('document_library')->where('id', (int) $id)->whereNull('deleted_at')->first();
+
+        if (!$row || !DocumentAccess::canView($row, $userId, $tenantId, $department)) {
+            return $this->notFound();
+        }
+
+        $data = $request->validate(['destination_folder_id' => 'sometimes|nullable|integer']);
+        $destinationFolderId = null;
+
+        if (!empty($data['destination_folder_id'])) {
+            $destinationFolderId = (int) $data['destination_folder_id'];
+            $folder = DB::table('document_folders')->where('id', $destinationFolderId)->whereNull('deleted_at')->first();
+
+            if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId, $department)) {
+                return response()->json(['status' => 0, 'message' => 'That destination folder does not exist.'], 422);
+            }
+        }
+
+        $duplicator = new DocumentDuplicator(new DocumentStorageService());
+        $result = $duplicator->duplicateDocument($row, $userId, $destinationFolderId);
+
+        if ($result === null) {
+            return response()->json(['status' => 0, 'message' => 'The original file could not be found in storage.'], 422);
+        }
+
+        return response()->json(['status' => 1, 'message' => 'Document duplicated.', 'data' => $result]);
     }
 
     /** DELETE /api/account/documents/{id} — remove one of mine. */
