@@ -5,15 +5,9 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Backfill for the `RoleKey::LEGACY_NAMES` gap this commit also fixes: the
- * literal profile name "administrator" (not "admin") was never in that list,
- * so any profile named exactly that — with `role_key` still NULL, true for
- * 10 of 12 known tenants per `Docs\cross-repo-audit\_evidence\roles-permissions-db3.txt`
- * — resolved to `role_key = null` through every migration below, not
- * `'administrator'`.
- *
- * Five migrations already ran against that false negative, all gated on
- * `RoleKey::fromProfile($profile) === 'administrator'` (or `in_array(...,
+ * General repair: make sure every profile `RoleKey::fromProfile()` resolves
+ * to `'administrator'` TODAY actually holds the rights rows it should, from
+ * the five migrations below (all gated on that same check, or `in_array(...,
  * $row['roles'])`):
  *   2026_09_30_110000_create_event_bus_and_audit_menu_rights.php
  *   2026_09_30_120000_revoke_broad_platform_services_module_grants.php  (the one that DELETES)
@@ -21,20 +15,43 @@ use Illuminate\Support\Facades\DB;
  *   2026_09_30_122000_create_ai_intelligence_menu_rights.php
  *   2026_10_05_150000_create_document_library_menu_right.php
  *
- * A profile matching the newly-added legacy name was therefore: (a) stripped
- * of its inherited Workflow/Scheduler/Integration/Add Process/Fields
- * Configuration grants by the revoke migration, backed up first into
- * `g2g_platform_services_revoked_rights_backup`; and (b) never granted the
- * brand-new rows the other four migrations created (Event Bus, Audit,
- * Platform Administration, What's Coming, 11 of 12 AI capabilities, Document
- * Library). This migration corrects both, scoped ONLY to profiles that the
- * fixed `RoleKey::fromProfile()` now resolves to `'administrator'` AND that
- * the OLD resolution did not — a profile correctly classified as non-admin
- * before this fix is untouched by either step.
+ * ── WHY THIS EXISTS, AND WHY IT IS NOT NARROWER ─────────────────────────────
  *
- * Both steps are idempotent (existence-checked inserts) — safe to run twice,
- * and safe for profiles already correctly granted by the original five
- * migrations.
+ * Originally written to backfill one specific cause: `RoleKey::LEGACY_NAMES`
+ * was missing the literal profile name "administrator" (only "admin" was
+ * recognised), so a profile named exactly that with `role_key` still NULL
+ * resolved to `null`, not `'administrator'`, through every migration above —
+ * see this commit's fix to `RoleKey.php` itself. That fix is real and worth
+ * keeping (10 of 12 known tenants still have `role_key IS NULL`, per
+ * `Docs\cross-repo-audit\_evidence\roles-permissions-db3.txt`, so an
+ * "Administrator"-named profile among them would hit exactly this gap).
+ *
+ * But it does NOT explain the specific account that prompted this migration.
+ * Direct inspection of both database connections (read-only, 2026-10-09)
+ * found that account's profile named "Admin" — already a recognised legacy
+ * name before this fix — with `role_key` already `'administrator'` on the
+ * `live` connection specifically, yet still missing its Event Bus right
+ * there, while ten OTHER administrator profiles on `live` have it and the
+ * SAME profile has it on the `default` connection. The migrations above are
+ * logged as having run on both connections. The exact mechanism was not
+ * pinned down (a timing interaction with the same-day role_key backfill is
+ * the leading guess, since Event Bus's own grant runs before it), and is not
+ * pursued further here — whatever the cause, the fix is the same: make sure
+ * every current administrator profile holds every row it should, which is
+ * what this migration already did before this note was corrected. It is
+ * deliberately NOT scoped to "only profiles the name fix newly affects",
+ * because that framing turned out not to cover the actual reported case.
+ *
+ * Separately, worth the user's attention: the `default` connection's own
+ * `migrations` table is missing log entries for
+ * `2026_09_30_120000_backfill_role_key_where_unambiguous` and
+ * `2026_09_30_120000_revoke_broad_platform_services_module_grants` entirely
+ * (present on `live`) — the two connections' migration histories have
+ * diverged beyond just this one profile's rights, which may be worth its own
+ * investigation independent of this fix.
+ *
+ * Both steps below are idempotent (existence-checked inserts) — safe to run
+ * twice, and safe for profiles already correctly granted.
  *
  * Everything this migration itself inserts is tracked in its own backup
  * table (`g2g_administrator_backfill_rights_backup`), the same way the
