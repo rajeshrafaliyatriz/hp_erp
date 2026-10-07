@@ -178,6 +178,7 @@ use App\Http\Controllers\Api\Attendance\AttendanceTrackingApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceReportApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceAdminController;
+use App\Http\Controllers\Api\Attendance\DepartmentScheduleController;
 use App\Http\Controllers\Api\Attendance\AttendanceRegularisationApiController;
 
 
@@ -1093,6 +1094,25 @@ Route::prefix('attendance')->group(function () {
         Route::get('/admin/grid', [AttendanceAdminController::class, 'grid']);
         Route::post('/admin/corrections', [AttendanceAdminController::class, 'correct']);
         Route::get('/admin/edits', [AttendanceAdminController::class, 'edits']);
+
+        /*
+        | Office hours, per department. Phase 18 step 5.
+        |
+        | Four endpoints and not two, because the apply is the dangerous one.
+        | `preview` computes exactly what `apply` computes and writes nothing;
+        | `apply` requires an explicit list of weekdays - there is no "all" on
+        | the server, so Saturday and Sunday have to be named.
+        |
+        | The previous version of this feature was REMOVED because a bulk shift
+        | write silently flattened Saturday across a department; 100 employees
+        | in one tenant have a Saturday that ends at 14:00. The preview, the
+        | explicit weekday list and the before-image event are the three things
+        | that version did not have.
+        */
+        Route::get('/admin/schedules', [DepartmentScheduleController::class, 'index']);
+        Route::post('/admin/schedules', [DepartmentScheduleController::class, 'store']);
+        Route::post('/admin/schedules/preview', [DepartmentScheduleController::class, 'preview']);
+        Route::post('/admin/schedules/apply', [DepartmentScheduleController::class, 'apply']);
     });
 });
 

@@ -39,6 +39,12 @@ get() { curl -s -m 60 -G "$BASE$2" -H "Authorization: Bearer $1" -H 'Accept: app
 # file that does not exist reads identically to one with no match, which would
 # let a moved or renamed component pass as a clean result. Count only what can
 # actually be opened, and say so when it cannot.
+# Fixed-string variant. The CSV patterns below are nothing but regex
+# metacharacters - $ { } ' - so they are matched literally, not compiled.
+countfix() {  # countfix <file> <literal>
+  if [ -f "$1" ]; then grep -cF "$2" "$1" || true; else echo "missing-file"; fi
+}
+
 countin() {   # countin <file> <pattern>
   if [ -f "$1" ]; then grep -c "$2" "$1" || true; else echo "missing-file"; fi
 }
@@ -135,6 +141,22 @@ check "  and the chevrons take their events back" "2" \
 SHELL_TSX="$FE/components/domain/hrms/hrit/payroll-management/shared/payroll-shell.tsx"
 check "the CSV writer can force a cell to text" "1" \
   "$(countin "$SHELL_TSX" 'export function csvText')"
+
+# A REGRESSION OF MINE, SHIPPED AND MERGED.
+#
+# The phase-17 commit wrote  ${'$'}{csv}  into the blob template. In a JS
+# template literal that evaluates to the string "$" followed by the LITERAL text
+# {csv}, so every exported file carried six characters and none of the data.
+#
+# It passed tsc, passed next build, and passed THIS PROBE - because the probe
+# asserted only that csvText EXISTS, never that the writer emits anything. An
+# assertion about a helper's presence says nothing about its output. Both
+# directions are asserted now: the broken form is absent AND the working one is
+# there, because either alone can be satisfied by a file that exports nothing.
+check "  the broken interpolation is gone" "0" \
+  "$(countfix "$SHELL_TSX" "\${'\$'}{csv}")"
+check "  and the rows are actually interpolated" "1" \
+  "$(countfix "$SHELL_TSX" "\${csv}")"
 
 MAR="$FE/components/domain/hrms/hrit/attendance-management/monthly-attendance-report/page.tsx"
 check "  and the monthly report uses it for dates" "1" \

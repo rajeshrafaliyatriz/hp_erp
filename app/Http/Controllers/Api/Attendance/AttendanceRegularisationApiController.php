@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Attendance;
 
+use App\Services\Attendance\AttendanceCorrector;
 use App\Http\Controllers\Api\Attendance\Concerns\ResolvesAttendanceContext;
 use App\Http\Controllers\Api\Leave\Concerns\ResolvesLeaveAuthority;
 use App\Http\Controllers\Controller;
@@ -536,82 +537,25 @@ class AttendanceRegularisationApiController extends Controller
      * commonest reason to regularise, and refusing it would leave the employee
      * with an approved request and an absent day.
      */
+    /**
+     * Apply the correction this request asked for.
+     *
+     * The body moved to App\Services\Attendance\AttendanceCorrector so the new
+     * HR-initiated route could share it rather than grow a second writer. The
+     * behaviour is unchanged for this path; the service also now marks a created
+     * row with in_note/out_note the way a real punch does, which this path
+     * previously left at 0.
+     */
     private function applyCorrection(object $row, int $actorId): array
     {
-        $day = Carbon::parse($row->day)->toDateString();
-
-        $existing = DB::table('hrms_attendances')
-            ->where('user_id', $row->user_id)
-            ->where('sub_institute_id', $row->sub_institute_id)
-            ->whereNull('deleted_at')
-            ->whereDate('day', $day)
-            ->first();
-
-        $punchIn  = $row->requested_in_time
-            ? $day . ' ' . $row->requested_in_time
-            : ($existing->punchin_time ?? null);
-
-        $punchOut = $row->requested_out_time
-            ? $day . ' ' . $row->requested_out_time
-            : ($existing->punchout_time ?? null);
-
-        $update = [
-            'punchin_time'   => $punchIn,
-            'punchout_time'  => $punchOut,
-            'timestamp_diff' => $this->duration($punchIn, $punchOut),
-            'updated_at'     => now(),
-            'updated_by'     => $actorId,
-        ];
-
-        /*
-         * The before-image, captured BEFORE the write. This correction overwrites
-         * somebody's recorded hours; without this the old punch times are gone and
-         * "what did this row say yesterday" has no answer. Payroll reads
-         * timestamp_diff, so an unrecorded correction is an unexplained pay change.
-         */
-        $before = $existing
-            ? [
-                'attendance_id'  => (int) $existing->id,
-                'punchin_time'   => $existing->punchin_time,
-                'punchout_time'  => $existing->punchout_time,
-                'timestamp_diff' => $existing->timestamp_diff,
-            ]
-            : null;   // no row existed - the correction CREATES the day
-
-        if ($existing) {
-            DB::table('hrms_attendances')->where('id', $existing->id)->update($update);
-
-            return ['before' => $before, 'after' => $update, 'attendance_id' => (int) $existing->id];
-        }
-
-        $newId = DB::table('hrms_attendances')->insertGetId(array_merge($update, [
-            'user_id'          => $row->user_id,
-            'sub_institute_id' => $row->sub_institute_id,
-            'day'              => $day,
-            'created_at'       => now(),
-            'created_by'       => $actorId,
-        ]));
-
-        return ['before' => null, 'after' => $update, 'attendance_id' => (int) $newId];
+        return app(AttendanceCorrector::class)->apply($row, $actorId);
     }
 
     /** HH:MM:SS between two datetimes, or null when the day is still open. */
+    /** Worked time. Delegated, so both correction paths round it identically. */
     private function duration(?string $punchIn, ?string $punchOut): ?string
     {
-        if (!$punchIn || !$punchOut) {
-            return null;
-        }
-
-        $in  = Carbon::parse($punchIn);
-        $out = Carbon::parse($punchOut);
-
-        if ($out->lessThanOrEqualTo($in)) {
-            return null;
-        }
-
-        $minutes = $in->diffInMinutes($out);
-
-        return sprintf('%02d:%02d:00', intdiv($minutes, 60), $minutes % 60);
+        return app(AttendanceCorrector::class)->duration($punchIn, $punchOut);
     }
 
     private function transform(object $row): array
