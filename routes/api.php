@@ -177,6 +177,7 @@ use App\Http\Controllers\Api\Leave\LeaveDistributionApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceTrackingApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceReportApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceAdminController;
 use App\Http\Controllers\Api\Attendance\AttendanceRegularisationApiController;
 
 
@@ -1072,6 +1073,26 @@ Route::prefix('attendance')->group(function () {
         // Dashboard analytics (department + employee scoped)
         Route::get('/weekly-summary', [AttendanceDashboardApiController::class, 'weeklySummary']);
         Route::get('/kpi', [AttendanceDashboardApiController::class, 'kpi']);
+    });
+
+    /*
+    | The HR attendance desk. Phase 18.
+    |
+    | admin,hr ONLY - deliberately narrower than the reporting group above.
+    | executive and auditor may READ the organisation's attendance; changing
+    | somebody's recorded hours changes their pay, and that is an HR act.
+    |
+    | The role gate here says WHO may ask. It does NOT say whom they may ask
+    | ABOUT: an HR manager is HR for one organisation, not for all twelve, and
+    | the route cannot know which employee id belongs to whose. The controller
+    | carries that check, and the probe asserts it with a cross-tenant admin
+    | token - an assertion with a plain employee would pass with the check
+    | deleted, because this gate stops them first.
+    */
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::get('/admin/grid', [AttendanceAdminController::class, 'grid']);
+        Route::post('/admin/corrections', [AttendanceAdminController::class, 'correct']);
+        Route::get('/admin/edits', [AttendanceAdminController::class, 'edits']);
     });
 });
 
@@ -2005,6 +2026,7 @@ Route::middleware('api.token')->group(function () {
     Route::post('/account/documents/{id}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restore'])->whereNumber('id');
     Route::post('/account/documents/{id}/versions', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'uploadVersion'])->whereNumber('id');
     Route::post('/account/documents/{id}/versions/{historyId}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreVersion'])->whereNumber(['id', 'historyId']);
+    Route::post('/account/documents/{id}/duplicate', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'duplicate'])->whereNumber('id');
 
     /*
      * "MY DEPARTMENT DOCUMENTS" — same no-id-parameter shape as
@@ -2037,6 +2059,8 @@ Route::middleware('api.token')->group(function () {
      * with id = "activity".
      */
     Route::get('/documents/activity', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'activity']);
+    Route::get('/documents/recent', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'recent']);
+    Route::get('/documents/starred', [\App\Http\Controllers\Documents\DocumentStarController::class, 'starred']);
 
     /*
      * Folders - DocumentAccess's folder-aware methods decide what a caller
@@ -2051,6 +2075,7 @@ Route::middleware('api.token')->group(function () {
     Route::post('/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'store']);
     Route::patch('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'update'])->whereNumber('id');
     Route::post('/documents/folders/{id}/move', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'move'])->whereNumber('id');
+    Route::post('/documents/folders/{id}/duplicate', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'duplicate'])->whereNumber('id');
     Route::delete('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'destroy'])->whereNumber('id');
 
     /*
@@ -2067,6 +2092,8 @@ Route::middleware('api.token')->group(function () {
     Route::get('/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'show'])->whereNumber('id');
     Route::get('/documents/{id}/history', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'history'])->whereNumber('id');
     Route::get('/documents/{id}/related', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'related'])->whereNumber('id');
+    Route::post('/documents/{id}/star', [\App\Http\Controllers\Documents\DocumentStarController::class, 'star'])->whereNumber('id');
+    Route::delete('/documents/{id}/star', [\App\Http\Controllers\Documents\DocumentStarController::class, 'unstar'])->whereNumber('id');
 
     Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
 

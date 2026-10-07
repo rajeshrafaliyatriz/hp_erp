@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Documents;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use App\Services\Documents\DocumentAccess;
+use App\Services\Documents\DocumentDuplicator;
+use App\Services\Documents\DocumentStorageService;
 use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -287,6 +289,62 @@ class DocumentFolderController extends Controller
         ]);
 
         return response()->json(['status' => 1, 'message' => 'Folder moved.']);
+    }
+
+    /**
+     * POST /api/documents/folders/{id}/duplicate — Drive's "Make a copy" for
+     * a whole folder tree. {destination_parent_id?}. Gated on canViewFolder()
+     * (you can copy anything shared with you), not canManageFolder() - a
+     * duplicate never touches the original. Same cycle guard move() already
+     * has: a folder can't be duplicated into its own subtree either, since
+     * the recursive walk below would otherwise copy the destination into
+     * itself as it goes. See DocumentDuplicator::duplicateFolder() for how
+     * contents the acting viewer can't see are silently skipped.
+     */
+    public function duplicate(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenantId = (int) $identity['sub_institute_id'];
+        $department = $this->callerDepartment($userId);
+        $folderId = (int) $id;
+
+        $folder = DB::table('document_folders')->where('id', $folderId)->whereNull('deleted_at')->first();
+
+        if (!$folder || !DocumentAccess::canViewFolder($folder, $userId, $tenantId, $department)) {
+            return $this->notFound();
+        }
+
+        $data = $request->validate(['destination_parent_id' => 'sometimes|nullable|integer']);
+        $destinationParentId = null;
+
+        if (!empty($data['destination_parent_id'])) {
+            $destinationParentId = (int) $data['destination_parent_id'];
+
+            if ($destinationParentId === $folderId) {
+                return response()->json(['status' => 0, 'message' => 'A folder cannot be duplicated into itself.'], 422);
+            }
+
+            $destinationParent = DB::table('document_folders')->where('id', $destinationParentId)->whereNull('deleted_at')->first();
+
+            if (!$destinationParent || !DocumentAccess::canManageFolder($destinationParent, $userId, $tenantId, $department)) {
+                return response()->json(['status' => 0, 'message' => 'That destination folder does not exist.'], 422);
+            }
+
+            if ($this->isDescendant($folderId, $destinationParentId)) {
+                return response()->json(['status' => 0, 'message' => 'A folder cannot be duplicated into its own subfolder.'], 422);
+            }
+        }
+
+        $duplicator = new DocumentDuplicator(new DocumentStorageService());
+        $result = $duplicator->duplicateFolder($folder, $userId, $tenantId, $department, $destinationParentId);
+
+        return response()->json(['status' => 1, 'message' => 'Folder duplicated.', 'data' => $result]);
     }
 
     /**
