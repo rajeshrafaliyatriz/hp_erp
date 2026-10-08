@@ -77,6 +77,21 @@ class CalendarShareService
             $colorByOwner[(int) $row->owner_user_id] ??= $row->color;
         }
 
+        /*
+         * A person's OWN chosen color (UserPreferences::task_card_color),
+         * tenant-wide - the fallback under a viewer-specific share color, not
+         * instead of it. An owner who shared with THIS viewer using a
+         * specific color still shows that way to them; everyone else sees
+         * the owner's own pick. Resolved here, once, so the wire format and
+         * every consumer (the dot, the chip accent) stay exactly as they
+         * were - this just widens what feeds a non-null color.
+         */
+        $personalColorByUser = [];
+        foreach (DB::table('user_preferences')->where('pref_key', 'task_card_color')->where('device_id', '')->where('pref_value', '!=', '')->get(['user_id', 'pref_value']) as $row) {
+            $personalColorByUser[(int) $row->user_id] = $row->pref_value;
+        }
+        $resolveColor = fn (int $userId) => $colorByOwner[$userId] ?? $personalColorByUser[$userId] ?? null;
+
         if ($visibility->visibleOwnerIds($viewerUserId, $subInstituteId) === null) {
             // Privileged — every active user in the tenant is a valid feed,
             // most with no actual share row at all; $colorByOwner still
@@ -84,7 +99,7 @@ class CalendarShareService
             return DB::table('tbluser')
                 ->where('sub_institute_id', $subInstituteId)->where('status', 1)->whereNull('deleted_at')
                 ->get(['id', DB::raw("TRIM(CONCAT_WS(' ', first_name, middle_name, last_name)) as name")])
-                ->map(fn ($row) => ['user_id' => (string) $row->id, 'name' => (string) $row->name, 'color' => $colorByOwner[(int) $row->id] ?? null])
+                ->map(fn ($row) => ['user_id' => (string) $row->id, 'name' => (string) $row->name, 'color' => $resolveColor((int) $row->id)])
                 ->all();
         }
 
@@ -98,7 +113,7 @@ class CalendarShareService
 
         return DB::table('tbluser')->whereIn('id', $ids)
             ->get(['id', DB::raw("TRIM(CONCAT_WS(' ', first_name, middle_name, last_name)) as name")])
-            ->map(fn ($row) => ['user_id' => (string) $row->id, 'name' => (string) $row->name, 'color' => $colorByOwner[(int) $row->id] ?? null])
+            ->map(fn ($row) => ['user_id' => (string) $row->id, 'name' => (string) $row->name, 'color' => $resolveColor((int) $row->id)])
             ->all();
     }
 }

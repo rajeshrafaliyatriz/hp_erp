@@ -103,6 +103,18 @@ class UserPreferences
         'about' => '',
 
         /*
+         * The color this person's own task/event chips show as on the Task
+         * Calendar, tenant-wide - empty means "no preference, use the
+         * automatic per-project/per-feed palette". Stored here rather than on
+         * task_management_calendar_shares (which already has an unrelated
+         * "color" column): that table's EVERYONE-viewer-id row is also how
+         * CalendarVisibilityService grants tenant-wide visibility, so writing
+         * a self-color there would accidentally share the person's whole
+         * calendar with everyone as a side effect of picking a color.
+         */
+        'task_card_color' => '',
+
+        /*
          * ═══════════════════════════════════════════════════════════════════
          * WHO CAN SEE THE PARTS OF A PERSON THAT ARE NOT WORK
          * ═══════════════════════════════════════════════════════════════════
