@@ -988,7 +988,7 @@ class OpportunityIngestionTest extends TestCase
         $call = 0;
         Http::fake(['generativelanguage.googleapis.com/*' => function () use (&$call) {
             $call++;
-            if ($call === 2) {
+            if ($call === 2 || $call === 3) { // call 3 is the intentional no-thinking retry of the same chunk (AiModelClient::callGemini)
                 return Http::response(['error' => 'boom'], 500);
             }
 
