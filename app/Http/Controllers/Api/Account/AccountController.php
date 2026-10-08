@@ -497,6 +497,12 @@ class AccountController extends Controller
             'pronouns' => ['sometimes', 'nullable', 'string', 'max:30'],
             'about' => ['sometimes', 'nullable', 'string', 'max:300'],
 
+            // Empty string clears it back to "use the automatic palette" -
+            // nullable alone isn't enough since '' fails a bare 'string' rule
+            // under Laravel's implicit-required-unless-nullable handling for
+            // some rule combinations; regex permits '' explicitly.
+            'task_card_color' => ['sometimes', 'regex:/^$|^#[0-9A-Fa-f]{6}$/'],
+
             /*
              * Visibility is an enum and is validated as one. Without this a
              * client could store `visible_mobile = 'yes'`, which the directory
