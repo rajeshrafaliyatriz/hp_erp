@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Platform;
 
 use App\Services\Platform\PlatformRegistry;
 use App\Services\Platform\ProcedureParser;
+use App\Services\Tasks\TaskPublisher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -45,6 +46,7 @@ class ProcessController extends PlatformController
     public function __construct(
         private readonly PlatformRegistry $registry,
         private readonly ProcedureParser $parser,
+        private readonly TaskPublisher $taskPublisher,
     ) {
     }
 
@@ -455,63 +457,30 @@ class ProcessController extends PlatformController
     /**
      * One derived task as a real task row.
      *
-     * Writes through the same tables `LegacyTaskController` uses rather than
-     * calling it: that controller resolves its context from request input, and
-     * this one already holds a verified scope. Re-entering through it would mean
-     * forging a request to satisfy a check that has already passed.
+     * Delegates to App\Services\Tasks\TaskPublisher - extracted so the
+     * Department Process run engine (DepartmentProcessRunController) raises
+     * tasks the exact same way rather than a second, drifting copy of this
+     * insert. Writes through the same tables `LegacyTaskController` uses
+     * rather than calling it: that controller resolves its context from
+     * request input, and this one already holds a verified scope. Re-entering
+     * through it would mean forging a request to satisfy a check that has
+     * already passed.
      */
     private function raiseTask(array $task, int $assigneeId, $scope, string $idempotencyKey, string $processName): ?int
     {
-        return DB::transaction(function () use ($task, $assigneeId, $scope, $idempotencyKey, $processName) {
-            $existing = DB::table('task_management_idempotency_keys')
-                ->where('sub_institute_id', $scope->selectedInstituteId)
-                ->where('idempotency_key', $idempotencyKey)
-                ->value('task_id');
+        $due = now()->addDays(max(1, (int) ($task['due_in_days'] ?? 7)));
 
-            if ($existing) {
-                return (int) $existing;
-            }
-
-            $due = now()->addDays(max(1, (int) ($task['due_in_days'] ?? 7)));
-
-            /*
-             * Column names and defaults copied from `LegacyTaskController::payload()`
-             * and its insert, so a task raised here is indistinguishable from one
-             * raised by the task screen — same `status` spelling ('PENDING', which
-             * is upper-case there and matters to the status filters), same
-             * `task_allocated` meaning the owner, same `SYEAR`.
-             *
-             * Getting these wrong would produce rows that exist and never appear in
-             * anybody's list, which is the worst outcome available here: the publish
-             * reports success and the work is invisible.
-             */
-            $taskId = DB::table('task')->insertGetId([
-                'task_title' => mb_substr((string) $task['title'], 0, 255),
-                'task_description' => 'Raised from the process "' . mb_substr($processName, 0, 150) . '".',
-                'task_date' => $due->toDateString(),
-                'task_type' => 'Medium',
-                'task_allocated_to' => $assigneeId,
-                // The person publishing owns it — they are who to ask about it.
-                'task_allocated' => $scope->userId,
-                'status' => 'PENDING',
-                'sub_institute_id' => $scope->selectedInstituteId,
-                'SYEAR' => $scope->syear ?? now()->year,
-                'created_by' => $scope->userId,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-            DB::table('task_management_idempotency_keys')->insert([
-                'sub_institute_id' => $scope->selectedInstituteId,
-                'idempotency_key' => $idempotencyKey,
-                'task_id' => $taskId,
-                // No `updated_at` on this table — it records that a key was used,
-                // which happens once and is never revised.
-                'created_at' => now(),
-            ]);
-
-            return (int) $taskId;
-        });
+        return $this->taskPublisher->publish(
+            title: (string) $task['title'],
+            description: 'Raised from the process "' . mb_substr($processName, 0, 150) . '".',
+            dueDate: $due,
+            // The person publishing owns it — they are who to ask about it.
+            assigneeId: $assigneeId,
+            allocatedBy: $scope->userId,
+            subInstituteId: $scope->selectedInstituteId,
+            syear: $scope->syear ?? null,
+            idempotencyKey: $idempotencyKey,
+        );
     }
 
     private function own(int $tenantId, int $id): ?object

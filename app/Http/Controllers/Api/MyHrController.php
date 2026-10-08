@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
+use App\Services\Documents\DocumentStorageService;
+use App\Services\Documents\Extraction\TextExtractionManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * What an employee can see about themselves. F-130.
@@ -505,6 +508,165 @@ class MyHrController extends Controller
             'message' => $decoded['message'] ?? 'Form 16 fetched successfully',
             'data'    => $data,
         ]);
+    }
+
+    /**
+     * POST /api/my-hr/form-16/{year}/generate
+     *
+     * Renders this employee's Form 16 figures (same data `form16()` above
+     * returns as JSON) to a PDF and files it into the Document Library -
+     * something that did not exist before: Form 16 was a live-computed
+     * report, never a saved document, so there was nothing to download for
+     * a previous year without regenerating it on screen every time.
+     *
+     * Upserts on (owner, document_type='form16', period_label) - requesting
+     * the same year again replaces the stored PDF rather than filing a
+     * second copy, the same convention the payslip path uses.
+     *
+     * NOT a statutory Form 16 - see the PDF's own disclaimer and
+     * `form16()`'s docblock above. This endpoint computes and stores the
+     * same honestly-scoped figures, nothing more.
+     */
+    public function generateForm16(Request $request, int $year)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $userId = (int) $identity['user_id'];
+        $tenant = (int) $identity['sub_institute_id'];
+
+        $request->merge([
+            'type'             => 'API',
+            'sub_institute_id' => $tenant,
+            'emp_id'           => $userId,
+            'department_id'    => (int) (DB::table('tbluser')->where('id', $userId)->value('department_id') ?? 0),
+            'year'             => $year,
+            'syear'            => $request->input('syear') ?: $year,
+        ]);
+
+        $decoded = $this->decodeControllerJson(
+            app(\App\Http\Controllers\Payroll\PayrollController::class)->form16Report($request)
+        );
+
+        if (!is_array($decoded) || empty($decoded['get_employee_detail']) || empty($decoded['get_employee_salary'])) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'Your Form 16 figures could not be produced for that year - there is no salary structure on file.',
+            ], 409);
+        }
+
+        $employee = (object) $decoded['get_employee_detail'];
+        $school = (object) ($decoded['get_school_detail'] ?? []);
+        $salaryData = json_decode((string) ($decoded['get_employee_salary']['employee_salary_data'] ?? '{}'), true) ?: [];
+        $fromDate = (string) ($decoded['from_date'] ?? '');
+        $toDate = (string) ($decoded['to_date'] ?? '');
+        $departmentName = (string) ($decoded['department_name']['department_name'] ?? '-');
+
+        $earnings = $this->amountRows($decoded['allowance'] ?? [], $salaryData);
+        $deductions = $this->amountRows($decoded['deduction'] ?? [], $salaryData);
+        $grossEarnings = array_sum(array_column($earnings, 'amount'));
+        $totalDeductions = array_sum(array_column($deductions, 'amount'));
+
+        $pdfOptions = new \Dompdf\Options();
+        $pdfOptions->set('isRemoteEnabled', true);
+        $dompdf = new \Dompdf\Dompdf($pdfOptions);
+        $dompdf->loadHtml(view('payroll.form16.pdf', compact(
+            'school', 'employee', 'departmentName', 'fromDate', 'toDate',
+            'earnings', 'deductions', 'grossEarnings', 'totalDeductions'
+        ))->render());
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        $periodLabel = $year . '-' . substr((string) ($year + 1), -2);
+        $fileName = 'form16_' . $userId . '_' . $periodLabel . '.pdf';
+        $stored = (new DocumentStorageService())->storeGenerated($dompdf->output(), $fileName, 'application/pdf', $userId);
+
+        $extractedText = '';
+        try {
+            $local = tempnam(sys_get_temp_dir(), 'form16_');
+            file_put_contents($local, $stored['storage_path'] ? Storage::disk((new DocumentStorageService())->disk())->get($stored['storage_path']) : '');
+            $extractedText = (new TextExtractionManager())->extract($local, 'pdf');
+            @unlink($local);
+        } catch (\Throwable $e) {
+            $extractedText = '';
+        }
+
+        $title = 'Form 16 ' . $periodLabel;
+        $existing = DB::table('document_library')
+            ->where('sub_institute_id', $tenant)
+            ->where('owner_id', $userId)
+            ->where('document_type', 'form16')
+            ->where('period_label', $periodLabel)
+            ->whereNull('deleted_at')
+            ->first(['id']);
+
+        $row = [
+            'sub_institute_id' => $tenant,
+            'owner_id' => $userId,
+            'title' => $title,
+            'original_file_name' => $fileName,
+            'mime_type' => 'application/pdf',
+            'size' => $stored['size'],
+            'checksum_sha256' => $stored['checksum_sha256'],
+            'storage_path' => $stored['storage_path'],
+            'category' => 'personnel',
+            'document_type' => 'form16',
+            'document_date' => now()->toDateString(),
+            'period_label' => $periodLabel,
+            'extracted_text' => $extractedText !== '' ? $extractedText : null,
+            'visibility' => 'private',
+            'processing_status' => 'done',
+            'updated_at' => now(),
+        ];
+
+        if ($existing) {
+            DB::table('document_library')->where('id', $existing->id)->update($row);
+            $documentId = $existing->id;
+        } else {
+            $row['current_version'] = 1;
+            $row['created_by'] = $userId;
+            $row['created_at'] = now();
+            $documentId = DB::table('document_library')->insertGetId($row);
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Form 16 generated.',
+            'data' => ['id' => $documentId],
+        ]);
+    }
+
+    /**
+     * Payroll type rows (allowance or deduction, each `{id, payroll_name,
+     * ...}`) joined against `employee_salary_data` (`{"<type_id>": amount}`)
+     * - the same join `form16Report()`'s own Blade view does, pulled out
+     * here because the PDF view needs it pre-computed rather than
+     * re-deriving it inside the template.
+     *
+     * @param  array<int, array>|array<string, array>  $typeRows
+     * @param  array<string, mixed>  $salaryData
+     * @return array<int, array{label: string, amount: float}>
+     */
+    private function amountRows(array $typeRows, array $salaryData): array
+    {
+        $rows = [];
+
+        foreach ($typeRows as $type) {
+            $id = (string) ($type['id'] ?? '');
+
+            if ($id === '' || !array_key_exists($id, $salaryData)) {
+                continue;
+            }
+
+            $rows[] = [
+                'label' => (string) ($type['payroll_name'] ?? 'Other'),
+                'amount' => (float) $salaryData[$id],
+            ];
+        }
+
+        return $rows;
     }
 
     /**

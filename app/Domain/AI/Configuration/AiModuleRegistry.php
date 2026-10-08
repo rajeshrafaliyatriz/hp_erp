@@ -159,6 +159,13 @@ final class AiModuleRegistry
             'wired' => true,
             'consumer' => 'App\Domain\Signals\Support\StructuredAi',
         ],
+        [
+            'key' => 'document_classification',
+            'label' => 'Document Library Classification',
+            'description' => 'Classifies an uploaded document (type, subject, keywords, summary) and OCRs scans/photos with no text layer, for the Document Library.',
+            'wired' => true,
+            'consumer' => 'App\Services\Documents\Understanding\DocumentClassificationService',
+        ],
     ];
 
     /** @return array<int, array{key:string, label:string, description:string, wired:bool, consumer:string}> */

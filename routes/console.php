@@ -128,6 +128,24 @@ TaskRunLedger::track(
 );
 
 /*
+ * Walks every in-flight Department Process run forward past any `wait_delay`
+ * step whose due_at has elapsed, and flags task/approval/milestone/decision
+ * steps closing in on their own due_at. Every 15 minutes rather than daily
+ * (unlike the certification sweep above) - a two-hour wait step in a run
+ * should not sit until the next morning's cycle to advance. Idempotent: a
+ * wait step is only ever `in_progress` once, and a due-soon flag checks for
+ * its own prior emission before writing a second one.
+ */
+TaskRunLedger::track(
+    Schedule::command('process-runs:scan-due')
+        ->everyFifteenMinutes()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'department_process_runs.scan_due'
+);
+
+/*
  * Pre-existing, carried across from the Kernel with its original timing.
  */
 TaskRunLedger::track(
@@ -226,4 +244,38 @@ TaskRunLedger::track(
         ->onOneServer()
         ->runInBackground(),
     'signals.research'
+);
+
+/*
+ * DOCUMENT TRASH — PURGED DAILY.
+ *
+ * `destroy()`/`destroyForEmployee()` only ever soft-delete, so a trash view
+ * can offer restore. Without this, nothing ever turns that into a real
+ * deletion and trash grows forever. `--execute` is required because the
+ * command is dry-run by default (see its own docblock) - omitting it here
+ * would schedule a no-op that never actually purges anything.
+ *
+ * Runs against BOTH mysql and live by default (the command's own
+ * --database= loop) - one scheduled entry, not two.
+ */
+TaskRunLedger::track(
+    Schedule::command('documents:purge-trash --execute')
+        ->dailyAt('03:00')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'documents.purge_trash'
+);
+
+/*
+ * IDMS TRASH - PURGED DAILY (30-day retention, config/idms.php). Only runs if
+ * the server's `schedule:run` cron is active.
+ */
+TaskRunLedger::track(
+    Schedule::command('idms:purge-trash')
+        ->dailyAt('03:30')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'idms.purge_trash'
 );

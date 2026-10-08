@@ -160,6 +160,8 @@ use App\Http\Controllers\HRMS\DepartmentSkillController;
 use App\Http\Controllers\HRMS\DepartmentSopController;
 use App\Http\Controllers\HRMS\DepartmentPolicyController;
 use App\Http\Controllers\HRMS\DepartmentRuleController;
+use App\Http\Controllers\HRMS\DepartmentProcessController;
+use App\Http\Controllers\HRMS\DepartmentProcessRunController;
 use App\Http\Controllers\HRTemplates\TemplateController;
 use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\CareerJourneyController;
@@ -175,6 +177,8 @@ use App\Http\Controllers\Api\Leave\LeaveDistributionApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceTrackingApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceReportApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
+use App\Http\Controllers\Api\Attendance\AttendanceAdminController;
+use App\Http\Controllers\Api\Attendance\DepartmentScheduleController;
 use App\Http\Controllers\Api\Attendance\AttendanceRegularisationApiController;
 
 
@@ -1071,6 +1075,45 @@ Route::prefix('attendance')->group(function () {
         Route::get('/weekly-summary', [AttendanceDashboardApiController::class, 'weeklySummary']);
         Route::get('/kpi', [AttendanceDashboardApiController::class, 'kpi']);
     });
+
+    /*
+    | The HR attendance desk. Phase 18.
+    |
+    | admin,hr ONLY - deliberately narrower than the reporting group above.
+    | executive and auditor may READ the organisation's attendance; changing
+    | somebody's recorded hours changes their pay, and that is an HR act.
+    |
+    | The role gate here says WHO may ask. It does NOT say whom they may ask
+    | ABOUT: an HR manager is HR for one organisation, not for all twelve, and
+    | the route cannot know which employee id belongs to whose. The controller
+    | carries that check, and the probe asserts it with a cross-tenant admin
+    | token - an assertion with a plain employee would pass with the check
+    | deleted, because this gate stops them first.
+    */
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::get('/admin/grid', [AttendanceAdminController::class, 'grid']);
+        Route::post('/admin/corrections', [AttendanceAdminController::class, 'correct']);
+        Route::get('/admin/edits', [AttendanceAdminController::class, 'edits']);
+
+        /*
+        | Office hours, per department. Phase 18 step 5.
+        |
+        | Four endpoints and not two, because the apply is the dangerous one.
+        | `preview` computes exactly what `apply` computes and writes nothing;
+        | `apply` requires an explicit list of weekdays - there is no "all" on
+        | the server, so Saturday and Sunday have to be named.
+        |
+        | The previous version of this feature was REMOVED because a bulk shift
+        | write silently flattened Saturday across a department; 100 employees
+        | in one tenant have a Saturday that ends at 14:00. The preview, the
+        | explicit weekday list and the before-image event are the three things
+        | that version did not have.
+        */
+        Route::get('/admin/schedules', [DepartmentScheduleController::class, 'index']);
+        Route::post('/admin/schedules', [DepartmentScheduleController::class, 'store']);
+        Route::post('/admin/schedules/preview', [DepartmentScheduleController::class, 'preview']);
+        Route::post('/admin/schedules/apply', [DepartmentScheduleController::class, 'apply']);
+    });
 });
 
 
@@ -1416,6 +1459,23 @@ Route::prefix('departments-management')->group(function () {
     Route::get('/{id}/impact', [DepartmentManagementController::class, 'impact']);
     // The alternative to deleting: everything becomes the target's.
     Route::post('/{id}/merge', [DepartmentManagementController::class, 'merge']);
+
+    /*
+     * A DEPARTMENT'S OWN DOCUMENTS - admin/HR curating ON BEHALF OF a
+     * department, which may not be the caller's own. Gated twice, same
+     * reasoning as employees-management's own document routes just below in
+     * this file: profile:admin,hr says WHO may ask, the controller's own
+     * inline HR_ELEVATED + tenant/existence check says WHICH departments.
+     * This is what lets an upload tag correctly to the department being
+     * VIEWED rather than silently landing under the uploader's own -
+     * storeForDepartment()'s own docblock explains why that distinction
+     * matters.
+     */
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::post('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'storeForDepartment'])->whereNumber('id');
+        Route::post('/{id}/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'storeForDepartment'])->whereNumber('id');
+        Route::post('/{id}/documents/folders/resolve-path', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'resolvePathForDepartment'])->whereNumber('id');
+    });
 });
 
 Route::resource('departments-management', DepartmentManagementController::class)
@@ -1450,7 +1510,7 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
          * which resolves the same two permissions from the row itself. One reader,
          * one rule.
          */
-        Route::get('/{id}/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'forEmployee'])->whereNumber('id');
+        Route::get('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'forEmployee'])->whereNumber('id');
 
         /*
          * HR files and removes an employee's document.
@@ -1467,8 +1527,10 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
          * employee delete by guessing an id. This one is gated by role AND by
          * the employee-in-my-tenant check inside the controller.
          */
-        Route::post('/{id}/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'storeForEmployee'])->whereNumber('id');
-        Route::delete('/{employee}/documents/{document}', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'destroyForEmployee'])
+        Route::post('/{id}/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'storeForEmployee'])->whereNumber('id');
+        Route::delete('/{employee}/documents/{document}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroyForEmployee'])
+            ->whereNumber('employee')->whereNumber('document');
+        Route::post('/{employee}/documents/{document}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreForEmployee'])
             ->whereNumber('employee')->whereNumber('document');
         Route::post('/', [EmployeeDirectoryController::class, 'store']);
         Route::put('/{id}', [EmployeeDirectoryController::class, 'update'])->whereNumber('id');
@@ -1517,6 +1579,43 @@ Route::prefix('department-rules')->group(function () {
     Route::post('/', [DepartmentRuleController::class, 'store']);
     Route::put('/{id}', [DepartmentRuleController::class, 'update']);
     Route::delete('/{id}', [DepartmentRuleController::class, 'destroy']);
+});
+
+// Department Process Builder: a department's own visual, versioned
+// processes (steps + branching edges). SOPs/Policies/Rules above are
+// referenced from a step by id rather than duplicated - see
+// DepartmentProcessController and department_process_steps.linked_*_id.
+// /templates is declared before /{id} for the same ORDER MATTERS reason as
+// elsewhere in this file - otherwise the router reads "templates" as an id.
+Route::prefix('department-processes')->group(function () {
+    Route::get('/templates', [DepartmentProcessController::class, 'templates']);
+    Route::post('/convert-source', [DepartmentProcessController::class, 'convertSource']);
+    Route::get('/', [DepartmentProcessController::class, 'index']);
+    Route::post('/', [DepartmentProcessController::class, 'store']);
+    Route::get('/{id}', [DepartmentProcessController::class, 'show']);
+    Route::put('/{id}', [DepartmentProcessController::class, 'update']);
+    Route::delete('/{id}', [DepartmentProcessController::class, 'destroy']);
+    Route::post('/{id}/duplicate', [DepartmentProcessController::class, 'duplicate']);
+    Route::put('/{id}/canvas', [DepartmentProcessController::class, 'updateCanvas']);
+    Route::post('/{id}/publish', [DepartmentProcessController::class, 'publish']);
+    Route::get('/{id}/history', [DepartmentProcessController::class, 'history']);
+    Route::post('/{id}/history/{version}/restore', [DepartmentProcessController::class, 'restoreVersion']);
+    Route::post('/{id}/tasks/publish', [DepartmentProcessController::class, 'publishTasks']);
+    Route::get('/{id}/runs', [DepartmentProcessRunController::class, 'index']);
+    Route::post('/{id}/runs', [DepartmentProcessRunController::class, 'start']);
+});
+
+// Department Process execution engine: a launched run of a published
+// process, walked forward one step action at a time. See
+// DepartmentProcessRunController for why every transition is recorded twice
+// (this run's own timeline, plus the org-wide g2g_event history).
+Route::prefix('department-process-runs')->group(function () {
+    Route::get('/', [DepartmentProcessRunController::class, 'index']);
+    Route::get('/{id}', [DepartmentProcessRunController::class, 'show']);
+    Route::post('/{id}/cancel', [DepartmentProcessRunController::class, 'cancel']);
+    Route::post('/{id}/steps/{nodeKey}/claim', [DepartmentProcessRunController::class, 'claimStep']);
+    Route::post('/{id}/steps/{nodeKey}/complete', [DepartmentProcessRunController::class, 'completeStep']);
+    Route::post('/{id}/steps/{nodeKey}/skip', [DepartmentProcessRunController::class, 'skipStep']);
 });
 
 // Department Skills API Routes
@@ -1934,10 +2033,87 @@ Route::middleware('api.token')->group(function () {
      * Reads and writes are both open to any token holder here, because the only
      * thing reachable is the caller's own record.
      */
-    Route::get('/account/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'mine']);
-    Route::post('/account/documents', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'store']);
-    Route::get('/account/documents/{id}/download', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'download'])->whereNumber('id');
-    Route::delete('/account/documents/{id}', [\App\Http\Controllers\HRMS\EmployeeDocumentController::class, 'destroy'])->whereNumber('id');
+    Route::get('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'mine']);
+    Route::post('/account/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'store']);
+    // Static segment BEFORE /account/documents/{id} - same ordering rule as
+    // /documents/activity below. whereNumber('id') already makes "trash"
+    // un-matchable there regardless of order, but the convention stays one
+    // convention everywhere in this file, not "usually, except here."
+    Route::get('/account/documents/trash', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'trash']);
+    Route::get('/account/documents/{id}/download', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'download'])->whereNumber('id');
+    Route::match(['put', 'patch'], '/account/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'update'])->whereNumber('id');
+    Route::delete('/account/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'destroy'])->whereNumber('id');
+    Route::post('/account/documents/{id}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restore'])->whereNumber('id');
+    Route::post('/account/documents/{id}/versions', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'uploadVersion'])->whereNumber('id');
+    Route::post('/account/documents/{id}/versions/{historyId}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreVersion'])->whereNumber(['id', 'historyId']);
+    Route::post('/account/documents/{id}/duplicate', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'duplicate'])->whereNumber('id');
+
+    /*
+     * "MY DEPARTMENT DOCUMENTS" — same no-id-parameter shape as
+     * /account/documents above, one level narrower: not "mine", but "my
+     * department's". MyDepartmentDocumentsController never reads a
+     * department_id from the request - it is always derived from the
+     * caller's own tbluser.department_id, so this cannot be pointed at a
+     * colleague's department by tampering with any id. Writes reuse
+     * /account/documents and /documents/folders above unchanged - no new
+     * write routes needed here, see that controller's own docblock.
+     */
+    Route::get('/account/department-documents', [\App\Http\Controllers\Documents\MyDepartmentDocumentsController::class, 'index']);
+    Route::get('/account/department-documents/folders', [\App\Http\Controllers\Documents\MyDepartmentDocumentsController::class, 'folderIndex']);
+    Route::get('/account/department-documents/folders/tree', [\App\Http\Controllers\Documents\MyDepartmentDocumentsController::class, 'folderTree']);
+
+    /*
+     * One search box over the whole Document Library, self-service and admin
+     * alike. `DocumentAccess` (inside the controller) decides what a given
+     * caller may see - a non-elevated caller gets their own + organisation-
+     * visible documents, HR/admin additionally sees the whole tenant - so
+     * this needs no separate admin route or role gate of its own.
+     */
+    Route::get('/documents', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'search']);
+
+    /*
+     * Static segment BEFORE the /documents/{id} family below - the exact
+     * ordering gotcha this codebase has already been bitten by elsewhere
+     * (see the g2g-platform-services-rights history): a route for
+     * `/documents/{id}` registered first would swallow `/documents/activity`
+     * with id = "activity".
+     */
+    Route::get('/documents/activity', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'activity']);
+    Route::get('/documents/recent', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'recent']);
+    Route::get('/documents/starred', [\App\Http\Controllers\Documents\DocumentStarController::class, 'starred']);
+
+    /*
+     * Folders - DocumentAccess's folder-aware methods decide what a caller
+     * may see/manage internally (same reasoning as /documents search just
+     * above: no separate admin route needed). Static segments
+     * (tree/resolve-path) registered before any numeric {id} route in this
+     * prefix, same convention as /documents/activity above.
+     */
+    Route::get('/documents/folders/tree', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'tree']);
+    Route::post('/documents/folders/resolve-path', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'resolvePath']);
+    Route::get('/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'index']);
+    Route::post('/documents/folders', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'store']);
+    Route::patch('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'update'])->whereNumber('id');
+    Route::post('/documents/folders/{id}/move', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'move'])->whereNumber('id');
+    Route::post('/documents/folders/{id}/duplicate', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'duplicate'])->whereNumber('id');
+    Route::delete('/documents/folders/{id}', [\App\Http\Controllers\Documents\DocumentFolderController::class, 'destroy'])->whereNumber('id');
+
+    /*
+     * Tenant-wide trash, for HR/admin - unlike `/documents` (search) above,
+     * this genuinely needs its own gate: a non-elevated caller's trash view
+     * is `/account/documents/trash` (their own rows only), and nothing about
+     * a deleted-but-not-yet-purged row should be reachable through the
+     * ordinary visibility rules `DocumentAccess` applies to live documents.
+     */
+    Route::middleware('profile:admin,hr')->group(function () {
+        Route::get('/documents/trash', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'trashVisible']);
+    });
+
+    Route::get('/documents/{id}', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'show'])->whereNumber('id');
+    Route::get('/documents/{id}/history', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'history'])->whereNumber('id');
+    Route::get('/documents/{id}/related', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'related'])->whereNumber('id');
+    Route::post('/documents/{id}/star', [\App\Http\Controllers\Documents\DocumentStarController::class, 'star'])->whereNumber('id');
+    Route::delete('/documents/{id}/star', [\App\Http\Controllers\Documents\DocumentStarController::class, 'unstar'])->whereNumber('id');
 
     Route::get('/account/activity', [\App\Http\Controllers\Api\Account\AccountController::class, 'activity']);
 
@@ -3043,6 +3219,15 @@ Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
 
     Route::get('/form-16/{year}', [App\Http\Controllers\Api\MyHrController::class, 'form16'])
         ->whereNumber('year');
+
+    /*
+     * Renders the figures above to a PDF and files it into the Document
+     * Library, so a previous year's Form 16 is something to download rather
+     * than something to regenerate on screen every time. POST because it
+     * writes a document_library row, not just computes a response.
+     */
+    Route::post('/form-16/{year}/generate', [App\Http\Controllers\Api\MyHrController::class, 'generateForm16'])
+        ->whereNumber('year');
 });
 
 /*
@@ -3164,4 +3349,37 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     Route::get('/ingestion/findings/{id}/opportunity-matches', [$intel, 'matchFinding'])->whereNumber('id');
     Route::get('/opportunity-matches', [$intel, 'listMatches']);
     Route::post('/matches/action', [$intel, 'actOnMatch']);
+});
+
+/*
+ * IDMS (Intelligent Document Management System) - /api/v1.
+ * Separate from the HR Document Library ('/documents', '/account/documents').
+ * `trash/documents` is its own prefix so it can never collide with `documents/{id}`.
+ * Identity and tenant come from the verified token inside the controller.
+ */
+Route::prefix('v1')->middleware(['api.token', 'throttle:120,1'])->group(function () {
+    $idms = \App\Http\Controllers\Idms\IdmsDocumentController::class;
+
+    Route::get('documents', [$idms, 'index']);
+    Route::post('documents', [$idms, 'store'])->middleware('throttle:30,1');
+    Route::get('documents/{id}', [$idms, 'show'])->whereNumber('id');
+    Route::patch('documents/{id}', [$idms, 'update'])->whereNumber('id');
+    Route::delete('documents/{id}', [$idms, 'destroy'])->whereNumber('id');
+    Route::post('documents/{id}/confirm', [$idms, 'confirm'])->whereNumber('id');
+    Route::post('documents/{id}/tags', [$idms, 'updateTags'])->whereNumber('id');
+    Route::get('documents/{id}/preview', [$idms, 'preview'])->whereNumber('id');
+    Route::get('documents/{id}/download', [$idms, 'download'])->whereNumber('id');
+    Route::get('documents/{id}/versions', [$idms, 'getVersions'])->whereNumber('id');
+    Route::post('documents/{id}/versions', [$idms, 'addVersion'])->whereNumber('id')->middleware('throttle:30,1');
+    Route::post('documents/{id}/versions/{versionNumber}/restore', [$idms, 'restoreVersion'])->whereNumber(['id', 'versionNumber']);
+    Route::get('documents/{id}/related', [$idms, 'related'])->whereNumber('id');
+
+    Route::get('trash/documents', [$idms, 'trash']);
+    Route::post('trash/documents/{id}/restore', [$idms, 'restore'])->whereNumber('id');
+    Route::delete('trash/documents/{id}', [$idms, 'purge'])->whereNumber('id');
+
+    Route::post('search/parse', [$idms, 'parseSearch']);
+    Route::get('browse/tree', [$idms, 'tree']);
+    Route::get('tags', [$idms, 'tags']);
+    Route::get('audit', [$idms, 'audit']);
 });

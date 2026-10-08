@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Offboarding;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Offboarding\Concerns\ResolvesOffboardingContext;
 use App\Models\talent\TalentOffboardingCase;
+use App\Services\Documents\Federation\OffboardingDocumentIndexer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -910,6 +911,12 @@ class OffboardingController extends Controller
         $case->activity_log = json_encode($activityLog);
         $case->updated_by = $actorId;
         $case->save();
+
+        try {
+            app(OffboardingDocumentIndexer::class)->indexCase((int) $case->id);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return $this->offboardingResponse($documents, 'Document uploaded.');
     }

@@ -2,8 +2,10 @@
 
 namespace App\Services\Events;
 
+use App\Services\Documents\DocumentStorageService;
+use App\Services\Documents\Extraction\TextExtractionManager;
+use App\Services\Events\Concerns\DrivesFromEventStore;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Files the offer letter into the new employee's own documents, automatically.
@@ -40,6 +42,19 @@ use Illuminate\Support\Facades\Storage;
  */
 class OfferLetterFiler
 {
+    /*
+     * Registered in ReactEvents::REACTORS but, until this line, missing the
+     * trait that actually makes `events:react` able to call it -
+     * `->pendingCount()`/`->catchUp()` did not exist on this class, so every
+     * run threw "Call to undefined method" for this consumer, caught and
+     * logged as FAILED, and moved on. Confirmed live:
+     * `php artisan events:react --pending --consumer=offer_letter_filer`
+     * before this fix. Found while building ResumeFiler as this class's
+     * sibling - same bug, same missing trait, see OnboardingLauncher for
+     * the other reactor this also affected.
+     */
+    use DrivesFromEventStore;
+
     public const CONSUMER = 'offer_letter_filer';
 
     public const HANDLES = [
@@ -47,16 +62,15 @@ class OfferLetterFiler
     ];
 
     /**
-     * The document type these rows carry.
+     * The document_library `document_type` these rows carry.
      *
-     * `student_document_type`, NOT `document_type`, and the name is 'offer'
-     * because that row already exists (id 3, user_type 'staff'). This is not a
-     * cosmetic choice: the Employee Directory reads documents with an INNER JOIN
-     * onto `student_document_type` (tbluserController:784), so a row pointing at
-     * any other table is silently dropped and the letter never appears. Resolved
-     * by NAME rather than hardcoded to 3, so a reseeded database still works.
+     * An open string now, not a `student_document_type` id - document_library
+     * does not use that lookup table (it has no seeder anywhere in this
+     * codebase and its live contents are unknowable from source control; see
+     * the document_library migration's docblock). 'offer_letter' is one of
+     * `config('documents.types.personnel')`.
      */
-    public const DOCUMENT_TYPE = 'offer';
+    public const DOCUMENT_TYPE = 'offer_letter';
 
     public function handles(string $type): bool
     {
@@ -128,10 +142,10 @@ class OfferLetterFiler
 
         // Already filed for this employee - the same offer re-delivered, or HR
         // attached it by hand first. Either way there is nothing to do.
-        $exists = DB::table('staff_document')
+        $exists = DB::table('document_library')
             ->where('sub_institute_id', $tenant)
-            ->where('user_id', $employeeId)
-            ->where('file_name', $sourceName)
+            ->where('owner_id', $employeeId)
+            ->where('document_type', self::DOCUMENT_TYPE)
             ->whereNull('deleted_at')
             ->exists();
 
@@ -142,19 +156,44 @@ class OfferLetterFiler
         }
 
         try {
-            $typeId = $this->documentTypeId();
-            $this->copyIntoStaffDocuments($sourceName);
+            $adopted = $this->adoptIntoDocumentLibrary($sourceName, $employeeId);
 
-            DB::table('staff_document')->insert([
-                'user_id'          => $employeeId,
-                'document_type_id' => $typeId,
-                'document_title'   => 'Offer Letter',
-                'file_name'        => $sourceName,
-                'sub_institute_id' => $tenant,
+            if ($adopted === null) {
+                $this->ledger($event, 'skipped', 'offer letter file missing at public/offerLetter/' . $sourceName);
+
+                return;
+            }
+
+            $extractedText = '';
+
+            try {
+                $localCopy = tempnam(sys_get_temp_dir(), 'offer_letter_');
+                file_put_contents($localCopy, (new DocumentStorageService())->get($adopted['storage_path']));
+                $extractedText = (new TextExtractionManager())->extract($localCopy, 'pdf');
+                @unlink($localCopy);
+            } catch (\Throwable $e) {
+                $extractedText = '';
+            }
+
+            DB::table('document_library')->insert([
+                'sub_institute_id'   => $tenant,
+                'owner_id'           => $employeeId,
+                'title'              => 'Offer Letter',
+                'original_file_name' => $sourceName,
+                'mime_type'          => 'application/pdf',
+                'size'               => $adopted['size'],
+                'checksum_sha256'    => $adopted['checksum_sha256'],
+                'storage_path'       => $adopted['storage_path'],
+                'current_version'    => 1,
+                'category'           => 'personnel',
+                'document_type'      => self::DOCUMENT_TYPE,
+                'extracted_text'     => $extractedText !== '' ? $extractedText : null,
+                'visibility'         => 'private',
+                'processing_status'  => 'done',
                 // NULL means SYSTEM. Nobody attached this; the hire did.
-                'created_by'       => null,
-                'created_at'       => now(),
-                'updated_at'       => now(),
+                'created_by'         => null,
+                'created_at'         => now(),
+                'updated_at'         => now(),
             ]);
         } catch (\Throwable $e) {
             $this->ledger($event, 'failed', mb_substr($e->getMessage(), 0, 500));
@@ -244,65 +283,24 @@ class OfferLetterFiler
     }
 
     /**
-     * The id of the 'offer' staff document type, created only if absent.
+     * Copy the letter from where TalentOfferController wrote it into the
+     * document_library folder convention, via DocumentStorageService - the
+     * same one every other document_library writer uses, so this table never
+     * grows a fourth divergent folder the way `staff_document` grew three.
      *
-     * `student_document_type` carries no sub_institute_id - it is a global
-     * vocabulary, so one row serves every organisation.
-     */
-    private function documentTypeId(): int
-    {
-        $existing = DB::table('student_document_type')
-            ->where('document_type', self::DOCUMENT_TYPE)
-            ->where('user_type', 'staff')
-            ->value('id');
-
-        if ($existing) {
-            return (int) $existing;
-        }
-
-        // Only if a database has none - the standard seed ships it as id 3.
-        return (int) DB::table('student_document_type')->insertGetId([
-            'document_type' => self::DOCUMENT_TYPE,
-            'user_type'     => 'staff',
-            'status'        => '1',
-            'created_at'    => now(),
-            'updated_at'    => now(),
-        ]);
-    }
-
-    /**
-     * Put the letter where staff_document rows are read from.
+     * Best effort by design: if the copy fails, null is returned and no row
+     * is written (the caller records why), because a document row whose file
+     * is missing is worse than no row - it offers a download that 404s.
      *
-     * Best effort by design: if the copy fails the row is not written either
-     * (the caller catches and records it), because a document row whose file is
-     * missing is worse than no row - it offers a download that 404s.
+     * @return array{storage_path:string, size:int, checksum_sha256:string}|null
      */
-    private function copyIntoStaffDocuments(string $fileName): void
+    private function adoptIntoDocumentLibrary(string $fileName, int $employeeId): ?array
     {
-        /*
-         * `hp_staff_document`, not `staff_document`.
-         *
-         * The Employee Directory builds its download URL as
-         * .../public/hp_staff_document/{file_name} (upload-doc-tab.tsx:137), and
-         * the upload endpoint writes there (tbluserController:1339). PayrollController
-         * uses `public/staff_document/` for payslips - a pre-existing inconsistency
-         * in this codebase, and the wrong one to copy: a row in the right table
-         * pointing at the wrong folder downloads nothing.
-         */
-        $from = 'public/offerLetter/' . $fileName;
-        $to   = 'public/hp_staff_document/' . $fileName;
-
-        $disk = Storage::disk('digitalocean');
-
-        if ($disk->exists($to)) {
-            return;
-        }
-
-        if (!$disk->exists($from)) {
-            throw new \RuntimeException('offer letter file missing at ' . $from);
-        }
-
-        $disk->put($to, $disk->get($from), 'public');
+        return (new DocumentStorageService())->adopt(
+            'public/offerLetter/' . $fileName,
+            $employeeId,
+            'pdf'
+        );
     }
 
     /** @return array<string, mixed> */

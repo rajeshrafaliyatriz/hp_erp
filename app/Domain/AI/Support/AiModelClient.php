@@ -64,6 +64,15 @@ final class AiModelClient
      * @param  array<int, array{role: string, content: string}>  $messages
      * @param  array{max_tokens?: int, temperature?: float, json?: bool}  $options
      */
+    /**
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @param  array{max_tokens?: int, temperature?: float, json?: bool, images?: array<int, array{mime_type: string, data: string}>}  $options
+     *         `images` is Gemini-only (OCR of a scan/photo via inline base64 data,
+     *         `mime_type` + base64-encoded `data`) - see `callGemini()`. An
+     *         OpenAI-compatible provider ignores it rather than failing the
+     *         call, because text classification (the other caller of this
+     *         module) never sends one.
+     */
     public function complete(
         string $moduleKey,
         array $messages,
@@ -333,6 +342,40 @@ final class AiModelClient
                 'role' => $role === 'assistant' ? 'model' : 'user',
                 'parts' => [['text' => $text]],
             ];
+        }
+
+        /*
+         * Images ride as inline base64 parts on the LAST user turn - OCR is
+         * always "here is the page, read it", asked once, not a multi-turn
+         * conversation about an image. Appended to that turn's existing
+         * `parts` (rather than a separate content entry) so Gemini sees the
+         * instruction text and the page together, which is what makes it
+         * transcribe the text in the image instead of describing the image.
+         */
+        if (! empty($options['images'])) {
+            $lastUserIndex = null;
+
+            foreach ($contents as $index => $entry) {
+                if ($entry['role'] === 'user') {
+                    $lastUserIndex = $index;
+                }
+            }
+
+            $imageParts = array_map(
+                fn (array $image) => [
+                    'inlineData' => [
+                        'mimeType' => (string) $image['mime_type'],
+                        'data' => (string) $image['data'],
+                    ],
+                ],
+                $options['images']
+            );
+
+            if ($lastUserIndex !== null) {
+                $contents[$lastUserIndex]['parts'] = [...$contents[$lastUserIndex]['parts'], ...$imageParts];
+            } else {
+                $contents[] = ['role' => 'user', 'parts' => $imageParts];
+            }
         }
 
         $payload = [

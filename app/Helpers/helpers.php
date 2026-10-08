@@ -17,6 +17,29 @@ if (!function_exists('is_mobile')) {
     function is_mobile($type, $url = null, $data = null, $redirect_type = "redirect")
     {
         if ($type == "API") {
+                /*
+                 * A NON-ARRAY PAYLOAD IS NOT AN ERROR. F-226.
+                 *
+                 * array_walk_recursive() requires an array, and PHP 8 throws a
+                 * TypeError on null rather than shrugging as PHP 7 did. Four
+                 * call sites pass `null` as $data - the "action done, nothing
+                 * to return" ones - so every API call to those endpoints
+                 * answered 500.
+                 *
+                 * The attendance punch routes are two of them, and the damage
+                 * was not cosmetic: the row was WRITTEN and then the response
+                 * said the request had failed, so a client that retries would
+                 * punch twice. hrms_attendances has no unique index on
+                 * (user_id, day) to stop it.
+                 *
+                 * Walking is for cleaning strings inside a structure; there are
+                 * no strings to clean in null, so it is skipped rather than
+                 * made to work.
+                 */
+                if (!is_array($data)) {
+                    return response()->json($data);
+                }
+
                 if (isset($data["status_code"])) {
                     $data["status"] = strtoupper($data["status_code"]);
                     unset($data["status_code"]);
