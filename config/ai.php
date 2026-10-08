@@ -125,4 +125,23 @@ return [
     'rate_limit' => [
         'per_minute' => (int) env('AI_RATE_LIMIT_PER_MINUTE', 60),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Chat lifecycle and chat actions
+    |--------------------------------------------------------------------------
+    |
+    | lifecycle.enabled     route /ask through the twelve-stage lifecycle (trace, evidence,
+    |                       proposed actions, reports). Off = the original four-step pipeline.
+    | chat_actions.require_approval
+    |                       a write proposed from the chat also needs an administrator's approval.
+    |                       Keep in step with the frontend's NEXT_PUBLIC_CHAT_ACTION_APPROVALS.
+    */
+    'lifecycle' => [
+        'enabled' => (bool) env('AI_LIFECYCLE_ENABLED', false),
+    ],
+
+    'chat_actions' => [
+        'require_approval' => (bool) env('AI_CHAT_ACTION_APPROVALS', false),
+    ],
 ];

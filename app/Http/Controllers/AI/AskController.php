@@ -4,7 +4,9 @@ namespace App\Http\Controllers\AI;
 
 use App\Domain\AI\Conversation\AskPipeline;
 use App\Domain\AI\Conversation\ConversationStore;
+use App\Domain\AI\Conversation\ModuleGrounding;
 use App\Domain\AI\Conversation\OrganisationContext;
+use App\Domain\AI\Lifecycle\LifecycleAskService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -43,6 +45,8 @@ class AskController extends AiController
         private readonly AskPipeline $pipeline,
         private readonly ConversationStore $conversations,
         private readonly OrganisationContext $context,
+        private readonly ModuleGrounding $grounding,
+        private readonly LifecycleAskService $lifecycle,
     ) {
     }
 
@@ -64,7 +68,42 @@ class AskController extends AiController
                 'message' => 'required|string|max:8000',
                 'session_key' => 'nullable|string|max:64',
                 'module_key' => 'nullable|string|max:60',
+                // The page the chat is opened on. Only the id travels: its title and breadcrumb are
+                // read from the menu table, because they end up in the model's instructions.
+                'menu_id' => 'nullable|integer|min:1',
+                // What the browser read off the page. Rebuilt and capped by PageSnapshot; never trusted as sent.
+                'page_data' => 'nullable|array',
+                // Actions the page offers (metadata only: key, label, description, phrases). Used by the
+                // lifecycle's planning stage; ignored by the original pipeline.
+                'available_actions' => 'nullable|array|max:30',
+                // The AI Stack tab the chat is opened on (one of the AI Stack's own tab ids; checked in the lifecycle).
+                'ai_stack_tab' => 'nullable|string|max:40',
             ]);
+
+            // A module key the caller supplies must name a registered `ai_modules` row. It
+            // selects the model binding, the grounding and the policy scope, so an invented key
+            // would silently fall back to organisation-wide behaviour under a module's name.
+            $moduleKey = trim((string) ($validated['module_key'] ?? '')) ?: null;
+
+            if ($moduleKey !== null && $this->grounding->module($moduleKey, $scope->selectedInstituteId) === null) {
+                return $this->failure("{$moduleKey} is not a registered AI module.", 422);
+            }
+
+            if (config('ai.lifecycle.enabled')) {
+                $result = $this->lifecycle->ask(
+                    $scope,
+                    trim((string) ($validated['session_key'] ?? '')) ?: (string) \Illuminate\Support\Str::uuid(),
+                    trim($validated['message']),
+                    $moduleKey,
+                    isset($validated['menu_id']) ? (int) $validated['menu_id'] : null,
+                    $validated['page_data'] ?? null,
+                    $this->organisationName($scope->selectedInstituteId),
+                    $validated['available_actions'] ?? [],
+                    $validated['ai_stack_tab'] ?? null
+                );
+
+                return $this->success($result['answer'] === null ? 'The assistant could not answer.' : 'Answered.', $result);
+            }
 
             $result = $this->pipeline->ask(
                 $scope,
@@ -72,7 +111,9 @@ class AskController extends AiController
                 // the first question of a new conversation legitimately has none.
                 trim((string) ($validated['session_key'] ?? '')) ?: (string) \Illuminate\Support\Str::uuid(),
                 trim($validated['message']),
-                $validated['module_key'] ?? null,
+                $moduleKey,
+                isset($validated['menu_id']) ? (int) $validated['menu_id'] : null,
+                $validated['page_data'] ?? null,
                 $this->organisationName($scope->selectedInstituteId)
             );
 

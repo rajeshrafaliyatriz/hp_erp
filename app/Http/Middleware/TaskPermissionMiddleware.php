@@ -45,6 +45,10 @@ class TaskPermissionMiddleware
         // Reading every employee's productivity, or the permission matrix, is
         // an administrative act even though it is a GET.
         'report.view',
+        // Acting on ANOTHER user's calendar entry/reminder — your own needs
+        // no privileged ability, the same "your own work" rule every other
+        // entry here follows for the caller's own records.
+        'calendar.manage',
     ];
 
     /**

@@ -69,6 +69,9 @@ class UserPreferences
         // Where to land
         'landing_page' => 'dashboard',
 
+        // Task Management: how many days out a "Create Follow-up" task is due.
+        'follow_up_days' => 3,
+
         // Notifications. In-app is not opt-out: it is the product telling you
         // something happened in your own workspace, and a silent inbox is how
         // an approval sits unseen for a week.

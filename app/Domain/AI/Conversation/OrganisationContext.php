@@ -183,4 +183,54 @@ TXT;
 
         return $prompt . "\n\nCURRENT FIGURES FOR {$organisationName}:\n{$briefing}";
     }
+
+    /**
+     * The standing instruction when the assistant is opened inside one module.
+     *
+     * The organisation-wide briefing is not included: it carries figures from every other
+     * module, and a model that has them will answer from them. This prompt confines the
+     * assistant to the module and to the briefing `ModuleGrounding` built from it.
+     */
+    public function moduleSystemPrompt(
+        string $moduleLabel,
+        ?string $briefing,
+        string $organisationName = 'this organisation',
+        ?array $page = null,
+        ?string $screen = null
+    ): string {
+        $prompt = <<<TXT
+You are the assistant inside the {$moduleLabel} module of GapstoGrowth. You are speaking
+to a user of {$organisationName}. Be brief and concrete.
+
+RULES YOU MUST NOT BREAK
+
+- Answer only about the {$moduleLabel} module. If the question is about another module,
+  say so and point at that module instead of answering it.
+- Use only the facts supplied below. If a question needs something that is not there,
+  say which screen of this module would show it. Never estimate.
+- Never invent a name, a count, a rating or a date.
+- You cannot see any individual person's record. Where a source is marked as one row per
+  person, you know how many rows there are and nothing about who they are.
+- You cannot take actions. If asked to create, change, approve or delete something, say
+  that you can only describe what exists and name the screen where it is done.
+- If you are unsure, say so. An admitted gap is useful; a confident guess is not.
+TXT;
+
+        if ($page !== null) {
+            // Title and breadcrumb are read from the menu table by the server, not from the client.
+            $prompt .= "\n\nThe user has the \"{$page['title']}\" page open (" . implode(' > ', $page['breadcrumb'])
+                . '). Prefer facts that bear on that page, but you may still answer about the rest of the module.';
+        }
+
+        if ($screen !== null) {
+            $prompt .= "\n\n" . $screen;
+        }
+
+        if ($briefing === null) {
+            return $prompt . "\n\nNo facts could be read for this module, so answer only questions about "
+                . 'how the module works, and say when you would need data you do not have.';
+        }
+
+        return $prompt . "\n\nWHAT {$moduleLabel} CURRENTLY HOLDS FOR {$organisationName}:\n{$briefing}";
+    }
 }

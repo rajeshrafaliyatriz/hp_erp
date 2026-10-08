@@ -142,9 +142,13 @@ use App\Http\Controllers\Api\TaskManagement\BacklogController;
 use App\Http\Controllers\Api\TaskManagement\WorkstreamController;
 use App\Http\Controllers\Api\TaskManagement\WorkstreamRecordController;
 use App\Http\Controllers\Api\TaskManagement\WorkspaceController;
+use App\Http\Controllers\Api\TaskManagement\TaskBulkActionController;
 use App\Http\Controllers\Api\TaskManagement\DependencyController;
 use App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController;
 use App\Http\Controllers\Api\TaskManagement\TaskOptionController;
+use App\Http\Controllers\Api\TaskManagement\CalendarController;
+use App\Http\Controllers\Api\TaskManagement\CalendarReminderController;
+use App\Http\Controllers\Api\TaskManagement\CalendarShareController;
 use App\Http\Controllers\Api\UserJourneyLogController;
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
@@ -320,7 +324,25 @@ Route::get('job-applications/shortlisted', [talent_jobapplicationcontroller::cla
 Route::resource('job-applications', talent_jobapplicationcontroller::class)
     ->middleware('profile:admin,hr,recruiter');
 
-Route::resource('job-postings', talent_jobpostingcontroller::class);
+// Creating a posting is gated on the SAME right the sidebar uses for the Recruitment page
+// (tblgroupwise_rights_g2g, menu "Recruitment", action `add`). The POST was open to any token
+// holder, so an Employee could publish a job to the careers page by calling it directly.
+// Reads/updates are untouched. `store` is kept out of the resource and re-declared so its URL
+// and route name (job-postings.store) are unchanged.
+Route::post('job-postings', [talent_jobpostingcontroller::class, 'store'])
+    ->middleware('anyaccess:admin+hr,/module/talent-management/recruitment@view')
+    ->name('job-postings.store');
+Route::resource('job-postings', talent_jobpostingcontroller::class)->except(['store', 'update', 'destroy']);
+// Editing and deleting a posting (delete cascades to its applications, interviews and offers) had
+// the same hole as store(); same gate, same Recruitment page right. URLs and route names unchanged.
+// The gate is the page right OR the administrator/HR role, so an admin in an organisation whose
+// rights rows are missing (some tenants hold none for this page) is not locked out of their own data.
+Route::match(['put', 'patch'], 'job-postings/{job_posting}', [talent_jobpostingcontroller::class, 'update'])
+    ->middleware('anyaccess:admin+hr,/module/talent-management/recruitment@view')
+    ->name('job-postings.update');
+Route::delete('job-postings/{job_posting}', [talent_jobpostingcontroller::class, 'destroy'])
+    ->middleware('anyaccess:admin+hr,/module/talent-management/recruitment@view')
+    ->name('job-postings.destroy');
 Route::get('/talent/team-overview', [talent_jobpostingcontroller::class, 'getHiringStatus']);
 // ROUND 5. The internal sign-off talent.recruitment.requisition declares,
 // for a posting a platform chain has gated before it can go live.
@@ -521,13 +543,21 @@ Route::put('/competency/library/taxonomy/{type}', [CompetencyLibraryController::
 Route::delete('/competency/library/taxonomy/{type}', [CompetencyLibraryController::class, 'destroyTaxonomy']);
 
 Route::get('/competency/library/skills', [CompetencyLibraryController::class, 'skills']);
-Route::post('/competency/library/skills', [CompetencyLibraryController::class, 'storeSkill']);
+// Library creates took any token. The Capability Library page (the only screen that adds skills or
+// KASA entries) is open to every profile for reading, and its rights row carries `add` for
+// administrator/HR/HR executive, so that is the gate.
+Route::post('/competency/library/skills', [CompetencyLibraryController::class, 'storeSkill'])
+    ->middleware('anyaccess:admin+hr,/module/capability-intelligence/capability-library@add');
 Route::get('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'showSkill'])->whereNumber('id');
 Route::put('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'updateSkill'])->whereNumber('id');
 Route::delete('/competency/library/skills/{id}', [CompetencyLibraryController::class, 'destroySkill'])->whereNumber('id');
 
 Route::get('/competency/library/jobroles', [CompetencyLibraryController::class, 'jobroles']);
-Route::post('/competency/library/jobroles', [CompetencyLibraryController::class, 'storeJobrole']);
+// A job role is added from the Capability Library (`add` there) AND, in place, from a department's
+// own panel in Department Management (a department edit: `edit` on that page, which department
+// heads hold). Both doors stay open; everyone else is refused.
+Route::post('/competency/library/jobroles', [CompetencyLibraryController::class, 'storeJobrole'])
+    ->middleware('anyaccess:admin+hr,/module/capability-intelligence/capability-library@add,/module/organizational-management/organization-setup/department-management@edit');
 Route::get('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'showJobrole'])->whereNumber('id');
 Route::put('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'updateJobrole'])->whereNumber('id');
 Route::delete('/competency/library/jobroles/{id}', [CompetencyLibraryController::class, 'destroyJobrole'])->whereNumber('id');
@@ -566,7 +596,8 @@ Route::delete('/competency/library/jobrole-tasks/{id}', [CompetencyLibraryContro
 
 // One set of routes for all four KASA tabs: {type} is knowledge|ability|attitude|behaviour.
 Route::get('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'kasa']);
-Route::post('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'storeKasa']);
+Route::post('/competency/library/kasa/{type}', [CompetencyLibraryController::class, 'storeKasa'])
+    ->middleware('anyaccess:admin+hr,/module/capability-intelligence/capability-library@add');
 // Where a knowledge / ability / attitude / behaviour item is actually used:
 // which skills reference it, at which levels, and the job roles that inherit
 // it. Declared before the {id} show route so 'usage' is not read as an id.
@@ -1140,7 +1171,12 @@ Route::post('/lmsAssignment/request', [\App\Http\Controllers\lms\assignment\assi
 Route::post('/lmsAssignment/review/{id}', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'review']);
 Route::post('/lmsAssignment/bulkReview', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'bulkReview']);
 Route::get('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'index']);
-Route::post('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'store']);
+// Assigning a course to OTHER people. It needed only a token, so an Employee could enrol anyone by
+// calling it. Gated on the Assignments page's own rights row: the `add` right (administrator, HR,
+// HR executive, department head and reporting manager hold it) - or the administrator/HR role,
+// which is what `/lmsAssignment/review` already requires. Assignments is the only screen that calls it.
+Route::post('/lmsAssignment', [\App\Http\Controllers\lms\assignment\assignmentController::class, 'store'])
+    ->middleware('anyaccess:admin+hr,/module/lms/training-and-records/assignments@add');
 
 /*
 | Learning Catalog - token-authenticated course management. The equivalent
@@ -1234,7 +1270,11 @@ Route::delete('/lms/assessments/{id}', [LmsAssessmentController::class, 'destroy
 
 Route::get('/lms/courses/kpis', [LmsCourseController::class, 'kpis']);
 Route::get('/lms/courses/filters', [LmsCourseController::class, 'filters']);
-Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk']);
+// Bulk activate / deactivate / DELETE from the catalogue's selection bar, which the UI shows only to
+// course authors (isHrAdmin). Gated to the same people: leaving it open would make the single-course
+// delete gate below pointless.
+Route::post('/lms/courses/bulk', [LmsCourseController::class, 'bulk'])
+    ->middleware('anyaccess:admin+hr');
 // Who a course is for. Declared BEFORE /lms/courses/{id} so "audience" is not
 // captured as an id.
 Route::get('/lms/courses/{id}/audience/preview', [LmsCourseController::class, 'audiencePreview'])->whereNumber('id');
@@ -1344,10 +1384,18 @@ Route::post('/onboarding/next-steps/restore', [\App\Http\Controllers\Api\Onboard
 Route::get('/lms/courses/{id}/audience/suggested', [LmsCourseController::class, 'suggestedAudience'])->whereNumber('id');
 Route::post('/lms/courses/{id}/audience', [LmsCourseController::class, 'assignAudience'])->whereNumber('id');
 Route::get('/lms/courses', [LmsCourseController::class, 'index']);
-Route::post('/lms/courses', [LmsCourseController::class, 'store']);
+// Course authoring. These three took any token. The Learning Catalogue offers them only to
+// administrator/HR (`canAuthor = isHrAdmin`), and the Course Builder page - which creates and saves
+// drafts - has no role check of its own, only the sidebar right. So: administrator/HR, or anyone
+// whose profile can open the Course Builder page. Delete exists only in the catalogue, so it is
+// administrator/HR alone.
+Route::post('/lms/courses', [LmsCourseController::class, 'store'])
+    ->middleware('anyaccess:admin+hr,/module/lms/administration/course-builder@view');
 Route::get('/lms/courses/{id}', [LmsCourseController::class, 'show']);
-Route::put('/lms/courses/{id}', [LmsCourseController::class, 'update']);
-Route::delete('/lms/courses/{id}', [LmsCourseController::class, 'destroy']);
+Route::put('/lms/courses/{id}', [LmsCourseController::class, 'update'])
+    ->middleware('anyaccess:admin+hr,/module/lms/administration/course-builder@view');
+Route::delete('/lms/courses/{id}', [LmsCourseController::class, 'destroy'])
+    ->middleware('anyaccess:admin+hr');
 
 /*
 | Build with AI - outline generation (DeepSeek) and presentation rendering
@@ -1444,20 +1492,38 @@ Route::delete('/enroll/{id}', [LmsCourseEnrollController::class, 'destroy']);
  * The resource itself is limited to the five methods that exist. It previously
  * registered create() and edit() too, which this controller has never had.
  */
-Route::prefix('departments-management')->group(function () {
+// The structure writes below (reorder, head, parent, employee moves, merge) and the resource's
+// update / destroy were open to any token holder: the only gate was the UI hiding the button.
+// They now need the SAME right the sidebar and `store` use - `view` on the Department Management
+// page - so a profile that cannot open the page cannot do them by calling the endpoint. `view`
+// rather than `add`/`edit`/`delete` because the page's own UI has no per-action check
+// (department-list: canManage = access !== 'none'), so a stricter flag would silently remove what
+// profiles can do there today. Employee moves are also made from the Employee Directory's bulk bar,
+// so that page's `view` right is accepted too.
+$departmentPage = '/module/organizational-management/organization-setup/department-management';
+$employeeDirectoryPage = '/module/organizational-management/user-management/employee-directory';
+
+Route::prefix('departments-management')->group(function () use ($departmentPage, $employeeDirectoryPage) {
     Route::get('/export', [DepartmentManagementController::class, 'export']);
     Route::get('/employees', [DepartmentManagementController::class, 'employees']);
-    Route::post('/reorder', [DepartmentManagementController::class, 'reorder']);
-    Route::patch('/{id}/head', [DepartmentManagementController::class, 'setHead']);
-    Route::patch('/{id}/parent', [DepartmentManagementController::class, 'setParent']);
+    Route::post('/reorder', [DepartmentManagementController::class, 'reorder'])
+        ->middleware('anyaccess:admin+hr,' . $departmentPage . '@view');
+    Route::patch('/{id}/head', [DepartmentManagementController::class, 'setHead'])
+        ->middleware('anyaccess:admin+hr,' . $departmentPage . '@view');
+    Route::patch('/{id}/parent', [DepartmentManagementController::class, 'setParent'])
+        ->middleware('anyaccess:admin+hr,' . $departmentPage . '@view');
     // Move employees in / out. Both log an s_mobility_transfers row per
     // employee, so a headcount never changes without a record of who moved.
-    Route::post('/{id}/employees', [DepartmentManagementController::class, 'assignEmployees']);
-    Route::delete('/{id}/employees', [DepartmentManagementController::class, 'unassignEmployees']);
+    Route::post('/{id}/employees', [DepartmentManagementController::class, 'assignEmployees'])
+        ->middleware('anyaccess:admin+hr,' . $departmentPage . '@view,' . $employeeDirectoryPage . '@view');
+    Route::delete('/{id}/employees', [DepartmentManagementController::class, 'unassignEmployees'])
+        ->middleware('anyaccess:admin+hr,' . $departmentPage . '@view,' . $employeeDirectoryPage . '@view');
     // What is attached, before anything is done to it. ?mode=delete counts the
     // subtree (delete cascades); ?mode=merge counts only this department.
     Route::get('/{id}/impact', [DepartmentManagementController::class, 'impact']);
     // The alternative to deleting: everything becomes the target's.
+    Route::post('/{id}/merge', [DepartmentManagementController::class, 'merge'])
+        ->middleware('anyaccess:admin+hr,' . $departmentPage . '@view');
     Route::post('/{id}/merge', [DepartmentManagementController::class, 'merge']);
 
     /*
@@ -1478,8 +1544,23 @@ Route::prefix('departments-management')->group(function () {
     });
 });
 
+// Creating a department is gated on the SAME right the sidebar uses for the Department
+// Management page (tblgroupwise_rights_g2g, action `add`). It had no permission check at all:
+// an Employee could create one by calling the endpoint. Only `store` is gated here; the other
+// writes on this resource are unchanged. URL and route name are unchanged.
+Route::post('departments-management', [DepartmentManagementController::class, 'store'])
+    ->middleware('anyaccess:admin+hr,/module/organizational-management/organization-setup/department-management@view')
+    ->name('departments-management.store');
 Route::resource('departments-management', DepartmentManagementController::class)
-    ->only(['index', 'store', 'show', 'update', 'destroy']);
+    ->only(['index', 'show']);
+// update (PUT/PATCH) and destroy: gated like `store` above. Declared separately so the URLs and the
+// route names (departments-management.update / .destroy) stay exactly what the resource gave them.
+Route::match(['put', 'patch'], 'departments-management/{departments_management}', [DepartmentManagementController::class, 'update'])
+    ->middleware('anyaccess:admin+hr,' . $departmentPage . '@view')
+    ->name('departments-management.update');
+Route::delete('departments-management/{departments_management}', [DepartmentManagementController::class, 'destroy'])
+    ->middleware('anyaccess:admin+hr,' . $departmentPage . '@view')
+    ->name('departments-management.destroy');
 
 /*
  * Employee Directory.
@@ -1796,10 +1877,17 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->middleware('task.permission:notification.manage');
     Route::get('/workspace', [WorkspaceController::class, 'index']);
     Route::get('/workspace/workload', [WorkspaceController::class, 'workload']);
+    // Bulk actions — static segments, declared before {id} so they match
+    // first. reassign is per-row-authorized inside the controller (task.update
+    // is not a privileged ability); bulkDelete is unconditionally privileged,
+    // matching the single-task DELETE below.
+    Route::post('/workspace/bulk/reassign', [TaskBulkActionController::class, 'reassign'])->middleware('task.permission:task.update');
+    Route::delete('/workspace/bulk', [TaskBulkActionController::class, 'bulkDelete'])->middleware('task.permission:task.delete');
     Route::get('/workspace/{id}', [WorkspaceController::class, 'show'])->whereNumber('id');
     Route::get('/workspace/{id}/activity', [ActivityController::class, 'index'])->whereNumber('id');
     Route::put('/workspace/{id}', [WorkspaceController::class, 'update'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::delete('/workspace/{id}', [WorkspaceController::class, 'destroy'])->middleware('task.permission:task.delete')->whereNumber('id');
+    Route::post('/workspace/{id}/follow-up', [WorkspaceController::class, 'followUp'])->whereNumber('id');
     Route::patch('/workspace/{id}/approval', [WorkspaceController::class, 'approve'])->middleware('task.permission:task.approve')->whereNumber('id');
     Route::post('/workspace/{id}/comments', [WorkspaceController::class, 'comment'])->middleware('task.permission:task.comment')->whereNumber('id');
     Route::get('/workspace/{id}/time-entries', [TaskTimeTrackingController::class, 'index'])->whereNumber('id');
@@ -1812,8 +1900,14 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::get('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'show'])->whereNumber('id');
     Route::put('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'upsert'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::delete('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'destroy'])->middleware('task.permission:task.update')->whereNumber('id');
+    // One reminder per user per task - your own, so no privileged ability,
+    // same reasoning as /recurrence above.
+    Route::get('/workspace/{id}/reminder', [CalendarReminderController::class, 'taskShow'])->whereNumber('id');
+    Route::put('/workspace/{id}/reminder', [CalendarReminderController::class, 'taskUpsert'])->whereNumber('id');
+    Route::delete('/workspace/{id}/reminder', [CalendarReminderController::class, 'taskDestroy'])->whereNumber('id');
     Route::get('/workspace/{id}/schedule', [TaskScheduleController::class, 'show'])->whereNumber('id');
     Route::put('/workspace/{id}/schedule', [TaskScheduleController::class, 'update'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::patch('/workspace/{id}/visibility', [WorkspaceController::class, 'updateVisibility'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::get('/workspace/{id}/attachments', [TaskAttachmentVersionController::class, 'index'])->whereNumber('id');
     Route::post('/workspace/{id}/attachments', [TaskAttachmentVersionController::class, 'store'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::get('/workspace/{id}/attachments/{version}', [TaskAttachmentVersionController::class, 'download'])->whereNumber(['id', 'version']);
@@ -1837,8 +1931,69 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::put('/milestones/{id}', [DependencyController::class, 'updateMilestone'])->middleware('task.permission:milestone.manage')->whereNumber('id');
     Route::delete('/milestones/{id}', [DependencyController::class, 'destroyMilestone'])->middleware('task.permission:milestone.manage')->whereNumber('id');
     Route::get('/my-tasks', [MyTasksController::class, 'index']);
+    // Static segment BEFORE {id}, same reason the workstream block documents:
+    // declared after, '/quick' would be swallowed as an {id}.
+    Route::post('/my-tasks/quick', [MyTasksController::class, 'quickAdd']);
     Route::get('/my-tasks/{id}', [MyTasksController::class, 'show'])->whereNumber('id');
     Route::patch('/my-tasks/{id}/status', [MyTasksController::class, 'updateStatus'])->middleware('task.permission:task.status')->whereNumber('id');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Calendar — tasks + events + milestones + checkpoints, merged for display
+    |--------------------------------------------------------------------------
+    |
+    | Reads are ungated (visibility is enforced inside CalendarFeedService,
+    | not here). Creating/editing your own event needs no privileged ability
+    | either — the same "your own work" rule /workspace, /my-tasks and
+    | /dependencies already follow. Deleting is privileged-only even for your
+    | own event, matching the one rule this module has never carved an
+    | exception into: no employee route anywhere deletes a task outright.
+    |
+    | Static segments ('/events') are declared before the dynamic routes
+    | below them read the same way the workstream block above does.
+    */
+    Route::get('/calendar', [CalendarController::class, 'index']);
+    Route::post('/calendar/events', [CalendarController::class, 'storeEvent']);
+    Route::get('/calendar/events/{id}', [CalendarController::class, 'show'])->whereNumber('id');
+    Route::put('/calendar/events/{id}', [CalendarController::class, 'update'])->whereNumber('id');
+    Route::patch('/calendar/events/{id}/reschedule', [CalendarController::class, 'reschedule'])->whereNumber('id');
+    Route::delete('/calendar/events/{id}', [CalendarController::class, 'destroy'])->middleware('task.permission:task.delete')->whereNumber('id');
+    // Recurrence (Phase 2) — mirrors the task-side /workspace/{id}/recurrence
+    // routes below exactly, for the same entity type Calendar actually owns.
+    Route::get('/calendar/events/{id}/recurrence', [CalendarController::class, 'recurrenceShow'])->whereNumber('id');
+    Route::put('/calendar/events/{id}/recurrence', [CalendarController::class, 'recurrenceUpsert'])->whereNumber('id');
+    Route::delete('/calendar/events/{id}/recurrence', [CalendarController::class, 'recurrenceDestroy'])->whereNumber('id');
+    // iCalendar + attendees (Phase 5). Static segments ('/export.ics',
+    // '/import') declared before any dynamic {id} pattern, same reason the
+    // workstream block further down documents.
+    Route::get('/calendar/export.ics', [CalendarController::class, 'exportRangeIcs']);
+    Route::post('/calendar/import', [CalendarController::class, 'importIcs']);
+    Route::get('/calendar/events/{id}/ics', [CalendarController::class, 'exportEventIcs'])->whereNumber('id');
+    Route::get('/calendar/events/{id}/attendees', [CalendarController::class, 'listAttendees'])->whereNumber('id');
+    Route::post('/calendar/events/{id}/attendees', [CalendarController::class, 'inviteAttendee'])->whereNumber('id');
+    Route::delete('/calendar/events/{id}/attendees/{attendeeId}', [CalendarController::class, 'removeAttendee'])->whereNumber('id')->whereNumber('attendeeId');
+    // PUBLIC — no token, matching CRM's own accept-only short-link. Still
+    // sits inside this prefix group (only `task.sanitize` applies there,
+    // which merely trims input) rather than needing a separate declaration.
+    Route::get('/calendar/invite/{token}/accept', [CalendarController::class, 'acceptInvite']);
+    // Reminders (Phase 3) — one per user per event, mirroring /workspace/{id}/reminder.
+    Route::get('/calendar/events/{id}/reminder', [CalendarReminderController::class, 'eventShow'])->whereNumber('id');
+    Route::put('/calendar/events/{id}/reminder', [CalendarReminderController::class, 'eventUpsert'])->whereNumber('id');
+    Route::delete('/calendar/events/{id}/reminder', [CalendarReminderController::class, 'eventDestroy'])->whereNumber('id');
+    // Polling surface: entity-agnostic, since a user asking "what's due right
+    // now" does not know or care which task/event each delivery is for until
+    // this tells them. Static segment ('/due') declared before any dynamic
+    // {id} pattern this group might grow later.
+    Route::get('/calendar/reminders/due', [CalendarReminderController::class, 'due']);
+    Route::patch('/calendar/reminders/{id}/seen', [CalendarReminderController::class, 'seen'])->whereNumber('id');
+    Route::patch('/calendar/reminders/{id}/snooze', [CalendarReminderController::class, 'snooze'])->whereNumber('id');
+    // Sharing (Phase 4): outgoing grants are self-service (no id to tamper
+    // with - you can only ever share YOUR OWN calendar). /feeds is the
+    // incoming read the toggle panel asks for.
+    Route::get('/calendar/shares', [CalendarShareController::class, 'index']);
+    Route::post('/calendar/shares', [CalendarShareController::class, 'store']);
+    Route::delete('/calendar/shares/{id}', [CalendarShareController::class, 'destroy'])->whereNumber('id');
+    Route::get('/calendar/feeds', [CalendarShareController::class, 'feeds']);
     Route::get('/projects/options', [ProjectController::class, 'options']);
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::post('/projects', [ProjectController::class, 'store'])->middleware('task.permission:project.create');

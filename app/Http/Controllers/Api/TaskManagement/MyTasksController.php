@@ -183,6 +183,92 @@ class MyTasksController extends Controller
         ]);
     }
 
+    /**
+     * The employee's own low-friction "jot this down" create path — also the
+     * calendar's "Add Task" self-entry (Phase 9.4), which is why every field
+     * beyond title/due_date is optional rather than a second endpoint: the
+     * existing title-only caller and the richer calendar form share one path.
+     *
+     * Deliberately not CreateTaskModal's shape (department/job-role/skills/
+     * KRA/KPA/observer) — that form is an assigner assigning work to someone
+     * else. This is the opposite: always self-assigned, so there is no id to
+     * tamper with and no privileged ability to gate — the same reasoning the
+     * account/preferences routes document for why a self-only write needs no
+     * role guard.
+     */
+    public function quickAdd(Request $request)
+    {
+        $context = $this->context($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'title' => 'required|string|max:191',
+            'due_date' => 'nullable|date',
+            'description' => 'nullable|string|max:5000',
+            'time_start' => 'nullable|date_format:H:i',
+            'time_end' => 'nullable|date_format:H:i|after:time_start',
+            'status' => 'nullable|string|max:100',
+            'priority' => 'nullable|string|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 0,
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        // Same resolution MyTasksController::updateStatus() already applies -
+        // a system category or the tenant's own custom label, never a raw
+        // unchecked string landing in the column.
+        $status = 'PENDING';
+        $statusLabel = null;
+        if ($request->filled('status')) {
+            $resolvedStatus = $this->optionSets->resolveStatus($context['sub_institute_id'], (string) $request->input('status'));
+            if ($resolvedStatus === null) {
+                return response()->json(['status' => 0, 'message' => 'Unknown status for this organisation.'], 422);
+            }
+            $status = $resolvedStatus['status'];
+            $statusLabel = $resolvedStatus['label'];
+        }
+
+        $priority = 'Medium';
+        if ($request->filled('priority')) {
+            $resolvedPriority = $this->optionSets->resolvePriority($context['sub_institute_id'], (string) $request->input('priority'));
+            if ($resolvedPriority === null) {
+                return response()->json(['status' => 0, 'message' => 'Unknown priority for this organisation.'], 422);
+            }
+            $priority = $resolvedPriority;
+        }
+
+        $id = DB::table('task')->insertGetId([
+            'task_title' => $request->input('title'),
+            'task_description' => $request->input('description') ?: null,
+            'task_date' => $request->input('due_date') ?: Carbon::today()->toDateString(),
+            'time_start' => $request->input('time_start') ?: null,
+            'time_end' => $request->input('time_end') ?: null,
+            'task_type' => $priority,
+            'status' => $status,
+            'status_label' => $statusLabel,
+            'task_allocated' => $context['user_id'],
+            'task_allocated_to' => $context['user_id'],
+            'sub_institute_id' => $context['sub_institute_id'],
+            'SYEAR' => $context['syear'],
+            'created_by' => $context['user_id'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Task created successfully.',
+            'data' => ['id' => (string) $id],
+        ], 201);
+    }
+
     public function updateStatus(Request $request, int $id)
     {
         $context = $this->context($request);
@@ -358,7 +444,7 @@ class MyTasksController extends Controller
             ->select([
                 't.id', 't.task_title', 't.task_description', 't.task_attachment',
                 't.file_size', 't.file_type', 't.task_date', 't.planned_start_date', 't.estimated_hours', 't.actual_hours', 't.remaining_hours', 't.acceptance_criteria', 't.task_type',
-                't.status', 't.status_label', 't.reply', 't.delay_category', 't.delay_reason', 't.observation_point', 't.created_at',
+                't.status', 't.status_label', 't.reply', 't.delay_category', 't.delay_reason', 't.observation_point', 't.created_at', 't.recurrence_id', 't.visibility',
                 // THE APPROVAL DECISION, WHICH THE ASSIGNEE COULD NOT SEE.
                 // A rejected task silently flipped to ON HOLD with no reason and
                 // no badge — the person whose work was sent back was the one
@@ -462,6 +548,11 @@ class MyTasksController extends Controller
             'due_date' => $task->task_date ? Carbon::parse($task->task_date)->toDateString() : null,
             'delay_category' => $task->delay_category, 'delay_reason' => $task->delay_reason,
             'remarks' => $task->reply,
+            // Which series this occurrence belongs to, if any — lets the
+            // drawer offer the this/this-and-following/all scope choice only
+            // when a task is genuinely part of a recurring series.
+            'recurrence_id' => $task->recurrence_id ? (string) $task->recurrence_id : null,
+            'visibility' => $task->visibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
             'created_at' => $task->created_at ? Carbon::parse($task->created_at)->toIso8601String() : null,
             'updated_at' => $task->updated_at ? Carbon::parse($task->updated_at)->toIso8601String() : null,
         ];

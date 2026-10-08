@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api\TaskManagement;
 
 use App\Http\Controllers\Controller;
+use App\Services\Account\UserPreferences;
 use App\Services\TaskManagement\TaskAuditService;
 use App\Services\TaskManagement\TaskStatusTransitionService;
 use App\Services\TaskManagement\TaskOptionSetService;
+use App\Support\SubjectAuthority;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +37,8 @@ class WorkspaceController extends Controller
     public function __construct(
         private readonly TaskAuditService $taskAudit,
         private readonly TaskStatusTransitionService $statusTransitions,
-        private readonly TaskOptionSetService $optionSets
+        private readonly TaskOptionSetService $optionSets,
+        private readonly UserPreferences $preferences
     ) {
     }
 
@@ -170,6 +173,52 @@ class WorkspaceController extends Controller
         ]);
     }
 
+    /**
+     * A task's own PRIVATE/PUBLIC flag — its own small write, not folded into
+     * the big field-replace `update()` above, so flipping privacy can never
+     * accidentally carry a stale title/assignee/status along with it.
+     */
+    public function updateVisibility(Request $request, int $id)
+    {
+        $context = $this->context($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $validator = Validator::make($request->all(), ['visibility' => 'required|in:PUBLIC,PRIVATE']);
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $task = $this->findTenantTask($context, $id);
+        if (!$task) {
+            return response()->json(['status' => 0, 'message' => 'Task not found.'], 404);
+        }
+        if (!$this->canEditTask($context, $task)) {
+            return response()->json(['status' => 0, 'message' => 'You can only change visibility on your own tasks.'], 403);
+        }
+
+        // PUBLIC is stored as NULL, not the string - "default" should mean
+        // default, not "a second way to spell not-private".
+        $value = $request->input('visibility') === 'PRIVATE' ? 'PRIVATE' : null;
+        DB::table('task')->where('id', $id)->update(['visibility' => $value, 'updated_at' => now()]);
+
+        return response()->json(['status' => 1, 'message' => 'Visibility updated.', 'data' => ['visibility' => $value ?? 'PUBLIC']]);
+    }
+
+    /**
+     * Per-assignee workload: active and overdue counts, by name.
+     *
+     * Previously returned bare {user_id, total} - no name (the frontend had
+     * to show a raw numeric id), no active/overdue split (one COUNT(*)
+     * covering every task ever, completed included), and unassigned tasks
+     * bucketed under a fake "user 0" via COALESCE. None of that answers
+     * "who is overloaded right now", which is the only question a workload
+     * view exists to answer. `active`/`blocked_overdue`'s own SUM(CASE...)
+     * idiom two methods up is reused here rather than invented fresh -
+     * `overdue` is narrower (date-based only, not also "on hold") because a
+     * paused task isn't necessarily late.
+     */
     public function workload(Request $request)
     {
         $context = $this->context($request);
@@ -177,18 +226,35 @@ class WorkspaceController extends Controller
             return $context;
         }
 
+        $today = Carbon::today()->toDateString();
+
         $rows = DB::table('task as t')
+            ->leftJoin('tbluser as assignee', 'assignee.id', '=', 't.task_allocated_to')
             ->where('t.sub_institute_id', $context['sub_institute_id'])
             ->where('t.SYEAR', $context['syear'])
             ->whereNull('t.deleted_at')
-            ->selectRaw('COALESCE(t.task_allocated_to, 0) as user_id, COUNT(*) as total')
-            ->groupBy('user_id')
+            ->whereNotNull('t.task_allocated_to')
+            ->selectRaw(
+                "t.task_allocated_to as user_id,
+                 TRIM(CONCAT_WS(' ', assignee.first_name, assignee.middle_name, assignee.last_name)) as name,
+                 SUM(CASE WHEN UPPER(COALESCE(t.status,'PENDING')) <> 'COMPLETED' THEN 1 ELSE 0 END) as active_tasks,
+                 SUM(CASE WHEN t.task_date < ? AND UPPER(COALESCE(t.status,'PENDING')) <> 'COMPLETED' THEN 1 ELSE 0 END) as overdue_tasks",
+                [$today]
+            )
+            ->groupBy('t.task_allocated_to', 'assignee.first_name', 'assignee.middle_name', 'assignee.last_name')
+            ->havingRaw('active_tasks > 0')
+            ->orderByDesc('active_tasks')
             ->get();
 
         return response()->json([
             'status' => 1,
             'message' => 'Workspace workload retrieved successfully.',
-            'data' => $rows,
+            'data' => $rows->map(fn ($row) => [
+                'id' => (string) $row->user_id,
+                'name' => $row->name ?: ('User #' . $row->user_id),
+                'active_tasks' => (int) $row->active_tasks,
+                'overdue_tasks' => (int) $row->overdue_tasks,
+            ]),
         ]);
     }
 
@@ -370,6 +436,64 @@ class WorkspaceController extends Controller
         $this->taskAudit->taskChanged($id, 'archived', (array) $task, $context['user_id']);
 
         return response()->json(['status' => 1, 'message' => 'Task archived successfully.']);
+    }
+
+    /**
+     * Clone a task into a fresh, PENDING follow-up due `today + follow_up_days`.
+     *
+     * No schema link is kept between the two - only the title prefix signals
+     * the relationship, deliberately (see the completion plan's stated
+     * non-goal: real traceability is a new migration, out of scope here).
+     * Ungated at the route, like every sibling /workspace/{id}/* route's
+     * "your own work" convention - canEditTask is the actual gate.
+     */
+    public function followUp(Request $request, int $id)
+    {
+        $context = $this->context($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $task = $this->findTenantTask($context, $id);
+        if (!$task) {
+            return response()->json(['status' => 0, 'message' => 'Task not found.'], 404);
+        }
+        if (!$this->canEditTask($context, $task)) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'You can only create a follow-up for tasks you own, created, or are assigned to.',
+            ], 403);
+        }
+
+        $days = (int) $this->preferences->all($context['user_id'])['follow_up_days'];
+        $dueDate = now()->addDays($days)->toDateString();
+        $title = '[Followup] ' . $task->task_title;
+
+        // Owner is the REQUESTER, not the source task's owner - mirroring
+        // LegacyTaskController's own default-to-caller behaviour when an
+        // owner isn't explicitly specified. Assignee carries over unchanged.
+        $newId = DB::table('task')->insertGetId([
+            'task_title' => $title,
+            'task_description' => $task->task_description,
+            'task_date' => $dueDate,
+            'task_type' => $task->task_type,
+            'status' => 'PENDING',
+            'task_allocated' => $context['user_id'],
+            'task_allocated_to' => $task->task_allocated_to,
+            'sub_institute_id' => $context['sub_institute_id'],
+            'SYEAR' => $context['syear'],
+            'created_by' => $context['user_id'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->taskAudit->taskCreated($newId, $context['user_id']);
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Follow-up task created.',
+            'data' => ['id' => (string) $newId, 'task_title' => $title, 'due_date' => $dueDate],
+        ], 201);
     }
 
     public function approve(Request $request, int $id)
@@ -620,10 +744,25 @@ class WorkspaceController extends Controller
      *
      * Employees edit their own work - assigned to them, allocated by them, or
      * created by them - mirroring the scoping MyTasksController already does.
-     * Anyone above the Employee profile (Admin / HR) manages the whole tenant,
+     * Anyone in SubjectAuthority::TASK_PRIVILEGED manages the whole tenant,
      * which is what the Dashboard is for. task.update is deliberately not a
-     * privileged ability, so this check is what stops an employee editing a
-     * colleague's task through the API.
+     * privileged ABILITY at the middleware (so an employee's own-work edits
+     * need no elevated role at all), so this check is what stops an employee
+     * editing a colleague's task through the API.
+     *
+     * G-SEC-41. This used to ask `!isEmployeeProfile($userId)` - a NAME match
+     * against the literal string 'Employee', inverted so everything else
+     * passed by default. TaskPermissionMiddleware::isPrivileged() already
+     * documents why that exact shape is wrong (an unresolvable or renamed
+     * profile fails open) and was fixed there; this second, redundant
+     * implementation of the same question was never brought in line with it.
+     * Measured on the live app host: 1000 Student, 15 Teacher, 3 Auditor, 2
+     * Recruiter and 2 Finance accounts all satisfied the old "not Employee"
+     * rule and could therefore edit ANY task in their tenant through this
+     * endpoint, not just their own - an over-grant with real reach, not a
+     * theoretical one. TASK_PRIVILEGED already resolves through RoleKey (the
+     * same legacy-name fallback TaskPermissionMiddleware uses), so this is a
+     * drop-in replacement, not a new resolution path to get wrong twice.
      */
     private function canEditTask(array $context, object $task): bool
     {
@@ -635,18 +774,7 @@ class WorkspaceController extends Controller
             return true;
         }
 
-        return !$this->isEmployeeProfile($userId);
-    }
-
-    /** True when the user sits on the Employee profile (the non-managing role). */
-    private function isEmployeeProfile(int $userId): bool
-    {
-        $profile = DB::table('tbluser')
-            ->leftJoin('tbluserprofilemaster as p', 'p.id', '=', 'tbluser.user_profile_id')
-            ->where('tbluser.id', $userId)
-            ->value('p.name');
-
-        return strcasecmp(trim((string) $profile), 'Employee') === 0;
+        return SubjectAuthority::userSatisfies($userId, SubjectAuthority::TASK_PRIVILEGED);
     }
 
     private function findTenantTask(array $context, int $id): ?object
@@ -685,8 +813,8 @@ class WorkspaceController extends Controller
             ->selectRaw("t.id, t.task_title, t.task_description, t.task_type, t.task_date, t.planned_start_date, t.status,
                 t.task_allocated, t.task_allocated_to, t.created_by, t.created_at, t.updated_at,
                 t.reply, t.approve_status, t.approved_on, t.approve_remarks, t.task_attachment, t.file_size, t.file_type, t.status_label,
-                t.kra, t.kpa, t.required_skills, t.skill_id, t.observation_point,
-                pt.project_id, proj.name as project_name, department.department as department_name,
+                t.kra, t.kpa, t.required_skills, t.skill_id, t.observation_point, t.recurrence_id,
+                pt.project_id, proj.name as project_name, department.id as department_id, department.department as department_name,
                 TRIM(CONCAT_WS(' ', allocator.first_name, allocator.middle_name, allocator.last_name)) as allocator_name,
                 TRIM(CONCAT_WS(' ', assignee.first_name, assignee.middle_name, assignee.last_name)) as assignee_name");
 
@@ -804,6 +932,7 @@ class WorkspaceController extends Controller
             'description' => (string) ($task->task_description ?? ''),
             'project_id' => $task->project_id ? (string) $task->project_id : null,
             'project' => (string) ($task->project_name ?? ''),
+            'department_id' => $task->department_id ? (string) $task->department_id : null,
             'department' => (string) ($task->department_name ?? ''),
             'assignee_id' => $task->task_allocated_to ? (string) $task->task_allocated_to : null,
             'assignee' => (string) ($task->assignee_name ?: 'Unassigned'),
@@ -823,6 +952,7 @@ class WorkspaceController extends Controller
                 : null,
             'due_date' => $task->task_date ? Carbon::parse($task->task_date)->toDateString() : null,
             'remarks' => $task->reply ?? null,
+            'recurrence_id' => isset($task->recurrence_id) && $task->recurrence_id ? (string) $task->recurrence_id : null,
             'approved' => in_array(strtolower(trim((string) ($task->approve_status ?? ''))), self::APPROVED_VALUES, true),
             /*
              * THE DECISION ITSELF, NOT JUST "IS IT APPROVED".
@@ -841,7 +971,6 @@ class WorkspaceController extends Controller
                 : null,
             'approved_on' => $task->approved_on ?? null,
             'approve_remarks' => $task->approve_remarks ?: null,
-            'approved_on' => $task->approved_on ?? null,
             'approval' => $this->approvalInfoFor((int) $task->id, $status),
             'created_at' => $task->created_at ? Carbon::parse($task->created_at)->toIso8601String() : null,
             'updated_at' => $task->updated_at ? Carbon::parse($task->updated_at)->toIso8601String() : null,
