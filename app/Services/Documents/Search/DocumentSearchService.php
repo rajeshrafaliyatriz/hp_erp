@@ -95,11 +95,12 @@ class DocumentSearchService
 
         $ownerNames = $this->ownerNames($rows->pluck('owner_id')->filter()->unique()->all(), $tenantId);
 
-        $data = $rows->map(function ($row) use ($snippets, $ownerNames) {
+        $data = $rows->map(function ($row) use ($snippets, $ownerNames, $starred) {
             $data = (array) $row;
             $data['snippet'] = $snippets[$row->id] ?? null;
             // Who the document belongs to, so a list of matches can tell two people apart.
             $data['owner_name'] = $ownerNames[$row->owner_id] ?? null;
+            $data['starred'] = in_array($row->id, $starred, true);
 
             return $data;
         })->all();
@@ -135,6 +136,20 @@ class DocumentSearchService
      * @return array<int, string>
      */
     private function ownerNames(array $ids, int $tenantId): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return DB::table('tbluser')
+            ->where('sub_institute_id', $tenantId)
+            ->whereIn('id', $ids)
+            ->get(['id', 'first_name', 'last_name'])
+            ->mapWithKeys(fn ($u) => [(int) $u->id => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))])
+            ->all();
+    }
+
+    /**
      * Which of these ids has THIS caller starred? Same bounded-second-query
      * shape as snippets() above, for the same reason: starring is per-caller
      * metadata that does not belong in the main SELECT's column list - a
@@ -151,11 +166,10 @@ class DocumentSearchService
             return [];
         }
 
-        return DB::table('tbluser')
-            ->where('sub_institute_id', $tenantId)
-            ->whereIn('id', $ids)
-            ->get(['id', 'first_name', 'last_name'])
-            ->mapWithKeys(fn ($u) => [(int) $u->id => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))])
+        return DB::table('document_library_stars')
+            ->where('user_id', $userId)
+            ->whereIn('document_id', $ids)
+            ->pluck('document_id')
             ->all();
     }
 
