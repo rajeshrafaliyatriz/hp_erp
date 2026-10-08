@@ -44,6 +44,36 @@ TaskRunLedger::track(
 );
 
 /*
+ * TASK/EVENT RECURRENCE — ROLLING 90-DAY MATERIALIZATION WINDOW.
+ *
+ * An open-ended series ("repeat weekly, forever") only has its first 90 days
+ * written at the moment it is created — without this, nothing ever advances
+ * `materialized_through`, so the series would quietly stop appearing on the
+ * calendar after 90 days despite never having been told to end.
+ */
+TaskRunLedger::track(
+    Schedule::command('calendar:materialize-recurrences')
+        ->dailyAt('02:15')
+        ->withoutOverlapping()
+        ->onOneServer(),
+    'calendar.materialize_recurrences'
+);
+
+/*
+ * REMINDERS — fired every 5 minutes, not continuously. A reminder's own
+ * precision is "minutes before", so this cadence is within the granularity
+ * the feature already promises.
+ */
+TaskRunLedger::track(
+    Schedule::command('calendar:fire-reminders')
+        ->everyFiveMinutes()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'calendar.fire_reminders'
+);
+
+/*
 |--------------------------------------------------------------------------
 | MOVED HERE FROM app/Console/Kernel.php ON 2026-08-31, BECAUSE THAT FILE'S
 | schedule() HAS NEVER RUN.
