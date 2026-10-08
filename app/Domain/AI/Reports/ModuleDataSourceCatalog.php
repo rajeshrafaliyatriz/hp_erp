@@ -314,7 +314,12 @@ final class ModuleDataSourceCatalog
                         ->addSelect(['d.department', 's.display_name as course', 'e.status', 'e.start_date', 'e.end_date'])
                         ->orderByDesc('e.id');
 
-                    if (($u = $this->int($a, 'user_id')) !== null) {
+                    // "My" enrolments: a caller who is not an administrator sees only their own,
+                    // whatever `user_id` they pass. An administrator keeps the organisation-wide
+                    // view the report builder needs, optionally narrowed to one learner.
+                    $u = $scope->isAdmin ? $this->int($a, 'user_id') : $scope->userId;
+
+                    if ($u !== null) {
                         $q->where('e.user_id', $u);
                     }
                     if (($s = $this->text($a, 'status')) !== null) {

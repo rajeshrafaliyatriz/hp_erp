@@ -153,7 +153,7 @@ final class ConversationStore
             ->where('conversation_id', $conversationId)
             ->max('turn_index');
 
-        $id = DB::table('ai_conversation_turns')->insertGetId([
+        $row = [
             'conversation_id' => $conversationId,
             'turn_index' => $nextIndex + 1,
             'role' => $role,
@@ -168,7 +168,14 @@ final class ConversationStore
             'sub_institute_id' => $institute,
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ];
+
+        // The lifecycle trace, when this turn has one and the column is installed.
+        if (isset($meta['trace']) && self::hasTraceColumn()) {
+            $row['trace'] = json_encode($meta['trace'], JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        }
+
+        $id = DB::table('ai_conversation_turns')->insertGetId($row);
 
         DB::table('ai_conversations')->where('id', $conversationId)->update([
             'turn_count' => DB::raw('turn_count + 1'),
@@ -223,5 +230,12 @@ final class ConversationStore
             ->limit($limit)
             ->get()
             ->all();
+    }
+
+    private static ?bool $traceColumn = null;
+
+    private static function hasTraceColumn(): bool
+    {
+        return self::$traceColumn ??= DB::getSchemaBuilder()->hasColumn('ai_conversation_turns', 'trace');
     }
 }
