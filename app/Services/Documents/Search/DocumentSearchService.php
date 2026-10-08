@@ -32,6 +32,21 @@ class DocumentSearchService
 
         DocumentAccess::visibleTo($query, $callerId, $tenantId, $departmentId);
 
+        // A person's name narrows to that person's documents. Resolved to ids inside the caller's own
+        // tenant, then applied on top of the visibility rules above - a name can only ever NARROW what
+        // the caller may already see, never reveal a document they could not open.
+        $ownerName = trim((string) ($filters['owner_name'] ?? ''));
+
+        if ($ownerName !== '') {
+            $ownerIds = $this->ownerIdsByName($ownerName, $tenantId);
+
+            if ($ownerIds === []) {
+                return ['data' => [], 'total' => 0];
+            }
+
+            $query->whereIn('owner_id', $ownerIds);
+        }
+
         $this->applyFilters($query, $filters);
 
         $term = trim((string) ($filters['q'] ?? ''));
@@ -59,14 +74,59 @@ class DocumentSearchService
 
         $snippets = $term !== '' ? $this->snippets($rows->pluck('id')->all(), $term) : [];
 
-        $data = $rows->map(function ($row) use ($snippets) {
+        $ownerNames = $this->ownerNames($rows->pluck('owner_id')->filter()->unique()->all(), $tenantId);
+
+        $data = $rows->map(function ($row) use ($snippets, $ownerNames) {
             $data = (array) $row;
             $data['snippet'] = $snippets[$row->id] ?? null;
+            // Who the document belongs to, so a list of matches can tell two people apart.
+            $data['owner_name'] = $ownerNames[$row->owner_id] ?? null;
 
             return $data;
         })->all();
 
         return ['data' => $data, 'total' => $total];
+    }
+
+    /**
+     * The ids of this tenant's users whose full name contains every word of `$name`.
+     *
+     * @return array<int, int>
+     */
+    private function ownerIdsByName(string $name, int $tenantId): array
+    {
+        $words = array_values(array_filter(preg_split('/\s+/', $name) ?: []));
+
+        if ($words === []) {
+            return [];
+        }
+
+        $users = DB::table('tbluser')->where('sub_institute_id', $tenantId)->whereNull('deleted_at');
+
+        foreach (array_slice($words, 0, 4) as $word) {
+            $like = '%' . $this->escapeLike($word) . '%';
+            $users->whereRaw("CONCAT(COALESCE(first_name,''),' ',COALESCE(middle_name,''),' ',COALESCE(last_name,'')) like ?", [$like]);
+        }
+
+        return $users->limit(200)->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * @param  array<int, int|string>  $ids
+     * @return array<int, string>
+     */
+    private function ownerNames(array $ids, int $tenantId): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return DB::table('tbluser')
+            ->where('sub_institute_id', $tenantId)
+            ->whereIn('id', $ids)
+            ->get(['id', 'first_name', 'last_name'])
+            ->mapWithKeys(fn ($u) => [(int) $u->id => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))])
+            ->all();
     }
 
     private function applyFilters($query, array $filters): void

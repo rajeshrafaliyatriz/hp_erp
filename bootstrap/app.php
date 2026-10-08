@@ -126,6 +126,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // from an access_link (optionally module-scoped via {module}) at
             // request time instead of a fixed id baked into the route.
             'platformright' => \App\Http\Middleware\RequirePlatformRight::class,
+            // One gate for a write several screens perform: passes on a role
+            // (`admin+hr`) OR a per-page right (`/access/link@add`), e.g.
+            // 'anyaccess:admin+hr,/module/lms/administration/course-builder@view'.
+            'anyaccess' => \App\Http\Middleware\RequireAnyAccess::class,
             // Acting ABOVE the tenants - creating an organisation. No role_key
             // can authorise this: every role the platform defines is scoped to
             // one organisation. Membership is a row in `platform_owners`.

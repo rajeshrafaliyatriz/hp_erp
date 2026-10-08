@@ -322,7 +322,7 @@ class DocumentLibraryController extends Controller
         $perPage = min(100, max(1, (int) $request->input('per_page', 24)));
 
         $result = (new DocumentSearchService())->search(
-            $request->only(['q', 'category', 'document_type', 'department_id', 'source_system', 'date_from', 'date_to', 'owner_id']),
+            $request->only(['q', 'category', 'document_type', 'department_id', 'source_system', 'date_from', 'date_to', 'owner_id', 'owner_name']),
             (int) $identity['sub_institute_id'],
             (int) $identity['user_id'],
             $department,
