@@ -20,7 +20,7 @@ return new class extends Migration {
     {
         if (Schema::hasTable('ai_conversation_turns') && ! Schema::hasColumn('ai_conversation_turns', 'trace')) {
             Schema::table('ai_conversation_turns', function (Blueprint $table) {
-                $table->json('trace')->nullable();
+                $table->longText('trace')->nullable();
             });
         }
 

@@ -224,8 +224,8 @@ return new class extends Migration
 
             $table->longText('system_prompt')->nullable();
             $table->longText('user_prompt');
-            $table->json('variables')->nullable();                     // [{key,label,required,type}]
-            $table->json('output_schema')->nullable();
+            $table->longText('variables')->nullable();                     // [{key,label,required,type}]
+            $table->longText('output_schema')->nullable();
             $table->string('output_format', 24)->default('text');      // text|json|markdown
 
             // Report-layout columns, unused today. Present so the two products'
@@ -233,14 +233,14 @@ return new class extends Migration
             // than a schema change.
             $table->longText('html_layout')->nullable();
             $table->string('data_source', 120)->nullable();
-            $table->json('data_arguments')->nullable();
+            $table->longText('data_arguments')->nullable();
 
             $table->string('provider', 40)->nullable();
             $table->string('model', 120)->nullable();
             $table->decimal('temperature', 4, 2)->nullable();
             $table->unsignedInteger('max_tokens')->nullable();
 
-            $table->json('safety_rules')->nullable();
+            $table->longText('safety_rules')->nullable();
             $table->boolean('allow_as_evidence')->default(false);
             $table->boolean('requires_review')->default(false);
 
@@ -280,13 +280,13 @@ return new class extends Migration
             $table->string('action_ref', 150)->nullable();
 
             $table->text('prompt')->nullable();
-            $table->json('payload')->nullable();
+            $table->longText('payload')->nullable();
 
             // Hidden unless the current screen resolved a record, so a record-specific
             // action cannot appear on a list page.
             $table->boolean('requires_entity')->default(false);
-            $table->json('allowed_roles')->nullable();
-            $table->json('required_permissions')->nullable();
+            $table->longText('allowed_roles')->nullable();
+            $table->longText('required_permissions')->nullable();
 
             $table->unsignedSmallInteger('sort_order')->default(0);
             $table->boolean('status')->default(true)->index();
