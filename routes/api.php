@@ -3111,6 +3111,12 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::post('/ingestion/sources/{id}/analyze', [$ing, 'analyze'])->whereNumber('id')->middleware('throttle:10,1');
         Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id');
         Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss']);
+
+        // Structured demand-side import (daily scan). Literal paths: no clash with /signals/{id}.
+        $market = \App\Http\Controllers\Api\Signals\MarketImportController::class;
+        Route::post('/market/import', [$market, 'import'])->middleware('throttle:10,1');
+        Route::get('/market/scan-log', [$market, 'scanLog']);
+        Route::get('/market/rejections', [$market, 'rejections']);
     });
 });
 

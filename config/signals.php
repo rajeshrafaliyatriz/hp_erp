@@ -132,4 +132,16 @@ return [
         'url_timeout' => (int) env('SIGNALS_INGESTION_URL_TIMEOUT', 12),
         'user_agent' => env('SIGNALS_FETCH_USER_AGENT', 'G2G-Signals-Bot/1.0'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Market (demand-side) import
+    |--------------------------------------------------------------------------
+    | The structured daily-scan feed: POST /api/signals/market/import and
+    | `php artisan signals:import-market`. See docs/signals-market-import-schema.md.
+    */
+    'market_import' => [
+        'max_records' => (int) env('SIGNALS_MARKET_IMPORT_MAX_RECORDS', 500),
+        'max_upload_kb' => (int) env('SIGNALS_MARKET_IMPORT_MAX_KB', 5120),
+    ],
 ];
