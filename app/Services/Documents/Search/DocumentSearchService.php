@@ -21,7 +21,7 @@ class DocumentSearchService
 {
     /**
      * @param  array{q?:string, category?:string, document_type?:string, department_id?:int,
-     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int}  $filters
+     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, folder_id?:int|string}  $filters
      * @return array{data: array, total: int}
      */
     public function search(array $filters, int $tenantId, int $callerId, ?int $departmentId, int $page = 1, int $perPage = 24): array
@@ -57,8 +57,26 @@ class DocumentSearchService
 
         $total = (int) (clone $query)->count();
 
+        // Relevance when there's something to rank, newest-first otherwise -
+        // automatic, not a user-facing toggle (a "sort by relevance" control
+        // would be meaningless with no query typed, and vice versa). Reuses
+        // booleanModeTerm() rather than having applyTermMatch() expose its
+        // own computed value - cheap (pure string work, no query) and keeps
+        // that method's signature untouched.
+        $boolean = $term !== '' ? $this->booleanModeTerm($term) : '';
+
         $rows = $query
-            ->orderByDesc('id')
+            ->when($boolean !== '', function ($q) use ($boolean) {
+                // Sum of both MATCH() scores, so a hit in the body ranks
+                // alongside a hit in the title rather than one silently
+                // dominating regardless of where the term actually matched.
+                $q->orderByRaw(
+                    'MATCH(title, original_file_name, subject) AGAINST (? IN BOOLEAN MODE) '
+                    .'+ MATCH(extracted_text) AGAINST (? IN BOOLEAN MODE) DESC',
+                    [$boolean, $boolean]
+                );
+            })
+            ->orderByDesc('id') // newest-first when there's no term to rank by; stable tiebreaker either way
             ->forPage($page, $perPage)
             ->get([
                 'id', 'title', 'original_file_name', 'mime_type', 'size', 'category',
@@ -73,6 +91,7 @@ class DocumentSearchService
             ]);
 
         $snippets = $term !== '' ? $this->snippets($rows->pluck('id')->all(), $term) : [];
+        $starred = $this->starredIds($rows->pluck('id')->all(), $callerId);
 
         $ownerNames = $this->ownerNames($rows->pluck('owner_id')->filter()->unique()->all(), $tenantId);
 
@@ -116,6 +135,17 @@ class DocumentSearchService
      * @return array<int, string>
      */
     private function ownerNames(array $ids, int $tenantId): array
+     * Which of these ids has THIS caller starred? Same bounded-second-query
+     * shape as snippets() above, for the same reason: starring is per-caller
+     * metadata that does not belong in the main SELECT's column list - a
+     * leftJoin against document_library_stars would force every caller of
+     * this method to disambiguate `id` across both tables for a column only
+     * one view (the star toggle) ever reads.
+     *
+     * @param  int[]  $ids
+     * @return int[]
+     */
+    private function starredIds(array $ids, int $userId): array
     {
         if ($ids === []) {
             return [];
@@ -151,6 +181,24 @@ class DocumentSearchService
 
         if (!empty($filters['date_to'])) {
             $query->whereDate('document_date', '<=', $filters['date_to']);
+        }
+
+        /*
+         * Presence, not truthiness: `folder_id=0` (the frontend's "Home"/root
+         * sentinel) must filter to `whereNull('folder_id')`, which `empty()`
+         * would otherwise treat as "no filter at all" and silently ignore -
+         * the same trap the other fields above don't have to worry about
+         * since none of them has a legitimate falsy value. Omitting the key
+         * entirely (not browsing by folder) is what leaves this unfiltered.
+         */
+        if (array_key_exists('folder_id', $filters)) {
+            $folderId = (int) $filters['folder_id'];
+
+            if ($folderId === 0) {
+                $query->whereNull('folder_id');
+            } else {
+                $query->where('folder_id', $folderId);
+            }
         }
     }
 

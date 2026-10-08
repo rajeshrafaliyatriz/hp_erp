@@ -245,3 +245,37 @@ TaskRunLedger::track(
         ->runInBackground(),
     'signals.research'
 );
+
+/*
+ * DOCUMENT TRASH — PURGED DAILY.
+ *
+ * `destroy()`/`destroyForEmployee()` only ever soft-delete, so a trash view
+ * can offer restore. Without this, nothing ever turns that into a real
+ * deletion and trash grows forever. `--execute` is required because the
+ * command is dry-run by default (see its own docblock) - omitting it here
+ * would schedule a no-op that never actually purges anything.
+ *
+ * Runs against BOTH mysql and live by default (the command's own
+ * --database= loop) - one scheduled entry, not two.
+ */
+TaskRunLedger::track(
+    Schedule::command('documents:purge-trash --execute')
+        ->dailyAt('03:00')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'documents.purge_trash'
+);
+
+/*
+ * IDMS TRASH - PURGED DAILY (30-day retention, config/idms.php). Only runs if
+ * the server's `schedule:run` cron is active.
+ */
+TaskRunLedger::track(
+    Schedule::command('idms:purge-trash')
+        ->dailyAt('03:30')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'idms.purge_trash'
+);

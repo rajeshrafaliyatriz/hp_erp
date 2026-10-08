@@ -465,6 +465,27 @@ class GeminiCredentialFailoverTest extends TestCase
         $this->assertSame(1, (new RunOpportunityResearchJob(1, null))->tries);
     }
 
+    public function test_deepseek_flash_is_called_with_thinking_disabled_but_deepseek_chat_is_not(): void
+    {
+        config(['ai.provider.driver' => 'deepseek', 'ai.provider.deepseek.api_key' => 'ds-key-111111111']);
+
+        foreach (['deepseek-flash' => true, 'deepseek-v4-flash' => true, 'deepseek-chat' => false] as $model => $expectsThinkingOff) {
+            config(['ai.provider.deepseek.model' => $model]);
+            $this->app->forgetInstance(\Illuminate\Http\Client\Factory::class);
+            Http::clearResolvedInstance(\Illuminate\Http\Client\Factory::class);
+            $body = null;
+            Http::fake(function (Request $request) use (&$body) {
+                $body = $request->data();
+
+                return Http::response(['choices' => [['message' => ['content' => '{"ok":true}'], 'finish_reason' => 'stop']], 'usage' => ['prompt_tokens' => 1, 'completion_tokens' => 1]], 200);
+            });
+
+            $this->complete();
+
+            $this->assertSame($model, $body['model']);
+            $this->assertSame($expectsThinkingOff ? ['type' => 'disabled'] : null, $body['thinking'] ?? null, $model);
+        }
+    }
     // ── 13: DeepSeek unchanged ───────────────────────────────────────────────
 
     public function test_deepseek_is_not_rotated_and_still_works(): void
