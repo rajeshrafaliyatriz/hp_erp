@@ -3137,6 +3137,10 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     Route::get('/partners', [$part, 'index']);
     Route::get('/partners/{id}', [$part, 'show']);
 
+    // Readiness confirmation: administrators only (not HR), audited, never automatic.
+    Route::middleware('profile:admin')->post('/offers/{id}/readiness', [$port, 'confirmReadiness']);
+    Route::middleware('profile:admin,hr')->get('/offers/{id}/readiness-log', [$port, 'readinessLog']);
+
     Route::middleware('profile:admin,hr')->group(function () use ($port, $part) {
         Route::post('/offers', [$port, 'store']);
         Route::put('/offers/{id}', [$port, 'update']);

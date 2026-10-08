@@ -60,7 +60,8 @@ class PortfolioImportService
                         'trigger_signals'      => $offerData['trigger_signals'] ?? $existing->trigger_signals,
                         'deployment_model'     => $offerData['deployment_model'] ?? $existing->deployment_model,
                         'readiness_status'     => $offerData['readiness_status'] ?? $existing->readiness_status,
-                        'readiness_confirmed'  => $offerData['readiness_confirmed'] ?? $existing->readiness_confirmed,
+                        // Readiness is confirmed only by an explicit, audited administrator action.
+                        // A "Yes" in the spreadsheet must never confirm anything.
                         'typical_deal_band'    => $offerData['typical_deal_band'] ?? $existing->typical_deal_band,
                         'pricing_model'        => $offerData['pricing_model'] ?? $existing->pricing_model,
                         'implementation_effort'=> $offerData['implementation_effort'] ?? $existing->implementation_effort,
@@ -83,7 +84,7 @@ class PortfolioImportService
                         'trigger_signals'      => $offerData['trigger_signals'] ?? [],
                         'deployment_model'     => $offerData['deployment_model'] ?? null,
                         'readiness_status'     => $offerData['readiness_status'],
-                        'readiness_confirmed'  => (bool) ($offerData['readiness_confirmed'] ?? false),
+                        'readiness_confirmed'  => false,
                         'typical_deal_band'    => $offerData['typical_deal_band'] ?? null,
                         'pricing_model'        => $offerData['pricing_model'] ?? null,
                         'implementation_effort'=> $offerData['implementation_effort'] ?? null,

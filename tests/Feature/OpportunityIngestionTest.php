@@ -84,6 +84,8 @@ class OpportunityIngestionTest extends TestCase
         if (file_exists(base_path('database/migrations/2026_10_01_130000_add_stage_to_g2g_research_runs.php'))) {
             (require base_path('database/migrations/2026_10_01_130000_add_stage_to_g2g_research_runs.php'))->up();
         }
+        // The market-import columns the opportunity feed now reads (expiry, samples, evidence).
+        (require base_path('database/migrations/2026_10_08_100000_extend_g2g_signals_for_market_import.php'))->up();
 
         RoleKey::flushCache();
         Cache::flush();

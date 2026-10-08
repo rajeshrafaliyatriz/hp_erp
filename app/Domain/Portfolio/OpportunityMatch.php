@@ -13,6 +13,8 @@ class OpportunityMatch extends Model
 
     protected $casts = [
         'reviewed_at' => 'datetime',
+        'matched_need_codes' => 'array',
+        'is_deliverable' => 'boolean',
     ];
 
     public function scopeForTenant(Builder $query, int $tenantId): Builder

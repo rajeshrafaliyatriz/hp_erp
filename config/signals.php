@@ -140,6 +140,13 @@ return [
     | The structured daily-scan feed: POST /api/signals/market/import and
     | `php artisan signals:import-market`. See docs/signals-market-import-schema.md.
     */
+    // Offer matching for imported signals. Readiness never changes a score.
+    'matching' => [
+        'code_boost' => (int) env('SIGNALS_MATCH_CODE_BOOST', 25),       // per matching need code
+        'segment_bonus' => (int) env('SIGNALS_MATCH_SEGMENT_BONUS', 15), // once, if the buyer segment matches
+        'store_min_score' => (int) env('SIGNALS_MATCH_STORE_MIN_SCORE', 30), // import stores matches at or above this
+    ],
+
     'market_import' => [
         'max_records' => (int) env('SIGNALS_MARKET_IMPORT_MAX_RECORDS', 500),
         'max_upload_kb' => (int) env('SIGNALS_MARKET_IMPORT_MAX_KB', 5120),

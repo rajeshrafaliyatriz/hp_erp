@@ -2,6 +2,8 @@
 
 namespace App\Domain\Signals\Market;
 
+use App\Domain\Portfolio\MatchingEngine;
+use App\Domain\Portfolio\OpportunityMatch;
 use App\Domain\Signals\Opportunities\CompanyOpportunity;
 use Illuminate\Support\Facades\DB;
 
@@ -29,8 +31,11 @@ class MarketImporter
         'leadership' => 'leadership_change', 'hiring' => 'hiring', 'partnership' => 'project', 'other' => 'project',
     ];
 
-    public function __construct(private readonly QualificationGate $gate, private readonly BuyerResolver $buyers)
-    {
+    public function __construct(
+        private readonly QualificationGate $gate,
+        private readonly BuyerResolver $buyers,
+        private readonly MatchingEngine $matcher,
+    ) {
     }
 
     /**
@@ -117,7 +122,9 @@ class MarketImporter
                 $this->event($tenantId, $opportunity->id, 'evidence_downgraded', ['claim_level' => ['confirmed', 'inference'], 'note' => $r['evidence_note']], $scanLogId);
             }
 
-            return ['outcome' => 'accepted', 'public' => ['outcome' => 'accepted', 'id' => $opportunity->id, 'buyer_id' => $company->id, 'buyer_created' => $resolved['created']], ...$base];
+            $matches = $this->snapshotMatches($tenantId, $opportunity);
+
+            return ['outcome' => 'accepted', 'public' => ['outcome' => 'accepted', 'id' => $opportunity->id, 'buyer_id' => $company->id, 'buyer_created' => $resolved['created'], 'matches' => $matches], ...$base];
         }
 
         $stored = [
@@ -142,11 +149,22 @@ class MarketImporter
         // Re-imports refresh the evidence fields; they never touch review_status / pipeline_status
         // (what a person decided) or first_discovered_at.
         unset($new['review_status'], $new['pipeline_status'], $new['first_discovered_at'], $new['fingerprint']);
-        $existing->forceFill(array_filter($new, fn ($v) => $v !== null))->save();
-
+        // first_discovered_at is assigned to ITSELF in the UPDATE. Migration 2026_10_08_110000
+        // removes the column's ON UPDATE clause, but until it has run (or if it never does) any
+        // UPDATE that omits the column makes MySQL/MariaDB reset it to now(). An explicit
+        // assignment prevents that, and Eloquent would drop an unchanged attribute from the SQL,
+        // so this goes through the query builder with the model's own cast-encoded values.
+        $existing->forceFill(array_filter($new, fn ($v) => $v !== null));
+        CompanyOpportunity::where('id', $existing->id)->update(
+            $existing->getDirty() + [
+                'first_discovered_at' => DB::raw(DB::getQueryGrammar()->wrap('first_discovered_at')),
+                'updated_at' => now(),
+            ]
+        );
         $this->event($tenantId, $existing->id, 'updated', $changes, $scanLogId);
+        $matches = $this->snapshotMatches($tenantId, $existing->refresh());
 
-        return ['outcome' => 'updated', 'public' => ['outcome' => 'updated', 'id' => $existing->id, 'changes' => array_keys($changes)], ...$base];
+        return ['outcome' => 'updated', 'public' => ['outcome' => 'updated', 'id' => $existing->id, 'changes' => array_keys($changes), 'matches' => $matches], ...$base];
     }
 
     /** @param array<string, mixed> $r @return array<string, mixed> */
@@ -169,7 +187,12 @@ class MarketImporter
             'product_fit' => $r['what_we_could_sell'] ?? '', 'recommended_action' => $r['what_we_could_sell'] ?? '',
             'priority' => $total === null ? 'Low' : ($total >= 28 ? 'High' : ($total >= 20 ? 'Medium' : 'Low')),
             'urgency' => $expires === null ? null : ($daysLeft < 0 ? 'Expired' : 'Closes ' . \Illuminate\Support\Carbon::parse($expires)->format('d M Y')),
-            'feed_section' => ($daysLeft !== null && $daysLeft >= 0 && $daysLeft <= 14) ? 'immediate_action' : ($claim === 'confirmed' ? 'market_intelligence' : 'watchlist'),
+            // Evidence decides the section, not urgency alone: only a confirmed claim read from the
+            // document or page text, and not yet expired, is eligible for Immediate action. Everything
+            // else (inference, hypothesis, a snippet or a blocked page) is Watchlist. Expired items are
+            // hidden by the feed unless the "Expired" filter is on.
+            'feed_section' => ($claim === 'confirmed' && in_array($r['fetch_level'], ['full_document', 'page_text'], true) && ($daysLeft === null || $daysLeft >= 0))
+                ? 'immediate_action' : 'watchlist',
             'qualification' => $claim === 'confirmed'
                 ? (in_array($r['trigger_type'], ['tender', 'rfp', 'eoi', 'rfq'], true) ? 'Relevant Requirement Found' : 'New Opportunity')
                 : ($claim === 'inference' ? 'Needs Verification' : 'Monitoring'),
@@ -197,6 +220,44 @@ class MarketImporter
         }
 
         return $row;
+    }
+
+    /**
+     * Store (or refresh) the offer matches for one opportunity, with the readiness snapshot.
+     *
+     * Rows a person has already reviewed keep their status and notes: only the score and the
+     * snapshot fields are refreshed. Readiness never changes a score; it only sets
+     * is_deliverable / readiness_at_match so a strong match to an unverified offer is visible.
+     *
+     * @return int number of matches stored or refreshed
+     */
+    private function snapshotMatches(int $tenantId, CompanyOpportunity $opportunity): int
+    {
+        $min = (int) config('signals.matching.store_min_score', 30);
+        $count = 0;
+
+        foreach ($this->matcher->matchForSignal($opportunity, 'opportunity', $tenantId)['offer_matches'] as $m) {
+            if ($m['match_score'] < $min) {
+                continue;
+            }
+
+            $offer = $m['offer'];
+            $attrs = [
+                'matched_need_codes' => $m['matched_need_codes'],
+                'match_score' => $m['match_score'],
+                'readiness_at_match' => $offer->readiness_status,
+                'is_deliverable' => (bool) $offer->readiness_confirmed,
+                'confidence' => round($m['match_score'] / 100, 2),
+                'rationale' => mb_substr(implode(' ', $m['match_reasons']), 0, 1000),
+            ];
+            $where = ['sub_institute_id' => $tenantId, 'signal_type' => 'opportunity', 'signal_id' => $opportunity->id, 'offer_id' => $offer->offer_id];
+
+            $row = OpportunityMatch::where($where)->first();
+            $row ? $row->forceFill($attrs)->save() : OpportunityMatch::create($where + ['match_status' => 'Matched'] + $attrs);
+            $count++;
+        }
+
+        return $count;
     }
 
     /** @param array<string, mixed> $changes */

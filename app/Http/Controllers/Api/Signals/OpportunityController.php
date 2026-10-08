@@ -313,6 +313,15 @@ class OpportunityController extends Controller
             'review_status' => 'nullable|in:New,Reviewed,Follow-up,Dismissed',
             'feed_section' => 'nullable|string|in:immediate_action,watchlist,market_intelligence,competitor_intelligence,top_actions',
             'run_id' => 'nullable|integer|min:1',
+            'expired' => 'nullable|in:hide,only,include',
+            'include_samples' => 'nullable|boolean',
+            'claim_level' => 'nullable|in:confirmed,inference,hypothesis',
+            'fetch_level' => 'nullable|in:full_document,page_text,search_snippet,blocked',
+            'business_fit' => 'nullable|in:eb,scholar,g2g,multiple',
+            'pipeline_status' => 'nullable|in:NEW,REVIEWING,ENGAGED,WON,LOST,ARCHIVED',
+            'government_track' => 'nullable|boolean',
+            'need_code' => ['nullable', 'regex:/^N(0[1-9]|1\d|20)$/'],
+            'trigger_type' => 'nullable|string|max:30',
             'report_date' => 'nullable|date',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
@@ -326,6 +335,11 @@ class OpportunityController extends Controller
         $list = $base()
             ->when($request->query('review_status'), fn ($q, $s) => $q->where('o.review_status', $s))
             ->when($request->query('priority'), fn ($q, $p) => $q->where('o.priority', $p))
+            // Soonest expiry first (rows with no expiry after them); the "Expired" view lists the most
+            // recently expired first. Then score, then the order researched rows always had.
+            ->orderByRaw('(o.expires_at IS NULL) ASC')
+            ->when($request->query('expired') === 'only', fn ($q) => $q->orderByDesc('o.expires_at'), fn ($q) => $q->orderBy('o.expires_at'))
+            ->orderByRaw('o.score_total DESC')
             ->orderByRaw("CASE o.priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END")
             ->orderByDesc('o.first_discovered_at')->orderByDesc('o.id')
             ->paginate((int) $request->query('per_page', 10));
@@ -343,7 +357,7 @@ class OpportunityController extends Controller
 
         return response()->json([
             'status' => 1,
-            'data' => collect($list->items())->map(fn ($row) => $this->presentOpportunity($row))->all(),
+            'data' => $this->presentMany($list->items(), $tenantId),
             'meta' => ['page' => $list->currentPage(), 'per_page' => $list->perPage(), 'total' => $list->total(), 'last_page' => $list->lastPage()],
             'summary' => [
                 'total' => (int) ($counts->total ?? 0),
@@ -354,8 +368,15 @@ class OpportunityController extends Controller
                 'watchlist' => (int) ($counts->watchlist_count ?? 0),
                 'market_intelligence' => (int) ($counts->market_intel_count ?? 0),
                 'competitor_intelligence' => (int) ($counts->competitor_intel_count ?? 0),
+                // Hidden by default; shown under the Expired filter / Include samples toggle.
+                'expired' => (int) $this->query($tenantId)->where('o.is_sample', false)->whereNotNull('o.expires_at')->where('o.expires_at', '<', Carbon::today()->toDateString())->count(),
+                'samples' => (int) $this->query($tenantId)->where('o.is_sample', true)->count(),
             ],
             'filters' => [
+                'claim_levels' => ['confirmed', 'inference', 'hypothesis'],
+                'fetch_levels' => ['full_document', 'page_text', 'search_snippet', 'blocked'],
+                'business_fits' => ['eb', 'scholar', 'g2g', 'multiple'],
+                'pipeline_statuses' => ['NEW', 'REVIEWING', 'ENGAGED', 'WON', 'LOST', 'ARCHIVED'],
                 'categories' => collect(config('signals.opportunities.categories'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
                 'kinds' => collect(config('signals.opportunities.signal_kinds'))->map(fn ($l, $k) => ['value' => $k, 'label' => $l])->values(),
                 'report_dates' => ResearchRun::where('sub_institute_id', $tenantId)->whereIn('status', ['success', 'partial'])
@@ -374,7 +395,7 @@ class OpportunityController extends Controller
         $row = $this->query($identity['sub_institute_id'])->where('o.id', $id)->first();
 
         return $row
-            ? response()->json(['status' => 1, 'data' => $this->presentOpportunity($row, true)])
+            ? response()->json(['status' => 1, 'data' => $this->presentMany([$row], $identity['sub_institute_id'])[0] + $this->presentOpportunity($row, true)])
             : response()->json(['status' => 0, 'message' => 'Opportunity not found'], 404);
     }
 
@@ -422,7 +443,7 @@ class OpportunityController extends Controller
                 $join->on('r.id', '=', 'o.research_run_id')->where('r.sub_institute_id', '=', $tenantId);
             })
             ->where('o.sub_institute_id', $tenantId)
-            ->select('o.*', 'c.name as company_name', 'c.website as company_website', 'c.industry as company_industry', 'c.location as company_location', 'r.report_date');
+            ->select('o.*', 'c.name as company_name', 'c.website as company_website', 'c.industry as company_industry', 'c.location as company_location', 'c.type as company_type', 'c.state as company_state', 'r.report_date');
     }
 
     private function filtered(Request $request, int $tenantId)
@@ -433,6 +454,30 @@ class OpportunityController extends Controller
             if ($value = $request->query($param)) {
                 $q->where($column, $value);
             }
+        }
+        // Expiry: expired signals are hidden unless asked for (expired=only|include). A signal with no
+        // expiry never expires.
+        $today = Carbon::today()->toDateString();
+        $expired = $request->query('expired', 'hide');
+        if ($expired === 'hide') {
+            $q->where(fn ($w) => $w->whereNull('o.expires_at')->orWhere('o.expires_at', '>=', $today));
+        } elseif ($expired === 'only') {
+            $q->whereNotNull('o.expires_at')->where('o.expires_at', '<', $today);
+        }
+        // Sample rows never appear unless the caller explicitly includes them.
+        if (! $request->boolean('include_samples')) {
+            $q->where('o.is_sample', false);
+        }
+        foreach (['claim_level' => 'o.claim_level', 'fetch_level' => 'o.fetch_level', 'business_fit' => 'o.business_fit', 'pipeline_status' => 'o.pipeline_status', 'trigger_type' => 'o.trigger_type'] as $param => $column) {
+            if ($value = $request->query($param)) {
+                $q->where($column, $value);
+            }
+        }
+        if ($request->query('government_track') !== null && $request->query('government_track') !== '') {
+            $q->where('o.is_government_track', $request->boolean('government_track'));
+        }
+        if ($code = $request->query('need_code')) {
+            $q->where('o.candidate_need_codes', 'like', '%"' . $code . '"%');
         }
         if ($date = $request->query('report_date')) {
             $q->whereDate('r.report_date', Carbon::parse($date)->toDateString());
@@ -449,6 +494,64 @@ class OpportunityController extends Controller
         }
 
         return $q;
+    }
+
+    /**
+     * A page of rows, each with its stored offer matches (one query for the whole page).
+     *
+     * @param  iterable<object>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function presentMany(iterable $rows, int $tenantId): array
+    {
+        $rows = collect($rows);
+        $matches = $this->matchedOffers($tenantId, $rows->pluck('id')->map(fn ($i) => (int) $i)->all());
+
+        return $rows->map(function ($row) use ($matches) {
+            $out = $this->presentOpportunity($row);
+            $out['matched_offers'] = $matches[(int) $row->id] ?? [];
+
+            return $out;
+        })->all();
+    }
+
+    /**
+     * Stored matches per opportunity id, best first, with each offer's CURRENT readiness.
+     * `is_deliverable` is what the offer is now; `readiness_at_match` is what it was when matched.
+     * Readiness never affects the order: match_score decides it.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, list<array<string, mixed>>>
+     */
+    private function matchedOffers(int $tenantId, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $rows = DB::table('g2g_opportunity_matches as m')
+            ->leftJoin('g2g_product_offers as p', function ($join) use ($tenantId) {
+                $join->on('p.offer_id', '=', 'm.offer_id')->where(fn ($w) => $w->where('p.sub_institute_id', $tenantId)->orWhereNull('p.sub_institute_id'));
+            })
+            ->where('m.sub_institute_id', $tenantId)->where('m.signal_type', 'opportunity')->whereIn('m.signal_id', $ids)
+            ->orderByDesc('m.match_score')
+            ->get(['m.signal_id', 'm.offer_id', 'm.match_score', 'm.matched_need_codes', 'm.readiness_at_match', 'm.match_status', 'p.name as offer_name', 'p.readiness_status', 'p.readiness_confirmed']);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r->signal_id][] = [
+                'offer_id' => $r->offer_id,
+                'offer_name' => $r->offer_name,
+                'match_score' => $r->match_score === null ? null : (int) $r->match_score,
+                'matched_need_codes' => json_decode($r->matched_need_codes ?? '[]', true) ?: [],
+                'readiness_status' => $r->readiness_status,
+                'readiness_at_match' => $r->readiness_at_match,
+                'is_deliverable' => (bool) $r->readiness_confirmed,
+                'match_status' => $r->match_status,
+            ];
+        }
+
+        return $out;
     }
 
     /** @return array<string, mixed> */
@@ -504,6 +607,44 @@ class OpportunityController extends Controller
             'research_run_id' => (int) $row->research_run_id,
             'research_run_id' => $row->research_run_id ? (int) $row->research_run_id : null,
         ];
+        // Imported (demand-side) fields. Present as null on researched rows.
+        $expiresAt = $row->expires_at ?? null;
+        $daysLeft = $expiresAt ? (int) Carbon::today()->diffInDays(Carbon::parse($expiresAt)->startOfDay(), false) : null;
+        $scoreKeys = ['buying_signal', 'problem_fit', 'product_fit', 'accessibility', 'urgency', 'potential_value', 'evidence_quality'];
+        $scores = isset($row->score_total) ? array_combine($scoreKeys, array_map(fn ($k) => isset($row->{'score_' . $k}) ? (int) $row->{'score_' . $k} : null, $scoreKeys)) + ['total' => (int) $row->score_total] : null;
+        $out += [
+            'pipeline_status' => $row->pipeline_status ?? 'NEW',
+            'trigger_type' => $row->trigger_type ?? null,
+            'trigger_summary' => $row->trigger_summary ?? null,
+            'reference_no' => $row->reference_no ?? null,
+            'source_url' => $row->source_url ?? null,
+            'source_title' => $row->source_title ?? null,
+            'expires_at' => $expiresAt ? Carbon::parse($expiresAt)->toDateString() : null,
+            'days_left' => $daysLeft,
+            'is_expired' => $daysLeft !== null && $daysLeft < 0,
+            'claim_level' => $row->claim_level ?? null,
+            'fetch_level' => $row->fetch_level ?? null,
+            'evidence_note' => $row->evidence_note ?? null,
+            'business_fit' => $row->business_fit ?? null,
+            'candidate_need_codes' => json_decode($row->candidate_need_codes ?? '[]', true) ?: [],
+            'buyer_segment' => $row->buyer_segment ?? null,
+            'buyer_type' => $row->company_type ?? null,
+            'buyer_state' => $row->company_state ?? null,
+            'likely_problem' => $row->likely_problem ?? null,
+            'likely_stakeholder' => $row->likely_stakeholder ?? null,
+            'what_we_could_sell' => $row->what_we_could_sell ?? null,
+            'entry_point' => $row->entry_point ?? null,
+            'scale' => $row->scale ?? null,
+            'estimated_value' => $row->estimated_value ?? null,
+            'is_government_track' => (bool) ($row->is_government_track ?? false),
+            'partner_route_note' => $row->partner_route_note ?? null,
+            'soft_marketing_angle' => $row->soft_marketing_angle ?? null,
+            'scores' => $scores,
+            'score_reasoning' => $row->score_reasoning ?? null,
+            'is_sample' => (bool) ($row->is_sample ?? false),
+            'matched_offers' => [],
+        ];
+
         if ($detail) {
             $out['sources'] = $sources;
             $out['reviewed_at'] = $row->reviewed_at ? Carbon::parse($row->reviewed_at)->toIso8601String() : null;

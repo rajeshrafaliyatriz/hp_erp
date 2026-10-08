@@ -376,4 +376,57 @@ class MarketImportTest extends TestCase
         $this->assertSame('NEW', $legacy->pipeline_status);
         $this->assertSame('foundation', DB::table('g2g_ingestion_sources')->getConnection()->getSchemaBuilder()->hasColumn('g2g_ingestion_sources', 'intent') ? 'foundation' : 'missing');
     }
+    // ── first_discovered_at must survive updates (ON UPDATE current_timestamp() hazard) ──
+
+    public function test_an_importer_update_assigns_first_discovered_at_explicitly_and_keeps_its_value(): void
+    {
+        $this->importer()->import(self::T1, [$this->rec()]);
+        DB::table('g2g_company_opportunities')->update(['first_discovered_at' => '2026-09-01 08:00:00']);
+
+        $updates = [];
+        DB::listen(function ($q) use (&$updates) {
+            if (stripos($q->sql, 'update') === 0 && str_contains($q->sql, 'g2g_company_opportunities')) {
+                $updates[] = $q->sql;
+            }
+        });
+
+        $out = $this->importer()->import(self::T1, [$this->rec(['expires_at' => '2026-11-20'])]);
+
+        $this->assertSame(1, $out['updated']);
+        $this->assertCount(1, $updates, 'one UPDATE statement for the opportunity');
+        // MySQL/MariaDB reset an ON UPDATE timestamp unless the UPDATE assigns the column, so the
+        // statement must name it. Eloquent alone would drop an unchanged attribute from the SQL.
+        $this->assertMatchesRegularExpression('/first_discovered_at\W+=\W+first_discovered_at/', $updates[0]);
+        $this->assertSame('2026-09-01 08:00:00', DB::table('g2g_company_opportunities')->value('first_discovered_at'));
+    }
+
+    public function test_the_protect_migration_is_a_no_op_off_mysql_and_safe_to_repeat(): void
+    {
+        $m = require base_path('database/migrations/2026_10_08_110000_protect_first_discovered_at_on_opportunities.php');
+
+        $m->up();
+        $m->up();
+
+        $this->assertTrue(Schema::hasTable('g2g_company_opportunities'));
+    }
+
+    /**
+     * The real guard. It needs MySQL/MariaDB (sqlite has no ON UPDATE), so it is skipped on the
+     * in-memory test database and run by hand against the local copy:
+     *   DB_CONNECTION=mysql DB_HOST=127.0.0.1 DB_PORT=3307 DB_DATABASE=hp_erp_local \
+     *   php artisan test --filter=first_discovered_at_survives_a_real
+     */
+    public function test_first_discovered_at_survives_a_real_value_change_on_mysql(): void
+    {
+        if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            $this->markTestSkipped('Needs MySQL/MariaDB: sqlite has no ON UPDATE CURRENT_TIMESTAMP.');
+        }
+
+        $this->importer()->import(self::T1, [$this->rec()]);
+        DB::table('g2g_company_opportunities')->update(['first_discovered_at' => '2026-09-01 08:00:00']);
+        // A plain value change, the same shape as a review/dismiss click.
+        DB::table('g2g_company_opportunities')->update(['review_status' => 'Reviewed']);
+
+        $this->assertSame('2026-09-01 08:00:00', DB::table('g2g_company_opportunities')->value('first_discovered_at'));
+    }
 }
