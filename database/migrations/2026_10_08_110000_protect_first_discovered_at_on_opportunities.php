@@ -40,13 +40,23 @@ return new class extends Migration
 
         $original = (string) DB::selectOne('SELECT @@SESSION.sql_mode AS m')->m;
         $relaxed = implode(',', array_filter(explode(',', $original), fn ($m) => ! in_array($m, ['NO_ZERO_DATE', 'NO_ZERO_IN_DATE'], true)));
-        DB::statement('SET SESSION sql_mode = ?', [$relaxed]);
+        $this->setSqlMode($relaxed);
 
         try {
             DB::statement('ALTER TABLE `g2g_company_opportunities` MODIFY `first_discovered_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
         } finally {
-            DB::statement('SET SESSION sql_mode = ?', [$original]);
+            $this->setSqlMode($original);
         }
+    }
+
+    /** A literal, not a bound parameter (a prepared SET is unverified on MariaDB 10.1); see the sibling migration. */
+    private function setSqlMode(string $modes): void
+    {
+        if (preg_match('/^[A-Z_,]*$/', $modes) !== 1) {
+            throw new \RuntimeException('Unexpected sql_mode value; refusing to change it.');
+        }
+
+        DB::unprepared("SET SESSION sql_mode = '{$modes}'");
     }
 
     /** Restoring an accidental auto-update would reintroduce the bug, so there is nothing to undo. */

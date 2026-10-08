@@ -24,6 +24,16 @@ return new class extends Migration
         return Schema::hasColumn($table, $column);
     }
 
+    /** A literal, not a bound parameter (a prepared SET is unverified on MariaDB 10.1). */
+    private function setSqlMode(string $modes): void
+    {
+        if (preg_match('/^[A-Z_,]*$/', $modes) !== 1) {
+            throw new \RuntimeException('Unexpected sql_mode value; refusing to change it.');
+        }
+
+        DB::unprepared("SET SESSION sql_mode = '{$modes}'");
+    }
+
     public function up(): void
     {
         if (Schema::hasTable('g2g_product_offers')) {
@@ -33,7 +43,7 @@ return new class extends Migration
             if ($isMysql) {
                 // Same reason as the other Signals migrations: legacy zero-date defaults.
                 $relaxed = implode(',', array_filter(explode(',', $original), fn ($m) => ! in_array($m, ['NO_ZERO_DATE', 'NO_ZERO_IN_DATE'], true)));
-                DB::statement('SET SESSION sql_mode = ?', [$relaxed]);
+                $this->setSqlMode($relaxed);
             }
 
             try {
@@ -52,7 +62,7 @@ return new class extends Migration
                 }
             } finally {
                 if ($isMysql) {
-                    DB::statement('SET SESSION sql_mode = ?', [$original]);
+                    $this->setSqlMode((string) $original);
                 }
             }
         }

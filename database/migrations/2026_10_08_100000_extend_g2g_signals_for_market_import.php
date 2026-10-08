@@ -89,16 +89,30 @@ return new class extends Migration
         if ($isMysql) {
             $original = (string) DB::selectOne('SELECT @@SESSION.sql_mode AS m')->m;
             $relaxed = implode(',', array_filter(explode(',', $original), fn ($m) => ! in_array($m, ['NO_ZERO_DATE', 'NO_ZERO_IN_DATE'], true)));
-            DB::statement('SET SESSION sql_mode = ?', [$relaxed]);
+            $this->setSqlMode($relaxed);
         }
 
         try {
             $this->apply();
         } finally {
             if ($isMysql) {
-                DB::statement('SET SESSION sql_mode = ?', [$original]);
+                $this->setSqlMode((string) $original);
             }
         }
+    }
+
+    /**
+     * SET with a literal, not a bound parameter: whether a server-side prepared SET is accepted has
+     * not been verified on MariaDB 10.1. The value is a list of sql_mode keywords read from the
+     * server itself and is validated before it is interpolated.
+     */
+    private function setSqlMode(string $modes): void
+    {
+        if (preg_match('/^[A-Z_,]*$/', $modes) !== 1) {
+            throw new \RuntimeException('Unexpected sql_mode value; refusing to change it.');
+        }
+
+        DB::unprepared("SET SESSION sql_mode = '{$modes}'");
     }
 
     private function apply(): void
@@ -248,6 +262,12 @@ return new class extends Migration
 
     private function indexExists(string $table, string $index): bool
     {
+        // SHOW INDEX works on every MySQL/MariaDB version; Schema::getIndexes() queries
+        // information_schema in a way that has not been verified on MariaDB 10.1.
+        if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            return ! empty(DB::select("SHOW INDEX FROM `{$table}` WHERE Key_name = ?", [$index]));
+        }
+
         foreach (Schema::getIndexes($table) as $existing) {
             if ($existing['name'] === $index) {
                 return true;
