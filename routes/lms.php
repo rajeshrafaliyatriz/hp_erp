@@ -326,27 +326,12 @@ Route::post('/set-book-session',[contentController::class,'setBookSession'])->na
 
 Route::get('/download-File', [contentLibraryController::class, 'downloadFile'])->name('downloadFile');
 
-// use App\Http\Controllers\lms\Neo4jSyncController;
-// use App\Http\Controllers\lms\GraphController;
-// use App\Http\Controllers\lms\RecommendationController;
-// use App\Http\Controllers\lms\GraphControllerNew;
-
-
-// Route::get('/get-students', [GraphControllerNew::class, 'getStudents']);
-// Route::get('/get-related-data/{nodeId}', [GraphControllerNew::class, 'getRelatedData']);
-// Route::get('/get-chapters-for-subject/{subjectId}', [GraphControllerNew::class, 'getChaptersForSubject']);
-// Route::get('/get-questions-for-chapter/{chapterId}', [GraphControllerNew::class, 'getQuestionsForChapter']);
-// Route::get('/recommendations', [RecommendationController::class, 'getRecommendations']);
-// Route::get('/graph-data', [GraphController::class, 'getGraphData']);
-// Route::get('/graph-data-learning-path', [GraphController::class, 'getLearningPath']);
-
 // Route::get('/welcome', function () {
 //     return view('welcomenew');
 // });
 // Route::get('/dashboard', function () {
 //     return view('recommend');
 // });
-// Route::get('/sync-neo4j', [Neo4jSyncController::class, 'sync']);
 Route::get('question_paper/search_question', [questionpaperController::class,'search_question2']);
 
 // Course Recommendation API - Get courses based on logged-in user's job role

@@ -16,90 +16,100 @@ class JobRoleGraphController extends Controller
         $this->neo4jService = $neo4jService;
     }
 
+    /**
+     * One job role's competency graph.
+     *
+     * Previously a single query chaining seven independent OPTIONAL MATCHes
+     * off the same :JobRole. Independent OPTIONAL MATCHes compose as nested
+     * loops, so their row counts multiply rather than add: a role with 189
+     * REQUIRES_SKILL edges (real data — "Chief Executives") times its
+     * behaviour/knowledge/ability/attitude fan-out exhausted PHP's 512MB
+     * limit outright. That is why this endpoint had zero working frontend
+     * callers despite being fully wired. Each relationship family is now its
+     * own small, correlated query instead.
+     */
     public function show($jobRoleId)
 {
     $client = $this->neo4jService->getClient();
+    $jobRoleId = (int) $jobRoleId;
 
-    $result = $client->run(
-        'MATCH (jr:JobRole {jobRoleId: $jobRoleId})
-         OPTIONAL MATCH (jr)-[r1]->(n1)
-         OPTIONAL MATCH (n1)-[r2]->(n2)
-         OPTIONAL MATCH (jr)-[rs:REQUIRES_SKILL]->(s:Skill)
-         OPTIONAL MATCH (s)-[rb:REQUIRES_BEHAVIOUR]->(b:Behaviour)
-         OPTIONAL MATCH (jr)-[r_know:REQUIRES_KNOWLEDGE]->(k:Knowledge)
-         OPTIONAL MATCH (jr)-[r_abil:REQUIRES_ABILITY]->(ab:Ability)
-         OPTIONAL MATCH (jr)-[r_att:REQUIRES_ATTITUDE]->(at:Attitude)
-         RETURN jr, r1, n1, r2, n2, rs, s, rb, b, r_know, k, r_abil, ab, r_att, at;',
-        ['jobRoleId' => (int) $jobRoleId]
-    );
+    $root = $client->run(
+        'MATCH (jr:JobRole {jobRoleId: $jobRoleId}) RETURN jr',
+        ['jobRoleId' => $jobRoleId]
+    )->first();
 
-    $nodes = [];
+    if (! $root || ! $root->get('jr')) {
+        return response()->json(['rootNode' => null, 'nodes' => [], 'relationships' => []]);
+    }
+
+    $rootNode = $this->formatNode($root->get('jr'));
+    $nodes = [$rootNode['id'] => $rootNode];
     $relationships = [];
-    $rootNode = null;
+    $skillIds = [];
 
-    foreach ($result as $record) {
+    // REQUIRES_ATTITUTE (not ...ATTITUDE) is the relationship type actually
+    // written to the graph by whatever projector created it — matching the
+    // correctly-spelled name silently returns zero rows for every job role
+    // (confirmed against live data: 984 real edges, all under this
+    // spelling). Match reality, don't "fix" it back to a typo that breaks it.
+    $families = [
+        ['rel' => 'BELONGS_TO_ORG', 'target' => null],
+        ['rel' => 'IS_IN_DEPT', 'target' => null],
+        ['rel' => 'HAS_PARENT', 'target' => null],
+        ['rel' => 'REQUIRES_SKILL', 'target' => 'Skill', 'limit' => 300],
+        ['rel' => 'REQUIRES_KNOWLEDGE', 'target' => 'Knowledge', 'limit' => 100],
+        ['rel' => 'REQUIRES_ABILITY', 'target' => 'Ability', 'limit' => 100],
+        ['rel' => 'REQUIRES_ATTITUTE', 'target' => 'Attitude', 'limit' => 100],
+    ];
 
-        /* Root JobRole */
-        if ($record->get('jr') && !$rootNode) {
-            $rootNode = $this->formatNode($record->get('jr'));
-            $nodes[$rootNode['id']] = $rootNode;
-        }
+    foreach ($families as $family) {
+        $targetMatch = $family['target'] ? ':'.$family['target'] : '';
+        $limit = $family['limit'] ?? 20;
 
-        /* First-level node */
-        if ($record->get('n1')) {
-            $node = $this->formatNode($record->get('n1'));
+        $result = $client->run(
+            "MATCH (jr:JobRole {jobRoleId: \$jobRoleId})-[r:{$family['rel']}]->(n{$targetMatch})
+             RETURN r, n LIMIT {$limit}",
+            ['jobRoleId' => $jobRoleId]
+        );
+
+        foreach ($result as $record) {
+            $rawNode = $record->get('n');
+            $node = $this->formatNode($rawNode);
             $nodes[$node['id']] = $node;
-        }
 
-        /* Second-level node */
-        if ($record->get('n2')) {
-            $node = $this->formatNode($record->get('n2'));
-            $nodes[$node['id']] = $node;
-        }
+            if ($family['rel'] === 'REQUIRES_SKILL') {
+                $skillIds[] = $rawNode->getId();
+            }
 
-        /* ✅ Skill node */
-        if ($record->get('s')) {
-            $node = $this->formatNode($record->get('s'));
-            $nodes[$node['id']] = $node;
+            $rel = $record->get('r');
+            $relationships[$rel->getId()] = $this->formatRelationship($rel);
         }
+    }
 
-        /* ✅ Behaviour node */
-        if ($record->get('b')) {
+    // Behaviours hang off each Skill, not off the job role directly. Pulling
+    // them per already-loaded skill (one query, filtered by id) is the same
+    // decorrelation as above — chaining this as a third OPTIONAL MATCH onto
+    // the skill fan-out is exactly the pattern that caused the blow-up.
+    if ($skillIds !== []) {
+        $result = $client->run(
+            'MATCH (s:Skill)-[r:REQUIRES_BEHAVIOUR]->(b:Behaviour)
+             WHERE id(s) IN $skillIds
+             RETURN r, b LIMIT 300',
+            ['skillIds' => $skillIds]
+        );
+
+        foreach ($result as $record) {
             $node = $this->formatNode($record->get('b'));
             $nodes[$node['id']] = $node;
-        }
-
-        /* Knowledge node */
-        if ($record->get('k')) {
-            $node = $this->formatNode($record->get('k'));
-            $nodes[$node['id']] = $node;
-        }
-
-        /* Ability node */
-        if ($record->get('ab')) {
-            $node = $this->formatNode($record->get('ab'));
-            $nodes[$node['id']] = $node;
-        }
-
-        /* Attitude node */
-        if ($record->get('at')) {
-            $node = $this->formatNode($record->get('at'));
-            $nodes[$node['id']] = $node;
-        }
-
-        /* Relationships */
-        foreach (['r1', 'r2', 'rs', 'rb', 'r_know', 'r_abil', 'r_att'] as $relKey) {
-            if ($record->get($relKey)) {
-                $rel = $record->get($relKey);
-                $relationships[$rel->getId()] = $this->formatRelationship($rel);
-            }
+            $rel = $record->get('r');
+            $relationships[$rel->getId()] = $this->formatRelationship($rel);
         }
     }
 
     return response()->json([
         'rootNode' => $rootNode,
         'nodes' => array_values($nodes),
-        'relationships' => array_values($relationships)
+        'relationships' => array_values($relationships),
     ]);
 }
 

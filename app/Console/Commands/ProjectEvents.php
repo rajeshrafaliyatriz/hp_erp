@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\Events\AuditLogProjector;
 use App\Services\Events\CapabilityEvidenceProjector;
+use App\Services\Events\Neo4jProjector;
 use App\Services\Events\TaskStatusProjector;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,10 @@ class ProjectEvents extends Command
         AuditLogProjector::class,
         CapabilityEvidenceProjector::class,
         TaskStatusProjector::class,
+        // Ported from Sonika/fdaf4973: the Organization/Department/JobRole/
+        // Competency/reporting-line graph. Drained here rather than via a
+        // separate schedule entry, same as every other projector in this list.
+        Neo4jProjector::class,
     ];
 
     public function handle(): int

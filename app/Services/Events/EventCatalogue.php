@@ -211,6 +211,35 @@ class EventCatalogue
         'platform.scheduler.task_run_failed' => [
             'AuditLogProjector'           => self::PROJECTOR,
         ],
+
+        // Phase 3 (Neo4j graph projection). Neo4jProjector is PURE - it only
+        // MERGEs the Organization/Department/JobRole graph, never anything
+        // the old Neo4jSyncController touched (that class is dead: its
+        // source table does not exist in this database at all).
+        'organization.changed' => [
+            'Neo4jProjector'              => self::PROJECTOR,
+        ],
+        'department.changed' => [
+            'Neo4jProjector'              => self::PROJECTOR,
+        ],
+        'jobrole.changed' => [
+            'Neo4jProjector'              => self::PROJECTOR,
+        ],
+        'competency.changed' => [
+            'Neo4jProjector'              => self::PROJECTOR,
+        ],
+        'jobrole_competency_map.changed' => [
+            'Neo4jProjector'              => self::PROJECTOR,
+        ],
+
+        // Phase 7.2 - reporting structure is one of the roadmap's four
+        // canonical-source decisions: G2G's tbluser.reporting_manager_id +
+        // ReportingLineValidator (real cycle-detection logic) is canonical
+        // over EB's hpbrain_reporting_structures (a separate, empty table).
+        // This is the first time that column's changes reach the graph.
+        'employee_reporting_line.changed' => [
+            'Neo4jProjector'              => self::PROJECTOR,
+        ],
     ];
 
     /**
