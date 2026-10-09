@@ -32,6 +32,37 @@ final class G2gModuleExamples
     public static function definitions(): array
     {
         return [
+            // The Main Dashboard has no write action of its own: it is the organisation's overview. Its example
+            // is the headline workforce picture, read from the same data the dashboard cards show.
+            'main_dashboard' => [
+                'report' => [
+                    'source' => 'dashboard.headcount_by_department',
+                    'name' => 'Headcount by department (starter example)',
+                    'heading' => 'Headcount by department',
+                    'description' => 'How many people each department has right now, read live from the same data as the Main Dashboard.',
+                    'arguments' => ['limit' => 200],
+                ],
+                'prompt' => [
+                    'name' => 'Workforce overview summary (starter example)',
+                    'description' => 'Summarises the headline workforce picture from the live dashboard data.',
+                    'focus' => 'the headline workforce picture: headcount by department, what is waiting for approval and which tasks are overdue',
+                ],
+            ],
+            // Agentic AI manages the agents themselves; its example is a register of them and how their runs ended.
+            'agentic_ai' => [
+                'report' => [
+                    'source' => 'agentic.agents',
+                    'name' => 'Agent register (starter example)',
+                    'heading' => 'Agent register',
+                    'description' => 'Every agent configured for the organisation with its status, tools and run counts, read live from Agentic AI.',
+                    'arguments' => ['limit' => 200],
+                ],
+                'prompt' => [
+                    'name' => 'Agent activity summary (starter example)',
+                    'description' => 'Summarises which agents exist, which are active and how their recent runs ended.',
+                    'focus' => 'which agents exist, which are active and how their recent runs ended',
+                ],
+            ],
             'organizational_management' => [
                 'action' => [
                     'key' => 'create_department',

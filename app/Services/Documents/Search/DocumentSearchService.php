@@ -82,6 +82,8 @@ class DocumentSearchService
                 'id', 'title', 'original_file_name', 'mime_type', 'size', 'category',
                 'document_type', 'department_id', 'document_date', 'period_label',
                 'visibility', 'owner_id', 'source_system', 'tags', 'created_at',
+                // Which folder it sits in (null = the top level), so a caller can say WHERE a document is.
+                'folder_id',
                 // Every row here is already filtered to 'done' above, but the
                 // column still has to be SELECTED for the frontend to see
                 // that - omitting it left `processing_status` undefined on
@@ -229,7 +231,13 @@ class DocumentSearchService
         $boolean = $this->booleanModeTerm($term);
         $like = '%' . $this->escapeLike($term) . '%';
 
-        $query->where(function ($q) use ($boolean, $like) {
+        // The way a person reads a file name: "SSM Science 33 40" is `C10_2026-27_SSM_Science-33-40`. Names are
+        // compared with underscores, hyphens and dots read as spaces, so a file is found by what it is called,
+        // not by which separator its uploader happened to use. Only widens a match; it never narrows one.
+        $spoken = trim((string) preg_replace('/[_\-.\s]+/', ' ', mb_strtolower($term)));
+        $spokenLike = '%' . $this->escapeLike($spoken) . '%';
+
+        $query->where(function ($q) use ($boolean, $like, $spoken, $spokenLike) {
             if ($boolean !== '') {
                 $q->orWhereRaw(
                     'MATCH(title, original_file_name, subject) AGAINST (? IN BOOLEAN MODE)',
@@ -242,6 +250,12 @@ class DocumentSearchService
 
             $q->orWhere('title', 'like', $like)
                 ->orWhere('original_file_name', 'like', $like);
+
+            if ($spoken !== '') {
+                foreach (['title', 'original_file_name'] as $column) {
+                    $q->orWhereRaw("REPLACE(REPLACE(REPLACE(LOWER({$column}), '_', ' '), '-', ' '), '.', ' ') like ?", [$spokenLike]);
+                }
+            }
         });
     }
 

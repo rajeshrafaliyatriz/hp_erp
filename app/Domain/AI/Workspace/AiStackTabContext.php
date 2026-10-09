@@ -3,6 +3,7 @@
 namespace App\Domain\AI\Workspace;
 
 use App\Domain\AI\Examples\ModuleExampleBuilder;
+use App\Domain\AI\Examples\PageExampleBuilder;
 use App\Services\Ai\AiRequestScope;
 use Throwable;
 
@@ -30,14 +31,17 @@ final class AiStackTabContext
         'guardrails' => 'Guardrails',
         'activity' => 'Activity',
         'approvals' => 'Approvals',
+        'examples' => 'Examples by page',
     ];
 
     private const MAX_QUESTIONS = 6;
 
     private const FACT_CHARS = 3000;
 
-    public function __construct(private readonly ModuleExampleBuilder $examples)
-    {
+    public function __construct(
+        private readonly ModuleExampleBuilder $examples,
+        private readonly PageExampleBuilder $pageExamples,
+    ) {
     }
 
     /** The tab id when it is one of the AI Stack's tabs, else null (never trusted as sent). */
@@ -117,6 +121,10 @@ final class AiStackTabContext
                 $add("Which assistant actions in {$label} are waiting for approval?");
                 $add($runMessage);
                 break;
+            case 'examples':
+                $add("Which pages of {$label} have live data behind them?");
+                $add("Which {$label} pages have no data yet, and why?");
+                break;
         }
 
         // A module with nothing on this tab (no data source, no template) still has a tab to ask about.
@@ -133,6 +141,10 @@ final class AiStackTabContext
      */
     public function facts(AiRequestScope $scope, string $module, string $moduleLabel, string $tab): ?string
     {
+        if ($tab === 'examples') {
+            return $this->pageCoverageFacts($scope, $module, $moduleLabel);
+        }
+
         $descriptor = $this->descriptor($scope, $module, $tab);
 
         if ($descriptor === null) {
@@ -150,6 +162,35 @@ final class AiStackTabContext
 
         foreach (array_slice((array) ($descriptor['items'] ?? []), 0, 8) as $item) {
             $lines[] = sprintf('* %s%s', $item['title'] ?? '', isset($item['detail']) ? ': ' . $item['detail'] : '');
+        }
+
+        return mb_strimwidth(implode("\n", $lines), 0, self::FACT_CHARS, '...');
+    }
+
+    /** What the Examples-by-page tab shows: each page, whether real data stands behind it, and how much. */
+    private function pageCoverageFacts(AiRequestScope $scope, string $module, string $moduleLabel): ?string
+    {
+        try {
+            $built = $this->pageExamples->forModule($scope, $module);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return null;
+        }
+
+        if ($built === null) {
+            return null;
+        }
+
+        $c = $built['coverage'];
+        $lines = [
+            sprintf('THE USER IS ON THE EXAMPLES BY PAGE TAB OF THE %s AI STACK. It shows one example per page, from that page\'s own data.', $moduleLabel),
+            sprintf('- Pages: %d; with live data: %d; no records yet: %d; no data behind them: %d; not mapped: %d', $c['pages'], $c['ready'], $c['empty'], $c['no_data'], $c['unmapped']),
+        ];
+
+        foreach (array_slice($built['pages'], 0, 40) as $page) {
+            $sources = implode(', ', array_map(fn ($s) => sprintf('%s %d', $s['label'], $s['rows']), $page['sources']));
+            $lines[] = sprintf('* %s [%s]%s', $page['page']['title'], $page['status'], $sources === '' ? '' : ': ' . $sources);
         }
 
         return mb_strimwidth(implode("\n", $lines), 0, self::FACT_CHARS, '...');

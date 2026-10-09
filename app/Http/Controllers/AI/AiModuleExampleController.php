@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AI;
 use App\Domain\AI\Conversation\ModuleGrounding;
 use App\Domain\AI\Examples\GuardrailCheck;
 use App\Domain\AI\Examples\ModuleExampleBuilder;
+use App\Domain\AI\Examples\PageExampleBuilder;
 use App\Domain\AI\Support\AiAuditLogger;
 use App\Services\Ai\AiPolicyResolver;
 use Illuminate\Http\Request;
@@ -15,6 +16,7 @@ use Throwable;
  * The worked "Example" panel at the top of each tab of a module's AI Stack.
  *
  * `GET  /modules/{module}/examples`                  one live example per tab
+ * `GET  /modules/{module}/page-examples`            one live example per PAGE of the module
  * `POST /modules/{module}/examples/guardrail-check`  run the module's example write action
  *                                                    through the rights its route really enforces,
  *                                                    for the caller, and record the result
@@ -30,6 +32,7 @@ class AiModuleExampleController extends AiController
         private readonly ModuleGrounding $grounding,
         private readonly AiAuditLogger $audit,
         private readonly AiPolicyResolver $policies,
+        private readonly PageExampleBuilder $pageExamples,
     ) {
     }
 
@@ -44,6 +47,22 @@ class AiModuleExampleController extends AiController
             }
 
             return $this->success('Module examples resolved.', $examples);
+        } catch (Throwable $exception) {
+            return $this->handle($exception);
+        }
+    }
+
+    /** One example per page of the module, from each page's own data, for the caller's organisation. */
+    public function pages(Request $request, string $module)
+    {
+        try {
+            $examples = $this->pageExamples->forModule($this->scope($request), $module);
+
+            if ($examples === null) {
+                return $this->failure("{$module} is not a registered AI module.", 404);
+            }
+
+            return $this->success('Page examples resolved.', $examples);
         } catch (Throwable $exception) {
             return $this->handle($exception);
         }
