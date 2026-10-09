@@ -21,7 +21,7 @@ class DocumentSearchService
 {
     /**
      * @param  array{q?:string, category?:string, document_type?:string, department_id?:int,
-     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, folder_id?:int|string}  $filters
+     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, owner_name?:string, folder_id?:int|string}  $filters
      * @return array{data: array, total: int}
      */
     public function search(array $filters, int $tenantId, int $callerId, ?int $departmentId, int $page = 1, int $perPage = 24): array
@@ -92,12 +92,12 @@ class DocumentSearchService
 
         $snippets = $term !== '' ? $this->snippets($rows->pluck('id')->all(), $term) : [];
         $starred = $this->starredIds($rows->pluck('id')->all(), $callerId);
-
         $ownerNames = $this->ownerNames($rows->pluck('owner_id')->filter()->unique()->all(), $tenantId);
 
-        $data = $rows->map(function ($row) use ($snippets, $ownerNames) {
+        $data = $rows->map(function ($row) use ($snippets, $starred, $ownerNames) {
             $data = (array) $row;
             $data['snippet'] = $snippets[$row->id] ?? null;
+            $data['starred'] = in_array($row->id, $starred, true);
             // Who the document belongs to, so a list of matches can tell two people apart.
             $data['owner_name'] = $ownerNames[$row->owner_id] ?? null;
 
@@ -135,6 +135,20 @@ class DocumentSearchService
      * @return array<int, string>
      */
     private function ownerNames(array $ids, int $tenantId): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return DB::table('tbluser')
+            ->where('sub_institute_id', $tenantId)
+            ->whereIn('id', $ids)
+            ->get(['id', 'first_name', 'last_name'])
+            ->mapWithKeys(fn ($u) => [(int) $u->id => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))])
+            ->all();
+    }
+
+    /**
      * Which of these ids has THIS caller starred? Same bounded-second-query
      * shape as snippets() above, for the same reason: starring is per-caller
      * metadata that does not belong in the main SELECT's column list - a
@@ -151,11 +165,10 @@ class DocumentSearchService
             return [];
         }
 
-        return DB::table('tbluser')
-            ->where('sub_institute_id', $tenantId)
-            ->whereIn('id', $ids)
-            ->get(['id', 'first_name', 'last_name'])
-            ->mapWithKeys(fn ($u) => [(int) $u->id => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))])
+        return DB::table('document_library_stars')
+            ->where('user_id', $userId)
+            ->whereIn('document_id', $ids)
+            ->pluck('document_id')
             ->all();
     }
 

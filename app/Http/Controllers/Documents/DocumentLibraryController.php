@@ -331,7 +331,15 @@ class DocumentLibraryController extends Controller
             ->where('h.entry_type', 'audit')
             ->whereNull('d.deleted_at');
 
-        DocumentAccess::visibleTo($query, (int) $identity['user_id'], (int) $identity['sub_institute_id'], $department);
+        // The access rule names bare columns (`sub_institute_id`, `owner_id`, `visibility`), which are
+        // ambiguous once this query also joins `tbluser`. So it is applied to the library table alone,
+        // inside a subquery, and the feed is limited to those documents - the same rule, unambiguously.
+        $query->whereIn('d.id', DocumentAccess::visibleTo(
+            DB::table('document_library')->select('id'),
+            (int) $identity['user_id'],
+            (int) $identity['sub_institute_id'],
+            $department
+        ));
 
         $entries = $query
             ->orderByDesc('h.created_at')
@@ -477,7 +485,7 @@ class DocumentLibraryController extends Controller
         $perPage = min(100, max(1, (int) $request->input('per_page', 24)));
 
         $result = (new DocumentSearchService())->search(
-            $request->only(['q', 'category', 'document_type', 'department_id', 'source_system', 'date_from', 'date_to', 'owner_id', 'folder_id']),
+            $request->only(['q', 'category', 'document_type', 'department_id', 'source_system', 'date_from', 'date_to', 'owner_id', 'owner_name', 'folder_id']),
             (int) $identity['sub_institute_id'],
             (int) $identity['user_id'],
             $department,
