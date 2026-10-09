@@ -657,6 +657,58 @@ class EmployeeDirectoryController extends Controller
     }
 
     /**
+     * PUT /api/employees-management/{id}/task-card-color
+     *
+     * Lets an administrator set how a DIFFERENT employee's tasks/events are
+     * coloured on the Task Calendar. `task_card_color` is normally
+     * self-service only (`PUT /account/preferences`, `AccountController`),
+     * which resolves whose row to write exclusively from the caller's own
+     * bearer token - by design, so that endpoint can be called from any
+     * role with no further guard. This is the admin-on-behalf-of path
+     * instead, mirroring update()'s own shape: `profile:admin` (route-level,
+     * narrower than update()'s `profile:admin,hr` - this one was asked for
+     * admins specifically) says who may call it, findForTenant() says which
+     * employee they may act on (same tenant as the caller, never trusted
+     * from the request body).
+     */
+    public function updateTaskCardColor(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = $identity['sub_institute_id'];
+
+        $existing = $this->findForTenant((int) $id, $tenantId);
+        if (!$existing) {
+            return response()->json(['status' => 0, 'message' => 'Employee not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            // Same pattern AccountController::updatePreferences validates
+            // task_card_color against - empty string clears back to the
+            // automatic by-index palette.
+            'color' => ['required', 'regex:/^$|^#[0-9A-Fa-f]{6}$/'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        app(\App\Services\Account\UserPreferences::class)->save(
+            (int) $id,
+            $tenantId,
+            ['task_card_color' => $request->input('color')]
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Task card color updated.']);
+    }
+
+    /**
      * PATCH /api/employees-management/{id}/status
      *
      * Backs "Suspend Access". Deliberately not destroy(): the legacy

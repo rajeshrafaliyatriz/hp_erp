@@ -1658,6 +1658,18 @@ Route::prefix('employees-management')->middleware('api.token')->group(function (
         Route::get('/pending-access', [EmployeeDirectoryController::class, 'pendingAccess']);
     });
 
+    /*
+     * Task Calendar: an administrator recolours a DIFFERENT employee's task
+     * cards. Deliberately its own `profile:admin` group, narrower than the
+     * `profile:admin,hr` block above - this was asked for administrators
+     * specifically, and the frontend's own admin check (Task Calendar's
+     * "Added Calendars" sidebar) matches this exactly, so there is no
+     * endpoint here the UI doesn't also offer.
+     */
+    Route::middleware('profile:admin')->group(function () {
+        Route::put('/{id}/task-card-color', [EmployeeDirectoryController::class, 'updateTaskCardColor'])->whereNumber('id');
+    });
+
     Route::get('/', [EmployeeDirectoryController::class, 'index']);
     Route::get('/{id}', [EmployeeDirectoryController::class, 'show'])->whereNumber('id');
 });
@@ -3579,6 +3591,8 @@ Route::prefix('v1')->middleware(['api.token', 'throttle:120,1'])->group(function
 Route::prefix('crm')->group(function () {
     $crmLead = \App\Http\Controllers\Api\Crm\CrmLeadController::class;
     $crmPicklist = \App\Http\Controllers\Api\Crm\CrmPicklistController::class;
+    $crmOrg = \App\Http\Controllers\Api\Crm\CrmOrganizationController::class;
+    $crmContact = \App\Http\Controllers\Api\Crm\CrmContactController::class;
 
     Route::get('picklist-values', [$crmPicklist, 'index']);
 
@@ -3588,4 +3602,24 @@ Route::prefix('crm')->group(function () {
     Route::put('leads/{id}', [$crmLead, 'update'])->whereNumber('id')->middleware('menuright:201,edit');
     Route::delete('leads/{id}', [$crmLead, 'destroy'])->whereNumber('id')->middleware('menuright:201,delete');
     Route::post('leads/{id}/convert', [$crmLead, 'convert'])->whereNumber('id')->middleware('menuright:201,edit');
+
+    // Organizations + Contacts: their menu ids differ per database (confirmed
+    // above), so every route here uses the access-link-resolving
+    // `platformright:` middleware, never `menuright:<id>`.
+    $orgLink = '/module/crm/marketing/organizations';
+    Route::get('organizations', [$crmOrg, 'index'])->middleware("platformright:{$orgLink},view");
+    Route::get('organizations/{id}', [$crmOrg, 'show'])->whereNumber('id')->middleware("platformright:{$orgLink},view");
+    Route::get('organizations/{id}/hierarchy', [$crmOrg, 'hierarchy'])->whereNumber('id')->middleware("platformright:{$orgLink},view");
+    Route::post('organizations', [$crmOrg, 'store'])->middleware("platformright:{$orgLink},add");
+    Route::put('organizations/{id}', [$crmOrg, 'update'])->whereNumber('id')->middleware("platformright:{$orgLink},edit");
+    Route::delete('organizations/{id}', [$crmOrg, 'destroy'])->whereNumber('id')->middleware("platformright:{$orgLink},delete");
+    Route::post('organizations/{id}/transfer-ownership', [$crmOrg, 'transferOwnership'])->whereNumber('id')->middleware("platformright:{$orgLink},edit");
+
+    $contactLink = '/module/crm/marketing/contacts';
+    Route::get('contacts', [$crmContact, 'index'])->middleware("platformright:{$contactLink},view");
+    Route::get('contacts/{id}', [$crmContact, 'show'])->whereNumber('id')->middleware("platformright:{$contactLink},view");
+    Route::post('contacts', [$crmContact, 'store'])->middleware("platformright:{$contactLink},add");
+    Route::put('contacts/{id}', [$crmContact, 'update'])->whereNumber('id')->middleware("platformright:{$contactLink},edit");
+    Route::delete('contacts/{id}', [$crmContact, 'destroy'])->whereNumber('id')->middleware("platformright:{$contactLink},delete");
+    Route::post('contacts/{id}/transfer-ownership', [$crmContact, 'transferOwnership'])->whereNumber('id')->middleware("platformright:{$contactLink},edit");
 });
