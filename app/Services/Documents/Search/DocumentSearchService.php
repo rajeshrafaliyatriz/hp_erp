@@ -21,7 +21,7 @@ class DocumentSearchService
 {
     /**
      * @param  array{q?:string, category?:string, document_type?:string, department_id?:int,
-     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, folder_id?:int|string}  $filters
+     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, owner_name?:string, folder_id?:int|string}  $filters
      * @return array{data: array, total: int}
      */
     public function search(array $filters, int $tenantId, int $callerId, ?int $departmentId, int $page = 1, int $perPage = 24): array
@@ -92,12 +92,12 @@ class DocumentSearchService
 
         $snippets = $term !== '' ? $this->snippets($rows->pluck('id')->all(), $term) : [];
         $starred = $this->starredIds($rows->pluck('id')->all(), $callerId);
-
         $ownerNames = $this->ownerNames($rows->pluck('owner_id')->filter()->unique()->all(), $tenantId);
 
-        $data = $rows->map(function ($row) use ($snippets, $ownerNames, $starred) {
+        $data = $rows->map(function ($row) use ($snippets, $starred, $ownerNames) {
             $data = (array) $row;
             $data['snippet'] = $snippets[$row->id] ?? null;
+            $data['starred'] = in_array($row->id, $starred, true);
             // Who the document belongs to, so a list of matches can tell two people apart.
             $data['owner_name'] = $ownerNames[$row->owner_id] ?? null;
             $data['starred'] = in_array($row->id, $starred, true);
