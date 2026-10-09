@@ -3497,6 +3497,38 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
 });
 
 /*
+ * GTM & Revenue workspace - /api/gtm.
+ *
+ * Reads: administrator + executive. Writes: administrator only. The tenant always comes
+ * from the token (ResolvesApiIdentity); another organisation's record answers 404.
+ * Literal paths are declared before `/{id}` and every `{id}` is whereNumber.
+ */
+Route::prefix('gtm')->middleware('api.token')->group(function () {
+    $acc = \App\Http\Controllers\Api\Gtm\AccountController::class;
+    $con = \App\Http\Controllers\Api\Gtm\ContactController::class;
+    $ovr = \App\Http\Controllers\Api\Gtm\OverviewController::class;
+
+    Route::middleware('profile:admin,executive')->group(function () use ($acc, $ovr) {
+        Route::get('/overview', [$ovr, 'show']);
+        Route::get('/accounts', [$acc, 'index']);
+        Route::get('/accounts/candidates', [$acc, 'candidates']);
+        Route::get('/accounts/{id}', [$acc, 'show'])->whereNumber('id');
+    });
+
+    Route::middleware('profile:admin')->group(function () use ($acc, $con) {
+        Route::post('/accounts', [$acc, 'store']);
+        Route::post('/accounts/from-company/{companyId}', [$acc, 'fromCompany'])->whereNumber('companyId');
+        Route::patch('/accounts/{id}', [$acc, 'update'])->whereNumber('id');
+        Route::delete('/accounts/{id}', [$acc, 'destroy'])->whereNumber('id');
+
+        Route::post('/accounts/{accountId}/contacts', [$con, 'store'])->whereNumber('accountId');
+        Route::post('/accounts/{accountId}/activities', [$con, 'logActivity'])->whereNumber('accountId');
+        Route::patch('/contacts/{id}', [$con, 'update'])->whereNumber('id');
+        Route::delete('/contacts/{id}', [$con, 'destroy'])->whereNumber('id');
+    });
+});
+
+/*
  * IDMS (Intelligent Document Management System) - /api/v1.
  * Separate from the HR Document Library ('/documents', '/account/documents').
  * `trash/documents` is its own prefix so it can never collide with `documents/{id}`.
