@@ -183,6 +183,7 @@ use App\Http\Controllers\Api\Attendance\AttendanceReportApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceDashboardApiController;
 use App\Http\Controllers\Api\Attendance\AttendanceAdminController;
 use App\Http\Controllers\Api\Attendance\DepartmentScheduleController;
+use App\Http\Controllers\Api\Attendance\EmployeeScheduleRequestController;
 use App\Http\Controllers\Api\Attendance\AttendanceRegularisationApiController;
 
 
@@ -1145,6 +1146,36 @@ Route::prefix('attendance')->group(function () {
         Route::post('/admin/schedules/preview', [DepartmentScheduleController::class, 'preview']);
         Route::post('/admin/schedules/apply', [DepartmentScheduleController::class, 'apply']);
     });
+
+    /*
+    | Employee office hours - propose, withdraw, decide. Phase 19.
+    |
+    | NO ROLE GATE ON THE FIRST THREE, ON PURPOSE.
+    |
+    | What makes them safe is not a role - it is that the SUBJECT is always the
+    | caller. `my-office-hours` and `store` take no employee id at all, and
+    | `destroy` is scoped to the caller's own pending row, so an id belonging to
+    | somebody else simply does not match. This is the same shape as `my-hr`,
+    | whose route comment says the same thing, and the My Leave Requests half of
+    | the leave split.
+    |
+    | `index` serves both halves: ?scope=mine is the caller's own and open to
+    | everybody, ?scope=team is the approver queue and the CONTROLLER refuses it
+    | for anybody who may not decide. Gating the route would have forced the
+    | queue onto a separate path, and a component that asks and renders nothing
+    | on 403 is better than one that guesses at a role.
+    |
+    | `decision` is the only thing in this feature that writes tbluser - and
+    | those columns are a payroll input, since PayrollController reads
+    | saturday_in_date to count 2nd-Saturday lateness. It needs BOTH admin/hr
+    | (authority) and approve_leave (scope); see the controller's docblock for
+    | why approve_leave alone is too wide.
+    */
+    Route::get('/my-office-hours', [EmployeeScheduleRequestController::class, 'mine']);
+    Route::get('/office-hours-requests', [EmployeeScheduleRequestController::class, 'index']);
+    Route::post('/office-hours-requests', [EmployeeScheduleRequestController::class, 'store']);
+    Route::delete('/office-hours-requests/{id}', [EmployeeScheduleRequestController::class, 'destroy'])->whereNumber('id');
+    Route::post('/office-hours-requests/{id}/decision', [EmployeeScheduleRequestController::class, 'decision'])->whereNumber('id');
 });
 
 

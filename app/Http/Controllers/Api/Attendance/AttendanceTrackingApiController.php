@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Attendance;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Attendance\Concerns\ResolvesAttendanceContext;
 use App\Models\HRMS\HrmsAttendance;
+use App\Support\RoleKey;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,83 @@ class AttendanceTrackingApiController extends Controller
         return $callerId;
     }
 
+    /**
+     * The employee a READ is about.
+     *
+     * ── CONTRAST punchSubject(), DIRECTLY ABOVE ─────────────────────────────
+     *
+     * punchSubject() is the employee a WRITE is FOR, and it is ALWAYS the
+     * caller - a mismatched `employee` is refused outright. That refusal is the
+     * only thing standing between an HR role and clocking a colleague in or out
+     * (G-ATT-SEC-01), so the two helpers must never be unified. They sit side by
+     * side deliberately, and a reader who wants to merge them should read this
+     * paragraph first.
+     *
+     * **Do not call this from punchIn() or punchOut().**
+     *
+     * ── WHY A READ MAY NAME SOMEBODY ELSE ───────────────────────────────────
+     *
+     * The reported problem: HR corrected an employee's punch-in, opened that
+     * employee's attendance page, and saw nothing - because every endpoint here
+     * resolved its subject from the TOKEN and had no employee parameter at all.
+     * The screen was answering for the HR user's own record, truthfully, about
+     * the wrong person.
+     *
+     * ── THE PATTERN IS BORROWED, NOT INVENTED ───────────────────────────────
+     *
+     * AttendanceApiController::employeeMonthlyReport() has done exactly this
+     * since F-159: validate, then allow the subject only for admin/hr (plus
+     * executive/auditor there), 403 otherwise, bounded by the caller's own
+     * tenant. This is that, narrowed to admin/hr because these endpoints are
+     * reachable by every employee and the reporting roles have their own
+     * screens.
+     *
+     * Roles come from RoleKey, never from the profile NAME - ten live tenants
+     * have a profile whose name a substring test would have got wrong (D-010).
+     *
+     * @return int|\Illuminate\Http\JsonResponse  the subject id, or a refusal
+     */
+    private function readSubject(Request $request, array $context)
+    {
+        $callerId  = (int) $context['user_id'];
+        $requested = $request->input('employee') ?? $request->input('user_id');
+
+        // Absent, blank, or the caller themselves: the overwhelmingly common
+        // case, and no role lookup is worth doing for it.
+        if ($requested === null || $requested === '' || (int) $requested === $callerId) {
+            return $callerId;
+        }
+
+        if (!RoleKey::satisfies(RoleKey::forUserId($callerId), ['admin', 'hr'])) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'You may only view your own attendance.',
+            ], 403);
+        }
+
+        $subjectId = (int) $requested;
+
+        /*
+         * An HR manager is HR for one organisation, not for all twelve. 404
+         * rather than 403, so a refusal does not confirm that an employee id
+         * exists in somebody else's organisation.
+         */
+        $inTenant = DB::table('tbluser')
+            ->where('id', $subjectId)
+            ->where('sub_institute_id', $context['sub_institute_id'])
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (!$inTenant) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'That employee is not in your organisation.',
+            ], 404);
+        }
+
+        return $subjectId;
+    }
+
     use ResolvesAttendanceContext;
 
     private const WEEKDAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -84,7 +162,14 @@ class AttendanceTrackingApiController extends Controller
         }
 
         $subInstituteId = $context['sub_institute_id'];
-        $userId = $context['user_id'];
+
+        // The subject - the caller, unless admin/hr named somebody in their own
+        // organisation. See readSubject().
+        $userId = $this->readSubject($request, $context);
+
+        if (!is_int($userId)) {
+            return $userId;
+        }
 
         if (!$userId) {
             return response()->json(['status' => 0, 'message' => 'user_id is required'], 400);
@@ -108,7 +193,27 @@ class AttendanceTrackingApiController extends Controller
         $rangeStart = $fromDate->format('Y-m-d');
         $rangeEnd = $toDate->format('Y-m-d');
 
-        $employee = DB::table('tbluser')->where('id', $userId)->first();
+        /*
+         * Tenant-scoped, and the null guard is new.
+         *
+         * Both were safe only while $userId could not be anything but the
+         * caller. Now that an admin/hr caller can name a subject, this is the
+         * second line of defence behind readSubject()'s own tenant check - and
+         * $employee is dereferenced unguarded further down (->{$weekdayName}),
+         * which would have thrown on a miss.
+         */
+        $employee = DB::table('tbluser')
+            ->where('id', $userId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->first();
+
+        if (!$employee) {
+            return response()->json([
+                'status'  => 0,
+                'message' => 'That employee is not in your organisation.',
+            ], 404);
+        }
+
         $leaveDates = $this->leaveDates($userId, $subInstituteId, $rangeStart, $rangeEnd);
         $holidayDates = $this->holidayDates($subInstituteId, $employee->department_id ?? null, $rangeStart, $rangeEnd);
 
@@ -263,11 +368,21 @@ class AttendanceTrackingApiController extends Controller
             return $context;
         }
 
-        $userId          = (int) $context['user_id'];
         $subInstituteId  = (int) $context['sub_institute_id'];
         $today           = Carbon::today();
 
-        $employee = DB::table('tbluser')->where('id', $userId)->first();
+        $subject = $this->readSubject($request, $context);
+
+        if (!is_int($subject)) {
+            return $subject;
+        }
+
+        $userId = $subject;
+
+        $employee = DB::table('tbluser')
+            ->where('id', $userId)
+            ->where('sub_institute_id', $subInstituteId)
+            ->first();
 
         if (!$employee) {
             return response()->json(['status' => 0, 'message' => 'Employee not found'], 404);
@@ -466,10 +581,80 @@ class AttendanceTrackingApiController extends Controller
     }
 
     /**
+     * Refuse to re-punch a day that is already closed.
+     *
+     * ── WHAT THIS STOPS ────────────────────────────────────────────────────
+     *
+     * When HR corrects a full day through the attendance desk - a punch-in AND
+     * a punch-out - the employee's own screen shows a green "Punch In" again,
+     * because its `activeShift` test is "punched in and NOT punched out". One
+     * click used to run straight into the update branch below, which sets
+     * punchin_time to the current clock and NULLS punchout_time and
+     * timestamp_diff.
+     *
+     * So a single click destroyed the correction, discarded the punch-out, and
+     * erased the worked duration - a number PayrollController reads - while
+     * hrms_attendance_edits went on recording that the correction had been
+     * applied. The screen said the day was open; the database said it was
+     * closed; the employee's pay followed the screen.
+     *
+     * ── WHY A REFUSAL, AND NOT THE ALTERNATIVES ───────────────────────────
+     *
+     * An "I really mean it" flag from the client was the obvious fix and is the
+     * worst one: it is a control the server cannot audit, and the frontend
+     * would set it to make the button work, which is how the flag becomes
+     * permanently 1 and the bug comes back wearing a parameter.
+     *
+     * Auto-filing a regularisation is the right destination and the wrong
+     * mechanism: that path requires a `reason`, a punch form has no reason
+     * field, and the employee who pressed "Punch In" would be told their
+     * request was submitted.
+     *
+     * So: refuse, and name the two times so the message is actionable.
+     *
+     * 409 rather than 422 - the request is well formed; the refusal is about
+     * the state of the resource. `next_action` is there so a client branches on
+     * a field instead of matching this English.
+     *
+     * ── DELIBERATELY NARROW ───────────────────────────────────────────────
+     *
+     * Only a day with BOTH times is refused. A day with a punch-in and no
+     * punch-out still re-punches exactly as before - that is the legitimate
+     * "punched in on the wrong device" case punchIn()'s docblock describes, and
+     * nothing is lost by letting it through.
+     *
+     * @return \Illuminate\Http\JsonResponse|null  the refusal, or null to proceed
+     */
+    private function closedDayRefusal(?object $row, string $day)
+    {
+        if (!$row || !$row->punchin_time || !$row->punchout_time) {
+            return null;
+        }
+
+        return response()->json([
+            'status'  => 0,
+            'message' => 'This day is already recorded as worked - in at '
+                . Carbon::parse($row->punchin_time)->format('h:i A') . ', out at '
+                . Carbon::parse($row->punchout_time)->format('h:i A')
+                . '. If those times are wrong, raise a correction request rather than'
+                . ' punching again.',
+            'data'    => [
+                'day'           => $day,
+                'punchin_time'  => $row->punchin_time,
+                'punchout_time' => $row->punchout_time,
+                'next_action'   => 'regularisation',
+            ],
+        ], 409);
+    }
+
+    /**
      * POST /api/attendance/punch-in
      *
-     * Re-punching the same day resets the out side of the row so the day does
+     * Re-punching an OPEN day resets the out side of the row so the day does
      * not keep a stale punch out / duration from the previous punch.
+     *
+     * Re-punching a CLOSED day - one that already has both times - is refused.
+     * See closedDayRefusal() for what that used to destroy.
      */
     public function punchIn(Request $request)
     {
@@ -507,6 +692,13 @@ class AttendanceTrackingApiController extends Controller
             ->first();
 
         if ($record) {
+            // The row this is about to overwrite - checked before anything is
+            // assigned, because what follows nulls punchout_time and
+            // timestamp_diff unconditionally.
+            if ($refusal = $this->closedDayRefusal($record, $formattedDate)) {
+                return $refusal;
+            }
+
             $record->punchin_time = Carbon::parse($formattedDate . ' ' . $request->input('intime'))->format('Y-m-d H:i:s');
             $record->punchout_time = null;
             $record->timestamp_diff = null;
@@ -579,6 +771,12 @@ class AttendanceTrackingApiController extends Controller
             ->first();
 
         if ($attendance) {
+            // Reachable with a closed row only when an outtime was supplied -
+            // the no-outtime lookup above requires punchout_time to be NULL.
+            if ($refusal = $this->closedDayRefusal($attendance, $dateOnly)) {
+                return $refusal;
+            }
+
             $attendance->punchout_time = $punchoutTime?->format('Y-m-d H:i:s');
             $attendance->ipaddress_out = $request->ip();
             $attendance->out_note = 1;
@@ -592,12 +790,23 @@ class AttendanceTrackingApiController extends Controller
 
             $attendance->save();
         } else {
-            // Already punched out before - overwrite with the current time.
+            // No open row for the day. Historically this overwrote the latest
+            // row with the current time; see the guard below.
             $existingRecord = HrmsAttendance::where([
                 ['user_id', $employeeId],
                 ['sub_institute_id', $subInstituteId],
                 ['day', $dateOnly],
             ])->orderBy('id', 'desc')->first();
+
+            // THE WORSE OF THE TWO PATHS. Reached when the day has no OPEN row,
+            // which on a corrected day means it is closed - and this branch then
+            // replaced the punch-out with the current clock and recomputed the
+            // duration from it. The comment above it said "overwrite with the
+            // current time" as though that were the intent; for a day HR had
+            // just corrected it was data loss.
+            if ($refusal = $this->closedDayRefusal($existingRecord, $dateOnly)) {
+                return $refusal;
+            }
 
             if ($existingRecord && $existingRecord->punchin_time) {
                 $now = Carbon::now();
