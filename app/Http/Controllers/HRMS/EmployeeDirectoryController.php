@@ -467,6 +467,12 @@ class EmployeeDirectoryController extends Controller
             throw $e;
         }
 
+        // A schedule given at creation is HR's, not the employee's. See
+        // stampRosterProvenance().
+        if ($request->has('schedule')) {
+            $this->stampRosterProvenance($payload, $tenantId, (int) $newId, $actorId);
+        }
+
         $invite = $this->employees->issueInvite($request->input('email'), $tenantId);
 
         /*
@@ -604,6 +610,16 @@ class EmployeeDirectoryController extends Controller
                 ->where('sub_institute_id', $tenantId)
                 ->update($payload);
 
+            /*
+             * Re-stamp the roster as HR's, inside the same transaction.
+             *
+             * Without this an HR edit here leaves a stale `employee_request`
+             * stamp behind, and the next "Apply to department" skips an
+             * employee whose hours HR itself just set - reporting them as
+             * somebody who chose their own. See stampRosterProvenance().
+             */
+            $this->stampRosterProvenance($payload, (int) $tenantId, (int) $id, $actorId);
+
             if ($movedDepartment) {
                 DB::table('s_mobility_transfers')->insert([
                     'sub_institute_id'   => $tenantId,
@@ -638,6 +654,58 @@ class EmployeeDirectoryController extends Controller
             'message' => 'Employee updated.',
             'data'    => $this->findForTenant((int) $id, $tenantId),
         ]);
+    }
+
+    /**
+     * PUT /api/employees-management/{id}/task-card-color
+     *
+     * Lets an administrator set how a DIFFERENT employee's tasks/events are
+     * coloured on the Task Calendar. `task_card_color` is normally
+     * self-service only (`PUT /account/preferences`, `AccountController`),
+     * which resolves whose row to write exclusively from the caller's own
+     * bearer token - by design, so that endpoint can be called from any
+     * role with no further guard. This is the admin-on-behalf-of path
+     * instead, mirroring update()'s own shape: `profile:admin` (route-level,
+     * narrower than update()'s `profile:admin,hr` - this one was asked for
+     * admins specifically) says who may call it, findForTenant() says which
+     * employee they may act on (same tenant as the caller, never trusted
+     * from the request body).
+     */
+    public function updateTaskCardColor(Request $request, $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (!is_array($identity)) {
+            return $identity;
+        }
+        $tenantId = $identity['sub_institute_id'];
+
+        $existing = $this->findForTenant((int) $id, $tenantId);
+        if (!$existing) {
+            return response()->json(['status' => 0, 'message' => 'Employee not found'], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            // Same pattern AccountController::updatePreferences validates
+            // task_card_color against - empty string clears back to the
+            // automatic by-index palette.
+            'color' => ['required', 'regex:/^$|^#[0-9A-Fa-f]{6}$/'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        app(\App\Services\Account\UserPreferences::class)->save(
+            (int) $id,
+            $tenantId,
+            ['task_card_color' => $request->input('color')]
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Task card color updated.']);
     }
 
     /**
@@ -1256,6 +1324,60 @@ class EmployeeDirectoryController extends Controller
      * AttendanceDashboardApiController and AttendanceApiController, so a wrong
      * value here produces wrong lateness reports.
      */
+    /**
+     * Stamp where a roster written through this screen came from.
+     *
+     * ── THIS IS THE WRITER THAT GETS FORGOTTEN ──────────────────────────────
+     *
+     * Three code paths write the 21 `tbluser` roster columns: the department
+     * template apply, an approved employee request, and this screen. The first
+     * two stamp `hrms_employee_roster_provenance` because they were written
+     * with it in mind. This one was here first.
+     *
+     * If it does not stamp, an HR edit made here leaves a stale
+     * `employee_request` row behind - and "Apply to department" then SKIPS an
+     * employee whose hours HR itself last set, reporting them as somebody who
+     * chose their own. That single omission is the difference between a feature
+     * that protects people's choices and one that quietly refuses to work, and
+     * it would look correct from every screen.
+     *
+     * Only the weekdays actually present in the payload are stamped: a request
+     * carrying a partial schedule must not claim authorship of days it did not
+     * touch.
+     *
+     * Never fatal. A missing provenance row degrades to "we do not know where
+     * this came from", which is the honest default and what every roster
+     * predating this feature already reads as - whereas failing the employee
+     * save over it would break a working screen for an audit nicety.
+     */
+    private function stampRosterProvenance(array $payload, int $tenantId, int $userId, ?int $actorId): void
+    {
+        $weekdays = array_values(array_intersect(
+            ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+            array_keys($payload),
+        ));
+
+        if ($weekdays === []) {
+            return;
+        }
+
+        try {
+            app(\App\Services\Attendance\RosterProvenance::class)->record(
+                $tenantId,
+                $userId,
+                $weekdays,
+                \App\Services\Attendance\RosterProvenance::HR_DIRECTORY,
+                null,
+                $actorId,
+            );
+        } catch (\Throwable $caught) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Could not stamp roster provenance from Employee Directory',
+                ['user_id' => $userId, 'error' => $caught->getMessage()],
+            );
+        }
+    }
+
     private function scheduleColumns($schedule): array
     {
         if (!is_array($schedule)) {

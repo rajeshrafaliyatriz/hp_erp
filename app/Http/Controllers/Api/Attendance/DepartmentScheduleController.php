@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Attendance;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
+use App\Services\Attendance\RosterProvenance;
 use App\Services\Events\EventRecorder;
 use App\Support\RoleKey;
 use Illuminate\Http\Request;
@@ -281,9 +282,10 @@ class DepartmentScheduleController extends Controller
         [$actorId, $tenantId] = $gate;
 
         $validator = Validator::make($request->all(), [
-            'department_id' => 'required|integer',
-            'weekdays'      => 'required|array|min:1|max:7',
-            'weekdays.*'    => 'required|string|in:' . implode(',', self::WEEKDAYS),
+            'department_id'           => 'required|integer',
+            'weekdays'                => 'required|array|min:1|max:7',
+            'weekdays.*'              => 'required|string|in:' . implode(',', self::WEEKDAYS),
+            'override_employee_hours' => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -292,6 +294,22 @@ class DepartmentScheduleController extends Controller
 
         $departmentId = (int) $request->input('department_id');
         $weekdays     = array_values(array_unique($request->input('weekdays')));
+
+        /*
+         * filter_var, NOT a plain (bool) cast.
+         *
+         * This single flag decides whether somebody's deliberately chosen 14:00
+         * Saturday finish gets overwritten, and `(bool) "false"` is TRUE in PHP.
+         * `nullable|boolean` already rejects the literal string, so this is belt
+         * and braces on the one input where being wrong is expensive.
+         *
+         * Default FALSE, always. An apply that overwrites an employee's own
+         * choice has to be asked for.
+         */
+        $override = filter_var(
+            $request->input('override_employee_hours', false),
+            FILTER_VALIDATE_BOOLEAN,
+        );
 
         if (!$this->departmentInTenant($departmentId, $tenantId)) {
             return response()->json([
@@ -343,9 +361,26 @@ class DepartmentScheduleController extends Controller
 
         /* ---------------- what would change ---------------- */
 
+        /*
+         * Where each employee's hours came from - one query for the whole
+         * department, the same shape $headcount already uses. A lookup per
+         * employee per weekday would be 7 x N queries on a screen HR opens to
+         * look at a department.
+         */
+        // Resolved ONCE. The employee-set test below runs per employee per
+        // weekday - 200 employees x 7 days is 1,400 container lookups for a
+        // service with no per-call state.
+        $provenanceService = app(RosterProvenance::class);
+
+        $provenance = $provenanceService->forUsers(
+            $tenantId,
+            $employees->pluck('id')->map(fn ($id) => (int) $id)->all(),
+        );
+
         $perWeekday = [];
         $updates    = [];      // user_id => [column => value]
         $before     = [];      // user_id => [column => old value], for the event
+        $skipped    = [];      // user_id => name, for the confirmation's sentence
 
         foreach ($weekdays as $weekday) {
             $target  = $schedule[$weekday];
@@ -356,8 +391,10 @@ class DepartmentScheduleController extends Controller
             $same = 0;
             $differ = 0;
             $unset = 0;
+            $employeeSet = 0;
 
             foreach ($employees as $employee) {
+                $userId = (int) $employee->id;
                 $currentWorking = $employee->{$weekday} === null ? null : (int) $employee->{$weekday};
                 $currentIn      = $employee->{$weekday . '_in_date'}
                     ? substr((string) $employee->{$weekday . '_in_date'}, 0, 5) : null;
@@ -369,9 +406,45 @@ class DepartmentScheduleController extends Controller
 
                 $matches = $currentWorking === $working && $currentIn === $in && $currentOut === $out;
 
+                /*
+                 * THE ORDER OF THESE THREE TESTS IS LOAD-BEARING.
+                 *
+                 * $matches first, unchanged. An employee whose own chosen hours
+                 * already equal the template is `already_match`, not
+                 * `employee_set` - counting them in the fourth bucket would
+                 * overstate it, and there is nothing to protect.
+                 */
                 if ($matches) {
                     $same++;
                     continue;
+                }
+
+                /*
+                 * THE FOURTH BUCKET: hours this employee chose themselves.
+                 *
+                 * The previous version of department shift-setting was deleted
+                 * from the product for silently flattening Saturday across a
+                 * department - 100 employees in one tenant finish at 14:00. Now
+                 * that an employee can have their own hours approved, an apply
+                 * would do it again.
+                 *
+                 * So these employees are counted and SKIPPED - no $before entry,
+                 * no $updates entry - unless the override was explicitly ticked.
+                 *
+                 * Counted in BOTH modes, deliberately: `employee_set` reports
+                 * the same number whether or not the override is on, so the
+                 * confirmation shows the same sentence either way and the tick
+                 * only changes whether those people also land in
+                 * `would_change`. A count that moved with the tick would make
+                 * the preview's promise depend on the answer.
+                 */
+                if ($provenanceService->isEmployeeSet($provenance[$userId] ?? [], $weekday)) {
+                    $employeeSet++;
+
+                    if (!$override) {
+                        $skipped[$userId] = trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? ''));
+                        continue;
+                    }
                 }
 
                 if ($hasNothing) {
@@ -379,8 +452,6 @@ class DepartmentScheduleController extends Controller
                 } else {
                     $differ++;
                 }
-
-                $userId = (int) $employee->id;
 
                 $before[$userId][$weekday] = [
                     'is_working' => $currentWorking,
@@ -414,6 +485,9 @@ class DepartmentScheduleController extends Controller
                 // hours somebody chose, which this would overwrite.
                 'would_change' => $differ,
                 'would_set'    => $unset,
+                // Employees whose hours for this weekday came from their own
+                // approved request. Skipped unless the override is ticked.
+                'employee_set' => $employeeSet,
             ];
         }
 
@@ -426,6 +500,22 @@ class DepartmentScheduleController extends Controller
             'employees_touched' => count($updates),
             'total_would_change' => array_sum(array_column($perWeekday, 'would_change')),
             'total_would_set'    => array_sum(array_column($perWeekday, 'would_set')),
+
+            'override_employee_hours' => $override,
+            /*
+             * TWO COUNTS, AND THEY ARE DIFFERENT NUMBERS. Both are returned
+             * because a caller using the wrong one says something false.
+             *
+             * `total_employee_set` sums the per-weekday rows, so three people
+             * across seven days is 21.
+             *
+             * `employees_left_alone` is DISTINCT PEOPLE, which is what the
+             * sentence "3 employees set their own hours and will be left alone"
+             * is about.
+             */
+            'total_employee_set'        => array_sum(array_column($perWeekday, 'employee_set')),
+            'employees_left_alone'      => count($skipped),
+            'employees_left_alone_list' => $skipped,
         ];
 
         if (!$write) {
@@ -448,8 +538,35 @@ class DepartmentScheduleController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($updates, $tenantId, $actorId) {
+        DB::transaction(function () use ($updates, $tenantId, $actorId, $weekdays, $departmentId) {
+            $provenanceService = app(RosterProvenance::class);
+
             foreach ($updates as $userId => $values) {
+                /*
+                 * Stamp what this apply wrote, in the same transaction.
+                 *
+                 * Without it the next apply cannot tell its own previous work
+                 * from an employee's choice - and more importantly, an employee
+                 * whose hours were later overwritten by a department apply would
+                 * still read as `employee_request` and be skipped forever, with
+                 * the override becoming the only way to reach them again.
+                 *
+                 * Only the weekdays this employee was actually written for:
+                 * array_keys($values) carries the flag columns and the time
+                 * columns, so it is intersected back against $weekdays rather
+                 * than guessed at.
+                 */
+                $written = array_values(array_intersect($weekdays, array_keys($values)));
+
+                $provenanceService->record(
+                    $tenantId,
+                    (int) $userId,
+                    $written,
+                    RosterProvenance::DEPARTMENT_APPLY,
+                    $departmentId,
+                    $actorId,
+                );
+
                 DB::table('tbluser')
                     ->where('id', $userId)
                     // Scoped on the tenant as well as the id. The id alone is
@@ -514,12 +631,36 @@ class DepartmentScheduleController extends Controller
         return response()->json([
             'status'  => 1,
             'applied' => true,
+            /*
+             * The message says what happened to the skipped employees, and uses
+             * the word OVERWRITTEN when the override was ticked.
+             *
+             * A message that read the same either way would make the override a
+             * silent switch - which is the shape of the failure this whole
+             * bucket exists to prevent.
+             */
             'message' => sprintf(
-                'Applied to %d %s. %d had different hours and were changed; %d had none set.',
+                'Applied to %d %s. %d had different hours and were changed; %d had none set.%s',
                 count($updates),
                 count($updates) === 1 ? 'employee' : 'employees',
                 $summary['total_would_change'],
                 $summary['total_would_set'],
+                $override
+                    ? ($summary['total_employee_set'] > 0
+                        ? sprintf(
+                            ' %d had their OWN hours overwritten, because you ticked the override.',
+                            $summary['total_employee_set'],
+                        )
+                        : '')
+                    : (count($skipped) > 0
+                        ? sprintf(
+                            ' %d %s left alone because they set their own hours: %s.',
+                            count($skipped),
+                            count($skipped) === 1 ? 'employee was' : 'employees were',
+                            implode(', ', array_slice(array_values($skipped), 0, 5))
+                                . (count($skipped) > 5 ? ' and others' : ''),
+                        )
+                        : ''),
             ),
             'data'    => $summary,
         ]);

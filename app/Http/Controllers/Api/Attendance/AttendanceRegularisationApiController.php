@@ -538,17 +538,57 @@ class AttendanceRegularisationApiController extends Controller
      * with an approved request and an absent day.
      */
     /**
-     * Apply the correction this request asked for.
+     * Apply the correction this request asked for, and record it.
      *
-     * The body moved to App\Services\Attendance\AttendanceCorrector so the new
-     * HR-initiated route could share it rather than grow a second writer. The
-     * behaviour is unchanged for this path; the service also now marks a created
-     * row with in_note/out_note the way a real punch does, which this path
-     * previously left at 0.
+     * The write itself moved to App\Services\Attendance\AttendanceCorrector so
+     * the HR-initiated route could share it rather than grow a second writer.
+     * The service also marks a created row with in_note/out_note the way a real
+     * punch does, which this path previously left at 0.
+     *
+     * ── THE EDIT ROW, WHICH THIS PATH NEVER USED TO WRITE ───────────────────
+     *
+     * `hrms_attendance_edits` had exactly one writer -
+     * AttendanceAdminController::correct() - which hardcodes source = 'admin'.
+     * So an approved employee request corrected the attendance row and left no
+     * HR-readable record of it, while the Change History screen's empty state
+     * told users that approved requests appear there, and the 'regularisation'
+     * value that table's own migration documents was produced by nothing.
+     *
+     * Written here rather than inside the service because the two paths differ
+     * on exactly the fields that matter: `reason` is the EMPLOYEE's words here
+     * and the HR user's there, `source` differs, and only this path has a
+     * request id. The column mapping is shared via editRowFrom(); the decision
+     * and the differing values stay visible at the call site.
+     *
+     * In the same transaction as the correction - both callers of this method
+     * are already inside DB::transaction(), so the row and the change it
+     * describes commit together or not at all.
+     *
+     * `regularisation_id` needs the column added by
+     * 2026_10_09_100300_add_regularisation_id_to_hrms_attendance_edits_table,
+     * which is migrated on both hosts. Finding the request by (user_id, day)
+     * instead was considered and rejected: two requests can exist for one day -
+     * one rejected and one approved, or one withdrawn and one resubmitted, and
+     * this table soft-deletes - so the join would be ambiguous.
      */
     private function applyCorrection(object $row, int $actorId): array
     {
-        return app(AttendanceCorrector::class)->apply($row, $actorId);
+        $corrector = app(AttendanceCorrector::class);
+        $applied   = $corrector->apply($row, $actorId);
+
+        $applied['edit_id'] = DB::table('hrms_attendance_edits')->insertGetId(
+            $corrector->editRowFrom(
+                $applied,
+                (int) $row->sub_institute_id,
+                (int) $row->user_id,
+                Carbon::parse($row->day)->toDateString(),
+                (string) ($row->reason ?? ''),
+                'regularisation',
+                $actorId,
+            ) + ['regularisation_id' => (int) $row->id]
+        );
+
+        return $applied;
     }
 
     /** HH:MM:SS between two datetimes, or null when the day is still open. */
