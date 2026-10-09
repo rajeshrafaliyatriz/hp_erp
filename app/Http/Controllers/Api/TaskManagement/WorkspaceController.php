@@ -810,7 +810,7 @@ class WorkspaceController extends Controller
             // never did, so `WorkspaceTask` had no start field at all and the
             // calendar could only place a task on its DUE date - a task running
             // three weeks appeared as a single chip on the last day of it.
-            ->selectRaw("t.id, t.task_title, t.task_description, t.task_type, t.task_date, t.planned_start_date, t.status,
+            ->selectRaw("t.id, t.task_title, t.task_description, t.task_type, t.task_date, t.planned_start_date, t.time_start, t.time_end, t.status,
                 t.task_allocated, t.task_allocated_to, t.created_by, t.created_at, t.updated_at,
                 t.reply, t.approve_status, t.approved_on, t.approve_remarks, t.task_attachment, t.file_size, t.file_type, t.status_label,
                 t.kra, t.kpa, t.required_skills, t.skill_id, t.observation_point, t.recurrence_id,
@@ -951,6 +951,12 @@ class WorkspaceController extends Controller
                 ? Carbon::parse($task->planned_start_date)->toDateString()
                 : null,
             'due_date' => $task->task_date ? Carbon::parse($task->task_date)->toDateString() : null,
+            'time_start' => isset($task->time_start) && $task->time_start
+                ? Carbon::parse($task->time_start)->format('H:i')
+                : null,
+            'time_end' => isset($task->time_end) && $task->time_end
+                ? Carbon::parse($task->time_end)->format('H:i')
+                : null,
             'remarks' => $task->reply ?? null,
             'recurrence_id' => isset($task->recurrence_id) && $task->recurrence_id ? (string) $task->recurrence_id : null,
             'approved' => in_array(strtolower(trim((string) ($task->approve_status ?? ''))), self::APPROVED_VALUES, true),
