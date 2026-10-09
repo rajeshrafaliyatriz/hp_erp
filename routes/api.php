@@ -142,9 +142,13 @@ use App\Http\Controllers\Api\TaskManagement\BacklogController;
 use App\Http\Controllers\Api\TaskManagement\WorkstreamController;
 use App\Http\Controllers\Api\TaskManagement\WorkstreamRecordController;
 use App\Http\Controllers\Api\TaskManagement\WorkspaceController;
+use App\Http\Controllers\Api\TaskManagement\TaskBulkActionController;
 use App\Http\Controllers\Api\TaskManagement\DependencyController;
 use App\Http\Controllers\Api\TaskManagement\DeadlineExtensionController;
 use App\Http\Controllers\Api\TaskManagement\TaskOptionController;
+use App\Http\Controllers\Api\TaskManagement\CalendarController;
+use App\Http\Controllers\Api\TaskManagement\CalendarReminderController;
+use App\Http\Controllers\Api\TaskManagement\CalendarShareController;
 use App\Http\Controllers\Api\UserJourneyLogController;
 use App\Http\Controllers\Api\signup_api\SchoolSetupController;
 use App\Http\Controllers\Api\signup_api\UserSignupController;
@@ -1873,10 +1877,17 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->middleware('task.permission:notification.manage');
     Route::get('/workspace', [WorkspaceController::class, 'index']);
     Route::get('/workspace/workload', [WorkspaceController::class, 'workload']);
+    // Bulk actions — static segments, declared before {id} so they match
+    // first. reassign is per-row-authorized inside the controller (task.update
+    // is not a privileged ability); bulkDelete is unconditionally privileged,
+    // matching the single-task DELETE below.
+    Route::post('/workspace/bulk/reassign', [TaskBulkActionController::class, 'reassign'])->middleware('task.permission:task.update');
+    Route::delete('/workspace/bulk', [TaskBulkActionController::class, 'bulkDelete'])->middleware('task.permission:task.delete');
     Route::get('/workspace/{id}', [WorkspaceController::class, 'show'])->whereNumber('id');
     Route::get('/workspace/{id}/activity', [ActivityController::class, 'index'])->whereNumber('id');
     Route::put('/workspace/{id}', [WorkspaceController::class, 'update'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::delete('/workspace/{id}', [WorkspaceController::class, 'destroy'])->middleware('task.permission:task.delete')->whereNumber('id');
+    Route::post('/workspace/{id}/follow-up', [WorkspaceController::class, 'followUp'])->whereNumber('id');
     Route::patch('/workspace/{id}/approval', [WorkspaceController::class, 'approve'])->middleware('task.permission:task.approve')->whereNumber('id');
     Route::post('/workspace/{id}/comments', [WorkspaceController::class, 'comment'])->middleware('task.permission:task.comment')->whereNumber('id');
     Route::get('/workspace/{id}/time-entries', [TaskTimeTrackingController::class, 'index'])->whereNumber('id');
@@ -1889,8 +1900,14 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::get('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'show'])->whereNumber('id');
     Route::put('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'upsert'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::delete('/workspace/{id}/recurrence', [TaskRecurrenceController::class, 'destroy'])->middleware('task.permission:task.update')->whereNumber('id');
+    // One reminder per user per task - your own, so no privileged ability,
+    // same reasoning as /recurrence above.
+    Route::get('/workspace/{id}/reminder', [CalendarReminderController::class, 'taskShow'])->whereNumber('id');
+    Route::put('/workspace/{id}/reminder', [CalendarReminderController::class, 'taskUpsert'])->whereNumber('id');
+    Route::delete('/workspace/{id}/reminder', [CalendarReminderController::class, 'taskDestroy'])->whereNumber('id');
     Route::get('/workspace/{id}/schedule', [TaskScheduleController::class, 'show'])->whereNumber('id');
     Route::put('/workspace/{id}/schedule', [TaskScheduleController::class, 'update'])->middleware('task.permission:task.update')->whereNumber('id');
+    Route::patch('/workspace/{id}/visibility', [WorkspaceController::class, 'updateVisibility'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::get('/workspace/{id}/attachments', [TaskAttachmentVersionController::class, 'index'])->whereNumber('id');
     Route::post('/workspace/{id}/attachments', [TaskAttachmentVersionController::class, 'store'])->middleware('task.permission:task.update')->whereNumber('id');
     Route::get('/workspace/{id}/attachments/{version}', [TaskAttachmentVersionController::class, 'download'])->whereNumber(['id', 'version']);
@@ -1914,8 +1931,69 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::put('/milestones/{id}', [DependencyController::class, 'updateMilestone'])->middleware('task.permission:milestone.manage')->whereNumber('id');
     Route::delete('/milestones/{id}', [DependencyController::class, 'destroyMilestone'])->middleware('task.permission:milestone.manage')->whereNumber('id');
     Route::get('/my-tasks', [MyTasksController::class, 'index']);
+    // Static segment BEFORE {id}, same reason the workstream block documents:
+    // declared after, '/quick' would be swallowed as an {id}.
+    Route::post('/my-tasks/quick', [MyTasksController::class, 'quickAdd']);
     Route::get('/my-tasks/{id}', [MyTasksController::class, 'show'])->whereNumber('id');
     Route::patch('/my-tasks/{id}/status', [MyTasksController::class, 'updateStatus'])->middleware('task.permission:task.status')->whereNumber('id');
+
+    /*
+    |--------------------------------------------------------------------------
+    | Calendar — tasks + events + milestones + checkpoints, merged for display
+    |--------------------------------------------------------------------------
+    |
+    | Reads are ungated (visibility is enforced inside CalendarFeedService,
+    | not here). Creating/editing your own event needs no privileged ability
+    | either — the same "your own work" rule /workspace, /my-tasks and
+    | /dependencies already follow. Deleting is privileged-only even for your
+    | own event, matching the one rule this module has never carved an
+    | exception into: no employee route anywhere deletes a task outright.
+    |
+    | Static segments ('/events') are declared before the dynamic routes
+    | below them read the same way the workstream block above does.
+    */
+    Route::get('/calendar', [CalendarController::class, 'index']);
+    Route::post('/calendar/events', [CalendarController::class, 'storeEvent']);
+    Route::get('/calendar/events/{id}', [CalendarController::class, 'show'])->whereNumber('id');
+    Route::put('/calendar/events/{id}', [CalendarController::class, 'update'])->whereNumber('id');
+    Route::patch('/calendar/events/{id}/reschedule', [CalendarController::class, 'reschedule'])->whereNumber('id');
+    Route::delete('/calendar/events/{id}', [CalendarController::class, 'destroy'])->middleware('task.permission:task.delete')->whereNumber('id');
+    // Recurrence (Phase 2) — mirrors the task-side /workspace/{id}/recurrence
+    // routes below exactly, for the same entity type Calendar actually owns.
+    Route::get('/calendar/events/{id}/recurrence', [CalendarController::class, 'recurrenceShow'])->whereNumber('id');
+    Route::put('/calendar/events/{id}/recurrence', [CalendarController::class, 'recurrenceUpsert'])->whereNumber('id');
+    Route::delete('/calendar/events/{id}/recurrence', [CalendarController::class, 'recurrenceDestroy'])->whereNumber('id');
+    // iCalendar + attendees (Phase 5). Static segments ('/export.ics',
+    // '/import') declared before any dynamic {id} pattern, same reason the
+    // workstream block further down documents.
+    Route::get('/calendar/export.ics', [CalendarController::class, 'exportRangeIcs']);
+    Route::post('/calendar/import', [CalendarController::class, 'importIcs']);
+    Route::get('/calendar/events/{id}/ics', [CalendarController::class, 'exportEventIcs'])->whereNumber('id');
+    Route::get('/calendar/events/{id}/attendees', [CalendarController::class, 'listAttendees'])->whereNumber('id');
+    Route::post('/calendar/events/{id}/attendees', [CalendarController::class, 'inviteAttendee'])->whereNumber('id');
+    Route::delete('/calendar/events/{id}/attendees/{attendeeId}', [CalendarController::class, 'removeAttendee'])->whereNumber('id')->whereNumber('attendeeId');
+    // PUBLIC — no token, matching CRM's own accept-only short-link. Still
+    // sits inside this prefix group (only `task.sanitize` applies there,
+    // which merely trims input) rather than needing a separate declaration.
+    Route::get('/calendar/invite/{token}/accept', [CalendarController::class, 'acceptInvite']);
+    // Reminders (Phase 3) — one per user per event, mirroring /workspace/{id}/reminder.
+    Route::get('/calendar/events/{id}/reminder', [CalendarReminderController::class, 'eventShow'])->whereNumber('id');
+    Route::put('/calendar/events/{id}/reminder', [CalendarReminderController::class, 'eventUpsert'])->whereNumber('id');
+    Route::delete('/calendar/events/{id}/reminder', [CalendarReminderController::class, 'eventDestroy'])->whereNumber('id');
+    // Polling surface: entity-agnostic, since a user asking "what's due right
+    // now" does not know or care which task/event each delivery is for until
+    // this tells them. Static segment ('/due') declared before any dynamic
+    // {id} pattern this group might grow later.
+    Route::get('/calendar/reminders/due', [CalendarReminderController::class, 'due']);
+    Route::patch('/calendar/reminders/{id}/seen', [CalendarReminderController::class, 'seen'])->whereNumber('id');
+    Route::patch('/calendar/reminders/{id}/snooze', [CalendarReminderController::class, 'snooze'])->whereNumber('id');
+    // Sharing (Phase 4): outgoing grants are self-service (no id to tamper
+    // with - you can only ever share YOUR OWN calendar). /feeds is the
+    // incoming read the toggle panel asks for.
+    Route::get('/calendar/shares', [CalendarShareController::class, 'index']);
+    Route::post('/calendar/shares', [CalendarShareController::class, 'store']);
+    Route::delete('/calendar/shares/{id}', [CalendarShareController::class, 'destroy'])->whereNumber('id');
+    Route::get('/calendar/feeds', [CalendarShareController::class, 'feeds']);
     Route::get('/projects/options', [ProjectController::class, 'options']);
     Route::get('/projects', [ProjectController::class, 'index']);
     Route::post('/projects', [ProjectController::class, 'store'])->middleware('task.permission:project.create');

@@ -100,6 +100,7 @@ class DocumentSearchService
             $data['starred'] = in_array($row->id, $starred, true);
             // Who the document belongs to, so a list of matches can tell two people apart.
             $data['owner_name'] = $ownerNames[$row->owner_id] ?? null;
+            $data['starred'] = in_array($row->id, $starred, true);
 
             return $data;
         })->all();

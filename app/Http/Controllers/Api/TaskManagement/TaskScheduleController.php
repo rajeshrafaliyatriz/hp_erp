@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\TaskManagement;
 
 use App\Http\Controllers\Api\TaskManagement\Concerns\ResolvesTaskContext;
 use App\Http\Controllers\Controller;
+use App\Services\TaskManagement\CalendarReminderService;
 use App\Services\TaskManagement\TaskAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,8 +19,10 @@ class TaskScheduleController extends Controller
 {
     use ResolvesTaskContext;
 
-    public function __construct(private readonly TaskAuditService $taskAudit)
-    {
+    public function __construct(
+        private readonly TaskAuditService $taskAudit,
+        private readonly CalendarReminderService $reminders,
+    ) {
     }
 
     public function show(Request $request, int $id)
@@ -76,6 +79,13 @@ class TaskScheduleController extends Controller
         }
 
         DB::table('task')->where('id', $id)->update($update);
+
+        // A due-date move must carry any reminder set on this task forward
+        // with it - otherwise a reminder fires against the date the task
+        // USED to be due on.
+        if ($request->has('due_date')) {
+            $this->reminders->recomputeForEntry('TASK', $id, $request->input('due_date') . ' 23:59:59');
+        }
 
         // Moving a due date is the change people most often need to trace, so
         // the previous schedule is what gets snapshotted here.
