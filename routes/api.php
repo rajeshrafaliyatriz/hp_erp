@@ -3667,4 +3667,17 @@ Route::prefix('crm')->group(function () {
     Route::put('contacts/{id}', [$crmContact, 'update'])->whereNumber('id')->middleware("platformright:{$contactLink},edit");
     Route::delete('contacts/{id}', [$crmContact, 'destroy'])->whereNumber('id')->middleware("platformright:{$contactLink},delete");
     Route::post('contacts/{id}/transfer-ownership', [$crmContact, 'transferOwnership'])->whereNumber('id')->middleware("platformright:{$contactLink},edit");
+
+    $crmCampaign = \App\Http\Controllers\Api\Crm\CrmCampaignController::class;
+    $campaignLink = '/module/crm/marketing/campaigns';
+    Route::get('campaigns', [$crmCampaign, 'index'])->middleware("platformright:{$campaignLink},view");
+    Route::get('campaigns/{id}', [$crmCampaign, 'show'])->whereNumber('id')->middleware("platformright:{$campaignLink},view");
+    Route::post('campaigns', [$crmCampaign, 'store'])->middleware("platformright:{$campaignLink},add");
+    Route::put('campaigns/{id}', [$crmCampaign, 'update'])->whereNumber('id')->middleware("platformright:{$campaignLink},edit");
+    Route::delete('campaigns/{id}', [$crmCampaign, 'destroy'])->whereNumber('id')->middleware("platformright:{$campaignLink},delete");
+    Route::get('campaigns/{id}/targets', [$crmCampaign, 'getTargets'])->whereNumber('id')->middleware("platformright:{$campaignLink},view");
+    Route::post('campaigns/{id}/targets', [$crmCampaign, 'addTarget'])->whereNumber('id')->middleware("platformright:{$campaignLink},edit");
+    Route::post('campaigns/{id}/targets/bulk', [$crmCampaign, 'bulkAddFromSearch'])->whereNumber('id')->middleware("platformright:{$campaignLink},edit");
+    Route::delete('campaigns/{id}/targets/{targetRowId}', [$crmCampaign, 'removeTarget'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
+    Route::put('campaigns/{id}/targets/{targetRowId}', [$crmCampaign, 'updateTargetStatus'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
 });
