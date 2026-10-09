@@ -3559,3 +3559,33 @@ Route::prefix('v1')->middleware(['api.token', 'throttle:120,1'])->group(function
     Route::get('tags', [$idms, 'tags']);
     Route::get('audit', [$idms, 'audit']);
 });
+
+/*
+ * CRM Marketing — Leads, Contacts, Organizations, Campaigns.
+ *
+ * Leads' menu id (201) was reactivated, not newly created
+ * (database/migrations/2026_11_20_085000_*) — confirmed identical on both
+ * the local and live connections, so `menuright:201,...` (id-based) is safe
+ * below. The 3 NEW leaf rows that same migration created (Contacts,
+ * Organizations, Campaigns) got their ids via plain insertGetId() and are
+ * confirmed to differ per host (e.g. Contacts is 451 locally, 435 on live) —
+ * their own routes (Phase 2/3) must use the access-link-resolving
+ * `platformright:<access_link>,<action>` middleware instead of
+ * `menuright:<id>,...`, never a hardcoded id.
+ *
+ * Tenant-scoped by sub_institute_id only (no syear) via ResolvesApiIdentity
+ * inside each controller — token owner's own tenant wins, never the request.
+ */
+Route::prefix('crm')->group(function () {
+    $crmLead = \App\Http\Controllers\Api\Crm\CrmLeadController::class;
+    $crmPicklist = \App\Http\Controllers\Api\Crm\CrmPicklistController::class;
+
+    Route::get('picklist-values', [$crmPicklist, 'index']);
+
+    Route::get('leads', [$crmLead, 'index'])->middleware('menuright:201,view');
+    Route::get('leads/{id}', [$crmLead, 'show'])->whereNumber('id')->middleware('menuright:201,view');
+    Route::post('leads', [$crmLead, 'store'])->middleware('menuright:201,add');
+    Route::put('leads/{id}', [$crmLead, 'update'])->whereNumber('id')->middleware('menuright:201,edit');
+    Route::delete('leads/{id}', [$crmLead, 'destroy'])->whereNumber('id')->middleware('menuright:201,delete');
+    Route::post('leads/{id}/convert', [$crmLead, 'convert'])->whereNumber('id')->middleware('menuright:201,edit');
+});
