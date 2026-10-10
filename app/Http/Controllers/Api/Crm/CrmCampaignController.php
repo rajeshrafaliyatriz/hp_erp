@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -11,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Campaigns — the legacy CRM's Marketing module, last of the three target
@@ -25,6 +27,16 @@ class CrmCampaignController extends Controller
 {
     use ResolvesApiIdentity;
     use HasCrmBulkActions;
+    use HasCrmExport;
+
+    /** @var array<string, string> db column => CSV header, in export column order. */
+    private const EXPORT_COLUMNS = [
+        'name' => 'Name', 'campaign_type' => 'Type', 'campaign_status' => 'Status',
+        'expected_revenue' => 'Expected Revenue', 'budget_cost' => 'Budget Cost',
+        'actual_cost' => 'Actual Cost', 'sponsor' => 'Sponsor', 'target_audience' => 'Target Audience',
+        'closing_date' => 'Closing Date', 'description' => 'Description',
+        'assigned_to' => 'Assigned To (user id)',
+    ];
 
     /** @var array<string, string> */
     private const TARGET_TABLES = [
@@ -190,6 +202,74 @@ class CrmCampaignController extends Controller
         }
 
         return $this->bulkAssignRows($request, 'crm_campaigns', $identity['sub_institute_id'], $identity['user_id'], 'Campaign');
+    }
+
+    /** Exports the same rows index() would list (search applied). */
+    public function export(Request $request): StreamedResponse|JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $query = DB::table('crm_campaigns')
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->whereNull('deleted_at');
+
+        if ($search = trim((string) $request->input('search', ''))) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+
+        return $this->exportCsv($query, self::EXPORT_COLUMNS, 'campaigns.csv');
+    }
+
+    /** CSV import. A missing/invalid owner rejects the row (no fallback) - same rule store() already applies. */
+    public function import(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'rows' => 'required|array|min:1|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $created = 0;
+        $results = [];
+
+        foreach ($request->input('rows') as $index => $row) {
+            $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
+            $rowValidator = Validator::make($rowRequest->all(), $this->validationRules());
+
+            if ($rowValidator->fails()) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $rowValidator->errors()->first()];
+                continue;
+            }
+
+            $data = $this->payload($rowRequest);
+            $data['campaign_no'] = 'CAM-' . Str::upper(Str::random(8));
+            $data['sub_institute_id'] = $identity['sub_institute_id'];
+            $data['created_by'] = $identity['user_id'];
+            $data['created_at'] = now();
+            $data['updated_at'] = now();
+
+            DB::table('crm_campaigns')->insert($data);
+            $created++;
+            $results[] = ['row' => $index + 1, 'ok' => true];
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => $created === count($results) ? "{$created} campaign(s) imported." : "{$created} of " . count($results) . ' row(s) imported.',
+            'data' => ['created' => $created, 'results' => $results],
+        ]);
     }
 
     /**

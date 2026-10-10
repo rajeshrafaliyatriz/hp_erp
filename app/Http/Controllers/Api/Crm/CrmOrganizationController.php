@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Crm;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -12,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Organizations - the legacy CRM's "Accounts" module, relabeled. Internal
@@ -24,6 +26,18 @@ class CrmOrganizationController extends Controller
     use HasCrmBulkActions;
     use HasCrmDuplicateDetection;
     use HasCrmMerge;
+    use HasCrmExport;
+
+    /** @var array<string, string> db column => CSV header, in export column order. */
+    private const EXPORT_COLUMNS = [
+        'name' => 'Name', 'account_type' => 'Type', 'industry' => 'Industry', 'rating' => 'Rating',
+        'ownership' => 'Ownership', 'annual_revenue' => 'Annual Revenue', 'employees' => 'Employees',
+        'phone' => 'Phone', 'email' => 'Email', 'website' => 'Website',
+        'billing_street' => 'Billing Street', 'billing_city' => 'Billing City',
+        'billing_state' => 'Billing State', 'billing_code' => 'Billing Postal Code',
+        'billing_country' => 'Billing Country', 'description' => 'Description',
+        'assigned_to' => 'Assigned To (user id)',
+    ];
 
     public function index(Request $request): JsonResponse
     {
@@ -295,6 +309,101 @@ class CrmOrganizationController extends Controller
                 DB::table('crm_organizations')->where('parent_id', $fromId)->update(['parent_id' => $toId]);
             },
         );
+    }
+
+    /** Exports the same rows index() would list (search applied). */
+    public function export(Request $request): StreamedResponse|JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $query = DB::table('crm_organizations')
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->whereNull('deleted_at');
+
+        if ($search = trim((string) $request->input('search', ''))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
+            });
+        }
+
+        return $this->exportCsv($query, self::EXPORT_COLUMNS, 'organizations.csv');
+    }
+
+    /**
+     * CSV import. A missing/invalid owner rejects the row (no fallback),
+     * and a name that collides with an existing organization in this
+     * tenant is also rejected - the same rule store() already applies to a
+     * manual single create, so a CSV never bypasses it.
+     */
+    public function import(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'rows' => 'required|array|min:1|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $created = 0;
+        $results = [];
+
+        foreach ($request->input('rows') as $index => $row) {
+            $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
+
+            $rowValidator = Validator::make($rowRequest->all(), [
+                'name' => 'required|string|max:191',
+                'email' => 'nullable|email|max:191',
+                'assignedTo' => 'required|integer',
+                'annualRevenue' => 'nullable|numeric',
+                'employees' => 'nullable|integer',
+            ]);
+
+            if ($rowValidator->fails()) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $rowValidator->errors()->first()];
+                continue;
+            }
+
+            $nameClash = DB::table('crm_organizations')
+                ->where('sub_institute_id', $identity['sub_institute_id'])
+                ->where('name', $rowRequest->input('name'))
+                ->whereNull('deleted_at')
+                ->exists();
+
+            if ($nameClash) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => 'An organization with that name already exists.'];
+                continue;
+            }
+
+            $data = $this->payload($rowRequest);
+            $data['account_no'] = 'ORG-' . Str::upper(Str::random(8));
+            $data['sub_institute_id'] = $identity['sub_institute_id'];
+            $data['created_by'] = $identity['user_id'];
+            $data['created_at'] = now();
+            $data['updated_at'] = now();
+
+            DB::table('crm_organizations')->insert($data);
+            $created++;
+            $results[] = ['row' => $index + 1, 'ok' => true];
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => $created === count($results) ? "{$created} organization(s) imported." : "{$created} of " . count($results) . ' row(s) imported.',
+            'data' => ['created' => $created, 'results' => $results],
+        ]);
     }
 
     /**
