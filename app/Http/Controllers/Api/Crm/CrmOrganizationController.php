@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ use Illuminate\Support\Str;
 class CrmOrganizationController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmBulkActions;
 
     public function index(Request $request): JsonResponse
     {
@@ -201,6 +203,39 @@ class CrmOrganizationController extends Controller
         ]);
 
         return response()->json(['status' => 1, 'message' => 'Organization moved to Recycle Bin.']);
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        // Same guard as the single-record destroy() above: a parent with
+        // live children must be re-parented first, bulk or not.
+        return $this->bulkDeleteRows(
+            $request,
+            'crm_organizations',
+            $identity['sub_institute_id'],
+            $identity['user_id'],
+            'Organization',
+            guard: fn (int $id) => DB::table('crm_organizations')->where('parent_id', $id)->whereNull('deleted_at')->exists()
+                ? 'Re-parent or remove this organization\'s child organizations first.'
+                : null,
+        );
+    }
+
+    public function bulkAssign(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkAssignRows($request, 'crm_organizations', $identity['sub_institute_id'], $identity['user_id'], 'Organization');
     }
 
     /**

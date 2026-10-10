@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ use Illuminate\Support\Str;
 class CrmContactController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmBulkActions;
 
     public function index(Request $request): JsonResponse
     {
@@ -171,6 +173,28 @@ class CrmContactController extends Controller
         ]);
 
         return response()->json(['status' => 1, 'message' => 'Contact moved to Recycle Bin.']);
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkDeleteRows($request, 'crm_contacts', $identity['sub_institute_id'], $identity['user_id'], 'Contact');
+    }
+
+    public function bulkAssign(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkAssignRows($request, 'crm_contacts', $identity['sub_institute_id'], $identity['user_id'], 'Contact');
     }
 
     public function transferOwnership(Request $request, int $id): JsonResponse

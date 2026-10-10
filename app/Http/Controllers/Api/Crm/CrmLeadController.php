@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,7 @@ use Illuminate\Support\Str;
 class CrmLeadController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmBulkActions;
 
     public function index(Request $request): JsonResponse
     {
@@ -211,6 +213,28 @@ class CrmLeadController extends Controller
         ]);
 
         return response()->json(['status' => 1, 'message' => 'Lead moved to Recycle Bin.']);
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkDeleteRows($request, 'crm_leads', $identity['sub_institute_id'], $identity['user_id'], 'Lead');
+    }
+
+    public function bulkAssign(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkAssignRows($request, 'crm_leads', $identity['sub_institute_id'], $identity['user_id'], 'Lead');
     }
 
     /**

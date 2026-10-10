@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Controller;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +24,7 @@ use Illuminate\Support\Str;
 class CrmCampaignController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmBulkActions;
 
     /** @var array<string, string> */
     private const TARGET_TABLES = [
@@ -166,6 +168,28 @@ class CrmCampaignController extends Controller
         ]);
 
         return response()->json(['status' => 1, 'message' => 'Campaign moved to Recycle Bin.']);
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkDeleteRows($request, 'crm_campaigns', $identity['sub_institute_id'], $identity['user_id'], 'Campaign');
+    }
+
+    public function bulkAssign(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkAssignRows($request, 'crm_campaigns', $identity['sub_institute_id'], $identity['user_id'], 'Campaign');
     }
 
     /**
