@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Platform;
 
 use App\Services\Platform\Integrations\IntegrationTester;
+use App\Services\Platform\Integrations\SmsIntegrationTester;
 use App\Services\Platform\Integrations\SmtpIntegrationTester;
 use App\Services\Platform\Integrations\WebhookIntegrationTester;
 use App\Services\Platform\PlatformRegistry;
@@ -57,6 +58,7 @@ class IntegrationController extends PlatformController
     private const TESTERS = [
         'smtp' => SmtpIntegrationTester::class,
         'webhook' => WebhookIntegrationTester::class,
+        'sms' => SmsIntegrationTester::class,
     ];
 
     public function __construct(private readonly PlatformRegistry $registry)
