@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Gtm;
 
+use App\Domain\Gtm\DealHealth;
+use App\Domain\Gtm\GtmDeal;
 use App\Domain\Signals\Opportunities\SearchProviderFactory;
 use App\Domain\Signals\SignalRunner;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
@@ -48,6 +50,7 @@ class OverviewController extends Controller
         $scored = DB::table('gtm_accounts')->where('sub_institute_id', $t)->whereNull('deleted_at')->whereNotNull('icp_fit_score');
 
         $search = SearchProviderFactory::make();
+        $deals = $this->dealsBlock($t);
 
         return response()->json(['status' => 1, 'data' => [
             'measured' => [
@@ -62,6 +65,8 @@ class OverviewController extends Controller
                 'activities_30d_by_type' => $activities,
                 'activities_30d_total' => (int) $activities->sum(),
             ],
+            // null = the deals tables are not installed in this environment (not "0 deals").
+            'deals' => $deals,
             'estimates' => [
                 // AI-produced, labelled. Null until at least one account has been scored.
                 'icp_fit_avg' => $scored->count() > 0 ? round((float) (clone $scored)->avg('icp_fit_score'), 1) : null,
@@ -72,5 +77,38 @@ class OverviewController extends Controller
                 'ai' => ['configured' => $signals->aiConfigured($t)],
             ],
         ]]);
+    }
+
+    /** Measured deal figures, or null when the deals tables do not exist here yet. @return array<string, mixed>|null */
+    private function dealsBlock(int $t): ?array
+    {
+        $exists = DB::selectOne('SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', ['gtm_deals'])->c > 0;
+        if (! $exists) {
+            return null;
+        }
+        $open = GtmDeal::where('sub_institute_id', $t)->whereIn('stage', GtmDeal::OPEN_STAGES)->get();
+        $assessed = app(DealHealth::class)->assess($t, $open);
+        $byCurrency = function ($rows) {
+            $out = [];
+            foreach ($rows as $d) {
+                if ($d->amount !== null && $d->currency) {
+                    $out[$d->currency] = round(($out[$d->currency] ?? 0) + (float) $d->amount, 2);
+                }
+            }
+
+            return $out;
+        };
+        $closed = GtmDeal::where('sub_institute_id', $t)->whereIn('stage', ['won', 'lost'])->where('closed_at', '>=', now()->subDays(30))->get();
+
+        return [
+            'open_count' => $open->count(),
+            'open_value_by_currency' => $byCurrency($open),
+            'open_without_amount' => $open->whereNull('amount')->count(),
+            'flagged_count' => $open->filter(fn ($d) => ($assessed[$d->id]['flags'] ?? []) !== [])->count(),
+            'no_next_step_count' => $open->filter(fn ($d) => in_array('no_next_step', $assessed[$d->id]['flags'] ?? [], true))->count(),
+            'won_30d' => ['count' => $closed->where('stage', 'won')->count(), 'value_by_currency' => $byCurrency($closed->where('stage', 'won'))],
+            'lost_30d' => ['count' => $closed->where('stage', 'lost')->count()],
+            'customers' => DB::table('gtm_accounts')->where('sub_institute_id', $t)->whereNull('deleted_at')->where('stage', 'customer')->count(),
+        ];
     }
 }

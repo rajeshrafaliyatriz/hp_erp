@@ -229,7 +229,8 @@ class TaskExecutionClassifier
                     . 'automation: a task needing accountability, judgement or physical presence '
                     . 'stays with a person. You return only valid JSON.'],
                 ['role' => 'user', 'content' => $this->prompt($distinct, $jobrole)],
-            ], ['json' => true, 'temperature' => 0.2, 'max_tokens' => $budget]);
+            ], ['json' => true, 'temperature' => 0.2, 'max_tokens' => $budget]
+                + $this->boundModelOption($tenantId));
         } catch (DeepSeekBudgetException $e) {
             // Refused BEFORE sending, so nothing was charged. Distinct from a
             // failure, because the fix is topping up rather than retrying.
@@ -485,6 +486,21 @@ class TaskExecutionClassifier
     }
 
     /** Weighted mean, with the two inverse dimensions flipped first. */
+    /**
+     * The model this tenant's AI Stack binding selects for task classification, if it
+     * names a verified one. Empty when unbound, so the configured default is used.
+     *
+     * @return array{model?: string}
+     */
+    private function boundModelOption(int $tenantId): array
+    {
+        $model = app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class)
+            ->modelFor('eso_intelligence', $tenantId, ['task_my_tasks', 'capability_library']);
+
+        return ['meter' => ['module' => 'eso_intelligence', 'institute' => $tenantId]]
+            + ($model === null ? [] : ['model' => $model]);
+    }
+
     public function score(array $dims): int
     {
         $total = 0.0;

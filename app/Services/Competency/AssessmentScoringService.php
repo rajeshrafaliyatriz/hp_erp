@@ -190,7 +190,9 @@ class AssessmentScoringService
                 $answer = $this->ai->chatJson([
                     ['role' => 'system', 'content' => $this->markingSystemPrompt((string) $format)],
                     ['role' => 'user', 'content' => $this->markingPrompt($group, (string) $format)],
-                ], ['json' => true, 'temperature' => 0.2]);
+                ], ['json' => true, 'temperature' => 0.2, 'meter' => ['module' => 'assessment_ai', 'institute' => $tenantId, 'related_type' => 'assessment_marking', 'related_id' => $attemptId]]
+                    + ['model' => app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class)
+                        ->modelFor('assessment_ai', $tenantId, ['talent_recruitment', 'capability_library'])]);
 
                 foreach ($answer['marks'] ?? [] as $mark) {
                     $result['marks'][] = $mark;

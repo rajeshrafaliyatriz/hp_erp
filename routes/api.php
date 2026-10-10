@@ -3503,22 +3503,64 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
  * from the token (ResolvesApiIdentity); another organisation's record answers 404.
  * Literal paths are declared before `/{id}` and every `{id}` is whereNumber.
  */
+Route::get('gtm/unsubscribe/{contact}', \App\Http\Controllers\Api\Gtm\UnsubscribeController::class)->whereNumber('contact')->middleware(['signed', 'throttle:30,1'])->name('gtm.unsubscribe');
+
 Route::prefix('gtm')->middleware('api.token')->group(function () {
     $acc = \App\Http\Controllers\Api\Gtm\AccountController::class;
     $con = \App\Http\Controllers\Api\Gtm\ContactController::class;
     $ovr = \App\Http\Controllers\Api\Gtm\OverviewController::class;
+    $pb = \App\Http\Controllers\Api\Gtm\PlaybookController::class;
+    $ag = \App\Http\Controllers\Api\Gtm\AgentController::class;
+    $dl = \App\Http\Controllers\Api\Gtm\DealController::class;
+    $ou = \App\Http\Controllers\Api\Gtm\OutreachController::class;
+    $ci = \App\Http\Controllers\Api\Gtm\ContactImportController::class;
 
-    Route::middleware('profile:admin,executive')->group(function () use ($acc, $ovr) {
+    Route::middleware('profile:admin,executive')->group(function () use ($acc, $ovr, $pb, $ag, $dl, $ou) {
+        Route::get('/outreach', [$ou, 'index']);
+        Route::get('/outreach/readiness', [$ou, 'readiness']);
+        Route::get('/deals', [$dl, 'index']);
+        Route::get('/deals/pipeline', [$dl, 'pipeline']);
+        Route::get('/deals/health', [$dl, 'health']);
+        Route::get('/deals/{id}', [$dl, 'show'])->whereNumber('id');
+        Route::get('/agents', [$ag, 'index']);
+        Route::get('/agents/runs', [$ag, 'runs']);
+        Route::get('/agents/runs/{id}', [$ag, 'runDetail'])->whereNumber('id');
+        Route::get('/playbooks', [$pb, 'index']);
+        Route::get('/playbooks/{id}', [$pb, 'show'])->whereNumber('id');
         Route::get('/overview', [$ovr, 'show']);
         Route::get('/accounts', [$acc, 'index']);
         Route::get('/accounts/candidates', [$acc, 'candidates']);
         Route::get('/accounts/{id}', [$acc, 'show'])->whereNumber('id');
     });
 
-    Route::middleware('profile:admin')->group(function () use ($acc, $con) {
+    Route::middleware('profile:admin')->group(function () use ($acc, $con, $pb, $ag, $dl, $ou, $ci) {
+        Route::post('/contacts/import/preview', [$ci, 'preview'])->middleware('throttle:30,1');
+        Route::post('/contacts/import', [$ci, 'import'])->middleware('throttle:20,1');
+        Route::post('/outreach', [$ou, 'store']);
+        Route::post('/outreach/from-analysis', [$ou, 'fromAnalysis']);
+        Route::patch('/outreach/{id}', [$ou, 'update'])->whereNumber('id');
+        Route::post('/outreach/{id}/submit', [$ou, 'submit'])->whereNumber('id');
+        Route::post('/outreach/{id}/approve', [$ou, 'approve'])->whereNumber('id');
+        Route::post('/outreach/{id}/reject', [$ou, 'reject'])->whereNumber('id');
+        Route::post('/outreach/{id}/cancel', [$ou, 'cancel'])->whereNumber('id');
+        Route::post('/outreach/{id}/send', [$ou, 'send'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post('/deals', [$dl, 'store']);
+        Route::patch('/deals/{id}', [$dl, 'update'])->whereNumber('id');
+        Route::post('/deals/{id}/stage', [$dl, 'stage'])->whereNumber('id');
+        Route::delete('/deals/{id}', [$dl, 'destroy'])->whereNumber('id');
+        Route::post('/deals/{id}/activities', [$dl, 'logActivity'])->whereNumber('id');
+        Route::post('/deals/{id}/score', [$dl, 'score'])->whereNumber('id')->middleware('throttle:20,1');
+        Route::post('/deals/{id}/discovery', [$dl, 'discovery'])->whereNumber('id')->middleware('throttle:20,1');
+        Route::post('/agents/{slug}/run', [$ag, 'run'])->where('slug', 'gtm-[a-z-]+')->middleware('throttle:10,1');
+        Route::post('/playbooks', [$pb, 'store']);
+        Route::post('/playbooks/{id}/customise', [$pb, 'customise'])->whereNumber('id');
+        Route::patch('/playbooks/{id}', [$pb, 'update'])->whereNumber('id');
+        Route::post('/playbooks/{id}/versions/{version}/restore', [$pb, 'restore'])->whereNumber('id')->whereNumber('version');
+        Route::delete('/playbooks/{id}', [$pb, 'destroy'])->whereNumber('id');
         Route::post('/accounts', [$acc, 'store']);
         Route::post('/accounts/from-company/{companyId}', [$acc, 'fromCompany'])->whereNumber('companyId');
         Route::patch('/accounts/{id}', [$acc, 'update'])->whereNumber('id');
+        Route::post('/accounts/{id}/score-icp', [$acc, 'scoreIcp'])->whereNumber('id')->middleware('throttle:20,1');
         Route::delete('/accounts/{id}', [$acc, 'destroy'])->whereNumber('id');
 
         Route::post('/accounts/{accountId}/contacts', [$con, 'store'])->whereNumber('accountId');
