@@ -3794,6 +3794,11 @@ Route::prefix('crm')->group(function () {
     Route::post('quotes/bulk/assign', [$crmQuote, 'bulkAssign'])->middleware("platformright:{$quoteLink},edit");
     Route::post('quotes/import', [$crmQuote, 'import'])->middleware("platformright:{$quoteLink},add");
 
+    $crmSms = \App\Http\Controllers\Api\Crm\CrmSmsController::class;
+    $smsLink = '/module/crm/sales/sms-notifier';
+    Route::get('sms-log', [$crmSms, 'index'])->middleware("platformright:{$smsLink},view");
+    Route::post('sms-log/send', [$crmSms, 'send'])->middleware("platformright:{$smsLink},edit");
+
     // Products & Services: one controller, one table, two menu rights - no
     // static middleware here either, for the same reason as Recycle Bin/
     // Saved Views below, except the "which right" question here is answered
