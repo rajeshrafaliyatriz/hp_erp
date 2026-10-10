@@ -53,6 +53,7 @@ class AiModuleModelController extends AiController
         private readonly TemplateModuleCatalog $modules,
         private readonly AiAuditLogger $audit,
         private readonly \App\Domain\AI\Support\SchemaCache $schema,
+        private readonly \App\Domain\AI\Configuration\ModuleDeepSeekModel $deepSeekModels,
     ) {
     }
 
@@ -167,6 +168,16 @@ class AiModuleModelController extends AiController
 
             if (! $this->providers->exists($data['provider'])) {
                 return $this->failure('That is not a provider this platform can call.', 422);
+            }
+
+            // These generators call DeepSeek directly and read this choice back, so a choice
+            // they cannot honour is refused here rather than saved and silently ignored.
+            if (\App\Domain\AI\Configuration\ModuleDeepSeekModel::supports($capability)) {
+                $refusal = $this->deepSeekModels->refusal((string) $data['provider'], $data['model'] ?? null);
+
+                if ($refusal !== null) {
+                    return $this->failure($refusal, 422);
+                }
             }
 
             // A credential must be one this organisation can actually see. Without this, an id
@@ -624,12 +635,23 @@ class AiModuleModelController extends AiController
                 continue;
             }
 
+            // The generators behind these three read the saved choice (ModuleDeepSeekModel),
+            // limited to verified DeepSeek models. Every other consumer still uses its own
+            // configuration, so it stays labelled as recorded-but-not-used.
+            $reads = \App\Domain\AI\Configuration\ModuleDeepSeekModel::supports($key);
+            // JD analysis goes through the full resolver, so any provider is honoured there.
+            $viaResolver = $key === 'recruitment_ai';
+
             $rows[] = [
                 'key' => $key,
                 'label' => $definition['label'],
                 'description' => $definition['description']
-                    . ' Its generator still reaches its provider through its own configuration, so a choice saved here is recorded but not yet used.',
-                'wired' => false,
+                    . ($viaResolver
+                        ? ' Job-description analysis uses the provider and model chosen here; other recruitment features still use their own keys.'
+                        : ($reads
+                            ? ' This generator uses the model chosen here when it is a verified DeepSeek model (' . implode(', ', (array) config('deepseek.allowed_models', [])) . '); otherwise it uses the configured default.'
+                            : ' Its generator still reaches its provider through its own configuration, so a choice saved here is recorded but not yet used.')),
+                'wired' => $reads || $viaResolver,
             ];
         }
 
