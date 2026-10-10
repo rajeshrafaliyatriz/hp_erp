@@ -71,6 +71,10 @@ class CrmQuoteController extends Controller
             $query->where('q.organization_id', $organizationId);
         }
 
+        if ($opportunityId = $request->input('opportunity_id')) {
+            $query->where('q.opportunity_id', $opportunityId);
+        }
+
         $sortableColumns = ['subject', 'total', 'quote_stage', 'valid_till', 'created_at'];
         $sortBy = in_array($request->input('sort_by'), $sortableColumns, true) ? $request->input('sort_by') : 'created_at';
         $sortDir = strtolower((string) $request->input('sort_dir')) === 'desc' ? 'desc' : 'asc';
@@ -141,6 +145,18 @@ class CrmQuoteController extends Controller
         }
 
         $data = $this->payload($request);
+        /*
+         * shipping_handling_amount/adjustment are NOT NULL with a DB-level
+         * default of 0 - but that default only applies when a column is
+         * OMITTED from the insert entirely, not when NULL is passed for it
+         * explicitly. payload() always includes both keys on store() (unlike
+         * forUpdate, which skips absent keys), so an omitted client field
+         * becomes an explicit `null` here and the insert fails with
+         * "Column 'adjustment' cannot be null" - found live, clicking
+         * Create Quote with neither field touched.
+         */
+        $data['shipping_handling_amount'] = $data['shipping_handling_amount'] ?? 0;
+        $data['adjustment'] = $data['adjustment'] ?? 0;
         $data['quote_no'] = 'QT-' . Str::upper(Str::random(8));
         $data['sub_institute_id'] = $identity['sub_institute_id'];
         $data['created_by'] = $identity['user_id'];
