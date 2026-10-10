@@ -52,6 +52,10 @@ return [
             'report' => 'Report',
             'invoice' => 'Invoice',
             'purchase_order' => 'Purchase Order',
+            // Written only by CrmQuoteController::pdf() - a generated quote
+            // PDF, keyed to the quote's own id as owner_id so re-downloading
+            // after an edit replaces this row rather than duplicating it.
+            'crm_quote' => 'Sales Quote',
             'sop' => 'Standard Operating Procedure',
             // Written only by federated indexers (see source_systems below),
             // never offered on the upload form - a person cannot "upload" an

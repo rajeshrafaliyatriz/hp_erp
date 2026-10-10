@@ -3748,6 +3748,16 @@ Route::prefix('crm')->group(function () {
     Route::get('campaigns/export', [$crmCampaign, 'export'])->middleware("platformright:{$campaignLink},view");
     Route::post('campaigns/import', [$crmCampaign, 'import'])->middleware("platformright:{$campaignLink},add");
 
+    // Tax Rates: index() is intentionally ungated (same precedent as
+    // picklist-values' own index()) - any authenticated caller can read the
+    // active list to populate a dropdown; only admin-managed writes check
+    // the Quotes right internally (see CrmTaxRateController::canEdit()).
+    $crmTaxRate = \App\Http\Controllers\Api\Crm\CrmTaxRateController::class;
+    Route::get('tax-rates', [$crmTaxRate, 'index']);
+    Route::get('tax-rates/admin', [$crmTaxRate, 'adminIndex']);
+    Route::post('tax-rates', [$crmTaxRate, 'store']);
+    Route::put('tax-rates/{id}', [$crmTaxRate, 'update'])->whereNumber('id');
+
     $crmOpportunity = \App\Http\Controllers\Api\Crm\CrmOpportunityController::class;
     $oppLink = '/module/crm/sales/opportunities';
     Route::get('opportunities', [$crmOpportunity, 'index'])->middleware("platformright:{$oppLink},view");
@@ -3768,6 +3778,21 @@ Route::prefix('crm')->group(function () {
     Route::post('opportunities/bulk/delete', [$crmOpportunity, 'bulkDelete'])->middleware("platformright:{$oppLink},delete");
     Route::post('opportunities/bulk/assign', [$crmOpportunity, 'bulkAssign'])->middleware("platformright:{$oppLink},edit");
     Route::post('opportunities/import', [$crmOpportunity, 'import'])->middleware("platformright:{$oppLink},add");
+
+    $crmQuote = \App\Http\Controllers\Api\Crm\CrmQuoteController::class;
+    $quoteLink = '/module/crm/sales/quotes';
+    Route::get('quotes', [$crmQuote, 'index'])->middleware("platformright:{$quoteLink},view");
+    Route::get('quotes/export', [$crmQuote, 'export'])->middleware("platformright:{$quoteLink},view");
+    Route::get('quotes/{id}', [$crmQuote, 'show'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
+    Route::post('quotes', [$crmQuote, 'store'])->middleware("platformright:{$quoteLink},add");
+    Route::put('quotes/{id}', [$crmQuote, 'update'])->whereNumber('id')->middleware("platformright:{$quoteLink},edit");
+    Route::delete('quotes/{id}', [$crmQuote, 'destroy'])->whereNumber('id')->middleware("platformright:{$quoteLink},delete");
+    Route::get('quotes/{id}/line-items', [$crmQuote, 'getLineItems'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
+    Route::put('quotes/{id}/line-items', [$crmQuote, 'saveLineItems'])->whereNumber('id')->middleware("platformright:{$quoteLink},edit");
+    Route::get('quotes/{id}/pdf', [$crmQuote, 'pdf'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
+    Route::post('quotes/bulk/delete', [$crmQuote, 'bulkDelete'])->middleware("platformright:{$quoteLink},delete");
+    Route::post('quotes/bulk/assign', [$crmQuote, 'bulkAssign'])->middleware("platformright:{$quoteLink},edit");
+    Route::post('quotes/import', [$crmQuote, 'import'])->middleware("platformright:{$quoteLink},add");
 
     // Products & Services: one controller, one table, two menu rights - no
     // static middleware here either, for the same reason as Recycle Bin/
