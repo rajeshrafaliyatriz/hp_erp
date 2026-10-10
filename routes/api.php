@@ -3595,6 +3595,9 @@ Route::prefix('crm')->group(function () {
     $crmContact = \App\Http\Controllers\Api\Crm\CrmContactController::class;
 
     Route::get('picklist-values', [$crmPicklist, 'index']);
+    Route::get('picklist-values/admin', [$crmPicklist, 'adminIndex']);
+    Route::post('picklist-values', [$crmPicklist, 'store']);
+    Route::put('picklist-values/{id}', [$crmPicklist, 'update'])->whereNumber('id');
 
     Route::get('leads', [$crmLead, 'index'])->middleware('menuright:201,view');
     Route::get('leads/{id}', [$crmLead, 'show'])->whereNumber('id')->middleware('menuright:201,view');
