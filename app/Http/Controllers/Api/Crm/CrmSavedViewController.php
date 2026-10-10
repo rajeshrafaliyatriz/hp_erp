@@ -28,7 +28,10 @@ class CrmSavedViewController extends Controller
 {
     use ResolvesApiIdentity;
 
-    private const MODULES = ['leads', 'contacts', 'organizations', 'campaigns'];
+    private const MODULES = [
+        'leads', 'contacts', 'organizations', 'campaigns',
+        'opportunities', 'quotes', 'products', 'services', 'sms_log',
+    ];
 
     /** @var array<string, array{menuId: int|null, link: string|null}> */
     private const MODULE_RIGHTS = [
@@ -36,6 +39,11 @@ class CrmSavedViewController extends Controller
         'contacts' => ['menuId' => null, 'link' => '/module/crm/marketing/contacts'],
         'organizations' => ['menuId' => null, 'link' => '/module/crm/marketing/organizations'],
         'campaigns' => ['menuId' => null, 'link' => '/module/crm/marketing/campaigns'],
+        'opportunities' => ['menuId' => null, 'link' => '/module/crm/sales/opportunities'],
+        'quotes' => ['menuId' => null, 'link' => '/module/crm/sales/quotes'],
+        'products' => ['menuId' => null, 'link' => '/module/crm/sales/products'],
+        'services' => ['menuId' => null, 'link' => '/module/crm/sales/services'],
+        'sms_log' => ['menuId' => null, 'link' => '/module/crm/sales/sms-notifier'],
     ];
 
     public function index(Request $request): JsonResponse

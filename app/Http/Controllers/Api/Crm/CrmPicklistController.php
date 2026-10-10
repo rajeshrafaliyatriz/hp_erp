@@ -35,12 +35,24 @@ class CrmPicklistController extends Controller
 {
     use ResolvesApiIdentity;
 
-    /** @var array<string, array<string>> */
+    /**
+     * @var array<string, array<string>>
+     *
+     * 'products' covers Products AND Services - both are the same physical
+     * `crm_products` table with one shared `category` column, so there is
+     * deliberately no separate 'services' entry here (unlike the Recycle
+     * Bin, where item_type scopes which ROWS a right-holder can see, a
+     * picklist VALUE like "Software" or "Consulting" is one shared list
+     * regardless of which type uses it).
+     */
     private const FIELD_KEYS = [
         'leads' => ['lead_status', 'lead_source', 'rating', 'salutation', 'industry'],
         'contacts' => ['salutation', 'lead_source'],
         'organizations' => ['account_type', 'industry', 'rating'],
         'campaigns' => ['campaign_type', 'campaign_status', 'expected_response'],
+        'opportunities' => ['sales_stage', 'lead_source', 'potential_type', 'forecast_category'],
+        'quotes' => ['quote_stage'],
+        'products' => ['category'],
     ];
 
     /** @var array<string, array{menuId: int|null, link: string|null}> Same shape/reasoning as CrmSavedViewController::MODULE_RIGHTS. */
@@ -49,6 +61,9 @@ class CrmPicklistController extends Controller
         'contacts' => ['menuId' => null, 'link' => '/module/crm/marketing/contacts'],
         'organizations' => ['menuId' => null, 'link' => '/module/crm/marketing/organizations'],
         'campaigns' => ['menuId' => null, 'link' => '/module/crm/marketing/campaigns'],
+        'opportunities' => ['menuId' => null, 'link' => '/module/crm/sales/opportunities'],
+        'quotes' => ['menuId' => null, 'link' => '/module/crm/sales/quotes'],
+        'products' => ['menuId' => null, 'link' => '/module/crm/sales/products'],
     ];
 
     public function index(Request $request): JsonResponse
