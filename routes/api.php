@@ -3653,4 +3653,12 @@ Route::prefix('crm')->group(function () {
     Route::get('recycle-bin', [$crmRecycleBin, 'index']);
     Route::post('recycle-bin/{type}/{id}/restore', [$crmRecycleBin, 'restore'])->whereNumber('id');
     Route::delete('recycle-bin/{type}/{id}', [$crmRecycleBin, 'forceDelete'])->whereNumber('id');
+
+    // Saved Views: same "no static middleware, check the right per-request"
+    // shape as the Recycle Bin above - the module name lives in the request
+    // body/query, not the URL, so one dedicated menu permission can't gate it.
+    $crmSavedView = \App\Http\Controllers\Api\Crm\CrmSavedViewController::class;
+    Route::get('saved-views', [$crmSavedView, 'index']);
+    Route::post('saved-views', [$crmSavedView, 'store']);
+    Route::delete('saved-views/{id}', [$crmSavedView, 'destroy'])->whereNumber('id');
 });
