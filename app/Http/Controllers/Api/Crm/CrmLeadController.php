@@ -3,12 +3,17 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Leads — the legacy CRM's Marketing module, first vertical slice.
@@ -21,6 +26,21 @@ use Illuminate\Support\Str;
 class CrmLeadController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmBulkActions;
+    use HasCrmDuplicateDetection;
+    use HasCrmMerge;
+    use HasCrmExport;
+
+    /** @var array<string, string> db column => CSV header, in export column order. Also the accepted import row keys (camelCase - matches payload()'s map). */
+    private const EXPORT_COLUMNS = [
+        'salutation' => 'Salutation', 'first_name' => 'First Name', 'last_name' => 'Last Name',
+        'company' => 'Company', 'email' => 'Email', 'secondary_email' => 'Secondary Email',
+        'phone' => 'Phone', 'mobile' => 'Mobile', 'website' => 'Website', 'industry' => 'Industry',
+        'lead_source' => 'Lead Source', 'lead_status' => 'Lead Status', 'rating' => 'Rating',
+        'annual_revenue' => 'Annual Revenue', 'street' => 'Street', 'city' => 'City',
+        'state' => 'State', 'country' => 'Country', 'postal_code' => 'Postal Code',
+        'description' => 'Description', 'assigned_to' => 'Assigned To (user id)',
+    ];
 
     public function index(Request $request): JsonResponse
     {
@@ -211,6 +231,159 @@ class CrmLeadController extends Controller
         ]);
 
         return response()->json(['status' => 1, 'message' => 'Lead moved to Recycle Bin.']);
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkDeleteRows($request, 'crm_leads', $identity['sub_institute_id'], $identity['user_id'], 'Lead');
+    }
+
+    public function bulkAssign(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkAssignRows($request, 'crm_leads', $identity['sub_institute_id'], $identity['user_id'], 'Lead');
+    }
+
+    /**
+     * Possible duplicates, grouped by two independent signals: an exact
+     * (normalized) email match, and a same last-name-and-company match for
+     * leads with no email at all. Converted leads are excluded - they are
+     * already a soft archive (see index()), not an actionable record.
+     */
+    public function duplicates(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = $identity['sub_institute_id'];
+        $resource = fn ($row) => $this->resource($row);
+        $excludeConverted = fn ($query) => $query->where('converted', false);
+
+        $groups = array_merge(
+            $this->duplicateGroups('crm_leads', $tenantId, 'LOWER(TRIM(email))', ['email'], 'Same email', $resource, $excludeConverted),
+            $this->duplicateGroups('crm_leads', $tenantId, "CONCAT(LOWER(TRIM(last_name)), '|', LOWER(TRIM(company)))", ['last_name', 'company'], 'Same name and company', $resource, $excludeConverted),
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Possible duplicate leads.', 'data' => $groups]);
+    }
+
+    public function merge(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->mergeRows(
+            $request, 'crm_leads', $identity['sub_institute_id'], $identity['user_id'], 'Lead',
+            repoint: fn (int $fromId, int $toId) => $this->repointCampaignTargets('lead', $fromId, $toId),
+        );
+    }
+
+    /** Exports the same rows index() would list (search applied, converted leads excluded), never the hidden/deleted ones. */
+    public function export(Request $request): StreamedResponse|JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $query = DB::table('crm_leads')
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->whereNull('deleted_at')
+            ->where('converted', false);
+
+        if ($search = trim((string) $request->input('search', ''))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('company', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        return $this->exportCsv($query, self::EXPORT_COLUMNS, 'leads.csv');
+    }
+
+    /**
+     * CSV import. Explicit decisions (none of this silently ports the
+     * legacy system's permissive behavior):
+     *  - A missing/invalid owner REJECTS the row (no fallback to an admin
+     *    or to the importing user) - same as BulkTaskController's own CSV
+     *    import, and the same rule store() already applies to a manual
+     *    single create.
+     *  - lead_status/lead_source/industry/rating are free-text columns, not
+     *    foreign keys to a picklist table, so an unrecognized value is
+     *    simply accepted as typed - there is no "picklist" to auto-grow.
+     *  - No cross-references to validate (Leads has none of its own - unlike
+     *    Contacts' organizationId).
+     */
+    public function import(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'rows' => 'required|array|min:1|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $created = 0;
+        $results = [];
+
+        foreach ($request->input('rows') as $index => $row) {
+            $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
+
+            $rowValidator = Validator::make($rowRequest->all(), [
+                'lastName' => 'required|string|max:191',
+                'email' => 'nullable|email|max:191',
+                'assignedTo' => 'required|integer',
+                'annualRevenue' => 'nullable|numeric',
+            ]);
+
+            if ($rowValidator->fails()) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $rowValidator->errors()->first()];
+                continue;
+            }
+
+            $data = $this->payload($rowRequest, $identity['sub_institute_id']);
+            $data['lead_no'] = $this->nextLeadNo($identity['sub_institute_id']);
+            $data['created_by'] = $identity['user_id'];
+            $data['created_at'] = now();
+            $data['updated_at'] = now();
+
+            DB::table('crm_leads')->insert($data);
+            $created++;
+            $results[] = ['row' => $index + 1, 'ok' => true];
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => $created === count($results) ? "{$created} lead(s) imported." : "{$created} of " . count($results) . ' row(s) imported.',
+            'data' => ['created' => $created, 'results' => $results],
+        ]);
     }
 
     /**

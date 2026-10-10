@@ -3682,6 +3682,9 @@ Route::prefix('crm')->group(function () {
     $crmContact = \App\Http\Controllers\Api\Crm\CrmContactController::class;
 
     Route::get('picklist-values', [$crmPicklist, 'index']);
+    Route::get('picklist-values/admin', [$crmPicklist, 'adminIndex']);
+    Route::post('picklist-values', [$crmPicklist, 'store']);
+    Route::put('picklist-values/{id}', [$crmPicklist, 'update'])->whereNumber('id');
 
     Route::get('leads', [$crmLead, 'index'])->middleware('menuright:201,view');
     Route::get('leads/{id}', [$crmLead, 'show'])->whereNumber('id')->middleware('menuright:201,view');
@@ -3689,6 +3692,12 @@ Route::prefix('crm')->group(function () {
     Route::put('leads/{id}', [$crmLead, 'update'])->whereNumber('id')->middleware('menuright:201,edit');
     Route::delete('leads/{id}', [$crmLead, 'destroy'])->whereNumber('id')->middleware('menuright:201,delete');
     Route::post('leads/{id}/convert', [$crmLead, 'convert'])->whereNumber('id')->middleware('menuright:201,edit');
+    Route::post('leads/bulk/delete', [$crmLead, 'bulkDelete'])->middleware('menuright:201,delete');
+    Route::post('leads/bulk/assign', [$crmLead, 'bulkAssign'])->middleware('menuright:201,edit');
+    Route::get('leads/duplicates', [$crmLead, 'duplicates'])->middleware('menuright:201,view');
+    Route::post('leads/merge', [$crmLead, 'merge'])->middleware('menuright:201,delete');
+    Route::get('leads/export', [$crmLead, 'export'])->middleware('menuright:201,view');
+    Route::post('leads/import', [$crmLead, 'import'])->middleware('menuright:201,add');
 
     // Organizations + Contacts: their menu ids differ per database (confirmed
     // above), so every route here uses the access-link-resolving
@@ -3701,6 +3710,12 @@ Route::prefix('crm')->group(function () {
     Route::put('organizations/{id}', [$crmOrg, 'update'])->whereNumber('id')->middleware("platformright:{$orgLink},edit");
     Route::delete('organizations/{id}', [$crmOrg, 'destroy'])->whereNumber('id')->middleware("platformright:{$orgLink},delete");
     Route::post('organizations/{id}/transfer-ownership', [$crmOrg, 'transferOwnership'])->whereNumber('id')->middleware("platformright:{$orgLink},edit");
+    Route::post('organizations/bulk/delete', [$crmOrg, 'bulkDelete'])->middleware("platformright:{$orgLink},delete");
+    Route::post('organizations/bulk/assign', [$crmOrg, 'bulkAssign'])->middleware("platformright:{$orgLink},edit");
+    Route::get('organizations/duplicates', [$crmOrg, 'duplicates'])->middleware("platformright:{$orgLink},view");
+    Route::post('organizations/merge', [$crmOrg, 'merge'])->middleware("platformright:{$orgLink},delete");
+    Route::get('organizations/export', [$crmOrg, 'export'])->middleware("platformright:{$orgLink},view");
+    Route::post('organizations/import', [$crmOrg, 'import'])->middleware("platformright:{$orgLink},add");
 
     $contactLink = '/module/crm/marketing/contacts';
     Route::get('contacts', [$crmContact, 'index'])->middleware("platformright:{$contactLink},view");
@@ -3709,6 +3724,12 @@ Route::prefix('crm')->group(function () {
     Route::put('contacts/{id}', [$crmContact, 'update'])->whereNumber('id')->middleware("platformright:{$contactLink},edit");
     Route::delete('contacts/{id}', [$crmContact, 'destroy'])->whereNumber('id')->middleware("platformright:{$contactLink},delete");
     Route::post('contacts/{id}/transfer-ownership', [$crmContact, 'transferOwnership'])->whereNumber('id')->middleware("platformright:{$contactLink},edit");
+    Route::post('contacts/bulk/delete', [$crmContact, 'bulkDelete'])->middleware("platformright:{$contactLink},delete");
+    Route::post('contacts/bulk/assign', [$crmContact, 'bulkAssign'])->middleware("platformright:{$contactLink},edit");
+    Route::get('contacts/duplicates', [$crmContact, 'duplicates'])->middleware("platformright:{$contactLink},view");
+    Route::post('contacts/merge', [$crmContact, 'merge'])->middleware("platformright:{$contactLink},delete");
+    Route::get('contacts/export', [$crmContact, 'export'])->middleware("platformright:{$contactLink},view");
+    Route::post('contacts/import', [$crmContact, 'import'])->middleware("platformright:{$contactLink},add");
 
     $crmCampaign = \App\Http\Controllers\Api\Crm\CrmCampaignController::class;
     $campaignLink = '/module/crm/marketing/campaigns';
@@ -3722,4 +3743,26 @@ Route::prefix('crm')->group(function () {
     Route::post('campaigns/{id}/targets/bulk', [$crmCampaign, 'bulkAddFromSearch'])->whereNumber('id')->middleware("platformright:{$campaignLink},edit");
     Route::delete('campaigns/{id}/targets/{targetRowId}', [$crmCampaign, 'removeTarget'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
     Route::put('campaigns/{id}/targets/{targetRowId}', [$crmCampaign, 'updateTargetStatus'])->whereNumber(['id', 'targetRowId'])->middleware("platformright:{$campaignLink},edit");
+    Route::post('campaigns/bulk/delete', [$crmCampaign, 'bulkDelete'])->middleware("platformright:{$campaignLink},delete");
+    Route::post('campaigns/bulk/assign', [$crmCampaign, 'bulkAssign'])->middleware("platformright:{$campaignLink},edit");
+    Route::get('campaigns/export', [$crmCampaign, 'export'])->middleware("platformright:{$campaignLink},view");
+    Route::post('campaigns/import', [$crmCampaign, 'import'])->middleware("platformright:{$campaignLink},add");
+
+    // Recycle Bin: one shared screen across all 4 modules. No single static
+    // middleware here - CrmRecycleBinController checks each row's own type
+    // against that type's existing menu/platform right internally, since no
+    // "list trashed across modules" permission exists (or should exist) as
+    // its own menu row.
+    $crmRecycleBin = \App\Http\Controllers\Api\Crm\CrmRecycleBinController::class;
+    Route::get('recycle-bin', [$crmRecycleBin, 'index']);
+    Route::post('recycle-bin/{type}/{id}/restore', [$crmRecycleBin, 'restore'])->whereNumber('id');
+    Route::delete('recycle-bin/{type}/{id}', [$crmRecycleBin, 'forceDelete'])->whereNumber('id');
+
+    // Saved Views: same "no static middleware, check the right per-request"
+    // shape as the Recycle Bin above - the module name lives in the request
+    // body/query, not the URL, so one dedicated menu permission can't gate it.
+    $crmSavedView = \App\Http\Controllers\Api\Crm\CrmSavedViewController::class;
+    Route::get('saved-views', [$crmSavedView, 'index']);
+    Route::post('saved-views', [$crmSavedView, 'store']);
+    Route::delete('saved-views/{id}', [$crmSavedView, 'destroy'])->whereNumber('id');
 });
