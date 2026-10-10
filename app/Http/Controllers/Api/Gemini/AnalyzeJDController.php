@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AnalyzeJDController extends Controller
 {
@@ -76,12 +77,9 @@ class AnalyzeJDController extends Controller
                 }
             );
 
-            if ($geminiApiRows->isEmpty()) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Gemini API key not found or inactive'
-                ], 500);
-            }
+            // An empty legacy table is no longer fatal on its own: the configured AI
+            // provider (below) may serve this request. It is checked again before the
+            // legacy path is used.
 
             /* ===============================
              * 3️⃣ Fetch ICF Competency Framework
@@ -121,12 +119,46 @@ Respond strictly in valid JSON:
 PROMPT;
 
             /* ===============================
-             * 5️⃣ Call Gemini API (WITH FALLBACK)
-             * =============================== */
+             * 5️⃣a Configured AI provider first (audit CRA-027 / recruitment_ai)
+             * ===============================
+             * Goes through AiModelClient, so the provider, model and credential come from
+             * AI Model Setup (including this module's AI Stack choice), the call is metered
+             * in ai_usage_events and quota-checked. Any failure falls through to the legacy
+             * gemini_api keys below, which are unchanged. */
+            $textResponse = null;
             $response = null;
             $usedApiRow = null;
 
-            foreach ($geminiApiRows as $geminiApiRow) {
+            try {
+                $completion = app(\App\Domain\AI\Support\AiModelClient::class)->complete(
+                    'recruitment_ai',
+                    [['role' => 'user', 'content' => $prompt]],
+                    ['json' => true, 'temperature' => 0.2, 'max_tokens' => 1500, 'related_type' => 'jd_analysis'],
+                    $subInstituteId,
+                    'talent_recruitment'
+                );
+
+                if (trim($completion->text) !== '') {
+                    $textResponse = $completion->text;
+                }
+            } catch (\Throwable $e) {
+                Log::info('JD analysis: configured AI provider unavailable, using legacy Gemini keys', [
+                    'tenant' => $subInstituteId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            if ($textResponse === null && $geminiApiRows->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Gemini API key not found or inactive'
+                ], 500);
+            }
+
+            /* ===============================
+             * 5️⃣b Legacy Gemini keys (WITH FALLBACK)
+             * =============================== */
+            foreach ($textResponse !== null ? [] : $geminiApiRows as $geminiApiRow) {
 
                 // Optional usage limit check (OLD LOGIC PRESERVED)
                 if (!is_null($geminiApiRow->limit) && $geminiApiRow->limit <= 0) {
@@ -162,14 +194,16 @@ PROMPT;
                 }
             }
 
-            if (!$response) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'All Gemini API keys failed'
-                ], 500);
-            }
+            if ($textResponse === null) {
+                if (!$response) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'All Gemini API keys failed'
+                    ], 500);
+                }
 
-            $textResponse = $response['candidates'][0]['content']['parts'][0]['text'] ?? '{}';
+                $textResponse = $response['candidates'][0]['content']['parts'][0]['text'] ?? '{}';
+            }
 
             /* ===============================
              * 6️⃣ Safe JSON Parsing (OLD LOGIC PRESERVED)
