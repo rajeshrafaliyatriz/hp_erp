@@ -3604,6 +3604,8 @@ Route::prefix('crm')->group(function () {
     Route::post('leads/{id}/convert', [$crmLead, 'convert'])->whereNumber('id')->middleware('menuright:201,edit');
     Route::post('leads/bulk/delete', [$crmLead, 'bulkDelete'])->middleware('menuright:201,delete');
     Route::post('leads/bulk/assign', [$crmLead, 'bulkAssign'])->middleware('menuright:201,edit');
+    Route::get('leads/duplicates', [$crmLead, 'duplicates'])->middleware('menuright:201,view');
+    Route::post('leads/merge', [$crmLead, 'merge'])->middleware('menuright:201,delete');
 
     // Organizations + Contacts: their menu ids differ per database (confirmed
     // above), so every route here uses the access-link-resolving
@@ -3618,6 +3620,8 @@ Route::prefix('crm')->group(function () {
     Route::post('organizations/{id}/transfer-ownership', [$crmOrg, 'transferOwnership'])->whereNumber('id')->middleware("platformright:{$orgLink},edit");
     Route::post('organizations/bulk/delete', [$crmOrg, 'bulkDelete'])->middleware("platformright:{$orgLink},delete");
     Route::post('organizations/bulk/assign', [$crmOrg, 'bulkAssign'])->middleware("platformright:{$orgLink},edit");
+    Route::get('organizations/duplicates', [$crmOrg, 'duplicates'])->middleware("platformright:{$orgLink},view");
+    Route::post('organizations/merge', [$crmOrg, 'merge'])->middleware("platformright:{$orgLink},delete");
 
     $contactLink = '/module/crm/marketing/contacts';
     Route::get('contacts', [$crmContact, 'index'])->middleware("platformright:{$contactLink},view");
@@ -3628,6 +3632,8 @@ Route::prefix('crm')->group(function () {
     Route::post('contacts/{id}/transfer-ownership', [$crmContact, 'transferOwnership'])->whereNumber('id')->middleware("platformright:{$contactLink},edit");
     Route::post('contacts/bulk/delete', [$crmContact, 'bulkDelete'])->middleware("platformright:{$contactLink},delete");
     Route::post('contacts/bulk/assign', [$crmContact, 'bulkAssign'])->middleware("platformright:{$contactLink},edit");
+    Route::get('contacts/duplicates', [$crmContact, 'duplicates'])->middleware("platformright:{$contactLink},view");
+    Route::post('contacts/merge', [$crmContact, 'merge'])->middleware("platformright:{$contactLink},delete");
 
     $crmCampaign = \App\Http\Controllers\Api\Crm\CrmCampaignController::class;
     $campaignLink = '/module/crm/marketing/campaigns';

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +17,8 @@ class CrmContactController extends Controller
 {
     use ResolvesApiIdentity;
     use HasCrmBulkActions;
+    use HasCrmDuplicateDetection;
+    use HasCrmMerge;
 
     public function index(Request $request): JsonResponse
     {
@@ -195,6 +199,57 @@ class CrmContactController extends Controller
         }
 
         return $this->bulkAssignRows($request, 'crm_contacts', $identity['sub_institute_id'], $identity['user_id'], 'Contact');
+    }
+
+    /**
+     * Possible duplicates: an exact (normalized) email match, and a same
+     * first-and-last-name match for contacts with no email at all.
+     */
+    public function duplicates(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = $identity['sub_institute_id'];
+        $resource = fn ($row) => $this->resource($row);
+
+        $groups = array_merge(
+            $this->duplicateGroups('crm_contacts', $tenantId, 'LOWER(TRIM(email))', ['email'], 'Same email', $resource),
+            $this->duplicateGroups('crm_contacts', $tenantId, "CONCAT(LOWER(TRIM(first_name)), '|', LOWER(TRIM(last_name)))", ['first_name', 'last_name'], 'Same name', $resource),
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Possible duplicate contacts.', 'data' => $groups]);
+    }
+
+    public function merge(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->mergeRows(
+            $request, 'crm_contacts', $identity['sub_institute_id'], $identity['user_id'], 'Contact',
+            repoint: function (int $fromId, int $toId) {
+                $this->repointCampaignTargets('contact', $fromId, $toId);
+
+                // If the survivor itself reported to the duplicate, clear
+                // that FIRST - otherwise the blanket re-point just below
+                // would match the survivor's own row too and leave it
+                // reporting to itself (where('reports_to_id', $fromId) stops
+                // matching it the moment that update runs, so this guard
+                // must go first).
+                DB::table('crm_contacts')->where('id', $toId)->where('reports_to_id', $fromId)->update(['reports_to_id' => null]);
+
+                // Everyone else who reported to the duplicate now reports to
+                // the survivor instead.
+                DB::table('crm_contacts')->where('reports_to_id', $fromId)->update(['reports_to_id' => $toId]);
+            },
+        );
     }
 
     public function transferOwnership(Request $request, int $id): JsonResponse

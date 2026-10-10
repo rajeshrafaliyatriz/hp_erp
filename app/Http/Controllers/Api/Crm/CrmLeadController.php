@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,6 +25,8 @@ class CrmLeadController extends Controller
 {
     use ResolvesApiIdentity;
     use HasCrmBulkActions;
+    use HasCrmDuplicateDetection;
+    use HasCrmMerge;
 
     public function index(Request $request): JsonResponse
     {
@@ -235,6 +239,46 @@ class CrmLeadController extends Controller
         }
 
         return $this->bulkAssignRows($request, 'crm_leads', $identity['sub_institute_id'], $identity['user_id'], 'Lead');
+    }
+
+    /**
+     * Possible duplicates, grouped by two independent signals: an exact
+     * (normalized) email match, and a same last-name-and-company match for
+     * leads with no email at all. Converted leads are excluded - they are
+     * already a soft archive (see index()), not an actionable record.
+     */
+    public function duplicates(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = $identity['sub_institute_id'];
+        $resource = fn ($row) => $this->resource($row);
+        $excludeConverted = fn ($query) => $query->where('converted', false);
+
+        $groups = array_merge(
+            $this->duplicateGroups('crm_leads', $tenantId, 'LOWER(TRIM(email))', ['email'], 'Same email', $resource, $excludeConverted),
+            $this->duplicateGroups('crm_leads', $tenantId, "CONCAT(LOWER(TRIM(last_name)), '|', LOWER(TRIM(company)))", ['last_name', 'company'], 'Same name and company', $resource, $excludeConverted),
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Possible duplicate leads.', 'data' => $groups]);
+    }
+
+    public function merge(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->mergeRows(
+            $request, 'crm_leads', $identity['sub_institute_id'], $identity['user_id'], 'Lead',
+            repoint: fn (int $fromId, int $toId) => $this->repointCampaignTargets('lead', $fromId, $toId),
+        );
     }
 
     /**

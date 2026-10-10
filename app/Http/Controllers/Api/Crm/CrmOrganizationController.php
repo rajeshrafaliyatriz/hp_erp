@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +22,8 @@ class CrmOrganizationController extends Controller
 {
     use ResolvesApiIdentity;
     use HasCrmBulkActions;
+    use HasCrmDuplicateDetection;
+    use HasCrmMerge;
 
     public function index(Request $request): JsonResponse
     {
@@ -236,6 +240,61 @@ class CrmOrganizationController extends Controller
         }
 
         return $this->bulkAssignRows($request, 'crm_organizations', $identity['sub_institute_id'], $identity['user_id'], 'Organization');
+    }
+
+    /**
+     * Possible duplicates: a same (normalized) website, or a same phone
+     * number. `name` is deliberately not a signal here - store() already
+     * rejects a second organization with the same name per tenant, so an
+     * exact name collision cannot exist going forward.
+     */
+    public function duplicates(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = $identity['sub_institute_id'];
+        $resource = fn ($row) => $this->resource($row);
+
+        $groups = array_merge(
+            $this->duplicateGroups('crm_organizations', $tenantId, 'LOWER(TRIM(website))', ['website'], 'Same website', $resource),
+            $this->duplicateGroups('crm_organizations', $tenantId, 'LOWER(TRIM(phone))', ['phone'], 'Same phone number', $resource),
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Possible duplicate organizations.', 'data' => $groups]);
+    }
+
+    public function merge(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->mergeRows(
+            $request, 'crm_organizations', $identity['sub_institute_id'], $identity['user_id'], 'Organization',
+            repoint: function (int $fromId, int $toId) {
+                $this->repointCampaignTargets('organization', $fromId, $toId);
+
+                DB::table('crm_contacts')->where('organization_id', $fromId)->update(['organization_id' => $toId]);
+                DB::table('crm_leads')->where('converted_organization_id', $fromId)->update(['converted_organization_id' => $toId]);
+
+                // If the survivor itself was a child of the duplicate, clear
+                // that FIRST - otherwise the blanket re-point just below would
+                // match the survivor's own row too and leave it parented to
+                // itself (where('parent_id', $fromId) stops matching it the
+                // moment that update runs, so this guard must go first).
+                DB::table('crm_organizations')->where('id', $toId)->where('parent_id', $fromId)->update(['parent_id' => null]);
+
+                // Every other organization that had the duplicate as its
+                // parent now reports to the survivor instead.
+                DB::table('crm_organizations')->where('parent_id', $fromId)->update(['parent_id' => $toId]);
+            },
+        );
     }
 
     /**
