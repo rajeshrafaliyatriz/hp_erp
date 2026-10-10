@@ -661,6 +661,17 @@ Route::get('/competency/employee-profiles/{id}/career-path', [EmployeeCompetency
 /* SLICE 1 item 7 - THE GAP. Read-only, so no profile gate: an employee may read
  * their OWN gap (competencySubject), anyone else needs an elevated role_key. */
 Route::get('/competency/gap', [\App\Http\Controllers\Api\Competency\CompetencyGapController::class, 'show']);
+Route::get('/competency/gap/narrative', [\App\Http\Controllers\Api\Competency\CompetencyGapController::class, 'narrative']);
+
+/* "Which employees best fit this role?" - new feature, elevated-role only (see
+ * RoleFitController::rank() for why: it reads many employees' ratings at once). */
+Route::get('/competency/role-fit', [\App\Http\Controllers\Api\Competency\RoleFitController::class, 'rank']);
+
+/* "Summarize this employee's capability profile" - own profile, or an elevated
+ * role, same gate as /competency/gap (competencySubject). Built on
+ * competency_kasba_rating (the active system), not the legacy skill matrix
+ * EmployeeCompetencyProfileController reads. */
+Route::get('/competency/profile/{id}', [\App\Http\Controllers\Api\Competency\CompetencyProfileController::class, 'show']);
 
 /* SLICE 1 item 3 - what a job role REQUIRES. jobrole_competency_map holds NO
  * text key, which is what makes the rename proof possible. Writes are HR/Admin. */
@@ -794,6 +805,7 @@ Route::put('/competency/development-plans/{id}', [CompetencyDevelopmentPlanContr
 Route::get('/competency/development-plans/{id}/gaps', [CompetencyDevelopmentPlanController::class, 'gaps'])->whereNumber('id');
 Route::get('/competency/development-plans/{id}/history', [CompetencyDevelopmentPlanController::class, 'history'])->whereNumber('id');
 Route::get('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'actions'])->whereNumber('id');
+Route::get('/competency/development-plans/{id}/narrative', [CompetencyDevelopmentPlanController::class, 'narrative'])->whereNumber('id');
 Route::post('/competency/development-plans/{id}/actions', [CompetencyDevelopmentPlanController::class, 'storeAction'])->whereNumber('id')->middleware('subject:people_managers');
 Route::put('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'updateAction'])->whereNumber('id')->whereNumber('actionId')->middleware('subject:people_managers');
 Route::delete('/competency/development-plans/{id}/actions/{actionId}', [CompetencyDevelopmentPlanController::class, 'destroyAction'])->whereNumber('id')->whereNumber('actionId')->middleware('subject:people_managers');
@@ -2504,6 +2516,7 @@ Route::get('/performance/reviews/board', [PerformanceReviewController::class, 'b
 Route::post('/performance/reviews/bulk', [PerformanceReviewController::class, 'bulk'])->middleware('profile:admin,hr');
 Route::get('/performance/reviews', [PerformanceReviewController::class, 'index']);
 Route::get('/performance/reviews/{id}', [PerformanceReviewController::class, 'show'])->whereNumber('id');
+Route::get('/performance/reviews/{id}/narrative', [PerformanceReviewController::class, 'narrative'])->whereNumber('id');
 Route::put('/performance/reviews/{id}', [PerformanceReviewController::class, 'update'])->whereNumber('id');
 Route::post('/performance/reviews/{id}/advance', [PerformanceReviewController::class, 'advance'])->whereNumber('id')->middleware('profile:admin,hr,manager');
 // Nudging somebody is a manager act - nobody reminds themselves. Matches the
@@ -3537,6 +3550,38 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
     Route::get('/ingestion/findings/{id}/opportunity-matches', [$intel, 'matchFinding'])->whereNumber('id');
     Route::get('/opportunity-matches', [$intel, 'listMatches']);
     Route::post('/matches/action', [$intel, 'actOnMatch']);
+});
+
+/*
+ * GTM & Revenue workspace - /api/gtm.
+ *
+ * Reads: administrator + executive. Writes: administrator only. The tenant always comes
+ * from the token (ResolvesApiIdentity); another organisation's record answers 404.
+ * Literal paths are declared before `/{id}` and every `{id}` is whereNumber.
+ */
+Route::prefix('gtm')->middleware('api.token')->group(function () {
+    $acc = \App\Http\Controllers\Api\Gtm\AccountController::class;
+    $con = \App\Http\Controllers\Api\Gtm\ContactController::class;
+    $ovr = \App\Http\Controllers\Api\Gtm\OverviewController::class;
+
+    Route::middleware('profile:admin,executive')->group(function () use ($acc, $ovr) {
+        Route::get('/overview', [$ovr, 'show']);
+        Route::get('/accounts', [$acc, 'index']);
+        Route::get('/accounts/candidates', [$acc, 'candidates']);
+        Route::get('/accounts/{id}', [$acc, 'show'])->whereNumber('id');
+    });
+
+    Route::middleware('profile:admin')->group(function () use ($acc, $con) {
+        Route::post('/accounts', [$acc, 'store']);
+        Route::post('/accounts/from-company/{companyId}', [$acc, 'fromCompany'])->whereNumber('companyId');
+        Route::patch('/accounts/{id}', [$acc, 'update'])->whereNumber('id');
+        Route::delete('/accounts/{id}', [$acc, 'destroy'])->whereNumber('id');
+
+        Route::post('/accounts/{accountId}/contacts', [$con, 'store'])->whereNumber('accountId');
+        Route::post('/accounts/{accountId}/activities', [$con, 'logActivity'])->whereNumber('accountId');
+        Route::patch('/contacts/{id}', [$con, 'update'])->whereNumber('id');
+        Route::delete('/contacts/{id}', [$con, 'destroy'])->whereNumber('id');
+    });
 });
 
 /*

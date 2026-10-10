@@ -338,6 +338,8 @@ Route::prefix(config('ai.route_prefix', 'api/ai'))
             // guardrail check it runs (records an audit row for the caller).
             Route::get('/modules/{module}/examples', [AiModuleExampleController::class, 'index'])
                 ->where('module', '[a-z0-9_\-]+');
+            Route::get('/modules/{module}/page-examples', [AiModuleExampleController::class, 'pages'])
+                ->where('module', '[a-z0-9_\-]+');
             Route::post('/modules/{module}/examples/guardrail-check', [AiModuleExampleController::class, 'guardrailCheck'])
                 ->where('module', '[a-z0-9_\-]+');
             Route::get('/modules/{module}/models', [AiModuleModelController::class, 'index'])

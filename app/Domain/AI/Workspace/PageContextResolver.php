@@ -4,6 +4,7 @@ namespace App\Domain\AI\Workspace;
 
 use App\Domain\AI\Reports\ModuleDataSourceCatalog;
 use App\Domain\AI\Support\SchemaCache;
+use App\Domain\AI\Examples\Sources\SourceRegistry;
 use App\Services\Ai\AiRequestScope;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -125,7 +126,7 @@ if ($nearest === null || $root === null) {
                 'root_label' => (string) $root->label,
             ],
             'page' => $pageInfo,
-            'suggestions' => $onPage !== [] ? $onPage : $this->suggestions($scope, (string) $nearest->module_key, (string) $root->module_key, $pageInfo['breadcrumb']),
+            'suggestions' => $onPage !== [] ? $onPage : $this->suggestions($scope, (string) $nearest->module_key, (string) $root->module_key, $pageInfo['breadcrumb'], $pageInfo['route']),
             'scope' => $onPage !== [] ? 'page' : 'module',
         ];
     }
@@ -249,7 +250,7 @@ if ($nearest === null || $root === null) {
      * @param  array<int, string>  $breadcrumb
      * @return array<int, array{id:string,label:string,prompt:string,origin:string,data_source:?string}>
      */
-    private function suggestions(AiRequestScope $scope, string $moduleKey, string $rootKey, array $breadcrumb): array
+    private function suggestions(AiRequestScope $scope, string $moduleKey, string $rootKey, array $breadcrumb, ?string $route = null): array
     {
         $out = [];
         $seen = [];
@@ -273,7 +274,11 @@ if ($nearest === null || $root === null) {
         // ONLY the page's own module's sources. A screen with its own module (Course Builder) is
         // not offered its sibling screens' questions; a page directly under a top-level module
         // (Organization Profile) gets that module's sources, which include its screens'.
-        $sources = $this->narrow($this->sources->forModule($moduleKey), $breadcrumb);
+        // A page the module has declared (its `pages()` map) uses ITS OWN sources - exactly the data behind that
+        // page. Only an undeclared page falls back to guessing from the words of its breadcrumb.
+        $declared = $route === null ? [] : (array) (SourceRegistry::pages()[$route]['sources'] ?? []);
+        $mapped = array_values(array_filter(array_map(fn (string $name) => $this->sources->describe($name), $declared)));
+        $sources = $mapped !== [] ? $mapped : $this->narrow($this->sources->forModule($moduleKey), $breadcrumb);
 
         foreach ($sources as $source) {
             foreach ($this->questions->forSource($source) as $index => $question) {

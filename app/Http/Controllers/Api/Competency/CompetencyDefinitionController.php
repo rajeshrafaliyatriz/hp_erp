@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Services\Graph\GraphVocabulary;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -53,7 +54,8 @@ class CompetencyDefinitionController extends Controller
 {
     use ResolvesCompetencyContext;
 
-    private const KASBA = ['skill', 'knowledge', 'ability', 'attitude', 'behaviour'];
+    /** Phase 7.2 — the canonical five, now declared once in GraphVocabulary rather than here. */
+    private const KASBA = GraphVocabulary::KASBA_TYPES;
 
     /**
      * The canonical table behind each dimension - what an `item_id` must exist in,
@@ -289,6 +291,23 @@ class CompetencyDefinitionController extends Controller
 
             return $id;
         });
+
+        // Graph projection needs to hear about this - after the transaction
+        // commits, not inside it, same as every other EventRecorder call
+        // site: the event is a claim about what the rows now look like.
+        app(\App\Services\Events\EventRecorder::class)->record(
+            'competency.changed',
+            (int) $sid,
+            'competency',
+            (int) $competencyId,
+            $actor !== null ? (int) $actor : null,
+            [
+                'code' => $request->input('code'),
+                'name' => $request->input('name'),
+                'competency_type' => $request->input('competency_type'),
+                'items' => $request->input('items'),
+            ]
+        );
 
         return response()->json([
             'status'  => 1,

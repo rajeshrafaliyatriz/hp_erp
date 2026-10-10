@@ -215,7 +215,7 @@ final class ModuleDataSourceCatalog
     {
         $limitArg = self::arg('limit', 'integer', 'Maximum rows to return (1–500, default 200).');
 
-        return [
+        $core = [
             [
                 'name' => 'lms.course_builder',
                 'module' => 'lms_course_builder',
@@ -724,5 +724,8 @@ final class ModuleDataSourceCatalog
                 },
             ],
         ];
+
+        // Every module's own sources (one group per module), beside the ones above.
+        return array_merge($core, \App\Domain\AI\Examples\Sources\SourceRegistry::definitions());
     }
 }

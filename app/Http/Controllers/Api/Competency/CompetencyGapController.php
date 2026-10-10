@@ -7,9 +7,11 @@ use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
 use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Services\Competency\ProficiencyService;
+use App\Services\DeepSeekService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Throwable;
 
 /**
  * SLICE 1, ITEM 7 — THE GAP. Required minus measured, resolved BY KEY.
@@ -46,8 +48,10 @@ class CompetencyGapController extends Controller
     // The ONE role resolver - two columns, one answer. See show().
     use ResolvesEmployeeJobRole;
 
-    public function __construct(private ProficiencyService $proficiency)
-    {
+    public function __construct(
+        private ProficiencyService $proficiency,
+        private DeepSeekService $ai
+    ) {
     }
 
     public function show(Request $request)
@@ -166,5 +170,103 @@ class CompetencyGapController extends Controller
                 'coverage' => $gap['coverage'],
             ],
         ]);
+    }
+
+    /**
+     * GET /api/competency/gap/narrative?user_id=&jobrole_id=
+     *
+     * One short paragraph for a manager, grounded only in show()'s own
+     * numbers - calls show() rather than recomputing anything, so the two
+     * endpoints can never disagree about what the gap actually is. Same
+     * retrieval/generation split as the K-12 Graph RAG reference
+     * implementation: the gap computation above is the retrieval step, this
+     * is the generation step, and a refusal/empty/unconfigured-model case
+     * is a clean failure, never a fabricated narrative.
+     */
+    public function narrative(Request $request)
+    {
+        $gapResponse = $this->show($request);
+        $gapPayload = json_decode((string) $gapResponse->getContent(), true) ?: [];
+
+        if (($gapPayload['status'] ?? 0) !== 1) {
+            return $gapResponse; // same refusal/error show() already produced
+        }
+
+        $data = $gapPayload['data'];
+
+        if (($data['competencies'] ?? []) === []) {
+            return response()->json([
+                'status' => 1,
+                'data'   => $data + ['narrative' => null],
+            ]);
+        }
+
+        if (!$this->ai->isConfigured()) {
+            return response()->json(['status' => 0, 'message' => 'No AI model is configured.'], 503);
+        }
+
+        try {
+            $narrative = $this->ai->chat([
+                ['role' => 'system', 'content' => $this->narrativeSystemPrompt()],
+                ['role' => 'user', 'content' => $this->narrativeUserPrompt($data)],
+            ]);
+        } catch (Throwable $e) {
+            return response()->json(['status' => 0, 'message' => 'The narrative could not be generated.'], 502);
+        }
+
+        return response()->json([
+            'status' => 1,
+            'data'   => $data + ['narrative' => trim($narrative)],
+        ]);
+    }
+
+    private function narrativeSystemPrompt(): string
+    {
+        return 'You are summarising one employee\'s competency gap report for their manager. Use only the '
+            . 'facts given in the message - never invent a competency name, proficiency figure, or count that '
+            . 'is not present in the input. Call out mandatory items below the required level first, since '
+            . 'those are the most consequential finding; only mention a non-mandatory gap if nothing mandatory '
+            . 'is short. If every competency is met or unmeasured, say so plainly rather than inventing a '
+            . 'problem. Keep the answer to 3-5 sentences of plain language, addressed to the manager.';
+    }
+
+    /** @param array{competencies:array,mandatory_below_required:array,coverage:array} $data */
+    private function narrativeUserPrompt(array $data): string
+    {
+        $lines = [];
+
+        foreach ($data['competencies'] as $c) {
+            $lines[] = sprintf(
+                '- %s (%s): required %d, %s%s',
+                $c['competency_name'],
+                $c['competency_code'] ?: 'no code',
+                $c['required_proficiency'],
+                $c['state'],
+                $c['measured_level'] !== null ? sprintf(', measured %.1f', $c['measured_level']) : ''
+            );
+        }
+
+        if ($data['mandatory_below_required'] !== []) {
+            $lines[] = '';
+            $lines[] = 'Mandatory items below required level:';
+            foreach ($data['mandatory_below_required'] as $m) {
+                $lines[] = sprintf(
+                    '- %s / %s: rated %d, required %d',
+                    $m['competency_name'],
+                    $m['kasba_type'],
+                    $m['rating'],
+                    $m['required']
+                );
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = sprintf(
+            'Coverage: %d competencies required, %d unmeasured.',
+            $data['coverage']['competencies_required'],
+            $data['coverage']['competencies_unmeasured']
+        );
+
+        return implode("\n", $lines);
     }
 }

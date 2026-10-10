@@ -30,14 +30,14 @@ return new class extends Migration {
             $table->string('module_key', 120)->nullable()->index();
             $table->string('action_key', 120);
             $table->unsignedBigInteger('requested_by')->index();
-            $table->json('payload');
-            $table->json('preview')->nullable();
+            $table->longText('payload');
+            $table->longText('preview')->nullable();
             $table->string('status', 20)->default('pending')->index();
             $table->unsignedBigInteger('decided_by')->nullable();
             $table->timestamp('decided_at')->nullable();
             $table->string('decision_note', 2000)->nullable();
             $table->timestamp('executed_at')->nullable();
-            $table->json('result')->nullable();
+            $table->longText('result')->nullable();
             $table->timestamps();
 
             $table->index(['sub_institute_id', 'status']);

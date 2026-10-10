@@ -194,6 +194,20 @@ class RoleCompetencyMapController extends Controller
             return ['written' => $n, 'removed' => $removed];
         });
 
+        // Graph projection needs to hear about this. This is a full-replace
+        // operation (sync semantics, not append - see above), so the payload
+        // carries the COMPLETE current list: Neo4jProjector removes any
+        // REQUIRES_COMPETENCY edge not in it, the same way this method
+        // deletes any row not in it.
+        app(\App\Services\Events\EventRecorder::class)->record(
+            'jobrole_competency_map.changed',
+            (int) $sid,
+            'jobrole',
+            (int) $jobroleId,
+            $actor !== null ? (int) $actor : null,
+            ['items' => $request->input('items')]
+        );
+
         return response()->json([
             'status'  => 1,
             'message' => 'Requirements saved.',

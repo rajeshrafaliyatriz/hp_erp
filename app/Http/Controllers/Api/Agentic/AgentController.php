@@ -625,10 +625,18 @@ class AgentController extends Controller
 
         // An http agent without a URL would fail on every run, so the mode
         // falls back rather than being saved in a state that cannot work.
+        // An http agent whose URL resolves to a private/loopback/metadata
+        // address is worse than one that merely fails - RunController's
+        // dispatch sends the tenant's decrypted saved secrets to this URL,
+        // so an inward-resolving host is a live exfiltration path. Same
+        // fallback as the missing-URL case: not saved in a state that can run.
         if (($data['execution_mode'] ?? null) === 'http') {
             $url = $data['endpoint_url'] ?? null;
             if (!$url) {
                 $data['execution_mode'] = 'none';
+            } elseif (\App\Support\OutboundUrlGuard::reasonUnsafe($url) !== null) {
+                $data['execution_mode'] = 'none';
+                $data['endpoint_url'] = null;
             }
         }
 
