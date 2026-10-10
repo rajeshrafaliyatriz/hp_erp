@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AI\ActionRequestController;
+use App\Http\Controllers\AI\AiChatUsageController;
 use App\Http\Controllers\AI\AiConfigurationController;
 use App\Http\Controllers\AI\AiGenerationController;
 use App\Http\Controllers\AI\AiModuleController;
@@ -381,4 +382,18 @@ Route::prefix(config('ai.route_prefix', 'api/ai'))
             */
             Route::post('/generate', [AiGenerationController::class, 'generate']);
         });
+    });
+
+/*
+| What the frontend chat route (g2gv0 app/api/ai/chat) needs from the AI layer: report its
+| usage so the Usage panel sees it, and learn which Gemini model an administrator has
+| explicitly chosen. Open to any signed-in user (every chat user produces usage); tenant and
+| user come from the token, never the body. Same authentication, rate limit and scope stack
+| as the rest of /api/ai.
+*/
+Route::prefix(config('ai.route_prefix', 'api/ai'))
+    ->middleware(['api', AiAuth::class, AiRateLimit::class, AiContextHydrator::class])
+    ->group(function () {
+        Route::post('/chat-usage', [AiChatUsageController::class, 'report']);
+        Route::get('/chat-model', [AiChatUsageController::class, 'model']);
     });

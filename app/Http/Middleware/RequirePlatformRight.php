@@ -71,7 +71,7 @@ class RequirePlatformRight
 {
     private const ACTIONS = ['view', 'add', 'edit', 'delete'];
 
-    private const DECENTRALIZED_MODULES = ['organization', 'hrms', 'talent', 'lms', 'competency', 'task'];
+    private const DECENTRALIZED_MODULES = ['organization', 'hrms', 'talent', 'lms', 'competency', 'task', 'crm'];
 
     public function handle(Request $request, Closure $next, string $linkTemplate, string $action = 'view'): Response
     {

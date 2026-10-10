@@ -3,16 +3,37 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CrmContactController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmBulkActions;
+    use HasCrmDuplicateDetection;
+    use HasCrmMerge;
+    use HasCrmExport;
+
+    /** @var array<string, string> db column => CSV header, in export column order. */
+    private const EXPORT_COLUMNS = [
+        'salutation' => 'Salutation', 'first_name' => 'First Name', 'last_name' => 'Last Name',
+        'title' => 'Title', 'department' => 'Department', 'email' => 'Email',
+        'secondary_email' => 'Secondary Email', 'phone' => 'Phone', 'mobile' => 'Mobile',
+        'home_phone' => 'Home Phone', 'birthday' => 'Birthday', 'lead_source' => 'Lead Source',
+        'mailing_street' => 'Mailing Street', 'mailing_city' => 'Mailing City',
+        'mailing_state' => 'Mailing State', 'mailing_code' => 'Mailing Postal Code',
+        'mailing_country' => 'Mailing Country', 'description' => 'Description',
+        'organization_id' => 'Organization ID', 'assigned_to' => 'Assigned To (user id)',
+    ];
 
     public function index(Request $request): JsonResponse
     {
@@ -171,6 +192,177 @@ class CrmContactController extends Controller
         ]);
 
         return response()->json(['status' => 1, 'message' => 'Contact moved to Recycle Bin.']);
+    }
+
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkDeleteRows($request, 'crm_contacts', $identity['sub_institute_id'], $identity['user_id'], 'Contact');
+    }
+
+    public function bulkAssign(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkAssignRows($request, 'crm_contacts', $identity['sub_institute_id'], $identity['user_id'], 'Contact');
+    }
+
+    /**
+     * Possible duplicates: an exact (normalized) email match, and a same
+     * first-and-last-name match for contacts with no email at all.
+     */
+    public function duplicates(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = $identity['sub_institute_id'];
+        $resource = fn ($row) => $this->resource($row);
+
+        $groups = array_merge(
+            $this->duplicateGroups('crm_contacts', $tenantId, 'LOWER(TRIM(email))', ['email'], 'Same email', $resource),
+            $this->duplicateGroups('crm_contacts', $tenantId, "CONCAT(LOWER(TRIM(first_name)), '|', LOWER(TRIM(last_name)))", ['first_name', 'last_name'], 'Same name', $resource),
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Possible duplicate contacts.', 'data' => $groups]);
+    }
+
+    public function merge(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->mergeRows(
+            $request, 'crm_contacts', $identity['sub_institute_id'], $identity['user_id'], 'Contact',
+            repoint: function (int $fromId, int $toId) {
+                $this->repointCampaignTargets('contact', $fromId, $toId);
+
+                // If the survivor itself reported to the duplicate, clear
+                // that FIRST - otherwise the blanket re-point just below
+                // would match the survivor's own row too and leave it
+                // reporting to itself (where('reports_to_id', $fromId) stops
+                // matching it the moment that update runs, so this guard
+                // must go first).
+                DB::table('crm_contacts')->where('id', $toId)->where('reports_to_id', $fromId)->update(['reports_to_id' => null]);
+
+                // Everyone else who reported to the duplicate now reports to
+                // the survivor instead.
+                DB::table('crm_contacts')->where('reports_to_id', $fromId)->update(['reports_to_id' => $toId]);
+            },
+        );
+    }
+
+    /** Exports the same rows index() would list (search applied). */
+    public function export(Request $request): StreamedResponse|JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $query = DB::table('crm_contacts')
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->whereNull('deleted_at');
+
+        if ($search = trim((string) $request->input('search', ''))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        return $this->exportCsv($query, self::EXPORT_COLUMNS, 'contacts.csv');
+    }
+
+    /**
+     * CSV import. A missing/invalid owner rejects the row (no fallback), and
+     * an `organizationId` that doesn't resolve to a real, non-deleted
+     * organization in this tenant is also rejected rather than silently
+     * creating an orphaned reference or auto-creating a new organization -
+     * a CSV is far more likely to carry a typo'd id than the picker UI ever
+     * would.
+     */
+    public function import(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'rows' => 'required|array|min:1|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $created = 0;
+        $results = [];
+
+        foreach ($request->input('rows') as $index => $row) {
+            $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
+
+            $rowValidator = Validator::make($rowRequest->all(), [
+                'lastName' => 'required|string|max:191',
+                'email' => 'nullable|email|max:191',
+                'assignedTo' => 'required|integer',
+                'organizationId' => 'nullable|integer',
+            ]);
+
+            if ($rowValidator->fails()) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $rowValidator->errors()->first()];
+                continue;
+            }
+
+            if ($rowRequest->filled('organizationId')) {
+                $organizationExists = DB::table('crm_organizations')
+                    ->where('id', (int) $rowRequest->input('organizationId'))
+                    ->where('sub_institute_id', $identity['sub_institute_id'])
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                if (! $organizationExists) {
+                    $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => 'Organization ID not found.'];
+                    continue;
+                }
+            }
+
+            $data = $this->payload($rowRequest);
+            $data['contact_no'] = 'CON-' . Str::upper(Str::random(8));
+            $data['sub_institute_id'] = $identity['sub_institute_id'];
+            $data['created_by'] = $identity['user_id'];
+            $data['created_at'] = now();
+            $data['updated_at'] = now();
+
+            DB::table('crm_contacts')->insert($data);
+            $created++;
+            $results[] = ['row' => $index + 1, 'ok' => true];
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => $created === count($results) ? "{$created} contact(s) imported." : "{$created} of " . count($results) . ' row(s) imported.',
+            'data' => ['created' => $created, 'results' => $results],
+        ]);
     }
 
     public function transferOwnership(Request $request, int $id): JsonResponse

@@ -132,7 +132,14 @@ class RecruitmentAssessmentGenerator
         $paper = $this->ai->chatJson([
             ['role' => 'system', 'content' => $this->systemPrompt()],
             ['role' => 'user', 'content' => $this->prompt($role, $material, $types, $blueprint)],
-        ], ['json' => true, 'temperature' => 0.4, 'max_tokens' => 8000]);
+        ], [
+            'json' => true, 'temperature' => 0.4, 'max_tokens' => 8000,
+            // Metered so the AI & Intelligence Usage panel sees this spend, and the tenant's AI Stack
+            // choice for assessments applies when it names a verified model.
+            'meter' => ['module' => 'assessment_ai', 'institute' => $tenantId, 'related_type' => 'recruitment_assessment', 'user_id' => $actorId],
+            'model' => app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class)
+                ->modelFor('assessment_ai', $tenantId, ['talent_recruitment']),
+        ]);
 
         $questions = $this->acceptable($paper, (int) $blueprint->total_marks);
 

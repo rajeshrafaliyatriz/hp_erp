@@ -92,4 +92,27 @@ return [
     */
 
     'request_timeout' => (int) env('DEEPSEEK_REQUEST_TIMEOUT', 120),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Models a module's AI Stack binding may select
+    |--------------------------------------------------------------------------
+    |
+    | The ai_models catalogue is admin-editable and is offered on every module's
+    | Models tab, including entries these generators were never tuned for (for
+    | example `deepseek-reasoner`, which is present in the catalogue). A module
+    | binding is only honoured by ModuleDeepSeekModel when the model is listed
+    | here; anything else is ignored and the default above is used instead.
+    |
+    | The default model is always allowed. Add further, individually verified
+    | models with a comma-separated DEEPSEEK_ALLOWED_MODELS.
+    */
+
+    'allowed_models' => array_values(array_unique(array_filter(array_map(
+        'trim',
+        array_merge(
+            [env('DEEPSEEK_MODEL', 'deepseek-flash')],
+            explode(',', (string) env('DEEPSEEK_ALLOWED_MODELS', ''))
+        )
+    )))),
 ];

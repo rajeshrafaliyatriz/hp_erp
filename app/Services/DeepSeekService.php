@@ -142,6 +142,81 @@ class DeepSeekService
      */
     public function chat(array $messages, array $options = []): string
     {
+        $started = microtime(true);
+
+        try {
+            $content = $this->chatCore($messages, $options);
+        } catch (\Throwable $e) {
+            $this->meter($options, $started, $e);
+
+            throw $e;
+        }
+
+        $this->meter($options, $started, null);
+
+        return $content;
+    }
+
+    /**
+     * Record this call in ai_usage_events when the caller says who it is for.
+     *
+     * Pass `meter => ['module' => <AiModuleRegistry key>, 'institute' => <tenant>,
+     * 'related_type' => ..., 'user_id' => ...]`. Without it nothing is recorded, so
+     * callers that predate this are unchanged. Before, every DeepSeek generator spent
+     * money the AI & Intelligence Usage panel could not see, because only
+     * AiModelClient wrote usage events. Failure here never costs the caller its answer.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    private function meter(array $options, float $started, ?\Throwable $failure): void
+    {
+        $meta = $options['meter'] ?? null;
+
+        if (!is_array($meta) || empty($meta['module'])) {
+            return;
+        }
+
+        try {
+            $usage = $this->lastUsage ?? [];
+            $refused = $failure instanceof DeepSeekBudgetException;
+
+            app(\App\Domain\AI\Support\AiUsageMeter::class)->record(
+                (string) $meta['module'],
+                new \App\Domain\AI\Configuration\ResolvedAiConfiguration(
+                    provider: 'deepseek',
+                    model: (string) ($usage['model'] ?? $options['model'] ?? $this->model()),
+                    apiKey: null,
+                    source: 'env',
+                    keyId: null,
+                    scope: 'config',
+                    maxOutputTokens: null,
+                    alternates: [],
+                ),
+                $meta['institute'] ?? null,
+                (int) ($usage['prompt_tokens'] ?? 0),
+                (int) ($usage['completion_tokens'] ?? 0),
+                (int) round((microtime(true) - $started) * 1000),
+                [
+                    'outcome' => $failure === null
+                        ? \App\Domain\AI\Support\AiUsageMeter::OUTCOME_SUCCESS
+                        : ($refused
+                            ? \App\Domain\AI\Support\AiUsageMeter::OUTCOME_REFUSED
+                            : \App\Domain\AI\Support\AiUsageMeter::OUTCOME_FAILED),
+                    'error' => $failure?->getMessage(),
+                    'finish_reason' => $usage['finish_reason'] ?? null,
+                    'related_type' => $meta['related_type'] ?? null,
+                    'related_id' => $meta['related_id'] ?? null,
+                    'user_id' => $meta['user_id'] ?? null,
+                ],
+            );
+        } catch (\Throwable $e) {
+            Log::warning('DeepSeek usage could not be metered', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /** The request loop. Wrapped by chat() so every exit is metered once. */
+    private function chatCore(array $messages, array $options = []): string
+    {
         if (!$this->isConfigured()) {
             throw new RuntimeException(
                 'DeepSeek is not configured. Set DEEPSEEK_API_KEY in the environment.'

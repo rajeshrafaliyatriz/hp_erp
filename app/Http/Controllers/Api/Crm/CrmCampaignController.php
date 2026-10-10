@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -10,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Campaigns — the legacy CRM's Marketing module, last of the three target
@@ -23,12 +26,30 @@ use Illuminate\Support\Str;
 class CrmCampaignController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmBulkActions;
+    use HasCrmExport;
+
+    /** @var array<string, string> db column => CSV header, in export column order. */
+    private const EXPORT_COLUMNS = [
+        'name' => 'Name', 'campaign_type' => 'Type', 'campaign_status' => 'Status',
+        'expected_revenue' => 'Expected Revenue', 'budget_cost' => 'Budget Cost',
+        'actual_cost' => 'Actual Cost', 'sponsor' => 'Sponsor', 'target_audience' => 'Target Audience',
+        'closing_date' => 'Closing Date', 'description' => 'Description',
+        'assigned_to' => 'Assigned To (user id)',
+    ];
 
     /** @var array<string, string> */
     private const TARGET_TABLES = [
         'lead' => 'crm_leads',
         'contact' => 'crm_contacts',
         'organization' => 'crm_organizations',
+    ];
+
+    /** Singular targetType -> crm_saved_views.module (that table's own plural convention). */
+    private const TARGET_MODULES = [
+        'lead' => 'leads',
+        'contact' => 'contacts',
+        'organization' => 'organizations',
     ];
 
     public function index(Request $request): JsonResponse
@@ -168,6 +189,96 @@ class CrmCampaignController extends Controller
         return response()->json(['status' => 1, 'message' => 'Campaign moved to Recycle Bin.']);
     }
 
+    public function bulkDelete(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkDeleteRows($request, 'crm_campaigns', $identity['sub_institute_id'], $identity['user_id'], 'Campaign');
+    }
+
+    public function bulkAssign(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        return $this->bulkAssignRows($request, 'crm_campaigns', $identity['sub_institute_id'], $identity['user_id'], 'Campaign');
+    }
+
+    /** Exports the same rows index() would list (search applied). */
+    public function export(Request $request): StreamedResponse|JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $query = DB::table('crm_campaigns')
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->whereNull('deleted_at');
+
+        if ($search = trim((string) $request->input('search', ''))) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+
+        return $this->exportCsv($query, self::EXPORT_COLUMNS, 'campaigns.csv');
+    }
+
+    /** CSV import. A missing/invalid owner rejects the row (no fallback) - same rule store() already applies. */
+    public function import(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $validator = Validator::make($request->all(), [
+            'rows' => 'required|array|min:1|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $created = 0;
+        $results = [];
+
+        foreach ($request->input('rows') as $index => $row) {
+            $rowRequest = Request::create('/', 'POST', is_array($row) ? $row : []);
+            $rowValidator = Validator::make($rowRequest->all(), $this->validationRules());
+
+            if ($rowValidator->fails()) {
+                $results[] = ['row' => $index + 1, 'ok' => false, 'reason' => $rowValidator->errors()->first()];
+                continue;
+            }
+
+            $data = $this->payload($rowRequest);
+            $data['campaign_no'] = 'CAM-' . Str::upper(Str::random(8));
+            $data['sub_institute_id'] = $identity['sub_institute_id'];
+            $data['created_by'] = $identity['user_id'];
+            $data['created_at'] = now();
+            $data['updated_at'] = now();
+
+            DB::table('crm_campaigns')->insert($data);
+            $created++;
+            $results[] = ['row' => $index + 1, 'ok' => true];
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => $created === count($results) ? "{$created} campaign(s) imported." : "{$created} of " . count($results) . ' row(s) imported.',
+            'data' => ['created' => $created, 'results' => $results],
+        ]);
+    }
+
     /**
      * Add one target (Lead/Contact/Organization) to this campaign.
      *
@@ -300,6 +411,7 @@ class CrmCampaignController extends Controller
         $validator = Validator::make($request->all(), [
             'targetType' => 'required|in:lead,contact,organization',
             'search' => 'nullable|string|max:191',
+            'savedViewId' => 'nullable|integer|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -308,6 +420,30 @@ class CrmCampaignController extends Controller
 
         $targetType = $request->input('targetType');
         $search = trim((string) $request->input('search', ''));
+
+        /*
+         * A saved view (built for the list screens - search/sort only, see
+         * crm_saved_views) overrides the free-text search when named - its
+         * own stored search term IS the filter criterion here. sortKey/
+         * sortAsc are meaningless for "which rows to add as targets", so
+         * only the search condition is read out of it.
+         */
+        if ($request->filled('savedViewId')) {
+            $module = self::TARGET_MODULES[$targetType];
+
+            $savedView = DB::table('crm_saved_views')
+                ->where('id', (int) $request->input('savedViewId'))
+                ->where('sub_institute_id', $identity['sub_institute_id'])
+                ->where('module', $module)
+                ->first();
+
+            if (! $savedView) {
+                return response()->json(['status' => 0, 'message' => 'Saved view not found.'], 404);
+            }
+
+            $conditions = json_decode($savedView->conditions, true) ?? [];
+            $search = trim((string) ($conditions['search'] ?? ''));
+        }
 
         $added = 0;
         $alreadyPresent = 0;

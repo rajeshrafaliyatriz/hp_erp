@@ -6,6 +6,7 @@ use App\Domain\Gtm\GtmAccount;
 use App\Domain\Gtm\GtmActivity;
 use App\Domain\Gtm\GtmAudit;
 use App\Domain\Gtm\GtmContact;
+use App\Domain\Gtm\IcpScorer;
 use App\Domain\Signals\Opportunities\Company;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
@@ -289,6 +290,53 @@ class AccountController extends Controller
         GtmAudit::record('gtm.account.updated', $tenant, 'gtm_accounts', $account->id, $identity['user_id'], ['changed' => array_keys($data)]);
 
         return response()->json(['status' => 1, 'data' => ['account' => $account->fresh()]]);
+    }
+
+    /** Score this account against the organisation's own ICP. The result is an AI ESTIMATE. */
+    public function scoreIcp(Request $request, int $id, IcpScorer $scorer): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $tenant = $identity['sub_institute_id'];
+
+        $account = GtmAccount::where('sub_institute_id', $tenant)->find($id);
+        if (! $account) {
+            return response()->json(['status' => 0, 'message' => 'Account not found'], 404);
+        }
+
+        try {
+            $result = $scorer->score($account, $identity['user_id']);
+        } catch (\DomainException $e) {
+            return response()->json(['status' => 0, 'code' => 'icp_not_defined', 'message' => $e->getMessage()], 422);
+        } catch (\App\Domain\AI\Support\AiNotConfiguredException $e) {
+            return response()->json(['status' => 0, 'code' => 'ai_not_configured', 'message' => $e->getMessage()], 503);
+        } catch (\App\Domain\AI\Support\AiQuotaExceededException|\App\Domain\AI\Support\AiCredentialsExhaustedException $e) {
+            return response()->json(['status' => 0, 'code' => 'ai_unavailable', 'message' => $e->getMessage()], 503);
+        } catch (\App\Domain\AI\Support\AiProviderHttpException $e) {
+            report($e);
+            if ($e->httpStatus === 429) {
+                return response()->json(['status' => 0, 'code' => 'ai_rate_limited', 'message' => 'The AI provider\'s quota or rate limit has been reached. Nothing was changed - try again later.'], 503);
+            }
+
+            return $e->httpStatus >= 500
+                ? response()->json(['status' => 0, 'code' => 'ai_provider_busy', 'message' => 'The AI provider is temporarily overloaded. Nothing was changed - please try again in a minute.'], 503)
+                : response()->json(['status' => 0, 'code' => 'ai_error', 'message' => 'The AI provider rejected this request. Nothing was changed.'], 502);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['status' => 0, 'code' => 'ai_error', 'message' => 'The AI provider could not score this account. Nothing was changed.'], 502);
+        }
+
+        GtmActivity::create([
+            'sub_institute_id' => $tenant, 'account_id' => $account->id, 'type' => 'system',
+            'subject' => 'ICP fit scored: '.($result['score'] ?? 'not enough data'), 'occurred_at' => now(), 'user_id' => $identity['user_id'],
+            'metadata' => ['analysis_id' => $result['analysis_id']],
+        ]);
+        GtmAudit::record('gtm.account.icp_scored', $tenant, 'gtm_accounts', $account->id, $identity['user_id'], ['score' => $result['score'], 'analysis_id' => $result['analysis_id']]);
+
+        return response()->json(['status' => 1, 'data' => ['account' => $account->fresh(), 'score' => $result['score'], 'basis' => $result['basis']]]);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
