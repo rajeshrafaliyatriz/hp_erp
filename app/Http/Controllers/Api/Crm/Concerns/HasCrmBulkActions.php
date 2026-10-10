@@ -64,12 +64,22 @@ trait HasCrmBulkActions
         return $this->bulkResponse($results, "{$label}s moved to Recycle Bin.");
     }
 
+    /**
+     * @param (Closure(int $id, int $assignedTo): int)|null $afterEach Runs
+     *   after a successful reassignment, for a module that needs to cascade
+     *   the new owner onto related records (Organizations -> their own
+     *   Contacts, opt-in via the request same as the single-record transfer
+     *   endpoint). Returns how many related rows it touched, summed across
+     *   the whole batch into the response message - mirrors
+     *   CrmOrganizationController::transferOwnership()'s own message shape.
+     */
     protected function bulkAssignRows(
         Request $request,
         string $table,
         int $tenantId,
         int $userId,
         string $label,
+        ?Closure $afterEach = null,
     ): JsonResponse {
         $ids = $this->validatedBulkIds($request);
 
@@ -85,6 +95,7 @@ trait HasCrmBulkActions
 
         $assignedTo = (int) $request->input('assignedTo');
         $results = [];
+        $cascaded = 0;
 
         foreach ($ids as $id) {
             $exists = DB::table($table)
@@ -104,10 +115,16 @@ trait HasCrmBulkActions
                 'updated_at' => now(),
             ]);
 
+            if ($afterEach) {
+                $cascaded += $afterEach($id, $assignedTo);
+            }
+
             $results[] = ['id' => (string) $id, 'ok' => true];
         }
 
-        return $this->bulkResponse($results, 'Ownership transferred.');
+        $message = $cascaded > 0 ? "Ownership transferred, including {$cascaded} contact(s)." : 'Ownership transferred.';
+
+        return $this->bulkResponse($results, $message);
     }
 
     /** @return array<int, int>|JsonResponse */

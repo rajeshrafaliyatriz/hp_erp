@@ -45,6 +45,13 @@ class CrmCampaignController extends Controller
         'organization' => 'crm_organizations',
     ];
 
+    /** Singular targetType -> crm_saved_views.module (that table's own plural convention). */
+    private const TARGET_MODULES = [
+        'lead' => 'leads',
+        'contact' => 'contacts',
+        'organization' => 'organizations',
+    ];
+
     public function index(Request $request): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -404,6 +411,7 @@ class CrmCampaignController extends Controller
         $validator = Validator::make($request->all(), [
             'targetType' => 'required|in:lead,contact,organization',
             'search' => 'nullable|string|max:191',
+            'savedViewId' => 'nullable|integer|min:1',
         ]);
 
         if ($validator->fails()) {
@@ -412,6 +420,30 @@ class CrmCampaignController extends Controller
 
         $targetType = $request->input('targetType');
         $search = trim((string) $request->input('search', ''));
+
+        /*
+         * A saved view (built for the list screens - search/sort only, see
+         * crm_saved_views) overrides the free-text search when named - its
+         * own stored search term IS the filter criterion here. sortKey/
+         * sortAsc are meaningless for "which rows to add as targets", so
+         * only the search condition is read out of it.
+         */
+        if ($request->filled('savedViewId')) {
+            $module = self::TARGET_MODULES[$targetType];
+
+            $savedView = DB::table('crm_saved_views')
+                ->where('id', (int) $request->input('savedViewId'))
+                ->where('sub_institute_id', $identity['sub_institute_id'])
+                ->where('module', $module)
+                ->first();
+
+            if (! $savedView) {
+                return response()->json(['status' => 0, 'message' => 'Saved view not found.'], 404);
+            }
+
+            $conditions = json_decode($savedView->conditions, true) ?? [];
+            $search = trim((string) ($conditions['search'] ?? ''));
+        }
 
         $added = 0;
         $alreadyPresent = 0;

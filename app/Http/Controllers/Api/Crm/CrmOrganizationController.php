@@ -253,7 +253,20 @@ class CrmOrganizationController extends Controller
             return $identity;
         }
 
-        return $this->bulkAssignRows($request, 'crm_organizations', $identity['sub_institute_id'], $identity['user_id'], 'Organization');
+        $cascade = $request->boolean('cascadeToContacts');
+
+        return $this->bulkAssignRows(
+            $request, 'crm_organizations', $identity['sub_institute_id'], $identity['user_id'], 'Organization',
+            afterEach: $cascade
+                ? function (int $organizationId, int $assignedTo) use ($identity) {
+                    return DB::table('crm_contacts')
+                        ->where('organization_id', $organizationId)
+                        ->where('sub_institute_id', $identity['sub_institute_id'])
+                        ->whereNull('deleted_at')
+                        ->update(['assigned_to' => $assignedTo, 'updated_by' => $identity['user_id'], 'updated_at' => now()]);
+                }
+                : null,
+        );
     }
 
     /**
