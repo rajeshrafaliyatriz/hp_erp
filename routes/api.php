@@ -3748,6 +3748,24 @@ Route::prefix('crm')->group(function () {
     Route::get('campaigns/export', [$crmCampaign, 'export'])->middleware("platformright:{$campaignLink},view");
     Route::post('campaigns/import', [$crmCampaign, 'import'])->middleware("platformright:{$campaignLink},add");
 
+    // Products & Services: one controller, one table, two menu rights - no
+    // static middleware here either, for the same reason as Recycle Bin/
+    // Saved Views below, except the "which right" question here is answered
+    // by the request's own itemType field rather than a {module}/row type.
+    // CrmProductController checks internally on every action.
+    $crmProduct = \App\Http\Controllers\Api\Crm\CrmProductController::class;
+    Route::get('products', [$crmProduct, 'index']);
+    Route::get('products/duplicates', [$crmProduct, 'duplicates']);
+    Route::get('products/export', [$crmProduct, 'export']);
+    Route::get('products/{id}', [$crmProduct, 'show'])->whereNumber('id');
+    Route::post('products', [$crmProduct, 'store']);
+    Route::put('products/{id}', [$crmProduct, 'update'])->whereNumber('id');
+    Route::delete('products/{id}', [$crmProduct, 'destroy'])->whereNumber('id');
+    Route::post('products/bulk/delete', [$crmProduct, 'bulkDelete']);
+    Route::post('products/bulk/assign', [$crmProduct, 'bulkAssign']);
+    Route::post('products/merge', [$crmProduct, 'merge']);
+    Route::post('products/import', [$crmProduct, 'import']);
+
     // Recycle Bin: one shared screen across all 4 modules. No single static
     // middleware here - CrmRecycleBinController checks each row's own type
     // against that type's existing menu/platform right internally, since no
