@@ -3748,6 +3748,27 @@ Route::prefix('crm')->group(function () {
     Route::get('campaigns/export', [$crmCampaign, 'export'])->middleware("platformright:{$campaignLink},view");
     Route::post('campaigns/import', [$crmCampaign, 'import'])->middleware("platformright:{$campaignLink},add");
 
+    $crmOpportunity = \App\Http\Controllers\Api\Crm\CrmOpportunityController::class;
+    $oppLink = '/module/crm/sales/opportunities';
+    Route::get('opportunities', [$crmOpportunity, 'index'])->middleware("platformright:{$oppLink},view");
+    Route::get('opportunities/pipeline', [$crmOpportunity, 'pipeline'])->middleware("platformright:{$oppLink},view");
+    Route::get('opportunities/export', [$crmOpportunity, 'export'])->middleware("platformright:{$oppLink},view");
+    Route::get('opportunities/{id}', [$crmOpportunity, 'show'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
+    Route::post('opportunities', [$crmOpportunity, 'store'])->middleware("platformright:{$oppLink},add");
+    Route::put('opportunities/{id}', [$crmOpportunity, 'update'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");
+    Route::put('opportunities/{id}/stage', [$crmOpportunity, 'changeStage'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");
+    Route::get('opportunities/{id}/stage-history', [$crmOpportunity, 'stageHistory'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
+    Route::delete('opportunities/{id}', [$crmOpportunity, 'destroy'])->whereNumber('id')->middleware("platformright:{$oppLink},delete");
+    Route::get('opportunities/{id}/contacts', [$crmOpportunity, 'contacts'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
+    Route::post('opportunities/{id}/contacts', [$crmOpportunity, 'addContact'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");
+    Route::delete('opportunities/{id}/contacts/{rowId}', [$crmOpportunity, 'removeContact'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$oppLink},edit");
+    Route::get('opportunities/{id}/products', [$crmOpportunity, 'products'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
+    Route::post('opportunities/{id}/products', [$crmOpportunity, 'addProduct'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");
+    Route::delete('opportunities/{id}/products/{rowId}', [$crmOpportunity, 'removeProduct'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$oppLink},edit");
+    Route::post('opportunities/bulk/delete', [$crmOpportunity, 'bulkDelete'])->middleware("platformright:{$oppLink},delete");
+    Route::post('opportunities/bulk/assign', [$crmOpportunity, 'bulkAssign'])->middleware("platformright:{$oppLink},edit");
+    Route::post('opportunities/import', [$crmOpportunity, 'import'])->middleware("platformright:{$oppLink},add");
+
     // Products & Services: one controller, one table, two menu rights - no
     // static middleware here either, for the same reason as Recycle Bin/
     // Saved Views below, except the "which right" question here is answered
