@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api\Competency;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyGap;
 use App\Http\Controllers\Controller;
+use App\Services\DeepSeekService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Throwable;
 
 /**
  * Development plans (s_competency_development_plans) for the Development &
@@ -897,6 +899,106 @@ class DevelopmentPlanController extends Controller
             'message' => 'Plan actions fetched successfully',
             'data'    => $data,
         ]);
+    }
+
+    /**
+     * GET /competency/development-plans/{id}/narrative
+     *
+     * "What training closes this employee's gaps?" — grounded ONLY in the
+     * plan's own structure and its actions' progress, never in gaps()'
+     * figures. gaps() compares against the legacy skill system, which can be
+     * out of date against the KASBA rating system CompetencyGapController/
+     * RoleFitController/CompetencyProfileController read instead. Narrating
+     * gaps() here would risk presenting a different picture of this same
+     * employee's gaps than those already give.
+     */
+    public function narrative(Request $request, $id, DeepSeekService $ai)
+    {
+        $planResponse = $this->show($request, $id);
+        $planPayload = json_decode((string) $planResponse->getContent(), true) ?: [];
+
+        if (($planPayload['status'] ?? 0) !== 1) {
+            return $planResponse;
+        }
+
+        $actionsResponse = $this->actions($request, $id);
+        $actionsPayload = json_decode((string) $actionsResponse->getContent(), true) ?: [];
+        $actions = ($actionsPayload['status'] ?? 0) === 1 ? ($actionsPayload['data'] ?? []) : [];
+
+        $plan = $planPayload['data'];
+
+        if (!$ai->isConfigured()) {
+            return response()->json(['status' => 1, 'data' => ['plan' => $plan, 'actions' => $actions, 'narrative' => null]]);
+        }
+
+        try {
+            $narrative = trim($ai->chat([
+                ['role' => 'system', 'content' => $this->narrativeSystemPrompt()],
+                ['role' => 'user', 'content' => $this->narrativeUserPrompt($plan, $actions)],
+            ]));
+        } catch (Throwable $e) {
+            return response()->json(['status' => 1, 'data' => ['plan' => $plan, 'actions' => $actions, 'narrative' => null]]);
+        }
+
+        return response()->json(['status' => 1, 'data' => ['plan' => $plan, 'actions' => $actions, 'narrative' => $narrative]]);
+    }
+
+    private function narrativeSystemPrompt(): string
+    {
+        return 'You are summarising one employee\'s development plan for their manager. Use only the facts '
+            . 'given - never invent a competency, date, or figure not present in the input. Focus on progress: '
+            . 'what has been completed, what is next (the next milestone), and whether the plan is on track '
+            . 'against its due date. Do not describe skill gaps or required levels - none are given to you, '
+            . 'and inventing them would be a fabrication. Keep the answer to 3-5 sentences of plain language.';
+    }
+
+    /** @param array<string,mixed> $plan @param array<int,array<string,mixed>> $actions */
+    private function narrativeUserPrompt(array $plan, array $actions): string
+    {
+        $lines = [sprintf(
+            'Plan: "%s" for %s, status %s, %d%% progress, due %s.',
+            $plan['title'] ?? 'Untitled',
+            $plan['employee_name'] ?? 'this employee',
+            $plan['status_label'] ?? $plan['status'] ?? 'unknown',
+            $plan['progress'] ?? 0,
+            $plan['due_date_label'] ?? 'no due date set'
+        )];
+
+        if (!empty($plan['objective'])) {
+            $lines[] = 'Objective: ' . $plan['objective'];
+        }
+
+        if (!empty($plan['focus_areas'])) {
+            $lines[] = 'Focus areas: ' . implode(', ', (array) $plan['focus_areas']);
+        }
+
+        if (!empty($plan['next_milestone'])) {
+            $lines[] = sprintf(
+                'Next milestone: "%s" (%s), due %s.',
+                $plan['next_milestone']['title'],
+                $plan['next_milestone']['status'],
+                $plan['next_milestone']['due_date'] ?? 'no due date'
+            );
+        }
+
+        $counts = $plan['action_counts'] ?? ['total' => 0, 'completed' => 0];
+        $lines[] = sprintf('Actions: %d completed of %d total.', $counts['completed'], $counts['total']);
+
+        if ($actions !== []) {
+            $lines[] = '';
+            $lines[] = 'All actions:';
+            foreach ($actions as $a) {
+                $lines[] = sprintf(
+                    '- %s (%s, %s)%s',
+                    $a['title'],
+                    $a['action_type'] ?: 'training',
+                    $a['status'],
+                    $a['due_date_label'] ? ', due ' . $a['due_date_label'] : ''
+                );
+            }
+        }
+
+        return implode("\n", $lines);
     }
 
     /** POST /competency/development-plans/{id}/actions */

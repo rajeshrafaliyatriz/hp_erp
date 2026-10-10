@@ -84,6 +84,11 @@ return [
             'description' => 'Projects, tasks and execution evidence.',
             'icon' => 'ListChecks',
         ],
+        'crm' => [
+            'label' => 'CRM',
+            'description' => 'Leads, contacts, organizations and campaigns.',
+            'icon' => 'Handshake',
+        ],
         'events' => [
             'label' => 'Platform',
             'description' => 'The event store and the jobs that drain it.',
@@ -559,6 +564,14 @@ return [
         // with no form behind it. See CustomFieldValueController::recordBelongsToTenant()
         // for the matching tenant-ownership check this table needed.
         'hrms_emp_leaves' => ['label' => 'Leave request', 'module' => 'hrms'],
+        // CRM Marketing migration. The system fields confirmed from the
+        // legacy CRM (Lead Status, Account Type, Campaign Status, etc.) are
+        // real columns on these tables, not custom fields - this entry only
+        // governs admin-ADDED fields on top of that fixed set.
+        'crm_leads' => ['label' => 'Lead', 'module' => 'crm'],
+        'crm_contacts' => ['label' => 'Contact', 'module' => 'crm'],
+        'crm_organizations' => ['label' => 'Organization', 'module' => 'crm'],
+        'crm_campaigns' => ['label' => 'Campaign', 'module' => 'crm'],
     ],
 
     /*

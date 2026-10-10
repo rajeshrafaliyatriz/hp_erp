@@ -100,12 +100,26 @@ teardown() {
   local era="(day < '2000-01-01' or day > '2090-01-01')"
   php Docs/hrit-audit/_evidence/snapshot.php \
     "delete from hrms_attendances where $era" >/dev/null 2>&1
+  # Section 10 raises real regularisation requests, on scratch days.
+  php Docs/hrit-audit/_evidence/snapshot.php \
+    "delete from hrms_attendance_regularisations where $era" >/dev/null 2>&1
   php Docs/hrit-audit/_evidence/snapshot.php \
     "delete from hrms_attendance_edits where $era" >/dev/null 2>&1
   php Docs/hrit-audit/_evidence/snapshot.php \
     "delete from g2g_event where type='attendance.corrected' \
        and (payload like '%1999-%' or payload like '%2099-%')" >/dev/null 2>&1
-  rm -f storage/app/zzpunch.out storage/app/zzadmin.out storage/app/zzgrid.out
+  # Section 9b's day is a REAL recent date, so the era clean above cannot see
+  # it. Removed by name, and only for this probe's own subject.
+  if [ -n "${RDAY:-}" ]; then
+    php Docs/hrit-audit/_evidence/snapshot.php \
+      "delete from hrms_attendances where user_id=$SUBJECT and day='$RDAY'" >/dev/null 2>&1
+    php Docs/hrit-audit/_evidence/snapshot.php \
+      "delete from hrms_attendance_edits where user_id=$SUBJECT and day='$RDAY'" >/dev/null 2>&1
+    php Docs/hrit-audit/_evidence/snapshot.php \
+      "delete from g2g_event where type='attendance.corrected' \
+         and payload like '%$RDAY%'" >/dev/null 2>&1
+  fi
+  rm -f storage/app/zzpunch.out storage/app/zzadmin.out storage/app/zzgrid.out storage/app/zzapunch.out storage/app/zztrack.out
 }
 
 # ---- the admin correction endpoint -----------------------------------------
@@ -150,6 +164,69 @@ gqs() { php -r '$d=json_decode(file_get_contents("storage/app/zzgrid.out"),true)
     foreach ($d["data"]["employees"] ?? [] as $e) { if ((int) $e["user_id"] === $id) return $e; }
     return null;
   }'" $1"; }
+
+# apunch <in|out> <token> <day> <time|-> ; the API punch routes, not the legacy
+# ones punch() above uses. Echoes the HTTP code, body in storage/app/zzapunch.out.
+apunch() {
+  if [ "$1" = "in" ]; then
+    curl -s -o storage/app/zzapunch.out -m 40 -w '%{http_code}' -X POST \
+      "$BASE/api/attendance/punch-in" \
+      -H "Authorization: Bearer $2" -H 'Accept: application/json' \
+      -H 'Content-Type: application/x-www-form-urlencoded' \
+      -d "employee=$SUBJECT" -d "indate=$3" -d "intime=${4:-09:00}"
+  else
+    local args=(-d "employee=$SUBJECT" -d "outdate=$3")
+    [ "${4:-}" != "-" ] && args+=(-d "outtime=$4")
+    curl -s -o storage/app/zzapunch.out -m 40 -w '%{http_code}' -X POST \
+      "$BASE/api/attendance/punch-out" \
+      -H "Authorization: Bearer $2" -H 'Accept: application/json' \
+      -H 'Content-Type: application/x-www-form-urlencoded' "${args[@]}"
+  fi
+}
+
+abody() { php -r '$d=json_decode(file_get_contents("storage/app/zzapunch.out"),true);'" $1"; }
+
+# A RECENT empty day, found at runtime - and why that is necessary.
+#
+# Every other fixture in this probe uses 1999 or 2099, eras that cannot collide
+# with a real record. That choice MASKS the bug one assertion below is supposed
+# to catch. The un-guarded punch-out computes
+# durationBetween(punchin_time, now), and from a 1999 punch-in that is about
+# 243,190 hours - outside MySQL's TIME range (838:59:59). The UPDATE is rejected
+# with SQLSTATE 22007 and the request 500s BEFORE the destructive write lands,
+# so the row survives for a reason that has nothing to do with the guard.
+#
+# On a real, recent closed day the duration is in range, the write succeeds, and
+# the correction is destroyed. That is the case worth asserting, so this one
+# section needs a recent day.
+#
+# It is still this probe's OWN data: a day is only used after it is proven to
+# hold no row for the subject, and the teardown removes it by name.
+find_empty_recent_day() {
+  local offset
+  for offset in 3 4 5 6 7 8 9 10 11 12; do
+    local candidate
+    candidate=$(php -r 'echo date("Y-m-d", strtotime("-'"$offset"' day"));')
+    local existing
+    existing=$(val "select count(*) v from hrms_attendances
+                    where user_id=$SUBJECT and day='$candidate'")
+    if [ "$existing" = "0" ]; then echo "$candidate"; return 0; fi
+  done
+  return 1
+}
+
+# track <my-attendance|self-summary> <token> [query] ; echoes the HTTP code
+track() {
+  curl -s -o storage/app/zztrack.out -m 60 -w '%{http_code}' \
+    "$BASE/api/attendance/$1${3:-}" \
+    -H "Authorization: Bearer $2" -H 'Accept: application/json'
+}
+
+tbody() { php -r '$d=json_decode(file_get_contents("storage/app/zztrack.out"),true);'" $1"; }
+
+# val <sql selecting one column aliased v> ; the same helper
+# probe-department-schedules.sh uses, so an assertion reads the same in both.
+val() { php Docs/hrit-audit/_evidence/snapshot.php "$1"         | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["v"] ?? "";'; }
 
 # one scalar out of hrms_attendances / hrms_attendance_edits
 att()  { php Docs/hrit-audit/_evidence/snapshot.php \
@@ -547,6 +624,10 @@ echo "8. The four extras"
 
 HOOK="$FE/hooks/use-attendance-admin.ts"
 QUEUE="$FE/components/domain/hrms/hrit/attendance-management/attendance-tracking/components/regularisation-queue.tsx"
+SHARED="$FE/components/domain/hrms/hrit/attendance-management/shared"
+DIALOG="$SHARED/attendance-correction-dialog.tsx"
+GRIDC="$FE/components/domain/hrms/hrit/attendance-management/manage-employee-attendance/month-grid.tsx"
+HISTC="$FE/components/domain/hrms/hrit/attendance-management/manage-employee-attendance/change-history.tsx"
 
 # BULK: allSettled, not all.
 #
@@ -580,8 +661,22 @@ check "  the screen defines no second queue of its own" "0" \
   "$(countfix "$SCREEN" "scope: 'team'")"
 
 # ADD A MISSING DAY: the same endpoint, which inserts when the day has no row.
+#
+# The dialog moved out of the page into shared/, because three surfaces now need
+# it - the grid, the per-employee calendar panel, and the Employee Directory
+# attendance tab. Two copies of a dialog that writes a payroll input would
+# drift, and the half that drifted would be the one with no explanation attached.
 check "the dialog says when it is creating a day rather than editing one" "1" \
-  "$(countfix "$SCREEN" "Add a missing day")"
+  "$(countfix "$DIALOG" "Add a missing day")"
+check "  and there is exactly ONE of it - the page does not define a second" "0" \
+  "$(countfix "$SCREEN" "function CorrectionDialog(")"
+check "  the page renders the shared one" "1" \
+  "$(countfix "$SCREEN" "<AttendanceCorrectionDialog")"
+# It takes a name and a roster flag rather than a grid row, which is what lets
+# the calendar panel and the directory tab render it - neither of those has an
+# AttendanceGridEmployee to hand.
+check "  which takes a plain employee name, not a grid row" "1" \
+  "$(countfix "$DIALOG" "employeeName: string")"
 
 # PRINT: scoped to this screen.
 #
@@ -605,6 +700,445 @@ check "the export wraps the employee code" "1" \
   "$(countfix "$SCREEN" 'csvText(employee.employee_code ?? ')"
 check "  and the punch times" "1" "$(countfix "$SCREEN" 'csvText(`${cell.in ?? ')"
 
+
+# ---------------------------------------------- 9. a corrected day is not destroyed
+#
+# THE BUG THIS SECTION EXISTS FOR.
+#
+# After HR corrected a full day, the employee's own screen showed a green
+# "Punch In" again - its activeShift test is "punched in and NOT punched out",
+# and a corrected day is punched out. One click then ran the update branch of
+# punchIn(), which sets punchin_time to the current clock and NULLS
+# punchout_time and timestamp_diff.
+#
+# So one click destroyed the correction, discarded the punch-out and erased the
+# worked duration PayrollController reads - while hrms_attendance_edits went on
+# recording that the correction had been applied. punchOut() had the same bug by
+# two different routes.
+echo
+echo "9. A corrected day survives the employee pressing Punch In"
+
+teardown
+
+check "HR corrects a FULL day - both times" "200" \
+  "$(correct "$A6" "$SUBJECT" "$ADAY" "09:15" "18:30" "Closed+day+fixture")"
+check "  the day is closed" "$ADAY 09:15:00|$ADAY 18:30:00" \
+  "$(val "select concat(punchin_time,'|',punchout_time) v from hrms_attendances
+           where user_id=$SUBJECT and day='$ADAY' and deleted_at is null")"
+check "  with a duration" "09:15:00" "$(att timestamp_diff $SUBJECT $ADAY)"
+
+echo
+echo "   the employee cannot re-punch it"
+check "punch-in on a closed day is refused" "409" "$(apunch in "$E6" "$ADAY" "08:00")"
+# Both times, in the 12-hour form the message actually renders. My first version
+# of this used "06:30" as a must-NOT-appear sentinel, which was wrong: 18:30
+# formatted h:i A IS "06:30 PM". The assertion went red and the code was fine.
+check "  and names both recorded times" "1" \
+  "$(abody 'echo (strpos($d["message"] ?? "", "09:15 AM") !== false
+              && strpos($d["message"] ?? "", "06:30 PM") !== false) ? 1 : 0;')"
+# A client must be able to branch on a field, not on this English.
+check "  and carries next_action for the client" "regularisation" \
+  "$(abody 'echo $d["data"]["next_action"] ?? "missing";')"
+# >>> THE ASSERTION THAT MATTERS <<<
+check "  THE CORRECTION SURVIVED, in and out" "$ADAY 09:15:00|$ADAY 18:30:00" \
+  "$(val "select concat(punchin_time,'|',punchout_time) v from hrms_attendances
+           where user_id=$SUBJECT and day='$ADAY' and deleted_at is null")"
+check "  and so did the duration payroll reads" "09:15:00" "$(att timestamp_diff $SUBJECT $ADAY)"
+
+echo
+echo "   punch-out has the same bug by two routes, both closed"
+# No outtime: the lookup requires a NULL punchout_time, finds nothing on a closed
+# day, and the else branch used to overwrite the latest row with Carbon::now().
+check "punch-out with no time is refused" "409" "$(apunch out "$E6" "$ADAY" "-")"
+check "  the correction survived that too" "$ADAY 18:30:00" \
+  "$(val "select punchout_time v from hrms_attendances
+           where user_id=$SUBJECT and day='$ADAY' and deleted_at is null")"
+# With an outtime: the lookup orders by id desc and takes the latest row whether
+# or not it is closed.
+check "punch-out with a time is refused" "409" "$(apunch out "$E6" "$ADAY" "21:00")"
+check "  and the 18:30 is still 18:30" "$ADAY 18:30:00" \
+  "$(val "select punchout_time v from hrms_attendances
+           where user_id=$SUBJECT and day='$ADAY' and deleted_at is null")"
+
+# NARROWNESS. An open day must still re-punch - that is the legitimate
+# "punched in on the wrong device" case, and over-refusing would break the one
+# thing these endpoints exist for.
+echo
+echo "   but an OPEN day still re-punches, which is the point of being narrow"
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from hrms_attendances where day='$ADAY'" >/dev/null 2>&1
+check "HR records a punch-in only" "200" \
+  "$(correct "$A6" "$SUBJECT" "$ADAY" "09:15" "-" "Open+day+fixture")"
+check "  the day is open" "" "$(att punchout_time $SUBJECT $ADAY)"
+check "the employee re-punches it" "200" "$(apunch in "$E6" "$ADAY" "08:00")"
+check "  and the new time landed" "$ADAY 08:00:00" "$(att punchin_time $SUBJECT $ADAY)"
+check "the employee can then punch out" "200" "$(apunch out "$E6" "$ADAY" "17:00")"
+check "  and the day closes with a duration" "09:00:00" "$(att timestamp_diff $SUBJECT $ADAY)"
+check "  after which re-punching IS refused" "409" "$(apunch in "$E6" "$ADAY" "07:00")"
+
+# status: the corrector now writes 1 and records what it was. A status 0 row was
+# visible on the HR grid and invisible on the employee's own screen, which
+# filters status = 1 - so the person whose pay it changed could not see it.
+echo
+echo "   a corrected day counts: status is forced to 1 and the old value kept"
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from hrms_attendances where day='$ADAY'" >/dev/null 2>&1
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from hrms_attendance_edits where day='$ADAY'" >/dev/null 2>&1
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from g2g_event where type='attendance.corrected' and payload like '%$ADAY%'" >/dev/null 2>&1
+# A hidden row, as something outside this module may have left it.
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "insert into hrms_attendances (user_id, sub_institute_id, day, punchin_time, status, created_at, updated_at)
+   values ($SUBJECT, 6, '$ADAY', '$ADAY 10:00:00', 0, now(), now())" >/dev/null
+check "the seeded row is hidden" "0" "$(att status $SUBJECT $ADAY)"
+check "HR corrects it" "200" \
+  "$(correct "$A6" "$SUBJECT" "$ADAY" "09:15" "18:30" "Un-hide+on+correct")"
+check "  status is now 1, so the employee's own screen can see it" "1" \
+  "$(att status $SUBJECT $ADAY)"
+# A visibility flip is as much a change as a time flip; an unexplained one is
+# the harm the edit trail exists to prevent.
+check "  and the prior 0 is in the event's before-image" "1" \
+  "$(val "select (count(*) > 0) v from g2g_event
+           where type='attendance.corrected' and payload like '%$ADAY%'
+             and payload like '%\"status\":0%'")"
+
+
+# ------------------------------------------- 9b. the same guard, on a REAL day
+#
+# Section 9 proves the guards REFUSE. It cannot prove they prevent data loss,
+# because its 1999 fixture makes the destructive UPDATE fail on its own: the
+# duration from a 1999 punch-in to now is ~243,190 hours, outside MySQL's TIME
+# range, so the write is rejected and the row survives whether the guard is
+# there or not.
+#
+# This section runs the same case on a recent day, where the duration is valid
+# and the write would succeed. It is the only place in this probe that can tell
+# the guard apart from the out-of-range accident.
+echo
+echo "9b. On a recent day, where the destructive write would actually succeed"
+
+RDAY=$(find_empty_recent_day)
+if [ -z "${RDAY:-}" ]; then
+  echo "  SKIP  no recent day in the last 12 is free for employee $SUBJECT."
+  echo "        Not failing: this probe will not overwrite somebody's real"
+  echo "        attendance to make an assertion pass."
+else
+  check "found an empty recent day to use ($RDAY)" "0" \
+    "$(val "select count(*) v from hrms_attendances where user_id=$SUBJECT and day='$RDAY'")"
+
+  check "HR closes it - both times" "200" \
+    "$(correct "$A6" "$SUBJECT" "$RDAY" "09:15" "18:30" "Recent+closed+day")"
+  check "  and the duration is in TIME range, unlike the 1999 fixture" "09:15:00" \
+    "$(val "select timestamp_diff v from hrms_attendances
+             where user_id=$SUBJECT and day='$RDAY' and deleted_at is null")"
+
+  # >>> THE ASSERTION SECTION 9 COULD NOT MAKE <<<
+  #
+  # Without the else-branch guard this returns 200, overwrites punchout_time
+  # with the current clock and recomputes timestamp_diff from it - destroying
+  # both the corrected out-time and the duration payroll reads.
+  check "the no-time punch-out is refused" "409" "$(apunch out "$E6" "$RDAY" "-")"
+  check "  THE CORRECTED OUT-TIME SURVIVED" "$RDAY 18:30:00" \
+    "$(val "select punchout_time v from hrms_attendances
+             where user_id=$SUBJECT and day='$RDAY' and deleted_at is null")"
+  check "  and so did the duration" "09:15:00" \
+    "$(val "select timestamp_diff v from hrms_attendances
+             where user_id=$SUBJECT and day='$RDAY' and deleted_at is null")"
+
+  check "the supplied-time punch-out is refused too" "409" "$(apunch out "$E6" "$RDAY" "21:00")"
+  check "  and 18:30 is still 18:30" "$RDAY 18:30:00" \
+    "$(val "select punchout_time v from hrms_attendances
+             where user_id=$SUBJECT and day='$RDAY' and deleted_at is null")"
+
+  check "punch-in is refused as well" "409" "$(apunch in "$E6" "$RDAY" "08:00")"
+  check "  and the corrected in-time survived" "$RDAY 09:15:00" \
+    "$(val "select punchin_time v from hrms_attendances
+             where user_id=$SUBJECT and day='$RDAY' and deleted_at is null")"
+fi
+
+
+# -------------------------------------- 10. the change history tells the truth
+#
+# THREE DEFECTS, ALL CONFIRMED BEFORE BEING FIXED.
+#
+# 1. Every row rendered "day did not exist". config/database.php sets
+#    PDO::ATTR_EMULATE_PREPARES on the mysql connection, so every column comes
+#    back as a STRING - and `created_row` arrived as "0", which is falsy in PHP
+#    and TRUTHY in JavaScript. The screen tested it directly, so the
+#    before-image - the only thing that makes this an audit rather than a log -
+#    was never shown on any row.
+#
+# 2. Approved employee regularisations never reached the table at all.
+#    AttendanceAdminController::correct() was its only writer and hardcoded
+#    source = 'admin', so the 'regularisation' value the table's own migration
+#    documents was produced by nothing - while the screen's empty state promised
+#    those requests appear there.
+#
+# 3. The 200-row cap was silent, and the UI's name fallback printed the EDIT
+#    row's id as an employee number.
+echo
+echo "10. The change history"
+
+RGDAY=1999-01-12
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from hrms_attendance_regularisations where day='$RGDAY'" >/dev/null 2>&1
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from hrms_attendances where day='$RGDAY'" >/dev/null 2>&1
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from hrms_attendance_edits where day='$RGDAY'" >/dev/null 2>&1
+
+echo "   an approved employee request now appears, which it never did"
+check "the employee raises a regularisation" "1" \
+  "$(curl -s -m 40 -X POST "$BASE/api/attendance/regularisations" \
+      -H "Authorization: Bearer $E6" -H 'Accept: application/json' \
+      -d "day=$RGDAY" -d "requested_in_time=09:30" -d "requested_out_time=18:00" \
+      -d "reason=Badge+reader+was+down" \
+    | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["status"] ?? 0;')"
+
+RGID=$(val "select id v from hrms_attendance_regularisations
+            where day='$RGDAY' and user_id=$SUBJECT order by id desc limit 1")
+check "  and it was recorded" "1" "$([ -n "$RGID" ] && echo 1 || echo 0)"
+
+check "HR approves it" "1" \
+  "$(curl -s -m 40 -X POST "$BASE/api/attendance/regularisations/$RGID/decision" \
+      -H "Authorization: Bearer $A6" -H 'Accept: application/json' \
+      -d "status=approved" -d "reviewer_comment=Confirmed+with+facilities" \
+    | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["status"] ?? 0;')"
+check "  the attendance row was corrected" "$RGDAY 09:30:00" \
+  "$(att punchin_time $SUBJECT $RGDAY)"
+
+# >>> THE ROW THAT NEVER USED TO EXIST <<<
+check "  an edit row was written" "1" \
+  "$(val "select count(*) v from hrms_attendance_edits where day='$RGDAY'")"
+check "  with source=regularisation, not admin" "regularisation" \
+  "$(val "select source v from hrms_attendance_edits where day='$RGDAY'")"
+check "  linked back to the request" "$RGID" \
+  "$(val "select regularisation_id v from hrms_attendance_edits where day='$RGDAY'")"
+# The reason on this path is the EMPLOYEE's words. HR's reviewer_comment is a
+# different field about a different thing, and conflating them would put the
+# approver's note where the requester's explanation belongs.
+check "  carrying the EMPLOYEE's reason, not the approver's comment" "Badge reader was down" \
+  "$(val "select reason v from hrms_attendance_edits where day='$RGDAY'")"
+
+echo
+echo "   created_row crosses to JSON as a boolean, not a string"
+HIST="?user_id=$SUBJECT&month=1999-01"
+check "the history reads back" "200" "$(edits "$A6" "$HIST")"
+# "0" is falsy in PHP and truthy in JavaScript. This is the assertion that would
+# have caught every row rendering "day did not exist".
+check "  created_row is a real boolean" "boolean" \
+  "$(php -r '$d=json_decode(file_get_contents("storage/app/zzadmin.out"),true);
+     $r=$d["data"][0] ?? null; echo $r === null ? "no-rows" : gettype($r["created_row"]);')"
+check "  and so is every row's" "1" \
+  "$(php -r '$d=json_decode(file_get_contents("storage/app/zzadmin.out"),true);
+     foreach ($d["data"] ?? [] as $r) { if (gettype($r["created_row"]) !== "boolean") { echo 0; return; } }
+     echo 1;')"
+check "  ids are integers, not strings" "integer" \
+  "$(php -r '$d=json_decode(file_get_contents("storage/app/zzadmin.out"),true);
+     $r=$d["data"][0] ?? null; echo $r === null ? "no-rows" : gettype($r["id"]);')"
+# So the screen can name the employee instead of printing the edit row's id.
+check "  user_id is carried for the name fallback" "$SUBJECT" \
+  "$(php -r '$d=json_decode(file_get_contents("storage/app/zzadmin.out"),true);
+     $r=$d["data"][0] ?? null; echo $r === null ? "no-rows" : $r["user_id"];')"
+check "  times are HH:MM, whatever shape they were stored in" "1" \
+  "$(php -r '$d=json_decode(file_get_contents("storage/app/zzadmin.out"),true);
+     foreach ($d["data"] ?? [] as $r) {
+       foreach (["before_in_time","after_in_time"] as $k) {
+         if ($r[$k] !== null && !preg_match("/^\d{2}:\d{2}$/", $r[$k])) { echo 0; return; }
+       }
+     } echo 1;')"
+
+echo
+echo "   the cap is no longer silent"
+check "meta reports the total" "1" \
+  "$(php -r '$d=json_decode(file_get_contents("storage/app/zzadmin.out"),true);
+     echo isset($d["meta"]["total"], $d["meta"]["returned"], $d["meta"]["truncated"]) ? 1 : 0;')"
+check "  and says it is not truncated at this size" "" \
+  "$(php -r '$d=json_decode(file_get_contents("storage/app/zzadmin.out"),true);
+     echo $d["meta"]["truncated"] ? "1" : "";')"
+check "  data stayed an array, so outside consumers are unaffected" "array" \
+  "$(php -r '$d=json_decode(file_get_contents("storage/app/zzadmin.out"),true);
+     echo array_is_list($d["data"] ?? []) ? "array" : "reshaped";')"
+
+echo
+echo "   the day filter, for the drill-down from a changed cell"
+check "one day narrows the list" "1" \
+  "$(edits "$A6" "?user_id=$SUBJECT&day=$RGDAY" >/dev/null; php -r '
+     $d=json_decode(file_get_contents("storage/app/zzadmin.out"),true); echo count($d["data"] ?? []);')"
+check "  and a day with no change returns none, not an error" "0" \
+  "$(edits "$A6" "?user_id=$SUBJECT&day=1999-01-20" >/dev/null; php -r '
+     $d=json_decode(file_get_contents("storage/app/zzadmin.out"),true); echo count($d["data"] ?? []);')"
+
+php Docs/hrit-audit/_evidence/snapshot.php \
+  "delete from hrms_attendance_regularisations where day='$RGDAY'" >/dev/null 2>&1
+
+
+# ---------------------------------------- 11. the change history, as a screen
+#
+# The backend half is asserted in section 10. These are the three defects that
+# lived in the SCREEN, each of which made a working endpoint look broken.
+echo
+echo "11. The change-history screen"
+
+# 1. The Refresh button called the GRID's loader on every tab, so on the history
+#    tab it fetched something invisible and appeared to do nothing - and its
+#    spinner was wired to the grid's loading flag too.
+check "Refresh dispatches on the active tab" "1" "$(countfix "$SCREEN" "void refreshActiveTab()")"
+check "  and the dispatcher exists" "1" "$(countfix "$SCREEN" "const refreshActiveTab = React.useCallback")"
+# Twice: once for `disabled`, once for the spin class. Both are the point -
+# the button used to be disabled by the GRID's loading flag while sitting on the
+# history tab, so it looked inert for the wrong reason.
+check "  with the history's own spinner and disabled state, not the grid's" "2" \
+  "$(countfix "$SCREEN" "tab === 'history' ? editsLoading : isLoading")"
+
+# 2. The history was handed the GRID's month setter - which also resets the
+#    grid's page - so changing the month while reading the history silently
+#    re-paged and re-fetched the grid behind it.
+check "the history has its own month, not the grid's" "1" \
+  "$(countfix "$SCREEN" "month={historyMonth}")"
+check "  and its own setter" "1" "$(countfix "$SCREEN" "setMonth={setHistoryMonth}")"
+# The grid's OWN filter still takes the grid's setter - that one should reset
+# the grid's page. Exactly one use, in GridFilters; a second would mean the
+# history had been handed it again.
+check "  and the grid keeps its own page-resetting setter, once" "1" \
+  "$(countfix "$SCREEN" "setMonth={setMonth}")"
+
+# 3. A correction reloaded the grid and never touched the history.
+check "a write invalidates the history" "2" "$(countfix "$HOOK" "if (editsEverLoaded.current) void loadEdits")"
+check "  but only once it has been opened, so it costs nothing otherwise" "1" \
+  "$(countfix "$HOOK" "const editsEverLoaded = useRef(false)")"
+check "the window coming back refetches a stale list" "1" \
+  "$(countfix "$HOOK" "document.addEventListener('visibilitychange', onVisible)")"
+check "  thresholded, so alt-tabbing is not a request storm" "1" \
+  "$(countfix "$HOOK" "const STALE_AFTER_MS = 20_000")"
+# Polling exists but is opt-in: a 30s interval on a two-join query, on a tab
+# left open all day, to catch an event that usually originates in that tab.
+check "polling is opt-in and off by default" "1" \
+  "$(countfix "$HOOK" "const [liveHistory, setLiveHistory] = useState(false)")"
+check "  and only runs while the tab is visible" "1" \
+  "$(countfix "$HOOK" "if (document.visibilityState === 'visible') void loadEdits({ quiet: true })")"
+check "the freshness is shown, so Refresh means something" "1" \
+  "$(countfix "$HISTC" "Updated {new Date(loadedAt)")"
+check "the truncation notice replaces the silent cap" "1" "$(countfix "$HISTC" "meta?.truncated")"
+# The old fallback printed the AUDIT ROW's id as an employee number.
+check "the name fallback uses the employee id, not the edit row's" "1" \
+  "$(countfix "$HISTC" 'Employee ${row.user_id}')"
+check "  and never the audit row's id" "0" "$(countfix "$HISTC" 'Employee #${row.id}')"
+# Two declarations: the correction RESPONSE always carried a real PHP bool, and
+# AttendanceEditRow is the one that used to say `number` and arrive as "0".
+check "created_row is typed boolean everywhere, so nobody tests a string again" "2" \
+  "$(countfix "$FE/services/hrms/index.ts" "created_row: boolean")"
+
+echo
+echo "   one vocabulary, one tile, one grid"
+check "the shared status module exists" "1" "$([ -f "$SHARED/attendance-day-status.ts" ] && echo 1 || echo 0)"
+check "  and the page uses it instead of its own copy" "0" \
+  "$(countfix "$SCREEN" "const STATUS_LABEL: Record<")"
+check "  the grid renders the shared tile" "1" "$(countfix "$GRIDC" "<AttendanceDayTile")"
+# The reveal must be portalled - ui/tooltip.tsx is hand-rolled and absolutely
+# positioned, so it is clipped by the grid's own overflow-x-auto.
+check "the reveal is portalled, not the clipped hand-rolled tooltip" "0" \
+  "$(countfix "$GRIDC" "from '@/components/ui/tooltip'")"
+check "  one popover for the whole grid, anchored to a rect" "1" \
+  "$(countfix "$GRIDC" "<AttendanceCellPeek")"
+check "  which needs PopoverAnchor exported" "1" \
+  "$(countfix "$FE/components/ui/popover.tsx" "PopoverAnchor = PopoverPrimitive.Anchor")"
+# The print rule forces [class*="sticky"] to static, so the frozen column must
+# keep a class literally containing "sticky".
+check "the frozen column still carries a 'sticky' class for the print rule" "1" \
+  "$(countfix "$GRIDC" "'sticky left-0 z-10 border-b border-r border-border")"
+# It used to replace bg-card with bg-primary/10, which is 90% transparent - so
+# day cells scrolling underneath showed through the frozen column.
+check "  and keeps bg-card when selected, tinting over it" "1" \
+  "$(countfix "$GRIDC" "before:bg-primary/10")"
+check "lateness is '—' where there is no roster, never 0" "1" \
+  "$(countfix "$GRIDC" "row?.late === null || row?.late === undefined ? '—' : row.late")"
+
+
+# ---------------------------------- 12. HR can read ONE employee's attendance
+#
+# THE REPORTED PROBLEM, AND IT WAS NOT A REFRESH ISSUE.
+#
+# HR corrected an employee's punch-in, opened that employee's attendance page,
+# and saw nothing. Both reads here resolved their subject from the TOKEN and had
+# no employee parameter at all - so the screen answered for the HR user's own
+# record, truthfully, about the wrong person.
+#
+# The fix follows the pattern employeeMonthlyReport has used since F-159:
+# a subject is honoured only for admin/hr, bounded by the caller's own tenant.
+#
+# WHAT THIS SECTION MOSTLY EXISTS TO PROTECT is the thing it must NOT have
+# loosened. readSubject() now sits beside punchSubject(), which refuses a
+# mismatched employee - and that refusal is the only thing stopping an HR role
+# writing a punch as somebody else. Two near-identical helpers side by side is
+# an invitation to "unify" them, so the last assertions here are the fence.
+echo
+echo "12. Reading one employee's attendance"
+
+teardown
+check "HR corrects the employee's day" "200" \
+  "$(correct "$A6" "$SUBJECT" "$ADAY" "09:30" "18:00" "Identity+fixture")"
+
+echo
+echo "   HR naming the employee now gets THAT employee"
+check "my-attendance accepts an employee for admin/hr" "200" \
+  "$(track my-attendance "$A6" "?employee=$SUBJECT&from_date=$ADAY&to_date=$ADAY")"
+# >>> THE ASSERTION FOR THE REPORTED BUG <<<
+check "  and answers about them, not about the caller" "$ADAY 09:30:00" \
+  "$(tbody 'foreach ($d["attendanceData"] ?? [] as $r) {
+       if (substr((string) $r["day"], 0, 10) === "'"$ADAY"'") { echo $r["punchin_time"]; return; }
+     } echo "the-corrected-day-is-absent";')"
+check "self-summary accepts one too" "200" "$(track self-summary "$A6" "?employee=$SUBJECT")"
+
+echo
+echo "   and without the parameter it is still self-only"
+check "my-attendance for the caller alone" "200" \
+  "$(track my-attendance "$A6" "?from_date=$ADAY&to_date=$ADAY")"
+# The admin has no punch on the scratch day; the employee does. If the parameter
+# were being ignored in either direction, these two calls would agree.
+check "  the admin's own month does NOT contain the employee's day" "1" \
+  "$(tbody 'foreach ($d["attendanceData"] ?? [] as $r) {
+       if (substr((string) $r["day"], 0, 10) === "'"$ADAY"'") { echo 0; return; }
+     } echo 1;')"
+
+echo
+echo "   who may not name somebody else"
+check "an employee naming a colleague is refused" "403" \
+  "$(track my-attendance "$E6" "?employee=$OTHER")"
+check "  and so is an auditor, who may read reports but not this" "403" \
+  "$(track my-attendance "$AU3" "?employee=$SUBJ3")"
+# 404, not 403 - a refusal must not confirm that an id exists elsewhere.
+check "HR of ANOTHER tenant gets 404, not 403" "404" \
+  "$(track my-attendance "$A3" "?employee=$SUBJECT")"
+check "  and self-summary likewise" "404" "$(track self-summary "$A3" "?employee=$SUBJECT")"
+# Naming yourself is never a privileged act.
+check "an employee naming THEMSELVES is fine" "200" \
+  "$(track my-attendance "$E6" "?employee=$SUBJECT")"
+check "no token" "401" "$(track my-attendance "" "?employee=$SUBJECT")"
+
+echo
+echo "   THE FENCE: the punch WRITES stay self-only"
+check "an admin punching IN for another employee is still refused" "403" \
+  "$(apunch in "$A6" "$ADAY" "07:00")"
+check "an admin punching OUT for another employee is still refused" "403" \
+  "$(apunch out "$A6" "$ADAY" "22:00")"
+check "  and the employee's corrected day is untouched by those attempts" "$ADAY 09:30:00|$ADAY 18:00:00" \
+  "$(val "select concat(punchin_time,'|',punchout_time) v from hrms_attendances
+           where user_id=$SUBJECT and day='$ADAY' and deleted_at is null")"
+# The two helpers must remain distinguishable to a reader.
+check "punchSubject and readSubject are both present, and documented as opposites" "1" \
+  "$(php -r '
+     $f = file_get_contents("app/Http/Controllers/Api/Attendance/AttendanceTrackingApiController.php");
+     echo (strpos($f, "private function punchSubject") !== false
+        && strpos($f, "private function readSubject") !== false
+        && strpos($f, "Do not call this from punchIn() or punchOut()") !== false) ? 1 : 0;')"
+check "  and the write path does NOT call readSubject" "2" \
+  "$(php -r '
+     $f = file_get_contents("app/Http/Controllers/Api/Attendance/AttendanceTrackingApiController.php");
+     // punchIn and punchOut each resolve through punchSubject, and only those two.
+     echo preg_match_all("/\\\$this->punchSubject\\(/", $f);')"
+
 echo
 echo "  ---------------------------------------------"
 teardown
@@ -613,6 +1147,10 @@ check "  nor on the correction day" "0" "$(nedits $SUBJECT $ADAY)"
 check "  nor for the tenant-3 subject" "0" "$(nedits $SUBJ3 $ADAY)"
 # Era-wide, so a row left on a day this probe does not name is still caught -
 # which is exactly what went wrong once.
+check "  nor on the recent day section 9b used" "0" \
+  "$(if [ -n "${RDAY:-}" ]; then
+       val "select count(*) v from hrms_attendances where user_id=$SUBJECT and day='$RDAY'"
+     else echo 0; fi)"
 check "  nor anywhere in either scratch era" "0" \
   "$(php Docs/hrit-audit/_evidence/snapshot.php \
       "select count(*) v from hrms_attendance_edits \

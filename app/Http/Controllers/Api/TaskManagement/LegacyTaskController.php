@@ -151,6 +151,9 @@ class LegacyTaskController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:10000',
             'due_date' => 'nullable|date',
+            'planned_start_date' => 'nullable|date',
+            'time_start' => 'nullable|date_format:H:i',
+            'time_end' => 'nullable|date_format:H:i|after:time_start',
             // System values plus the tenant's custom priorities, resolved
             // in payload(); unknowns fall back to Medium.
             'priority' => 'nullable|string|max:100',
@@ -220,6 +223,9 @@ class LegacyTaskController extends Controller
             'task_title' => $request->input('title'),
             'task_description' => $request->input('description'),
             'task_date' => $request->input('due_date'),
+            'planned_start_date' => $request->input('planned_start_date') ?: null,
+            'time_start' => $request->input('time_start') ?: null,
+            'time_end' => $request->input('time_end') ?: null,
             'task_type' => $this->optionSets->resolvePriority($context['sub_institute_id'], (string) $request->input('priority', 'Medium')) ?? 'Medium',
             'task_allocated_to' => $request->integer('assignee_id'),
             'task_allocated' => $request->input('owner_id') ? $request->integer('owner_id') : $context['user_id'],

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\TaskManagement;
 
 use App\Http\Controllers\Controller;
+use App\Support\SubjectAuthority;
 use App\Services\TaskManagement\TaskAuditService;
 use App\Services\TaskManagement\TaskDependencyResolutionService;
 use App\Services\TaskManagement\TaskStatusTransitionService;
@@ -129,9 +130,24 @@ class MyTasksController extends Controller
             return $context;
         }
 
-        $task = $this->baseQuery($context)
-            ->where('t.id', $id)
-            ->where(function (Builder $query) use ($context) {
+        $query = $this->baseQuery($context)->where('t.id', $id);
+
+        /*
+         * ── A TASK_PRIVILEGED VIEWER SEES WHAT THEIR OWN CALENDAR FEED SHOWS ──
+         *
+         * CalendarVisibilityService::visibleOwnerIds() already returns null —
+         * "no restriction" — for a TASK_PRIVILEGED viewer, which is why an
+         * administrator's calendar/List View happily lists every tenant task,
+         * including ones owned by someone who is neither a subordinate nor on
+         * a shared project. This endpoint had no idea that tier existed: it
+         * only ever allowed own/subordinate/project-linked, so clicking one of
+         * those listed rows 404'd. Same shape as the project-membership fix
+         * below — the detail view must not be stricter than the list that
+         * displays the row, just extended to the tier that list is already
+         * built on.
+         */
+        if (!SubjectAuthority::userSatisfies($context['user_id'], SubjectAuthority::TASK_PRIVILEGED)) {
+            $query->where(function (Builder $query) use ($context) {
                 $query
                     ->where('t.task_allocated_to', $context['user_id'])
                     ->orWhere('t.task_allocated', $context['user_id'])
@@ -169,8 +185,10 @@ class MyTasksController extends Controller
                             ->where('p.sub_institute_id', $context['sub_institute_id'])
                             ->where('p.syear', $context['syear']);
                     });
-            })
-            ->first();
+            });
+        }
+
+        $task = $query->first();
 
         if (!$task) {
             return response()->json(['status' => 0, 'message' => 'Task not found.'], 404);

@@ -127,6 +127,15 @@ class jobroletexonomycontroller extends Controller
 
         $sub_institute_id = $this->apiTenantId($request);
 
+        // Phase 7.3 — apiTenantId() returns null on a failed resolution
+        // rather than throwing; used unchecked, that null would $objjobrole->save()
+        // a tenant-less row (EventRecorder::record() below would then throw,
+        // but only AFTER the bad row was already written). Refused here
+        // instead of relying on that later guard.
+        if ($sub_institute_id === null) {
+            return response()->json(['status' => 0, 'message' => 'Your session could not be verified.'], 401);
+        }
+
         // $validator = Validator::make($request->all(), [
         //     'jobrole_category' => 'required|string|max:255',
         // ]);
@@ -156,6 +165,19 @@ class jobroletexonomycontroller extends Controller
             $objjobrole->created_by = $request->user_id;
 
             if ($objjobrole->save()) {
+                // Graph projection needs to hear about this. jobroletexonomy
+                // maps to s_user_jobrole (same table, confusing model name) -
+                // confirmed this is the real job-role catalog, not a
+                // different/legacy table, before wiring this.
+                app(\App\Services\Events\EventRecorder::class)->record(
+                    'jobrole.changed',
+                    (int) $sub_institute_id,
+                    'jobrole',
+                    (int) $objjobrole->id,
+                    $request->user_id !== null ? (int) $request->user_id : null,
+                    ['jobrole_category' => $objjobrole->jobrole_category]
+                );
+
                 return response()->json(['message' => 'category added successfully !!','data' => $objjobrole], 200);
             }
 
@@ -188,12 +210,18 @@ public function storeskill(Request $request)
 
         $sub_institute_id = $this->apiTenantId($request);
 
+        // Phase 7.3 — same gap as store() above, and no EventRecorder call
+        // here to incidentally catch it: nothing stopped this from saving a
+        // tenant-less row.
+        if ($sub_institute_id === null) {
+            return response()->json(['status' => 0, 'message' => 'Your session could not be verified.'], 401);
+        }
 
           $validator = Validator::make($request->all(), [
             'department' => 'required|string',
              'status' => 'required|in:0,1',
              'sub_institute_id' => 'required|numeric',
-            
+
         ]);
 
         if ($validator->fails()) {

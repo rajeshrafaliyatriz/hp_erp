@@ -21,7 +21,7 @@ class DocumentSearchService
 {
     /**
      * @param  array{q?:string, category?:string, document_type?:string, department_id?:int,
-     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, folder_id?:int|string}  $filters
+     *                source_system?:string, date_from?:string, date_to?:string, owner_id?:int, owner_name?:string, folder_id?:int|string}  $filters
      * @return array{data: array, total: int}
      */
     public function search(array $filters, int $tenantId, int $callerId, ?int $departmentId, int $page = 1, int $perPage = 24): array
@@ -82,6 +82,8 @@ class DocumentSearchService
                 'id', 'title', 'original_file_name', 'mime_type', 'size', 'category',
                 'document_type', 'department_id', 'document_date', 'period_label',
                 'visibility', 'owner_id', 'source_system', 'tags', 'created_at',
+                // Which folder it sits in (null = the top level), so a caller can say WHERE a document is.
+                'folder_id',
                 // Every row here is already filtered to 'done' above, but the
                 // column still has to be SELECTED for the frontend to see
                 // that - omitting it left `processing_status` undefined on
@@ -92,14 +94,15 @@ class DocumentSearchService
 
         $snippets = $term !== '' ? $this->snippets($rows->pluck('id')->all(), $term) : [];
         $starred = $this->starredIds($rows->pluck('id')->all(), $callerId);
-
         $ownerNames = $this->ownerNames($rows->pluck('owner_id')->filter()->unique()->all(), $tenantId);
 
-        $data = $rows->map(function ($row) use ($snippets, $ownerNames) {
+        $data = $rows->map(function ($row) use ($snippets, $starred, $ownerNames) {
             $data = (array) $row;
             $data['snippet'] = $snippets[$row->id] ?? null;
+            $data['starred'] = in_array($row->id, $starred, true);
             // Who the document belongs to, so a list of matches can tell two people apart.
             $data['owner_name'] = $ownerNames[$row->owner_id] ?? null;
+            $data['starred'] = in_array($row->id, $starred, true);
 
             return $data;
         })->all();
@@ -135,6 +138,20 @@ class DocumentSearchService
      * @return array<int, string>
      */
     private function ownerNames(array $ids, int $tenantId): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return DB::table('tbluser')
+            ->where('sub_institute_id', $tenantId)
+            ->whereIn('id', $ids)
+            ->get(['id', 'first_name', 'last_name'])
+            ->mapWithKeys(fn ($u) => [(int) $u->id => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))])
+            ->all();
+    }
+
+    /**
      * Which of these ids has THIS caller starred? Same bounded-second-query
      * shape as snippets() above, for the same reason: starring is per-caller
      * metadata that does not belong in the main SELECT's column list - a
@@ -151,11 +168,10 @@ class DocumentSearchService
             return [];
         }
 
-        return DB::table('tbluser')
-            ->where('sub_institute_id', $tenantId)
-            ->whereIn('id', $ids)
-            ->get(['id', 'first_name', 'last_name'])
-            ->mapWithKeys(fn ($u) => [(int) $u->id => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))])
+        return DB::table('document_library_stars')
+            ->where('user_id', $userId)
+            ->whereIn('document_id', $ids)
+            ->pluck('document_id')
             ->all();
     }
 
@@ -215,7 +231,13 @@ class DocumentSearchService
         $boolean = $this->booleanModeTerm($term);
         $like = '%' . $this->escapeLike($term) . '%';
 
-        $query->where(function ($q) use ($boolean, $like) {
+        // The way a person reads a file name: "SSM Science 33 40" is `C10_2026-27_SSM_Science-33-40`. Names are
+        // compared with underscores, hyphens and dots read as spaces, so a file is found by what it is called,
+        // not by which separator its uploader happened to use. Only widens a match; it never narrows one.
+        $spoken = trim((string) preg_replace('/[_\-.\s]+/', ' ', mb_strtolower($term)));
+        $spokenLike = '%' . $this->escapeLike($spoken) . '%';
+
+        $query->where(function ($q) use ($boolean, $like, $spoken, $spokenLike) {
             if ($boolean !== '') {
                 $q->orWhereRaw(
                     'MATCH(title, original_file_name, subject) AGAINST (? IN BOOLEAN MODE)',
@@ -228,6 +250,12 @@ class DocumentSearchService
 
             $q->orWhere('title', 'like', $like)
                 ->orWhere('original_file_name', 'like', $like);
+
+            if ($spoken !== '') {
+                foreach (['title', 'original_file_name'] as $column) {
+                    $q->orWhereRaw("REPLACE(REPLACE(REPLACE(LOWER({$column}), '_', ' '), '-', ' '), '.', ' ') like ?", [$spokenLike]);
+                }
+            }
         });
     }
 
