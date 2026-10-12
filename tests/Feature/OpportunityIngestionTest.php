@@ -84,6 +84,8 @@ class OpportunityIngestionTest extends TestCase
         if (file_exists(base_path('database/migrations/2026_10_01_130000_add_stage_to_g2g_research_runs.php'))) {
             (require base_path('database/migrations/2026_10_01_130000_add_stage_to_g2g_research_runs.php'))->up();
         }
+        // The market-import columns the opportunity feed now reads (expiry, samples, evidence).
+        (require base_path('database/migrations/2026_10_08_100000_extend_g2g_signals_for_market_import.php'))->up();
 
         RoleKey::flushCache();
         Cache::flush();
@@ -145,7 +147,7 @@ class OpportunityIngestionTest extends TestCase
                 'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
             ], $aiStatus),
             '*/robots.txt' => Http::response('', 404),
-            '*' => Http::response('<html><head><title>Acme</title></head><body><p>' . self::SNIPPET . '</p></body></html>', 200, ['Content-Type' => 'text/html']),
+            '*' => Http::response('<html><head><title>Acme</title></head><body><p>' . self::SNIPPET . '</p><p>The company said the plant will employ staff across engineering, finance and operations.</p></body></html>', 200, ['Content-Type' => 'text/html']),
         ]);
     }
 
@@ -160,11 +162,16 @@ class OpportunityIngestionTest extends TestCase
     {
         return $o + [
             'company_name' => 'Acme Industries', 'website' => 'https://acme.example.com', 'industry' => null, 'location' => 'Pune',
-            'title' => 'New Pune plant, replacing manual payroll', 'category' => 'expansion',
-            'observed_event' => 'Acme announced a Pune plant and 200 hires.', 'why_indicates_need' => 'Rapid hiring strains manual payroll.',
-            'product_fit' => 'Automated payroll runs.', 'recommended_action' => 'Research the HR head before outreach.',
-            'priority' => 'High', 'confidence' => 'Medium', 'qualification' => 'Relevant Requirement Found',
-            'event_date' => null, 'source_ids' => ['S1'],
+            'buyer_type' => 'enterprise', 'context' => null, 'trigger_type' => 'expansion',
+            'what_happened' => 'Acme announced a Pune plant and 200 hires.',
+            'trigger_summary' => 'Hiring 200 people in Pune while replacing its manual payroll system.',
+            'likely_problem' => 'Fast hiring is straining its manual payroll. Our payroll automation fits that gap.',
+            'what_we_could_sell' => 'payroll automation pilot for the new Pune plant HR team', 'offer_id' => null,
+            'entry_point' => 'pilot', 'entry_point_reason' => null,
+            'soft_marketing_angle' => 'Open with the cost of manual payroll errors during a 200-person hiring surge.',
+            'likely_stakeholder' => null,
+            'scores' => ['buying_signal' => 4, 'problem_fit' => 4, 'product_fit' => 4, 'accessibility' => 3, 'urgency' => 3, 'potential_value' => 3, 'evidence_quality' => 3, 'reasoning' => 'Clear hiring surge.'],
+            'inference_reasoning' => null, 'event_date' => null, 'source_ids' => ['S1'],
             'evidence_quote' => 'Acme Industries announced a new plant in Pune and said it is hiring 200 people',
         ];
     }
@@ -259,7 +266,14 @@ class OpportunityIngestionTest extends TestCase
         $this->assertSame('Acme Industries', $company->name);
         $this->assertNull($company->website); // news.example.com neither states nor is acme.example.com
         $opp = CompanyOpportunity::sole();
-        $this->assertSame('Relevant Requirement Found', $opp->qualification);
+        // A news site is a secondary source: a headline is never CONFIRMED, however well it quotes.
+        $this->assertSame('hypothesis', $opp->claim_level);
+        $this->assertSame('Monitoring', $opp->qualification);
+        $this->assertSame('watchlist', $opp->feed_section);
+        $this->assertSame(24, $opp->score_total);
+        $this->assertSame('pilot', $opp->entry_point);
+        $this->assertSame('payroll automation pilot for the new Pune plant HR team', $opp->what_we_could_sell);
+        $this->assertSame('https://news.example.com/acme-pune', $opp->source_url);
         $this->assertSame('New', $opp->review_status);
         $this->assertSame($run->id, $opp->research_run_id);
         $this->assertSame('https://news.example.com/acme-pune', $opp->sources[0]['url']);
@@ -276,7 +290,8 @@ class OpportunityIngestionTest extends TestCase
             $this->opportunity(['company_name' => 'Initech', 'title' => 'Company not in quote']),
             $this->opportunity(['title' => 'Unknown source', 'source_ids' => ['S99']]),
             $this->opportunity(['title' => 'Short quote', 'evidence_quote' => 'Acme']),
-            $this->opportunity(['title' => 'Bad category', 'category' => 'astrology']),
+            $this->opportunity(['title' => 'Vague sell line', 'what_we_could_sell' => 'AI solution for digital transformation']),
+            $this->opportunity(['title' => 'Other with no reason', 'entry_point' => 'other']),
             $this->opportunity(['title' => 'Excluded', 'industry' => 'Gambling']),
         ]);
 
@@ -284,16 +299,35 @@ class OpportunityIngestionTest extends TestCase
 
         $this->assertSame(1, CompanyOpportunity::count());
         $run = ResearchRun::sole();
-        $this->assertSame('partial', $run->status);
-        $this->assertSame(6, $run->opportunities_rejected);
+        // Results below the evidence bar are a count, not a degraded run: only a failed query is "partial".
+        $this->assertSame('success', $run->status);
+        $this->assertSame(7, $run->opportunities_rejected);
+        $this->assertEqualsCanonicalizing(['vague_sell_line', 'entry_point_other_needs_reason'], \App\Domain\Signals\Market\ImportRejection::pluck('reason_code')->all());
     }
 
-    public function test_low_confidence_cannot_claim_a_relevant_requirement(): void
+    public function test_evidence_level_is_derived_and_a_claimed_level_is_ignored(): void
     {
         $this->profile();
-        $this->fakeWorld([$this->opportunity(['confidence' => 'Low'])]);
+        // The model asserts 'confirmed'; the only source is a news site, so the gate stores hypothesis.
+        $this->fakeWorld([$this->opportunity(['claim_level' => 'confirmed'])]);
         $this->runResearch()->assertStatus(202);
-        $this->assertSame('Needs Verification', CompanyOpportunity::sole()->qualification);
+
+        $opp = CompanyOpportunity::sole();
+        $this->assertSame('hypothesis', $opp->claim_level);
+        $this->assertStringContainsString('secondary', $opp->evidence_note);
+    }
+
+    public function test_a_first_party_page_that_was_read_is_confirmed_and_acts_now(): void
+    {
+        $this->profile();
+        $this->fakeWorld([$this->opportunity(['website' => 'https://www.acme-industries.com'])], [['url' => 'https://www.acme-industries.com/news/pune', 'title' => 'Pune plant', 'content' => self::SNIPPET, 'published_date' => now()->toDateString()]]);
+        $this->runResearch()->assertStatus(202);
+
+        $opp = CompanyOpportunity::sole();
+        $this->assertSame('confirmed', $opp->claim_level);
+        $this->assertSame('page_text', $opp->fetch_level);
+        $this->assertSame('immediate_action', $opp->feed_section); // CONFIRMED and score 24 >= 22
+        $this->assertSame('New Opportunity', $opp->qualification);
     }
 
     public function test_website_is_kept_only_when_stated_or_first_party(): void
@@ -988,7 +1022,7 @@ class OpportunityIngestionTest extends TestCase
         $call = 0;
         Http::fake(['generativelanguage.googleapis.com/*' => function () use (&$call) {
             $call++;
-            if ($call === 2) {
+            if ($call === 2 || $call === 3) { // call 3 is the intentional no-thinking retry of the same chunk (AiModelClient::callGemini)
                 return Http::response(['error' => 'boom'], 500);
             }
 
@@ -1193,20 +1227,16 @@ class OpportunityIngestionTest extends TestCase
         $this->getJson("/api/signals/research/runs/{$run->id}/sources", $this->h(self::T2))->assertStatus(404);
     }
 
-    public function test_signal_kind_is_stored_validated_shown_and_filterable(): void
+    public function test_signal_kind_filter_still_works_and_researched_leads_are_opportunities(): void
     {
         $this->profile();
-        $this->fakeWorld([
-            $this->opportunity(['signal_kind' => 'risk', 'title' => 'Payroll risk during hiring surge']),
-            $this->opportunity(['signal_kind' => 'astrology', 'category' => 'hiring', 'title' => 'Bad kind falls back to none']),
-        ]);
+        $this->fakeWorld([$this->opportunity(['signal_kind' => 'risk'])]); // ignored: one vocabulary, the gate's
         $this->runResearch()->assertStatus(202);
+        $this->assertSame('opportunity', CompanyOpportunity::sole()->signal_kind);
 
+        $this->seedOpportunity(self::T1, ['signal_kind' => 'risk', 'title' => 'Payroll risk during hiring surge']);
         $h = $this->h();
         $list = $this->getJson('/api/signals/opportunities', $h)->assertOk();
-        $kinds = collect($list->json('data'))->pluck('signal_kind', 'title');
-        $this->assertSame('risk', $kinds['Payroll risk during hiring surge']);
-        $this->assertNull($kinds['Bad kind falls back to none']);
         $this->assertContains('gap', collect($list->json('filters.kinds'))->pluck('value')->all());
 
         $this->getJson('/api/signals/opportunities?kind=risk', $h)->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.signal_kind_label', 'Risk');
