@@ -18,8 +18,17 @@ class TextExtractionManager
         $this->extractors = [
             new PdfExtractor(),
             new DocxExtractor(),
+            new PptxExtractor(),
+            new OdtExtractor(),
             new ExcelExtractor(),
             new PlainTextExtractor(),
+            // Last: the heuristic byte-scan is the fallback of last resort
+            // for the legacy binary formats none of the structured
+            // extractors above handle (doc/xls/ppt) - ordering doesn't
+            // change behavior here (handles() is format-exclusive across
+            // every extractor in this list), just reads as "try the real
+            // parsers first" for a future reader.
+            new LegacyOfficeExtractor(),
         ];
     }
 
