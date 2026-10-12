@@ -211,7 +211,13 @@ class OpportunityResearcher
             $failure = AiFailureClassifier::classify($e);
             Log::error('signals.research_failed', [
                 'tenant' => $tenantId, 'http_status' => $failure['http'], 'code' => $failure['code'], 'exception' => get_class($e),
-            ]);
+            ] + (
+                // An unclassified failure is the hardest to diagnose (the UI only says "generation failed"), so record
+                // what it was. Not for AI-provider errors: their text can echo the prompt and is never logged.
+                $failure['code'] === 'generation_failed' && ! $e instanceof \App\Domain\AI\Support\AiProviderHttpException
+                    ? ['message' => mb_substr($e->getMessage(), 0, 400), 'where' => basename($e->getFile()) . ':' . $e->getLine()]
+                    : []
+            ));
 
             return $this->failRun($run, $tenantId, $trigger, $userId, $started, $failure['code'], $failure['message']);
         } finally {
