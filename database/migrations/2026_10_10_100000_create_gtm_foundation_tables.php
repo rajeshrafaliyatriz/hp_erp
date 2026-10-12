@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /*
@@ -36,7 +37,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('gtm_accounts')) {
+        if (! $this->has('gtm_accounts')) {
             Schema::create('gtm_accounts', function (Blueprint $t) {
                 $t->id();
                 $t->unsignedBigInteger('sub_institute_id');
@@ -66,7 +67,7 @@ return new class extends Migration
             });
         }
 
-        if (! Schema::hasTable('gtm_contacts')) {
+        if (! $this->has('gtm_contacts')) {
             Schema::create('gtm_contacts', function (Blueprint $t) {
                 $t->id();
                 $t->unsignedBigInteger('sub_institute_id');
@@ -91,7 +92,7 @@ return new class extends Migration
             });
         }
 
-        if (! Schema::hasTable('gtm_activities')) {
+        if (! $this->has('gtm_activities')) {
             Schema::create('gtm_activities', function (Blueprint $t) {
                 $t->id();
                 $t->unsignedBigInteger('sub_institute_id');
@@ -113,7 +114,7 @@ return new class extends Migration
             });
         }
 
-        if (! Schema::hasTable('gtm_playbooks')) {
+        if (! $this->has('gtm_playbooks')) {
             Schema::create('gtm_playbooks', function (Blueprint $t) {
                 $t->id();
                 $t->unsignedBigInteger('sub_institute_id')->nullable();  // NULL = platform default
@@ -141,7 +142,7 @@ return new class extends Migration
             });
         }
 
-        if (! Schema::hasTable('gtm_analyses')) {
+        if (! $this->has('gtm_analyses')) {
             Schema::create('gtm_analyses', function (Blueprint $t) {
                 $t->id();
                 $t->unsignedBigInteger('sub_institute_id');
@@ -166,6 +167,16 @@ return new class extends Migration
                 $t->index(['sub_institute_id', 'subject_type', 'subject_id'], 'gtm_analyses_tenant_subject_idx');
             });
         }
+    }
+
+    /** MariaDB 10.1 (live) cannot run Schema::hasTable(); sqlite (PHPUnit) has no information_schema. */
+    private function has(string $t): bool
+    {
+        if (DB::getDriverName() === 'sqlite') {
+            return Schema::hasTable($t);
+        }
+
+        return DB::selectOne('SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [$t])->c > 0;
     }
 
     public function down(): void

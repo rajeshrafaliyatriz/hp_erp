@@ -328,7 +328,7 @@ class DealController extends Controller
 
     public function score(Request $request, int $id, DealAnalyzer $analyzer): JsonResponse
     {
-        return $this->analyse($request, $id, fn ($deal, $uid) => $analyzer->score($deal, $this->methodologyFor($request, $deal), $uid), 'deal_scored');
+        return $this->analyse($request, $id, fn ($deal, $uid) => $analyzer->score($deal, $this->methodologyFor($request, $deal), $uid), 'gtm.deal.scored');
     }
 
     public function discovery(Request $request, int $id, DealAnalyzer $analyzer): JsonResponse
@@ -338,7 +338,7 @@ class DealController extends Controller
             return $this->invalid($v);
         }
 
-        return $this->analyse($request, $id, fn ($deal, $uid) => $analyzer->discovery($deal, (string) $request->input('notes'), $uid), 'deal_discovery_analysed');
+        return $this->analyse($request, $id, fn ($deal, $uid) => $analyzer->discovery($deal, (string) $request->input('notes'), $uid), 'gtm.deal.discovery_analysed');
     }
 
     /** Shared wrapper: tenant lookup, then the AI call with every failure mapped to a safe response. */
@@ -373,7 +373,7 @@ class DealController extends Controller
 
             return response()->json(['status' => 0, 'code' => 'ai_error', 'message' => 'The AI provider could not complete this analysis. Nothing was changed.'], 502);
         }
-        GtmAudit::record("gtm.{$event}", $t, 'gtm_deals', $deal->id, $identity['user_id'], ['analysis_id' => $out['analysis_id'] ?? null]);
+        GtmAudit::record($event, $t, 'gtm_deals', $deal->id, $identity['user_id'], ['analysis_id' => $out['analysis_id'] ?? null]);
 
         return response()->json(['status' => 1, 'data' => $out]);
     }
@@ -441,6 +441,7 @@ class DealController extends Controller
             'next_step' => 'nullable|string|max:1000',
             'next_step_due' => 'nullable|date',
             'methodology_slug' => 'nullable|string|max:100',
+            'forecast_category' => 'nullable|in:pipeline,best_case,commit,omitted',
         ];
     }
 

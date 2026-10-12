@@ -109,6 +109,7 @@ final class ContactImporter
         $existingEmails = GtmContact::where('sub_institute_id', $tenant)->whereNotNull('email')->pluck('id', DB::raw('LOWER(email)'))->all();
         $existingNameKeys = GtmContact::where('sub_institute_id', $tenant)->whereNull('email')->get(['account_id', 'full_name'])->mapWithKeys(fn ($c) => [$c->account_id.'|'.mb_strtolower($c->full_name) => true])->all();
 
+        $suppressed = array_flip(app(\App\Domain\Gtm\Outreach\Suppressions::class)->among($tenant, array_filter(array_map(fn ($r) => mb_strtolower(trim((string) ($r[$mapping['email'] ?? -1] ?? ''))), $parsed['rows']))));
         $seenEmails = [];
         $seenNames = [];
         $newAccounts = [];
@@ -161,6 +162,9 @@ final class ContactImporter
                 $linkedin = '';
             }
 
+            if ($email !== '' && $errors === [] && isset($suppressed[$email])) {
+                $warnings[] = 'This address is on the suppression list: the contact is saved but will never be emailed.';
+            }
             $status = 'ok';
             if ($errors === []) {
                 $nameKey = ($accountId ?? 'new:'.mb_strtolower((string) $newAccountName)).'|'.mb_strtolower($name);

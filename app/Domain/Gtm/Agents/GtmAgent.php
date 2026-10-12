@@ -86,11 +86,11 @@ abstract class GtmAgent
     }
 
     /** Ask the model to apply the playbook; returns the AiRunner payload plus the playbook reference. */
-    protected function ask(int $tenant, ?int $userId, string $playbookSlug, string $kind, string $subjectType, ?int $subjectId, array $records, array $sources, string $summary, int $maxTokens = 1800): array
+    protected function ask(int $tenant, ?int $userId, string $playbookSlug, string $kind, string $subjectType, ?int $subjectId, array $records, array $sources, string $summary, int $maxTokens = 1800, string $extraSystem = ''): array
     {
         $playbook = $this->playbooks->resolve($tenant, $playbookSlug);
         $run = $this->ai->json($tenant, $userId, $kind, $subjectType, $subjectId, [
-            ['role' => 'system', 'content' => $this->playbooks->systemPrompt($playbook)],
+            ['role' => 'system', 'content' => $this->playbooks->systemPrompt($playbook).($extraSystem !== '' ? ' '.$extraSystem : '')],
             ['role' => 'user', 'content' => json_encode($records, JSON_UNESCAPED_UNICODE)],
         ], $sources, $summary, $playbook->id, $maxTokens);
 

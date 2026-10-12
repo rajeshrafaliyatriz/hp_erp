@@ -28,7 +28,7 @@ return new class extends Migration
 
     public function up(): void
     {
-        if (! $this->tableExists('gtm_playbook_versions')) {
+        if (! $this->has('gtm_playbook_versions')) {
             Schema::create('gtm_playbook_versions', function (Blueprint $t) {
                 $t->id();
                 $t->unsignedBigInteger('playbook_id');
@@ -78,10 +78,10 @@ return new class extends Migration
         DB::table('gtm_playbooks')->whereIn('id', $ids)->delete();
         Schema::dropIfExists('gtm_playbook_versions');
 
-        if ($this->tableExists('tblmenumaster_g2g')) {
+        if ($this->has('tblmenumaster_g2g')) {
             $menu = DB::table('tblmenumaster_g2g')->where('access_link', self::LINK)->value('id');
             if ($menu) {
-                if ($this->tableExists('tblgroupwise_rights_g2g')) {
+                if ($this->has('tblgroupwise_rights_g2g')) {
                     DB::table('tblgroupwise_rights_g2g')->where('menu_id', $menu)->delete();
                 }
                 DB::table('tblmenumaster_g2g')->where('id', $menu)->delete();
@@ -91,7 +91,7 @@ return new class extends Migration
 
     private function menu(): void
     {
-        if (! $this->tableExists('tblmenumaster_g2g')) {
+        if (! $this->has('tblmenumaster_g2g')) {
             return;
         }
         $root = DB::table('tblmenumaster_g2g')->where('access_link', '/gtm')->value('id');
@@ -106,7 +106,7 @@ return new class extends Migration
                 'sub_institute_id' => null, 'created_at' => now(), 'updated_at' => now(),
             ]);
 
-        if (! $this->tableExists('tblgroupwise_rights_g2g') || ! $this->tableExists('tbluserprofilemaster')) {
+        if (! $this->has('tblgroupwise_rights_g2g') || ! $this->has('tbluserprofilemaster')) {
             return;
         }
         $grants = ['administrator' => [1, 1, 1, 1], 'executive' => [1, 0, 0, 0]];
@@ -123,8 +123,13 @@ return new class extends Migration
         }
     }
 
-    private function tableExists(string $table): bool
+    /** MariaDB 10.1 (live) cannot run Schema::hasTable(); sqlite (PHPUnit) has no information_schema. */
+    private function has(string $t): bool
     {
-        return DB::selectOne('SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [$table])->c > 0;
+        if (DB::getDriverName() === 'sqlite') {
+            return Schema::hasTable($t);
+        }
+
+        return DB::selectOne('SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [$t])->c > 0;
     }
 };
