@@ -12,6 +12,7 @@ use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -416,6 +417,178 @@ class CrmProductController extends Controller
         );
     }
 
+    // ── Bundle components (Products only - one level, no price override) ──
+
+    public function bundleItems(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $parent = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $parent) {
+            return response()->json(['status' => 0, 'message' => 'Product not found.'], 404);
+        }
+
+        if (! $this->canOnType($identity, $parent->item_type, 'view')) {
+            return $this->forbidden();
+        }
+
+        $rows = DB::table('crm_product_bundle_items as b')
+            ->join('crm_products as p', 'p.id', '=', 'b.component_product_id')
+            ->where('b.parent_product_id', $id)
+            ->whereNull('p.deleted_at')
+            ->select('b.id as row_id', 'p.id as product_id', 'p.name', 'p.item_type', 'p.unit_price', 'b.quantity')
+            ->get();
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Bundle components.',
+            'data' => $rows->map(fn ($row) => [
+                'id' => (string) $row->row_id,
+                'productId' => (string) $row->product_id,
+                'name' => $row->name,
+                'itemType' => $row->item_type,
+                'unitPrice' => $row->unit_price !== null ? (float) $row->unit_price : null,
+                'quantity' => (float) $row->quantity,
+            ])->all(),
+        ]);
+    }
+
+    public function addBundleItem(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $parent = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $parent) {
+            return response()->json(['status' => 0, 'message' => 'Product not found.'], 404);
+        }
+
+        if ($parent->item_type !== 'product') {
+            return response()->json(['status' => 0, 'message' => 'Only Products can be bundles, not Services.'], 422);
+        }
+
+        if (! $this->canOnType($identity, 'product', 'edit')) {
+            return $this->forbidden();
+        }
+
+        $validator = Validator::make($request->all(), [
+            'componentProductId' => 'required|integer',
+            'quantity' => 'nullable|numeric|min:0.01',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $componentId = (int) $request->input('componentProductId');
+
+        if ($componentId === $id) {
+            return response()->json(['status' => 0, 'message' => 'A product cannot be a component of itself.'], 422);
+        }
+
+        $component = $this->ownRow($identity['sub_institute_id'], $componentId);
+
+        if (! $component) {
+            return response()->json(['status' => 0, 'message' => 'That component product was not found.'], 422);
+        }
+
+        // One level only, matching legacy (getSubProducts() never recurses) -
+        // a bundle cannot itself be used as a component, which also rules
+        // out any cycle (A contains B, B contains A) by construction.
+        $componentIsItselfABundle = DB::table('crm_product_bundle_items')->where('parent_product_id', $componentId)->exists();
+
+        if ($componentIsItselfABundle) {
+            return response()->json(['status' => 0, 'message' => 'That product is itself a bundle - bundles cannot be nested.'], 422);
+        }
+
+        DB::table('crm_product_bundle_items')->updateOrInsert(
+            ['parent_product_id' => $id, 'component_product_id' => $componentId],
+            ['quantity' => $request->input('quantity', 1), 'created_at' => now()],
+        );
+
+        return response()->json(['status' => 1, 'message' => 'Component added.']);
+    }
+
+    public function removeBundleItem(Request $request, int $id, int $rowId): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $parent = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $parent) {
+            return response()->json(['status' => 0, 'message' => 'Product not found.'], 404);
+        }
+
+        if (! $this->canOnType($identity, $parent->item_type, 'edit')) {
+            return $this->forbidden();
+        }
+
+        DB::table('crm_product_bundle_items')->where('id', $rowId)->where('parent_product_id', $id)->delete();
+
+        return response()->json(['status' => 1, 'message' => 'Component removed.']);
+    }
+
+    // ── Image upload ────────────────────────────────────────────────────
+
+    public function uploadImage(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
+            return response()->json(['status' => 0, 'message' => 'Product not found.'], 404);
+        }
+
+        if (! $this->canOnType($identity, $existing->item_type, 'edit')) {
+            return $this->forbidden();
+        }
+
+        $validator = Validator::make($request->all(), ['image' => 'required|image|max:5120']);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $file = $request->file('image');
+        // Content-derived extension and a random basename, never the
+        // client's filename - same reasoning as AccountController's own
+        // storeAvatar() (a client-named key lets a disguised upload get
+        // served back with an attacker-chosen Content-Type).
+        $extension = $file->extension() ?: 'jpg';
+        $name = $id . '_' . Str::random(24) . '.' . $extension;
+
+        Storage::disk('digitalocean')->putFileAs('public/hp_crm_product/', $file, $name, [
+            'visibility' => 'public',
+            'ContentType' => $file->getMimeType() ?: 'application/octet-stream',
+        ]);
+
+        DB::table('crm_products')->where('id', $id)->update([
+            'image' => $name, 'updated_by' => $identity['user_id'], 'updated_at' => now(),
+        ]);
+
+        $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
+
+        return response()->json(['status' => 1, 'message' => 'Image uploaded.', 'data' => $this->resource($row)]);
+    }
+
     /** Exports the same rows index() would list (itemType + search applied). */
     public function export(Request $request): StreamedResponse|JsonResponse
     {
@@ -584,6 +757,21 @@ class CrmProductController extends Controller
             ->first();
     }
 
+    private function imageUrl(?string $filename): ?string
+    {
+        $filename = trim((string) $filename);
+
+        if ($filename === '') {
+            return null;
+        }
+
+        try {
+            return Storage::disk('digitalocean')->url('public/hp_crm_product/' . $filename);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function ownRowJoined(int $tenantId, int $id): ?object
     {
         return DB::table('crm_products as p')
@@ -653,6 +841,7 @@ class CrmProductController extends Controller
             'reorderLevel' => $row->reorder_level !== null ? (int) $row->reorder_level : null,
             'weight' => $row->weight !== null ? (float) $row->weight : null,
             'usageUnit' => $row->usage_unit,
+            'imageUrl' => $this->imageUrl($row->image ?? null),
             'assignedTo' => $row->assigned_to ? (string) $row->assigned_to : null,
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
             'createdAt' => $row->created_at,

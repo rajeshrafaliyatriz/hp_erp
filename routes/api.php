@@ -3818,6 +3818,10 @@ Route::prefix('crm')->group(function () {
     Route::post('products/bulk/assign', [$crmProduct, 'bulkAssign']);
     Route::post('products/merge', [$crmProduct, 'merge']);
     Route::post('products/import', [$crmProduct, 'import']);
+    Route::get('products/{id}/bundle-items', [$crmProduct, 'bundleItems'])->whereNumber('id');
+    Route::post('products/{id}/bundle-items', [$crmProduct, 'addBundleItem'])->whereNumber('id');
+    Route::delete('products/{id}/bundle-items/{rowId}', [$crmProduct, 'removeBundleItem'])->whereNumber('id')->whereNumber('rowId');
+    Route::post('products/{id}/image', [$crmProduct, 'uploadImage'])->whereNumber('id');
 
     // Recycle Bin: one shared screen across all 4 modules. No single static
     // middleware here - CrmRecycleBinController checks each row's own type
