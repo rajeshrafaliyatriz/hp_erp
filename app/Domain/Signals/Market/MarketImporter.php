@@ -35,6 +35,7 @@ class MarketImporter
         private readonly QualificationGate $gate,
         private readonly BuyerResolver $buyers,
         private readonly MatchingEngine $matcher,
+        private readonly SectionAssigner $sections = new SectionAssigner(),
     ) {
     }
 
@@ -111,13 +112,25 @@ class MarketImporter
 
         $fingerprint = hash('sha256', implode('|', [$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url'])]));
         $existing = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $fingerprint)->first();
+        $legacy = false;
+        if ($existing === null) {
+            // Rows the web-research pipeline wrote before it used this importer carry a different
+            // fingerprint formula and no trigger_type. Match them on company + source URL so the first
+            // run through the gate enriches them instead of duplicating them.
+            $existing = $this->legacyMatch($tenantId, $company->id, $r['source_url']);
+            $legacy = $existing !== null;
+        }
 
         $base = ['suggestion' => $resolved['suggestion'], 'alias_conflicts' => $resolved['alias_conflicts']];
 
         if ($existing === null) {
             $opportunity = CompanyOpportunity::create($this->columns($tenantId, $company->id, $r, $fingerprint, $meta));
 
-            $this->event($tenantId, $opportunity->id, 'created', ['claim_level' => [null, $r['claim_level']], 'fetch_level' => [null, $r['fetch_level']]], $scanLogId);
+            $created = ['claim_level' => [null, $r['claim_level']], 'fetch_level' => [null, $r['fetch_level']]];
+            if (($r['entry_point_reason'] ?? null) !== null) {
+                $created['entry_point_reason'] = $r['entry_point_reason'];
+            }
+            $this->event($tenantId, $opportunity->id, 'created', $created, $scanLogId);
             if ($r['evidence_note'] !== null) {
                 $this->event($tenantId, $opportunity->id, 'evidence_downgraded', ['claim_level' => ['confirmed', 'inference'], 'note' => $r['evidence_note']], $scanLogId);
             }
@@ -138,7 +151,7 @@ class MarketImporter
 
         $new = $this->columns($tenantId, $company->id, $r, $fingerprint, $meta);
         $changes = [];
-        foreach (['event_date', 'expires_at', 'claim_level', 'fetch_level', 'trigger_summary', 'score_total', 'entry_point'] as $field) {
+        foreach (['event_date', 'expires_at', 'claim_level', 'fetch_level', 'trigger_summary', 'score_total', 'entry_point', 'what_we_could_sell', 'feed_section'] as $field) {
             $old = $existing->{$field};
             $old = $old instanceof \DateTimeInterface ? $old->format('Y-m-d') : $old;
             if (($new[$field] ?? null) !== null && (string) $new[$field] !== (string) $old) {
@@ -148,7 +161,10 @@ class MarketImporter
 
         // Re-imports refresh the evidence fields; they never touch review_status / pipeline_status
         // (what a person decided) or first_discovered_at.
-        unset($new['review_status'], $new['pipeline_status'], $new['first_discovered_at'], $new['fingerprint']);
+        unset($new['review_status'], $new['pipeline_status'], $new['first_discovered_at']);
+        if (! $legacy) {
+            unset($new['fingerprint']);
+        }
         // first_discovered_at is assigned to ITSELF in the UPDATE. Migration 2026_10_08_110000
         // removes the column's ON UPDATE clause, but until it has run (or if it never does) any
         // UPDATE that omits the column makes MySQL/MariaDB reset it to now(). An explicit
@@ -178,27 +194,29 @@ class MarketImporter
         $claim = $r['claim_level'];
         $fact = $r['what_happened'] ?? $r['trigger_summary'];
 
+        $section = $this->sections->assign(['claim_level' => $claim, 'fetch_level' => $r['fetch_level'], 'score_total' => $total, 'context' => $r['context'] ?? null], $daysLeft) ?? SectionAssigner::WATCHING;
+
         $row = [
-            'sub_institute_id' => $tenantId, 'company_id' => $companyId, 'research_run_id' => null,
+            'sub_institute_id' => $tenantId, 'company_id' => $companyId, 'research_run_id' => $meta['research_run_id'] ?? null,
             'ingestion_source_id' => $meta['ingestion_source_id'] ?? null,
             'title' => mb_substr($r['trigger_summary'], 0, 191),
             'category' => self::CATEGORY[$r['trigger_type']] ?? 'project', 'signal_kind' => 'opportunity',
             'observed_event' => $fact, 'why_indicates_need' => $r['likely_problem'] ?? $r['trigger_summary'],
             'product_fit' => $r['what_we_could_sell'] ?? '', 'recommended_action' => $r['what_we_could_sell'] ?? '',
             'priority' => $total === null ? 'Low' : ($total >= 28 ? 'High' : ($total >= 20 ? 'Medium' : 'Low')),
-            'urgency' => $expires === null ? null : ($daysLeft < 0 ? 'Expired' : 'Closes ' . \Illuminate\Support\Carbon::parse($expires)->format('d M Y')),
+            // Stored as a band (act_this_week | act_this_month | nurture); the deadline itself is expires_at.
+            'urgency' => (new CardPresenter())->band($daysLeft, $scores['urgency'] ?? null, $section),
             // Evidence decides the section, not urgency alone: only a confirmed claim read from the
             // document or page text, and not yet expired, is eligible for Immediate action. Everything
             // else (inference, hypothesis, a snippet or a blocked page) is Watchlist. Expired items are
             // hidden by the feed unless the "Expired" filter is on.
-            'feed_section' => ($claim === 'confirmed' && in_array($r['fetch_level'], ['full_document', 'page_text'], true) && ($daysLeft === null || $daysLeft >= 0))
-                ? 'immediate_action' : 'watchlist',
+            'feed_section' => $section,
             'qualification' => $claim === 'confirmed'
                 ? (in_array($r['trigger_type'], ['tender', 'rfp', 'eoi', 'rfq'], true) ? 'Relevant Requirement Found' : 'New Opportunity')
                 : ($claim === 'inference' ? 'Needs Verification' : 'Monitoring'),
             'confidence' => ['confirmed' => 'High', 'inference' => 'Medium', 'hypothesis' => 'Low'][$claim],
             'review_status' => 'New', 'pipeline_status' => 'NEW',
-            'sources' => [['url' => $r['source_url'], 'title' => $r['source_title'], 'published_at' => $r['event_date'], 'excerpt' => null, 'retrieved_at' => now()->toDateTimeString()]],
+            'sources' => [['url' => $r['source_url'], 'title' => $r['source_title'], 'published_at' => $r['event_date'], 'excerpt' => $r['source_excerpt'] ?? null, 'retrieved_at' => now()->toDateTimeString(), 'content_hash' => $r['content_hash'] ?? null]],
             'confirmed_facts' => $claim === 'confirmed' && $r['what_happened'] ? [$r['what_happened']] : [],
             'unverified_claims' => $claim !== 'confirmed' ? [$fact] : [],
             'source_published_at' => $r['event_date'], 'event_date' => $r['event_date'], 'fingerprint' => $fingerprint,
@@ -258,6 +276,21 @@ class MarketImporter
         }
 
         return $count;
+    }
+
+    private function legacyMatch(int $tenantId, int $companyId, string $sourceUrl): ?CompanyOpportunity
+    {
+        $key = $this->urlKey($sourceUrl);
+
+        foreach (CompanyOpportunity::where('sub_institute_id', $tenantId)->where('company_id', $companyId)->whereNull('trigger_type')->get() as $row) {
+            foreach ((array) $row->sources as $s) {
+                if (is_array($s) && isset($s['url']) && $this->urlKey((string) $s['url']) === $key) {
+                    return $row;
+                }
+            }
+        }
+
+        return null;
     }
 
     /** @param array<string, mixed> $changes */

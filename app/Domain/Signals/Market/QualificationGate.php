@@ -15,12 +15,13 @@ use Illuminate\Support\Carbon;
 final class QualificationGate
 {
     public const TRIGGER_TYPES = ['tender', 'rfp', 'eoi', 'rfq', 'programme', 'regulation', 'expansion', 'funding', 'acquisition', 'leadership', 'hiring', 'partnership', 'other'];
-    public const BUYER_TYPES = ['government', 'institutional', 'sme', 'school', 'enterprise', 'other'];
+    public const BUYER_TYPES = ['government', 'institutional', 'sme', 'school', 'enterprise', 'other', 'school_group', 'college', 'university', 'public_sector', 'hospital', 'training_institute'];
     public const CLAIM_LEVELS = ['confirmed' => 3, 'inference' => 2, 'hypothesis' => 1];
     public const FETCH_LEVELS = ['full_document' => 3, 'page_text' => 2, 'search_snippet' => 1, 'blocked' => 0];
     public const BUSINESS_FIT = ['eb', 'scholar', 'g2g', 'multiple'];
     public const ENTRY_POINTS = ['discovery_meeting', 'pilot', 'poc', 'paid_assessment', 'workshop', 'si_partnership', 'rfp_response', 'other'];
     public const SCALES = ['small', 'medium', 'large', 'strategic'];
+    public const CONTEXTS = ['market', 'competitor'];
     public const SCORE_KEYS = ['buying_signal', 'problem_fit', 'product_fit', 'accessibility', 'urgency', 'potential_value', 'evidence_quality'];
 
     /** Closing-date style tenders: their expiry is the closing date. */
@@ -59,8 +60,12 @@ final class QualificationGate
             return $this->reject('missing_source_url', 'source_url is required and must be an http(s) URL.');
         }
 
+        // A record that carries an `evidence` block (the web-research path) never states its own
+        // claim_level: it is DERIVED by EvidenceGrader. A record without one (the daily-scan import)
+        // supplies claim_level as before and is only ever downgraded, never upgraded.
+        $evidence = is_array($r['evidence'] ?? null) ? $r['evidence'] : null;
         $claim = $this->enum($r['claim_level'] ?? null, array_keys(self::CLAIM_LEVELS));
-        if ($claim === null) {
+        if ($claim === null && $evidence === null) {
             return $this->reject('invalid_claim_level', 'claim_level must be one of: ' . implode(', ', array_keys(self::CLAIM_LEVELS)) . '.');
         }
         $fetch = $this->enum($r['fetch_level'] ?? null, array_keys(self::FETCH_LEVELS));
@@ -77,6 +82,21 @@ final class QualificationGate
             if ($this->str($r[$field] ?? null) !== null && $this->enum($r[$field], $allowed) === null) {
                 return $this->reject('invalid_' . $field, "{$field} must be one of: " . implode(', ', $allowed) . '.');
             }
+        }
+
+        $context = $this->enum($r['context'] ?? null, self::CONTEXTS);
+        if ($this->str($r['context'] ?? null) !== null && $context === null) {
+            return $this->reject('invalid_context', 'context must be one of: ' . implode(', ', self::CONTEXTS) . '.');
+        }
+
+        $entryReason = $this->str($r['entry_point_reason'] ?? null);
+        if ($this->enum($r['entry_point'] ?? null, self::ENTRY_POINTS) === 'other' && ($entryReason === null || mb_strlen($entryReason) < 10)) {
+            return $this->reject('entry_point_other_needs_reason', "entry_point 'other' needs a stated reason (entry_point_reason, at least 10 characters). A dump bucket is not an entry point.");
+        }
+
+        $sellLine = $this->str($r['what_we_could_sell'] ?? null);
+        if ($sellLine !== null && $this->isVagueSellLine($sellLine)) {
+            return $this->reject('vague_sell_line', "what_we_could_sell is too vague (\"{$sellLine}\"). Name the concrete deliverable, scope and buyer unit, e.g. 'capability mapping pilot for 3 departments'.");
         }
 
         $buyerType = $this->str($buyer['type'] ?? null);
@@ -98,11 +118,43 @@ final class QualificationGate
         $notes = [];
         $evidenceNote = null;
 
+        if ($evidence !== null) {
+            $graded = (new EvidenceGrader())->grade($evidence, $fetch, $url, ['name' => $name, 'website' => $this->url($buyer['website'] ?? null)]);
+            $claim = $graded['claim_level'];
+            $evidenceNote = $graded['note'];
+        }
+
         // Evidence grade: a snippet or a blocked page can never support a "confirmed" claim.
         if ($claim === 'confirmed' && self::FETCH_LEVELS[$fetch] < self::FETCH_LEVELS['page_text']) {
             $claim = 'inference';
             $evidenceNote = "Downgraded from confirmed to inference: the source was only seen as '{$fetch}'.";
             $notes[] = $evidenceNote;
+        }
+
+        if ($evidence !== null) {
+            if ($context === null) {
+                $missing = array_keys(array_filter([
+                    'what_we_could_sell' => $sellLine === null,
+                    'entry_point' => $this->enum($r['entry_point'] ?? null, self::ENTRY_POINTS) === null,
+                    'soft_marketing_angle' => $this->str($r['soft_marketing_angle'] ?? null) === null,
+                    'likely_problem' => $this->str($r['likely_problem'] ?? null) === null,
+                ]));
+                if ($missing !== []) {
+                    return $this->reject('incomplete_card', 'Every lead must carry the full card; missing: ' . implode(', ', $missing) . '.');
+                }
+            }
+            if ($scores === null) {
+                return $this->reject('missing_scores', 'A researched lead must carry all seven 1-5 scores.');
+            }
+            // The face of the card must read as plain English (jargon_on_card, sentence_too_long, missing_so_what).
+            $plain = $this->faceViolations($r + ['context' => $context]);
+            if ($plain !== []) {
+                return $this->reject($plain[0]['code'], $plain[0]['reason']);
+            }
+            $bar = (new SectionAssigner())->assign(['claim_level' => $claim, 'fetch_level' => $fetch, 'score_total' => $scores['total'], 'context' => $context]);
+            if ($bar === null) {
+                return $this->reject('below_score_bar', "Scored {$scores['total']} with {$claim} evidence: below the bar for the feed.");
+            }
         }
 
         // Expiry: explicit, else a tender's closing date, else none ("no expiry").
@@ -120,6 +172,7 @@ final class QualificationGate
         $record = [
             'buyer' => [
                 'name' => $name, 'type' => $buyerType, 'state' => $state, 'website' => $this->url($buyer['website'] ?? null),
+                'industry' => $this->str($buyer['industry'] ?? null), 'location' => $this->str($buyer['location'] ?? null),
                 'aliases' => $this->aliases($buyer['aliases'] ?? []),
             ],
             'trigger_type' => $trigger,
@@ -149,6 +202,11 @@ final class QualificationGate
             'scores' => $scores ?: null,
             'score_reasoning' => is_array($r['scores'] ?? null) ? $this->str($r['scores']['reasoning'] ?? null) : null,
             'is_sample' => filter_var($r['is_sample'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'context' => $context,
+            'entry_point_reason' => $entryReason,
+            'content_hash' => $this->str($r['content_hash'] ?? null),
+            'source_excerpt' => ($e = $this->str($r['source_excerpt'] ?? null)) === null ? null : mb_substr($e, 0, 1000),
+            'evidence_derived' => $evidence !== null,
         ];
 
         return ['ok' => true, 'record' => $record, 'notes' => $notes];
@@ -174,6 +232,52 @@ final class QualificationGate
         }
 
         return false;
+    }
+
+    /**
+     * A sell line must name something concrete. It fails when it is, or after removing vague terms
+     * and filler words reduces to, fewer than `min_specific_words` words ("AI solution",
+     * "digital transformation", "our platform"). Word lists live in config('signals.card.sell_line').
+     */
+    public function isVagueSellLine(string $line): bool
+    {
+        $cfg = (array) config('signals.card.sell_line');
+        $clean = fn (string $t): string => trim(preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9\s]+/', ' ', mb_strtolower($t)) ?? '') ?? '');
+
+        $norm = $clean($line);
+        $vague = array_map(fn ($t) => $clean((string) $t), (array) ($cfg['vague_terms'] ?? []));
+        if ($norm === '' || in_array($norm, $vague, true)) {
+            return true;
+        }
+
+        // Strip vague phrases first (longest first), then filler words; what is left is specific.
+        usort($vague, fn ($a, $b) => strlen($b) <=> strlen($a));
+        $rest = ' ' . $norm . ' ';
+        foreach ($vague as $term) {
+            if ($term !== '') {
+                $rest = str_replace(' ' . $term . ' ', '  ', $rest);
+            }
+        }
+        $filler = (array) ($cfg['filler_words'] ?? []);
+        $specific = array_filter(preg_split('/\s+/', trim($rest)) ?: [], fn ($w) => $w !== '' && ! in_array($w, $filler, true));
+
+        return count($specific) < (int) ($cfg['min_specific_words'] ?? 3);
+    }
+
+    /**
+     * Plain-English violations on the face of a researched lead. Public so the researcher can give
+     * the model one fair second attempt; the gate still enforces them in evaluate().
+     *
+     * @param  array<string, mixed>  $r
+     * @return list<array{code: string, field: string, reason: string}>
+     */
+    public function faceViolations(array $r): array
+    {
+        return (new PlainLanguageRules())->violations([
+            'what_happened' => $this->str($r['what_happened'] ?? null),
+            'likely_problem' => $this->str($r['likely_problem'] ?? null),
+            'soft_marketing_angle' => $this->str($r['soft_marketing_angle'] ?? null),
+        ], $this->enum($r['context'] ?? null, self::CONTEXTS) === null);
     }
 
     private function reject(string $code, string $reason): array

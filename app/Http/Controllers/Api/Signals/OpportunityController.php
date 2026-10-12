@@ -612,6 +612,16 @@ class OpportunityController extends Controller
         $daysLeft = $expiresAt ? (int) Carbon::today()->diffInDays(Carbon::parse($expiresAt)->startOfDay(), false) : null;
         $scoreKeys = ['buying_signal', 'problem_fit', 'product_fit', 'accessibility', 'urgency', 'potential_value', 'evidence_quality'];
         $scores = isset($row->score_total) ? array_combine($scoreKeys, array_map(fn ($k) => isset($row->{'score_' . $k}) ? (int) $row->{'score_' . $k} : null, $scoreKeys)) + ['total' => (int) $row->score_total] : null;
+        $out['card'] = (new \App\Domain\Signals\Market\CardPresenter())->face([
+            'company_name' => $out['company_name'], 'company_type' => $row->company_type ?? null, 'company_state' => $row->company_state ?? null,
+            'location' => $out['location'], 'website' => $out['website'],
+            'observed_event' => $row->observed_event, 'likely_problem' => $row->likely_problem ?? null, 'why_indicates_need' => $row->why_indicates_need,
+            'soft_marketing_angle' => $row->soft_marketing_angle ?? null, 'recommended_action' => $row->recommended_action,
+            'entry_point' => $row->entry_point ?? null, 'urgency' => $row->urgency ?? null, 'score_urgency' => isset($row->score_urgency) ? (int) $row->score_urgency : null,
+            'feed_section' => $row->feed_section ?? null, 'days_left' => $daysLeft, 'claim_level' => $row->claim_level ?? null,
+            'import_source' => $row->import_source ?? null, 'source_url' => $row->source_url ?? null, 'primary_source' => $sources[0] ?? null,
+            'source_published_at' => $row->source_published_at, 'event_date' => $row->event_date,
+        ]);
         $out += [
             'pipeline_status' => $row->pipeline_status ?? 'NEW',
             'trigger_type' => $row->trigger_type ?? null,

@@ -67,6 +67,7 @@ class BuyerResolver
             $company = Company::create([
                 'sub_institute_id' => $tenantId, 'name' => $display, 'normalized_name' => $plain,
                 'website' => $buyer['website'], 'domain' => $domain ?: null, 'type' => $buyer['type'], 'state' => $buyer['state'],
+                'industry' => $buyer['industry'] ?? null, 'location' => $buyer['location'] ?? null,
                 'first_seen_at' => now(), 'last_verified_at' => now(),
             ]);
             $created = true;
@@ -77,6 +78,8 @@ class BuyerResolver
                 'domain' => $company->domain ?: ($domain ?: null),
                 'type' => $company->type ?: $buyer['type'],
                 'state' => $company->state ?: $buyer['state'],
+                'industry' => $company->industry ?: ($buyer['industry'] ?? null),
+                'location' => $company->location ?: ($buyer['location'] ?? null),
                 'last_verified_at' => now(),
             ])->save();
         }
