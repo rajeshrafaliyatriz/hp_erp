@@ -577,6 +577,13 @@ return [
         'crm_opportunities' => ['label' => 'Opportunity', 'module' => 'crm'],
         'crm_quotes' => ['label' => 'Quote', 'module' => 'crm'],
         'crm_products' => ['label' => 'Product / Service', 'module' => 'crm'],
+        // CRM order-to-cash migration. Same reasoning as Sales/Marketing
+        // above - admin-ADDED fields only, on top of each table's fixed
+        // real-column set.
+        'crm_vendors' => ['label' => 'Vendor', 'module' => 'crm'],
+        'crm_sales_orders' => ['label' => 'Sales Order', 'module' => 'crm'],
+        'crm_purchase_orders' => ['label' => 'Purchase Order', 'module' => 'crm'],
+        'crm_invoices' => ['label' => 'Invoice', 'module' => 'crm'],
     ],
 
     /*

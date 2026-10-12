@@ -245,4 +245,31 @@ class DocumentAccess
 
         return array_values(array_unique($principals));
     }
+
+    /**
+     * Same job as computePrincipals() above, but for a document that has
+     * real per-person shares (DocumentShareService) instead of the
+     * never-populated `$permissions` array that method reads `user:`/`role:`
+     * principals from. Call this (not computePrincipals()) whenever a
+     * document's visibility, department, OR its share list changes - any of
+     * the three can add or remove a principal, and view_principals has to
+     * reflect all of them together, not just whichever one just changed.
+     *
+     * @param  int[]  $sharedUserIds  every viewer_user_id with an active document_library_shares row for this document
+     * @return string[]
+     */
+    public static function computePrincipalsForDocument(string $visibility, ?int $departmentId, array $sharedUserIds): array
+    {
+        $principals = [];
+
+        if ($visibility === 'department' && $departmentId) {
+            $principals[] = 'dept:' . $departmentId;
+        }
+
+        foreach ($sharedUserIds as $userId) {
+            $principals[] = 'user:' . (int) $userId;
+        }
+
+        return array_values(array_unique($principals));
+    }
 }

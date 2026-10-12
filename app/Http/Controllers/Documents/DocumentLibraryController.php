@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessDocumentPipelineJob;
 use App\Services\Documents\DocumentAccess;
 use App\Services\Documents\DocumentDuplicator;
+use App\Services\Documents\DocumentShareService;
 use App\Services\Documents\DocumentStorageService;
 use App\Services\Documents\Extraction\TextExtractionManager;
 use App\Services\Documents\Search\DocumentSearchService;
@@ -569,6 +570,20 @@ class DocumentLibraryController extends Controller
      * only the fields actually present AND different from the current row,
      * so a no-op PATCH doesn't leave a vacuous audit entry.
      */
+    /**
+     * Used to be gated by a flat `where('owner_id', $userId)` on the row
+     * lookup - meaning not even an admin/RECORD_OWNERS caller could edit a
+     * document they didn't personally own, and there was no way for a
+     * shared "editor" (DocumentShareService) to update one either. Now
+     * gated through DocumentAccess::canManage() (owner, creator, or an
+     * elevated role - the same check update()'s sibling endpoints already
+     * use) OR'd with a document_library_shares edit-grant, so both the
+     * admin half and the sharing half of this feature land through the one
+     * check. `visibility`/`department_id` are deliberately NOT covered by
+     * the shared-editor OR below - changing who a document is visible to is
+     * a sharing-management action, kept to the same people who can manage
+     * sharing itself (DocumentShareController, same canManage() gate).
+     */
     public function update(Request $request, $id)
     {
         $identity = $this->resolveApiIdentity($request);
@@ -578,14 +593,22 @@ class DocumentLibraryController extends Controller
         }
 
         $userId = (int) $identity['user_id'];
+        $tenantId = (int) $identity['sub_institute_id'];
 
         $row = DB::table('document_library')
             ->where('id', (int) $id)
-            ->where('owner_id', $userId)
+            ->where('sub_institute_id', $tenantId)
             ->whereNull('deleted_at')
             ->first();
 
         if (!$row) {
+            return $this->notFound();
+        }
+
+        $canManage = DocumentAccess::canManage($row, $userId, $tenantId);
+        $canEditShared = $canManage || (new DocumentShareService())->canEdit($row->id, $userId);
+
+        if (!$canEditShared) {
             return $this->notFound();
         }
 
@@ -598,7 +621,15 @@ class DocumentLibraryController extends Controller
             // to root" rather than relying on this app's API layer to have
             // turned an empty string into a real null on the way in.
             'folder_id' => 'sometimes|nullable',
+            'visibility' => 'sometimes|string|in:private,department,organization',
+            'department_id' => 'sometimes|nullable|integer',
         ]);
+
+        if (array_key_exists('visibility', $data) || array_key_exists('department_id', $data)) {
+            if (!$canManage) {
+                return $this->notFound();
+            }
+        }
 
         if (array_key_exists('folder_id', $data)) {
             $data['folder_id'] = $data['folder_id'] !== '' && $data['folder_id'] !== null ? (int) $data['folder_id'] : null;
@@ -615,7 +646,7 @@ class DocumentLibraryController extends Controller
         if (array_key_exists('folder_id', $changes) && $changes['folder_id'] !== null) {
             $folder = DB::table('document_folders')->where('id', $changes['folder_id'])->whereNull('deleted_at')->first();
 
-            if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, (int) $identity['sub_institute_id'])) {
+            if (!$folder || !DocumentAccess::canManageFolder($folder, $userId, $tenantId)) {
                 return response()->json(['status' => 0, 'message' => 'That folder does not exist.'], 422);
             }
         }
@@ -635,6 +666,14 @@ class DocumentLibraryController extends Controller
         $changes['updated_at'] = now();
 
         DB::table('document_library')->where('id', $row->id)->update($changes);
+
+        // visibility/department_id just changed the inputs view_principals is
+        // derived from - rebuild it from the row's new state plus whatever
+        // shares already exist, same helper DocumentShareService calls after
+        // a share/unshare so all three triggers stay consistent with each other.
+        if (array_key_exists('visibility', $changes) || array_key_exists('department_id', $changes)) {
+            (new DocumentShareService())->syncViewPrincipals($row->id);
+        }
 
         $this->recordAudit($row->id, $userId, $request, 'updated', ['changed_fields' => array_keys($changes)]);
 

@@ -34,7 +34,7 @@ class CrmLeadController extends Controller
     /** @var array<string, string> db column => CSV header, in export column order. Also the accepted import row keys (camelCase - matches payload()'s map). */
     private const EXPORT_COLUMNS = [
         'salutation' => 'Salutation', 'first_name' => 'First Name', 'last_name' => 'Last Name',
-        'company' => 'Company', 'email' => 'Email', 'secondary_email' => 'Secondary Email',
+        'company' => 'Company', 'designation' => 'Designation', 'email' => 'Email', 'secondary_email' => 'Secondary Email',
         'phone' => 'Phone', 'mobile' => 'Mobile', 'website' => 'Website', 'industry' => 'Industry',
         'lead_source' => 'Lead Source', 'lead_status' => 'Lead Status', 'rating' => 'Rating',
         'annual_revenue' => 'Annual Revenue', 'street' => 'Street', 'city' => 'City',
@@ -387,7 +387,7 @@ class CrmLeadController extends Controller
     }
 
     /**
-     * Convert Lead -> Organization + Contact.
+     * Convert Lead -> Organization + Contact (+ optional Opportunity).
      *
      * Mirrors the legacy CRM's exact mechanics (confirmed from the legacy
      * source, `include/Webservices/ConvertLead.php`):
@@ -400,8 +400,18 @@ class CrmLeadController extends Controller
      *    company->accountname, email->email1/email, firstname/lastname->
      *    Contact, industry/phone/fax/rating/website/addresses->Organization,
      *    leadsource->Contact, designation->title.
-     *  - Convert Lead -> Potential/Deal is explicitly out of scope — Sales
-     *    module not yet migrated (see this plan's Feature Parity Checklist).
+     *
+     * Two Phase-6-audit additions, deliberately NOT mirroring legacy exactly:
+     *  - `existingContactId`: unlike Organization's silent name-match, a
+     *    Contact is never fuzzy-matched by name (two different people often
+     *    share one) - the caller must explicitly pick an existing Contact to
+     *    attach to, or a new one is created as before.
+     *  - `createOpportunity`: legacy's own Convert-Lead-to-Potential was
+     *    excluded when this controller first shipped because the Sales
+     *    module didn't exist yet. It does now (crm_opportunities) - off by
+     *    default (a converted Lead becoming a pipeline deal is a real
+     *    decision, not implied by every conversion), created with no
+     *    amount/stage so the rep sets those explicitly afterward.
      */
     public function convert(Request $request, int $id): JsonResponse
     {
@@ -428,6 +438,8 @@ class CrmLeadController extends Controller
         $validator = Validator::make($request->all(), [
             'createOrganization' => 'required|boolean',
             'createContact' => 'required|boolean',
+            'existingContactId' => 'nullable|integer',
+            'createOpportunity' => 'nullable|boolean',
             'assignedTo' => 'required|integer',
         ]);
 
@@ -439,11 +451,27 @@ class CrmLeadController extends Controller
             return response()->json(['status' => 0, 'message' => 'Select at least one of Organization or Contact to create.'], 422);
         }
 
+        $existingContactId = $request->filled('existingContactId') ? (int) $request->input('existingContactId') : null;
+
+        if ($existingContactId !== null) {
+            $existingContactOk = DB::table('crm_contacts')
+                ->where('id', $existingContactId)
+                ->where('sub_institute_id', $identity['sub_institute_id'])
+                ->whereNull('deleted_at')
+                ->exists();
+
+            if (! $existingContactOk) {
+                return response()->json(['status' => 0, 'message' => 'That existing Contact was not found.'], 422);
+            }
+        }
+
         $assignedTo = (int) $request->input('assignedTo');
+        $createOpportunity = $request->boolean('createOpportunity');
         $organizationId = null;
         $contactId = null;
+        $opportunityId = null;
 
-        DB::transaction(function () use ($request, $lead, $identity, $assignedTo, &$organizationId, &$contactId) {
+        DB::transaction(function () use ($request, $lead, $identity, $assignedTo, $existingContactId, $createOpportunity, &$organizationId, &$contactId, &$opportunityId) {
             if ($request->boolean('createOrganization') && $lead->company) {
                 $existingOrg = DB::table('crm_organizations')
                     ->where('sub_institute_id', $identity['sub_institute_id'])
@@ -478,39 +506,68 @@ class CrmLeadController extends Controller
             }
 
             if ($request->boolean('createContact')) {
-                $contactId = DB::table('crm_contacts')->insertGetId([
-                    'contact_no' => 'CON-' . Str::upper(Str::random(8)),
+                if ($existingContactId !== null) {
+                    $contactId = $existingContactId;
+                } else {
+                    $contactId = DB::table('crm_contacts')->insertGetId([
+                        'contact_no' => 'CON-' . Str::upper(Str::random(8)),
+                        'organization_id' => $organizationId,
+                        'salutation' => $lead->salutation,
+                        'first_name' => $lead->first_name,
+                        'last_name' => $lead->last_name,
+                        'title' => $lead->designation ?? null,
+                        'email' => $lead->email,
+                        'secondary_email' => $lead->secondary_email,
+                        'phone' => $lead->phone,
+                        'mobile' => $lead->mobile,
+                        'fax' => $lead->fax,
+                        'lead_source' => $lead->lead_source,
+                        'email_opt_out' => $lead->email_opt_out,
+                        'mailing_city' => $lead->city,
+                        'mailing_state' => $lead->state,
+                        'mailing_country' => $lead->country,
+                        'mailing_code' => $lead->postal_code,
+                        'mailing_street' => $lead->street,
+                        'mailing_po_box' => $lead->po_box,
+                        'description' => $lead->description,
+                        'sub_institute_id' => $identity['sub_institute_id'],
+                        'assigned_to' => $assignedTo,
+                        'created_by' => $identity['user_id'],
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
+            if ($createOpportunity) {
+                $dealName = $lead->company ? "{$lead->company} - Opportunity" : trim("{$lead->first_name} {$lead->last_name}") . ' - Opportunity';
+
+                $opportunityId = DB::table('crm_opportunities')->insertGetId([
+                    'opportunity_no' => 'OPP-' . Str::upper(Str::random(8)),
+                    'name' => $dealName,
                     'organization_id' => $organizationId,
-                    'salutation' => $lead->salutation,
-                    'first_name' => $lead->first_name,
-                    'last_name' => $lead->last_name,
-                    'title' => $lead->designation ?? null,
-                    'email' => $lead->email,
-                    'secondary_email' => $lead->secondary_email,
-                    'phone' => $lead->phone,
-                    'mobile' => $lead->mobile,
-                    'fax' => $lead->fax,
                     'lead_source' => $lead->lead_source,
-                    'email_opt_out' => $lead->email_opt_out,
-                    'mailing_city' => $lead->city,
-                    'mailing_state' => $lead->state,
-                    'mailing_country' => $lead->country,
-                    'mailing_code' => $lead->postal_code,
-                    'mailing_street' => $lead->street,
-                    'mailing_po_box' => $lead->po_box,
-                    'description' => $lead->description,
                     'sub_institute_id' => $identity['sub_institute_id'],
                     'assigned_to' => $assignedTo,
                     'created_by' => $identity['user_id'],
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+
+                if ($contactId) {
+                    DB::table('crm_opportunity_contacts')->insert([
+                        'opportunity_id' => $opportunityId,
+                        'contact_id' => $contactId,
+                        'created_at' => now(),
+                    ]);
+                }
             }
 
             DB::table('crm_leads')->where('id', $lead->id)->update([
                 'converted' => true,
                 'converted_organization_id' => $organizationId,
                 'converted_contact_id' => $contactId,
+                'converted_opportunity_id' => $opportunityId,
                 'updated_by' => $identity['user_id'],
                 'updated_at' => now(),
             ]);
@@ -522,6 +579,7 @@ class CrmLeadController extends Controller
             'data' => [
                 'organizationId' => $organizationId ? (string) $organizationId : null,
                 'contactId' => $contactId ? (string) $contactId : null,
+                'opportunityId' => $opportunityId ? (string) $opportunityId : null,
             ],
         ]);
     }
@@ -543,6 +601,7 @@ class CrmLeadController extends Controller
             'firstName' => 'first_name',
             'lastName' => 'last_name',
             'company' => 'company',
+            'designation' => 'designation',
             'email' => 'email',
             'secondaryEmail' => 'secondary_email',
             'phone' => 'phone',
@@ -600,6 +659,7 @@ class CrmLeadController extends Controller
             'firstName' => $row->first_name,
             'lastName' => $row->last_name,
             'company' => $row->company,
+            'designation' => $row->designation,
             'email' => $row->email,
             'secondaryEmail' => $row->secondary_email,
             'phone' => $row->phone,
@@ -623,6 +683,7 @@ class CrmLeadController extends Controller
             'converted' => (bool) $row->converted,
             'convertedOrganizationId' => $row->converted_organization_id ? (string) $row->converted_organization_id : null,
             'convertedContactId' => $row->converted_contact_id ? (string) $row->converted_contact_id : null,
+            'convertedOpportunityId' => $row->converted_opportunity_id ? (string) $row->converted_opportunity_id : null,
             'description' => $row->description,
             'assignedTo' => $row->assigned_to ? (string) $row->assigned_to : null,
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
