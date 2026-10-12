@@ -2257,6 +2257,9 @@ Route::middleware('api.token')->group(function () {
     Route::post('/account/documents/{id}/versions', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'uploadVersion'])->whereNumber('id');
     Route::post('/account/documents/{id}/versions/{historyId}/restore', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'restoreVersion'])->whereNumber(['id', 'historyId']);
     Route::post('/account/documents/{id}/duplicate', [\App\Http\Controllers\Documents\DocumentLibraryController::class, 'duplicate'])->whereNumber('id');
+    Route::get('/account/documents/{id}/shares', [\App\Http\Controllers\Documents\DocumentShareController::class, 'index'])->whereNumber('id');
+    Route::post('/account/documents/{id}/shares', [\App\Http\Controllers\Documents\DocumentShareController::class, 'store'])->whereNumber('id');
+    Route::delete('/account/documents/{id}/shares/{shareId}', [\App\Http\Controllers\Documents\DocumentShareController::class, 'destroy'])->whereNumber(['id', 'shareId']);
 
     /*
      * "MY DEPARTMENT DOCUMENTS" — same no-id-parameter shape as
@@ -3793,6 +3796,22 @@ Route::prefix('crm')->group(function () {
     Route::post('quotes/bulk/delete', [$crmQuote, 'bulkDelete'])->middleware("platformright:{$quoteLink},delete");
     Route::post('quotes/bulk/assign', [$crmQuote, 'bulkAssign'])->middleware("platformright:{$quoteLink},edit");
     Route::post('quotes/import', [$crmQuote, 'import'])->middleware("platformright:{$quoteLink},add");
+
+    $crmPriceBook = \App\Http\Controllers\Api\Crm\CrmPriceBookController::class;
+    $priceBookLink = '/module/crm/sales/price-books';
+    Route::get('price-books', [$crmPriceBook, 'index'])->middleware("platformright:{$priceBookLink},view");
+    Route::get('price-books/active', [$crmPriceBook, 'active'])->middleware("platformright:{$priceBookLink},view");
+    Route::get('price-books/export', [$crmPriceBook, 'export'])->middleware("platformright:{$priceBookLink},view");
+    Route::get('price-books/{id}', [$crmPriceBook, 'show'])->whereNumber('id')->middleware("platformright:{$priceBookLink},view");
+    Route::post('price-books', [$crmPriceBook, 'store'])->middleware("platformright:{$priceBookLink},add");
+    Route::put('price-books/{id}', [$crmPriceBook, 'update'])->whereNumber('id')->middleware("platformright:{$priceBookLink},edit");
+    Route::delete('price-books/{id}', [$crmPriceBook, 'destroy'])->whereNumber('id')->middleware("platformright:{$priceBookLink},delete");
+    Route::post('price-books/bulk/delete', [$crmPriceBook, 'bulkDelete'])->middleware("platformright:{$priceBookLink},delete");
+    Route::post('price-books/bulk/assign', [$crmPriceBook, 'bulkAssign'])->middleware("platformright:{$priceBookLink},edit");
+    Route::get('price-books/{id}/items', [$crmPriceBook, 'items'])->whereNumber('id')->middleware("platformright:{$priceBookLink},view");
+    Route::post('price-books/{id}/items', [$crmPriceBook, 'addItem'])->whereNumber('id')->middleware("platformright:{$priceBookLink},edit");
+    Route::put('price-books/{id}/items/{rowId}', [$crmPriceBook, 'updateItem'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$priceBookLink},edit");
+    Route::delete('price-books/{id}/items/{rowId}', [$crmPriceBook, 'removeItem'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$priceBookLink},edit");
 
     $crmSms = \App\Http\Controllers\Api\Crm\CrmSmsController::class;
     $smsLink = '/module/crm/sales/sms-notifier';
