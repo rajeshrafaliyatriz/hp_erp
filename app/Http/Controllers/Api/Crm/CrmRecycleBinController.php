@@ -41,6 +41,7 @@ class CrmRecycleBinController extends Controller
         'quotes' => ['table' => 'crm_quotes', 'menuId' => null, 'link' => '/module/crm/sales/quotes'],
         'products' => ['table' => 'crm_products', 'menuId' => null, 'link' => '/module/crm/sales/products', 'typeFilter' => ['item_type', 'product']],
         'services' => ['table' => 'crm_products', 'menuId' => null, 'link' => '/module/crm/sales/services', 'typeFilter' => ['item_type', 'service']],
+        'price_books' => ['table' => 'crm_price_books', 'menuId' => null, 'link' => '/module/crm/sales/price-books'],
     ];
 
     /** @var array<string, string> Reverse of crm_campaign_targets.target_type. */
@@ -239,6 +240,7 @@ class CrmRecycleBinController extends Controller
             'opportunities' => $row->sales_stage ?? null,
             'quotes' => $row->quote_no ?? null,
             'products', 'services' => $row->product_no ?? null,
+            'price_books' => $row->price_book_no ?? null,
             default => null,
         };
 

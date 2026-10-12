@@ -129,6 +129,7 @@ class CrmQuoteController extends Controller
             'organizationId' => 'nullable|integer',
             'contactId' => 'nullable|integer',
             'opportunityId' => 'nullable|integer',
+            'priceBookId' => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {
@@ -139,6 +140,7 @@ class CrmQuoteController extends Controller
             ['organizationId', 'crm_organizations', 'Organization'],
             ['contactId', 'crm_contacts', 'Contact'],
             ['opportunityId', 'crm_opportunities', 'Opportunity'],
+            ['priceBookId', 'crm_price_books', 'Price book'],
         ] as [$field, $table, $label]) {
             if (($rejection = $this->rejectUnknownReference($request, $identity['sub_institute_id'], $field, $table, $label)) !== null) {
                 return $rejection;
@@ -189,6 +191,7 @@ class CrmQuoteController extends Controller
             'organizationId' => 'nullable|integer',
             'contactId' => 'nullable|integer',
             'opportunityId' => 'nullable|integer',
+            'priceBookId' => 'nullable|integer',
         ]);
 
         if ($validator->fails()) {
@@ -199,6 +202,7 @@ class CrmQuoteController extends Controller
             ['organizationId', 'crm_organizations', 'Organization'],
             ['contactId', 'crm_contacts', 'Contact'],
             ['opportunityId', 'crm_opportunities', 'Opportunity'],
+            ['priceBookId', 'crm_price_books', 'Price book'],
         ] as [$field, $table, $label]) {
             if (($rejection = $this->rejectUnknownReference($request, $identity['sub_institute_id'], $field, $table, $label)) !== null) {
                 return $rejection;
@@ -638,9 +642,10 @@ class CrmQuoteController extends Controller
             ->leftJoin('crm_organizations as o', 'o.id', '=', 'q.organization_id')
             ->leftJoin('crm_contacts as c', 'c.id', '=', 'q.contact_id')
             ->leftJoin('crm_opportunities as op', 'op.id', '=', 'q.opportunity_id')
+            ->leftJoin('crm_price_books as pb', 'pb.id', '=', 'q.price_book_id')
             ->where('q.sub_institute_id', $tenantId)
             ->whereNull('q.deleted_at')
-            ->select('q.*', 'o.name as organization_name', DB::raw("TRIM(CONCAT(c.first_name, ' ', c.last_name)) as contact_name"), 'op.name as opportunity_name');
+            ->select('q.*', 'o.name as organization_name', DB::raw("TRIM(CONCAT(c.first_name, ' ', c.last_name)) as contact_name"), 'op.name as opportunity_name', 'pb.name as price_book_name');
     }
 
     private function ownRow(int $tenantId, int $id): ?object
@@ -662,7 +667,7 @@ class CrmQuoteController extends Controller
     {
         $map = [
             'subject' => 'subject', 'organizationId' => 'organization_id', 'contactId' => 'contact_id',
-            'opportunityId' => 'opportunity_id', 'quoteStage' => 'quote_stage', 'validTill' => 'valid_till',
+            'opportunityId' => 'opportunity_id', 'priceBookId' => 'price_book_id', 'quoteStage' => 'quote_stage', 'validTill' => 'valid_till',
             'currency' => 'currency', 'shippingHandlingAmount' => 'shipping_handling_amount', 'adjustment' => 'adjustment',
             'billingStreet' => 'billing_street', 'billingCity' => 'billing_city', 'billingState' => 'billing_state',
             'billingCode' => 'billing_code', 'billingCountry' => 'billing_country', 'billingPoBox' => 'billing_po_box',
@@ -681,7 +686,7 @@ class CrmQuoteController extends Controller
             $data[$column] = $request->input($requestKey);
         }
 
-        foreach (['organization_id', 'contact_id', 'opportunity_id'] as $nullableIdColumn) {
+        foreach (['organization_id', 'contact_id', 'opportunity_id', 'price_book_id'] as $nullableIdColumn) {
             if (array_key_exists($nullableIdColumn, $data) && $data[$nullableIdColumn] === '') {
                 $data[$nullableIdColumn] = null;
             }
@@ -703,6 +708,8 @@ class CrmQuoteController extends Controller
             'contactName' => ($row->contact_name ?? '') !== '' ? $row->contact_name : null,
             'opportunityId' => $row->opportunity_id ? (string) $row->opportunity_id : null,
             'opportunityName' => $row->opportunity_name ?? null,
+            'priceBookId' => $row->price_book_id ? (string) $row->price_book_id : null,
+            'priceBookName' => $row->price_book_name ?? null,
             'quoteStage' => $row->quote_stage,
             'validTill' => $row->valid_till,
             'currency' => $row->currency,
