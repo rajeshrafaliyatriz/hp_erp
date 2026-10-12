@@ -32,6 +32,7 @@ class CrmSavedViewController extends Controller
         'leads', 'contacts', 'organizations', 'campaigns',
         'opportunities', 'quotes', 'products', 'services', 'sms_log', 'price_books',
         'vendors', 'sales_orders', 'purchase_orders', 'invoices',
+        'tickets', 'faqs', 'service_contracts', 'assets',
     ];
 
     /** @var array<string, array{menuId: int|null, link: string|null}> */
@@ -46,6 +47,10 @@ class CrmSavedViewController extends Controller
         'services' => ['menuId' => null, 'link' => '/module/crm/sales/services'],
         'sms_log' => ['menuId' => null, 'link' => '/module/crm/sales/sms-notifier'],
         'price_books' => ['menuId' => null, 'link' => '/module/crm/sales/price-books'],
+        'tickets' => ['menuId' => null, 'link' => '/module/crm/support/tickets'],
+        'faqs' => ['menuId' => null, 'link' => '/module/crm/support/faq'],
+        'service_contracts' => ['menuId' => null, 'link' => '/module/crm/support/service-contracts'],
+        'assets' => ['menuId' => null, 'link' => '/module/crm/support/assets'],
         'vendors' => ['menuId' => null, 'link' => '/module/crm/sales/vendors'],
         'sales_orders' => ['menuId' => null, 'link' => '/module/crm/sales/sales-orders'],
         'purchase_orders' => ['menuId' => null, 'link' => '/module/crm/sales/purchase-orders'],

@@ -584,6 +584,12 @@ return [
         'crm_sales_orders' => ['label' => 'Sales Order', 'module' => 'crm'],
         'crm_purchase_orders' => ['label' => 'Purchase Order', 'module' => 'crm'],
         'crm_invoices' => ['label' => 'Invoice', 'module' => 'crm'],
+        // CRM Support migration. Same reasoning as every prior CRM phase -
+        // admin-ADDED fields only, on top of each table's fixed real-column set.
+        'crm_tickets' => ['label' => 'Ticket', 'module' => 'crm'],
+        'crm_faqs' => ['label' => 'FAQ', 'module' => 'crm'],
+        'crm_service_contracts' => ['label' => 'Service Contract', 'module' => 'crm'],
+        'crm_assets' => ['label' => 'Asset', 'module' => 'crm'],
     ],
 
     /*
