@@ -24,6 +24,7 @@ final class OutreachAgent extends GtmAgent
             'account_id' => ['type' => 'account', 'required' => true, 'label' => 'Account'],
             'contact_id' => ['type' => 'contact', 'required' => true, 'label' => 'Contact'],
             'mode' => ['type' => 'select', 'required' => true, 'label' => 'Draft', 'options' => ['email', 'sequence']],
+            'campaign_id' => ['type' => 'campaign', 'required' => false, 'label' => 'Campaign (optional)'],
         ];
     }
 
@@ -37,6 +38,9 @@ final class OutreachAgent extends GtmAgent
         if (in_array($contact->status, self::BLOCKED, true)) {
             throw new \DomainException("{$contact->full_name} is marked '{$contact->status}'. No outreach can be drafted for this contact.");
         }
+        if ($block = app(\App\Domain\Gtm\Outreach\Suppressions::class)->blocking($tenant, $contact->email)) {
+            throw new \DomainException("{$contact->full_name}'s address is on the suppression list ({$block['reason']}). No outreach can be drafted for it.");
+        }
         $profile = $this->productProfile($tenant);
         $signals = $this->signalsFor($tenant, $account->company_id, 6);
         if ($signals === []) {
@@ -44,11 +48,23 @@ final class OutreachAgent extends GtmAgent
         }
 
         $sequence = ($input['mode'] ?? 'email') === 'sequence';
+        $campaign = null;
+        if (! empty($input['campaign_id'])) {
+            $campaign = DB::table('gtm_campaigns')->where('sub_institute_id', $tenant)->whereNull('deleted_at')->find((int) $input['campaign_id']);
+            if (! $campaign || in_array($campaign->status, ['completed', 'archived'], true)) {
+                throw new \DomainException('Choose one of your own open campaigns.');
+            }
+            if (! DB::table('gtm_campaign_members')->where('sub_institute_id', $tenant)->where('campaign_id', $campaign->id)->where('account_id', $account->id)->exists()) {
+                throw new \DomainException("{$account->name} is not a target of that campaign.");
+            }
+        }
         $records = [
             'product_profile' => $profile,
             'account' => array_filter(['name' => $account->name, 'industry' => $account->industry, 'location' => $account->location], fn ($v) => $v),
             'contact' => array_filter(['name' => $contact->full_name, 'title' => $contact->title, 'role_in_deal' => $contact->role_in_deal], fn ($v) => $v),
             'signals' => $signals,
+            'campaign' => $campaign ? array_filter(['name' => $campaign->name, 'goal' => $campaign->goal, 'kind' => $campaign->kind]) : null,
+            'industry_pack' => $campaign && $campaign->industry_pack_slug ? $this->pack($tenant, $campaign->industry_pack_slug) : null,
             'previous_activities' => DB::table('gtm_activities')->where('sub_institute_id', $tenant)->where('account_id', $account->id)->where('type', '!=', 'system')
                 ->orderByDesc('occurred_at')->limit(8)->get(['type', 'direction', 'subject', 'occurred_at'])->all(),
         ];
@@ -78,9 +94,24 @@ final class OutreachAgent extends GtmAgent
             }
         }
         $data['is_draft'] = true;
+        $data['campaign_id'] = $campaign ? (int) $campaign->id : null;
         $data['recipient'] = ['contact_id' => (int) $contact->id, 'name' => $contact->full_name, 'email' => $contact->email];
+
+        $this->ai->amend($tenant, $run['analysis_id'], $data);
 
         return ['result' => $data, 'analysis_id' => $run['analysis_id'], 'provider' => $run['provider'], 'model' => $run['model'], 'playbook' => $run['playbook'],
             'integrity' => ['references_dropped' => $dropped, 'note' => $dropped > 0 ? "Claims whose source was not one of the account's real signals were removed." : null]];
+    }
+
+    /** The industry pack as HYPOTHESES for the model (its own text says so); null if it is gone or archived. @return array<string, mixed>|null */
+    private function pack(int $tenant, string $slug): ?array
+    {
+        try {
+            $p = $this->playbooks->resolve($tenant, $slug);
+        } catch (\DomainException) {
+            return null;
+        }
+
+        return ['title' => $p->title, 'instruction' => $p->body, 'hypotheses' => $p->definition];
     }
 }

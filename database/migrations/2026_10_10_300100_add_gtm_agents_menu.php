@@ -3,6 +3,7 @@
 use App\Support\RoleKey;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /*
  * Sidebar page "Agents" under GTM & Revenue (only now that the screen exists).
@@ -59,8 +60,13 @@ return new class extends Migration
         }
     }
 
+    /** MariaDB 10.1 (live) cannot run Schema::hasTable(); sqlite (PHPUnit) has no information_schema. */
     private function has(string $t): bool
     {
+        if (DB::getDriverName() === 'sqlite') {
+            return Schema::hasTable($t);
+        }
+
         return DB::selectOne('SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [$t])->c > 0;
     }
 };
