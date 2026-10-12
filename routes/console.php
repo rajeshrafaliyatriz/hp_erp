@@ -309,3 +309,26 @@ TaskRunLedger::track(
         ->runInBackground(),
     'idms.purge_trash'
 );
+
+/*
+ * GTM - SCHEDULED SENDING, RETRIES, SNAPSHOTS AND ALERT EVENTS.
+ *
+ * One command, every five minutes (see App\Domain\Gtm\GtmScheduler). Sending only happens when
+ * GTM_OUTREACH_SCHEDULER_ENABLED=true AND GTM_OUTREACH_SENDING_ENABLED=true, and only for messages a person
+ * already approved with a send time; with both off the tick still recovers stuck sends and writes the daily
+ * snapshots. Like every entry here it only fires while `php artisan schedule:work` (or a per-minute
+ * cron / Windows Task Scheduler entry) is running - the GTM Monitoring screen reports when it is not.
+ */
+TaskRunLedger::track(
+    Schedule::command('gtm:tick')
+        ->everyFiveMinutes()
+        ->withoutOverlapping(10)
+        ->onOneServer()
+        ->runInBackground(),
+    'gtm.tick'
+);
+
+/*
+ * GTM WORKFLOW TRIGGERS: delivery of recorded gtm.* events to the workflow runner is done by the existing
+ * `events:react` entry above (GtmWorkflowRunner is one of its reactors), so no second event loop exists.
+ */

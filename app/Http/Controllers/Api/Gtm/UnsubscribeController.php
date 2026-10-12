@@ -29,6 +29,10 @@ class UnsubscribeController extends Controller
             GtmOutreachMessage::where('sub_institute_id', $c->sub_institute_id)->where('contact_id', $c->id)
                 ->whereIn('status', ['draft', 'pending_approval', 'approved', 'rejected', 'failed'])
                 ->update(['status' => 'cancelled', 'decision_note' => 'Contact unsubscribed', 'updated_at' => now()]);
+            // The address itself is suppressed too, so re-creating or re-importing this person cannot re-enable email to them.
+            if (trim((string) $c->email) !== '') {
+                app(\App\Domain\Gtm\Outreach\Suppressions::class)->add((int) $c->sub_institute_id, 'email', (string) $c->email, 'unsubscribed', 'Unsubscribed via email link');
+            }
             GtmActivity::create([
                 'sub_institute_id' => $c->sub_institute_id, 'account_id' => $c->account_id, 'contact_id' => $c->id, 'type' => 'system',
                 'subject' => 'Unsubscribed from outreach (email link)', 'occurred_at' => now(),
