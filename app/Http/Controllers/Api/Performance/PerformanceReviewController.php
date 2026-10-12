@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api\Performance;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Performance\Concerns\ResolvesPerformanceContext;
 use App\Models\Performance\PerformanceReview;
+use App\Services\DeepSeekService;
 use App\Support\SubjectAuthority;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Employee reviews - the screen's main table, the Review Board kanban and the
@@ -284,6 +286,105 @@ class PerformanceReviewController extends Controller
             ],
             'review_history' => $history,
         ]));
+    }
+
+    /**
+     * GET /api/performance/reviews/{id}/narrative
+     *
+     * Grounded in the review's own ratings/comments (presentRow(), via
+     * show()) plus this review's goals - both single, consistent systems
+     * (s_performance_reviews, s_performance_goals), unlike the competency
+     * features' legacy/modern split. Same access control as show(): this
+     * method grants nothing show() does not already grant.
+     */
+    public function narrative(Request $request, $id, DeepSeekService $ai)
+    {
+        $reviewResponse = $this->show($request, $id);
+        $reviewPayload = json_decode((string) $reviewResponse->getContent(), true) ?: [];
+
+        if (($reviewPayload['status'] ?? $reviewPayload['success'] ?? null) === false
+            || ($reviewPayload['data'] ?? null) === null) {
+            return $reviewResponse;
+        }
+
+        $review = $reviewPayload['data'];
+        $tenant = $this->performanceContext($request)['sub_institute_id'];
+
+        $goals = DB::table('s_performance_goals')
+            ->where('sub_institute_id', $tenant)->where('review_id', $id)->whereNull('deleted_at')
+            ->get(['title', 'category', 'progress', 'status', 'target_value', 'achieved_value', 'unit', 'self_rating', 'manager_rating'])
+            ->all();
+
+        if (!$ai->isConfigured()) {
+            return $this->performanceResponse(['review' => $review, 'goals' => $goals, 'narrative' => null]);
+        }
+
+        try {
+            $narrative = trim($ai->chat([
+                ['role' => 'system', 'content' => $this->reviewNarrativeSystemPrompt()],
+                ['role' => 'user', 'content' => $this->reviewNarrativeUserPrompt($review, $goals)],
+            ]));
+        } catch (Throwable $e) {
+            return $this->performanceResponse(['review' => $review, 'goals' => $goals, 'narrative' => null]);
+        }
+
+        return $this->performanceResponse(['review' => $review, 'goals' => $goals, 'narrative' => $narrative]);
+    }
+
+    private function reviewNarrativeSystemPrompt(): string
+    {
+        return 'You are summarising one employee\'s performance review for the people who will discuss it. '
+            . 'Use only the ratings, comments and goals given - never invent a figure, quote, or goal not '
+            . 'present in the input. Note where self-rating and manager-rating disagree, since that is the '
+            . 'conversation worth having. Say plainly when a rating or comment is absent rather than guessing '
+            . 'at it. Keep the answer to 3-5 sentences of plain language.';
+    }
+
+    /** @param array<string,mixed> $review @param array<int,object> $goals */
+    private function reviewNarrativeUserPrompt(array $review, array $goals): string
+    {
+        $lines = [sprintf(
+            'Review for %s, cycle %s, stage %s.',
+            $review['employee']['name'] ?? 'this employee',
+            $review['cycle'] ?? 'unknown',
+            $review['stage_label'] ?? $review['stage'] ?? 'unknown'
+        )];
+
+        $ratingLine = sprintf(
+            'Self-rating: %s. Manager rating: %s. Calibrated rating: %s. Overall: %s.',
+            $review['self_rating'] ?? 'not given',
+            $review['manager_rating'] ?? 'not given',
+            $review['calibrated_rating'] ?? 'not given',
+            $review['overall_rating_label'] ?? ($review['overall_rating'] ?? 'not given')
+        );
+        $lines[] = $ratingLine;
+
+        if (!empty($review['self_comments'])) {
+            $lines[] = 'Self comments: ' . $review['self_comments'];
+        }
+        if (!empty($review['manager_comments'])) {
+            $lines[] = 'Manager comments: ' . $review['manager_comments'];
+        }
+
+        if ($goals !== []) {
+            $lines[] = '';
+            $lines[] = 'Goals:';
+            foreach ($goals as $g) {
+                $lines[] = sprintf(
+                    '- %s (%s): %d%% progress, status %s%s',
+                    $g->title,
+                    $g->category ?: 'uncategorised',
+                    (int) $g->progress,
+                    $g->status,
+                    $g->target_value ? sprintf(', %s of %s %s achieved', $g->achieved_value ?: '0', $g->target_value, $g->unit ?: '') : ''
+                );
+            }
+        } else {
+            $lines[] = '';
+            $lines[] = 'No goals are recorded against this review.';
+        }
+
+        return implode("\n", $lines);
     }
 
     /**

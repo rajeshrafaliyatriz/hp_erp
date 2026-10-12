@@ -8,9 +8,12 @@ use function App\Helpers\is_mobile;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 
 class departmentController extends Controller
 {
+    use ResolvesApiIdentity;
+
     public function index(Request $request)
     {
         $type = $request->input('type');
@@ -215,7 +218,23 @@ class departmentController extends Controller
         }
 
         $i=0;
-        $sub_institute_id = $request->sub_institute_id;
+
+        // Phase 7.3 — this read the request body directly: any valid token
+        // holder could write into another tenant's departments by naming a
+        // different sub_institute_id in the form data, the same G-SEC-29
+        // shape organizationDetailsController and jobroletexonomycontroller
+        // were already fixed for. apiTenantId() resolves it from the token
+        // instead, and a null result now refuses the write rather than
+        // continuing with no tenant at all.
+        $sub_institute_id = $this->apiTenantId($request);
+
+        if ($sub_institute_id === null) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'Your token does not name an organisation, and none was supplied.',
+            ], 400);
+        }
+
         $user_id = $request->user_id;
         $formType = $request->formType;
 
@@ -235,6 +254,18 @@ class departmentController extends Controller
                     'created_by'=>$user_id,
                     'created_at'=>now(),
                 ]);
+
+                // Graph projection needs to hear about this. Only the
+                // top-level add-department path emits here - sub-department
+                // and import are deliberately not wired yet.
+                app(\App\Services\Events\EventRecorder::class)->record(
+                    'department.changed',
+                    (int) $sub_institute_id,
+                    'department',
+                    (int) $departmentId,
+                    $user_id !== null ? (int) $user_id : null,
+                    ['department' => $request->department, 'parent_id' => 0]
+                );
             }
         }
         else if($formType=="edit department"){
@@ -255,6 +286,18 @@ class departmentController extends Controller
 
                 DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department, 'parent_id'=>0])->update(['department'=>$request->department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
 
+                // Graph projection needs to hear about this. Only the
+                // top-level edit-department rename is wired here - the
+                // sub-department add nested below is not.
+                app(\App\Services\Events\EventRecorder::class)->record(
+                    'department.changed',
+                    (int) $sub_institute_id,
+                    'department',
+                    (int) $checkDepartment->id,
+                    $user_id !== null ? (int) $user_id : null,
+                    ['department' => $request->department, 'parent_id' => 0]
+                );
+
                 if(empty($checkSubDepartment) && !isset($checkSubDepartment->id)){
                     $updateArray['sub_department'] = $sub_department;
                     $updateArray['created_at'] = now();
@@ -270,6 +313,18 @@ class departmentController extends Controller
                 ];
 
                 DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$request->old_department, 'parent_id'=>0])->update(['department'=>$request->department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
+
+                // Graph projection needs to hear about this. Only the
+                // top-level edit-department rename is wired here - the
+                // sub-department add just below is not.
+                app(\App\Services\Events\EventRecorder::class)->record(
+                    'department.changed',
+                    (int) $sub_institute_id,
+                    'department',
+                    (int) $checkDepartment->id,
+                    $user_id !== null ? (int) $user_id : null,
+                    ['department' => $request->department, 'parent_id' => 0]
+                );
 
                 if(empty($checkSubDepartment) && !isset($checkSubDepartment->id)){
                     $updateArray['sub_department'] = $sub_department;
@@ -288,6 +343,18 @@ class departmentController extends Controller
                          'created_by'=>$user_id,
                          'created_at'=>now(),
                      ]);
+
+                     // Phase 7.2/7.3 follow-up — this nested sub-department
+                     // create was the one gap left flagged (not fixed) at
+                     // the end of the earlier pass. Wired now.
+                     app(\App\Services\Events\EventRecorder::class)->record(
+                         'department.changed',
+                         (int) $sub_institute_id,
+                         'department',
+                         (int) $subDepartmentId,
+                         $user_id !== null ? (int) $user_id : null,
+                         ['department' => $sub_department, 'parent_id' => $parentId]
+                     );
                 }
             }
         }
@@ -318,6 +385,16 @@ class departmentController extends Controller
 
             if(!empty($checkSubDepartment) && isset($checkSubDepartment->id)){
                 DB::table('hrms_departments')->where(['sub_institute_id'=>$sub_institute_id,'department'=>$old_sub_department, 'parent_id'=>$parentId])->update(['department'=>$sub_department, 'updated_at'=>now(), 'updated_by'=>$user_id]);
+
+                app(\App\Services\Events\EventRecorder::class)->record(
+                    'department.changed',
+                    (int) $sub_institute_id,
+                    'department',
+                    (int) $checkSubDepartment->id,
+                    $user_id !== null ? (int) $user_id : null,
+                    ['department' => $sub_department, 'parent_id' => $parentId]
+                );
+
                 $i=1;
             }
         }
@@ -348,6 +425,19 @@ class departmentController extends Controller
                     'created_by'           => $user_id,
                     'created_at'           => now(),
                 ]);
+
+                // Phase 7.2 — this is the "import" path Neo4jProjector's own
+                // docblock named as a known gap. Wired now, alongside the
+                // other two formType branches that shared the same gap.
+                app(\App\Services\Events\EventRecorder::class)->record(
+                    'department.changed',
+                    (int) $sub_institute_id,
+                    'department',
+                    (int) $departmentId,
+                    $user_id !== null ? (int) $user_id : null,
+                    ['department' => $deptName, 'parent_id' => 0]
+                );
+
                 $i++;
             }
 
@@ -362,7 +452,7 @@ class departmentController extends Controller
                         ->first();
 
                     if (!$subDept) {
-                        DB::table('hrms_departments')->insert([
+                        $subDeptId = DB::table('hrms_departments')->insertGetId([
                             'department'           => $subDeptName,
                             'parent_id'            => $departmentId,
                             'tasks'                => null,
@@ -373,6 +463,15 @@ class departmentController extends Controller
                             'created_by'           => $user_id,
                             'created_at'           => now(),
                         ]);
+
+                        app(\App\Services\Events\EventRecorder::class)->record(
+                            'department.changed',
+                            (int) $sub_institute_id,
+                            'department',
+                            (int) $subDeptId,
+                            $user_id !== null ? (int) $user_id : null,
+                            ['department' => $subDeptName, 'parent_id' => $departmentId]
+                        );
                     }
                 }
                 $i++;

@@ -165,27 +165,23 @@ class AttendanceAdminController extends Controller
              * change it describes. A correction that committed without its
              * record would be exactly the unexplained pay change this exists to
              * prevent.
+             *
+             * The column mapping lives on AttendanceCorrector so the
+             * regularisation-approval path writes an identically shaped row;
+             * the decision to write it, and the values the two paths disagree
+             * about (`reason`, `source`), stay here where they are decided.
              */
-            $editRow = [
-                'sub_institute_id' => $tenantId,
-                'user_id'          => $subjectId,
-                'day'              => $data['day'],
-                'attendance_id'    => $applied['attendance_id'],
-                'before_in_time'   => $applied['before']['punchin_time'] ?? null,
-                'before_out_time'  => $applied['before']['punchout_time'] ?? null,
-                'before_duration'  => $applied['before']['timestamp_diff'] ?? null,
-                'after_in_time'    => $applied['after']['punchin_time'] ?? null,
-                'after_out_time'   => $applied['after']['punchout_time'] ?? null,
-                'after_duration'   => $applied['after']['timestamp_diff'] ?? null,
-                'created_row'      => $applied['before'] === null,
-                'reason'           => $data['reason'],
-                'source'           => 'admin',
-                'created_by'       => $actorId,
-                'created_at'       => now(),
-                'updated_at'       => now(),
-            ];
-
-            $applied['edit_id'] = DB::table('hrms_attendance_edits')->insertGetId($editRow);
+            $applied['edit_id'] = DB::table('hrms_attendance_edits')->insertGetId(
+                app(AttendanceCorrector::class)->editRowFrom(
+                    $applied,
+                    $tenantId,
+                    $subjectId,
+                    $data['day'],
+                    $data['reason'],
+                    'admin',
+                    $actorId,
+                )
+            );
 
             return $applied;
         });
@@ -578,7 +574,17 @@ class AttendanceAdminController extends Controller
         }
 
         if ($request->filled('month')) {
-            // "YYYY-MM" - the same shape every other attendance screen takes.
+            /*
+             * Filters on e.day - the day that was CORRECTED - not on
+             * e.created_at, the day somebody corrected it. The two are
+             * unrelated: a correction made today to a day last month does not
+             * appear under this month, and should not.
+             *
+             * It is worth being explicit because the list is SORTED by
+             * created_at while being FILTERED by day, which reads as a
+             * contradiction until you know that is deliberate: "changes to days
+             * in October, most recently made first".
+             */
             $month = Carbon::parse($request->input('month') . '-01');
             $query->whereBetween('e.day', [
                 $month->copy()->startOfMonth()->toDateString(),
@@ -586,21 +592,142 @@ class AttendanceAdminController extends Controller
             ]);
         }
 
+        if ($request->filled('day')) {
+            // One day, for the drill-down from a cell the grid has marked as
+            // changed. Narrower than `month`, and compatible with it.
+            $query->whereDate('e.day', Carbon::parse($request->input('day'))->toDateString());
+        }
+
+        /*
+         * The cap is still here, but it is no longer silent.
+         *
+         * 200 newest-first degrades safely, but a busy tenant was being shown a
+         * truncated list with nothing to say so - and "the history only goes
+         * back so far" is a very different statement from "that is all the
+         * history there is".
+         */
+        $limit = 200;
+        $total = (clone $query)->count('e.id');
+
         $rows = $query
             ->orderByDesc('e.created_at')
-            ->limit(200)
+            ->limit($limit)
             ->get([
-                'e.id', 'e.user_id', 'e.day', 'e.attendance_id',
+                'e.id', 'e.user_id', 'e.day', 'e.attendance_id', 'e.regularisation_id',
                 'e.before_in_time', 'e.before_out_time', 'e.before_duration',
                 'e.after_in_time', 'e.after_out_time', 'e.after_duration',
                 'e.created_row', 'e.reason', 'e.source', 'e.created_at',
                 DB::raw("CONCAT_WS(' ', subject.first_name, subject.last_name) as employee_name"),
+                DB::raw("CONCAT_WS(' ', subject.employee_no, subject.employee_id) as employee_code"),
                 DB::raw("CONCAT_WS(' ', actor.first_name, actor.last_name) as changed_by_name"),
             ]);
 
         return response()->json([
             'status' => 1,
-            'data'   => $rows,
+            'data'   => $rows->map(fn ($row) => $this->transformEdit($row))->all(),
+            /*
+             * An additive sibling, not a reshaping of `data`.
+             *
+             * `data` stays a plain array because its consumers are outside this
+             * repository and the blast radius of changing its shape could not be
+             * measured from here.
+             */
+            'meta'   => [
+                'total'     => $total,
+                'returned'  => $rows->count(),
+                'limit'     => $limit,
+                'truncated' => $total > $rows->count(),
+            ],
         ]);
+    }
+
+    /**
+     * One edit row, with its types fixed at the boundary that broke them.
+     *
+     * ── THE BUG THIS EXISTS FOR ─────────────────────────────────────────────
+     *
+     * `config/database.php` sets `PDO::ATTR_EMULATE_PREPARES => true` on the
+     * `mysql` connection, so the driver returns EVERY column as a string
+     * regardless of its declared SQL type. `created_row` is a boolean column and
+     * arrived as the string `"0"`.
+     *
+     * `"0"` is falsy in PHP and **truthy in JavaScript**. The Change History
+     * screen tests it directly, so every single row rendered "day did not
+     * exist" and the before-image - the one thing that makes this an audit
+     * rather than a log - was never shown on any row. The table looked like it
+     * worked; the data in it was uniformly wrong.
+     *
+     * ── WHY HERE AND NOT IN THE FRONTEND ────────────────────────────────────
+     *
+     * The bug exists precisely BECAUSE a PHP string crossed into JavaScript, so
+     * the fix belongs at the crossing. Fixing it in the React screen fixes one
+     * consumer and leaves the mobile client and the next caller to rediscover
+     * it. A SQL `CAST(... AS UNSIGNED)` does not work either - with emulated
+     * prepares the driver stringifies the result of the cast too.
+     *
+     * The precedent is in this module:
+     * AttendanceRegularisationApiController::transform() casts every field on
+     * the way out, and `edits()` was the only read in the attendance API
+     * returning raw DB::table rows.
+     *
+     * It is not only `created_row`: `id`, `user_id`, `attendance_id` and
+     * `regularisation_id` are all strings too, and the last two are nullable, so
+     * a client saw either `null` or `"41"`.
+     */
+    private function transformEdit(object $row): array
+    {
+        return [
+            'id'                => (int) $row->id,
+            // Carried so the screen stops falling back to "Employee #{id}" with
+            // the EDIT row's id - an audit-row number printed as an employee
+            // number, which is worse than printing nothing.
+            'user_id'           => (int) $row->user_id,
+            'employee_name'     => trim((string) ($row->employee_name ?? '')) ?: null,
+            'employee_code'     => trim((string) ($row->employee_code ?? '')) ?: null,
+            'day'               => $row->day ? Carbon::parse($row->day)->toDateString() : null,
+            'attendance_id'     => $row->attendance_id !== null ? (int) $row->attendance_id : null,
+            'regularisation_id' => $row->regularisation_id !== null ? (int) $row->regularisation_id : null,
+            /*
+             * Times are normalised to HH:MM here rather than sliced in the
+             * client. `after_*` is written as a full Y-m-d H:i:s by
+             * AttendanceCorrector::stamp(), but `before_*` is whatever the
+             * driver handed back from hrms_attendances - and the audit columns
+             * are varchar(20), so there is no schema guarantee that a historical
+             * row holds the wide form. A client slicing at a fixed offset
+             * returns an empty string for the narrow one, which is not null and
+             * so does not trigger its own fallback.
+             */
+            'before_in_time'    => $this->clock($row->before_in_time),
+            'before_out_time'   => $this->clock($row->before_out_time),
+            'before_duration'   => $this->clock($row->before_duration),
+            'after_in_time'     => $this->clock($row->after_in_time),
+            'after_out_time'    => $this->clock($row->after_out_time),
+            'after_duration'    => $this->clock($row->after_duration),
+            // THE ONE THAT WAS BREAKING EVERY ROW.
+            'created_row'       => (bool) (int) $row->created_row,
+            'reason'            => (string) $row->reason,
+            'source'            => (string) $row->source,
+            'created_at'        => $row->created_at ? Carbon::parse($row->created_at)->toDateTimeString() : null,
+            'changed_by_name'   => trim((string) ($row->changed_by_name ?? '')) ?: null,
+        ];
+    }
+
+    /**
+     * Any stored time shape to "HH:MM", or null.
+     *
+     * Handles "2026-10-03 09:15:00", "09:15:00" and "09:15" alike, because all
+     * three are in the live data - the two writers of `timestamp_diff` disagree
+     * about the seconds, and the audit columns are plain strings that accept
+     * whatever they were given.
+     */
+    private function clock(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        return preg_match('/(\d{1,2}):(\d{2})/', $value, $m)
+            ? str_pad($m[1], 2, '0', STR_PAD_LEFT) . ':' . $m[2]
+            : null;
     }
 }

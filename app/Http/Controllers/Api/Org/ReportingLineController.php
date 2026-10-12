@@ -213,6 +213,17 @@ class ReportingLineController extends Controller
         DB::table('tbluser')->where('id', $userId)->where('sub_institute_id', $tenant)
             ->update(['reporting_manager_id' => $managerId, 'updated_by' => $actorId, 'updated_at' => now()]);
 
+        // Phase 7.2 — the graph needs to hear about this too, same
+        // after-save placement as every other EventRecorder call site.
+        app(\App\Services\Events\EventRecorder::class)->record(
+            'employee_reporting_line.changed',
+            $tenant,
+            'employee',
+            $userId,
+            $actorId,
+            ['manager_id' => $managerId]
+        );
+
         return ['ok' => true, 'reason' => null];
     }
 

@@ -124,6 +124,8 @@ class CustomFieldValueController extends PlatformController
         $tenantColumn = match ($recordTable) {
             'tbluser' => 'sub_institute_id',
             'hrms_emp_leaves' => 'sub_institute_id',
+            // CRM Marketing migration - all 4 tables use the same tenant column.
+            'crm_leads', 'crm_contacts', 'crm_organizations', 'crm_campaigns' => 'sub_institute_id',
             default => null,
         };
 

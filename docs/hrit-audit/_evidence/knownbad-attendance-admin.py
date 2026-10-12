@@ -39,6 +39,11 @@ PROBE = os.path.join(ROOT, 'Docs', 'hrit-audit', '_evidence', 'probe-attendance-
 # and the symptom is a sidebar entry that opens a blank page.
 MAP = os.path.join(ROOT, '..', 'g2gv0', 'hooks', 'content-map-m5.ts')
 
+# The self-service punch endpoints. Added in phase 19, because a corrected day
+# used to be destroyed by one click on the employee's own screen.
+TRACK = os.path.join(ROOT, 'app', 'Http', 'Controllers', 'Api', 'Attendance',
+                     'AttendanceTrackingApiController.php')
+
 # ---------------------------------------------------------------------------
 # Each mutation: a name, the file, a (find, replace) pair, and the substring of
 # the assertion label that must appear among the failures.
@@ -287,6 +292,154 @@ MUTATIONS = [
         ("accessLink: '/module/hrit-solutions/attendance-management/manage-employee-attendance'",
          "accessLink: '/module/hrit-solutions/attendance-management/manage-attendance'"),
         'on that exact accessLink',
+    ),
+    (
+        # THE ONE THAT MATTERS MOST IN THIS PHASE.
+        #
+        # Without the guard, one click on the employee's own "Punch In" sets
+        # punchin_time to the current clock and NULLS punchout_time and
+        # timestamp_diff - destroying HR's correction and the duration payroll
+        # reads, while hrms_attendance_edits still says the correction applied.
+        'the punch-in guard is removed, so a closed day is overwritten',
+        TRACK,
+        ("            if ($refusal = $this->closedDayRefusal($record, $formattedDate)) {\n"
+         "                return $refusal;\n"
+         "            }",
+         "            // mutated"),
+        'THE CORRECTION SURVIVED',
+    ),
+    (
+        'the punch-out guard is removed on the supplied-time path',
+        TRACK,
+        ("            if ($refusal = $this->closedDayRefusal($attendance, $dateOnly)) {\n"
+         "                return $refusal;\n"
+         "            }",
+         "            // mutated"),
+        # Section 9's "and the 18:30 is still 18:30" also catches this, but on
+        # the 1999 fixture - where a supplied out-time IS in range, so that one
+        # is a genuine catch rather than the accident described below. Pointed
+        # at 9b anyway, so both punch-out expectations rest on the real-day
+        # fixture and neither can be protected by the TIME overflow.
+        'and 18:30 is still 18:30',
+    ),
+    (
+        # The worse of the two punch-out paths: no open row is found on a closed
+        # day, and the else branch replaced the punch-out with Carbon::now().
+        #
+        # POINTED AT SECTION 9b, NOT SECTION 9, AND THAT IS THE WHOLE POINT.
+        #
+        # This was first expected to turn "the correction survived that too"
+        # red, in section 9. It did not, and the reason is worth keeping: that
+        # section's fixture is the 1999 scratch day, and from a 1999 punch-in
+        # the un-guarded code computes durationBetween(punchin, now) = about
+        # 243,190 hours, which is outside MySQL's TIME range (838:59:59). The
+        # UPDATE is rejected with SQLSTATE 22007 and the request 500s BEFORE the
+        # destructive write lands - so the row survived for a reason that had
+        # nothing to do with the guard.
+        #
+        # Measured, not reasoned: the log line is
+        #   Incorrect time value: '243190:11' for column
+        #   hp_erp.hrms_attendances.timestamp_diff
+        #
+        # Section 9b exists because of this. It runs the same case on a RECENT
+        # day, proven empty first, where the duration is valid and the write
+        # would succeed - which is the only place in the probe that can tell the
+        # guard apart from the out-of-range accident.
+        #
+        # VERIFIED BY HAND 2026-10-09 with the guard removed:
+        #   FAIL  THE CORRECTED OUT-TIME SURVIVED
+        #         - expected [2026-10-06 18:30:00] got [2026-10-09 ...]
+        'the punch-out guard is removed on the no-time path',
+        TRACK,
+        ("            if ($refusal = $this->closedDayRefusal($existingRecord, $dateOnly)) {\n"
+         "                return $refusal;\n"
+         "            }",
+         "            // mutated"),
+        'THE CORRECTED OUT-TIME SURVIVED',
+    ),
+    (
+        # OVER-REFUSAL, the opposite failure. Dropping the punchout_time
+        # condition refuses any day with a punch-in - which would break
+        # re-punching an open day, the legitimate "wrong device" case these
+        # endpoints exist for. A guard that is too wide is still a broken guard.
+        'the guard refuses an OPEN day too, not just a closed one',
+        TRACK,
+        ("        if (!$row || !$row->punchin_time || !$row->punchout_time) {",
+         "        if (!$row || !$row->punchin_time) {"),
+        'the employee re-punches it',
+    ),
+    (
+        'the corrector stops forcing status to 1',
+        CORR,
+        ("            'status'         => 1,\n", ""),
+        "status is now 1, so the employee's own screen can see it",
+    ),
+    (
+        'the corrector stops recording the prior status',
+        CORR,
+        ("                'status'         => (int) $existing->status,\n", ""),
+        "the prior 0 is in the event's before-image",
+    ),
+    (
+        'readSubject drops its role check, so any employee can read a colleague',
+        TRACK,
+        ("        if (!RoleKey::satisfies(RoleKey::forUserId($callerId), ['admin', 'hr'])) {\n"
+         "            return response()->json([\n"
+         "                'status'  => 0,\n"
+         "                'message' => 'You may only view your own attendance.',\n"
+         "            ], 403);\n"
+         "        }",
+         "        // mutated"),
+        'an employee naming a colleague is refused',
+    ),
+    (
+        'readSubject drops its tenant check, so HR reads across organisations',
+        TRACK,
+        ("        if (!$inTenant) {\n"
+         "            return response()->json([\n"
+         "                'status'  => 0,\n"
+         "                'message' => 'That employee is not in your organisation.',\n"
+         "            ], 404);\n"
+         "        }\n"
+         "\n"
+         "        return $subjectId;",
+         "        return $subjectId;"),
+        'HR of ANOTHER tenant gets 404, not 403',
+    ),
+    (
+        # The original bug: the subject came from the token and the parameter was
+        # silently discarded, so the screen answered about the wrong person.
+        'myAttendance goes back to resolving its subject from the token only',
+        TRACK,
+        ("        $userId = $this->readSubject($request, $context);",
+         "        $userId = $context['user_id'];"),
+        'and answers about them, not about the caller',
+    ),
+    (
+        # THE FENCE.
+        #
+        # punchSubject() refuses a mismatched employee and is the only thing
+        # stopping an HR role writing a punch as somebody else (G-ATT-SEC-01).
+        # readSubject() permits exactly what it refuses, and the two now sit
+        # side by side - so the realistic future mistake is somebody "unifying"
+        # them. This mutation is that mistake, and it must be caught.
+        'punchIn resolves its subject the way a READ does',
+        TRACK,
+        ("        $employeeId = $this->punchSubject($request, $context);\n"
+         "        if (!is_int($employeeId)) {\n"
+         "            return $employeeId;\n"
+         "        }\n"
+         "\n"
+         "        $subInstituteId = $context['sub_institute_id'];\n"
+         "        $formattedDate = Carbon::parse($request->input('indate'))->format('Y-m-d');",
+         "        $employeeId = $this->readSubject($request, $context);\n"
+         "        if (!is_int($employeeId)) {\n"
+         "            return $employeeId;\n"
+         "        }\n"
+         "\n"
+         "        $subInstituteId = $context['sub_institute_id'];\n"
+         "        $formattedDate = Carbon::parse($request->input('indate'))->format('Y-m-d');"),
+        'an admin punching IN for another employee is still refused',
     ),
 ]
 

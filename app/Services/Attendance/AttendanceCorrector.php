@@ -86,6 +86,30 @@ class AttendanceCorrector
             'punchin_time'   => $punchIn,
             'punchout_time'  => $punchOut,
             'timestamp_diff' => $this->duration($punchIn, $punchOut),
+            /*
+             * A CORRECTED DAY COUNTS. THREE SCREENS HAVE TO AGREE THAT IT DOES.
+             *
+             * This was omitted, and the omission was invisible on the insert
+             * path because hrms_attendances.status defaults to 1. On the UPDATE
+             * path it meant a pre-existing status = 0 row kept that 0, and the
+             * three readers then disagreed about the row HR had just corrected:
+             *
+             *   AttendanceTrackingApiController::myAttendance   filters status = 1
+             *   AttendanceAdminController::grid                 does not filter
+             *   AttendanceApiController::employeeMonthlyReport  does not filter
+             *
+             * So the correction showed on the HR grid and on the report, and was
+             * invisible on the employee's own screen - the one place the person
+             * whose pay it changed would go looking. There is only one
+             * defensible answer to "HR has just deliberately corrected this day,
+             * does it count": yes.
+             *
+             * Written explicitly even though the column default already says 1,
+             * for the same reason in_note/out_note are set below: a default
+             * lives in a migration nobody reads while debugging a service, and
+             * a column default is not a decision this service has made.
+             */
+            'status'         => 1,
             'updated_at'     => now(),
             'updated_by'     => $actorId,
         ];
@@ -100,6 +124,16 @@ class AttendanceCorrector
                 'punchin_time'   => $existing->punchin_time,
                 'punchout_time'  => $existing->punchout_time,
                 'timestamp_diff' => $existing->timestamp_diff,
+                /*
+                 * The prior status, because the write above forces it to 1.
+                 *
+                 * Flipping 0 to 1 is a VISIBILITY change - the row becomes
+                 * visible on the employee's own screen - and an unexplained
+                 * visibility change is as bad as an unexplained time change.
+                 * Without this the service would silently un-hide a row and
+                 * nothing would say so.
+                 */
+                'status'         => (int) $existing->status,
             ]
             : null;   // no row existed - this correction CREATES the day
 
@@ -142,6 +176,75 @@ class AttendanceCorrector
      * and the two have disagreed for as long as both have existed; this is the
      * form the column is declared as.
      */
+    /**
+     * Build the hrms_attendance_edits payload for a correction. PURE - writes nothing.
+     *
+     * ── WHY A BUILDER AND NOT A WRITER ──────────────────────────────────────
+     *
+     * Two paths correct an attendance day: HR doing it directly, and an approved
+     * employee regularisation request. Only the first was writing an edit row,
+     * so the Change History screen told users that approved employee requests
+     * appear there when they never had - and `source` could only ever be
+     * 'admin', while this table's creating migration documents 'regularisation'
+     * as a value.
+     *
+     * The obvious fix is to move the insert into apply() so both callers get it
+     * for free. That is wrong here for two reasons:
+     *
+     * 1. This class's own docblock records as a deliberate decision that it
+     *    "does NOT authorise, does not open a transaction, and does not record
+     *    the audit event - the two callers differ on all three, and burying them
+     *    here would make the permission check invisible at the point where the
+     *    permission is decided." Moving the write in contradicts that, and the
+     *    next reader has to pick which docblock to believe.
+     *
+     * 2. The two rows genuinely differ. `reason` is the HR user's words on one
+     *    path and the EMPLOYEE's on the other; `source` differs; and the
+     *    regularisation row carries the request id. A signature carrying all of
+     *    that is a second function wearing a parameter list.
+     *
+     * So the COLUMN MAPPING - the part that would drift between two copies -
+     * lives here once, and the decision to write it stays visible where the
+     * decision is made. Both callers already open their own transaction, so a
+     * call-site insert is already atomic with the correction it describes.
+     *
+     * @param array $applied the return value of apply()
+     */
+    public function editRowFrom(
+        array $applied,
+        int $tenantId,
+        int $userId,
+        string $day,
+        string $reason,
+        string $source,
+        int $actorId,
+    ): array {
+        return [
+            'sub_institute_id' => $tenantId,
+            'user_id'          => $userId,
+            'day'              => $day,
+            'attendance_id'    => $applied['attendance_id'] ?? null,
+            'before_in_time'   => $applied['before']['punchin_time'] ?? null,
+            'before_out_time'  => $applied['before']['punchout_time'] ?? null,
+            'before_duration'  => $applied['before']['timestamp_diff'] ?? null,
+            'after_in_time'    => $applied['after']['punchin_time'] ?? null,
+            'after_out_time'   => $applied['after']['punchout_time'] ?? null,
+            'after_duration'   => $applied['after']['timestamp_diff'] ?? null,
+            'created_row'      => ($applied['before'] ?? null) === null,
+            /*
+             * A blank reason would insert fine and produce a useless audit row.
+             * hrms_attendance_regularisations.reason is NOT NULL so it is always
+             * present in practice, but '' is not, and the whole value of this
+             * table is that somebody can read why.
+             */
+            'reason'           => trim($reason) !== '' ? $reason : 'No reason recorded',
+            'source'           => $source,
+            'created_by'       => $actorId,
+            'created_at'       => now(),
+            'updated_at'       => now(),
+        ];
+    }
+
     /**
      * One datetime shape for both tables.
      *

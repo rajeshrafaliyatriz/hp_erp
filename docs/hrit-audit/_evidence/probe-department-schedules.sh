@@ -40,6 +40,10 @@ TENANT=6
 # it without a list of ids to keep in step.
 MARK='zzprobe-schedule'
 
+# grep -cF, but a MISSING FILE reports "missing-file" rather than 0 - a
+# deleted file otherwise satisfies every "expect 0" assertion.
+countfix() { if [ -f "$1" ]; then grep -cF "$2" "$1" || true; else echo "missing-file"; fi; }
+
 pass=0; fail=0
 check() { if [ "$2" = "$3" ]; then echo "  PASS  $1"; pass=$((pass+1));
           else echo "  FAIL  $1 - expected [$2] got [$3]"; fail=$((fail+1)); fi; }
@@ -62,6 +66,8 @@ body() { php -r '$d=json_decode(file_get_contents("storage/app/zzsched.out"),tru
 teardown() {
   snap "delete from hrms_department_schedules where department_id in
           (select id from hrms_departments where department like '%$MARK%')" >/dev/null 2>&1
+  snap "delete from hrms_employee_roster_provenance where user_id in
+          (select id from tbluser where email like '%$MARK%')" >/dev/null 2>&1
   snap "delete from tbluser where email like '%$MARK%'" >/dev/null 2>&1
   snap "delete from hrms_departments where department like '%$MARK%'" >/dev/null 2>&1
   snap "delete from g2g_event where type='department.schedule.applied'
@@ -421,9 +427,180 @@ check "  one event per apply that changed something, and no more" "3" \
            where type='department.schedule.applied' and entity_id=$DEPT")"
 
 
+
+# ------------------------------- 7. hours an EMPLOYEE chose are left alone
+#
+# THE FAILURE THIS EXISTS TO PREVENT, AGAIN.
+#
+# The previous version of department shift-setting was deleted from the product
+# for silently flattening Saturday across a department; 100 employees in one
+# tenant finish at 14:00. Section 4 proves a Monday apply does not touch
+# Saturday. This section proves something different and newer: that an apply
+# which IS asked to write Saturday still leaves alone the employees who chose
+# their own Saturday through an approved request.
+#
+# `hrms_employee_roster_provenance` is what makes that answerable. A missing row
+# means "we do not know where this came from", which is true of every roster
+# written before this shipped - so the skip count starts at zero and fills
+# forward. This probe stamps its OWN fixture rather than relying on any existing
+# row.
+echo
+echo "7. An employee's own hours survive a department apply"
+
+# CLEAR THE PROVENANCE SECTION 4 STAMPED, FIRST.
+#
+# Section 4 applied a department schedule to these same employees, and an apply
+# stamps `department_apply` provenance for every weekday it wrote - so A and B
+# both already have a saturday row here. Without this delete the insert below
+# hits `herp_tenant_user_weekday_uniq` (Duplicate entry '6-<id>-saturday'),
+# snapshot.php dies on the PDOException, B is never marked as employee-set, and
+# every assertion in this section fails in a way that reads exactly like the
+# fourth bucket being broken.
+#
+# The tbluser columns below were already being reset for the same reason. The
+# provenance rows that the same apply wrote were missed.
+snap "delete from hrms_employee_roster_provenance
+       where sub_institute_id = $TENANT and weekday = 'saturday'
+         and user_id in ($A_ID, $B_ID)" >/dev/null
+
+# Employee B asked for and was granted a 14:00 Saturday. Stamped directly
+# because this probe does not own an approved request - the request lifecycle is
+# asserted in probe-employee-schedule-requests.sh.
+snap "insert into hrms_employee_roster_provenance
+        (sub_institute_id, user_id, weekday, source, source_ref_id, set_by, set_at, created_at, updated_at)
+      values ($TENANT, $B_ID, 'saturday', 'employee_request', 999, 28, now(), now(), now())" >/dev/null
+check "employee B's Saturday is marked as their own choice" "employee_request" \
+  "$(val "select source v from hrms_employee_roster_provenance
+           where user_id=$B_ID and weekday='saturday'")"
+check "  and employee A's is not marked at all" "0" \
+  "$(val "select count(*) v from hrms_employee_roster_provenance
+           where user_id=$A_ID and weekday='saturday'")"
+
+# Put the differing Saturdays back - section 4 applied over them.
+snap "update tbluser set saturday_in_date='09:00:00', saturday_out_date='18:00:00' where id=$A_ID" >/dev/null
+snap "update tbluser set saturday_in_date='09:00:00', saturday_out_date='14:00:00' where id=$B_ID" >/dev/null
+check "the fixture is back: A finishes 18:00, B finishes 14:00" "18:00:00|14:00:00" \
+  "$(val "select concat(
+       (select saturday_out_date from tbluser where id=$A_ID), '|',
+       (select saturday_out_date from tbluser where id=$B_ID)) v")"
+
+echo
+echo "   the preview counts them separately, before anything is written"
+check "the preview runs" "200" "$(post schedules/preview "$A6" "$PV")"
+check "  one employee is reported as having set their own hours" "1" \
+  "$(body 'echo $d["data"]["per_weekday"][0]["employee_set"] ?? "missing";')"
+# Two counts, because they are different numbers. "3 employees will be left
+# alone" needs distinct PEOPLE; a weekday-row sum would say 21 for three people
+# across seven days.
+check "  as one distinct person to be left alone" "1" \
+  "$(body 'echo $d["data"]["employees_left_alone"] ?? "missing";')"
+check "  and named, so the confirmation can say who" "1" \
+  "$(body 'echo count($d["data"]["employees_left_alone_list"] ?? []);')"
+check "  the override is off unless asked for" "" \
+  "$(body 'echo $d["data"]["override_employee_hours"] ? "1" : "";')"
+check "  and A, who chose nothing, is still counted as a change" "1" \
+  "$(body 'echo $d["data"]["per_weekday"][0]["would_change"];')"
+
+# ---------------------------------------------------------------------------
+# THE SEMANTICS THAT BIT THE UI, PINNED WHERE THEY CAN ACTUALLY BE TRUE.
+#
+# `employees_left_alone` means the people this apply will LEAVE ALONE, so with
+# the override ON the honest answer is ZERO - nobody is being left alone. That
+# is correct, and the confirmation dialog was reading it live to decide whether
+# to render the override warning AT ALL: ticking the box made the warning and
+# the box itself disappear, leaving an armed override with nothing on screen
+# saying so and no way to untick it.
+#
+# THIS SITS HERE, BEFORE ANY APPLY, AND THAT PLACEMENT IS THE ASSERTION.
+# It was first written after the override apply further down, where it passed -
+# VACUOUSLY. By that point B's provenance had already been rewritten to
+# `department_apply` by the apply itself, so B was not employee-set, every
+# count was 0, and "employees_left_alone is 0" was true for a reason that had
+# nothing to do with the override. Here B IS employee-set, so the zero means
+# what it claims and `total_employee_set` has something to count.
+# ---------------------------------------------------------------------------
+check "with the override ON, employees_left_alone is 0" "0"   "$(post schedules/preview "$A6" '{"department_id":'"$DEPT"',"weekdays":["saturday"],"override_employee_hours":true}' >/dev/null
+     body 'echo $d["data"]["employees_left_alone"] ?? "missing";')"
+# ... while the weekday-row count does NOT move with the tick, which is why it
+# is the mode-independent signal a UI should gate on.
+OVR_SET=$(body 'echo $d["data"]["total_employee_set"] ?? "missing";')
+check "  but total_employee_set still counts them" "yes"   "$([ "$OVR_SET" != "0" ] && [ "$OVR_SET" != "missing" ] && echo yes || echo "no [$OVR_SET]")"
+# Back to the default mode, so the sections below are not reading a preview
+# that was taken with the override on.
+post schedules/preview "$A6" "$PV" >/dev/null
+
+echo
+echo "   the apply leaves them alone by default"
+check "applying Saturday is accepted" "200" "$(post schedules/apply "$A6" "$PV")"
+# >>> THE ASSERTION THIS SECTION EXISTS FOR <<<
+check "  B'S CHOSEN 14:00 SURVIVED" "14:00:00" \
+  "$(val "select saturday_out_date v from tbluser where id=$B_ID")"
+check "  while A, who chose nothing, was updated" "13:30:00" \
+  "$(val "select saturday_out_date v from tbluser where id=$A_ID")"
+check "  and the message says who was left alone" "1" \
+  "$(body 'echo strpos($d["message"] ?? "", "left alone") !== false ? 1 : 0;')"
+# The apply stamps its OWN work, or the next apply cannot tell it from a choice.
+check "  A's Saturday is now stamped as a department apply" "department_apply" \
+  "$(val "select source v from hrms_employee_roster_provenance
+           where user_id=$A_ID and weekday='saturday'")"
+check "  and B's stamp was NOT overwritten, because B was skipped" "employee_request" \
+  "$(val "select source v from hrms_employee_roster_provenance
+           where user_id=$B_ID and weekday='saturday'")"
+
+echo
+echo "   the override overwrites, and says the word"
+check "applying with the override is accepted" "200" \
+  "$(post schedules/apply "$A6" '{"department_id":'"$DEPT"',"weekdays":["saturday"],"override_employee_hours":true}')"
+check "  B's 14:00 is now the department's 13:30" "13:30:00" \
+  "$(val "select saturday_out_date v from tbluser where id=$B_ID")"
+check "  the message uses the word overwritten" "1" \
+  "$(body 'echo stripos($d["message"] ?? "", "overwritten") !== false ? 1 : 0;')"
+check "  and B's provenance is now the department's" "department_apply" \
+  "$(val "select source v from hrms_employee_roster_provenance
+           where user_id=$B_ID and weekday='saturday'")"
+# "false" is TRUTHY in PHP, and this is the flag that decides whether somebody's
+# chosen Saturday is overwritten - so the string must not enable it.
+check "the literal string \"false\" does NOT enable the override" "422" \
+  "$(post schedules/apply "$A6" '{"department_id":'"$DEPT"',"weekdays":["saturday"],"override_employee_hours":"false"}')"
+
+echo
+echo "   the confirmation dialog does not read the mode-dependent count live"
+OH="../g2gv0/components/domain/hrms/hrit/attendance-management/manage-employee-attendance/office-hours.tsx"
+check "the people count is captured once, not per render" "1"   "$(countfix "$OH" 'const [employeeSet] = React.useState(() => ({')"
+check "  so the override block survives being ticked" "1"   "$(countfix "$OH" 'const leftAlone = employeeSet.count')"
+
+echo
+echo "   an HR edit through Employee Directory re-stamps, so Apply stops skipping"
+# THE WRITER THAT GETS FORGOTTEN. Without this, HR editing an employee here
+# leaves a stale employee_request stamp and the next apply skips somebody whose
+# hours HR itself just set - reporting them as having chosen their own.
+snap "delete from hrms_employee_roster_provenance where user_id=$B_ID" >/dev/null
+snap "insert into hrms_employee_roster_provenance
+        (sub_institute_id, user_id, weekday, source, source_ref_id, set_by, set_at, created_at, updated_at)
+      values ($TENANT, $B_ID, 'saturday', 'employee_request', 999, 28, now(), now(), now())" >/dev/null
+snap "update tbluser set saturday_out_date='14:00:00' where id=$B_ID" >/dev/null
+check "B is employee-set again" "1" \
+  "$(post schedules/preview "$A6" "$PV" >/dev/null; body 'echo $d["data"]["employees_left_alone"];')"
+
+check "HR edits B's schedule through the directory" "200" \
+  "$(curl -s -o storage/app/zzsched.out -m 60 -w '%{http_code}' -X PUT \
+      "$BASE/api/employees-management/$B_ID" \
+      -H "Authorization: Bearer $A6" -H 'Accept: application/json' \
+      -H 'Content-Type: application/json' \
+      -d '{"schedule":[{"day":"saturday","working":true,"in_time":"09:00","out_time":"16:00"}]}')"
+check "  the stamp moved to hr_directory" "hr_directory" \
+  "$(val "select source v from hrms_employee_roster_provenance
+           where user_id=$B_ID and weekday='saturday'")"
+# >>> AND THEREFORE <<<
+check "  so the apply no longer skips B" "0" \
+  "$(post schedules/preview "$A6" "$PV" >/dev/null; body 'echo $d["data"]["employees_left_alone"];')"
+
 echo
 echo "  ---------------------------------------------"
 teardown
+check "no provenance rows left behind" "0" \
+  "$(val "select count(*) v from hrms_employee_roster_provenance
+           where user_id in ($A_ID, $B_ID, $C_ID)")"
 check "nothing of this probe's is left - employees" "0" \
   "$(val "select count(*) v from tbluser where email like '%$MARK%'")"
 check "  departments" "0" \
