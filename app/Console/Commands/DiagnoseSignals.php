@@ -74,7 +74,9 @@ class DiagnoseSignals extends Command
 
                     continue;
                 }
-                $have = array_map('strtolower', Schema::getColumnListing($table));
+                // SHOW COLUMNS, not Schema::getColumnListing(): the latter selects information_schema.generation_expression,
+                // which MariaDB 10.1 does not have.
+                $have = array_map(fn ($row) => strtolower($row->Field), DB::select("SHOW COLUMNS FROM `{$table}`"));
                 foreach ($columns as $c) {
                     if (! in_array($c, $have, true)) {
                         $missing[] = "{$table}.{$c}";
@@ -88,10 +90,34 @@ class DiagnoseSignals extends Command
             return 'complete';
         });
 
+        $this->step('Every model research saves works on this database version', function () {
+            // Reproduces the MariaDB 10.1 failure ("Unknown column generation_expression") without writing anything:
+            // fill() is what triggers Eloquent's column introspection, and it needs no insert.
+            $broken = [];
+            foreach ([
+                \App\Domain\Signals\Market\ScanLog::class, \App\Domain\Signals\Market\OpportunityEvent::class,
+                \App\Domain\Signals\Market\ImportRejection::class, \App\Domain\Signals\Market\CompanyAlias::class,
+                \App\Domain\Signals\Opportunities\Company::class, \App\Domain\Signals\Opportunities\CompanyOpportunity::class,
+                \App\Domain\Signals\Opportunities\ResearchRun::class, \App\Domain\Signals\Opportunities\ResearchSource::class,
+                \App\Domain\Portfolio\OpportunityMatch::class, \App\Domain\Portfolio\ProductOffer::class,
+            ] as $class) {
+                try {
+                    (new $class())->fill(['sub_institute_id' => 1]);
+                } catch (\Throwable $e) {
+                    $broken[] = class_basename($class) . ' (' . mb_substr($e->getMessage(), 0, 90) . ')';
+                }
+            }
+            if ($broken !== []) {
+                throw new \RuntimeException('These cannot be saved here: ' . implode('; ', $broken) . '. Add the SkipsGuardableColumnCheck trait to each.');
+            }
+
+            return 'all can be saved';
+        });
+
         $this->step('Product profile exists and is complete', function () use ($tenant) {
             $p = ProductProfile::where('sub_institute_id', $tenant)->first();
             if (! $p) {
-                throw new \RuntimeException("No product profile for tenant {$tenant}. Fill in Product profile on the Signals screen.");
+                throw new \RuntimeException("No product profile for tenant {$tenant}. Note: the tenant is the organisation id (sub_institute_id), NOT the department id in the page address. Run without --tenant to auto-pick one, or fill in Product profile on the Signals screen.");
             }
             $c = app(\App\Domain\Signals\Opportunities\ProductProfileService::class)->completeness($p);
             if (! $c['complete']) {
