@@ -3797,6 +3797,7 @@ Route::prefix('crm')->group(function () {
     $crmSms = \App\Http\Controllers\Api\Crm\CrmSmsController::class;
     $smsLink = '/module/crm/sales/sms-notifier';
     Route::get('sms-log', [$crmSms, 'index'])->middleware("platformright:{$smsLink},view");
+    Route::get('sms-log/export', [$crmSms, 'export'])->middleware("platformright:{$smsLink},view");
     Route::post('sms-log/send', [$crmSms, 'send'])->middleware("platformright:{$smsLink},edit");
 
     // Products & Services: one controller, one table, two menu rights - no

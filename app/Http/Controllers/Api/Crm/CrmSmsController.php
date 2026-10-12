@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
 use App\Support\MenuRight;
 use Illuminate\Http\JsonResponse;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * SMS Notifier - a real send action plus an append-only sent-message log
@@ -39,10 +41,16 @@ use Illuminate\Support\Facades\Validator;
  * based adapter cannot parse an arbitrary vendor's success/failure body
  * format, so "sent" means "the gateway accepted the request", not "the
  * carrier delivered it".
+ *
+ * export() added in Phase 6 - a compliance/audit CSV export of the same
+ * append-only log, same HasCrmExport trait every other Sales entity uses.
+ * Not in tension with the no-edit/no-Recycle-Bin stance above: export is
+ * read-only, same as index().
  */
 class CrmSmsController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmExport;
 
     private const SMS_LINK = '/module/crm/sales/sms-notifier';
 
@@ -51,6 +59,13 @@ class CrmSmsController extends Controller
         'organization' => 'crm_organizations',
         'contact' => 'crm_contacts',
         'opportunity' => 'crm_opportunities',
+    ];
+
+    /** @var array<string, string> db column => CSV header, in export column order. */
+    private const EXPORT_COLUMNS = [
+        'to_number' => 'Phone Number', 'message' => 'Message', 'status' => 'Status',
+        'error_reason' => 'Error Reason', 'related_type' => 'Related To', 'related_id' => 'Related Record ID',
+        'sent_by' => 'Sent By (user id)', 'created_at' => 'Sent At',
     ];
 
     public function index(Request $request): JsonResponse
@@ -95,6 +110,28 @@ class CrmSmsController extends Controller
                 ],
             ],
         ]);
+    }
+
+    /** Exports the same rows index() would list (search/status applied). */
+    public function export(Request $request): StreamedResponse|JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $query = DB::table('crm_sms_log')->where('sub_institute_id', $identity['sub_institute_id']);
+
+        if ($search = trim((string) $request->input('search', ''))) {
+            $query->where('to_number', 'like', "%{$search}%");
+        }
+
+        if ($status = $request->input('status')) {
+            $query->where('status', $status);
+        }
+
+        return $this->exportCsv($query, self::EXPORT_COLUMNS, 'sms-log.csv');
     }
 
     public function send(Request $request): JsonResponse

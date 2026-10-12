@@ -27,7 +27,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * quote's own detail page after creation, same convention Campaign targets
  * already use (create the parent first, manage its children on its own
  * page). No duplicate-detection/merge pair, same reasoning as
- * Opportunities/Campaigns.
+ * Opportunities/Campaigns - re-confirmed, not just carried over, during
+ * Phase 6's cross-cutting polish pass.
  *
  * Every money total is SERVER-RECOMPUTED on save, never trusted from the
  * client - see saveLineItems()'s own docblock for the exact arithmetic and

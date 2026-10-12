@@ -18,7 +18,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * duplicate-detection/merge pair here, same reasoning as Campaigns: two
  * same-named deals for one Organization can be legitimately different
  * records, not an accidental double-entry the way a Lead/Contact/
- * Organization/Product usually is.
+ * Organization/Product usually is. Re-confirmed, not just carried over,
+ * during Phase 6's cross-cutting polish pass - merging would risk folding
+ * two genuinely distinct deals' stage history/line items into one.
  *
  * Deliberately separate from the GTM & Revenue module's `gtm_deals` - see
  * this phase's plan for why. The only connection point is
