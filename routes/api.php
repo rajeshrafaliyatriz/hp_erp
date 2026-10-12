@@ -3800,6 +3800,7 @@ Route::prefix('crm')->group(function () {
     Route::get('quotes/{id}/line-items', [$crmQuote, 'getLineItems'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
     Route::put('quotes/{id}/line-items', [$crmQuote, 'saveLineItems'])->whereNumber('id')->middleware("platformright:{$quoteLink},edit");
     Route::get('quotes/{id}/pdf', [$crmQuote, 'pdf'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
+    Route::get('quotes/{id}/stage-history', [$crmQuote, 'stageHistory'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
     Route::post('quotes/bulk/delete', [$crmQuote, 'bulkDelete'])->middleware("platformright:{$quoteLink},delete");
     Route::post('quotes/bulk/assign', [$crmQuote, 'bulkAssign'])->middleware("platformright:{$quoteLink},edit");
     Route::post('quotes/import', [$crmQuote, 'import'])->middleware("platformright:{$quoteLink},add");
