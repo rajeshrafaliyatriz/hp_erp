@@ -66,6 +66,18 @@ class CrmOpportunityController extends Controller
             $query->where('op.organization_id', $organizationId);
         }
 
+        // Reverse lookup for a Contact's own detail page ("which deals is this
+        // person tagged on") - Contact<->Opportunity is a M:M junction, not a
+        // column on crm_opportunities, so this can't be a plain ->where().
+        if ($contactId = $request->input('contact_id')) {
+            $query->whereExists(function ($sub) use ($contactId) {
+                $sub->select(DB::raw(1))
+                    ->from('crm_opportunity_contacts as oc')
+                    ->whereColumn('oc.opportunity_id', 'op.id')
+                    ->where('oc.contact_id', $contactId);
+            });
+        }
+
         $sortableColumns = ['name', 'amount', 'sales_stage', 'closing_date', 'created_at'];
         $sortBy = in_array($request->input('sort_by'), $sortableColumns, true) ? $request->input('sort_by') : 'created_at';
         $sortDir = strtolower((string) $request->input('sort_dir')) === 'desc' ? 'desc' : 'asc';

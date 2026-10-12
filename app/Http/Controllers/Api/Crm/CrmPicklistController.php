@@ -53,6 +53,9 @@ class CrmPicklistController extends Controller
         'opportunities' => ['sales_stage', 'lead_source', 'potential_type', 'forecast_category'],
         'quotes' => ['quote_stage'],
         'products' => ['category'],
+        'sales_orders' => ['so_stage'],
+        'purchase_orders' => ['po_stage'],
+        'invoices' => ['invoice_stage'],
     ];
 
     /** @var array<string, array{menuId: int|null, link: string|null}> Same shape/reasoning as CrmSavedViewController::MODULE_RIGHTS. */
@@ -64,6 +67,9 @@ class CrmPicklistController extends Controller
         'opportunities' => ['menuId' => null, 'link' => '/module/crm/sales/opportunities'],
         'quotes' => ['menuId' => null, 'link' => '/module/crm/sales/quotes'],
         'products' => ['menuId' => null, 'link' => '/module/crm/sales/products'],
+        'sales_orders' => ['menuId' => null, 'link' => '/module/crm/sales/sales-orders'],
+        'purchase_orders' => ['menuId' => null, 'link' => '/module/crm/sales/purchase-orders'],
+        'invoices' => ['menuId' => null, 'link' => '/module/crm/sales/invoices'],
     ];
 
     public function index(Request $request): JsonResponse

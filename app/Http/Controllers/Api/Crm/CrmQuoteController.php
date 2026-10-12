@@ -72,6 +72,10 @@ class CrmQuoteController extends Controller
             $query->where('q.organization_id', $organizationId);
         }
 
+        if ($contactId = $request->input('contact_id')) {
+            $query->where('q.contact_id', $contactId);
+        }
+
         if ($opportunityId = $request->input('opportunity_id')) {
             $query->where('q.opportunity_id', $opportunityId);
         }

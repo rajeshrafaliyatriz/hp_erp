@@ -31,6 +31,7 @@ class CrmSavedViewController extends Controller
     private const MODULES = [
         'leads', 'contacts', 'organizations', 'campaigns',
         'opportunities', 'quotes', 'products', 'services', 'sms_log', 'price_books',
+        'vendors', 'sales_orders', 'purchase_orders', 'invoices',
     ];
 
     /** @var array<string, array{menuId: int|null, link: string|null}> */
@@ -45,6 +46,10 @@ class CrmSavedViewController extends Controller
         'services' => ['menuId' => null, 'link' => '/module/crm/sales/services'],
         'sms_log' => ['menuId' => null, 'link' => '/module/crm/sales/sms-notifier'],
         'price_books' => ['menuId' => null, 'link' => '/module/crm/sales/price-books'],
+        'vendors' => ['menuId' => null, 'link' => '/module/crm/sales/vendors'],
+        'sales_orders' => ['menuId' => null, 'link' => '/module/crm/sales/sales-orders'],
+        'purchase_orders' => ['menuId' => null, 'link' => '/module/crm/sales/purchase-orders'],
+        'invoices' => ['menuId' => null, 'link' => '/module/crm/sales/invoices'],
     ];
 
     public function index(Request $request): JsonResponse

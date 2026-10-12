@@ -42,6 +42,10 @@ class CrmRecycleBinController extends Controller
         'products' => ['table' => 'crm_products', 'menuId' => null, 'link' => '/module/crm/sales/products', 'typeFilter' => ['item_type', 'product']],
         'services' => ['table' => 'crm_products', 'menuId' => null, 'link' => '/module/crm/sales/services', 'typeFilter' => ['item_type', 'service']],
         'price_books' => ['table' => 'crm_price_books', 'menuId' => null, 'link' => '/module/crm/sales/price-books'],
+        'vendors' => ['table' => 'crm_vendors', 'menuId' => null, 'link' => '/module/crm/sales/vendors'],
+        'sales_orders' => ['table' => 'crm_sales_orders', 'menuId' => null, 'link' => '/module/crm/sales/sales-orders'],
+        'purchase_orders' => ['table' => 'crm_purchase_orders', 'menuId' => null, 'link' => '/module/crm/sales/purchase-orders'],
+        'invoices' => ['table' => 'crm_invoices', 'menuId' => null, 'link' => '/module/crm/sales/invoices'],
     ];
 
     /** @var array<string, string> Reverse of crm_campaign_targets.target_type. */
@@ -231,7 +235,7 @@ class CrmRecycleBinController extends Controller
     {
         $name = match ($type) {
             'leads', 'contacts' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
-            'quotes' => $row->subject ?? '',
+            'quotes', 'sales_orders', 'purchase_orders', 'invoices' => $row->subject ?? '',
             default => $row->name ?? '',
         };
 
@@ -241,6 +245,10 @@ class CrmRecycleBinController extends Controller
             'quotes' => $row->quote_no ?? null,
             'products', 'services' => $row->product_no ?? null,
             'price_books' => $row->price_book_no ?? null,
+            'vendors' => $row->vendor_no ?? null,
+            'sales_orders' => $row->so_no ?? null,
+            'purchase_orders' => $row->po_no ?? null,
+            'invoices' => $row->invoice_no ?? null,
             default => null,
         };
 
