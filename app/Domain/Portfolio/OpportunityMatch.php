@@ -7,6 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class OpportunityMatch extends Model
 {
+    // MariaDB 10.1 (the live host) has no information_schema.generation_expression, which Eloquent's
+    // guarded-column check selects: without this, create()/fill() throws there. See the trait for the full story.
+    use \App\Models\Concerns\SkipsGuardableColumnCheck;
+
     protected $table = 'g2g_opportunity_matches';
 
     protected $guarded = ['id'];
