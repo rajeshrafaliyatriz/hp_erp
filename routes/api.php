@@ -3799,6 +3799,7 @@ Route::prefix('crm')->group(function () {
     Route::get('sms-log', [$crmSms, 'index'])->middleware("platformright:{$smsLink},view");
     Route::get('sms-log/export', [$crmSms, 'export'])->middleware("platformright:{$smsLink},view");
     Route::post('sms-log/send', [$crmSms, 'send'])->middleware("platformright:{$smsLink},edit");
+    Route::post('sms-log/bulk-send', [$crmSms, 'bulkSend'])->middleware("platformright:{$smsLink},edit");
 
     // Products & Services: one controller, one table, two menu rights - no
     // static middleware here either, for the same reason as Recycle Bin/

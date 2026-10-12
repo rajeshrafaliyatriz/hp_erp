@@ -51,10 +51,12 @@ class CrmProductController extends Controller
 
     /** @var array<string, string> db column => CSV header, in export column order. */
     private const EXPORT_COLUMNS = [
-        'name' => 'Name', 'sku' => 'SKU', 'category' => 'Category', 'description' => 'Description',
-        'unit_price' => 'Unit Price', 'cost_price' => 'Cost Price', 'currency' => 'Currency',
-        'is_active' => 'Active', 'vendor' => 'Vendor', 'qty_in_stock' => 'Qty In Stock',
-        'reorder_level' => 'Reorder Level', 'weight' => 'Weight', 'assigned_to' => 'Assigned To (user id)',
+        'name' => 'Name', 'sku' => 'SKU', 'category' => 'Category', 'gl_account' => 'GL Account',
+        'description' => 'Description', 'unit_price' => 'Unit Price', 'cost_price' => 'Cost Price',
+        'commission_rate' => 'Commission Rate', 'currency' => 'Currency', 'is_active' => 'Active',
+        'vendor' => 'Vendor', 'qty_in_stock' => 'Qty In Stock', 'qty_in_demand' => 'Qty In Demand',
+        'reorder_level' => 'Reorder Level', 'weight' => 'Weight', 'usage_unit' => 'Usage Unit',
+        'assigned_to' => 'Assigned To (user id)',
     ];
 
     public function index(Request $request): JsonResponse
@@ -151,6 +153,7 @@ class CrmProductController extends Controller
             'assignedTo' => 'required|integer',
             'unitPrice' => 'nullable|numeric',
             'costPrice' => 'nullable|numeric',
+            'commissionRate' => 'nullable|numeric|min:0|max:100',
             'taxRateId' => 'nullable|integer',
         ]);
 
@@ -183,6 +186,7 @@ class CrmProductController extends Controller
             $data['vendor'] = null;
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
+            $data['qty_in_demand'] = null;
         }
 
         $id = DB::table('crm_products')->insertGetId($data);
@@ -214,6 +218,7 @@ class CrmProductController extends Controller
             'assignedTo' => 'sometimes|required|integer',
             'unitPrice' => 'nullable|numeric',
             'costPrice' => 'nullable|numeric',
+            'commissionRate' => 'nullable|numeric|min:0|max:100',
             'taxRateId' => 'nullable|integer',
         ]);
 
@@ -234,6 +239,7 @@ class CrmProductController extends Controller
             $data['vendor'] = null;
             $data['qty_in_stock'] = null;
             $data['reorder_level'] = null;
+            $data['qty_in_demand'] = null;
         }
 
         $data['updated_by'] = $identity['user_id'];
@@ -497,6 +503,7 @@ class CrmProductController extends Controller
                 $data['vendor'] = null;
                 $data['qty_in_stock'] = null;
                 $data['reorder_level'] = null;
+                $data['qty_in_demand'] = null;
             }
 
             DB::table('crm_products')->insert($data);
@@ -592,11 +599,12 @@ class CrmProductController extends Controller
     private function payload(Request $request, bool $forUpdate = false): array
     {
         $map = [
-            'name' => 'name', 'sku' => 'sku', 'category' => 'category', 'description' => 'description',
-            'unitPrice' => 'unit_price', 'costPrice' => 'cost_price', 'currency' => 'currency',
-            'taxRateId' => 'tax_rate_id', 'isActive' => 'is_active', 'vendor' => 'vendor',
-            'qtyInStock' => 'qty_in_stock', 'reorderLevel' => 'reorder_level', 'weight' => 'weight',
-            'assignedTo' => 'assigned_to',
+            'name' => 'name', 'sku' => 'sku', 'category' => 'category', 'glAccount' => 'gl_account',
+            'description' => 'description', 'unitPrice' => 'unit_price', 'costPrice' => 'cost_price',
+            'commissionRate' => 'commission_rate', 'currency' => 'currency', 'taxRateId' => 'tax_rate_id',
+            'isActive' => 'is_active', 'vendor' => 'vendor', 'qtyInStock' => 'qty_in_stock',
+            'qtyInDemand' => 'qty_in_demand', 'reorderLevel' => 'reorder_level', 'weight' => 'weight',
+            'usageUnit' => 'usage_unit', 'assignedTo' => 'assigned_to',
         ];
 
         $data = [];
@@ -630,17 +638,21 @@ class CrmProductController extends Controller
             'name' => $row->name,
             'sku' => $row->sku,
             'category' => $row->category,
+            'glAccount' => $row->gl_account,
             'description' => $row->description,
             'unitPrice' => $row->unit_price !== null ? (float) $row->unit_price : null,
             'costPrice' => $row->cost_price !== null ? (float) $row->cost_price : null,
+            'commissionRate' => $row->commission_rate !== null ? (float) $row->commission_rate : null,
             'currency' => $row->currency,
             'taxRateId' => $row->tax_rate_id ? (string) $row->tax_rate_id : null,
             'taxRateName' => $row->tax_rate_name ?? null,
             'isActive' => (bool) $row->is_active,
             'vendor' => $row->vendor,
             'qtyInStock' => $row->qty_in_stock !== null ? (float) $row->qty_in_stock : null,
+            'qtyInDemand' => $row->qty_in_demand !== null ? (float) $row->qty_in_demand : null,
             'reorderLevel' => $row->reorder_level !== null ? (int) $row->reorder_level : null,
             'weight' => $row->weight !== null ? (float) $row->weight : null,
+            'usageUnit' => $row->usage_unit,
             'assignedTo' => $row->assigned_to ? (string) $row->assigned_to : null,
             'createdBy' => $row->created_by ? (string) $row->created_by : null,
             'createdAt' => $row->created_at,

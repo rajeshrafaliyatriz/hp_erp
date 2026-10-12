@@ -42,10 +42,15 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * format, so "sent" means "the gateway accepted the request", not "the
  * carrier delivered it".
  *
- * export() added in Phase 6 - a compliance/audit CSV export of the same
- * append-only log, same HasCrmExport trait every other Sales entity uses.
- * Not in tension with the no-edit/no-Recycle-Bin stance above: export is
- * read-only, same as index().
+ * export() and bulkSend() added in Phase 6. export() is a compliance/audit
+ * CSV export of the same append-only log, same HasCrmExport trait every
+ * other Sales entity uses - read-only, not in tension with the no-edit/
+ * no-Recycle-Bin stance above. bulkSend() is vtiger's own SMSNotifier list-
+ * view mass-action (select N records, send one message to all) - still NOT
+ * built: per-recipient delivery-status re-poll, unchanged from this
+ * migration's own original reasoning (needs inbound webhook infrastructure
+ * this app doesn't have) - re-confirmed, not overlooked, during the Phase 6
+ * audit.
  */
 class CrmSmsController extends Controller
 {
@@ -59,6 +64,18 @@ class CrmSmsController extends Controller
         'organization' => 'crm_organizations',
         'contact' => 'crm_contacts',
         'opportunity' => 'crm_opportunities',
+    ];
+
+    /**
+     * @var array<string, array{table: string, columns: array<string>}>
+     *   relatedType => {table, phone columns in priority order} for
+     *   bulkSend() - Opportunities excluded, they carry no phone of their
+     *   own (same reasoning send-sms-dialog.tsx already applies).
+     */
+    private const PHONE_SOURCES = [
+        'lead' => ['table' => 'crm_leads', 'columns' => ['mobile', 'phone']],
+        'organization' => ['table' => 'crm_organizations', 'columns' => ['phone']],
+        'contact' => ['table' => 'crm_contacts', 'columns' => ['mobile', 'phone']],
     ];
 
     /** @var array<string, string> db column => CSV header, in export column order. */
@@ -190,6 +207,106 @@ class CrmSmsController extends Controller
         }
 
         return response()->json(['status' => 1, 'message' => 'SMS sent.', 'data' => $this->resource($row)]);
+    }
+
+    /**
+     * Phase 6 audit gap: vtiger's own SMSNotifier list-view mass action lets
+     * a rep select N records and send one message to all of them at once.
+     * One gateway resolve, one `dispatch()` per recipient with a phone on
+     * file - every id is logged (even a skip, as a 'failed' row with a
+     * clear reason) so the append-only log stays the single source of
+     * truth for "what did we attempt," same discipline send() already has.
+     */
+    public function bulkSend(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! $this->canSend($identity)) {
+            return response()->json(['status' => 0, 'message' => 'You do not have permission to send SMS.'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'relatedType' => 'required|string|in:' . implode(',', array_keys(self::PHONE_SOURCES)),
+            'ids' => 'required|array|min:1|max:200',
+            'ids.*' => 'integer',
+            'message' => 'required|string|max:1000',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $relatedType = $request->input('relatedType');
+        $source = self::PHONE_SOURCES[$relatedType];
+        $message = $request->input('message');
+        $ids = array_unique(array_map('intval', $request->input('ids')));
+
+        $rows = DB::table($source['table'])
+            ->whereIn('id', $ids)
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->whereNull('deleted_at')
+            ->get();
+
+        $rowsById = $rows->keyBy('id');
+        $gateway = $this->resolveGatewayConfig($identity['sub_institute_id']);
+        $sent = 0;
+        $failed = 0;
+        $results = [];
+
+        foreach ($ids as $id) {
+            $row = $rowsById->get($id);
+
+            if (! $row) {
+                $results[] = ['id' => (string) $id, 'ok' => false, 'reason' => 'Record not found.'];
+                $failed++;
+                continue;
+            }
+
+            $toNumber = null;
+            foreach ($source['columns'] as $column) {
+                if (! empty($row->{$column})) {
+                    $toNumber = $row->{$column};
+                    break;
+                }
+            }
+
+            if (! $toNumber) {
+                $this->logAttempt($identity, '', $message, 'failed', 'No phone number on file.', $relatedType, $id);
+                $results[] = ['id' => (string) $id, 'ok' => false, 'reason' => 'No phone number on file.'];
+                $failed++;
+                continue;
+            }
+
+            if (! $gateway) {
+                $this->logAttempt($identity, $toNumber, $message, 'failed', 'No SMS gateway configured for this tenant.', $relatedType, $id);
+                $results[] = ['id' => (string) $id, 'ok' => false, 'reason' => 'No SMS gateway configured.'];
+                $failed++;
+                continue;
+            }
+
+            [$status, $errorReason] = $this->dispatch($gateway, $toNumber, $message);
+            $this->logAttempt($identity, $toNumber, $message, $status, $errorReason, $relatedType, $id);
+
+            if ($status === 'failed') {
+                $results[] = ['id' => (string) $id, 'ok' => false, 'reason' => $errorReason ?? 'The SMS gateway could not be reached.'];
+                $failed++;
+            } else {
+                $results[] = ['id' => (string) $id, 'ok' => true];
+                $sent++;
+            }
+        }
+
+        return response()->json([
+            'status' => 1,
+            'message' => $failed === 0
+                ? "{$sent} message(s) sent."
+                : "{$sent} sent, {$failed} failed of " . count($ids) . ' record(s).',
+            'data' => ['sent' => $sent, 'failed' => $failed, 'results' => $results],
+        ]);
     }
 
     /**
