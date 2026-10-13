@@ -1385,9 +1385,14 @@ Route::get('/organization/audit', [\App\Http\Controllers\Api\Organization\Organi
  * the organisation's own mailbox rate-limited by its provider.
  */
 Route::middleware(['api.token', 'profile:admin,hr'])->group(function () {
-    Route::get('/organization/delivery', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'show']);
-    Route::put('/organization/delivery', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'update']);
-    Route::post('/organization/delivery/test', [\App\Http\Controllers\Api\Organization\DeliveryController::class, 'test'])
+    $delivery = \App\Http\Controllers\Api\Organization\DeliveryController::class;
+    Route::get('/organization/delivery/options', [$delivery, 'options']);
+    Route::get('/organization/delivery/profiles', [$delivery, 'index']);
+    Route::post('/organization/delivery/profiles', [$delivery, 'store']);
+    Route::put('/organization/delivery/profiles/{id}', [$delivery, 'update'])->whereNumber('id');
+    Route::delete('/organization/delivery/profiles/{id}', [$delivery, 'destroy'])->whereNumber('id');
+    Route::post('/organization/delivery/profiles/{id}/test', [$delivery, 'test'])
+        ->whereNumber('id')
         ->middleware('throttle:4,1');
 });
 

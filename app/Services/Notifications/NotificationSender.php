@@ -2,9 +2,11 @@
 
 namespace App\Services\Notifications;
 
+use App\Support\MailGate;
+use App\Support\MailSender;
+use App\Support\MailSenderModules;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 /**
  * THE SEND. This is the line where the system stops being reversible.
@@ -52,9 +54,22 @@ class NotificationSender
     ) {
     }
 
+    /**
+     * The GLOBAL flag only - unchanged meaning, now delegated to
+     * App\Support\MailGate instead of duplicating its exact check, so the
+     * two can never drift apart. Existing callers (NotificationDispatcher's
+     * status reporting, the phase-3 evidence scripts) keep working
+     * unmodified - same method, same return semantics.
+     *
+     * The actual send gate in send()/sendEmail() below uses
+     * MailGate::allowedForTenant() instead, which is a strict superset of
+     * this (true whenever this is true, ALSO true for an allow-listed
+     * tenant) - this method stays for backward compatibility and status
+     * display, it is no longer what decides whether an email goes out.
+     */
     public function emailEnabled(): bool
     {
-        return filter_var(env('G2G_NOTIFY_EMAIL', false), FILTER_VALIDATE_BOOLEAN);
+        return MailGate::allowed();
     }
 
     /**
@@ -89,7 +104,16 @@ class NotificationSender
          * something happened in your own workspace, and a silent inbox is how an
          * approval sits unseen for a week.
          */
-        if ($this->emailEnabled()
+        /*
+         * MailGate::allowedForTenant(), not emailEnabled() - the per-tenant
+         * allowlist (G2G_NOTIFY_EMAIL_TENANTS) previously had no effect
+         * here at all, since emailEnabled() only ever consulted the global
+         * flag. This is a strict widening in the SAME direction the global
+         * flag already permits - allowedForTenant() is true whenever
+         * emailEnabled() is, plus true for one more case (an allow-listed
+         * tenant with the global flag still off).
+         */
+        if (MailGate::allowedForTenant($tenant)
             && $this->preferences->wantsEmail((int) $recipient['user_id'], $event->type)
             && $this->sendEmail($event, $recipient, $tenant)) {
             $delivered[] = 'email';
@@ -161,7 +185,7 @@ class NotificationSender
         }
 
         try {
-            Mail::raw($msg['body'], function ($m) use ($address, $msg) {
+            MailSender::mailer($tenant, $this->moduleKeyFor($event->type))->raw($msg['body'], function ($m) use ($address, $msg) {
                 $m->to($address)->subject($msg['subject']);
             });
             return true;
@@ -176,5 +200,22 @@ class NotificationSender
             ]);
             return false;
         }
+    }
+
+    /**
+     * A coarse module key from the event's own type prefix - this class has
+     * no other module concept (it is deliberately generic, fired for any
+     * event type any module raises). 'talent.*'/'leave.*' route to that
+     * module's own sender profile if an administrator has configured one;
+     * everything else (task/rights/competency events) uses the
+     * organisation's default profile.
+     */
+    private function moduleKeyFor(string $eventType): string
+    {
+        return match (true) {
+            str_starts_with($eventType, 'talent.') => 'talent_recruitment',
+            str_starts_with($eventType, 'leave.') => 'hrit_management',
+            default => MailSenderModules::DEFAULT,
+        };
     }
 }

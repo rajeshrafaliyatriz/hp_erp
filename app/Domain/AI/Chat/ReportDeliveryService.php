@@ -5,8 +5,8 @@ namespace App\Domain\AI\Chat;
 use App\Domain\AI\Support\AiAuditLogger;
 use App\Services\Ai\AiRequestScope;
 use App\Support\MailGate;
+use App\Support\MailSender;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Throwable;
@@ -201,7 +201,7 @@ class ReportDeliveryService
             $row = DB::table('ai_report_deliveries')->where('dedupe_key', $key)->first(['id']);
 
             try {
-                Mail::html($html, function ($m) use ($email, $name, $report) {
+                MailSender::mailer($tenant, 'ai_reports')->html($html, function ($m) use ($email, $name, $report) {
                     $m->to($email, $name)->subject('Report: ' . $report->title);
                 });
                 DB::table('ai_report_deliveries')->where('id', $row->id)

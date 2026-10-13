@@ -3,6 +3,7 @@
 namespace App\Domain\Gtm;
 
 use App\Support\MailGate;
+use App\Support\MailSender;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -128,7 +129,7 @@ final class OutreachMailer
         $text = rtrim($m->body)."\n\n--\nIf you would rather not receive emails from us, unsubscribe here: {$unsubscribeUrl}\n";
 
         try {
-            Mail::raw($text, function ($message) use ($contact, $m, $unsubscribeUrl) {
+            MailSender::mailer($tenant, 'gtm_outreach')->raw($text, function ($message) use ($contact, $m, $unsubscribeUrl) {
                 $message->to($contact->email, $contact->full_name)->subject($m->subject);
                 $headers = $message->getSymfonyMessage()->getHeaders();
                 $headers->addTextHeader('List-Unsubscribe', "<{$unsubscribeUrl}>");

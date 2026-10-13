@@ -10,7 +10,6 @@ use App\Support\CandidateLink;
 use App\Support\MailGate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -361,7 +360,7 @@ class TalentAssessmentController extends Controller
             ];
         } elseif (MailGate::allowedForTenant($sid)) {
             try {
-                Mail::raw(
+                \App\Support\MailSender::mailer((int) $sid, 'talent_recruitment')->raw(
                     'Hello ' . ($application->first_name ?: 'there') . ",\n\n"
                     . "The next step in your application is a short assessment. You can start it here:\n\n"
                     . $url . "\n\n"
