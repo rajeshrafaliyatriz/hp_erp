@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
@@ -28,6 +29,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CrmPriceBookController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmAuditTrail;
     use HasCrmBulkActions;
     use HasCrmExport;
 
@@ -174,6 +176,7 @@ class CrmPriceBookController extends Controller
         $data['updated_at'] = now();
 
         DB::table('crm_price_books')->where('id', $id)->update($data);
+        $this->recordCrmAudit('crm.price_book.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
         $row = $this->ownRow($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Price book updated.', 'data' => $this->resource($row)]);
@@ -187,7 +190,9 @@ class CrmPriceBookController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Price book not found.'], 404);
         }
 
@@ -196,7 +201,18 @@ class CrmPriceBookController extends Controller
             'deleted_by' => $identity['user_id'],
         ]);
 
+        $this->recordCrmAudit(
+            'crm.price_book.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
+
         return response()->json(['status' => 1, 'message' => 'Price book moved to Recycle Bin.']);
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_price_books';
     }
 
     public function bulkDelete(Request $request): JsonResponse

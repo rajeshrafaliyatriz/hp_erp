@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmComments;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDocuments;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
@@ -22,6 +26,10 @@ class CrmContactController extends Controller
     use HasCrmDuplicateDetection;
     use HasCrmMerge;
     use HasCrmExport;
+    use HasCrmComments;
+    use HasCrmDocuments;
+    use HasCrmEmailLinks;
+    use HasCrmAuditTrail;
 
     /** @var array<string, string> db column => CSV header, in export column order. */
     private const EXPORT_COLUMNS = [
@@ -144,7 +152,9 @@ class CrmContactController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Contact not found.'], 404);
         }
 
@@ -169,6 +179,9 @@ class CrmContactController extends Controller
         $data['updated_at'] = now();
 
         DB::table('crm_contacts')->where('id', $id)->update($data);
+
+        $this->recordCrmAudit('crm.contact.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+
         $row = $this->ownRowWithOrganization($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Contact updated.', 'data' => $this->resource($row)]);
@@ -182,7 +195,9 @@ class CrmContactController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Contact not found.'], 404);
         }
 
@@ -190,6 +205,12 @@ class CrmContactController extends Controller
             'deleted_at' => now(),
             'deleted_by' => $identity['user_id'],
         ]);
+
+        $this->recordCrmAudit(
+            'crm.contact.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
 
         return response()->json(['status' => 1, 'message' => 'Contact moved to Recycle Bin.']);
     }
@@ -410,6 +431,31 @@ class CrmContactController extends Controller
             ->whereNull('c.deleted_at')
             ->select('c.*', 'o.name as organization_name')
             ->first();
+    }
+
+    protected function commentsTable(): string
+    {
+        return 'crm_contact_comments';
+    }
+
+    protected function commentsForeignKey(): string
+    {
+        return 'contact_id';
+    }
+
+    protected function documentsLinkedType(): string
+    {
+        return 'CONTACT';
+    }
+
+    protected function emailsLinkedType(): string
+    {
+        return 'CONTACT';
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_contacts';
     }
 
     /** @return array<string, mixed> */

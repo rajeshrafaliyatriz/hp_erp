@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDocuments;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -35,6 +38,9 @@ class CrmTicketController extends Controller
     use ResolvesApiIdentity;
     use HasCrmBulkActions;
     use HasCrmExport;
+    use HasCrmDocuments;
+    use HasCrmEmailLinks;
+    use HasCrmAuditTrail;
 
     /** @var array<string, string> db column => CSV header, in export column order. */
     private const EXPORT_COLUMNS = [
@@ -276,6 +282,12 @@ class CrmTicketController extends Controller
             $this->applyContractConsumption($oldTicket, $merged);
         });
 
+        // Deliberately outside the transaction above (matches this trait's own
+        // post-commit convention) - $oldTicket, not $existing, since that is
+        // the name this controller's own update() already captures the
+        // pre-write row under.
+        $this->recordCrmAudit('crm.ticket.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $oldTicket, array_merge((array) $oldTicket, $data));
+
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Ticket updated.', 'data' => $this->resource($row)]);
@@ -339,7 +351,9 @@ class CrmTicketController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Ticket not found.'], 404);
         }
 
@@ -347,6 +361,12 @@ class CrmTicketController extends Controller
             'deleted_at' => now(),
             'deleted_by' => $identity['user_id'],
         ]);
+
+        $this->recordCrmAudit(
+            'crm.ticket.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
 
         return response()->json(['status' => 1, 'message' => 'Ticket moved to Recycle Bin.']);
     }
@@ -690,6 +710,21 @@ class CrmTicketController extends Controller
     private function ownRowJoined(int $tenantId, int $id): ?object
     {
         return $this->baseQuery($tenantId)->where('t.id', $id)->first();
+    }
+
+    protected function documentsLinkedType(): string
+    {
+        return 'TICKET';
+    }
+
+    protected function emailsLinkedType(): string
+    {
+        return 'TICKET';
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_tickets';
     }
 
     /** @return array<string, mixed> */

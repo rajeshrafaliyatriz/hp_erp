@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
@@ -35,6 +36,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CrmPurchaseOrderController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmAuditTrail;
     use HasCrmBulkActions;
     use HasCrmExport;
 
@@ -184,7 +186,9 @@ class CrmPurchaseOrderController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Purchase order not found.'], 404);
         }
 
@@ -217,6 +221,7 @@ class CrmPurchaseOrderController extends Controller
         $data['updated_at'] = now();
 
         DB::table('crm_purchase_orders')->where('id', $id)->update($data);
+        $this->recordCrmAudit('crm.purchase_order.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
 
         /*
          * A header-only save can still touch shippingHandlingAmount/
@@ -238,7 +243,9 @@ class CrmPurchaseOrderController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Purchase order not found.'], 404);
         }
 
@@ -247,7 +254,18 @@ class CrmPurchaseOrderController extends Controller
             'deleted_by' => $identity['user_id'],
         ]);
 
+        $this->recordCrmAudit(
+            'crm.purchase_order.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
+
         return response()->json(['status' => 1, 'message' => 'Purchase order moved to Recycle Bin.']);
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_purchase_orders';
     }
 
     public function bulkDelete(Request $request): JsonResponse

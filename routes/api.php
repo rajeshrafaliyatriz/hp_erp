@@ -2027,6 +2027,12 @@ Route::prefix('task-management')->middleware('task.sanitize')->group(function ()
     Route::get('/calendar/events/{id}/attendees', [CalendarController::class, 'listAttendees'])->whereNumber('id');
     Route::post('/calendar/events/{id}/attendees', [CalendarController::class, 'inviteAttendee'])->whereNumber('id');
     Route::delete('/calendar/events/{id}/attendees/{attendeeId}', [CalendarController::class, 'removeAttendee'])->whereNumber('id')->whereNumber('attendeeId');
+
+    // CRM Schedule tab feed (Activities/Calendar gap) — events linked to one
+    // Lead/Contact/Organization/Opportunity/Ticket record, listed without
+    // pulling the whole range-based calendar feed. Static 'linked' segment,
+    // so it can never collide with the {id} dynamic route above it.
+    Route::get('/calendar/events/linked/{linkedType}/{linkedId}', [CalendarController::class, 'linkedEvents'])->whereNumber('linkedId');
     // PUBLIC — no token, matching CRM's own accept-only short-link. Still
     // sits inside this prefix group (only `task.sanitize` applies there,
     // which merely trims input) rather than needing a separate declaration.
@@ -3577,6 +3583,8 @@ Route::post('gtm/inbound', [\App\Http\Controllers\Api\Gtm\InboundController::cla
 
 Route::get('gtm/unsubscribe/{contact}', \App\Http\Controllers\Api\Gtm\UnsubscribeController::class)->whereNumber('contact')->middleware(['signed', 'throttle:30,1'])->name('gtm.unsubscribe');
 
+Route::get('crm/email-unsubscribe/{type}/{id}', [\App\Http\Controllers\Api\Crm\CrmEmailController::class, 'unsubscribe'])->whereNumber('id')->middleware(['signed', 'throttle:30,1'])->name('crm.email.unsubscribe');
+
 Route::prefix('gtm')->middleware('api.token')->group(function () {
     $acc = \App\Http\Controllers\Api\Gtm\AccountController::class;
     $con = \App\Http\Controllers\Api\Gtm\ContactController::class;
@@ -3723,6 +3731,12 @@ Route::prefix('crm')->group(function () {
     Route::post('leads/merge', [$crmLead, 'merge'])->middleware('menuright:201,delete');
     Route::get('leads/export', [$crmLead, 'export'])->middleware('menuright:201,view');
     Route::post('leads/import', [$crmLead, 'import'])->middleware('menuright:201,add');
+    Route::get('leads/{id}/comments', [$crmLead, 'getComments'])->whereNumber('id')->middleware('menuright:201,view');
+    Route::post('leads/{id}/comments', [$crmLead, 'addComment'])->whereNumber('id')->middleware('menuright:201,edit');
+    Route::get('leads/{id}/documents', [$crmLead, 'getDocuments'])->whereNumber('id')->middleware('menuright:201,view');
+    Route::post('leads/{id}/documents', [$crmLead, 'attachDocument'])->whereNumber('id')->middleware('menuright:201,edit');
+    Route::get('leads/{id}/emails', [$crmLead, 'getEmails'])->whereNumber('id')->middleware('menuright:201,view');
+    Route::get('leads/{id}/history', [$crmLead, 'history'])->whereNumber('id')->middleware('menuright:201,view');
 
     // Organizations + Contacts: their menu ids differ per database (confirmed
     // above), so every route here uses the access-link-resolving
@@ -3746,6 +3760,13 @@ Route::prefix('crm')->group(function () {
     Route::post('organizations/merge', [$crmOrg, 'merge'])->middleware("platformright:{$orgLink}|{$orgLinkSupport},delete");
     Route::get('organizations/export', [$crmOrg, 'export'])->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
     Route::post('organizations/import', [$crmOrg, 'import'])->middleware("platformright:{$orgLink}|{$orgLinkSupport},add");
+    Route::get('organizations/{id}/comments', [$crmOrg, 'getComments'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
+    Route::post('organizations/{id}/comments', [$crmOrg, 'addComment'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},edit");
+    Route::get('organizations/{id}/documents', [$crmOrg, 'getDocuments'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
+    Route::post('organizations/{id}/documents', [$crmOrg, 'attachDocument'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},edit");
+    Route::get('organizations/{id}/emails', [$crmOrg, 'getEmails'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
+    Route::get('organizations/{id}/history', [$crmOrg, 'history'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
+    Route::get('organizations/{id}/projects', [$crmOrg, 'projects'])->whereNumber('id')->middleware("platformright:{$orgLink}|{$orgLinkSupport},view");
 
     $contactLink = '/module/crm/marketing/contacts';
     // Cross-linked under Support too - see the identical $orgLinkSupport note above.
@@ -3762,6 +3783,12 @@ Route::prefix('crm')->group(function () {
     Route::post('contacts/merge', [$crmContact, 'merge'])->middleware("platformright:{$contactLink}|{$contactLinkSupport},delete");
     Route::get('contacts/export', [$crmContact, 'export'])->middleware("platformright:{$contactLink}|{$contactLinkSupport},view");
     Route::post('contacts/import', [$crmContact, 'import'])->middleware("platformright:{$contactLink}|{$contactLinkSupport},add");
+    Route::get('contacts/{id}/comments', [$crmContact, 'getComments'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},view");
+    Route::post('contacts/{id}/comments', [$crmContact, 'addComment'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},edit");
+    Route::get('contacts/{id}/documents', [$crmContact, 'getDocuments'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},view");
+    Route::post('contacts/{id}/documents', [$crmContact, 'attachDocument'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},edit");
+    Route::get('contacts/{id}/emails', [$crmContact, 'getEmails'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},view");
+    Route::get('contacts/{id}/history', [$crmContact, 'history'])->whereNumber('id')->middleware("platformright:{$contactLink}|{$contactLinkSupport},view");
 
     $crmCampaign = \App\Http\Controllers\Api\Crm\CrmCampaignController::class;
     $campaignLink = '/module/crm/marketing/campaigns';
@@ -3779,6 +3806,7 @@ Route::prefix('crm')->group(function () {
     Route::post('campaigns/bulk/assign', [$crmCampaign, 'bulkAssign'])->middleware("platformright:{$campaignLink},edit");
     Route::get('campaigns/export', [$crmCampaign, 'export'])->middleware("platformright:{$campaignLink},view");
     Route::post('campaigns/import', [$crmCampaign, 'import'])->middleware("platformright:{$campaignLink},add");
+    Route::get('campaigns/{id}/history', [$crmCampaign, 'history'])->whereNumber('id')->middleware("platformright:{$campaignLink},view");
 
     // Tax Rates: index() is intentionally ungated (same precedent as
     // picklist-values' own index()) - any authenticated caller can read the
@@ -3810,6 +3838,12 @@ Route::prefix('crm')->group(function () {
     Route::post('opportunities/bulk/delete', [$crmOpportunity, 'bulkDelete'])->middleware("platformright:{$oppLink},delete");
     Route::post('opportunities/bulk/assign', [$crmOpportunity, 'bulkAssign'])->middleware("platformright:{$oppLink},edit");
     Route::post('opportunities/import', [$crmOpportunity, 'import'])->middleware("platformright:{$oppLink},add");
+    Route::get('opportunities/{id}/comments', [$crmOpportunity, 'getComments'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
+    Route::post('opportunities/{id}/comments', [$crmOpportunity, 'addComment'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");
+    Route::get('opportunities/{id}/documents', [$crmOpportunity, 'getDocuments'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
+    Route::post('opportunities/{id}/documents', [$crmOpportunity, 'attachDocument'])->whereNumber('id')->middleware("platformright:{$oppLink},edit");
+    Route::get('opportunities/{id}/emails', [$crmOpportunity, 'getEmails'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
+    Route::get('opportunities/{id}/projects', [$crmOpportunity, 'projects'])->whereNumber('id')->middleware("platformright:{$oppLink},view");
 
     $crmQuote = \App\Http\Controllers\Api\Crm\CrmQuoteController::class;
     $quoteLink = '/module/crm/sales/quotes';
@@ -3826,6 +3860,7 @@ Route::prefix('crm')->group(function () {
     Route::post('quotes/bulk/delete', [$crmQuote, 'bulkDelete'])->middleware("platformright:{$quoteLink},delete");
     Route::post('quotes/bulk/assign', [$crmQuote, 'bulkAssign'])->middleware("platformright:{$quoteLink},edit");
     Route::post('quotes/import', [$crmQuote, 'import'])->middleware("platformright:{$quoteLink},add");
+    Route::get('quotes/{id}/history', [$crmQuote, 'history'])->whereNumber('id')->middleware("platformright:{$quoteLink},view");
 
     $crmPriceBook = \App\Http\Controllers\Api\Crm\CrmPriceBookController::class;
     $priceBookLink = '/module/crm/sales/price-books';
@@ -3842,6 +3877,7 @@ Route::prefix('crm')->group(function () {
     Route::post('price-books/{id}/items', [$crmPriceBook, 'addItem'])->whereNumber('id')->middleware("platformright:{$priceBookLink},edit");
     Route::put('price-books/{id}/items/{rowId}', [$crmPriceBook, 'updateItem'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$priceBookLink},edit");
     Route::delete('price-books/{id}/items/{rowId}', [$crmPriceBook, 'removeItem'])->whereNumber(['id', 'rowId'])->middleware("platformright:{$priceBookLink},edit");
+    Route::get('price-books/{id}/history', [$crmPriceBook, 'history'])->whereNumber('id')->middleware("platformright:{$priceBookLink},view");
 
     $crmVendor = \App\Http\Controllers\Api\Crm\CrmVendorController::class;
     $vendorLink = '/module/crm/sales/vendors';
@@ -3859,6 +3895,7 @@ Route::prefix('crm')->group(function () {
     Route::post('vendors/bulk/delete', [$crmVendor, 'bulkDelete'])->middleware("platformright:{$vendorLink},delete");
     Route::post('vendors/bulk/assign', [$crmVendor, 'bulkAssign'])->middleware("platformright:{$vendorLink},edit");
     Route::post('vendors/import', [$crmVendor, 'import'])->middleware("platformright:{$vendorLink},add");
+    Route::get('vendors/{id}/history', [$crmVendor, 'history'])->whereNumber('id')->middleware("platformright:{$vendorLink},view");
 
     $crmSalesOrder = \App\Http\Controllers\Api\Crm\CrmSalesOrderController::class;
     $soLink = '/module/crm/sales/sales-orders';
@@ -3876,6 +3913,7 @@ Route::prefix('crm')->group(function () {
     Route::post('sales-orders/bulk/delete', [$crmSalesOrder, 'bulkDelete'])->middleware("platformright:{$soLink},delete");
     Route::post('sales-orders/bulk/assign', [$crmSalesOrder, 'bulkAssign'])->middleware("platformright:{$soLink},edit");
     Route::post('sales-orders/import', [$crmSalesOrder, 'import'])->middleware("platformright:{$soLink},add");
+    Route::get('sales-orders/{id}/history', [$crmSalesOrder, 'history'])->whereNumber('id')->middleware("platformright:{$soLink},view");
 
     $crmPurchaseOrder = \App\Http\Controllers\Api\Crm\CrmPurchaseOrderController::class;
     $poLink = '/module/crm/sales/purchase-orders';
@@ -3893,6 +3931,7 @@ Route::prefix('crm')->group(function () {
     Route::post('purchase-orders/bulk/delete', [$crmPurchaseOrder, 'bulkDelete'])->middleware("platformright:{$poLink},delete");
     Route::post('purchase-orders/bulk/assign', [$crmPurchaseOrder, 'bulkAssign'])->middleware("platformright:{$poLink},edit");
     Route::post('purchase-orders/import', [$crmPurchaseOrder, 'import'])->middleware("platformright:{$poLink},add");
+    Route::get('purchase-orders/{id}/history', [$crmPurchaseOrder, 'history'])->whereNumber('id')->middleware("platformright:{$poLink},view");
 
     $crmInvoice = \App\Http\Controllers\Api\Crm\CrmInvoiceController::class;
     $invoiceLink = '/module/crm/sales/invoices';
@@ -3910,6 +3949,7 @@ Route::prefix('crm')->group(function () {
     Route::post('invoices/bulk/delete', [$crmInvoice, 'bulkDelete'])->middleware("platformright:{$invoiceLink},delete");
     Route::post('invoices/bulk/assign', [$crmInvoice, 'bulkAssign'])->middleware("platformright:{$invoiceLink},edit");
     Route::post('invoices/import', [$crmInvoice, 'import'])->middleware("platformright:{$invoiceLink},add");
+    Route::get('invoices/{id}/history', [$crmInvoice, 'history'])->whereNumber('id')->middleware("platformright:{$invoiceLink},view");
 
     $crmTicket = \App\Http\Controllers\Api\Crm\CrmTicketController::class;
     $ticketLink = '/module/crm/support/tickets';
@@ -3926,6 +3966,10 @@ Route::prefix('crm')->group(function () {
     Route::post('tickets/bulk/delete', [$crmTicket, 'bulkDelete'])->middleware("platformright:{$ticketLink},delete");
     Route::post('tickets/bulk/assign', [$crmTicket, 'bulkAssign'])->middleware("platformright:{$ticketLink},edit");
     Route::post('tickets/import', [$crmTicket, 'import'])->middleware("platformright:{$ticketLink},add");
+    Route::get('tickets/{id}/documents', [$crmTicket, 'getDocuments'])->whereNumber('id')->middleware("platformright:{$ticketLink},view");
+    Route::post('tickets/{id}/documents', [$crmTicket, 'attachDocument'])->whereNumber('id')->middleware("platformright:{$ticketLink},edit");
+    Route::get('tickets/{id}/emails', [$crmTicket, 'getEmails'])->whereNumber('id')->middleware("platformright:{$ticketLink},view");
+    Route::get('tickets/{id}/history', [$crmTicket, 'history'])->whereNumber('id')->middleware("platformright:{$ticketLink},view");
 
     $crmFaq = \App\Http\Controllers\Api\Crm\CrmFaqController::class;
     $faqLink = '/module/crm/support/faq';
@@ -3938,6 +3982,7 @@ Route::prefix('crm')->group(function () {
     Route::post('faqs/bulk/delete', [$crmFaq, 'bulkDelete'])->middleware("platformright:{$faqLink},delete");
     Route::post('faqs/bulk/assign', [$crmFaq, 'bulkAssign'])->middleware("platformright:{$faqLink},edit");
     Route::post('faqs/import', [$crmFaq, 'import'])->middleware("platformright:{$faqLink},add");
+    Route::get('faqs/{id}/history', [$crmFaq, 'history'])->whereNumber('id')->middleware("platformright:{$faqLink},view");
 
     $crmServiceContract = \App\Http\Controllers\Api\Crm\CrmServiceContractController::class;
     $contractLink = '/module/crm/support/service-contracts';
@@ -3950,6 +3995,7 @@ Route::prefix('crm')->group(function () {
     Route::post('service-contracts/bulk/delete', [$crmServiceContract, 'bulkDelete'])->middleware("platformright:{$contractLink},delete");
     Route::post('service-contracts/bulk/assign', [$crmServiceContract, 'bulkAssign'])->middleware("platformright:{$contractLink},edit");
     Route::post('service-contracts/import', [$crmServiceContract, 'import'])->middleware("platformright:{$contractLink},add");
+    Route::get('service-contracts/{id}/history', [$crmServiceContract, 'history'])->whereNumber('id')->middleware("platformright:{$contractLink},view");
 
     $crmAsset = \App\Http\Controllers\Api\Crm\CrmAssetController::class;
     $assetLink = '/module/crm/support/assets';
@@ -3964,6 +4010,7 @@ Route::prefix('crm')->group(function () {
     Route::post('assets/bulk/delete', [$crmAsset, 'bulkDelete'])->middleware("platformright:{$assetLink},delete");
     Route::post('assets/bulk/assign', [$crmAsset, 'bulkAssign'])->middleware("platformright:{$assetLink},edit");
     Route::post('assets/import', [$crmAsset, 'import'])->middleware("platformright:{$assetLink},add");
+    Route::get('assets/{id}/history', [$crmAsset, 'history'])->whereNumber('id')->middleware("platformright:{$assetLink},view");
 
     $crmSms = \App\Http\Controllers\Api\Crm\CrmSmsController::class;
     $smsLink = '/module/crm/sales/sms-notifier';
@@ -3995,6 +4042,23 @@ Route::prefix('crm')->group(function () {
     Route::post('products/{id}/bundle-items', [$crmProduct, 'addBundleItem'])->whereNumber('id');
     Route::delete('products/{id}/bundle-items/{rowId}', [$crmProduct, 'removeBundleItem'])->whereNumber('id')->whereNumber('rowId');
     Route::post('products/{id}/image', [$crmProduct, 'uploadImage'])->whereNumber('id');
+    Route::get('products/{id}/history', [$crmProduct, 'history'])->whereNumber('id');
+
+    $crmEmailTemplate = \App\Http\Controllers\Api\Crm\CrmEmailTemplateController::class;
+    $emailTemplateLink = '/module/crm/support/email-templates';
+    Route::get('email-templates', [$crmEmailTemplate, 'index'])->middleware("platformright:{$emailTemplateLink},view");
+    Route::get('email-templates/export', [$crmEmailTemplate, 'export'])->middleware("platformright:{$emailTemplateLink},view");
+    Route::get('email-templates/{id}', [$crmEmailTemplate, 'show'])->whereNumber('id')->middleware("platformright:{$emailTemplateLink},view");
+    Route::post('email-templates', [$crmEmailTemplate, 'store'])->middleware("platformright:{$emailTemplateLink},add");
+    Route::put('email-templates/{id}', [$crmEmailTemplate, 'update'])->whereNumber('id')->middleware("platformright:{$emailTemplateLink},edit");
+    Route::delete('email-templates/{id}', [$crmEmailTemplate, 'destroy'])->whereNumber('id')->middleware("platformright:{$emailTemplateLink},delete");
+    Route::post('email-templates/bulk/delete', [$crmEmailTemplate, 'bulkDelete'])->middleware("platformright:{$emailTemplateLink},delete");
+    Route::post('email-templates/bulk/assign', [$crmEmailTemplate, 'bulkAssign'])->middleware("platformright:{$emailTemplateLink},edit");
+
+    $crmEmail = \App\Http\Controllers\Api\Crm\CrmEmailController::class;
+    Route::get('emails', [$crmEmail, 'index'])->middleware("platformright:{$emailTemplateLink},view");
+    Route::get('emails/{id}', [$crmEmail, 'show'])->whereNumber('id')->middleware("platformright:{$emailTemplateLink},view");
+    Route::post('emails/compose', [$crmEmail, 'compose'])->middleware("platformright:{$emailTemplateLink},add");
 
     // Recycle Bin: one shared screen across all 4 modules. No single static
     // middleware here - CrmRecycleBinController checks each row's own type

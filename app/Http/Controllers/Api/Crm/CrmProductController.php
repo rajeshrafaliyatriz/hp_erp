@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
@@ -37,6 +38,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CrmProductController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmAuditTrail;
     use HasCrmBulkActions;
     use HasCrmDuplicateDetection;
     use HasCrmMerge;
@@ -247,6 +249,7 @@ class CrmProductController extends Controller
         $data['updated_at'] = now();
 
         DB::table('crm_products')->where('id', $id)->update($data);
+        $this->recordCrmAudit('crm.product.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => ucfirst($existing->item_type) . ' updated.', 'data' => $this->resource($row)]);
@@ -275,7 +278,18 @@ class CrmProductController extends Controller
             'deleted_by' => $identity['user_id'],
         ]);
 
+        $this->recordCrmAudit(
+            'crm.product.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
+
         return response()->json(['status' => 1, 'message' => ucfirst($existing->item_type) . ' moved to Recycle Bin.']);
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_products';
     }
 
     public function bulkDelete(Request $request): JsonResponse
