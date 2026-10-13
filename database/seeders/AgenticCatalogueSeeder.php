@@ -33,24 +33,24 @@ class AgenticCatalogueSeeder extends Seeder
      *
      * `%d` is the agent's id, filled in once the row exists.
      *
-     * THIS PATH DOES NOT ACTUALLY RESOLVE TO A SCREEN. '/module/m7/...' uses
-     * a legacy module-code ('m7') this app's content-map never recognised
-     * (it keys on the real tblmenumaster_g2g id, and Agentic AI has none
-     * reserved for a standalone workspace route) - confirmed by reading
+     * '/module/agentic-ai/agent-workspace' is a REAL tblmenumaster_g2g row
+     * now (see 2026_11_28_090000_create_agentic_workspace_menu_row.php) - it
+     * used to be '/module/m7/ag-agent-workspace/ag-agent-workspace?agent=%d',
+     * a legacy module-code path ('m7') this app's content-map never
+     * recognised (it keys on the real id, and there was no row reserved for
+     * a standalone workspace route at all) - confirmed by reading
      * hooks/use-content-map.ts's CONTENT_MAP_LOADERS directly, not assumed.
-     * The 6 agents stored with this cta_link (pal-agent, marketing-strategy,
-     * content-automation, newsletter-agent, seo-agent,
-     * social-media-automation) are handled specially on the frontend instead
-     * (ag-agent-library.tsx's followCta() detects 'ag-agent-workspace' in the
-     * link and opens the agent's own detail Sheet - which already has this
-     * same input-schema-driven launch panel - rather than navigating here).
+     * Every catalogue agent whose cta_link pointed there (pal-agent,
+     * marketing-strategy, content-automation, newsletter-agent, seo-agent,
+     * social-media-automation) landed on the generic "not available yet"
+     * screen until that row existed.
+     *
      * The other 7 catalogue agents' cta_links were a SEPARATE instance of the
      * identical stale-module-code bug (e.g. '/module/m6/tm-tasks/tm-tasks'
-     * instead of the real '/module/task-management/my-tasks') and have been
-     * corrected below to real, verified access_link values - those needed no
-     * frontend workaround, just the right string.
+     * instead of the real '/module/task-management/my-tasks') and were
+     * corrected the same way, but to an access_link that already existed.
      */
-    private const WORKSPACE = '/module/m7/ag-agent-workspace/ag-agent-workspace?agent=%d';
+    private const WORKSPACE = '/module/agentic-ai/agent-workspace?agent=%d';
 
     private function agents(): array
     {
