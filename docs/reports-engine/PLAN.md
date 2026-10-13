@@ -161,17 +161,23 @@ Private), **definition (json)**, last_run_at,
 created_by/updated_by/deleted_by, timestamps+softDeletes. Indexes:
 `(sub_institute_id, module_scope, folder_id)`, `(owner_id)`, `(sharingtype)`.
 
-`definition` JSON shape:
+`definition` JSON shape — **every field reference is a `{module, field}` pair,
+never a single concatenated string**: module keys are themselves dotted
+(`task_management.tasks`) and so are custom-field keys (`custom.
+estimated_value`), so "split on the last dot" is ambiguous the moment a
+custom field is involved. Discovered and fixed during Phase 0
+implementation (`ReportModuleRegistry::resolve(moduleKey, fieldKey, ...)`
+takes two explicit arguments, not one combined string):
 ```json
 {
   "secondary_modules": ["task_management.projects"],
   "columns": [{"module": "task_management.tasks", "field": "status", "label": "Status", "visible": true, "aggregate": null}],
-  "standard_filter": {"field": "task_management.tasks.task_date", "preset": "this_month", "from": null, "to": null},
-  "advanced_filter": {"op": "AND", "conditions": [{"op": "OR", "conditions": [...]}, {"field": "...", "operator": "equals", "value": "..."}]},
-  "sort_columns": [{"field": "...", "direction": "asc"}],
-  "group_by": ["task_management.tasks.task_allocated_to"],
-  "pivot": {"rows": ["..."], "columns": ["..."], "values": [{"field": "...id", "aggregate": "count", "label": "Tasks"}]},
-  "chart": {"type": "VerticalBar", "group_by": "...", "data_fields": [{"field": "...id", "aggregate": "count", "label": "Count"}]}
+  "standard_filter": {"module": "task_management.tasks", "field": "task_date", "preset": "this_month", "from": null, "to": null},
+  "advanced_filter": {"op": "AND", "conditions": [{"op": "OR", "conditions": [...]}, {"module": "...", "field": "...", "operator": "equals", "value": "..."}]},
+  "sort_columns": [{"module": "...", "field": "...", "direction": "asc"}],
+  "group_by": [{"module": "task_management.tasks", "field": "task_allocated_to"}],
+  "pivot": {"rows": [{"module": "...", "field": "..."}], "columns": [{"module": "...", "field": "..."}], "values": [{"module": "...", "field": "id", "aggregate": "count", "label": "Tasks"}]},
+  "chart": {"type": "VerticalBar", "group_by": {"module": "...", "field": "..."}, "data_fields": [{"module": "...", "field": "id", "aggregate": "count", "label": "Count"}]}
 }
 ```
 Server-side validation on every create/update (never trust the client
@@ -224,16 +230,24 @@ Builder calls), then shapes the result per type:
 
 ### 4. API surface
 
+Prefix is `/api/report-builder/*`, **not** `/api/reports/*` — that prefix
+already belongs to an unrelated, pre-existing HR/Talent analytics namespace
+(`App\Http\Controllers\Reports\*`: kpi, hiring-analytics, employee
+lifecycle, department distribution, ...), discovered via `route:list` during
+Phase 0 implementation. No route actually conflicts, but two unrelated
+"Reports" systems sharing one URL prefix is exactly the kind of thing that
+confuses the next person reading the route list.
+
 ```
-GET/POST/PUT/DELETE  /api/reports/folders[/{id}]
-GET  /api/reports?scope={task_management|crm}&view={folder|all|shared}[&folder_id={id}]
-POST/GET/PUT/DELETE  /api/reports[/{id}]
-POST /api/reports/preview               # run an unsaved definition (builder live preview)
-GET  /api/reports/{id}/run
-GET  /api/reports/{id}/export?format=csv
-GET/POST/DELETE  /api/reports/{id}/shares[/{shareId}]
-GET  /api/reports/modules?scope={..}            # registry introspection for the builder
-GET  /api/reports/modules/{moduleKey}/fields
+GET/POST/PUT/DELETE  /api/report-builder/folders[/{id}]
+GET  /api/report-builder?scope={task_management|crm}&view={folder|all|shared}[&folder_id={id}]
+POST/GET/PUT/DELETE  /api/report-builder[/{id}]
+POST /api/report-builder/preview               # run an unsaved definition (builder live preview)
+GET  /api/report-builder/{id}/run
+GET  /api/report-builder/{id}/export?format=csv
+GET/POST/DELETE  /api/report-builder/{id}/shares[/{shareId}]
+GET  /api/report-builder/modules?scope={..}            # registry introspection for the builder
+GET  /api/report-builder/modules/{moduleKey}/fields
 ```
 `view=all` → every report in scope where `sharingtype='Public' OR
 owner_id=me OR exists(report_shares WHERE viewer_user_id=me)`. `view=shared`

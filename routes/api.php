@@ -4087,3 +4087,52 @@ Route::prefix('crm')->group(function () {
     Route::post('saved-views', [$crmSavedView, 'store']);
     Route::delete('saved-views/{id}', [$crmSavedView, 'destroy'])->whereNumber('id');
 });
+
+/*
+ * THE GENERIC REPORT BUILDER ENGINE — Docs/reports-engine/PLAN.md.
+ *
+ * Deliberately NOT inside the `crm` prefix group above: `scope` (task_
+ * management|crm) lives in the request, the same "no static per-module
+ * middleware" shape as CRM's own Saved Views/Recycle Bin just above - one
+ * engine serves every registered module, so there is no single menu-right
+ * to gate it by. Tenant-scoped by sub_institute_id via ResolvesApiIdentity
+ * inside each controller, same as every CRM controller in this file.
+ *
+ * Prefix is `report-builder`, NOT `reports` - `/api/reports/*` already
+ * belongs to an unrelated, pre-existing HR/Talent analytics namespace
+ * (App\Http\Controllers\Reports\*: kpi, hiring-analytics, employee
+ * lifecycle, department distribution, ...). No route actually conflicts
+ * (theirs are literal segments, this engine's {id} is whereNumber-
+ * constrained), but sharing one URL prefix between two unrelated "Reports"
+ * systems is exactly the kind of thing that confuses the next person
+ * reading `route:list` - a different prefix removes the ambiguity outright.
+ */
+Route::prefix('report-builder')->group(function () {
+    $reportFolder = \App\Http\Controllers\Api\Reports\ReportFolderController::class;
+    Route::get('folders', [$reportFolder, 'index']);
+    Route::post('folders', [$reportFolder, 'store']);
+    Route::put('folders/{id}', [$reportFolder, 'update'])->whereNumber('id');
+    Route::delete('folders/{id}', [$reportFolder, 'destroy'])->whereNumber('id');
+
+    $reportModule = \App\Http\Controllers\Api\Reports\ReportModuleController::class;
+    Route::get('modules', [$reportModule, 'index']);
+    // No custom regex needed: Laravel's default parameter pattern ([^/]+)
+    // already matches a dotted module key like "crm.leads" without spanning
+    // into the next path segment.
+    Route::get('modules/{moduleKey}/fields', [$reportModule, 'fields']);
+
+    $report = \App\Http\Controllers\Api\Reports\ReportController::class;
+    Route::post('preview', [$report, 'preview']);
+    Route::get('/', [$report, 'index']);
+    Route::post('/', [$report, 'store']);
+    Route::get('{id}', [$report, 'show'])->whereNumber('id');
+    Route::put('{id}', [$report, 'update'])->whereNumber('id');
+    Route::delete('{id}', [$report, 'destroy'])->whereNumber('id');
+    Route::get('{id}/run', [$report, 'run'])->whereNumber('id');
+    Route::get('{id}/export', [$report, 'export'])->whereNumber('id');
+
+    $reportShare = \App\Http\Controllers\Api\Reports\ReportShareController::class;
+    Route::get('{id}/shares', [$reportShare, 'index'])->whereNumber('id');
+    Route::post('{id}/shares', [$reportShare, 'store'])->whereNumber('id');
+    Route::delete('{id}/shares/{shareId}', [$reportShare, 'destroy'])->whereNumber('id')->whereNumber('shareId');
+});
