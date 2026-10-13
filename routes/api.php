@@ -2404,6 +2404,10 @@ Route::get('/platform/organizations', [\App\Http\Controllers\Api\Platform\Platfo
 Route::post('/platform/organizations', [\App\Http\Controllers\Api\Platform\PlatformOrganizationController::class, 'store'])
     ->middleware(['api.token', 'platform.owner']);
 
+Route::patch('/platform/organizations/{id}/outbound-email', [\App\Http\Controllers\Api\Platform\PlatformOrganizationController::class, 'setOutboundEmail'])
+    ->whereNumber('id')
+    ->middleware(['api.token', 'platform.owner']);
+
 /*
  * CREATING AN ORGANISATION, AND ITS FIRST USER.
  *

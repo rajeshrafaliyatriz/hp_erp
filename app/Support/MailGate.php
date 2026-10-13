@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\DB;
+
 /**
  * THE SINGLE GATE EVERY OUTBOUND MAIL PATH PASSES THROUGH.
  *
@@ -75,11 +77,21 @@ final class MailGate
      * so `allowed() && inList()` would be permanently false and useless. That
      * means mail CAN leave the building while `allowed()` still reports false —
      * which is exactly the drift this class exists to prevent. So the tripwire in
-     * Docs/phase3/_evidence/phase3-smoke.php was amended in the same change to
-     * assert this allowlist as well. If you widen the list, widen the tripwire.
+     * Docs/phase3/_evidence/phase3-smoke.php asserts this allowlist too - still
+     * true below, just read from a different place. If you widen the list,
+     * widen the tripwire.
      *
-     * G2G_NOTIFY_EMAIL_TENANTS is a comma-separated list of sub_institute_id.
-     * Empty or unset means nobody, which is the default.
+     * ── WHY THIS IS A DATABASE COLUMN NOW, NOT `G2G_NOTIFY_EMAIL_TENANTS` ───────
+     *
+     * The env-var list meant approving one more organisation required editing a
+     * file on whichever server happens to be running and then clearing config
+     * cache - an operation only whoever has server access could do, for
+     * something that needs to happen every time a new customer is trusted with
+     * real sending. `school_setup.outbound_email_enabled` is the same OR-gate,
+     * same default-nobody semantics, toggled instead through
+     * PlatformOrganizationController under the existing `platform.owner` gate -
+     * see 2026_11_27_090000_add_outbound_email_enabled_to_school_setup_table for
+     * the migration that carries over whatever the env list already held.
      */
     public static function allowedForTenant(?int $tenantId): bool
     {
@@ -87,18 +99,23 @@ final class MailGate
             return true;
         }
 
-        return $tenantId !== null && in_array($tenantId, self::allowedTenants(), true);
+        if ($tenantId === null) {
+            return false;
+        }
+
+        return (bool) DB::table('school_setup')
+            ->where('id', $tenantId)
+            ->value('outbound_email_enabled');
     }
 
     /** The organisations mail may currently leave for. Empty by default. */
     public static function allowedTenants(): array
     {
-        $raw = (string) env('G2G_NOTIFY_EMAIL_TENANTS', '');
-
-        return array_values(array_filter(
-            array_map(static fn ($v) => (int) trim($v), explode(',', $raw)),
-            static fn ($v) => $v > 0
-        ));
+        return DB::table('school_setup')
+            ->where('outbound_email_enabled', true)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
     }
 
     /** Why a send was refused for this organisation, or null when it was not. */
