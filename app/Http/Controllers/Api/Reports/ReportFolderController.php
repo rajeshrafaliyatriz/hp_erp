@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Reports;
 
 use App\Domain\Reports\SystemReportFolders;
+use App\Domain\Reports\SystemReportSeeds;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -36,6 +37,7 @@ class ReportFolderController extends Controller
         }
 
         SystemReportFolders::ensure((int) $identity['sub_institute_id'], $scope);
+        SystemReportSeeds::ensure((int) $identity['sub_institute_id'], (int) $identity['user_id'], $scope);
 
         $folders = DB::table('report_folders')
             ->where('sub_institute_id', $identity['sub_institute_id'])
