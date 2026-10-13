@@ -283,12 +283,28 @@ class DeliveryController extends Controller
             return response()->json(['status' => 0, 'message' => 'Sender profile not found.'], 404);
         }
 
-        $address = DB::table('tbluser')->where('id', $identity['user_id'])->value('email');
+        /*
+         * WHO THE TEST GOES TO, NOW A CHOICE RATHER THAN ALWAYS "YOURSELF"
+         *
+         * This used to only ever mail the caller's own address - a deliberate
+         * guard against a configured mailbox being used as an on-demand relay
+         * to an arbitrary address. The admin asked for the arbitrary address
+         * back, so it is validated here rather than trusted blindly:
+         * `email` format (not just non-empty), and the test MESSAGE ITSELF is
+         * still fixed - nobody can use this box to send a chosen subject or
+         * body, only to prove a mailbox works and ask it to prove that at
+         * one address instead of another. `throttle:4,1` on the route is the
+         * remaining guard against it being used to spam one address.
+         */
+        $request->validate(['to' => ['nullable', 'email', 'max:191']]);
+        $address = trim((string) $request->input('to')) !== ''
+            ? trim((string) $request->input('to'))
+            : DB::table('tbluser')->where('id', $identity['user_id'])->value('email');
 
         if (!$address) {
             return response()->json([
                 'status' => 0,
-                'message' => 'Your account has no email address, so there is nowhere to send a test.',
+                'message' => 'Your account has no email address, so there is nowhere to send a test. Type one in above instead.',
             ], 422);
         }
 
