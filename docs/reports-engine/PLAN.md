@@ -280,12 +280,13 @@ data field only, matches vtiger), VerticalBar/HorizontalBar/Line→
 
 ## Phasing
 
-- [ ] **Phase 0 — Engine foundation + durable plan doc.**
+- [x] **Phase 0 (backend) — Engine foundation.** *(commit `c6268d84`, hp_erp)*
   - [x] Step 0: write this plan to `hp_erp/Docs/reports-engine/PLAN.md` and commit it.
-  - [ ] Migrations: `report_folders`, `reports`, `report_shares`.
-  - [ ] Classes: `ReportModuleRegistry` (skeleton), the 3 value objects, `ReportQueryExecutionService`, `ReportShareService`.
-  - [ ] Controllers/routes from §4 (scope allowlist `task_management`/`crm`, even though only one is populated yet).
-  - [ ] Frontend: full shell/builder/viewer skeleton, `export-csv.ts`, `report-chart-colors.ts`, promoted `confirm-dialog.tsx` — no module content registered yet.
+  - [x] Migrations: `report_folders`, `reports` (longText `definition`, not json() — live's MariaDB predates JSON support), `report_shares`. Run on both `default` and `live`.
+  - [x] Classes: `ReportModuleRegistry` (skeleton, empty `all()`), the 3 value objects, `ReportQueryExecutionService`, `ReportShareService`.
+  - [x] Controllers/routes — prefix is `/api/report-builder/*`, NOT `/api/reports/*` (that's an unrelated pre-existing HR/Talent analytics namespace, found via `route:list`).
+  - [x] Live-verified: empty-registry endpoints respond cleanly, unknown-module create returns a clean 422.
+  - [ ] **Phase 0 (frontend, g2gv0) — still to do:** full shell/builder/viewer skeleton, `export-csv.ts`, `report-chart-colors.ts`, promoted `confirm-dialog.tsx` — no module content registered yet.
 
 - [ ] **Phase 1 — Task Management (the proving ground).**
   - [ ] Register `task_management.tasks` (table `task`).
