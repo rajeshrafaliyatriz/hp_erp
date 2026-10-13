@@ -443,20 +443,68 @@ class ReportController extends Controller
             }
         }
 
-        $checkRef = function (array $ref) use ($tenantId): ?string {
+        /**
+         * `$allowCustom` gates whether a CUSTOM field may resolve here at
+         * all — custom fields are display-only in v1 (Docs/reports-engine/
+         * PLAN.md §5: the EAV value column is untyped TEXT, so grouping/
+         * aggregating it risks silently wrong numbers), so every reference
+         * EXCEPT a tabular report's own display columns rejects one here,
+         * at save time, rather than only discovering it the first time the
+         * report runs.
+         */
+        $checkRef = function (array $ref, bool $allowCustom) use ($tenantId): ?string {
             if (!isset($ref['module'], $ref['field'])) {
                 return 'Every field reference needs a module and a field.';
             }
 
-            if ($this->registry->resolve($ref['module'], $ref['field'], $tenantId) === null) {
+            $field = $this->registry->resolve($ref['module'], $ref['field'], $tenantId);
+
+            if ($field === null) {
                 return "Unknown field: {$ref['module']}.{$ref['field']}.";
+            }
+
+            if ($field->isCustomField && !$allowCustom) {
+                return "Custom field {$ref['field']} cannot be used here — display-only in a tabular report's own columns, never as a filter/group/sort/aggregate field.";
             }
 
             return null;
         };
 
         foreach ($definition['columns'] ?? [] as $col) {
-            if (($error = $checkRef($col)) !== null) {
+            /*
+             * Outside a tabular report, `columns` only matters for entries
+             * that set `aggregate` — ReportQueryExecutionService::runSummary/
+             * runChart silently ignore every other entry (the builder UI
+             * lets an author tick a field's checkbox before choosing summary/
+             * chart's own group-by, without that tick doing anything). An
+             * un-aggregated tick is genuinely inert, so it is skipped here
+             * too rather than rejected — rejecting it would make ticking a
+             * display-only custom field's checkbox (harmless, ignored by the
+             * engine) break saving a summary/chart report for no real reason.
+             */
+            if ($reportType !== 'tabular' && empty($col['aggregate'])) {
+                continue;
+            }
+
+            if (($error = $checkRef($col, allowCustom: $reportType === 'tabular')) !== null) {
+                return $error;
+            }
+
+            // A custom field column only has real data to merge in when it's
+            // read off the PRIMARY module's own record — see
+            // ReportQueryExecutionService::runTabular()'s own docblock for why
+            // a secondary (joined) module's custom field is out of scope here.
+            if ($reportType === 'tabular' && ($col['module'] ?? null) !== $primaryModule) {
+                $field = $this->registry->resolve($col['module'] ?? '', $col['field'] ?? '', $tenantId);
+
+                if ($field?->isCustomField) {
+                    return 'Custom field columns are only supported on the report\'s primary module, not a joined secondary module.';
+                }
+            }
+        }
+
+        foreach ($definition['group_by'] ?? [] as $g) {
+            if (($error = $checkRef($g, allowCustom: false)) !== null) {
                 return $error;
             }
         }
