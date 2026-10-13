@@ -70,7 +70,7 @@ class MyDepartmentDocumentsController extends Controller
         $perPage = min(100, max(1, (int) $request->input('per_page', 24)));
 
         // department_id is DELIBERATELY not in this list - see class docblock.
-        $filters = $request->only(['q', 'category', 'document_type', 'source_system', 'date_from', 'date_to', 'folder_id']);
+        $filters = $request->only(['q', 'category', 'document_type', 'source_system', 'date_from', 'date_to', 'folder_id', 'owner_name']);
         $filters['department_id'] = $department;
 
         $result = (new DocumentSearchService())->search($filters, $tenantId, $userId, $department, $page, $perPage);
