@@ -161,6 +161,12 @@ return [
     | thresholds and word lists are enforced once. They are a starting point to tune.
     | score_total is the sum of the seven 1-5 scores (7 to 35).
     */
+    // Organisations that research with the Scholar K-12 ICP pack (config/signals_icp.php) instead of the generic
+    // product-profile queries. Comma-separated sub_institute_ids. Empty = nobody, so nothing changes by default.
+    'icp' => [
+        'scholar_k12_tenants' => array_values(array_filter(array_map('trim', explode(',', (string) env('SIGNALS_ICP_SCHOLAR_TENANTS', ''))))),
+    ],
+
     'card' => [
         // Section assignment (SectionAssigner). CONTEXT items name a company but no buyer
         // (a competitor move, a market-level event) and are never scored into the other two.
@@ -202,7 +208,7 @@ return [
             'max_sentence_words' => (int) env('SIGNALS_CARD_MAX_SENTENCE_WORDS', 20),
             'so_what_min_sentences' => 2,
             'so_what_min_words' => 8,
-            'max_sentences' => ['what_happened' => 3, 'likely_problem' => 3, 'soft_marketing_angle' => 3],
+            'max_sentences' => ['headline' => 1, 'what_happened' => 3, 'likely_problem' => 3, 'soft_marketing_angle' => 3],
             // Whole words / phrases that must not appear on the face. They may appear in the
             // collapsed detail. ("confirmed" is allowed in prose: it is only banned as a chip.)
             'banned_terms' => [

@@ -47,6 +47,12 @@ final class QualificationGate
             return $this->reject('missing_trigger', 'No named trigger event (trigger_summary).');
         }
 
+        // A pack's hard rule (coaching centre, college, edtech vendor, ...) removes the lead however strong it looks.
+        $outside = $this->str($r['icp_disqualifier'] ?? null);
+        if ($outside !== null) {
+            return $this->reject('outside_icp', "Outside the ideal customer profile: {$outside}.");
+        }
+
         $eventDate = $this->date($r['event_date'] ?? null);
         $observedAt = $this->date($r['observed_at'] ?? null);
         if ($this->str($r['event_date'] ?? null) !== null && $eventDate === null) {
@@ -87,6 +93,13 @@ final class QualificationGate
         $context = $this->enum($r['context'] ?? null, self::CONTEXTS);
         if ($this->str($r['context'] ?? null) !== null && $context === null) {
             return $this->reject('invalid_context', 'context must be one of: ' . implode(', ', self::CONTEXTS) . '.');
+        }
+
+        // BACKSTOP: an organisation that sells what we sell is never a buyer, even if the model forgot to say so. It becomes a
+        // context item (a possible partner), and a context item can never land in immediate action or the watchlist
+        // (SectionAssigner). A competitor the model already marked stays a competitor.
+        if ($context === null && filter_var($r['icp_vendor'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $context = 'market';
         }
 
         $entryReason = $this->str($r['entry_point_reason'] ?? null);
@@ -177,9 +190,11 @@ final class QualificationGate
             ],
             'trigger_type' => $trigger,
             'trigger_summary' => $summary,
+            'headline' => ($h = $this->str($r['headline'] ?? null)) === null ? null : mb_substr($h, 0, 191),
             'what_happened' => $this->str($r['what_happened'] ?? null),
             'source_url' => $url,
             'source_title' => $this->str($r['source_title'] ?? null),
+            'source_published_at' => $this->date($r['source_published_at'] ?? null)?->toDateString(),
             'reference_no' => $this->str($r['reference_no'] ?? null),
             'event_date' => $eventDate?->toDateString(),
             'observed_at' => ($observedAt ?? $eventDate)?->toDateTimeString(),
@@ -207,6 +222,7 @@ final class QualificationGate
             'content_hash' => $this->str($r['content_hash'] ?? null),
             'source_excerpt' => ($e = $this->str($r['source_excerpt'] ?? null)) === null ? null : mb_substr($e, 0, 1000),
             'evidence_derived' => $evidence !== null,
+            'evidence_input' => $evidence,
         ];
 
         return ['ok' => true, 'record' => $record, 'notes' => $notes];
@@ -274,6 +290,7 @@ final class QualificationGate
     public function faceViolations(array $r): array
     {
         return (new PlainLanguageRules())->violations([
+            'headline' => $this->str($r['headline'] ?? null),
             'what_happened' => $this->str($r['what_happened'] ?? null),
             'likely_problem' => $this->str($r['likely_problem'] ?? null),
             'soft_marketing_angle' => $this->str($r['soft_marketing_angle'] ?? null),

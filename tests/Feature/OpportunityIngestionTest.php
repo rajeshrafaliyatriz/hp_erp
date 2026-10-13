@@ -365,8 +365,18 @@ class OpportunityIngestionTest extends TestCase
         $this->assertSame(1, $second->opportunities_qualified);
         $this->assertSame(2, ResearchRun::count()); // history preserved
 
-        // A different source about the same company is a genuinely new development.
+        // The SAME event reported by a different site is not a new opportunity: its source is added to the one we have.
         $this->fakeWorld([$this->opportunity()], [['url' => 'https://other.example.org/acme-hires', 'title' => 'Acme hiring', 'content' => self::SNIPPET, 'published_date' => now()->toDateString()]]);
+        $this->artisan('signals:research', ['--tenant' => self::T1, '--trigger' => 'manual'])->assertExitCode(0);
+
+        $this->assertSame(1, Company::count());
+        $this->assertSame(1, CompanyOpportunity::count(), 'one event, however many sites report it');
+        $this->assertCount(2, CompanyOpportunity::sole()->sources);
+
+        // A genuinely NEW development is the same company, weeks later: a second opportunity.
+        $this->travel(21)->days();
+        $this->fakeWorld([$this->opportunity(['event_date' => now()->toDateString()])], [['url' => 'https://third.example.net/acme-expands', 'title' => 'Acme expands again', 'content' => self::SNIPPET, 'published_date' => now()->toDateString()]]);
+        Cache::flush();
         $this->artisan('signals:research', ['--tenant' => self::T1, '--trigger' => 'manual'])->assertExitCode(0);
 
         $this->assertSame(1, Company::count());

@@ -43,6 +43,9 @@ class GuardableColumnCheckTest extends TestCase
             \App\Domain\Portfolio\OpportunityMatch::class,
             \App\Domain\Portfolio\ProductOffer::class,
             \App\Domain\Portfolio\Partner::class,
+            \App\Domain\Signals\Icp\TargetAccount::class,
+            \App\Domain\Signals\Icp\IcpProfile::class,
+            \App\Domain\Signals\Icp\IcpProfileVersion::class,
         ]);
     }
 }

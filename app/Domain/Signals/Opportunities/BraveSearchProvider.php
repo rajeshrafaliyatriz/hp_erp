@@ -17,7 +17,7 @@ class BraveSearchProvider implements WebSearchProvider
         return SearchProviderFactory::usableKey((string) config('signals.web_search.brave_key'));
     }
 
-    public function search(string $query, int $recencyDays, int $limit): array
+    public function search(string $query, int $recencyDays, int $limit, array $options = []): array
     {
         $freshness = $recencyDays <= 1 ? 'pd' : ($recencyDays <= 7 ? 'pw' : ($recencyDays <= 31 ? 'pm' : 'py'));
 

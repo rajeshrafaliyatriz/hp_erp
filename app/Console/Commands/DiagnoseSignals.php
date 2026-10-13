@@ -22,7 +22,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class DiagnoseSignals extends Command
 {
-    protected $signature = 'signals:diagnose {--tenant= : sub_institute_id to test (default: the first with a product profile)}';
+    protected $signature = 'signals:diagnose {--tenant= : sub_institute_id to test (default: the first with a product profile)}
+        {--all : also list the overview of every organisation that has a product profile or an ICP}';
 
     protected $description = 'Test every step company research depends on and print the real reason any step fails.';
 
@@ -174,6 +175,22 @@ class DiagnoseSignals extends Command
             return 'free';
         });
 
+        $this->line(str_repeat('-', 60));
+        $this->line('Tenant overview (will research actually run?)');
+        $overview = app(\App\Domain\Signals\Icp\SignalsTenantOverview::class);
+        $ids = $this->option('all') ? $overview->tenants() : ($tenant > 0 ? [$tenant] : []);
+        foreach ($ids as $id) {
+            try {
+                foreach ($overview->lines($overview->forTenant((int) $id)) as $line) {
+                    $this->line($line);
+                }
+            } catch (\Throwable $e) {
+                $this->line("Organisation {$id}: could not be summarised (" . mb_substr($e->getMessage(), 0, 120) . ')');
+            }
+        }
+        if ($ids === []) {
+            $this->line('  (no organisation to show: give --tenant, or --all)');
+        }
         $this->line(str_repeat('-', 60));
         if ($this->failures === 0) {
             $this->info('All steps passed. If a run still fails, send the newest "signals.research_failed" line from storage/logs/laravel.log.');

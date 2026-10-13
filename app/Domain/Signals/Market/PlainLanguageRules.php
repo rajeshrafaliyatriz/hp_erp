@@ -16,7 +16,7 @@ namespace App\Domain\Signals\Market;
  */
 final class PlainLanguageRules
 {
-    public const FACE_FIELDS = ['what_happened', 'likely_problem', 'soft_marketing_angle'];
+    public const FACE_FIELDS = ['headline', 'what_happened', 'likely_problem', 'soft_marketing_angle'];
 
     /**
      * @param  array<string, mixed>  $face  keys from FACE_FIELDS (absent / null fields are skipped here)

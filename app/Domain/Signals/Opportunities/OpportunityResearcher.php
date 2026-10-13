@@ -6,8 +6,14 @@ use App\Domain\AI\Support\AiNotConfiguredException;
 use App\Domain\AI\Support\AiQuotaExceededException;
 use App\Domain\Portfolio\ProductOffer;
 use App\Domain\Signals\AiFailureClassifier;
+use App\Domain\Signals\Icp\AccountEvidence;
+use App\Domain\Signals\Icp\IcpPack;
+use App\Domain\Signals\Icp\IcpResearchPlanner;
+use App\Domain\Signals\Icp\TargetAccount;
 use App\Domain\Signals\Market\MarketImporter;
+use App\Domain\Signals\Market\OpportunityEvent;
 use App\Domain\Signals\Market\QualificationGate;
+use App\Domain\Signals\Market\SectionAssigner;
 use App\Domain\Signals\SignalRunner;
 use App\Domain\Signals\Support\HtmlText;
 use App\Domain\Signals\Support\RobotsPolicy;
@@ -48,7 +54,7 @@ class OpportunityResearcher
     ) {
     }
 
-    public function run(int $tenantId, string $trigger, ?int $userId = null, ?array $customParams = null, ?int $existingRunId = null): ResearchRun
+    public function run(int $tenantId, string $trigger, ?int $userId = null, ?array $customParams = null, ?int $existingRunId = null, ?int $icpProfileId = null): ResearchRun
     {
         $lock = Cache::lock("signals:research:{$tenantId}", ((int) config('signals.stale_run_minutes', 15)) * 60 * 2);
 
@@ -122,7 +128,19 @@ class OpportunityResearcher
             }
 
             $recency = max(1, (int) (($customParams['recency_days'] ?? null) ?: ($profile->recency_days ?: config('signals.opportunities.default_recency_days', 30))));
-            $queries = $isCustom ? $this->buildCustomQueries($customParams) : $this->profiles->queries($profile);
+            $pack = $isCustom ? null : IcpPack::forRun($tenantId, $icpProfileId);
+            if ($icpProfileId !== null && $pack === null && ! $isCustom) {
+                $msg = 'That ICP is not active for this organisation. Activate it in Signals setup, or run without choosing one.';
+
+                return $this->finish($run, $started, 'skipped', ['stage' => 'failed', 'stage_message' => $msg], 'icp_not_active', $msg);
+            }
+            $this->tagRun($run, $pack);
+            $watched = [];
+            if ($pack !== null) {
+                ['specs' => $queries, 'account_ids' => $watched] = (new IcpResearchPlanner())->plan($tenantId, $pack);
+            } else {
+                $queries = $isCustom ? $this->buildCustomQueries($customParams) : $this->profiles->queries($profile);
+            }
 
             $run->fill([
                 'stage' => 'searching',
@@ -136,6 +154,10 @@ class OpportunityResearcher
                 'queries_failed' => $queriesFailed,
                 'sources_found' => count($sources),
             ])->save();
+
+            if ($watched !== []) {
+                TargetAccount::whereIn('id', $watched)->update(['last_checked_at' => now()]);
+            }
 
             if ($queriesRun > 0 && $queriesFailed === $queriesRun) {
                 return $this->finish($run, $started, 'failed', [
@@ -165,8 +187,8 @@ class OpportunityResearcher
             ])->save();
 
             $offers = $this->offerCatalogue($tenantId);
-            $result = $this->ai->json($tenantId, $this->messages($profile, $sources, $offers), (int) config('signals.max_output_tokens'));
-            [$candidates, $rejected, $considered] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $offers);
+            $result = $this->ai->json($tenantId, $this->messages($profile, $sources, $offers, $pack), (int) config('signals.max_output_tokens'));
+            [$candidates, $rejected, $considered] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $offers, $pack);
             $candidates = $this->tightenCards($tenantId, $profile, $candidates, $offers);
 
             $run->fill([
@@ -186,6 +208,9 @@ class OpportunityResearcher
             $qualified = $import['accepted'] + $import['updated'] + $import['duplicate'];
             $rejected += $import['rejected'];
             $this->markCited($tenantId, $run->id, $candidates, $import['results']);
+            if ($pack !== null) {
+                $this->linkAccounts($tenantId, $pack, $candidates, $import['results']);
+            }
 
             // "partial" now means only that a search query failed. Results below the evidence bar are
             // reported as a count (opportunities_rejected), not as a degraded run.
@@ -279,25 +304,30 @@ class OpportunityResearcher
     {
         $perQuery = (int) config('signals.opportunities.results_per_query', 6);
         $cap = (int) config('signals.opportunities.max_sources', 30);
-        $cutoff = now()->subDays($recency)->startOfDay();
+        // Specs carry their own freshness window; keep results as fresh as the widest window asked for.
+        $widest = max($recency, ...array_map(fn ($q) => is_array($q) ? (int) ($q['days'] ?? 0) : 0, $queries ?: [[]]));
+        $cutoff = now()->subDays($widest)->startOfDay();
         $byUrl = [];
         $failed = 0;
         $lastError = null;
 
         $gap = max(0, (int) config('signals.web_search.min_interval_ms', 300)) * 1000;
-        foreach (array_values($queries) as $n => $query) {
+        foreach (array_values($queries) as $n => $spec) {
+            $query = is_array($spec) ? (string) $spec['q'] : (string) $spec;
+            $days = is_array($spec) ? (int) ($spec['days'] ?? $recency) : $recency;
+            $options = is_array($spec) ? array_filter(['topic' => $spec['topic'] ?? null, 'include_domains' => $spec['domains'] ?? null]) : [];
             if ($n > 0 && $gap > 0) {
                 usleep($gap); // stay under the provider's rate limit
             }
             try {
                 try {
-                    $results = $search->search($query, $recency, $perQuery);
+                    $results = $search->search($query, $days, $perQuery, $options);
                 } catch (\Throwable $e) {
                     if (! str_contains($e->getMessage(), 'HTTP 429')) {
                         throw $e;
                     }
                     sleep(2); // rate limited: one patient retry, then count it as failed
-                    $results = $search->search($query, $recency, $perQuery);
+                    $results = $search->search($query, $days, $perQuery, $options);
                 }
             } catch (\Throwable $e) {
                 $failed++;
@@ -418,8 +448,9 @@ class OpportunityResearcher
         return $out;
     }
 
-    private function messages(ProductProfile $p, array $sources, array $offers): array
+    private function messages(ProductProfile $p, array $sources, array $offers, ?IcpPack $pack = null): array
     {
+        $icp = $pack !== null ? $pack->promptBlock() : '';
         $max = (int) config('signals.opportunities.max_opportunities', 15);
         $triggers = implode(' | ', QualificationGate::TRIGGER_TYPES);
         $entries = implode(' | ', QualificationGate::ENTRY_POINTS);
@@ -428,6 +459,14 @@ class OpportunityResearcher
 
         $system = <<<TXT
 You are a B2B market-intelligence analyst writing lead cards for salespeople. You are given a PRODUCT PROFILE, an OFFER CATALOGUE and a list of public web SOURCES that a search API returned. Find organisations whose recent, publicly reported activity creates a specific reason for us to approach them.
+
+WHO IS A BUYER
+- A buyer is an organisation that would USE our offer on its own students, staff or data: a school, school group, hospital, government department, university, public sector company, or a company outside software and AI.
+- AI, analytics, software, edtech, ERP, LMS or IT-services companies, and consultancies that sell AI, are NOT buyers. They sell what we sell. Set "context" to "competitor" (they sell what we sell) or "market" (a possible partner). They are never a lead.
+- News only about an organisation's own product launch, funding, award, event appearance or expansion abroad is NOT a reason to approach it.
+- A lead needs the five buying conditions: a problem we solve, a reason to act now, a person who decides, trust (proof or a reference), and a route to buy (direct, tender or partner). In scores.reasoning say which of the five the sources prove.
+- buying_signal is 4 or 5 only when BOTH "a reason to act now" AND "a route to buy" are proven by the sources. A good fit with no reason now scores 1 or 2.
+- These are NOT leads: "Brahma AI raises USD 150 million at a USD 2 billion valuation" (an AI vendor); "Vaia expands its AI platform into the US" (a vendor, and abroad); "NEC India signs a distribution deal for analytics" (a vendor, at most a partner); "RSK Business Solutions demos AI at an event in Dubai" (a consultancy at an event).
 
 STRICT RULES
 - Use ONLY the SOURCES. Never use outside knowledge and never invent organisations, people, contacts, budgets, purchase intent, timelines, tenders or monetary values.
@@ -459,8 +498,9 @@ what_happened: "They have picked 11 edtech products to roll out in government sc
 likely_problem: "Those 11 products now have to work inside state government systems. That is integration work, and Scholar Clone fits it."
 soft_marketing_angle: "Approach the chosen vendors, and the foundation that runs the programme. Not the programme itself, because the selection is already closed."
 
+{$icp}
 Reply with one JSON object only:
-{"opportunities":[{"company_name":"","website":"<only if stated in a source, else null>","industry":"<only if stated, else null>","location":"<only if stated, else null>","buyer_type":"<one of: {$buyers}, or null>","context":"competitor|market|null","trigger_type":"<one of: {$triggers}>","what_happened":"<plain: fact with number, then context>","trigger_summary":"<one sentence: why now (detail for our team)>","likely_problem":"<plain: exactly two sentences, why they are a buyer + which product fits>","what_we_could_sell":"<concrete>","offer_id":"<catalogue id or null>","entry_point":"<one of: {$entries}>","entry_point_reason":"<required only for other, else null>","soft_marketing_angle":"<plain: next step and who to approach>","likely_stakeholder":"<role named in a source, else null>","scores":{"buying_signal":1,"problem_fit":1,"product_fit":1,"accessibility":1,"urgency":1,"potential_value":1,"evidence_quality":1,"reasoning":""},"inference_reasoning":"<only when reasoned, else null>","event_date":"<YYYY-MM-DD or null>","source_ids":["S1"],"evidence_quote":"<verbatim>"}]}
+{"opportunities":[{"company_name":"","website":"<only if stated in a source, else null>","industry":"<only if stated, else null>","location":"<only if stated, else null>","buyer_type":"<one of: {$buyers}, or null>","context":"competitor|market|null","trigger_type":"<one of: {$triggers}>","needs_statement":"<only when an ideal-customer block is given: one plain sentence, school name + what it needs + why now; else null>","closing_date":"<YYYY-MM-DD only if a source states it, else null>","what_happened":"<plain: fact with number, then context>","trigger_summary":"<one sentence: why now (detail for our team)>","likely_problem":"<plain: exactly two sentences, why they are a buyer + which product fits>","what_we_could_sell":"<concrete>","offer_id":"<catalogue id or null>","entry_point":"<one of: {$entries}>","entry_point_reason":"<required only for other, else null>","soft_marketing_angle":"<plain: next step and who to approach>","likely_stakeholder":"<role named in a source, else null>","scores":{"buying_signal":1,"problem_fit":1,"product_fit":1,"accessibility":1,"urgency":1,"potential_value":1,"evidence_quality":1,"reasoning":""},"inference_reasoning":"<only when reasoned, else null>","event_date":"<YYYY-MM-DD or null>","source_ids":["S1"],"evidence_quote":"<verbatim>"}]}
 TXT;
 
         $payload = [
@@ -543,7 +583,7 @@ TXT;
      *
      * @return array{0: list<array<string, mixed>>, 1: int, 2: int} candidates, rejected here, distinct organisations considered
      */
-    private function validate(array $raw, array $sources, ProductProfile $profile, array $offers): array
+    private function validate(array $raw, array $sources, ProductProfile $profile, array $offers, ?IcpPack $pack = null): array
     {
         $byId = [];
         foreach ($sources as $s) {
@@ -567,7 +607,7 @@ TXT;
                 $considered[StructuredAi::normalise($company)] = true;
             }
 
-            $candidate = count($valid) < $max ? $this->candidate($item, $byId, $excluded, $offers) : null;
+            $candidate = count($valid) < $max ? $this->candidate($item, $byId, $excluded, $offers, $pack) : null;
             $candidate === null ? $rejected++ : $valid[] = $candidate;
         }
 
@@ -575,7 +615,7 @@ TXT;
     }
 
     /** @return array<string, mixed>|null */
-    private function candidate(array $item, array $byId, array $excluded, array $offers): ?array
+    private function candidate(array $item, array $byId, array $excluded, array $offers, ?IcpPack $pack = null): ?array
     {
         $text = fn (string $k, int $max) => is_string($item[$k] ?? null) ? mb_substr(trim($item[$k]), 0, $max) : '';
 
@@ -653,14 +693,31 @@ TXT;
             'G2G' => 'g2g', 'EB' => 'eb', 'Scholar K-12' => 'scholar', 'Bundle' => 'multiple', default => null,
         };
 
+        // Freshness: a tender is open until its own closing date (only if the source states it: never invented);
+        // anything else stays worth acting on for the pack's number of days after the event.
+        $triggerType = strtolower($text('trigger_type', 30)) ?: 'other';
+        $closing = $this->statedDate($item['closing_date'] ?? null, $support['norm']);
+        $expires = null;
+        if ($pack !== null && ! in_array($triggerType, ['tender', 'rfp', 'eoi', 'rfq'], true)) {
+            $decay = $pack->decayDays($triggerType);
+            $base = $eventDate ?? $this->date($support['retrieved_at']);
+            $expires = ($decay !== null && $base !== null) ? $base->copy()->addDays($decay)->toDateString() : null;
+        }
+
         return [
+            'headline' => $text('needs_statement', 191) ?: null,
+            'closing_date' => $closing,
+            'expires_at' => $expires,
+            'icp_disqualifier' => $pack?->disqualifier($company . ' ' . $happened),
+            // Sells what we sell (read from its name, sector and first fact): a competitor or partner, never a buyer.
+            'icp_vendor' => $pack?->looksLikeVendor($company, $industry, $happened) ?? false,
             'buyer' => [
                 'name' => $company, 'type' => in_array($buyerType, QualificationGate::BUYER_TYPES, true) ? $buyerType : null,
                 'state' => null, 'website' => $website, 'aliases' => [],
                 'industry' => $industry, 'location' => $location,
             ],
             'context' => in_array(strtolower($text('context', 12)), QualificationGate::CONTEXTS, true) ? strtolower($text('context', 12)) : null,
-            'trigger_type' => strtolower($text('trigger_type', 30)) ?: 'other',
+            'trigger_type' => $triggerType,
             'trigger_summary' => $text('trigger_summary', 600),
             'what_happened' => $happened,
             'source_url' => $support['url'], 'source_title' => $support['title'],
@@ -675,7 +732,7 @@ TXT;
             ],
             'source_excerpt' => $quote,
             'content_hash' => hash('sha256', $support['norm']),
-            'business_fit' => $fit,
+            'business_fit' => $pack?->productLine() ?? $fit,
             'likely_problem' => $text('likely_problem', 600),
             'likely_stakeholder' => $role,
             'what_we_could_sell' => $text('what_we_could_sell', 500),
@@ -684,6 +741,64 @@ TXT;
             'soft_marketing_angle' => $text('soft_marketing_angle', 600),
             'scores' => is_array($item['scores'] ?? null) ? $item['scores'] : null,
         ];
+    }
+
+    // ── ideal-customer pack ──────────────────────────────────────────────────
+
+    /** Record which ICP a run belongs to. Best effort: a database that has not yet been upgraded just skips it. */
+    private function tagRun(?ResearchRun $run, ?IcpPack $pack): void
+    {
+        if ($run === null || $pack === null || $pack->profileId === null) {
+            return;
+        }
+        try {
+            ResearchRun::where('id', $run->id)->update(['icp_profile_id' => $pack->profileId]);
+        } catch (\Throwable $e) {
+            Log::warning('signals.run_not_tagged_with_icp', ['run' => $run->id, 'exception' => get_class($e)]);
+        }
+    }
+
+    /** Point each saved lead at the school it is about, and note when that school last produced a signal. */
+    private function linkAccounts(int $tenantId, IcpPack $pack, array $candidates, array $results): void
+    {
+        foreach ($results as $res) {
+            if (($res['outcome'] ?? 'rejected') === 'rejected' || ! isset($res['id'], $candidates[$res['index']])) {
+                continue;
+            }
+            $key = StructuredAi::normalise((string) $candidates[$res['index']]['buyer']['name']);
+            $account = TargetAccount::where('sub_institute_id', $tenantId)->where('pack', $pack->key)
+                ->where('account_key', 'like', addcslashes($key, '%_\\') . '|%')->orderBy('watch_priority')->first();
+            if ($account === null) {
+                continue;
+            }
+            $opp = CompanyOpportunity::find($res['id']);
+            $account->forceFill(['company_id' => $account->company_id ?: $opp?->company_id, 'last_signal_at' => now()])->save();
+
+            // A school kept on WATCH (for example it signed a new ERP last year) is never an "act now" lead: it stays on the watch list.
+            if ($opp !== null && $account->icp_status === 'watch' && $opp->feed_section === SectionAssigner::ACT_NOW) {
+                $opp->forceFill(['feed_section' => SectionAssigner::WATCHING])->save();
+                OpportunityEvent::create(['sub_institute_id' => $tenantId, 'opportunity_id' => $opp->id, 'event_type' => 'capped_by_watch',
+                    'changes' => ['feed_section' => [SectionAssigner::ACT_NOW, SectionAssigner::WATCHING], 'reason' => 'account is on watch'], 'scan_log_id' => null]);
+            }
+            // The school's score now includes its live evidence: recount from its own signals.
+            (new AccountEvidence())->refresh($account->refresh(), $pack->config());
+        }
+    }
+
+    /** A closing date, kept only if the source text actually states it (in any common written form). */
+    private function statedDate(mixed $value, string $normalisedSource): ?string
+    {
+        $d = $this->date($value);
+        if ($d === null) {
+            return null;
+        }
+        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'j F Y', 'F j, Y', 'd M Y', 'j M Y', 'jS F Y', 'd.m.Y'] as $format) {
+            if (str_contains($normalisedSource, StructuredAi::normalise($d->format($format)))) {
+                return $d->toDateString();
+            }
+        }
+
+        return null;
     }
 
     // ── run bookkeeping ──────────────────────────────────────────────────────
