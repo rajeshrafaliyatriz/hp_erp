@@ -46,6 +46,10 @@ class CrmRecycleBinController extends Controller
         'sales_orders' => ['table' => 'crm_sales_orders', 'menuId' => null, 'link' => '/module/crm/sales/sales-orders'],
         'purchase_orders' => ['table' => 'crm_purchase_orders', 'menuId' => null, 'link' => '/module/crm/sales/purchase-orders'],
         'invoices' => ['table' => 'crm_invoices', 'menuId' => null, 'link' => '/module/crm/sales/invoices'],
+        'tickets' => ['table' => 'crm_tickets', 'menuId' => null, 'link' => '/module/crm/support/tickets'],
+        'faqs' => ['table' => 'crm_faqs', 'menuId' => null, 'link' => '/module/crm/support/faq'],
+        'service_contracts' => ['table' => 'crm_service_contracts', 'menuId' => null, 'link' => '/module/crm/support/service-contracts'],
+        'assets' => ['table' => 'crm_assets', 'menuId' => null, 'link' => '/module/crm/support/assets'],
     ];
 
     /** @var array<string, string> Reverse of crm_campaign_targets.target_type. */
@@ -235,7 +239,10 @@ class CrmRecycleBinController extends Controller
     {
         $name = match ($type) {
             'leads', 'contacts' => trim(($row->first_name ?? '') . ' ' . ($row->last_name ?? '')),
-            'quotes', 'sales_orders', 'purchase_orders', 'invoices' => $row->subject ?? '',
+            'quotes', 'sales_orders', 'purchase_orders', 'invoices', 'service_contracts' => $row->subject ?? '',
+            'tickets' => $row->title ?? '',
+            'faqs' => \Illuminate\Support\Str::limit($row->question ?? '', 60),
+            'assets' => $row->asset_name ?? '',
             default => $row->name ?? '',
         };
 
@@ -249,6 +256,10 @@ class CrmRecycleBinController extends Controller
             'sales_orders' => $row->so_no ?? null,
             'purchase_orders' => $row->po_no ?? null,
             'invoices' => $row->invoice_no ?? null,
+            'tickets' => $row->ticket_no ?? null,
+            'faqs' => $row->faq_no ?? null,
+            'service_contracts' => $row->contract_no ?? null,
+            'assets' => $row->asset_no ?? null,
             default => null,
         };
 

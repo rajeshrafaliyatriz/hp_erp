@@ -185,7 +185,9 @@ class CrmQuoteController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Quote not found.'], 404);
         }
 
@@ -216,6 +218,8 @@ class CrmQuoteController extends Controller
         $data = $this->payload($request, forUpdate: true);
         $data['updated_by'] = $identity['user_id'];
         $data['updated_at'] = now();
+
+        $this->maybeWriteQuoteStatusHistory($existing, $data, $identity['user_id']);
 
         DB::table('crm_quotes')->where('id', $id)->update($data);
 
@@ -588,6 +592,64 @@ class CrmQuoteController extends Controller
             'status' => 1,
             'message' => $created === count($results) ? "{$created} quote(s) imported." : "{$created} of " . count($results) . ' row(s) imported.',
             'data' => ['created' => $created, 'results' => $results],
+        ]);
+    }
+
+    public function stageHistory(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+            return response()->json(['status' => 0, 'message' => 'Quote not found.'], 404);
+        }
+
+        $rows = DB::table('crm_quote_status_history')
+            ->where('quote_id', $id)
+            ->orderByDesc('created_at')
+            ->get();
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Stage history.',
+            'data' => $rows->map(fn ($row) => [
+                'id' => (string) $row->id,
+                'fromStage' => $row->from_stage,
+                'toStage' => $row->to_stage,
+                'changedBy' => $row->changed_by ? (string) $row->changed_by : null,
+                'createdAt' => $row->created_at,
+            ])->all(),
+        ]);
+    }
+
+    /**
+     * Incidental gap-closing: every order-to-cash sibling (SalesOrder/
+     * PurchaseOrder/Invoice) tracks its own stage transitions - Quotes
+     * simply never got this. Same shape/reasoning as
+     * CrmSalesOrderController::maybeWriteStatusHistory(), minus the
+     * `total` snapshot column (crm_quote_status_history has none to
+     * mirror it with). Quotes have no dedicated changeStage() action, so
+     * this is called from the plain update() path instead.
+     */
+    private function maybeWriteQuoteStatusHistory(object $existing, array $newData, int $userId): void
+    {
+        if (! array_key_exists('quote_stage', $newData)) {
+            return;
+        }
+
+        if ((string) ($newData['quote_stage'] ?? '') === (string) ($existing->quote_stage ?? '')) {
+            return;
+        }
+
+        DB::table('crm_quote_status_history')->insert([
+            'quote_id' => $existing->id,
+            'from_stage' => $existing->quote_stage,
+            'to_stage' => $newData['quote_stage'],
+            'changed_by' => $userId,
+            'created_at' => now(),
         ]);
     }
 

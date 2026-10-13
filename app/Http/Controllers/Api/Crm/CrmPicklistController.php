@@ -56,6 +56,10 @@ class CrmPicklistController extends Controller
         'sales_orders' => ['so_stage'],
         'purchase_orders' => ['po_stage'],
         'invoices' => ['invoice_stage'],
+        'tickets' => ['status', 'priority', 'severity', 'category'],
+        'faqs' => ['category', 'status'],
+        'service_contracts' => ['tracking_unit', 'contract_status', 'contract_type', 'priority'],
+        'assets' => ['status'],
     ];
 
     /** @var array<string, array{menuId: int|null, link: string|null}> Same shape/reasoning as CrmSavedViewController::MODULE_RIGHTS. */
@@ -70,6 +74,10 @@ class CrmPicklistController extends Controller
         'sales_orders' => ['menuId' => null, 'link' => '/module/crm/sales/sales-orders'],
         'purchase_orders' => ['menuId' => null, 'link' => '/module/crm/sales/purchase-orders'],
         'invoices' => ['menuId' => null, 'link' => '/module/crm/sales/invoices'],
+        'tickets' => ['menuId' => null, 'link' => '/module/crm/support/tickets'],
+        'faqs' => ['menuId' => null, 'link' => '/module/crm/support/faq'],
+        'service_contracts' => ['menuId' => null, 'link' => '/module/crm/support/service-contracts'],
+        'assets' => ['menuId' => null, 'link' => '/module/crm/support/assets'],
     ];
 
     public function index(Request $request): JsonResponse

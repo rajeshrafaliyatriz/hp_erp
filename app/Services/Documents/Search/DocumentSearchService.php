@@ -225,6 +225,21 @@ class DocumentSearchService
      * term. The LIKE half copies GlobalSearchController::escapeLike() exactly:
      * this codebase already shipped and fixed the bug where an unescaped `%`
      * or `_` matched every row, and that fix is not optional here either.
+     *
+     * extracted_text gets the same LIKE fallback title/original_file_name
+     * already had - MariaDB's default FULLTEXT settings (unconfigured here,
+     * and this table is also migrated onto a host too old to assume
+     * anything newer) drop any word under innodb_ft_min_token_size (3
+     * chars) AND silently skip ~36 common English stopwords ("the", "and",
+     * "with", ...) - a word genuinely typed into a document's body that
+     * happens to be short or common would otherwise never be found by
+     * content search at all, while the identical word in a title still
+     * would via its own LIKE fallback. Trade-off worth naming: unlike the
+     * MATCH() clause, this LIKE can't use the FULLTEXT index, so it's a
+     * real extra scan over a longText column on every content search - a
+     * cost this codebase already accepted for title/filename, acceptable
+     * at today's document volume, worth revisiting if that volume grows
+     * much larger.
      */
     private function applyTermMatch($query, string $term): void
     {
@@ -249,7 +264,8 @@ class DocumentSearchService
             }
 
             $q->orWhere('title', 'like', $like)
-                ->orWhere('original_file_name', 'like', $like);
+                ->orWhere('original_file_name', 'like', $like)
+                ->orWhere('extracted_text', 'like', $like);
 
             if ($spoken !== '') {
                 foreach (['title', 'original_file_name'] as $column) {

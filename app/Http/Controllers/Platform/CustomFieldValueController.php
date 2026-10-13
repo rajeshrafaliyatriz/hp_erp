@@ -133,7 +133,9 @@ class CustomFieldValueController extends PlatformController
             // every custom-field request for them (`$tenantColumn === null`
             // below) - fixed alongside adding the 4 new tables.
             'crm_opportunities', 'crm_quotes', 'crm_products',
-            'crm_vendors', 'crm_sales_orders', 'crm_purchase_orders', 'crm_invoices' => 'sub_institute_id',
+            'crm_vendors', 'crm_sales_orders', 'crm_purchase_orders', 'crm_invoices',
+            // CRM Support migration - same tenant column again.
+            'crm_tickets', 'crm_faqs', 'crm_service_contracts', 'crm_assets' => 'sub_institute_id',
             default => null,
         };
 
