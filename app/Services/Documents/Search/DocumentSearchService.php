@@ -219,40 +219,86 @@ class DocumentSearchService
     }
 
     /**
-     * FULLTEXT when the term is usable as one (3+ chars, boolean-mode safe),
-     * OR'd with an escaped LIKE so short terms and partial filenames still
-     * match - MATCH() alone silently returns nothing for a 1-2 character
-     * term. The LIKE half copies GlobalSearchController::escapeLike() exactly:
-     * this codebase already shipped and fixed the bug where an unescaped `%`
-     * or `_` matched every row, and that fix is not optional here either.
+     * Every query word must be present SOMEWHERE in the document - not
+     * necessarily the same field as the others, not necessarily adjacent.
+     * Words are AND'd together (applyWordMatch() per word), each word
+     * independently satisfiable by ANY field (OR'd inside applyWordMatch()).
      *
-     * extracted_text gets the same LIKE fallback title/original_file_name
-     * already had - MariaDB's default FULLTEXT settings (unconfigured here,
-     * and this table is also migrated onto a host too old to assume
-     * anything newer) drop any word under innodb_ft_min_token_size (3
-     * chars) AND silently skip ~36 common English stopwords ("the", "and",
-     * "with", ...) - a word genuinely typed into a document's body that
-     * happens to be short or common would otherwise never be found by
-     * content search at all, while the identical word in a title still
-     * would via its own LIKE fallback. Trade-off worth naming: unlike the
-     * MATCH() clause, this LIKE can't use the FULLTEXT index, so it's a
-     * real extra scan over a longText column on every content search - a
-     * cost this codebase already accepted for title/filename, acceptable
-     * at today's document volume, worth revisiting if that volume grows
-     * much larger.
+     * This matters because `document_library` has two separate FULLTEXT
+     * indexes - (title, original_file_name, subject) and (extracted_text)
+     * alone - and MATCH() requires every boolean-mode word to appear within
+     * the SAME index group. A single combined match on the whole phrase (the
+     * previous shape of this method) meant a document with word1 only in
+     * its title and word2 only in its body matched NEITHER index group, and
+     * the literal-phrase LIKE fallback couldn't help either since the words
+     * aren't adjacent - a fully-present-but-split-across-fields query
+     * silently returned nothing. A single-word query degenerates to exactly
+     * one applyWordMatch() call, so this is a strict generalization of the
+     * old behavior, not a change to it.
+     *
+     * Performance trade-off worth naming, not hiding: the WHERE clause now
+     * carries ~4 LIKE + 2 MATCH predicates per word instead of a flat total
+     * for the whole phrase (searchWords()'s 12-word cap bounds the worst
+     * case to ~72 predicates). Same already-accepted "LIKE can't use the
+     * FULLTEXT index" cost this class already pays for title/filename/body,
+     * just paid per word now - linear and bounded, not N+1, worth
+     * revisiting only if document volume grows much larger.
      */
     private function applyTermMatch($query, string $term): void
     {
-        $boolean = $this->booleanModeTerm($term);
-        $like = '%' . $this->escapeLike($term) . '%';
+        $words = $this->searchWords($term);
 
-        // The way a person reads a file name: "SSM Science 33 40" is `C10_2026-27_SSM_Science-33-40`. Names are
-        // compared with underscores, hyphens and dots read as spaces, so a file is found by what it is called,
-        // not by which separator its uploader happened to use. Only widens a match; it never narrows one.
-        $spoken = trim((string) preg_replace('/[_\-.\s]+/', ' ', mb_strtolower($term)));
-        $spokenLike = '%' . $this->escapeLike($spoken) . '%';
+        if ($words === []) {
+            return;
+        }
 
-        $query->where(function ($q) use ($boolean, $like, $spoken, $spokenLike) {
+        $query->where(function ($outer) use ($words, $term) {
+            $outer->where(function ($allWords) use ($words) {
+                foreach ($words as $word) {
+                    $allWords->where(function ($perWord) use ($word) {
+                        $this->applyWordMatch($perWord, $word);
+                    });
+                }
+            });
+
+            // Whole-phrase fallback, same reasoning as always: a person
+            // reads "SSM Science 33 40" as the file called
+            // `C10_2026-27_SSM_Science-33-40`. This is inherently about
+            // word ADJACENCY (comparing the whole typed phrase against
+            // separators-as-spaces), so it can't be decomposed per-word
+            // without losing the one thing it adds - a lone word already
+            // matches via applyWordMatch()'s own LIKE without this.
+            $this->applySpokenMatch($outer, $term);
+        });
+    }
+
+    /**
+     * One query word, independently satisfiable by either FULLTEXT index
+     * group (when long/clean enough - see booleanModeTerm()) or an escaped
+     * LIKE against title/filename/extracted_text/tags. The LIKE half copies
+     * GlobalSearchController::escapeLike() exactly: this codebase already
+     * shipped and fixed the bug where an unescaped `%`/`_` matched every
+     * row, and that fix is not optional here either.
+     *
+     * The LIKE fallback (not just the MATCH clause) is what makes a short
+     * word or a MariaDB default FULLTEXT stopword ("the", "and", "with",
+     * ...) findable at all - MATCH() alone silently drops any word under
+     * innodb_ft_min_token_size (3 chars, unconfigured here) and the default
+     * stopword list, for every one of these columns including tags.
+     *
+     * tags is longText, JSON-encoded at the application level (see the
+     * migration) - a plain substring LIKE against that encoded text is as
+     * correct here as it is for every other free-text column in this
+     * method. Currently a no-op in production (nothing writes to
+     * document_library.tags yet), but costs nothing to include and starts
+     * working the moment something does.
+     */
+    private function applyWordMatch($query, string $word): void
+    {
+        $boolean = $this->booleanModeTerm($word);
+        $like = '%' . $this->escapeLike($word) . '%';
+
+        $query->where(function ($q) use ($boolean, $like) {
             if ($boolean !== '') {
                 $q->orWhereRaw(
                     'MATCH(title, original_file_name, subject) AGAINST (? IN BOOLEAN MODE)',
@@ -265,14 +311,45 @@ class DocumentSearchService
 
             $q->orWhere('title', 'like', $like)
                 ->orWhere('original_file_name', 'like', $like)
-                ->orWhere('extracted_text', 'like', $like);
-
-            if ($spoken !== '') {
-                foreach (['title', 'original_file_name'] as $column) {
-                    $q->orWhereRaw("REPLACE(REPLACE(REPLACE(LOWER({$column}), '_', ' '), '-', ' '), '.', ' ') like ?", [$spokenLike]);
-                }
-            }
+                ->orWhere('extracted_text', 'like', $like)
+                ->orWhere('tags', 'like', $like);
         });
+    }
+
+    /**
+     * The way a person reads a file name: "SSM Science 33 40" is
+     * `C10_2026-27_SSM_Science-33-40`. Names are compared with underscores,
+     * hyphens and dots read as spaces, so a file is found by what it is
+     * called, not by which separator its uploader happened to use. Only
+     * widens a match; it never narrows one.
+     */
+    private function applySpokenMatch($query, string $term): void
+    {
+        $spoken = trim((string) preg_replace('/[_\-.\s]+/', ' ', mb_strtolower($term)));
+
+        if ($spoken === '') {
+            return;
+        }
+
+        $spokenLike = '%' . $this->escapeLike($spoken) . '%';
+
+        foreach (['title', 'original_file_name'] as $column) {
+            $query->orWhereRaw("REPLACE(REPLACE(REPLACE(LOWER({$column}), '_', ' '), '-', ' '), '.', ' ') like ?", [$spokenLike]);
+        }
+    }
+
+    /**
+     * Query words, whitespace-split, capped so a pasted paragraph can't blow
+     * up the WHERE clause into dozens of AND'd groups - 12 is already far
+     * beyond what a search BOX input realistically needs.
+     *
+     * @return string[]
+     */
+    private function searchWords(string $term): array
+    {
+        $words = array_values(array_filter(preg_split('/\s+/', trim($term)) ?: [], fn ($w) => $w !== ''));
+
+        return array_slice($words, 0, 12);
     }
 
     /**
@@ -320,7 +397,7 @@ class DocumentSearchService
             ->whereIn('id', $ids)
             ->get(['id', 'extracted_text']);
 
-        $needle = mb_strtolower($term);
+        $words = $this->searchWords($term);
         $out = [];
 
         foreach ($rows as $row) {
@@ -332,7 +409,7 @@ class DocumentSearchService
                 continue;
             }
 
-            $position = mb_stripos($text, $needle);
+            [$matched, $position] = $this->firstMatch($text, $term, $words);
 
             if ($position === false) {
                 $out[$row->id] = null;
@@ -343,7 +420,7 @@ class DocumentSearchService
             $start = max(0, $position - 80);
             $excerpt = mb_substr($text, $start, 240);
             $highlighted = preg_replace(
-                '/' . preg_quote($term, '/') . '/i',
+                '/' . preg_quote($matched, '/') . '/i',
                 '<mark>$0</mark>',
                 $excerpt
             );
@@ -352,5 +429,39 @@ class DocumentSearchService
         }
 
         return $out;
+    }
+
+    /**
+     * The whole typed phrase first - the best excerpt, when it genuinely
+     * appears adjacent in the text - otherwise the earliest-positioned
+     * individual search word that IS present. applyTermMatch() treats every
+     * word as independently satisfiable by any field, so a document can
+     * match with no single position containing every word together;
+     * without this fallback such a real match would show no excerpt at all.
+     * Highlights only the one word found, not every matched word at once -
+     * a deliberate scope boundary.
+     *
+     * @param  string[]  $words
+     * @return array{0: string, 1: int|false}
+     */
+    private function firstMatch(string $text, string $term, array $words): array
+    {
+        $position = mb_stripos($text, $term);
+
+        if ($position !== false) {
+            return [$term, $position];
+        }
+
+        $best = null;
+
+        foreach ($words as $word) {
+            $wordPosition = mb_stripos($text, $word);
+
+            if ($wordPosition !== false && ($best === null || $wordPosition < $best[1])) {
+                $best = [$word, $wordPosition];
+            }
+        }
+
+        return $best ?? ['', false];
     }
 }
