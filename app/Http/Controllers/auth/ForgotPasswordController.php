@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\user\tbluserModel;
+use App\Support\MailGate;
+use App\Support\MailSender;
+use App\Support\MailSenderModules;
 use Carbon\Carbon;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
@@ -11,11 +14,9 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use function App\Helpers\is_mobile;
 use Illuminate\Support\Facades\Validator;
-use App\Http\Controllers\AJAXController;
 use Illuminate\Support\Facades\Hash;
 
 class ForgotPasswordController extends Controller
@@ -127,34 +128,42 @@ class ForgotPasswordController extends Controller
             </body>
         </html>';
 
-        $emailController  = new AJAXController();
-        $newRequest = request()->merge([
-            'email' => $request->email,
-            'token' => $token,
-            /*
-             * THE USER'S OWN ORGANISATION, not a hardcoded 1.
-             *
-             * AJAXController::sendEmail() looks SMTP credentials up per tenant
-             * in `smtp_details`. Passing 1 meant every organisation's password
-             * resets went out through tenant 1's mail account - and only tenant
-             * 1 has a row, so for everybody else the lookup found nothing.
-             */
-            'sub_institute_id' => $checkUser->sub_institute_id,
-            'example_subject' => 'Reset Password',
-            'all_email' => $email,
-            'content' => $htmlContent,
-        ]);
+        /*
+         * THE USER'S OWN ORGANISATION, not a hardcoded 1.
+         *
+         * This used to hand `sub_institute_id` to AJAXController::sendEmail(),
+         * which looked SMTP credentials up per tenant in `smtp_details` - but
+         * always passed `1`, so every organisation's password resets went out
+         * through tenant 1's mail account (and only tenant 1 has a row, so
+         * everybody else's lookup found nothing). `MailSender` resolves this
+         * tenant's own profile, falling back the same way every other send
+         * site in the app now does.
+         */
+        $tenantId = (int) $checkUser->sub_institute_id;
 
-        $emailSent = $emailController->sendEmail($newRequest);
-        // return $emailSent;
-        // Mail::send(
-        //     'email.forgetPassword',
-        //     ['token' => $token, 'email' => $request->email],
-        //     function ($message) use ($request) {
-        //         $message->to($request->email);
-        //         $message->subject('Reset Password');
-        //     }
-        // );
+        /*
+         * ── THE CHECK THIS PATH NEVER HAD ───────────────────────────────────
+         *
+         * AJAXController::sendEmail() (now retired) never consulted
+         * `MailGate` at all - password resets were the one send site in the
+         * whole app that bypassed both the platform on/off switch and the
+         * per-tenant allowlist. That stops here.
+         */
+        $delivered = false;
+
+        if (MailGate::allowedForTenant($tenantId)) {
+            try {
+                MailSender::mailer($tenantId, MailSenderModules::DEFAULT)->html(
+                    $htmlContent,
+                    function ($message) use ($email) {
+                        $message->to($email)->subject('Reset Password');
+                    }
+                );
+                $delivered = true;
+            } catch (\Throwable $e) {
+                $delivered = false;
+            }
+        }
 
         /*
          * ── THE RESULT THAT WAS THROWN AWAY ─────────────────────────────────
@@ -163,19 +172,10 @@ class ForgotPasswordController extends Controller
          * answered "We have e-mailed your password reset link!" whenever the
          * database write succeeded, whether or not any mail left the building.
          *
-         * And it always succeeded: AJAXController::sendEmail() returns
-         * `status_code => 1` even on its no-SMTP branch, whose message is
-         * literally "You did not setup mail client." So the one honest signal
-         * in the whole path was both wrong AND discarded.
-         *
          * Now the send is what decides. A person who is told their link is on
          * the way and waits for an email that was never sent is worse off than
          * one who is told to ask an administrator.
          */
-        $sendResult = json_decode(json_encode($emailSent), true);
-        $delivered = is_array($sendResult)
-            && (int) ($sendResult['status_code'] ?? 0) === 1
-            && !str_contains(strtolower((string) ($sendResult['message'] ?? '')), 'did not setup');
 
         if ($insert && $delivered) {
             $res = [
