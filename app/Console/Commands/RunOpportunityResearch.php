@@ -11,7 +11,8 @@ class RunOpportunityResearch extends Command
 {
     protected $signature = 'signals:research
         {--tenant= : Run this sub_institute_id now, ignoring the schedule}
-        {--trigger=scheduled : scheduled|manual (recorded on the run)}';
+        {--trigger=scheduled : scheduled|manual (recorded on the run)}
+        {--batches=1 : Run this many runs in a row (max 6); each takes the next slice of the searches and the next unchecked schools}';
 
     protected $description = 'Daily company-opportunity research. Without --tenant it runs only for organisations whose configured time has passed today and that have not run yet. Existing results are never deleted.';
 
@@ -46,8 +47,16 @@ class RunOpportunityResearch extends Command
                 continue;
             }
             foreach ($packs === [] ? [null] : $packs as $pack) {
-                $run = $researcher->run($tenantId, $trigger, null, null, null, $pack?->profileId);
-                $this->line(sprintf('tenant %d%s: %s (%d qualified, %d new)%s', $tenantId, $pack ? " [{$pack->key}]" : '', $run->status, $run->opportunities_qualified, $run->opportunities_new, $run->error_code ? " [{$run->error_code}]" : ''));
+                $batches = $pack === null ? 1 : max(1, min(6, (int) $this->option('batches')));
+                for ($b = 0; $b < $batches; $b++) {
+                    config(['signals.icp.batch_shift' => $b]);
+                    $run = $researcher->run($tenantId, $trigger, null, null, null, $pack?->profileId);
+                    $this->line(sprintf('tenant %d%s%s: %s (%d qualified, %d new)%s', $tenantId, $pack ? " [{$pack->key}]" : '', $batches > 1 ? ' batch ' . ($b + 1) . "/{$batches}" : '', $run->status, $run->opportunities_qualified, $run->opportunities_new, $run->error_code ? " [{$run->error_code}]" : ''));
+                    if ($run->error_code === 'already_running') {
+                        break;
+                    }
+                }
+                config(['signals.icp.batch_shift' => 0]);
             }
         }
 
