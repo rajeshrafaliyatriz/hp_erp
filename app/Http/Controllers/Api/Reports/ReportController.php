@@ -247,6 +247,91 @@ class ReportController extends Controller
         return $this->runAndRespond($report->report_type, $report->primary_module, json_decode($report->definition, true), $tenantId);
     }
 
+    /**
+     * POST /api/reports/{id}/drilldown — the member rows behind one
+     * summary/chart/pivot group (Docs/reports-engine/PLAN.md, Phase 4). The
+     * caller sends back exactly the group-by field(s) and the clicked
+     * group's own label value(s) — already known client-side from the
+     * report's own definition and the result it just rendered, nothing new
+     * to compute server-side. Built as a synthetic TABULAR run reusing the
+     * report's own standard_filter/advanced_filter/secondary_modules (so a
+     * date-scoped or otherwise-filtered group drills into the same window),
+     * with one extra equality (or is_null, for the "—" no-value group)
+     * condition ANDed on top per field — never a client-supplied raw filter,
+     * only a {module,field,value} triple resolved through the registry like
+     * every other filter in this engine.
+     */
+    public function drilldown(Request $request, int $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = (int) $identity['sub_institute_id'];
+        $report = $this->viewableReport($id, $tenantId, (int) $identity['user_id']);
+
+        if (!$report) {
+            return response()->json(['status' => false, 'message' => 'Report not found.'], 404);
+        }
+
+        if (!in_array($report->report_type, ['summary', 'chart', 'pivot'], true)) {
+            return response()->json(['status' => false, 'message' => 'Drill-down is only available for summary, chart or pivot reports.'], 422);
+        }
+
+        $data = $request->validate([
+            'values' => ['required', 'array', 'min:1', 'max:2'],
+            'values.*.module' => ['required', 'string'],
+            'values.*.field' => ['required', 'string'],
+            'values.*.value' => ['nullable', 'string'],
+        ]);
+
+        $conditions = [];
+
+        foreach ($data['values'] as $value) {
+            if ($this->registry->resolve($value['module'], $value['field'], $tenantId) === null) {
+                return response()->json(['status' => false, 'message' => "Unknown field: {$value['module']}.{$value['field']}."], 422);
+            }
+
+            $conditions[] = ($value['value'] === null || $value['value'] === '—')
+                ? ['module' => $value['module'], 'field' => $value['field'], 'operator' => 'is_null']
+                : ['module' => $value['module'], 'field' => $value['field'], 'operator' => 'equals', 'value' => $value['value']];
+        }
+
+        $definition = json_decode($report->definition, true);
+        $drillGroup = ['op' => 'AND', 'conditions' => $conditions];
+        $existingFilter = $definition['advanced_filter'] ?? null;
+
+        $tabularDefinition = [
+            'secondary_modules' => $definition['secondary_modules'] ?? [],
+            'columns' => $this->defaultDrilldownColumns($report->primary_module, $tenantId),
+            'standard_filter' => $definition['standard_filter'] ?? null,
+            'advanced_filter' => $existingFilter
+                ? ['op' => 'AND', 'conditions' => [$existingFilter, $drillGroup]]
+                : $drillGroup,
+            'per_page' => 100,
+        ];
+
+        return $this->runAndRespond('tabular', $report->primary_module, $tabularDefinition, $tenantId);
+    }
+
+    /** A reasonable default column set for a drill-down table — the primary module's own fields, custom fields excluded (display-only elsewhere, no reason to add that cost here), capped to keep the table readable. */
+    private function defaultDrilldownColumns(string $primaryModule, int $tenantId): array
+    {
+        $fields = array_values(array_filter(
+            $this->registry->fieldsFor($primaryModule, $tenantId),
+            fn ($f) => !$f->isCustomField,
+        ));
+
+        return array_map(fn ($f) => [
+            'module' => $primaryModule,
+            'field' => $f->key,
+            'label' => $f->label,
+            'visible' => true,
+        ], array_slice($fields, 0, 8));
+    }
+
     /** GET /api/reports/{id}/export?format=csv */
     public function export(Request $request, int $id)
     {

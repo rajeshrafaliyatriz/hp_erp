@@ -4130,6 +4130,7 @@ Route::prefix('report-builder')->group(function () {
     Route::delete('{id}', [$report, 'destroy'])->whereNumber('id');
     Route::get('{id}/run', [$report, 'run'])->whereNumber('id');
     Route::get('{id}/export', [$report, 'export'])->whereNumber('id');
+    Route::post('{id}/drilldown', [$report, 'drilldown'])->whereNumber('id');
 
     $reportShare = \App\Http\Controllers\Api\Reports\ReportShareController::class;
     Route::get('{id}/shares', [$reportShare, 'index'])->whereNumber('id');
