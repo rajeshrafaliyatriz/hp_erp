@@ -72,6 +72,13 @@ return new class extends Migration
         // engines/versions - never rely on a default alone for a backfill).
         DB::table('smtp_details')->whereNull('module_key')->update(['module_key' => 'default']);
 
+        // `label` is new and every row that existed before it is NULL - and
+        // the admin screen's own CRUD now requires one on every row it
+        // writes, so a NULL here can only mean "this is the one row that
+        // predates the feature". A blank name in a list the feature itself
+        // introduced is a worse first impression than a generic one.
+        DB::table('smtp_details')->whereNull('label')->update(['label' => 'Default sender']);
+
         if (! $this->indexExists('smtp_details', 'smtp_details_tenant_module_unique')) {
             Schema::table('smtp_details', function (Blueprint $table) {
                 $table->unique(['sub_institute_id', 'module_key'], 'smtp_details_tenant_module_unique');
