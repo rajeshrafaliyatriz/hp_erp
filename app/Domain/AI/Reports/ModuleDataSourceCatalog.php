@@ -695,6 +695,142 @@ final class ModuleDataSourceCatalog
                 },
             ],
             [
+                'name' => 'crm.leads_by_status',
+                'module' => 'crm',
+                'label' => 'Leads by status',
+                'description' => 'Open (unconverted) leads grouped by their lead status, with a count and the most recent one in each group.',
+                'arguments' => [
+                    self::arg('assigned_to', 'integer', 'Only leads owned by this user.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_leads')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->where('converted', false)
+                        ->groupBy('lead_status')
+                        ->select(['lead_status as status'])
+                        ->selectRaw('COUNT(*) as leads')
+                        ->selectRaw('MAX(created_at) as most_recent')
+                        ->orderByDesc('leads');
+
+                    if (($u = $this->int($a, 'assigned_to')) !== null) {
+                        $q->where('assigned_to', $u);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'crm.opportunities_by_stage',
+                'module' => 'crm',
+                'label' => 'Opportunities by sales stage',
+                'description' => 'The open pipeline grouped by sales stage, with deal count, total amount and average probability per currency.',
+                'arguments' => [
+                    self::arg('assigned_to', 'integer', 'Only opportunities owned by this user.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_opportunities')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->groupBy('sales_stage', 'currency')
+                        ->select(['sales_stage as stage', 'currency'])
+                        ->selectRaw('COUNT(*) as opportunities')
+                        ->selectRaw('SUM(amount) as total_amount')
+                        ->selectRaw('ROUND(AVG(probability), 1) as average_probability')
+                        ->orderByDesc('total_amount');
+
+                    if (($u = $this->int($a, 'assigned_to')) !== null) {
+                        $q->where('assigned_to', $u);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'crm.tickets_by_status_and_priority',
+                'module' => 'crm',
+                'label' => 'Tickets by status and priority',
+                'description' => 'Support tickets grouped by status and priority, with a count in each bucket.',
+                'arguments' => [
+                    self::arg('assigned_to', 'integer', 'Only tickets owned by this user.'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_tickets')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->groupBy('status', 'priority')
+                        ->select(['status', 'priority'])
+                        ->selectRaw('COUNT(*) as tickets')
+                        ->orderBy('status')
+                        ->orderByRaw("FIELD(priority, 'Urgent', 'High', 'Medium', 'Low')");
+
+                    if (($u = $this->int($a, 'assigned_to')) !== null) {
+                        $q->where('assigned_to', $u);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'crm.revenue_by_month_from_invoices',
+                'module' => 'crm',
+                'label' => 'Revenue by month (invoices)',
+                'description' => "Invoiced revenue by calendar month of the invoice's own date, with invoice count, gross total and tax per currency.",
+                'arguments' => [
+                    self::arg('from_date', 'string', 'Only invoices dated on or after this date (YYYY-MM-DD).'),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_invoices')
+                        ->where('sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('deleted_at')
+                        ->whereNotNull('invoice_date')
+                        ->groupBy(DB::raw("DATE_FORMAT(invoice_date, '%Y-%m')"), 'currency')
+                        ->selectRaw("DATE_FORMAT(invoice_date, '%Y-%m') as month")
+                        ->addSelect('currency')
+                        ->selectRaw('COUNT(*) as invoices')
+                        ->selectRaw('SUM(total) as total_revenue')
+                        ->selectRaw('SUM(tax_total) as total_tax')
+                        ->orderByDesc('month');
+
+                    if (($f = $this->text($a, 'from_date')) !== null) {
+                        $q->where('invoice_date', '>=', $f);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
+                'name' => 'crm.service_contract_utilization',
+                'module' => 'crm',
+                'label' => 'Service contract utilization',
+                'description' => 'Each active service contract with its tracking unit, total vs. used units and percent progress.',
+                'arguments' => [
+                    self::arg('contract_status', 'string', "Only contracts in this status, e.g. 'Active'. Omit for every status."),
+                    $limitArg,
+                ],
+                'query' => function (AiRequestScope $scope, array $a): Builder {
+                    $q = DB::table('crm_service_contracts as c')
+                        ->leftJoin('crm_organizations as o', 'o.id', '=', 'c.organization_id')
+                        ->where('c.sub_institute_id', $scope->selectedInstituteId)
+                        ->whereNull('c.deleted_at')
+                        ->select([
+                            'c.contract_no', 'c.subject', 'o.name as organization', 'c.contract_status as status',
+                            'c.tracking_unit', 'c.total_units', 'c.used_units', 'c.progress', 'c.end_date',
+                        ])
+                        ->orderByDesc('c.progress');
+
+                    if (($s = $this->text($a, 'contract_status')) !== null) {
+                        $q->where('c.contract_status', $s);
+                    }
+
+                    return $q;
+                },
+            ],
+            [
                 'name' => 'hrms.attendance',
                 'module' => 'hrit_management',
                 'label' => 'Attendance',
