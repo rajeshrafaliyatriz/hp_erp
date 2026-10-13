@@ -247,6 +247,91 @@ class ReportController extends Controller
         return $this->runAndRespond($report->report_type, $report->primary_module, json_decode($report->definition, true), $tenantId);
     }
 
+    /**
+     * POST /api/reports/{id}/drilldown — the member rows behind one
+     * summary/chart/pivot group (Docs/reports-engine/PLAN.md, Phase 4). The
+     * caller sends back exactly the group-by field(s) and the clicked
+     * group's own label value(s) — already known client-side from the
+     * report's own definition and the result it just rendered, nothing new
+     * to compute server-side. Built as a synthetic TABULAR run reusing the
+     * report's own standard_filter/advanced_filter/secondary_modules (so a
+     * date-scoped or otherwise-filtered group drills into the same window),
+     * with one extra equality (or is_null, for the "—" no-value group)
+     * condition ANDed on top per field — never a client-supplied raw filter,
+     * only a {module,field,value} triple resolved through the registry like
+     * every other filter in this engine.
+     */
+    public function drilldown(Request $request, int $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $tenantId = (int) $identity['sub_institute_id'];
+        $report = $this->viewableReport($id, $tenantId, (int) $identity['user_id']);
+
+        if (!$report) {
+            return response()->json(['status' => false, 'message' => 'Report not found.'], 404);
+        }
+
+        if (!in_array($report->report_type, ['summary', 'chart', 'pivot'], true)) {
+            return response()->json(['status' => false, 'message' => 'Drill-down is only available for summary, chart or pivot reports.'], 422);
+        }
+
+        $data = $request->validate([
+            'values' => ['required', 'array', 'min:1', 'max:2'],
+            'values.*.module' => ['required', 'string'],
+            'values.*.field' => ['required', 'string'],
+            'values.*.value' => ['nullable', 'string'],
+        ]);
+
+        $conditions = [];
+
+        foreach ($data['values'] as $value) {
+            if ($this->registry->resolve($value['module'], $value['field'], $tenantId) === null) {
+                return response()->json(['status' => false, 'message' => "Unknown field: {$value['module']}.{$value['field']}."], 422);
+            }
+
+            $conditions[] = ($value['value'] === null || $value['value'] === '—')
+                ? ['module' => $value['module'], 'field' => $value['field'], 'operator' => 'is_null']
+                : ['module' => $value['module'], 'field' => $value['field'], 'operator' => 'equals', 'value' => $value['value']];
+        }
+
+        $definition = json_decode($report->definition, true);
+        $drillGroup = ['op' => 'AND', 'conditions' => $conditions];
+        $existingFilter = $definition['advanced_filter'] ?? null;
+
+        $tabularDefinition = [
+            'secondary_modules' => $definition['secondary_modules'] ?? [],
+            'columns' => $this->defaultDrilldownColumns($report->primary_module, $tenantId),
+            'standard_filter' => $definition['standard_filter'] ?? null,
+            'advanced_filter' => $existingFilter
+                ? ['op' => 'AND', 'conditions' => [$existingFilter, $drillGroup]]
+                : $drillGroup,
+            'per_page' => 100,
+        ];
+
+        return $this->runAndRespond('tabular', $report->primary_module, $tabularDefinition, $tenantId);
+    }
+
+    /** A reasonable default column set for a drill-down table — the primary module's own fields, custom fields excluded (display-only elsewhere, no reason to add that cost here), capped to keep the table readable. */
+    private function defaultDrilldownColumns(string $primaryModule, int $tenantId): array
+    {
+        $fields = array_values(array_filter(
+            $this->registry->fieldsFor($primaryModule, $tenantId),
+            fn ($f) => !$f->isCustomField,
+        ));
+
+        return array_map(fn ($f) => [
+            'module' => $primaryModule,
+            'field' => $f->key,
+            'label' => $f->label,
+            'visible' => true,
+        ], array_slice($fields, 0, 8));
+    }
+
     /** GET /api/reports/{id}/export?format=csv */
     public function export(Request $request, int $id)
     {
@@ -443,20 +528,68 @@ class ReportController extends Controller
             }
         }
 
-        $checkRef = function (array $ref) use ($tenantId): ?string {
+        /**
+         * `$allowCustom` gates whether a CUSTOM field may resolve here at
+         * all — custom fields are display-only in v1 (Docs/reports-engine/
+         * PLAN.md §5: the EAV value column is untyped TEXT, so grouping/
+         * aggregating it risks silently wrong numbers), so every reference
+         * EXCEPT a tabular report's own display columns rejects one here,
+         * at save time, rather than only discovering it the first time the
+         * report runs.
+         */
+        $checkRef = function (array $ref, bool $allowCustom) use ($tenantId): ?string {
             if (!isset($ref['module'], $ref['field'])) {
                 return 'Every field reference needs a module and a field.';
             }
 
-            if ($this->registry->resolve($ref['module'], $ref['field'], $tenantId) === null) {
+            $field = $this->registry->resolve($ref['module'], $ref['field'], $tenantId);
+
+            if ($field === null) {
                 return "Unknown field: {$ref['module']}.{$ref['field']}.";
+            }
+
+            if ($field->isCustomField && !$allowCustom) {
+                return "Custom field {$ref['field']} cannot be used here — display-only in a tabular report's own columns, never as a filter/group/sort/aggregate field.";
             }
 
             return null;
         };
 
         foreach ($definition['columns'] ?? [] as $col) {
-            if (($error = $checkRef($col)) !== null) {
+            /*
+             * Outside a tabular report, `columns` only matters for entries
+             * that set `aggregate` — ReportQueryExecutionService::runSummary/
+             * runChart silently ignore every other entry (the builder UI
+             * lets an author tick a field's checkbox before choosing summary/
+             * chart's own group-by, without that tick doing anything). An
+             * un-aggregated tick is genuinely inert, so it is skipped here
+             * too rather than rejected — rejecting it would make ticking a
+             * display-only custom field's checkbox (harmless, ignored by the
+             * engine) break saving a summary/chart report for no real reason.
+             */
+            if ($reportType !== 'tabular' && empty($col['aggregate'])) {
+                continue;
+            }
+
+            if (($error = $checkRef($col, allowCustom: $reportType === 'tabular')) !== null) {
+                return $error;
+            }
+
+            // A custom field column only has real data to merge in when it's
+            // read off the PRIMARY module's own record — see
+            // ReportQueryExecutionService::runTabular()'s own docblock for why
+            // a secondary (joined) module's custom field is out of scope here.
+            if ($reportType === 'tabular' && ($col['module'] ?? null) !== $primaryModule) {
+                $field = $this->registry->resolve($col['module'] ?? '', $col['field'] ?? '', $tenantId);
+
+                if ($field?->isCustomField) {
+                    return 'Custom field columns are only supported on the report\'s primary module, not a joined secondary module.';
+                }
+            }
+        }
+
+        foreach ($definition['group_by'] ?? [] as $g) {
+            if (($error = $checkRef($g, allowCustom: false)) !== null) {
                 return $error;
             }
         }

@@ -246,10 +246,37 @@ final class ReportQueryExecutionService
 
     // ── Result shaping per report type ─────────────────────────────────
 
+    /**
+     * Custom fields (Docs/reports-engine/PLAN.md §5) are display-only, and
+     * only on the PRIMARY module's own record — resolved here via ONE extra
+     * `g2g_custom_field_values` lookup keyed by the page's own primary ids,
+     * not a join per field (the EAV value column is untyped TEXT; a join
+     * would also multiply rows per answered field). A secondary (joined)
+     * module's custom field is rejected earlier, at save time
+     * (ReportController::validateDefinition) — merging it correctly would
+     * need that module's OWN primary key value per row, which runTabular's
+     * single `__primary_id` (always the PRIMARY module's id) cannot express.
+     */
     private function runTabular(Builder $query, ReportModuleDefinition $primary, array $definition, int $subInstituteId): array
     {
         $columns = array_values(array_filter($definition['columns'] ?? [], fn ($c) => $c['visible'] ?? true));
-        $realColumns = array_filter($columns, fn ($c) => !($c['custom'] ?? false));
+
+        $realColumns = [];
+        $customColumns = [];
+
+        foreach ($columns as $col) {
+            $field = $this->registry->resolve($col['module'], $col['field'], $subInstituteId);
+
+            if ($field === null) {
+                throw new \InvalidArgumentException("Unknown report field: {$col['module']}.{$col['field']}");
+            }
+
+            if ($field->isCustomField) {
+                $customColumns[] = ['key' => $col['module'] . '.' . $col['field'], 'field' => $field];
+            } else {
+                $realColumns[] = $col;
+            }
+        }
 
         $select = [$primary->alias . '.' . $primary->primaryKey . ' as __primary_id'];
 
@@ -272,6 +299,32 @@ final class ReportQueryExecutionService
             ->get()
             ->map(fn ($row) => (array) $row)
             ->all();
+
+        if ($customColumns !== [] && $rows !== []) {
+            $recordIds = array_column($rows, '__primary_id');
+            $fieldIds = array_values(array_unique(array_map(fn ($c) => $c['field']->customFieldId, $customColumns)));
+
+            $answers = DB::table('g2g_custom_field_values')
+                ->where('sub_institute_id', $subInstituteId)
+                ->where('record_table', $primary->table)
+                ->whereIn('record_id', $recordIds)
+                ->whereIn('field_id', $fieldIds)
+                ->get(['record_id', 'field_id', 'value']);
+
+            $byRecordThenField = [];
+
+            foreach ($answers as $answer) {
+                $byRecordThenField[$answer->record_id][$answer->field_id] = $answer->value;
+            }
+
+            foreach ($rows as &$row) {
+                foreach ($customColumns as $custom) {
+                    $row[$custom['key']] = $byRecordThenField[$row['__primary_id']][$custom['field']->customFieldId] ?? null;
+                }
+            }
+
+            unset($row);
+        }
 
         return [
             'rows' => $rows,
