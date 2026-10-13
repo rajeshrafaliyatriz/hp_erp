@@ -78,15 +78,22 @@ same client, "Triz") found:
    for aggregation risks silent wrong numbers (e.g. a bad `CAST` on an empty
    string corrupting a SUM). Merged into row results with one extra keyed
    lookup query per report run, not one join per field.
-6. **A new, minimal `crm_activities` table is in scope**, built in its own
-   phase before CRM's module registration — "Activity Reports" has no real
-   data to report on otherwise (confirmed: zero CRM-activity schema exists
-   today, only a loose project-level FK to generic Task Management).
+6. **"Activity Reports" has no new table — CORRECTED mid-implementation.**
+   The original plan (below, kept for the record) assumed CRM had zero
+   activity/calendar schema and called for a new `crm_activities` table.
+   That table was actually built, migrated, and live-verified — then fully
+   rolled back on discovering CRM already has a working "Activity" tab
+   (`CrmScheduleTab`) that deliberately reuses `task_management_calendar_
+   events` (via its own `linked_type`/`linked_id`) instead of a parallel
+   CRM-only calendar. The real fix was two new reportable fields
+   (`linked_type`/`linked_id`) on the already-registered
+   `task_management.events` module — see §2/Phase 2 below for the full
+   account.
 7. **Phase order is Task Management first** (the proving ground: pivot joins
    via a real pivot table, date-filtered + picklist-grouped summaries, chart
-   rendering), **then the new CRM Activity entity, then CRM's full module
-   registration** — not built simultaneously, so neither dilutes the other's
-   quality.
+   rendering), **then exposing `task_management.events` for CRM's reuse,
+   then CRM's full module registration** — not built simultaneously, so
+   neither dilutes the other's quality.
 8. **No KPI-card grid anywhere in this feature.** Charts (recharts, already a
    dependency) are the primary visual for chart-type reports; summary/pivot
    reports are grouped/matrix tables; any contextual numbers are a compact
@@ -190,17 +197,23 @@ for `primary_module`/`secondary_modules`; `chart.data_fields` capped at 3
 sub_institute_id, report_id (FK CASCADE), viewer_user_id (FK), can_edit
 (bool), created_by, timestamps, unique(report_id, viewer_user_id).
 
-**`crm_activities`** (new, built in Phase 2): id, sub_institute_id,
-activity_type (Call|Meeting|Task, picklist-backed), subject, description,
-related_type (nullable, polymorphic:
-lead|organization|contact|opportunity|quote|ticket|...), related_id
-(nullable), status (picklist-backed), priority (picklist-backed),
-assigned_to (FK tbluser), due_date (indexed), duration_minutes,
-created_by/updated_by/deleted_by, timestamps+softDeletes. Indexes:
-`(sub_institute_id, related_type, related_id)`, `(assigned_to, due_date)`.
-Seed `crm_picklist_values` rows for `module='activities'`
-(activity_type/status/priority) following the exact pattern in
-`2026_11_20_090600_create_crm_picklist_values_table.php`.
+**No new `crm_activities` table — CORRECTED during Phase 2 implementation.**
+A first pass built exactly that (polymorphic `related_type`/`related_id`,
+picklist-backed `activity_type`/`status`/`priority`), ran its migration on
+both connections, live-verified it, then discovered — too late to have
+checked first — that CRM already has a **working** "Activity" tab
+(`CrmScheduleTab`, rendered on Lead/Contact/Organization/Opportunity/
+Ticket detail pages) that reuses `task_management_calendar_events` via its
+own `linked_type`/`linked_id` columns (`LinkedRecordType = 'LEAD' |
+'CONTACT' | 'ORGANIZATION' | 'OPPORTUNITY' | 'TICKET'`,
+`CalendarController::linkedTargetExists()`), built specifically **to avoid
+a parallel CRM-only calendar** — its own docblock says so. The new table,
+controller, and routes were fully rolled back (migration rolled back on
+both connections, git commit reset before it ever reached the remote) —
+nothing of it shipped. **"Activity Reports" is `task_management.events`
+(already registered in Phase 1) filtered to CRM's 5 `linked_type` values**,
+not a new entity. The only real change: `linked_type`/`linked_id` added as
+reportable fields on that module (see Phase 1's `TaskManagementReportModules::events()`).
 
 ### 3. Query execution engine
 
@@ -301,13 +314,13 @@ data field only, matches vtiger), VerticalBar/HorizontalBar/Line→
   - [x] **Real bug found and fixed via live testing, not assumed correct:** secondary-module joins used INNER JOIN, silently returning zero rows whenever the joined record didn't exist (e.g. adding a "Project" column to a Tasks report dropped every task with no linked project). Fixed to LEFT JOIN for all join kinds + the target's own soft-delete filter applied safely. Confirmed this matches the real vtiger reference's own behavior ("Contacts by Accounts" vs "Contacts WITHOUT Accounts" are different reports — the join itself must never filter).
   - [x] Live-verified against tenant 7's real 1005 tasks: modules/fields/folders list correctly; tabular (with the Assignee column showing a real joined name, not a raw id), summary (grouped by assignee), pivot (status × priority matrix, totals correct), and chart (count by status) all return correct real data; the LEFT JOIN fix confirmed by re-running the same secondary-module test before/after.
 
-- [ ] **Phase 2 — `crm_activities` (new entity).**
-  - [ ] Build the `crm_activities` table + indexes.
-  - [ ] Seed its `crm_picklist_values` rows (activity_type/status/priority).
-  - [ ] Add a minimal activity log UI on CRM entity detail pages.
+- [x] **Phase 2 — CORRECTED, much smaller than planned. DONE.**
+  - [x] ~~Build a new `crm_activities` table~~ — built, migrated on both connections, live-verified, then **fully rolled back** on discovering CRM already has a working Activity tab (`CrmScheduleTab`) built specifically to reuse `task_management_calendar_events` instead of a parallel CRM-only calendar. Nothing of the new table shipped (migration rolled back both connections; the commit never reached the remote, so a clean `git reset` was enough — no revert-commit needed).
+  - [x] Added `linked_type`/`linked_id` as reportable fields on the already-registered `task_management.events` module (`TaskManagementReportModules::events()`) — the real "Activity Reports" data source. Confirmed via the registry directly: both fields resolve correctly.
+  - [x] No new UI needed — `CrmScheduleTab` already exists and already works on Lead/Contact/Organization/Opportunity/Ticket detail pages.
 
 - [ ] **Phase 3 — CRM module registration (engine unchanged, reused as-is).**
-  - [ ] Register all 15 CRM modules (leads, organizations, contacts, opportunities, quotes, sales_orders, purchase_orders, invoices, campaigns, tickets, products, vendors, service_contracts, assets, activities) with line-item/history children + polymorphic joins (campaign targets, activity↔related-record).
+  - [ ] Register all 15 CRM modules (leads, organizations, contacts, opportunities, quotes, sales_orders, purchase_orders, invoices, campaigns, tickets, products, vendors, service_contracts, assets) with line-item/history children + polymorphic joins (campaign targets). "Activity Reports" does NOT need its own module registered — it reuses `task_management.events`, filtered to `linked_type IN ('LEAD','CONTACT','ORGANIZATION','OPPORTUNITY','TICKET')` via an advanced_filter on the seeded canned reports.
   - [ ] Seed the ~15 system folders matching vtiger's real default set and canned reports (recovered from `C:\Users\MILAN\Downloads\crm\modules\Reports\PopulateReports.php` / `languages/en_us/Reports.php` — see the exact list below).
   - [ ] "Triz Reports" seeds as an ordinary empty custom folder.
   - [ ] Add new top-level CRM menu leaf `/module/crm/reports` (new migration, parent = menu id 199, sibling to Marketing/Sales/Support) + matching `content-map-crm.ts` entry.
@@ -327,7 +340,7 @@ data field only, matches vtiger), VerticalBar/HorizontalBar/Line→
 | Organization and Contact Reports | Contacts by Organizations, Contacts without Organizations, Contacts by Opportunities |
 | Lead Reports | Lead by Source, Lead Status Report |
 | Opportunity Reports | Opportunity Pipeline, Closed Opportunities |
-| Activity Reports | Last Month Activities, This Month Activities |
+| Activity Reports | Last Month Activities, This Month Activities — primary_module `task_management.events` (NOT a CRM module), `advanced_filter: linked_type IN ('LEAD','CONTACT','ORGANIZATION','OPPORTUNITY','TICKET')`, standard_filter on `start_at` for the month preset |
 | Tickets Reports | Tickets by Products, Tickets by Priority, Open Tickets |
 | Product Reports | Product Details, Products by Contacts |
 | Quote Reports | Open Quotes, Quotes Detailed Report |

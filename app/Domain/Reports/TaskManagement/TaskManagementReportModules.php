@@ -91,6 +91,23 @@ final class TaskManagementReportModules
                 ReportFieldDefinition::varchar('location', 'Location', 'e.location'),
                 ReportFieldDefinition::varchar('status', 'Status', 'e.status'), // Planned | Held | Cancelled
                 ReportFieldDefinition::userRef('owner_id', 'Owner', "TRIM(CONCAT_WS(' ', u_owner.first_name, u_owner.middle_name, u_owner.last_name))"),
+                /*
+                 * What this event is attached to (LEAD|CONTACT|ORGANIZATION|
+                 * OPPORTUNITY|TICKET|PROJECT|WORKSTREAM|TASK|BACKLOG_ITEM|
+                 * null) - this is CRM's real "Activity Reports" data
+                 * source, NOT a separate crm_activities table. CRM already
+                 * has a working "Activity" tab (CrmScheduleTab) that reads
+                 * and writes events here filtered by linked_type/linked_id
+                 * (CalendarController::linkedTargetExists()), built
+                 * specifically to reuse this table instead of a parallel
+                 * CRM-only calendar. A prior pass of this same engine
+                 * (since reverted) built crm_activities as a new table
+                 * before discovering this — Phase 3's CRM "Activity
+                 * Reports" folder filters this same module to the 5 CRM
+                 * linked_type values via an advanced_filter, nothing more.
+                 */
+                ReportFieldDefinition::varchar('linked_type', 'Linked To', 'e.linked_type'),
+                ReportFieldDefinition::varchar('linked_id', 'Linked Record Id', 'e.linked_id', groupable: false),
             ],
             alwaysJoins: [
                 ['table' => 'tbluser', 'alias' => 'u_owner', 'localColumn' => 'owner_id', 'foreignColumn' => 'id'],
