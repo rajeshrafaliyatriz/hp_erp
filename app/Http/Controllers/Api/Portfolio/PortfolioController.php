@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class PortfolioController extends Controller
@@ -156,6 +157,88 @@ class PortfolioController extends Controller
     }
 
     /**
+     * POST /portfolio/offers/{id}/readiness   (administrators only; see routes)
+     *
+     * The ONLY way readiness_confirmed changes. Records who and when, and appends a history row.
+     * Nothing confirms an offer automatically: not an import, not a re-sync, not a match.
+     * Body: confirmed (bool, required), note (string, required when confirming).
+     */
+    public function confirmReadiness(Request $request, $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        $v = Validator::make($request->all(), [
+            'confirmed' => 'required|boolean',
+            'note' => 'required_if:confirmed,true,1|nullable|string|min:5|max:1000',
+        ]);
+        if ($v->fails()) {
+            return response()->json(['status' => 0, 'errors' => $v->errors()], 422);
+        }
+
+        // Only this organisation's own offers: the shared foundation rows (sub_institute_id NULL)
+        // are not editable from a tenant.
+        $offer = ProductOffer::query()
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->where(function ($q) use ($id) {
+                $q->where('id', $id)->orWhere('offer_id', $id);
+            })
+            ->first();
+
+        if (! $offer) {
+            return response()->json(['status' => 0, 'message' => 'Offer not found'], 404);
+        }
+
+        $confirm = $request->boolean('confirmed');
+        if ((bool) $offer->readiness_confirmed === $confirm) {
+            return response()->json(['status' => 1, 'message' => 'No change.', 'data' => $offer]);
+        }
+
+        DB::transaction(function () use ($offer, $confirm, $identity, $request) {
+            // Query builder, so the model's saving hook and is_user_edited are not triggered by a flag change.
+            DB::table('g2g_product_offers')->where('id', $offer->id)->update([
+                'readiness_confirmed' => $confirm,
+                'readiness_confirmed_by' => $confirm ? $identity['user_id'] : null,
+                'readiness_confirmed_at' => $confirm ? now() : null,
+                'updated_at' => now(),
+            ]);
+
+            DB::table('g2g_offer_readiness_log')->insert([
+                'sub_institute_id' => $identity['sub_institute_id'], 'offer_row_id' => $offer->id, 'offer_id' => $offer->offer_id,
+                'action' => $confirm ? 'confirmed' : 'unconfirmed', 'readiness_status' => $offer->readiness_status,
+                'actor_id' => $identity['user_id'], 'note' => $request->input('note') ? mb_substr((string) $request->input('note'), 0, 1000) : null,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        });
+
+        return response()->json(['status' => 1, 'message' => $confirm ? 'Readiness confirmed.' : 'Readiness confirmation removed.', 'data' => $offer->fresh()]);
+    }
+
+    /**
+     * GET /portfolio/offers/{id}/readiness-log   (admin/HR): who confirmed or un-confirmed, when and why.
+     */
+    public function readinessLog(Request $request, $id): JsonResponse
+    {
+        $tenantId = $this->apiTenantId($request);
+
+        $offer = ProductOffer::query()->where('sub_institute_id', $tenantId)
+            ->where(function ($q) use ($id) {
+                $q->where('id', $id)->orWhere('offer_id', $id);
+            })->first();
+
+        if (! $offer) {
+            return response()->json(['status' => 0, 'message' => 'Offer not found'], 404);
+        }
+
+        $rows = DB::table('g2g_offer_readiness_log')
+            ->where('sub_institute_id', $tenantId)->where('offer_row_id', $offer->id)->orderByDesc('id')->limit(50)->get();
+
+        return response()->json(['status' => 1, 'data' => $rows]);
+    }
+
+    /**
      * POST /portfolio/offers
      */
     public function store(Request $request): JsonResponse
@@ -215,7 +298,9 @@ class PortfolioController extends Controller
             'trigger_signals'      => $request->input('trigger_signals', []),
             'deployment_model'     => $request->input('deployment_model'),
             'readiness_status'     => $request->input('readiness_status'),
-            'readiness_confirmed'  => (bool) $request->input('readiness_confirmed', false),
+            // Never set here: readiness is confirmed only by a person, through confirmReadiness()
+            // (admin only, audited). A new offer always starts unconfirmed.
+            'readiness_confirmed'  => false,
             'typical_deal_band'    => $request->input('typical_deal_band'),
             'pricing_model'        => $request->input('pricing_model'),
             'implementation_effort'=> $request->input('implementation_effort'),
@@ -282,10 +367,16 @@ class PortfolioController extends Controller
             return response()->json(['status' => 0, 'errors' => $v->errors()], 422);
         }
 
+        // Confirming readiness is its own audited, admin-only action. This endpoint must not be a
+        // back door around it, so a request that tries to change the flag is refused, not ignored.
+        if ($request->has('readiness_confirmed') && $request->boolean('readiness_confirmed') !== (bool) $offer->readiness_confirmed) {
+            return response()->json(['status' => 0, 'message' => 'Readiness is confirmed with POST /portfolio/offers/{id}/readiness (administrators only).'], 422);
+        }
+
         $data = $request->only([
             'name', 'parent_product', 'modules_components', 'what_it_does',
             'needs_solved', 'primary_segments', 'trigger_signals', 'deployment_model',
-            'readiness_status', 'readiness_confirmed', 'typical_deal_band',
+            'readiness_status', 'typical_deal_band',
             'pricing_model', 'implementation_effort', 'delivery_owner',
             'bundles_with', 'proof_points', 'notes',
         ]);

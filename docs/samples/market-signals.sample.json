@@ -1,0 +1,47 @@
+{
+  "source_label": "SAMPLE-do-not-use",
+  "_comment": "SAMPLE ONLY. Every organisation, URL and number below is fictional (example.invalid). Records carry is_sample=true so feeds can exclude them. Load only with: php artisan signals:import-market docs/samples/market-signals.sample.json --tenant=<id>",
+  "records": [
+    {
+      "is_sample": true,
+      "buyer": { "name": "Example State Department of School Education", "type": "government", "state": "Exampleland", "aliases": ["Example DSE"] },
+      "trigger_type": "tender",
+      "trigger_summary": "SAMPLE: tender for a teacher capability assessment platform",
+      "what_happened": "SAMPLE: the department published a fictional tender for a competency assessment platform.",
+      "source_url": "https://example.invalid/tenders/sample-001",
+      "source_title": "SAMPLE tender notice",
+      "reference_no": "SAMPLE/DSE/2026/001",
+      "event_date": "2026-10-01",
+      "expires_at": "2026-10-30",
+      "claim_level": "confirmed",
+      "fetch_level": "full_document",
+      "business_fit": "g2g",
+      "candidate_need_codes": ["N01", "N02"],
+      "buyer_segment": "GOV-STATE",
+      "what_we_could_sell": "SAMPLE: capability gap assessment for teachers",
+      "entry_point": "rfp_response",
+      "scale": "medium",
+      "scores": { "buying_signal": 4, "problem_fit": 4, "product_fit": 3, "accessibility": 3, "urgency": 4, "potential_value": 3, "evidence_quality": 5, "reasoning": "SAMPLE scoring" }
+    },
+    {
+      "is_sample": true,
+      "buyer": { "name": "Example Hospital Trust", "type": "institutional" },
+      "trigger_type": "expansion",
+      "trigger_summary": "SAMPLE: announced a new 200-bed wing and plans to hire nursing staff",
+      "source_url": "https://example.invalid/news/sample-002",
+      "event_date": "2026-09-28",
+      "claim_level": "confirmed",
+      "fetch_level": "search_snippet",
+      "business_fit": "g2g",
+      "candidate_need_codes": ["N01"]
+    },
+    {
+      "is_sample": true,
+      "buyer": { "name": "SAMPLE record that will be rejected" },
+      "trigger_type": "other",
+      "source_url": "https://example.invalid/none",
+      "claim_level": "hypothesis",
+      "fetch_level": "blocked"
+    }
+  ]
+}

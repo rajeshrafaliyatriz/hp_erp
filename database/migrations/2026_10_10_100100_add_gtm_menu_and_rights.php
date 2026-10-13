@@ -3,6 +3,7 @@
 use App\Support\RoleKey;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * "GTM & Revenue": a top-level sidebar module with its own pages.
@@ -150,13 +151,13 @@ return new class extends Migration
         ]);
     }
 
-    /** Schema::hasTable() throws on MariaDB 10.1 - information_schema does not. */
-    private function tableExists(string $table): bool
+    /** MariaDB 10.1 (live) cannot run Schema::hasTable(); sqlite (PHPUnit) has no information_schema. */
+    private function tableExists(string $t): bool
     {
-        return DB::selectOne(
-            'SELECT COUNT(*) AS c FROM information_schema.tables
-              WHERE table_schema = DATABASE() AND table_name = ?',
-            [$table]
-        )->c > 0;
+        if (DB::getDriverName() === 'sqlite') {
+            return Schema::hasTable($t);
+        }
+
+        return DB::selectOne('SELECT COUNT(*) AS c FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [$t])->c > 0;
     }
 };

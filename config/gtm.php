@@ -23,7 +23,38 @@ return [
         // Every email carries a signed one-click unsubscribe link. A link to localhost cannot work
         // for a real recipient, so sending is refused while APP_URL is local unless this is set
         // (for sending to yourself while testing).
+        // Scheduled sending: the scheduler may send APPROVED messages whose send time has come. OFF unless set, and
+        // it needs sending_enabled as well - two switches, both explicit.
+        'scheduler_enabled' => filter_var(env('GTM_OUTREACH_SCHEDULER_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        'batch_size' => (int) env('GTM_OUTREACH_BATCH_SIZE', 25),
+        // A message stuck in `sending` this long is marked failed (never resent automatically).
+        'stale_sending_minutes' => (int) env('GTM_OUTREACH_STALE_MINUTES', 15),
         'allow_local_unsubscribe' => filter_var(env('GTM_OUTREACH_ALLOW_LOCAL_UNSUBSCRIBE', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    'forecast' => [
+        // Closed deals needed before a historical win rate is offered as a SUGGESTION for a stage.
+        'min_history_deals' => (int) env('GTM_FORECAST_MIN_HISTORY', 20),
+    ],
+
+    'health' => [
+        // Customer health bands: a score at/above healthy_at is healthy, at/above watch_at is watch, below is at_risk.
+        'healthy_at' => (int) env('GTM_HEALTH_HEALTHY_AT', 70),
+        'watch_at' => (int) env('GTM_HEALTH_WATCH_AT', 40),
+        // No activity for this many days is listed as a risk.
+        'quiet_after_days' => (int) env('GTM_HEALTH_QUIET_DAYS', 60),
+        // A renewal this many days away (or overdue) that is not yet being worked raises an alert.
+        'renewal_alert_days' => (int) env('GTM_RENEWAL_ALERT_DAYS', 60),
+    ],
+
+    'inbound' => [
+        // Shared secret for the reply/bounce webhook (HMAC-SHA256). Unset = the endpoint refuses everything.
+        'secret' => env('GTM_INBOUND_WEBHOOK_SECRET', ''),
+    ],
+
+    'workflows' => [
+        // When true, the administrator who created a workflow cannot approve its runs; a different one must.
+        'require_second_approver' => filter_var(env('GTM_WORKFLOW_REQUIRE_SECOND_APPROVER', false), FILTER_VALIDATE_BOOLEAN),
     ],
 
     'import' => [

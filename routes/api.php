@@ -3521,6 +3521,12 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::post('/ingestion/sources/{id}/analyze', [$ing, 'analyze'])->whereNumber('id')->middleware('throttle:10,1');
         Route::delete('/ingestion/sources/{id}', [$ing, 'destroy'])->whereNumber('id');
         Route::patch('/ingestion/findings/{id}/{action}', [$ing, 'actOnFinding'])->whereNumber('id')->whereIn('action', ['review', 'dismiss']);
+
+        // Structured demand-side import (daily scan). Literal paths: no clash with /signals/{id}.
+        $market = \App\Http\Controllers\Api\Signals\MarketImportController::class;
+        Route::post('/market/import', [$market, 'import'])->middleware('throttle:10,1');
+        Route::get('/market/scan-log', [$market, 'scanLog']);
+        Route::get('/market/rejections', [$market, 'rejections']);
     });
 });
 
@@ -3540,6 +3546,10 @@ Route::prefix('portfolio')->middleware('api.token')->group(function () {
     Route::get('/partners/stats', [$part, 'stats']);
     Route::get('/partners', [$part, 'index']);
     Route::get('/partners/{id}', [$part, 'show']);
+
+    // Readiness confirmation: administrators only (not HR), audited, never automatic.
+    Route::middleware('profile:admin')->post('/offers/{id}/readiness', [$port, 'confirmReadiness']);
+    Route::middleware('profile:admin,hr')->get('/offers/{id}/readiness-log', [$port, 'readinessLog']);
 
     Route::middleware('profile:admin,hr')->group(function () use ($port, $part) {
         Route::post('/offers', [$port, 'store']);
@@ -3573,6 +3583,9 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
  * from the token (ResolvesApiIdentity); another organisation's record answers 404.
  * Literal paths are declared before `/{id}` and every `{id}` is whereNumber.
  */
+// Reply/bounce intake: PUBLIC, authenticated only by an HMAC signature (App\Domain\Gtm\Outreach\InboundSignature).
+Route::post('gtm/inbound', [\App\Http\Controllers\Api\Gtm\InboundController::class, 'webhook'])->middleware('throttle:120,1')->name('gtm.inbound');
+
 Route::get('gtm/unsubscribe/{contact}', \App\Http\Controllers\Api\Gtm\UnsubscribeController::class)->whereNumber('contact')->middleware(['signed', 'throttle:30,1'])->name('gtm.unsubscribe');
 
 Route::get('crm/email-unsubscribe/{type}/{id}', [\App\Http\Controllers\Api\Crm\CrmEmailController::class, 'unsubscribe'])->whereNumber('id')->middleware(['signed', 'throttle:30,1'])->name('crm.email.unsubscribe');
@@ -3586,8 +3599,13 @@ Route::prefix('gtm')->middleware('api.token')->group(function () {
     $dl = \App\Http\Controllers\Api\Gtm\DealController::class;
     $ou = \App\Http\Controllers\Api\Gtm\OutreachController::class;
     $ci = \App\Http\Controllers\Api\Gtm\ContactImportController::class;
+    $fc = \App\Http\Controllers\Api\Gtm\ForecastController::class;
+    $dr = \App\Http\Controllers\Api\Gtm\DirectoryController::class;
 
-    Route::middleware('profile:admin,executive')->group(function () use ($acc, $ovr, $pb, $ag, $dl, $ou) {
+    Route::middleware('profile:admin,executive')->group(function () use ($acc, $ovr, $pb, $ag, $dl, $ou, $fc, $dr) {
+        Route::get('/directory', [$dr, 'show']);
+        Route::get('/forecast', [$fc, 'show']);
+        Route::get('/forecast/settings', [$fc, 'settings']);
         Route::get('/outreach', [$ou, 'index']);
         Route::get('/outreach/readiness', [$ou, 'readiness']);
         Route::get('/deals', [$dl, 'index']);
@@ -3605,7 +3623,8 @@ Route::prefix('gtm')->middleware('api.token')->group(function () {
         Route::get('/accounts/{id}', [$acc, 'show'])->whereNumber('id');
     });
 
-    Route::middleware('profile:admin')->group(function () use ($acc, $con, $pb, $ag, $dl, $ou, $ci) {
+    Route::middleware('profile:admin')->group(function () use ($acc, $con, $pb, $ag, $dl, $ou, $ci, $fc) {
+        Route::put('/forecast/settings', [$fc, 'update']);
         Route::post('/contacts/import/preview', [$ci, 'preview'])->middleware('throttle:30,1');
         Route::post('/contacts/import', [$ci, 'import'])->middleware('throttle:20,1');
         Route::post('/outreach', [$ou, 'store']);
@@ -3640,6 +3659,9 @@ Route::prefix('gtm')->middleware('api.token')->group(function () {
         Route::patch('/contacts/{id}', [$con, 'update'])->whereNumber('id');
         Route::delete('/contacts/{id}', [$con, 'destroy'])->whereNumber('id');
     });
+
+    // Phase 5+ GTM routes (segments, campaigns, customers, workflows, reports, monitoring, inbound ...).
+    require __DIR__.'/gtm.php';
 });
 
 /*
