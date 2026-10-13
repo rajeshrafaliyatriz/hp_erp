@@ -3,8 +3,8 @@
 namespace App\Services\Crm;
 
 use App\Support\MailGate;
+use App\Support\MailSender;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 
 /**
@@ -84,7 +84,7 @@ final class CrmOutreachMailer
             ."\n\n--\nIf you would rather not receive emails from us, unsubscribe here: {$unsubscribeUrl}\n";
 
         try {
-            Mail::raw($body, function ($message) use ($emailRow, $unsubscribeUrl) {
+            MailSender::mailer($tenant, 'crm')->raw($body, function ($message) use ($emailRow, $unsubscribeUrl) {
                 $message->to($emailRow->to_address)->subject($emailRow->subject);
                 $headers = $message->getSymfonyMessage()->getHeaders();
                 $headers->addTextHeader('List-Unsubscribe', "<{$unsubscribeUrl}>");

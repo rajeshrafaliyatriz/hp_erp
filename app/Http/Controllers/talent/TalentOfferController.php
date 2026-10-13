@@ -8,7 +8,6 @@ use App\Support\CandidateLink;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Facades\Validator;
@@ -342,7 +341,7 @@ class TalentOfferController extends Controller
 
         if (\App\Support\MailGate::allowedForTenant($sub_institute_id)) {
             try {
-                Mail::to($application->email)->send(new OfferLetterMail(
+                \App\Support\MailSender::mailer($sub_institute_id, 'talent_recruitment')->to($application->email)->send(new OfferLetterMail(
                     $offer,
                     $pdfPath,
                     trim($application->first_name . ' ' . $application->last_name),
@@ -771,7 +770,7 @@ class TalentOfferController extends Controller
             ];
         } elseif (\App\Support\MailGate::allowedForTenant($tenantId)) {
             try {
-                Mail::raw(
+                \App\Support\MailSender::mailer((int) $tenantId, 'talent_recruitment')->raw(
                     "Hello " . ($application->first_name ?: 'there') . ",\n\n"
                     . "Your offer for " . $offer->position . " is ready. You can accept or decline it here:\n\n"
                     . $url . "\n\n"
