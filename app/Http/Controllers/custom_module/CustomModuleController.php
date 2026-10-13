@@ -742,20 +742,20 @@ class CustomModuleController extends Controller
                 $dynamicModel = new DynamicModel([], $columns);
                 if ($request->view_id) {
                     $i=1;
-                    if (Schema::hasColumn($getTable['table_name'], 'updated_by')) {
+                    if (app(\App\Domain\AI\Support\SchemaCache::class)->hasColumn($getTable['table_name'], 'updated_by')) {
                         $data['updated_by'] = $request->session()->get('user_id');
                     }
-                    if (Schema::hasColumn($getTable['table_name'], 'updated_at')) {
+                    if (app(\App\Domain\AI\Support\SchemaCache::class)->hasColumn($getTable['table_name'], 'updated_at')) {
                         $data['updated_at'] = now();
                     }
                     $dynamicModel->updateRecord($getTable['table_name'], $request->view_id, $data);                    
                     // $redirectURL = "/custom-module/create-view/".$id."/update/".$request->view_id;
                 } else {
                     $i=1;
-                    if (Schema::hasColumn($getTable['table_name'], 'updated_by')) {
+                    if (app(\App\Domain\AI\Support\SchemaCache::class)->hasColumn($getTable['table_name'], 'updated_by')) {
                         $data['created_by'] = $request->session()->get('user_id');
                     }
-                    if (Schema::hasColumn($getTable['table_name'], 'updated_at')) {
+                    if (app(\App\Domain\AI\Support\SchemaCache::class)->hasColumn($getTable['table_name'], 'updated_at')) {
                         $data['created_at'] = now();
                     }
                     $dynamicModel->createRecord($getTable['table_name'], $data);                    

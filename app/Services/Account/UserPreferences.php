@@ -22,12 +22,10 @@ use Illuminate\Support\Facades\DB;
  * settings store already here. What is new is the SCOPE: this one is keyed by
  * user, and nothing in this product has been before.
  *
- * ── WHY THE THEME DEFAULT IS 'system' AND NOT 'light' ───────────────────────
+ * ── WHY THE THEME DEFAULT IS 'light' ─────────────────────────────────────────
  *
- * Because the honest default for "which theme?" is "I have not been asked".
- * `system` follows the operating system, which is what somebody who has never
- * opened these settings almost certainly wants, and it means the first render
- * is not a guess that has to be corrected.
+ * Light Theme is the product's default theme when no theme preference has been
+ * saved. Users can still explicitly select 'dark' or 'system' (Match my device).
  *
  * ── NOTIFICATION KEYS ARE DERIVED FROM THE DISPATCHER ───────────────────────
  *
@@ -57,7 +55,7 @@ class UserPreferences
      */
     public const DEFAULTS = [
         // Appearance
-        'theme' => 'system',
+        'theme' => 'light',
         'sidebar_collapsed' => true,
         'density' => 'comfortable',
 
@@ -70,6 +68,9 @@ class UserPreferences
 
         // Where to land
         'landing_page' => 'dashboard',
+
+        // Task Management: how many days out a "Create Follow-up" task is due.
+        'follow_up_days' => 3,
 
         // Notifications. In-app is not opt-out: it is the product telling you
         // something happened in your own workspace, and a silent inbox is how
@@ -100,6 +101,18 @@ class UserPreferences
         'display_name' => '',
         'pronouns' => '',
         'about' => '',
+
+        /*
+         * The color this person's own task/event chips show as on the Task
+         * Calendar, tenant-wide - empty means "no preference, use the
+         * automatic per-project/per-feed palette". Stored here rather than on
+         * task_management_calendar_shares (which already has an unrelated
+         * "color" column): that table's EVERYONE-viewer-id row is also how
+         * CalendarVisibilityService grants tenant-wide visibility, so writing
+         * a self-color there would accidentally share the person's whole
+         * calendar with everyone as a side effect of picking a color.
+         */
+        'task_card_color' => '',
 
         /*
          * ═══════════════════════════════════════════════════════════════════

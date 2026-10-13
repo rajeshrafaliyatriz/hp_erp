@@ -342,6 +342,7 @@ class AiCourseController extends Controller
         }
 
         $slideCount = (int) ($request->input('slide_count') ?: 10);
+        $models = app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class);
 
         try {
             $outline = $this->deepSeek->chatJson(
@@ -357,7 +358,16 @@ class AiCourseController extends Controller
                         'content' => $this->buildOutlinePrompt($request, $slideCount),
                     ],
                 ],
-                ['model' => $request->input('model') ?: null]
+                // A model named in the request is kept only if it is on the allowlist
+                // (it used to be passed through unchecked); otherwise this tenant's
+                // AI Stack binding for LMS content decides; otherwise the default.
+                ['meter' => ['module' => 'lms_content_ai', 'institute' => $this->tenantId($request), 'related_type' => 'course_outline'],
+                 'model' => $models->sanitise($request->input('model'))
+                    ?? $models->modelFor(
+                        'lms_content_ai',
+                        $this->tenantId($request),
+                        ['lms_course_builder', 'lms_learning_catalog']
+                    )]
             );
 
             $normalised = $this->normaliseOutline($outline, $slideCount);

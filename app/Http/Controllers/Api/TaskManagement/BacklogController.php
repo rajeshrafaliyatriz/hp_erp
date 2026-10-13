@@ -362,14 +362,27 @@ class BacklogController extends Controller
             return trim($value) === '' ? null : trim($value);
         };
 
-        return [
-            'title'         => $trim($request->input('title')),
-            'notes'         => $trim($request->input('notes')),
-            'type'          => $request->input('type') ?: 'REQUEST',
-            'priority'      => $request->input('priority') ?: 'Medium',
-            'project_id'    => $request->input('project_id') ?: null,
-            'workstream_id' => $request->input('workstream_id') ?: null,
+        $payload = [
+            'title'    => $trim($request->input('title')),
+            'type'     => $request->input('type') ?: 'REQUEST',
+            'priority' => $request->input('priority') ?: 'Medium',
         ];
+
+        // `has()`, not a blanket default: a field ABSENT from the request (the
+        // edit dialog never sends project_id or workstream_id) must leave the
+        // column untouched, not overwrite it with null. Update() used to do the
+        // latter, which silently unfiled every edited item from its project.
+        if ($request->has('notes')) {
+            $payload['notes'] = $trim($request->input('notes'));
+        }
+        if ($request->has('project_id')) {
+            $payload['project_id'] = $request->input('project_id') ?: null;
+        }
+        if ($request->has('workstream_id')) {
+            $payload['workstream_id'] = $request->input('workstream_id') ?: null;
+        }
+
+        return $payload;
     }
 
     private function rankBetween(array $context, $beforeId, $afterId): ?int

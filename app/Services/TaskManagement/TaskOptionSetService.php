@@ -24,10 +24,18 @@ class TaskOptionSetService
         ['name' => 'COMPLETED', 'category' => 'COMPLETED', 'sort_order' => 40],
     ];
 
+    /**
+     * Colors mirror the frontend's own semantic tokens (app/globals.css in
+     * g2gv0: --destructive hsl(0 84% 50%), --warning hsl(38 92% 50%),
+     * --success hsl(142 71% 45%)), converted to hex, so a priority board
+     * ships looking correct immediately rather than gray until an admin
+     * configures it by hand - deliberately NOT null-by-default the way
+     * SYSTEM_STATUSES's color is, a one-line, reversible product decision.
+     */
     private const SYSTEM_PRIORITIES = [
-        ['name' => 'High', 'sort_order' => 10],
-        ['name' => 'Medium', 'sort_order' => 20],
-        ['name' => 'Low', 'sort_order' => 30],
+        ['name' => 'High', 'sort_order' => 10, 'color' => '#EB1414'],
+        ['name' => 'Medium', 'sort_order' => 20, 'color' => '#F59F0A'],
+        ['name' => 'Low', 'sort_order' => 30, 'color' => '#21C45D'],
     ];
 
     /** @return array<int, array{id: ?string, name: string, category: string, color: ?string, sort_order: int, is_system: bool}> */
@@ -70,6 +78,7 @@ class TaskOptionSetService
             'id' => (string) $row->id,
             'name' => (string) $row->name,
             'sort_order' => (int) $row->sort_order,
+            'color' => $row->color,
             'sla_hours' => $row->sla_hours !== null ? (int) $row->sla_hours : null,
             'is_system' => false,
             'active' => (bool) $row->active,

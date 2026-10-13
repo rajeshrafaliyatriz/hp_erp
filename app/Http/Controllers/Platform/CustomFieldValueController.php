@@ -124,6 +124,18 @@ class CustomFieldValueController extends PlatformController
         $tenantColumn = match ($recordTable) {
             'tbluser' => 'sub_institute_id',
             'hrms_emp_leaves' => 'sub_institute_id',
+            // CRM Marketing migration - all 4 tables use the same tenant column.
+            'crm_leads', 'crm_contacts', 'crm_organizations', 'crm_campaigns' => 'sub_institute_id',
+            // CRM Sales + order-to-cash migrations - same tenant column
+            // throughout. Opportunities/Quotes/Products were already
+            // allowlisted in config/platform_services.php's
+            // custom_field_tables but missing here, which silently refused
+            // every custom-field request for them (`$tenantColumn === null`
+            // below) - fixed alongside adding the 4 new tables.
+            'crm_opportunities', 'crm_quotes', 'crm_products',
+            'crm_vendors', 'crm_sales_orders', 'crm_purchase_orders', 'crm_invoices',
+            // CRM Support migration - same tenant column again.
+            'crm_tickets', 'crm_faqs', 'crm_service_contracts', 'crm_assets' => 'sub_institute_id',
             default => null,
         };
 

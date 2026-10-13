@@ -39,3 +39,12 @@ docs/phase3/_changes/*backup*.sql
 # Audit evidence may contain live tokens - never commit it.
 Docs/hrit-audit/_evidence/tokens.tsv
 Docs/hrit-audit/_evidence/unicode-payload.json
+
+# Known-bad harness artefacts. Neither is ever part of a change.
+#
+# *.knownbad-orig is the crash-safety sidecar: the harness writes the pristine
+# source there before it mutates a file, and removes it only after a verified
+# restore. One found on disk means a harness run was killed mid-mutation - it is
+# how the file gets recovered, not something to commit.
+*.knownbad-orig
+__pycache__/

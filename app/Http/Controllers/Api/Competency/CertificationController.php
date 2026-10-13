@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Competency;
 
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Controller;
+use App\Services\Documents\Federation\CompetencyEvidenceIndexer;
 use App\Support\Competency\CertificationCompliance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -1185,6 +1186,12 @@ class CertificationController extends Controller
             $request->input('title')
         );
 
+        try {
+            app(CompetencyEvidenceIndexer::class)->indexById((int) $evidenceId);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return response()->json([
             'status'  => 1,
             'message' => 'Document added successfully',
@@ -1226,6 +1233,12 @@ class CertificationController extends Controller
             (int) $id,
             $document->title
         );
+
+        try {
+            app(CompetencyEvidenceIndexer::class)->removeById((int) $documentId);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json(['status' => 1, 'message' => 'Document deleted successfully']);
     }

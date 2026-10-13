@@ -24,12 +24,47 @@ final class ResolvedAiConfiguration
         /** `institute` | `platform` | `env` | `config` */
         public readonly string $scope = 'config',
         public readonly ?int $maxOutputTokens = null,
+        /**
+         * Further credentials for the same provider, owned by the same organisation tier,
+         * that failover may move to. Holds secrets: never serialised (see toArray()).
+         *
+         * @var list<array{api_key:string, api_limit:int|null, id:int|string|null, scope:string}>
+         */
+        public readonly array $alternates = [],
     ) {
+    }
+
+    /** The same configuration, calling with one specific credential. */
+    public function withCredential(string $apiKey, int|string|null $keyId): self
+    {
+        $maxTokens = $this->maxOutputTokens;
+
+        return new self(
+            provider: $this->provider,
+            model: $this->model,
+            apiKey: $apiKey,
+            source: $this->source,
+            keyId: $keyId,
+            scope: $this->scope,
+            maxOutputTokens: $maxTokens,
+        );
     }
 
     public function hasKey(): bool
     {
-        return $this->apiKey !== null && trim($this->apiKey) !== '';
+        return $this->apiKey !== null
+            && trim($this->apiKey) !== ''
+            && ! self::isPlaceholder($this->apiKey);
+    }
+
+    /**
+     * A template value such as YOUR_GEMINI_API_KEY is not a credential. Counting it as
+     * one made every AI feature report "configured" and then fail at the provider with
+     * an authentication error; treating it as absent gives the accurate answer.
+     */
+    public static function isPlaceholder(string $key): bool
+    {
+        return preg_match('/^(your[_\-\s]|<|changeme|change[_-]me|replace[_-]me|xxx+$|todo$)/i', trim($key)) === 1;
     }
 
     /**

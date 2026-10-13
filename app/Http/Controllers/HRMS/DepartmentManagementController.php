@@ -257,6 +257,18 @@ class DepartmentManagementController extends Controller
             'updated_at'       => now(),
         ]);
 
+        // Phase 7.2 — this is the sub-department write path Neo4jProjector's
+        // own docblock flagged as unwired (departmentController::store() was
+        // wired, this one was not, despite writing the same table).
+        app(\App\Services\Events\EventRecorder::class)->record(
+            'department.changed',
+            (int) $tenantId,
+            'department',
+            (int) $id,
+            $actorId !== null ? (int) $actorId : null,
+            ['department' => $name]
+        );
+
         return response()->json([
             'status'  => 1,
             'message' => 'Department created successfully',
@@ -347,6 +359,16 @@ class DepartmentManagementController extends Controller
             ->where('id', $department->id)
             ->where('sub_institute_id', $tenantId)
             ->update($updates);
+
+        // Phase 7.2 — same gap as store() above.
+        app(\App\Services\Events\EventRecorder::class)->record(
+            'department.changed',
+            (int) $tenantId,
+            'department',
+            (int) $department->id,
+            $actorId !== null ? (int) $actorId : null,
+            ['department' => $updates['department'] ?? $department->department]
+        );
 
         return response()->json(['status' => 1, 'message' => 'Department updated successfully']);
     }

@@ -40,7 +40,16 @@ echo "1. The menu/route contract - the check nobody was running"
 #   14 -> 15  F-169, Employee Payroll History    (menu 308)
 #   15 -> 16  F-171, Monthly Attendance Report  (menu 309)
 #   16 -> 18  F-172, Payroll Register (310) + Salary Structure Report (311)
-check "content-map-m5 routes the 12 sub-modules, My HR and the five new reports" "18" "$(v routed)"
+#   18 -> 19  Phase 18, Manage Employee Attendance (433) - the HR attendance
+#             desk. Not 312: that id is free on 202.47.117.220 and TAKEN by
+#             "Platform Services" on 128.199.17.97, and these migrations guard
+#             on the id, so 312 would have inserted on one host and silently
+#             skipped on the other.
+# 20 since Phase 19 added My Office Hours (submenuId 434), the employee's own
+# side of the attendance desk. This number is a COUNT of routed entries, so it
+# moves every time a screen is added - which is the point: a new screen that
+# never got a content-map entry leaves this number behind and fails here.
+check "content-map-m5 routes the 12 sub-modules, My HR, the six reports and My Office Hours" "20" "$(v routed)"
 check "every routed screen has a menu row" "0" "$(v routed_without_menu)"
 # A live leaf under a live parent with no route falls through to
 # ComingSoonFallback and renders "Application Shell Ready" - a developer

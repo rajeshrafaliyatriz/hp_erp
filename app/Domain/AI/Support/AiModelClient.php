@@ -5,9 +5,10 @@ namespace App\Domain\AI\Support;
 use App\Domain\AI\Configuration\AiConfigurationResolver;
 use App\Domain\AI\Configuration\AiModuleRegistry;
 use App\Domain\AI\Configuration\ProviderCatalog;
+use App\Domain\AI\Configuration\ResolvedAiConfiguration;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -50,6 +51,8 @@ final class AiModelClient
         private readonly ProviderCatalog $providers,
         private readonly AiModuleRegistry $modules,
         private readonly AiUsageMeter $meter,
+        private readonly CredentialHealth $health,
+        private readonly ProviderFailureClassifier $failures,
     ) {
     }
 
@@ -60,6 +63,15 @@ final class AiModelClient
      *                             configuration this call resolves through.
      * @param  array<int, array{role: string, content: string}>  $messages
      * @param  array{max_tokens?: int, temperature?: float, json?: bool}  $options
+     */
+    /**
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @param  array{max_tokens?: int, temperature?: float, json?: bool, images?: array<int, array{mime_type: string, data: string}>}  $options
+     *         `images` is Gemini-only (OCR of a scan/photo via inline base64 data,
+     *         `mime_type` + base64-encoded `data`) - see `callGemini()`. An
+     *         OpenAI-compatible provider ignores it rather than failing the
+     *         call, because text classification (the other caller of this
+     *         module) never sends one.
      */
     public function complete(
         string $moduleKey,
@@ -106,33 +118,117 @@ final class AiModelClient
         $maxTokens = $config->maxOutputTokens
             ?: (int) ($options['max_tokens'] ?? 2048);
 
-        $started = microtime(true);
+        $credentials = $this->credentials($config);
+        $rotating = count($credentials) > 1;
+        $maxAttempts = max(1, (int) config('ai.failover.max_attempts', 20));
+        $maxTransient = max(1, (int) config('ai.failover.max_transient_attempts', 2));
 
-        try {
-            $completion = match ($this->providers->shape($config->provider)) {
-                'gemini' => $this->callGemini($config, $messages, $options, $maxTokens),
-                default => $this->callOpenAiCompatible($config, $messages, $options, $maxTokens),
-            };
-        } catch (Throwable $exception) {
-            // Metered on the way out. A provider that rejects a request has usually
-            // still charged for the prompt, and a meter that counts only successes
-            // under-reports exactly when something is going wrong.
-            $this->meter->record(
-                $moduleKey,
-                $config,
-                $institute,
-                0,
-                0,
-                (int) round((microtime(true) - $started) * 1000),
-                [
-                    'outcome' => AiUsageMeter::OUTCOME_FAILED,
-                    'error' => $exception->getMessage(),
-                ] + $this->meta($options)
-            );
+        // Health-aware order. With a single credential there is nothing to rotate to,
+        // so it is always attempted (a stale cooldown must not block the only key).
+        // With several, cooling credentials are skipped; all cooling = nothing to try.
+        $eligible = $rotating
+            ? array_values(array_filter($credentials, fn ($c) => $this->health->isAvailable($c['fingerprint'])))
+            : $credentials;
 
-            throw $exception;
+        if ($eligible === []) {
+            throw AiCredentialsExhaustedException::forProvider($this->providers->label($config->provider));
         }
 
+        $attempts = 0;
+        $transient = 0;
+        $capacityFailure = false;
+        $last = null;
+        $completion = null;
+        $attemptConfig = $config;
+        $started = microtime(true);
+
+        // Each credential is tried at most once per request; the loop is bounded by the
+        // eligible list and `max_attempts`. Nothing here re-enters complete().
+        foreach ($eligible as $credential) {
+            if ($attempts >= $maxAttempts) {
+                break;
+            }
+
+            $attempts++;
+            $attemptConfig = $credential['config'];
+            $started = microtime(true);
+
+            try {
+                $completion = match ($this->providers->shape($config->provider)) {
+                    'gemini' => $this->callGemini($attemptConfig, $messages, $options, $maxTokens),
+                    default => $this->callOpenAiCompatible($attemptConfig, $messages, $options, $maxTokens),
+                };
+
+                if ($rotating) {
+                    $this->health->recordSuccess($credential['fingerprint']);
+                }
+
+                break;
+            } catch (Throwable $exception) {
+                // Metered on the way out. A provider that rejects a request has usually
+                // still charged for the prompt, and a meter that counts only successes
+                // under-reports exactly when something is going wrong.
+                $this->meter->record(
+                    $moduleKey,
+                    $attemptConfig,
+                    $institute,
+                    0,
+                    0,
+                    (int) round((microtime(true) - $started) * 1000),
+                    [
+                        'outcome' => AiUsageMeter::OUTCOME_FAILED,
+                        'error' => $exception->getMessage(),
+                    ] + $this->meta($options)
+                );
+
+                $verdict = $this->failures->classify($exception);
+
+                // Not a credential problem (bad request, bad model, network): another
+                // key cannot fix it, and trying 20 would only multiply the damage.
+                if (! $rotating || $verdict['action'] !== 'rotate') {
+                    if ($verdict['action'] === 'rotate') {
+                        $this->health->recordFailure($credential['fingerprint'], $verdict['type'], $verdict['cooldown']);
+                    }
+
+                    throw $exception;
+                }
+
+                $this->health->recordFailure($credential['fingerprint'], $verdict['type'], $verdict['cooldown']);
+
+                Log::warning('AI credential failed; trying the next one.', [
+                    'provider' => $config->provider,
+                    'credential' => $credential['fingerprint'], // row id or key hash — never the key
+                    'failure' => $verdict['type'],
+                    'http_status' => $exception instanceof AiProviderHttpException ? $exception->httpStatus : null,
+                    'cooldown_seconds' => $verdict['cooldown'],
+                    'attempt' => $attempts,
+                    'institute' => $institute,
+                ]);
+
+                $last = $exception;
+
+                if ($verdict['type'] === 'transient' && ++$transient >= $maxTransient) {
+                    break;
+                }
+
+                if ($verdict['type'] !== 'invalid_credential') {
+                    $capacityFailure = true;
+                }
+            }
+        }
+
+        if ($completion === null) {
+            // Quota/outage on any attempted credential → controlled, user-safe error.
+            // Only invalid keys across the board → the real cause (a bad key) is the
+            // more useful thing to surface to the administrator.
+            if ($capacityFailure && $last !== null) {
+                throw AiCredentialsExhaustedException::forProvider($this->providers->label($config->provider));
+            }
+
+            throw $last ?? AiCredentialsExhaustedException::forProvider($this->providers->label($config->provider));
+        }
+
+        $config = $attemptConfig;
         $latencyMs = (int) round((microtime(true) - $started) * 1000);
 
         $this->meter->record(
@@ -144,7 +240,6 @@ final class AiModelClient
             $latencyMs,
             ['finish_reason' => $completion['finish_reason']] + $this->meta($options)
         );
-
         return new AiCompletion(
             text: $completion['text'],
             provider: $config->provider,
@@ -154,6 +249,34 @@ final class AiModelClient
             latencyMs: $latencyMs,
             finishReason: $completion['finish_reason'],
         );
+    }
+
+    /**
+     * The primary credential followed by its failover alternates, each as a ready-to-call
+     * configuration plus its health fingerprint. Duplicate keys collapse to one.
+     *
+     * @return list<array{config: ResolvedAiConfiguration, fingerprint: string}>
+     */
+    private function credentials(ResolvedAiConfiguration $config): array
+    {
+        $out = [['config' => $config, 'fingerprint' => CredentialHealth::fingerprint($config->keyId, (string) $config->apiKey)]];
+        $seen = [(string) $config->apiKey => true];
+
+        foreach ($config->alternates as $alternate) {
+            $key = (string) ($alternate['api_key'] ?? '');
+
+            if ($key === '' || isset($seen[$key])) {
+                continue;
+            }
+
+            $seen[$key] = true;
+            $out[] = [
+                'config' => $config->withCredential($key, $alternate['id'] ?? null),
+                'fingerprint' => CredentialHealth::fingerprint($alternate['id'] ?? null, $key),
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -221,6 +344,40 @@ final class AiModelClient
             ];
         }
 
+        /*
+         * Images ride as inline base64 parts on the LAST user turn - OCR is
+         * always "here is the page, read it", asked once, not a multi-turn
+         * conversation about an image. Appended to that turn's existing
+         * `parts` (rather than a separate content entry) so Gemini sees the
+         * instruction text and the page together, which is what makes it
+         * transcribe the text in the image instead of describing the image.
+         */
+        if (! empty($options['images'])) {
+            $lastUserIndex = null;
+
+            foreach ($contents as $index => $entry) {
+                if ($entry['role'] === 'user') {
+                    $lastUserIndex = $index;
+                }
+            }
+
+            $imageParts = array_map(
+                fn (array $image) => [
+                    'inlineData' => [
+                        'mimeType' => (string) $image['mime_type'],
+                        'data' => (string) $image['data'],
+                    ],
+                ],
+                $options['images']
+            );
+
+            if ($lastUserIndex !== null) {
+                $contents[$lastUserIndex]['parts'] = [...$contents[$lastUserIndex]['parts'], ...$imageParts];
+            } else {
+                $contents[] = ['role' => 'user', 'parts' => $imageParts];
+            }
+        }
+
         $payload = [
             'contents' => $contents,
             'generationConfig' => array_filter([
@@ -230,6 +387,12 @@ final class AiModelClient
             ], fn ($value) => $value !== null),
         ];
 
+        // Opt-in: Gemini's internal "thinking" tokens count against maxOutputTokens, so a
+        // structured-JSON caller can lose its whole budget to thinking and get truncated JSON.
+        if (isset($options['thinking_budget'])) {
+            $payload['generationConfig']['thinkingConfig'] = ['thinkingBudget' => (int) $options['thinking_budget']];
+        }
+
         if ($system !== null) {
             $payload['systemInstruction'] = ['parts' => [['text' => $system]]];
         }
@@ -237,15 +400,28 @@ final class AiModelClient
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
         $model = $config->model ?: 'gemini-3.6-flash';
 
-        $response = Http::timeout($this->timeout($config->provider))
+        $send = fn (array $body) => Http::timeout($this->timeout($config->provider))
+            ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->acceptJson()
             ->asJson()
             // The key rides in a header, not the query string. A URL reaches access
             // logs, proxy logs and the Referer header; a header does not.
             ->withHeaders(['x-goog-api-key' => $config->apiKey])
-            ->post("{$base}/models/{$model}:generateContent", $payload);
+            ->post("{$base}/models/{$model}:generateContent", $body);
 
-        $this->guard($response, $this->providers->label($config->provider));
+        $response = $send($payload);
+
+        // Some Gemini models cannot switch thinking off and answer `thinkingBudget: 0` with a
+        // 400 or 5xx. That is a statement about the optional setting, not about the model, so
+        // ask once more without it before reporting the provider as unavailable.
+        if (! $response->successful()
+            && ($response->status() === 400 || $response->status() >= 500)
+            && isset($payload['generationConfig']['thinkingConfig'])) {
+            unset($payload['generationConfig']['thinkingConfig']);
+            $response = $send($payload);
+        }
+
+        $this->guard($response, $this->providers->label($config->provider), $config->apiKey);
 
         $parts = $response->json('candidates.0.content.parts') ?? [];
         $text = implode('', array_map(fn ($part) => (string) ($part['text'] ?? ''), $parts));
@@ -286,15 +462,29 @@ final class AiModelClient
             $payload['response_format'] = ['type' => 'json_object'];
         }
 
+        // DeepSeek's current models (deepseek-flash, deepseek-v4-*) THINK BY DEFAULT: the
+        // reasoning consumes the output budget and structured answers come back empty
+        // (finish_reason=length). Signals needs a plain JSON answer, so thinking is switched
+        // off with DeepSeek's documented `thinking` parameter. Older names such as
+        // `deepseek-chat` are left untouched, and DEEPSEEK_DISABLE_THINKING=false opts out.
+        if (
+            $config->provider === 'deepseek'
+            && config('ai.provider.deepseek.disable_thinking', true)
+            && preg_match('/^deepseek-(flash|v4)/i', (string) $config->model) === 1
+        ) {
+            $payload['thinking'] = ['type' => 'disabled'];
+        }
+
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
 
         $response = Http::timeout($this->timeout($config->provider))
+            ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->withToken($config->apiKey)
             ->acceptJson()
             ->asJson()
             ->post("{$base}/chat/completions", $payload);
 
-        $this->guard($response, $this->providers->label($config->provider));
+        $this->guard($response, $this->providers->label($config->provider), $config->apiKey);
 
         return [
             'text' => trim((string) ($response->json('choices.0.message.content') ?? '')),
@@ -313,7 +503,7 @@ final class AiModelClient
      * away. The response body is not returned wholesale: it can echo the prompt, and
      * the prompt can contain the organisation's data.
      */
-    private function guard(Response $response, string $providerLabel): void
+    private function guard(Response $response, string $providerLabel, ?string $apiKey = null): void
     {
         if ($response->successful()) {
             return;
@@ -322,15 +512,55 @@ final class AiModelClient
         $message = $response->json('error.message')
             ?? $response->json('message')
             ?? $response->json('error');
+        $message = is_string($message) ? $message : null;
 
-        throw new RuntimeException(sprintf(
-            '%s refused the request (HTTP %d)%s',
-            $providerLabel,
+        $quotaIds = [];
+        $reason = null;
+        $retryAfter = null;
+
+        foreach ((array) ($response->json('error.details') ?? []) as $detail) {
+            $type = (string) ($detail['@type'] ?? '');
+
+            foreach ((array) ($detail['violations'] ?? []) as $violation) {
+                $quotaIds[] = (string) ($violation['quotaId'] ?? '');
+            }
+
+            if (str_ends_with($type, 'ErrorInfo') && isset($detail['reason'])) {
+                $reason = (string) $detail['reason'];
+            }
+
+            if (str_ends_with($type, 'RetryInfo') && isset($detail['retryDelay'])) {
+                $retryAfter = (int) ceil((float) $detail['retryDelay']); // "34s" / "34.5s"
+            }
+        }
+
+        $header = $response->header('Retry-After');
+
+        if ($retryAfter === null && is_numeric($header)) {
+            $retryAfter = (int) $header;
+        }
+
+        // A provider message should never contain the credential, but this class is the
+        // last stop before a message is stored in the usage table and shown to users.
+        if ($message !== null && $apiKey !== null && $apiKey !== '') {
+            $message = str_replace($apiKey, '[redacted]', $message);
+        }
+
+        throw new AiProviderHttpException(
+            sprintf(
+                '%s refused the request (HTTP %d)%s',
+                $providerLabel,
+                $response->status(),
+                $message !== null && $message !== '' ? ': ' . $message : '.'
+            ),
             $response->status(),
-            is_string($message) && $message !== '' ? ': ' . $message : '.'
-        ));
+            is_string($response->json('error.status')) ? $response->json('error.status') : null,
+            $reason,
+            array_values(array_filter($quotaIds)),
+            $retryAfter,
+            $message,
+        );
     }
-
     private function timeout(string $provider): int
     {
         return ((int) config("ai.provider.{$provider}.timeout")) ?: 45;

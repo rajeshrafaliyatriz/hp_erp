@@ -380,6 +380,7 @@ class tblmenumasterG2gController extends Controller
                 'audit' => $this->linkGranted('/settings?s=audit', $profileId, $tenant),
                 'platform_administration' => $this->linkGranted('/platform-services', $profileId, $tenant),
                 'whats_coming' => $this->linkGranted('/platform-services/whats-coming', $profileId, $tenant),
+                'document_library' => $this->linkGranted('/documents', $profileId, $tenant),
                 'ai' => [
                     'providers' => $this->linkGranted('/ai/providers', $profileId, $tenant),
                     'models' => $this->linkGranted('/ai/models', $profileId, $tenant),

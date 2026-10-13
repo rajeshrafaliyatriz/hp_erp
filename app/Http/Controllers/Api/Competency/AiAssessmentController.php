@@ -165,6 +165,12 @@ class AiAssessmentController extends Controller
             $generated = $ai->chatJson([
                 ['role' => 'system', 'content' => 'You write workplace capability assessments. You return only valid JSON.'],
                 ['role' => 'user',   'content' => $this->prompt($jobrole->jobrole, $items, $formats, $perItem)],
+            ], [
+                // This tenant's AI Stack choice for assessment generation, when it names a
+                // verified DeepSeek model; null falls back to the configured default.
+                'meter' => ['module' => 'assessment_ai', 'institute' => $sid, 'related_type' => 'assessment_generation', 'user_id' => $actor],
+                'model' => app(\App\Domain\AI\Configuration\ModuleDeepSeekModel::class)
+                    ->modelFor('assessment_ai', $sid, ['talent_recruitment', 'capability_library']),
             ]);
         } catch (\Throwable $e) {
             return response()->json([

@@ -85,8 +85,8 @@ class DynamicModel extends Model
      */
     protected function setFillableAttributes()
     {
-        if (Schema::hasTable($this->table)) {
-            $this->fillable = Schema::getColumnListing($this->table);
+        if (app(\App\Domain\AI\Support\SchemaCache::class)->hasTable($this->table)) {
+            $this->fillable = app(\App\Domain\AI\Support\SchemaCache::class)->getColumnListing($this->table);
 
             // Debugging information
             Log::info('Table ' . $this->table . ' fillable attributes: ' . implode(', ', $this->fillable));
@@ -145,11 +145,11 @@ class DynamicModel extends Model
         $userId = session('user_id');
         $isAdmin = session()->get('user_profile_name') === "admin";
 
-        if (Schema::hasColumn($table, 'syear') && $currentYear) {
+        if (app(\App\Domain\AI\Support\SchemaCache::class)->hasColumn($table, 'syear') && $currentYear) {
             $query->where('syear', $currentYear);
         }
 
-        if (!$isAdmin && Schema::hasColumn($table, 'created_by') && $userId) {
+        if (!$isAdmin && app(\App\Domain\AI\Support\SchemaCache::class)->hasColumn($table, 'created_by') && $userId) {
             $query->where('created_by', $userId);
         }
 

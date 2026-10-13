@@ -91,7 +91,7 @@ class TemplateCatalog
      *
      * @return array<int, array<string, mixed>>
      */
-    public function forModule(?string $moduleKey, int|string|null $institute): array
+    public function forModule(?string $moduleKey, int|string|null $institute, bool $rollUp = false): array
     {
         if (! $this->schema->hasTable('ai_templates')) {
             return [];
@@ -108,7 +108,10 @@ class TemplateCatalog
         if ($moduleKey === TemplateModuleCatalog::SHARED) {
             $query->whereNull('module_key');
         } elseif ($moduleKey !== null && $moduleKey !== '') {
-            $query->where('module_key', $moduleKey);
+            // The module-wide view also reads templates saved under the module's screens.
+            $query->whereIn('module_key', $rollUp
+                ? app(\App\Domain\AI\Modules\ModuleRollUp::class)->keysFor($moduleKey)
+                : [$moduleKey]);
         }
 
         $rows = $query

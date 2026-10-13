@@ -4,9 +4,11 @@ namespace App\Console\Commands;
 
 use App\Services\Events\AchievementAwarder;
 use App\Services\Events\CertificateIssuer;
+use App\Services\Events\GtmWorkflowRunner;
 use App\Services\Events\LearningAssigner;
 use App\Services\Events\OnboardingLauncher;
 use App\Services\Events\OfferLetterFiler;
+use App\Services\Events\ResumeFiler;
 use App\Services\Events\NotificationDispatcher;
 use App\Services\Events\RemediationRecommender;
 use App\Services\Events\ReplayMode;
@@ -96,6 +98,16 @@ class ReactEvents extends Command
          * can download it from their profile without HR attaching it by hand.
          */
         OfferLetterFiler::class,
+        /*
+         * Copies the resume behind the hire's job application onto their own
+         * personnel record, the same way OfferLetterFiler copies the letter.
+         */
+        ResumeFiler::class,
+        /*
+         * Runs GTM workflows for triggerable gtm.* events (see GtmWorkflowRunner). The engine never sends email and ignores
+         * events its own actions caused.
+         */
+        GtmWorkflowRunner::class,
     ];
 
     public function handle(): int

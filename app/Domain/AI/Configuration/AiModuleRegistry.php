@@ -47,8 +47,11 @@ final class AiModuleRegistry
             // AiConfigurationResolver, so a module binding saved for this capability
             // is stored and shown but does not change what this call sends. See the
             // note on eso_intelligence below for why that is not simply an oversight.
-            'description' => 'Competency assessment generation and scoring — the DeepSeek client behind AiAssessmentController. A saved module binding is not read yet.',
-            'wired' => false,
+            // Wired 2026-10-10 for GENERATION: AiAssessmentController::generate() now asks
+            // ModuleDeepSeekModel for the tenant's binding (verified DeepSeek models only).
+            // Marking (AssessmentScoringService) reads it too, and both are metered.
+            'description' => 'Competency assessment generation and scoring — the DeepSeek client behind AiAssessmentController. Generation and marking use the model saved for this capability when it is a verified DeepSeek model; otherwise the configured default. Every call is metered.',
+            'wired' => true,
             'consumer' => 'App\Services\DeepSeekService',
         ],
         [
@@ -68,20 +71,24 @@ final class AiModuleRegistry
             // ESO generation and task classification for their whole tenant. Wiring this
             // safely needs a per-provider allowed-model check BEFORE a binding is trusted,
             // not just a resolver call — see Docs/cross-repo-audit for the full trace.
-            'description' => 'Employee Skill Objective generation and task-execution classification. A saved module binding is not read yet — wiring it without a model allowlist would let an admin pick a model already measured to fail for this generator.',
-            'wired' => false,
+            // Wired 2026-10-10: EsoGenerator and TaskExecutionClassifier ask ModuleDeepSeekModel
+            // for the tenant's binding. The allowlist (config/deepseek.php allowed_models) is the
+            // safety piece described above: an unverified model is refused at save and ignored at
+            // call time, so an admin cannot pick one of the models measured to fail.
+            'description' => 'Employee Skill Objective generation and task-execution classification. Uses the model saved for this capability when it is a verified DeepSeek model; otherwise the configured default.',
+            'wired' => true,
             'consumer' => 'App\Services\Competency\EsoGenerator',
         ],
         [
             'key' => 'recruitment_ai',
             'label' => 'Recruitment AI',
-            // Verified 2026-09-29: AnalyzeJDController reads its Gemini key from a
-            // separate legacy `gemini_api` table (keyed only by sub_institute_id) with
-            // a hardcoded model in the request URL — it does not use ai_api_keys,
-            // ai_module_model_bindings, or AiConfigurationResolver at all. This is a
-            // different credential system, not just an unwired resolver call.
-            'description' => 'Job-description analysis, interview question generation and resume screening. Reads a separate legacy credentials table, not this configuration — a bigger migration than a resolver call.',
-            'wired' => false,
+            // 2026-10-10: AnalyzeJDController now asks AiModelClient first (resolver, module
+            // binding, quota, metering) and only then the legacy `gemini_api` table it used
+            // to read exclusively. The other recruitment consumers (question generation, the
+            // frontend screenCandidate route) still use their own keys, so this is wired for
+            // JD analysis only.
+            'description' => 'Job-description analysis now runs through this configuration (provider, model, key, quota and usage metering), falling back to the legacy gemini_api keys if it cannot. Interview-question generation and resume screening still use their own keys.',
+            'wired' => true,
             'consumer' => 'App\Http\Controllers\Api\Gemini\AnalyzeJDController',
         ],
         [
@@ -92,8 +99,12 @@ final class AiModuleRegistry
             // already accepts an optional `model` request field, but nothing in g2gv0 ever
             // sends it, and it is never sourced from this module's saved binding — the same
             // deepseek-chat-only constraint noted on eso_intelligence applies here too.
-            'description' => 'Course outlines, quizzes and lesson content for the learning module. A saved module binding is not read yet — see eso_intelligence for why that needs a model allowlist, not just a resolver call.',
-            'wired' => false,
+            // Wired 2026-10-10: AiCourseController::generateOutline() and CourseQuizGenerator ask
+            // ModuleDeepSeekModel for the tenant's binding; a model named in the outline request
+            // is now checked against the same allowlist. Quiz marking (QuizScoringService) reads it
+            // as well; presentations (Gamma) are not covered.
+            'description' => 'Course outlines and quiz generation for the learning module. Uses the model saved for this capability when it is a verified DeepSeek model; otherwise the configured default.',
+            'wired' => true,
             'consumer' => 'App\Services\Lms\CourseQuizGenerator',
         ],
         [
@@ -109,12 +120,13 @@ final class AiModuleRegistry
         [
             'key' => 'conversational_ai',
             'label' => 'Conversational AI',
-            // The assistant panel calls the Next.js route, which holds its own key.
-            // Listed because it is a real consumer and its spend is real; flagged
-            // unwired because that route does not read this configuration.
-            'description' => 'The assistant panel and its chat route. Served from the frontend today, so it does not read this configuration yet.',
-            'wired' => false,
-            'consumer' => 'app/api/agent/chat',
+            // Verified 2026-10-05: AskPipeline::MODULE and AiGenerationController both call
+            // AiModelClient::complete('conversational_ai', ...), so a saved configuration is
+            // read by the AI Stack assistant and by template generation. The separate Next.js
+            // chat route still holds its own key and does not read it.
+            'description' => 'The AI Stack assistant and template generation. The separate frontend chat route still uses its own key.',
+            'wired' => true,
+            'consumer' => 'App\Domain\AI\Conversation\AskPipeline',
         ],
         [
             'key' => 'recommendation_ai',
@@ -140,9 +152,37 @@ final class AiModuleRegistry
         [
             'key' => 'analytics_ai',
             'label' => 'Report & Analytics AI',
-            'description' => 'Analyse-this-screen actions over dashboards, reports and lists.',
-            'wired' => false,
-            'consumer' => 'App\Http\Controllers\dashboards',
+            // Verified 2026-10-05: EvaluationRunner::MODULE is 'analytics_ai' and calls
+            // AiModelClient::complete(), which resolves through AiConfigurationResolver, so a
+            // configuration saved here is read by the next evaluation run.
+            'description' => 'AI evaluation runs over the assistant\'s answers and templates. Resolved through this configuration; screen-analysis actions elsewhere are not routed here yet.',
+            'wired' => true,
+            'consumer' => 'App\Domain\AI\Evaluation\EvaluationRunner',
+        ],
+        [
+            'key' => 'signals',
+            'label' => 'Signals',
+            // Verified 2026-10-05: StructuredAi (company-opportunity research and the ingestion
+            // analyser), SignalGenerator and ProviderStatus all call AiModelClient::complete()
+            // with the module chosen by SignalsAiModule — `signals`, or the legacy
+            // `analytics_ai` for an organisation that configured that before this module existed.
+            'description' => 'Department Signals — company opportunities, the ingestion engine and signal generation. Resolved through this configuration; with none saved for Signals, a configuration saved for Report & Analytics AI is still used.',
+            'wired' => true,
+            'consumer' => 'App\Domain\Signals\Support\StructuredAi',
+        ],
+        [
+            'key' => 'gtm',
+            'label' => 'GTM & Revenue',
+            'description' => 'GTM & Revenue workspace — ICP fit scoring, account research, outreach drafting and deal coaching. Resolved through this configuration; every result is stored in gtm_analyses with the provider and model that produced it.',
+            'wired' => true,
+            'consumer' => 'App\Domain\Gtm\GtmAiRunner',
+        ],
+        [
+            'key' => 'document_classification',
+            'label' => 'Document Library Classification',
+            'description' => 'Classifies an uploaded document (type, subject, keywords, summary) and OCRs scans/photos with no text layer, for the Document Library.',
+            'wired' => true,
+            'consumer' => 'App\Services\Documents\Understanding\DocumentClassificationService',
         ],
     ];
 

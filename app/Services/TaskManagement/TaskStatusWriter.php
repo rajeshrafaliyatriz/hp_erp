@@ -173,6 +173,31 @@ class TaskStatusWriter
             if ($resolved['status'] === 'COMPLETED') {
                 app(\App\Services\TaskManagement\TaskExecutionApprovalWorkflow::class)->openFor($taskId, $tenantId);
             }
+
+            /*
+             * ── THE BACKLOG ITEM A COMPLETED TASK CAME FROM MUST CLOSE WITH IT ──
+             *
+             * BacklogController::assign() links a backlog item to this task and
+             * marks it ASSIGNED, one-way. Nothing ever closed the loop: finishing
+             * the task left the item showing ASSIGNED forever, because this is
+             * the only place that knows the transition happened, and it never
+             * looked back at the backlog table. A reopen undoes it, for the same
+             * reason `$isReopen` exists above - work sent back is not finished
+             * work, so the backlog item cannot be DONE either.
+             */
+            if ($resolved['status'] === 'COMPLETED') {
+                DB::table('task_management_backlog_items')
+                    ->where('task_id', $taskId)
+                    ->where('sub_institute_id', $tenantId)
+                    ->where('status', 'ASSIGNED')
+                    ->update(['status' => 'DONE', 'updated_by' => $actorId, 'updated_at' => now()]);
+            } elseif ($isReopen) {
+                DB::table('task_management_backlog_items')
+                    ->where('task_id', $taskId)
+                    ->where('sub_institute_id', $tenantId)
+                    ->where('status', 'DONE')
+                    ->update(['status' => 'ASSIGNED', 'updated_by' => $actorId, 'updated_at' => now()]);
+            }
         }
 
         return ['ok' => true, 'reason' => null, 'from' => $before->status, 'to' => $resolved['status']];

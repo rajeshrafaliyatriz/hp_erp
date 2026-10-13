@@ -111,7 +111,11 @@ class AiConfigurationController extends AiController
                 ->where('sub_institute_id', $institute)
                 ->first();
 
-            if ($existing !== null) {
+            // An administrator who deliberately adds another credential for the same
+            // module and provider (`additional_credential`) is building a failover
+            // pool, which is the one case where two active rows are intended: the
+            // runtime tries them newest first and skips any that are cooling down.
+            if ($existing !== null && ! $request->boolean('additional_credential')) {
                 return $this->failure(
                     'A configuration for this module and provider already exists. Edit it instead.',
                     409,
@@ -355,6 +359,7 @@ class AiConfigurationController extends AiController
             'account_email' => ['nullable', 'email', 'max:191'],
             'api_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'status' => ['nullable', 'integer', Rule::in([0, 1])],
+            'additional_credential' => ['nullable', 'boolean'],
         ]);
 
         $provider = $validated['provider'];
@@ -500,6 +505,29 @@ class AiConfigurationController extends AiController
             'editable' => ! $isPlatform && (string) ($row->sub_institute_id ?? '') === (string) $institute,
             'key_preview' => $this->preview((string) ($row->api_key ?? '')),
             'updated_at' => $row->updated_at ?? null,
+        ] + $this->health($row);
+    }
+
+    /**
+     * Failover state for one credential, from the cache. No secret is involved: the
+     * health key is the row id.
+     *
+     * @return array{health: string, cooldown_until: ?string, last_error_type: ?string, last_error_at: ?string, failure_count: int, last_used_at: ?string}
+     */
+    private function health(object $row): array
+    {
+        $tracker = app(\App\Domain\AI\Support\CredentialHealth::class);
+        $fingerprint = \App\Domain\AI\Support\CredentialHealth::fingerprint($row->id, '');
+        $state = $tracker->state($fingerprint);
+        $iso = fn (?int $t) => $t === null ? null : \Illuminate\Support\Carbon::createFromTimestamp($t)->toIso8601String();
+
+        return [
+            'health' => (int) $row->status === 1 ? $tracker->status($fingerprint) : 'retired',
+            'cooldown_until' => $state['cooldown_until'] !== null && $state['cooldown_until'] > now()->getTimestamp() ? $iso($state['cooldown_until']) : null,
+            'last_error_type' => $state['last_error_type'],
+            'last_error_at' => $iso($state['last_error_at']),
+            'failure_count' => $state['failure_count'],
+            'last_used_at' => $iso($state['last_used_at']),
         ];
     }
 

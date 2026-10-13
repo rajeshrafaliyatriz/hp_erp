@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\AI;
 
+use App\Domain\AI\Modules\ModuleRollUp;
 use App\Domain\AI\Support\AiAuditLogger;
 use App\Domain\AI\Support\SchemaCache;
 use Illuminate\Http\Request;
@@ -42,22 +43,38 @@ class AiModuleController extends AiController
     public function __construct(
         private readonly AiAuditLogger $audit,
         private readonly SchemaCache $schema,
+        private readonly ModuleRollUp $rollUp,
     ) {
+    }
+
+    /**
+     * The `ai_modules` keys one request reads.
+     *
+     * Opt-in (`rollup=1`), like every other roll-up endpoint: a top-level module's AI Stack
+     * asks for its screens' rows too, anything else reads exactly the key it named. Nothing
+     * here widens the tenant - the roll-up only adds keys of the same menu tree.
+     *
+     * @return array<int, string>
+     */
+    private function keys(Request $request, string $module): array
+    {
+        return $request->boolean('rollup') ? $this->rollUp->keysFor($module) : [$module];
     }
 
     public function usage(Request $request, string $module)
     {
         try {
             $institute = $this->scope($request)->selectedInstituteId;
+            $keys = $this->keys($request, $module);
 
             return $this->success('Module usage resolved.', [
                 'module' => $this->moduleIdentity($module, $institute),
-                'conversations' => $this->conversationUsage($module, $institute),
-                'generation' => $this->generationUsage($module, $institute),
-                'reports' => $this->reportUsage($module, $institute),
+                'conversations' => $this->conversationUsage($keys, $institute),
+                'generation' => $this->generationUsage($module, $keys, $institute),
+                'reports' => $this->reportUsage($keys, $institute),
                 'provider' => $this->providerUsage($module, $institute),
-                'recent_turns' => $this->recentTurns($module, $institute),
-                'daily' => $this->dailySeries($module, $institute),
+                'recent_turns' => $this->recentTurns($keys, $institute),
+                'daily' => $this->dailySeries($keys, $institute),
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -69,13 +86,14 @@ class AiModuleController extends AiController
         try {
             $institute = $this->scope($request)->selectedInstituteId;
             $identity = $this->moduleIdentity($module, $institute);
+            $keys = $this->keys($request, $module);
 
             return $this->success('Module guardrails resolved.', [
                 'module' => $identity,
                 'capabilities' => $identity['capabilities'],
-                'review' => $this->reviewPosture($module, $institute),
-                'refusals' => $this->refusals($module, $institute),
-                'refusal_counts' => $this->refusalCounts($module, $institute),
+                'review' => $this->reviewPosture($keys, $institute),
+                'refusals' => $this->refusals($keys, $institute),
+                'refusal_counts' => $this->refusalCounts($keys, $institute),
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -123,27 +141,43 @@ class AiModuleController extends AiController
         ];
     }
 
-    /** @return array<int, string> The module's AiModuleRegistry consumer keys. */
-    private function registryKeys(string $module, int|string|null $institute): array
+    /**
+     * The AiModuleRegistry consumer keys of these modules.
+     *
+     * @param  array<int, string>  $modules
+     * @return array<int, string>
+     */
+    private function registryKeys(array $modules, int|string|null $institute): array
     {
         if (! $this->schema->hasTable('ai_modules') || ! $this->schema->hasColumn('ai_modules', 'registry_keys')) {
             return [];
         }
 
-        $raw = DB::table('ai_modules')
-            ->where('module_key', $module)
-            ->where(fn ($q) => $q->where('sub_institute_id', $institute)->orWhereNull('sub_institute_id'))
-            ->orderByRaw('sub_institute_id IS NULL ASC')
-            ->value('registry_keys');
+        $keys = [];
 
-        $decoded = json_decode((string) $raw, true);
+        foreach ($modules as $module) {
+            $raw = DB::table('ai_modules')
+                ->where('module_key', $module)
+                ->where(fn ($q) => $q->where('sub_institute_id', $institute)->orWhereNull('sub_institute_id'))
+                ->orderByRaw('sub_institute_id IS NULL ASC')
+                ->value('registry_keys');
 
-        return is_array($decoded) ? array_values(array_filter($decoded, 'is_string')) : [];
+            $decoded = json_decode((string) $raw, true);
+
+            foreach (is_array($decoded) ? $decoded : [] as $key) {
+                if (is_string($key)) {
+                    $keys[] = $key;
+                }
+            }
+        }
+
+        return array_values(array_unique($keys));
     }
 
     // ------------------------------------------------------------------ usage
 
-    private function conversationUsage(string $module, int|string|null $institute): array
+    /** @param array<int, string> $modules */
+    private function conversationUsage(array $modules, int|string|null $institute): array
     {
         if (! $this->schema->hasTable('ai_conversations')) {
             return ['available' => false, 'reason' => 'ai_conversations is not on this estate.'];
@@ -151,7 +185,7 @@ class AiModuleController extends AiController
 
         $conversations = DB::table('ai_conversations')
             ->where('sub_institute_id', $institute)
-            ->where('module_key', $module);
+            ->whereIn('module_key', $modules);
 
         $totals = (clone $conversations)
             ->selectRaw('count(*) total, coalesce(sum(turn_count), 0) turns, count(distinct user_id) users, max(last_turn_at) last_activity, min(created_at) first_activity')
@@ -218,13 +252,14 @@ class AiModuleController extends AiController
      * are listed on its `ai_modules.registry_keys` — that is the only link between a
      * metered call and a menu module that G2G has.
      */
-    private function generationUsage(string $module, int|string|null $institute): array
+    /** @param array<int, string> $modules */
+    private function generationUsage(string $module, array $modules, int|string|null $institute): array
     {
         if (! $this->schema->hasTable('ai_usage_events')) {
             return ['available' => false, 'reason' => 'ai_usage_events is not on this estate.'];
         }
 
-        $keys = $this->registryKeys($module, $institute);
+        $keys = $this->registryKeys($modules, $institute);
 
         if ($keys === []) {
             return [
@@ -327,7 +362,7 @@ class AiModuleController extends AiController
     /** The first active credential bound to one of this module's consumers. */
     private function moduleCredential(string $module, int|string|null $institute): ?object
     {
-        $keys = $this->registryKeys($module, $institute);
+        $keys = $this->registryKeys([$module], $institute);
 
         if ($keys === [] || ! $this->schema->hasTable('ai_api_keys') || ! $this->schema->hasColumn('ai_api_keys', 'ai_module')) {
             return null;
@@ -370,7 +405,8 @@ class AiModuleController extends AiController
         ];
     }
 
-    private function reportUsage(string $module, int|string|null $institute): array
+    /** @param array<int, string> $modules */
+    private function reportUsage(array $modules, int|string|null $institute): array
     {
         if (! $this->schema->hasTable('ai_generated_reports')) {
             return ['available' => false, 'reason' => 'No report has been built on this estate yet — ai_generated_reports is created with the Templates report builder.'];
@@ -378,7 +414,7 @@ class AiModuleController extends AiController
 
         $reports = DB::table('ai_generated_reports')
             ->where('sub_institute_id', $institute)
-            ->where('module_key', $module);
+            ->whereIn('module_key', $modules);
 
         $aggregate = (clone $reports)
             ->selectRaw('count(*) total, coalesce(sum(row_count), 0) rows_reported, max(created_at) last_created')
@@ -431,7 +467,8 @@ class AiModuleController extends AiController
     }
 
     /** The module's most recent questions, each with how its answer ended. */
-    private function recentTurns(string $module, int|string|null $institute): array
+    /** @param array<int, string> $modules */
+    private function recentTurns(array $modules, int|string|null $institute): array
     {
         if (! $this->schema->hasTable('ai_conversations') || ! $this->schema->hasTable('ai_conversation_turns')) {
             return [];
@@ -445,7 +482,7 @@ class AiModuleController extends AiController
                     ->where('a.role', '=', 'assistant');
             })
             ->where('c.sub_institute_id', $institute)
-            ->where('c.module_key', $module)
+            ->whereIn('c.module_key', $modules)
             ->where('u.role', 'user')
             ->orderByDesc('u.id')
             ->limit(self::RECENT)
@@ -464,7 +501,8 @@ class AiModuleController extends AiController
             ->all();
     }
 
-    private function dailySeries(string $module, int|string|null $institute): array
+    /** @param array<int, string> $modules */
+    private function dailySeries(array $modules, int|string|null $institute): array
     {
         if (! $this->schema->hasTable('ai_conversations') || ! $this->schema->hasTable('ai_conversation_turns')) {
             return [];
@@ -473,7 +511,7 @@ class AiModuleController extends AiController
         return DB::table('ai_conversation_turns as t')
             ->join('ai_conversations as c', 'c.id', '=', 't.conversation_id')
             ->where('c.sub_institute_id', $institute)
-            ->where('c.module_key', $module)
+            ->whereIn('c.module_key', $modules)
             ->where('t.role', 'user')
             ->where('t.created_at', '>=', now()->subDays(30))
             ->selectRaw('date(t.created_at) day, count(*) turns')
@@ -486,14 +524,15 @@ class AiModuleController extends AiController
 
     // ------------------------------------------------------------------ guardrails
 
-    private function reviewPosture(string $module, int|string|null $institute): array
+    /** @param array<int, string> $modules */
+    private function reviewPosture(array $modules, int|string|null $institute): array
     {
         if (! $this->schema->hasTable('ai_templates')) {
             return ['available' => false, 'reason' => 'ai_templates is not on this estate.'];
         }
 
         $aggregate = DB::table('ai_templates')
-            ->where('module_key', $module)
+            ->whereIn('module_key', $modules)
             ->where(fn ($q) => $q->where('sub_institute_id', $institute)->orWhereNull('sub_institute_id'))
             ->selectRaw(
                 'count(*) total,'
@@ -513,9 +552,10 @@ class AiModuleController extends AiController
     }
 
     /** Calls this module's consumers made that a rule or a quota refused, or that failed. */
-    private function refusals(string $module, int|string|null $institute): array
+    /** @param array<int, string> $modules */
+    private function refusals(array $modules, int|string|null $institute): array
     {
-        $keys = $this->registryKeys($module, $institute);
+        $keys = $this->registryKeys($modules, $institute);
 
         if ($keys === [] || ! $this->schema->hasTable('ai_usage_events')) {
             return [];
@@ -544,9 +584,10 @@ class AiModuleController extends AiController
             ->all();
     }
 
-    private function refusalCounts(string $module, int|string|null $institute): array
+    /** @param array<int, string> $modules */
+    private function refusalCounts(array $modules, int|string|null $institute): array
     {
-        $keys = $this->registryKeys($module, $institute);
+        $keys = $this->registryKeys($modules, $institute);
 
         if ($keys === [] || ! $this->schema->hasTable('ai_usage_events')) {
             return [];
@@ -572,6 +613,12 @@ class AiModuleController extends AiController
             $scope = $this->scope($request);
             $institute = $scope->selectedInstituteId;
 
+            // The ledger path is built from the URL, so an unregistered key would write rows
+            // under a module that does not exist and could never be read back by any stack.
+            if (! ($this->moduleIdentity($module, $institute)['registered'] ?? false)) {
+                return $this->failure("{$module} is not a registered AI module, so the activity was not recorded.", 422);
+            }
+
             $data = $request->validate([
                 'operation' => ['required', 'string', 'max:60', 'regex:/^[a-z0-9_.-]+$/'],
                 'operation_label' => 'nullable|string|max:120',
@@ -590,6 +637,9 @@ class AiModuleController extends AiController
                 'workflow' => 'nullable|string|max:120',
                 'tool' => 'nullable|string|max:120',
                 'result' => 'nullable|array',
+                // Measured by the caller; absent means "not measured", never zero.
+                'duration_ms' => 'nullable|integer|min:0',
+                'knowledge_graph_used' => 'nullable|boolean',
             ]);
 
             $used = [];
@@ -645,6 +695,8 @@ class AiModuleController extends AiController
                     'reference' => $data['reference'] ?? null,
                     'used' => $used,
                     'result' => $data['result'] ?? null,
+                    'duration_ms' => $data['duration_ms'] ?? null,
+                    'knowledge_graph_used' => $data['knowledge_graph_used'] ?? null,
                 ],
             ]);
 
@@ -674,14 +726,28 @@ class AiModuleController extends AiController
                 ]);
             }
 
-            $prefix = "module.{$module}.";
+            // Every key this request reads, each with its own ledger prefix. A top-level
+            // module with `rollup=1` also reads its screens' `module.<screen>.*` rows.
+            $prefixes = array_map(fn (string $key) => "module.{$key}.", $this->keys($request, $module));
 
+            // STRICT TENANT. A NULL `sub_institute_id` is a platform-level row, and this
+            // ledger is an organisation's own record of what its people did: letting every
+            // tenant read the platform rows would show one organisation's activity to the next.
             $query = DB::table('ai_audit_logs')
-                ->where(fn ($q) => $q->where('sub_institute_id', $institute)->orWhereNull('sub_institute_id'))
-                ->where('event_type', 'like', $prefix . '%');
+                ->where('sub_institute_id', $institute)
+                ->where(function ($q) use ($prefixes) {
+                    foreach ($prefixes as $prefix) {
+                        // `_` and `%` are LIKE wildcards; module keys contain underscores.
+                        $q->orWhere('event_type', 'like', addcslashes($prefix, '\\_%') . '%');
+                    }
+                });
 
             if ($request->filled('operation')) {
-                $query->where('event_type', $prefix . $request->input('operation'));
+                $query->where(function ($q) use ($prefixes, $request) {
+                    foreach ($prefixes as $prefix) {
+                        $q->orWhere('event_type', $prefix . $request->input('operation'));
+                    }
+                });
             }
 
             if ($request->filled('outcome')) {
@@ -700,14 +766,14 @@ class AiModuleController extends AiController
                     ->orderByDesc('id')
                     ->limit($this->limit($request))
                     ->get()
-                    ->map(fn ($row) => $this->presentEntry($row, $prefix))
+                    ->map(fn ($row) => $this->presentEntry($row, $prefixes))
                     ->all(),
                 'by_operation' => (clone $query)
                     ->selectRaw('event_type, outcome, count(*) c')
                     ->groupBy('event_type', 'outcome')
                     ->get()
                     ->map(fn ($row) => [
-                        'operation' => substr((string) $row->event_type, strlen($prefix)),
+                        'operation' => $this->operationOf((string) $row->event_type, $prefixes),
                         'outcome' => (string) $row->outcome,
                         'count' => (int) $row->c,
                     ])
@@ -718,14 +784,44 @@ class AiModuleController extends AiController
         }
     }
 
-    private function presentEntry(object $row, string $prefix): array
+    /**
+     * The operation name with whichever `module.<key>.` prefix the row carries removed.
+     *
+     * @param  array<int, string>  $prefixes
+     */
+    private function operationOf(string $eventType, array $prefixes): string
+    {
+        foreach ($prefixes as $prefix) {
+            if (str_starts_with($eventType, $prefix)) {
+                return substr($eventType, strlen($prefix));
+            }
+        }
+
+        return $eventType;
+    }
+
+    /** The module key a ledger row was written under. */
+    private function moduleOf(string $eventType, array $prefixes): ?string
+    {
+        foreach ($prefixes as $prefix) {
+            if (str_starts_with($eventType, $prefix)) {
+                return substr($prefix, strlen('module.'), -1);
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<int, string> $prefixes */
+    private function presentEntry(object $row, array $prefixes): array
     {
         $payload = $row->payload ? json_decode((string) $row->payload, true) : null;
         $payload = is_array($payload) ? $payload : [];
 
         return [
             'id' => (int) $row->id,
-            'operation' => substr((string) $row->event_type, strlen($prefix)),
+            'operation' => $this->operationOf((string) $row->event_type, $prefixes),
+            'module' => $this->moduleOf((string) $row->event_type, $prefixes),
             'operation_label' => $payload['operation_label'] ?? null,
             'capability' => $payload['capability'] ?? null,
             'status' => $payload['status'] ?? ($row->outcome === 'success' ? 'completed' : 'failed'),
@@ -739,6 +835,8 @@ class AiModuleController extends AiController
             'reference' => $payload['reference'] ?? null,
             'used' => is_array($payload['used'] ?? null) ? $payload['used'] : [],
             'result' => $payload['result'] ?? null,
+            'duration_ms' => isset($payload['duration_ms']) ? (int) $payload['duration_ms'] : null,
+            'knowledge_graph_used' => isset($payload['knowledge_graph_used']) ? (bool) $payload['knowledge_graph_used'] : null,
             'created_at' => $row->created_at,
         ];
     }

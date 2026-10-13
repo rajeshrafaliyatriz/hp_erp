@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Controllers\AI\ActionRequestController;
+use App\Http\Controllers\AI\AiChatUsageController;
 use App\Http\Controllers\AI\AiConfigurationController;
 use App\Http\Controllers\AI\AiGenerationController;
 use App\Http\Controllers\AI\AiModuleController;
+use App\Http\Controllers\AI\AiModuleExampleController;
 use App\Http\Controllers\AI\AiModuleModelController;
 use App\Http\Controllers\AI\AiReportController;
 use App\Http\Controllers\AI\AiToolAgentController;
@@ -10,9 +13,11 @@ use App\Http\Controllers\AI\AiPolicyController;
 use App\Http\Controllers\AI\AiTemplateController;
 use App\Http\Controllers\AI\AskController;
 use App\Http\Controllers\AI\CapabilityController;
+use App\Http\Controllers\AI\ChatArtifactsController;
 use App\Http\Controllers\AI\EvaluationController;
 use App\Http\Controllers\AI\RecommendationController;
 use App\Http\Controllers\AI\UsageController;
+use App\Http\Controllers\AI\WorkspaceController;
 use App\Http\Middleware\AiAuth;
 use App\Http\Middleware\AiContextHydrator;
 use App\Http\Middleware\AiRateLimit;
@@ -206,6 +211,28 @@ Route::prefix(config('ai.route_prefix', 'api/ai'))
         */
         Route::middleware('platformright:' . $aiCapabilityLinks['conversational-ai'] . ',view')->group(function () {
             Route::post('/ask', [AskController::class, 'ask']);
+            // The page the chat is opened on: its module and the questions worth asking there.
+            // GET for a bare page; POST when the browser also sends what it read off the page.
+            Route::match(['get', 'post'], '/workspace/context', [WorkspaceController::class, 'context']);
+            // Approval ledger for actions proposed from a page. The browser performs the action;
+            // these routes hold the decision and the lifecycle.
+            Route::get('/action-requests', [ActionRequestController::class, 'index']);
+            Route::post('/action-requests', [ActionRequestController::class, 'store']);
+            Route::get('/action-requests/{actionRequest}', [ActionRequestController::class, 'show'])->whereNumber('actionRequest');
+            Route::post('/action-requests/{actionRequest}/resolve', [ActionRequestController::class, 'resolve'])->whereNumber('actionRequest');
+            Route::post('/action-requests/{actionRequest}/claim', [ActionRequestController::class, 'claim'])->whereNumber('actionRequest');
+            Route::post('/action-requests/{actionRequest}/complete', [ActionRequestController::class, 'complete'])->whereNumber('actionRequest');
+            Route::post('/action-requests/{actionRequest}/cancel', [ActionRequestController::class, 'cancel'])->whereNumber('actionRequest');
+            // Reports and templates the chat can offer or build for the module it is open in.
+            Route::get('/chat/report-suggestions', [ChatArtifactsController::class, 'reportSuggestions']);
+            Route::post('/chat/report', [ChatArtifactsController::class, 'report']);
+            Route::get('/chat/template-suggestions', [ChatArtifactsController::class, 'templateSuggestions']);
+            Route::get('/chat/templates/{id}/preview', [ChatArtifactsController::class, 'templatePreview'])->whereNumber('id');
+            // Send a saved report to real people of the tenant (mail gate + admin only), and its history.
+            Route::get('/chat/reports', [\App\Http\Controllers\AI\ReportDeliveryController::class, 'recent']);
+            Route::get('/chat/report-recipients', [\App\Http\Controllers\AI\ReportDeliveryController::class, 'recipients']);
+            Route::post('/chat/reports/{id}/send', [\App\Http\Controllers\AI\ReportDeliveryController::class, 'send'])->whereNumber('id');
+            Route::get('/chat/reports/{id}/deliveries', [\App\Http\Controllers\AI\ReportDeliveryController::class, 'history'])->whereNumber('id');
             Route::get('/grounding-context', [AskController::class, 'groundingContext']);
             Route::get('/conversations', [AskController::class, 'conversations']);
             Route::get('/conversations/{conversation}', [AskController::class, 'conversation'])
@@ -308,6 +335,14 @@ Route::prefix(config('ai.route_prefix', 'api/ai'))
                 ->where('module', '[a-z0-9_\-]+');
             Route::post('/modules/{module}/activity', [AiModuleController::class, 'recordActivity'])
                 ->where('module', '[a-z0-9_\-]+');
+            // The worked "Example" shown at the top of each AI Stack tab, built live, and the
+            // guardrail check it runs (records an audit row for the caller).
+            Route::get('/modules/{module}/examples', [AiModuleExampleController::class, 'index'])
+                ->where('module', '[a-z0-9_\-]+');
+            Route::get('/modules/{module}/page-examples', [AiModuleExampleController::class, 'pages'])
+                ->where('module', '[a-z0-9_\-]+');
+            Route::post('/modules/{module}/examples/guardrail-check', [AiModuleExampleController::class, 'guardrailCheck'])
+                ->where('module', '[a-z0-9_\-]+');
             Route::get('/modules/{module}/models', [AiModuleModelController::class, 'index'])
                 ->where('module', '[a-z0-9_\-]+');
             Route::put('/modules/{module}/models', [AiModuleModelController::class, 'update'])
@@ -347,4 +382,18 @@ Route::prefix(config('ai.route_prefix', 'api/ai'))
             */
             Route::post('/generate', [AiGenerationController::class, 'generate']);
         });
+    });
+
+/*
+| What the frontend chat route (g2gv0 app/api/ai/chat) needs from the AI layer: report its
+| usage so the Usage panel sees it, and learn which Gemini model an administrator has
+| explicitly chosen. Open to any signed-in user (every chat user produces usage); tenant and
+| user come from the token, never the body. Same authentication, rate limit and scope stack
+| as the rest of /api/ai.
+*/
+Route::prefix(config('ai.route_prefix', 'api/ai'))
+    ->middleware(['api', AiAuth::class, AiRateLimit::class, AiContextHydrator::class])
+    ->group(function () {
+        Route::post('/chat-usage', [AiChatUsageController::class, 'report']);
+        Route::get('/chat-model', [AiChatUsageController::class, 'model']);
     });

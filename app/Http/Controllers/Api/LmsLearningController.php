@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Concerns\ResolvesLmsIdentity;
+use App\Services\Documents\Federation\LmsCertificateIndexer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -2029,6 +2030,12 @@ class LmsLearningController extends Controller
                 'updated_at' => $now,
             ]);
 
+            try {
+                app(LmsCertificateIndexer::class)->indexById((int) $newId);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+
             return response()->json([
                 'status' => true,
                 'message' => 'Certificate re-issued',
@@ -2394,6 +2401,12 @@ class LmsLearningController extends Controller
                     'status' => 'completed',
                     'updated_at' => $now,
                 ]);
+            }
+
+            try {
+                app(LmsCertificateIndexer::class)->indexById((int) $certificateId);
+            } catch (\Throwable $e) {
+                report($e);
             }
 
             return response()->json([

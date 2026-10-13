@@ -1,0 +1,817 @@
+[
+  {
+    "offer_id": "G2G-01",
+    "name": "Competency Framework Studio",
+    "parent_product": "G2G",
+    "modules_components": "Capability Intelligence: Framework Structure, Role Mapping Matrix, Role Requirements, Weighting, Proficiency Scale, Workflow & Review",
+    "what_it_does": "Design and govern role→competency frameworks; FRAC-aligned for government capacity building",
+    "needs_solved": [
+      "N01",
+      "N03"
+    ],
+    "primary_segments": [
+      "GOV-CENTRAL",
+      "GOV-STATE",
+      "GOV-ULB",
+      "PSU",
+      "TRAIN-INST",
+      "HOSPITAL"
+    ],
+    "trigger_signals": [
+      "S-GOV-CBP",
+      "S-GOV-RFP",
+      "S-SI-WIN",
+      "S-LEAD-HIRE"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Built – no production client",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-02",
+      "G2G-03"
+    ],
+    "proof_points": "Live in g2gv0 under Capability Intelligence; no production tenant yet",
+    "notes": "Hybrid/on-prem likely needed for govt buyers — confirm"
+  },
+  {
+    "offer_id": "G2G-02",
+    "name": "KASBA Capability Library",
+    "parent_product": "G2G",
+    "modules_components": "Competency Library (Knowledge, Ability, Skill, Behaviour, Attitude) + Job Role Task catalogue",
+    "what_it_does": "Ready library of 3,572 job-role tasks across 268 job roles and 128 skills, grouped by Critical Work Function",
+    "needs_solved": [
+      "N03",
+      "N01"
+    ],
+    "primary_segments": [
+      "GOV-STATE",
+      "PSU",
+      "HOSPITAL",
+      "SME",
+      "TRAIN-INST"
+    ],
+    "trigger_signals": [
+      "S-GOV-CBP",
+      "S-INST-HRD",
+      "S-LEAD-HIRE"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Built – no production client",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-01"
+    ],
+    "proof_points": "Library content in g2gv0",
+    "notes": "K/A/Attitude/Behaviour items are thin (~10 each) — enrich before selling the library as content"
+  },
+  {
+    "offer_id": "G2G-03",
+    "name": "Capability Gap Assessment",
+    "parent_product": "G2G",
+    "modules_components": "Competency Rating (6-level scale), Expected Competency, self-rating, Q&A assessment",
+    "what_it_does": "Measure current vs expected proficiency per role and person; produce gap reports",
+    "needs_solved": [
+      "N02",
+      "N20"
+    ],
+    "primary_segments": [
+      "SME",
+      "HOSPITAL",
+      "PSU",
+      "UNIV",
+      "ENTERPRISE"
+    ],
+    "trigger_signals": [
+      "S-INST-ACCR",
+      "S-LEAD-HIRE",
+      "S-SME-FUND"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Built – no production client",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-01",
+      "G2G-04",
+      "EB-05"
+    ],
+    "proof_points": "Self-rating and Q&A assessment already built",
+    "notes": null
+  },
+  {
+    "offer_id": "G2G-04",
+    "name": "Competency-linked Learning",
+    "parent_product": "G2G",
+    "modules_components": "LMS + course_competency_map",
+    "what_it_does": "Courses mapped to competencies; completion raises proficiency; assessments for critical competencies",
+    "needs_solved": [
+      "N04",
+      "N17"
+    ],
+    "primary_segments": [
+      "SME",
+      "HOSPITAL",
+      "PSU",
+      "UNIV",
+      "TRAIN-INST"
+    ],
+    "trigger_signals": [
+      "S-LEAD-HIRE",
+      "S-INST-ACCR",
+      "S-GOV-CBP"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "In development",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-03"
+    ],
+    "proof_points": null,
+    "notes": "course_competency_map is the highest-priority connection item"
+  },
+  {
+    "offer_id": "G2G-05",
+    "name": "Talent Management",
+    "parent_product": "G2G",
+    "modules_components": "Talent Management module",
+    "what_it_does": "Succession, career pathing and talent decisions driven by capability data",
+    "needs_solved": [
+      "N05"
+    ],
+    "primary_segments": [
+      "SME",
+      "ENTERPRISE",
+      "PSU"
+    ],
+    "trigger_signals": [
+      "S-LEAD-HIRE",
+      "S-SME-FUND"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Built – no production client",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-03"
+    ],
+    "proof_points": null,
+    "notes": "Confirm readiness"
+  },
+  {
+    "offer_id": "G2G-06",
+    "name": "HRIT / HRMS Core",
+    "parent_product": "G2G",
+    "modules_components": "Organizational Management + HRIT (org structure, employee directory, reporting managers)",
+    "what_it_does": "Core HR records and org structure that the capability layer sits on",
+    "needs_solved": [
+      "N06"
+    ],
+    "primary_segments": [
+      "SME",
+      "UNIV",
+      "HOSPITAL",
+      "TRAIN-INST"
+    ],
+    "trigger_signals": [
+      "S-INST-HRD",
+      "S-SME-FUND"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Built – no production client",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-03",
+      "G2G-05"
+    ],
+    "proof_points": null,
+    "notes": "Confirm readiness; manager/department-head role was a Phase 3 prerequisite"
+  },
+  {
+    "offer_id": "G2G-07",
+    "name": "Task Execution with ESO",
+    "parent_product": "G2G",
+    "modules_components": "Task Management + ESO Library",
+    "what_it_does": "Job-role tasks performed by humans, AI agents or hybrid via ESOs; evidence recorded automatically",
+    "needs_solved": [
+      "N07"
+    ],
+    "primary_segments": [
+      "SME",
+      "HOSPITAL",
+      "ENTERPRISE"
+    ],
+    "trigger_signals": [
+      "S-EB-KM",
+      "S-SME-FUND",
+      "S-EB-DX"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "In development",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-08"
+    ],
+    "proof_points": null,
+    "notes": "ESOs being authored task by task"
+  },
+  {
+    "offer_id": "G2G-08",
+    "name": "Workforce AI Assistant & Agents",
+    "parent_product": "G2G",
+    "modules_components": "Agentic AI module (conversational AI, agentic library)",
+    "what_it_does": "AI on top of KASBA + ESO to reduce employees' physical and cognitive load",
+    "needs_solved": [
+      "N08"
+    ],
+    "primary_segments": [
+      "SME",
+      "ENTERPRISE",
+      "HOSPITAL"
+    ],
+    "trigger_signals": [
+      "S-EB-KM",
+      "S-SME-FUND"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "In development",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-07",
+      "EB-04"
+    ],
+    "proof_points": "Conversational AI and agentic library built",
+    "notes": "Generative AI planned, not yet implemented"
+  },
+  {
+    "offer_id": "G2G-09",
+    "name": "Hospital Capability Pack (ICU Staff Nurse)",
+    "parent_product": "G2G",
+    "modules_components": "Vertical pack on G2G-01/02/03",
+    "what_it_does": "Single-role MVP proving capability measurement in a hospital unit",
+    "needs_solved": [
+      "N01",
+      "N02",
+      "N20"
+    ],
+    "primary_segments": [
+      "HOSPITAL"
+    ],
+    "trigger_signals": [
+      "S-INST-ACCR",
+      "S-LEAD-HIRE",
+      "S-INST-HRD"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Pilot planned",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-03"
+    ],
+    "proof_points": null,
+    "notes": "Needs a first hospital pilot site"
+  },
+  {
+    "offer_id": "G2G-10",
+    "name": "G2G Education Pack",
+    "parent_product": "G2G",
+    "modules_components": "Competency + LMS + ESO for teachers",
+    "what_it_does": "Teacher CPD and competency improvement; work executed via ESO in human / AI / hybrid modes",
+    "needs_solved": [
+      "N17",
+      "N04",
+      "N02"
+    ],
+    "primary_segments": [
+      "K12-PVT",
+      "K12-TRUST",
+      "K12-GOVT",
+      "UNIV"
+    ],
+    "trigger_signals": [
+      "S-SCH-SCHEME",
+      "S-SCH-NEW",
+      "S-GOV-CBP"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Proposal / concept",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-01",
+      "SCH-08"
+    ],
+    "proof_points": "Part of CGTMSE proposal scope",
+    "notes": "Confirm readiness"
+  },
+  {
+    "offer_id": "EB-01",
+    "name": "Enterprise Brain Intelligence Layer",
+    "parent_product": "EB",
+    "modules_components": "10-stage intelligence loop (Signal→…→Learning), seven-question sufficiency gate",
+    "what_it_does": "Intelligence layer installed above a company's ERP/HR systems; verdicts over reports, UNDETERMINED as a designed state",
+    "needs_solved": [
+      "N09",
+      "N11"
+    ],
+    "primary_segments": [
+      "SME",
+      "ENTERPRISE",
+      "PSU"
+    ],
+    "trigger_signals": [
+      "S-EB-DX",
+      "S-EB-KM",
+      "S-EB-ADJ"
+    ],
+    "deployment_model": "Installable layer on client systems",
+    "readiness_status": "Proven on real client data (pilot)",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "EB-03",
+      "G2G-03"
+    ],
+    "proof_points": "Golden-intelligence pipeline end-to-end on FiberValley (ISP) and Lions School data",
+    "notes": null
+  },
+  {
+    "offer_id": "EB-02",
+    "name": "Department & Person Intelligence",
+    "parent_product": "EB",
+    "modules_components": "Department Intelligence, Person Profile/Intelligence screens",
+    "what_it_does": "Department health on measured dimensions + separate data-confidence view, per department and person",
+    "needs_solved": [
+      "N09",
+      "N02"
+    ],
+    "primary_segments": [
+      "SME",
+      "ENTERPRISE"
+    ],
+    "trigger_signals": [
+      "S-EB-DX",
+      "S-LEAD-HIRE"
+    ],
+    "deployment_model": "Installable layer on client systems",
+    "readiness_status": "In development",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "EB-01"
+    ],
+    "proof_points": "FiberValley CST used as reference",
+    "notes": "Screens under redesign (verdict-first)"
+  },
+  {
+    "offer_id": "EB-03",
+    "name": "Data Ingestion Engine",
+    "parent_product": "EB",
+    "modules_components": "Ingestion Engine + Evidence Ledger",
+    "what_it_does": "Onboard an organization from Excel/exports into EB with traceable evidence",
+    "needs_solved": [
+      "N11"
+    ],
+    "primary_segments": [
+      "SME",
+      "ENTERPRISE",
+      "PSU"
+    ],
+    "trigger_signals": [
+      "S-EB-ADJ",
+      "S-EB-DX"
+    ],
+    "deployment_model": "Installable layer on client systems",
+    "readiness_status": "Built – no production client",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "EB-01"
+    ],
+    "proof_points": "Used for FiberValley Excel imports",
+    "notes": "Confirm readiness label"
+  },
+  {
+    "offer_id": "EB-04",
+    "name": "Knowledge & Memory + AI Assistant",
+    "parent_product": "EB",
+    "modules_components": "Graph Explorer, KASBA Explorer, Knowledge & Memory, AI Assistant, ESO Library",
+    "what_it_does": "Company-brain knowledge base with graph exploration and an AI assistant",
+    "needs_solved": [
+      "N10",
+      "N08"
+    ],
+    "primary_segments": [
+      "ENTERPRISE",
+      "SME"
+    ],
+    "trigger_signals": [
+      "S-EB-KM",
+      "S-EB-DX"
+    ],
+    "deployment_model": "Installable layer on client systems",
+    "readiness_status": "In development",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "EB-01",
+      "G2G-08"
+    ],
+    "proof_points": null,
+    "notes": "Sidebar consolidation decided Aug 2026"
+  },
+  {
+    "offer_id": "EB-05",
+    "name": "KASBA Scoring & Gap Analysis",
+    "parent_product": "EB",
+    "modules_components": "KASBA scoring engine",
+    "what_it_does": "Scores capability across KASBA dimensions and surfaces gaps; shared engine across products",
+    "needs_solved": [
+      "N02"
+    ],
+    "primary_segments": [
+      "SME",
+      "ENTERPRISE",
+      "HOSPITAL"
+    ],
+    "trigger_signals": [
+      "S-LEAD-HIRE",
+      "S-INST-ACCR"
+    ],
+    "deployment_model": "Installable layer on client systems",
+    "readiness_status": "Built – no production client",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-03",
+      "EB-01"
+    ],
+    "proof_points": null,
+    "notes": "Mostly sold inside G2G-03 / EB-01 rather than alone"
+  },
+  {
+    "offer_id": "SCH-01",
+    "name": "Scholar School ERP",
+    "parent_product": "Scholar K-12",
+    "modules_components": "285 menus across 25 module groups: Admission, Fees, Student, Result, Attendance, Transport, Library, Hostel, Inventory, HRMS, LMS, SQAA etc.",
+    "what_it_does": "Complete school administration ERP",
+    "needs_solved": [
+      "N12",
+      "N13"
+    ],
+    "primary_segments": [
+      "K12-PVT",
+      "K12-TRUST",
+      "INTL"
+    ],
+    "trigger_signals": [
+      "S-SCH-NEW",
+      "S-SCH-SEEK",
+      "S-SCH-SCHEME",
+      "S-COMP"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Live – with client",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-03",
+      "SCH-04",
+      "SCH-08"
+    ],
+    "proof_points": "Anand Niketan School (first live Scholar implementation); Lions Club of Silvassa (long-standing Campus ERP)",
+    "notes": "Settle one consistent traction figure before partners use it"
+  },
+  {
+    "offer_id": "SCH-02",
+    "name": "Fees Intelligence & Decision Support",
+    "parent_product": "Scholar K-12",
+    "modules_components": "Fees intelligence dashboard, 63-signal DSS, Fees Action Centre",
+    "what_it_does": "Role-based fee intelligence for CFO, Principal, Trustee etc.",
+    "needs_solved": [
+      "N13",
+      "N09"
+    ],
+    "primary_segments": [
+      "K12-TRUST",
+      "K12-PVT"
+    ],
+    "trigger_signals": [
+      "S-SCH-NEW",
+      "S-SCH-SEEK"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Prototype",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-01"
+    ],
+    "proof_points": null,
+    "notes": "HTML prototypes exist"
+  },
+  {
+    "offer_id": "SCH-03",
+    "name": "LMS-PAL (AI question generation)",
+    "parent_product": "Scholar K-12",
+    "modules_components": "LMS + Pal Quiz semantic pipeline",
+    "what_it_does": "AI-generated questions and assessments for school LMS",
+    "needs_solved": [
+      "N14"
+    ],
+    "primary_segments": [
+      "K12-PVT",
+      "K12-TRUST",
+      "K12-GOVT"
+    ],
+    "trigger_signals": [
+      "S-SCH-SCHEME",
+      "S-SCH-SEEK"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "In development",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-01",
+      "SCH-06"
+    ],
+    "proof_points": "Listed as LMS-PAL v4 in CGTMSE scope",
+    "notes": "Confirm readiness"
+  },
+  {
+    "offer_id": "SCH-04",
+    "name": "Career Intelligence & Counselling",
+    "parent_product": "Scholar K-12",
+    "modules_components": "KASBA + NCDG competency framework, IPIP Big Five",
+    "what_it_does": "Student career guidance grounded in competency data",
+    "needs_solved": [
+      "N15"
+    ],
+    "primary_segments": [
+      "K12-PVT",
+      "K12-TRUST"
+    ],
+    "trigger_signals": [
+      "S-SCH-SCHEME",
+      "S-SCH-NEW"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "In development",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-01"
+    ],
+    "proof_points": null,
+    "notes": null
+  },
+  {
+    "offer_id": "SCH-05",
+    "name": "Prompt-to-Video Lessons",
+    "parent_product": "Scholar K-12",
+    "modules_components": "Agent pipeline: prompt → lesson video",
+    "what_it_does": "Teacher types a prompt; pipeline produces a finished lesson video",
+    "needs_solved": [
+      "N14"
+    ],
+    "primary_segments": [
+      "K12-PVT",
+      "K12-TRUST"
+    ],
+    "trigger_signals": [
+      "S-SCH-SCHEME"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Proposal / concept",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-03"
+    ],
+    "proof_points": null,
+    "notes": "Pipeline plan completed; build status to confirm"
+  },
+  {
+    "offer_id": "SCH-06",
+    "name": "Learning ESO (mastery execution)",
+    "parent_product": "Scholar K-12",
+    "modules_components": "Runtime mastery layer on Concept Intelligence",
+    "what_it_does": "Personalised mastery paths executed per learner",
+    "needs_solved": [
+      "N18"
+    ],
+    "primary_segments": [
+      "K12-PVT",
+      "K12-TRUST"
+    ],
+    "trigger_signals": [
+      "S-SCH-SCHEME"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Pilot planned",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-03"
+    ],
+    "proof_points": null,
+    "notes": "One-chapter pilot planned"
+  },
+  {
+    "offer_id": "SCH-07",
+    "name": "School FTS / Digital Office",
+    "parent_product": "Scholar K-12",
+    "modules_components": "eOffice-style file tracking",
+    "what_it_does": "Digital file movement and tracking for school administration",
+    "needs_solved": [
+      "N16"
+    ],
+    "primary_segments": [
+      "K12-TRUST",
+      "K12-GOVT"
+    ],
+    "trigger_signals": [
+      "S-SCH-SEEK",
+      "S-SCH-SCHEME"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Proposal / concept",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-01"
+    ],
+    "proof_points": "Client-facing proposal prepared",
+    "notes": null
+  },
+  {
+    "offer_id": "SCH-08",
+    "name": "School Bundle",
+    "parent_product": "Bundle",
+    "modules_components": "SCH-01 + SCH-03 + SCH-04 + G2G-10",
+    "what_it_does": "Commercial entry point packaging ERP, LMS-PAL, Career Intelligence and teacher CPD",
+    "needs_solved": [
+      "N12",
+      "N14",
+      "N15",
+      "N17"
+    ],
+    "primary_segments": [
+      "K12-PVT",
+      "K12-TRUST"
+    ],
+    "trigger_signals": [
+      "S-SCH-NEW",
+      "S-SCH-SEEK"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Proposal / concept",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "SCH-01",
+      "SCH-03",
+      "SCH-04",
+      "G2G-10"
+    ],
+    "proof_points": null,
+    "notes": "Only the live components should be sold today"
+  },
+  {
+    "offer_id": "BUN-01",
+    "name": "SME Capability + Intelligence Bundle",
+    "parent_product": "Bundle",
+    "modules_components": "G2G (G2G-03, G2G-06) + EB (EB-01) + AI (G2G-08)",
+    "what_it_does": "Capability + intelligence + AI agents for companies up to ₹100 Cr turnover, 100–500 people",
+    "needs_solved": [
+      "N02",
+      "N06",
+      "N09",
+      "N08"
+    ],
+    "primary_segments": [
+      "SME"
+    ],
+    "trigger_signals": [
+      "S-SME-FUND",
+      "S-LEAD-HIRE"
+    ],
+    "deployment_model": "Hybrid",
+    "readiness_status": "Proposal / concept",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [
+      "G2G-03",
+      "EB-01",
+      "G2G-08"
+    ],
+    "proof_points": null,
+    "notes": "Leading ICP for G2G BD — pricing to define"
+  },
+  {
+    "offer_id": "HE-01",
+    "name": "Higher Education ERP",
+    "parent_product": "HE",
+    "modules_components": "HE product",
+    "what_it_does": "Administration ERP for colleges and universities",
+    "needs_solved": [
+      "N19"
+    ],
+    "primary_segments": [
+      "UNIV"
+    ],
+    "trigger_signals": [
+      "S-INST-HRD",
+      "S-INST-ACCR"
+    ],
+    "deployment_model": "SaaS (multi-tenant)",
+    "readiness_status": "Deferred",
+    "readiness_confirmed": false,
+    "typical_deal_band": "To fill",
+    "pricing_model": "To fill",
+    "implementation_effort": "To fill",
+    "delivery_owner": "To fill",
+    "bundles_with": [],
+    "proof_points": null,
+    "notes": "Deliberately deferred"
+  }
+]

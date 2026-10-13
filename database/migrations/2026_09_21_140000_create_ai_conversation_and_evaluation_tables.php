@@ -192,16 +192,16 @@ return new class extends Migration
             $table->string('label', 200);
             // The variable bag this case supplies to the template, as JSON. This is
             // the input side of the test and the reason a run is reproducible.
-            $table->json('variables')->nullable();
+            $table->longText('variables')->nullable();
 
             // What a correct answer must contain. Kept as a list of required phrases
             // rather than an exact expected string: an exact match against generated
             // prose fails on wording that is entirely correct, which would make every
             // score meaningless.
-            $table->json('expect_contains')->nullable();
+            $table->longText('expect_contains')->nullable();
             // ...and what it must not. The more useful half in practice — "must not
             // invent a number", "must not name an employee".
-            $table->json('expect_absent')->nullable();
+            $table->longText('expect_absent')->nullable();
 
             $table->longText('output')->nullable();
             $table->decimal('score', 5, 4)->nullable();

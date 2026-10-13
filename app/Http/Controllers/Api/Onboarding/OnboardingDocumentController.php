@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Onboarding\Concerns\ResolvesOnboardingContext;
 use App\Models\Onboarding\OnboardingDocument;
 use App\Models\Onboarding\OnboardingJourney;
+use App\Services\Documents\Federation\OnboardingDocumentIndexer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -155,6 +156,8 @@ class OnboardingDocumentController extends Controller
             (int) $journey->id
         );
 
+        $this->indexDocument($document->id);
+
         return $this->onboardingResponse($this->presentDocument($document, collect()), 'Document added', 201);
     }
 
@@ -226,6 +229,8 @@ class OnboardingDocumentController extends Controller
             );
         }
 
+        $this->indexDocument($document->id);
+
         return $this->onboardingResponse($this->presentDocument($document, collect()), 'Document updated');
     }
 
@@ -263,7 +268,28 @@ class OnboardingDocumentController extends Controller
             $journeyId
         );
 
+        try {
+            app(OnboardingDocumentIndexer::class)->removeById((int) $id);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return $this->onboardingResponse(['id' => (int) $id], 'Document deleted');
+    }
+
+    /**
+     * Mirrors this document into the Document Library's search index -
+     * never lets an indexing failure take down the request that just
+     * succeeded at the thing it actually came here to do. See
+     * `OnboardingDocumentIndexer`'s docblock.
+     */
+    private function indexDocument(int $id): void
+    {
+        try {
+            app(OnboardingDocumentIndexer::class)->indexById($id);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /** @return array{0:string, 1:string} [fileName, storedPath] */
