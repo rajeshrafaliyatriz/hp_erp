@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
@@ -31,6 +32,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CrmServiceContractController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmAuditTrail;
     use HasCrmBulkActions;
     use HasCrmExport;
 
@@ -247,6 +249,7 @@ class CrmServiceContractController extends Controller
         $data['updated_at'] = now();
 
         DB::table('crm_service_contracts')->where('id', $id)->update($data);
+        $this->recordCrmAudit('crm.service_contract.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Service contract updated.', 'data' => $this->resource($row)]);
@@ -260,7 +263,9 @@ class CrmServiceContractController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Service contract not found.'], 404);
         }
 
@@ -269,7 +274,18 @@ class CrmServiceContractController extends Controller
             'deleted_by' => $identity['user_id'],
         ]);
 
+        $this->recordCrmAudit(
+            'crm.service_contract.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
+
         return response()->json(['status' => 1, 'message' => 'Service contract moved to Recycle Bin.']);
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_service_contracts';
     }
 
     public function bulkDelete(Request $request): JsonResponse

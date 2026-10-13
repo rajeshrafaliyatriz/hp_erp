@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmComments;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDocuments;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -32,6 +36,10 @@ class CrmOpportunityController extends Controller
     use ResolvesApiIdentity;
     use HasCrmBulkActions;
     use HasCrmExport;
+    use HasCrmComments;
+    use HasCrmDocuments;
+    use HasCrmEmailLinks;
+    use HasCrmAuditTrail;
 
     /** @var array<string, string> db column => CSV header, in export column order. */
     private const EXPORT_COLUMNS = [
@@ -254,6 +262,9 @@ class CrmOpportunityController extends Controller
         $this->maybeWriteStageHistory($existing, $data, $identity['user_id']);
 
         DB::table('crm_opportunities')->where('id', $id)->update($data);
+
+        $this->recordCrmAudit('crm.opportunity.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+
         $row = $this->ownRowJoined($identity['sub_institute_id'], $id);
 
         return response()->json(['status' => 1, 'message' => 'Opportunity updated.', 'data' => $this->resource($row)]);
@@ -343,7 +354,9 @@ class CrmOpportunityController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Opportunity not found.'], 404);
         }
 
@@ -351,6 +364,12 @@ class CrmOpportunityController extends Controller
             'deleted_at' => now(),
             'deleted_by' => $identity['user_id'],
         ]);
+
+        $this->recordCrmAudit(
+            'crm.opportunity.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
 
         return response()->json(['status' => 1, 'message' => 'Opportunity moved to Recycle Bin.']);
     }
@@ -726,6 +745,68 @@ class CrmOpportunityController extends Controller
     private function ownRowJoined(int $tenantId, int $id): ?object
     {
         return $this->baseQuery($tenantId)->where('op.id', $id)->first();
+    }
+
+    /**
+     * Projects in the Task Management module linked to this Opportunity, via
+     * task_management_projects.crm_opportunity_id. Mirrors
+     * CrmOrganizationController::projects() exactly; not shared via a trait,
+     * same reasoning there - 2 call sites total.
+     */
+    public function projects(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+            return response()->json(['status' => 0, 'message' => 'Opportunity not found.'], 404);
+        }
+
+        $rows = DB::table('task_management_projects')
+            ->where('crm_opportunity_id', $id)
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->orderByDesc('updated_at')
+            ->get(['id', 'code', 'name', 'status', 'priority']);
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Linked projects.',
+            'data' => $rows->map(fn ($row) => [
+                'id' => (string) $row->id,
+                'code' => $row->code,
+                'name' => $row->name,
+                'status' => $row->status,
+                'priority' => $row->priority,
+            ])->all(),
+        ]);
+    }
+
+    protected function commentsTable(): string
+    {
+        return 'crm_opportunity_comments';
+    }
+
+    protected function commentsForeignKey(): string
+    {
+        return 'opportunity_id';
+    }
+
+    protected function documentsLinkedType(): string
+    {
+        return 'OPPORTUNITY';
+    }
+
+    protected function emailsLinkedType(): string
+    {
+        return 'OPPORTUNITY';
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_opportunities';
     }
 
     /** @return array<string, mixed> */

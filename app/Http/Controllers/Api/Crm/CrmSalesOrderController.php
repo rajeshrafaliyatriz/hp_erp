@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
@@ -30,6 +31,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CrmSalesOrderController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmAuditTrail;
     use HasCrmBulkActions;
     use HasCrmExport;
 
@@ -217,6 +219,7 @@ class CrmSalesOrderController extends Controller
         $data['updated_at'] = now();
 
         DB::table('crm_sales_orders')->where('id', $id)->update($data);
+        $this->recordCrmAudit('crm.sales_order.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
 
         /*
          * A header-only save can still touch shippingHandlingAmount/
@@ -302,7 +305,9 @@ class CrmSalesOrderController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Sales order not found.'], 404);
         }
 
@@ -311,7 +316,18 @@ class CrmSalesOrderController extends Controller
             'deleted_by' => $identity['user_id'],
         ]);
 
+        $this->recordCrmAudit(
+            'crm.sales_order.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
+
         return response()->json(['status' => 1, 'message' => 'Sales order moved to Recycle Bin.']);
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_sales_orders';
     }
 
     public function bulkDelete(Request $request): JsonResponse

@@ -462,6 +462,10 @@ class ProjectController extends Controller
             'due_date' => 'required|date|after_or_equal:start_date', 'budget_estimate' => 'nullable|numeric|min:0',
             'client_name' => 'nullable|string|max:191', 'regulatory_flags' => 'nullable|array',
             'regulatory_flags.*' => 'string|max:30',
+            // CRM<->Project link (2026-10). Both nullable FKs onto
+            // crm_organizations/crm_opportunities - tenant-checked in the
+            // after() hook below, same pattern as department_ids.
+            'crm_organization_id' => 'nullable|integer', 'crm_opportunity_id' => 'nullable|integer',
         ])->after(function ($validator) use ($request, $context) {
             // Every department named must belong to THIS tenant. Without this a
             // caller could attach a project to another organisation's
@@ -485,6 +489,30 @@ class ProjectController extends Controller
 
             try { $this->validateTenantUsers(array_filter(array_merge($request->input('member_ids', []), [$request->input('manager_id'), $request->input('sponsor_id')])), $context); }
             catch (\InvalidArgumentException $e) { $validator->errors()->add('member_ids', $e->getMessage()); }
+
+            /*
+             * A linked Organization/Opportunity must belong to THIS tenant -
+             * same reasoning as the department check above: without this a
+             * project could be pointed at another organisation's CRM record
+             * and silently render its name. Scoped on sub_institute_id only,
+             * matching every other cross-module FK into CRM this phase -
+             * crm_organizations/crm_opportunities have no syear of their own.
+             */
+            if ($request->filled('crm_organization_id') && ! DB::table('crm_organizations')
+                    ->where('id', $request->input('crm_organization_id'))
+                    ->where('sub_institute_id', $context['sub_institute_id'])
+                    ->whereNull('deleted_at')
+                    ->exists()) {
+                $validator->errors()->add('crm_organization_id', 'That organization does not belong to this tenant.');
+            }
+
+            if ($request->filled('crm_opportunity_id') && ! DB::table('crm_opportunities')
+                    ->where('id', $request->input('crm_opportunity_id'))
+                    ->where('sub_institute_id', $context['sub_institute_id'])
+                    ->whereNull('deleted_at')
+                    ->exists()) {
+                $validator->errors()->add('crm_opportunity_id', 'That opportunity does not belong to this tenant.');
+            }
         });
     }
 
@@ -575,7 +603,7 @@ class ProjectController extends Controller
 
     private function projectPayload(Request $request, array $context): array
     {
-        return [
+        $payload = [
             'name' => trim($request->input('name')), 'category' => $request->input('category'),
             'description' => trim($request->input('description')), 'department_id' => $request->input('department_id'),
             'sponsor_id' => $request->input('sponsor_id'), 'manager_id' => $request->input('manager_id'),
@@ -585,6 +613,31 @@ class ProjectController extends Controller
             'client_name' => $request->input('client_name'), 'regulatory_flags' => json_encode($request->input('regulatory_flags', [])),
             'sub_institute_id' => $context['sub_institute_id'], 'syear' => $context['syear'],
         ];
+
+        /*
+         * CRM<->Project link fields are set ONLY when the caller actually sent
+         * them. The stock Edit Project modal (create-project-modal.tsx) never
+         * seeds or round-trips crm_organization_id/crm_opportunity_id into its
+         * form state - that was never part of this gap's spec, which only
+         * asked for a read-only display upgrade in project-command-bar.tsx.
+         * So a PUT from that modal carries no such keys at all.
+         *
+         * If this payload always included both keys, update()'s full-column
+         * overwrite would read $request->input() as null for a field the
+         * caller never mentioned and write NULL over it - silently clearing a
+         * CRM link every time someone fixes a typo in the project name. Using
+         * has() instead of filled()/input() means "the caller is silent on
+         * this field" leaves the column untouched, while an explicit null
+         * (deliberately unlinking) still gets written.
+         */
+        if ($request->has('crm_organization_id')) {
+            $payload['crm_organization_id'] = $request->input('crm_organization_id');
+        }
+        if ($request->has('crm_opportunity_id')) {
+            $payload['crm_opportunity_id'] = $request->input('crm_opportunity_id');
+        }
+
+        return $payload;
     }
 
     private function projectQuery(array $context): Builder
@@ -593,10 +646,17 @@ class ProjectController extends Controller
             ->leftJoin('tbluser as manager', 'manager.id', '=', 'p.manager_id')
             ->leftJoin('tbluser as sponsor', 'sponsor.id', '=', 'p.sponsor_id')
             ->leftJoin('hrms_departments as department', 'department.id', '=', 'p.department_id')
+            // Denormalized the same way CRM entities denormalize their own
+            // *Name fields - a project that outlives its linked Organization/
+            // Opportunity (FK is nullOnDelete) just shows a blank name, never
+            // an error.
+            ->leftJoin('crm_organizations as crm_org', 'crm_org.id', '=', 'p.crm_organization_id')
+            ->leftJoin('crm_opportunities as crm_opp', 'crm_opp.id', '=', 'p.crm_opportunity_id')
             ->where('p.sub_institute_id', $context['sub_institute_id'])->where('p.syear', $context['syear'])
             ->select('p.*', 'department.department as department_name',
                 DB::raw("TRIM(CONCAT_WS(' ', manager.first_name, manager.middle_name, manager.last_name)) as manager_name"),
                 DB::raw("TRIM(CONCAT_WS(' ', sponsor.first_name, sponsor.middle_name, sponsor.last_name)) as sponsor_name"),
+                'crm_org.name as crm_organization_name', 'crm_opp.name as crm_opportunity_name',
                 DB::raw('(SELECT COUNT(*) FROM task_management_project_members pm WHERE pm.project_id = p.id) as members_count'),
                 /*
                  * ── A DELETED TASK IS NOT AN OUTSTANDING TASK ──────────────
@@ -717,6 +777,10 @@ class ProjectController extends Controller
             'manager' => $row->manager_name, 'team_size' => $row->team_size, 'priority' => $row->priority,
             'status' => $row->status, 'start_date' => $row->start_date, 'due_date' => $row->due_date,
             'budget_estimate' => $row->budget_estimate, 'client_name' => $row->client_name,
+            'crm_organization_id' => $row->crm_organization_id ? (string) $row->crm_organization_id : null,
+            'crm_organization_name' => $row->crm_organization_name ?? null,
+            'crm_opportunity_id' => $row->crm_opportunity_id ? (string) $row->crm_opportunity_id : null,
+            'crm_opportunity_name' => $row->crm_opportunity_name ?? null,
             'regulatory_flags' => json_decode($row->regulatory_flags ?: '[]', true) ?: [],
             'members_count' => (int) $row->members_count, 'tasks_total' => $total,
             'tasks_completed' => $completed,

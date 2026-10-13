@@ -69,6 +69,8 @@ class CalendarController extends Controller
 
     public function storeEvent(Request $request)
     {
+        $this->maybeDefaultCrmSyear($request);
+
         $context = $this->taskContext($request);
         if (!is_array($context)) {
             return $context;
@@ -386,6 +388,46 @@ class CalendarController extends Controller
         );
     }
 
+    /**
+     * One record's own slice of the calendar (CRM Activities/Calendar gap) —
+     * every Event linked to this Lead/Contact/Organization/Opportunity/
+     * Ticket, listed without pulling a whole date-range feed the way
+     * `index()` does. Tenant-scoped only (`sub_institute_id`), deliberately
+     * NOT also scoped by `syear` the way `findTenantEvent()` is: CRM records
+     * have no academic-year concept, and a record's activity history is not
+     * expected to reset every year the way a task-management syear-scoped
+     * view does elsewhere in this module.
+     */
+    public function linkedEvents(Request $request, string $linkedType, int $linkedId)
+    {
+        // Same syear carve-out as storeEvent()'s maybeDefaultCrmSyear(), but
+        // keyed off the ROUTE's own {linkedType} segment rather than a
+        // `linked_type` request field - this endpoint has no such field, the
+        // type is the URL path itself. CRM callers (crm-schedule-tab.tsx)
+        // never send syear, since none of the 5 CRM entities have one.
+        if (trim((string) $request->input('syear')) === ''
+            && in_array(strtoupper($linkedType), ['LEAD', 'CONTACT', 'ORGANIZATION', 'OPPORTUNITY', 'TICKET'], true)) {
+            $request->merge(['syear' => (string) now()->year]);
+        }
+
+        $context = $this->taskContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $rows = DB::table('task_management_calendar_events')
+            ->where('linked_type', strtoupper($linkedType))
+            ->where('linked_id', $linkedId)
+            ->where('sub_institute_id', $context['sub_institute_id'])
+            ->whereNull('deleted_at')
+            ->orderBy('start_at')
+            ->get();
+
+        return $this->ok('Linked events retrieved successfully.', [
+            'entries' => $rows->map(fn ($row) => $this->resource($row))->all(),
+        ]);
+    }
+
     public function listAttendees(Request $request, int $id)
     {
         $context = $this->taskContext($request);
@@ -513,9 +555,39 @@ class CalendarController extends Controller
             'all_day' => 'nullable|boolean',
             'owner_id' => 'nullable|integer',
             'visibility' => 'nullable|in:PUBLIC,PRIVATE',
-            'linked_type' => 'nullable|in:PROJECT,WORKSTREAM,TASK,BACKLOG_ITEM|required_with:linked_id',
+            // LEAD/CONTACT/ORGANIZATION/OPPORTUNITY/TICKET (CRM Activities/
+            // Calendar gap) added alongside the 4 task-management types this
+            // whitelist already accepted — same pointer concept, 5 more
+            // tables it may legally point at.
+            'linked_type' => 'nullable|in:PROJECT,WORKSTREAM,TASK,BACKLOG_ITEM,LEAD,CONTACT,ORGANIZATION,OPPORTUNITY,TICKET|required_with:linked_id',
             'linked_id' => 'nullable|integer|min:1|required_with:linked_type',
         ];
+    }
+
+    /**
+     * CRM has never tracked a `syear` — the concept this whole module's
+     * `taskContext()` otherwise requires on every single request. Rather
+     * than teach every CRM caller to invent or track one, a CRM-linked
+     * create defaults it here, server-side, to the current calendar year —
+     * but ONLY when the caller is actually pointing at one of the 5 new CRM
+     * link types AND genuinely sent no syear of its own. The 4 pre-existing
+     * link types (PROJECT/WORKSTREAM/TASK/BACKLOG_ITEM) are untouched: they
+     * still require a real client-supplied syear exactly as before, because
+     * this never fires unless linked_type is one of the CRM five.
+     *
+     * Must run BEFORE taskContext() — that trait method reads `syear`
+     * straight off the request and fails the whole call with a 422 the
+     * instant it's blank, before eventRules() or linkedTargetExists() ever
+     * get a chance to look at linked_type.
+     */
+    private function maybeDefaultCrmSyear(Request $request): void
+    {
+        $linkedType = (string) $request->input('linked_type');
+        $syear = trim((string) $request->input('syear'));
+
+        if ($syear === '' && in_array($linkedType, ['LEAD', 'CONTACT', 'ORGANIZATION', 'OPPORTUNITY', 'TICKET'], true)) {
+            $request->merge(['syear' => (string) now()->year]);
+        }
     }
 
     private function eventAttributes(Request $request, bool $isUpdate = false): array
@@ -576,6 +648,34 @@ class CalendarController extends Controller
                 ->where('id', $id)
                 ->where('sub_institute_id', $context['sub_institute_id'])
                 ->where('syear', $context['syear'])
+                ->exists(),
+            // CRM Activities/Calendar gap — tenant-scoped only via
+            // sub_institute_id, same as linkedEvents() and the rest of this
+            // phase: CRM tables carry no syear column to check against.
+            'LEAD' => DB::table('crm_leads')
+                ->where('id', $id)
+                ->where('sub_institute_id', $context['sub_institute_id'])
+                ->whereNull('deleted_at')
+                ->exists(),
+            'CONTACT' => DB::table('crm_contacts')
+                ->where('id', $id)
+                ->where('sub_institute_id', $context['sub_institute_id'])
+                ->whereNull('deleted_at')
+                ->exists(),
+            'ORGANIZATION' => DB::table('crm_organizations')
+                ->where('id', $id)
+                ->where('sub_institute_id', $context['sub_institute_id'])
+                ->whereNull('deleted_at')
+                ->exists(),
+            'OPPORTUNITY' => DB::table('crm_opportunities')
+                ->where('id', $id)
+                ->where('sub_institute_id', $context['sub_institute_id'])
+                ->whereNull('deleted_at')
+                ->exists(),
+            'TICKET' => DB::table('crm_tickets')
+                ->where('id', $id)
+                ->where('sub_institute_id', $context['sub_institute_id'])
+                ->whereNull('deleted_at')
                 ->exists(),
             default => false,
         };

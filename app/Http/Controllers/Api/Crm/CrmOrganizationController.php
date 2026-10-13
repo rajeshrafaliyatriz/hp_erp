@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmComments;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDocuments;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
@@ -27,6 +31,10 @@ class CrmOrganizationController extends Controller
     use HasCrmDuplicateDetection;
     use HasCrmMerge;
     use HasCrmExport;
+    use HasCrmComments;
+    use HasCrmDocuments;
+    use HasCrmEmailLinks;
+    use HasCrmAuditTrail;
 
     /** @var array<string, string> db column => CSV header, in export column order. */
     private const EXPORT_COLUMNS = [
@@ -155,7 +163,9 @@ class CrmOrganizationController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Organization not found.'], 404);
         }
 
@@ -192,6 +202,9 @@ class CrmOrganizationController extends Controller
         $data['updated_at'] = now();
 
         DB::table('crm_organizations')->where('id', $id)->update($data);
+
+        $this->recordCrmAudit('crm.organization.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+
         $row = DB::table('crm_organizations')->where('id', $id)->first();
 
         return response()->json(['status' => 1, 'message' => 'Organization updated.', 'data' => $this->resource($row)]);
@@ -205,7 +218,9 @@ class CrmOrganizationController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Organization not found.'], 404);
         }
 
@@ -219,6 +234,12 @@ class CrmOrganizationController extends Controller
             'deleted_at' => now(),
             'deleted_by' => $identity['user_id'],
         ]);
+
+        $this->recordCrmAudit(
+            'crm.organization.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
 
         return response()->json(['status' => 1, 'message' => 'Organization moved to Recycle Bin.']);
     }
@@ -547,6 +568,68 @@ class CrmOrganizationController extends Controller
             ->where('sub_institute_id', $tenantId)
             ->whereNull('deleted_at')
             ->first();
+    }
+
+    /**
+     * Projects in the Task Management module linked to this Organization, via
+     * task_management_projects.crm_organization_id - the reverse side of the
+     * FK ProjectController now accepts. A simple read, not worth a trait for
+     * the 2 call sites (here and the Opportunity equivalent).
+     */
+    public function projects(Request $request, int $id): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (! is_array($identity)) {
+            return $identity;
+        }
+
+        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+            return response()->json(['status' => 0, 'message' => 'Organization not found.'], 404);
+        }
+
+        $rows = DB::table('task_management_projects')
+            ->where('crm_organization_id', $id)
+            ->where('sub_institute_id', $identity['sub_institute_id'])
+            ->orderByDesc('updated_at')
+            ->get(['id', 'code', 'name', 'status', 'priority']);
+
+        return response()->json([
+            'status' => 1,
+            'message' => 'Linked projects.',
+            'data' => $rows->map(fn ($row) => [
+                'id' => (string) $row->id,
+                'code' => $row->code,
+                'name' => $row->name,
+                'status' => $row->status,
+                'priority' => $row->priority,
+            ])->all(),
+        ]);
+    }
+
+    protected function commentsTable(): string
+    {
+        return 'crm_organization_comments';
+    }
+
+    protected function commentsForeignKey(): string
+    {
+        return 'organization_id';
+    }
+
+    protected function documentsLinkedType(): string
+    {
+        return 'ORGANIZATION';
+    }
+
+    protected function emailsLinkedType(): string
+    {
+        return 'ORGANIZATION';
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_organizations';
     }
 
     /** @return array<string, mixed> */

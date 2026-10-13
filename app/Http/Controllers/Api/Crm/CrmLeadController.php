@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmComments;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmDocuments;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmDuplicateDetection;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmEmailLinks;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmMerge;
 use App\Http\Controllers\Controller;
@@ -30,6 +34,10 @@ class CrmLeadController extends Controller
     use HasCrmDuplicateDetection;
     use HasCrmMerge;
     use HasCrmExport;
+    use HasCrmComments;
+    use HasCrmDocuments;
+    use HasCrmEmailLinks;
+    use HasCrmAuditTrail;
 
     /** @var array<string, string> db column => CSV header, in export column order. Also the accepted import row keys (camelCase - matches payload()'s map). */
     private const EXPORT_COLUMNS = [
@@ -202,6 +210,8 @@ class CrmLeadController extends Controller
 
         DB::table('crm_leads')->where('id', $id)->update($data);
 
+        $this->recordCrmAudit('crm.lead.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
+
         $row = DB::table('crm_leads')->where('id', $id)->first();
 
         return response()->json(['status' => 1, 'message' => 'Lead updated.', 'data' => $this->resource($row)]);
@@ -229,6 +239,12 @@ class CrmLeadController extends Controller
             'deleted_at' => now(),
             'deleted_by' => $identity['user_id'],
         ]);
+
+        $this->recordCrmAudit(
+            'crm.lead.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
 
         return response()->json(['status' => 1, 'message' => 'Lead moved to Recycle Bin.']);
     }
@@ -582,6 +598,45 @@ class CrmLeadController extends Controller
                 'opportunityId' => $opportunityId ? (string) $opportunityId : null,
             ],
         ]);
+    }
+
+    protected function commentsTable(): string
+    {
+        return 'crm_lead_comments';
+    }
+
+    protected function commentsForeignKey(): string
+    {
+        return 'lead_id';
+    }
+
+    protected function documentsLinkedType(): string
+    {
+        return 'LEAD';
+    }
+
+    protected function emailsLinkedType(): string
+    {
+        return 'LEAD';
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_leads';
+    }
+
+    /**
+     * CrmLeadController has no pre-existing ownRow() (unlike every other CRM
+     * controller) - added so HasCrmComments/HasCrmDocuments/HasCrmEmailLinks/
+     * HasCrmAuditTrail's own 404 guards and history() action have it.
+     */
+    private function ownRow(int $tenantId, int $id): ?object
+    {
+        return DB::table('crm_leads')
+            ->where('id', $id)
+            ->where('sub_institute_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->first();
     }
 
     private function nextLeadNo(int $subInstituteId): string

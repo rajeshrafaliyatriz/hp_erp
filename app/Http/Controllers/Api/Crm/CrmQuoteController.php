@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Crm;
 
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
+use App\Http\Controllers\Api\Crm\Concerns\HasCrmAuditTrail;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmBulkActions;
 use App\Http\Controllers\Api\Crm\Concerns\HasCrmExport;
 use App\Http\Controllers\Controller;
@@ -37,6 +38,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class CrmQuoteController extends Controller
 {
     use ResolvesApiIdentity;
+    use HasCrmAuditTrail;
     use HasCrmBulkActions;
     use HasCrmExport;
 
@@ -222,6 +224,7 @@ class CrmQuoteController extends Controller
         $this->maybeWriteQuoteStatusHistory($existing, $data, $identity['user_id']);
 
         DB::table('crm_quotes')->where('id', $id)->update($data);
+        $this->recordCrmAudit('crm.quote.updated', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'], (array) $existing, array_merge((array) $existing, $data));
 
         /*
          * A header-only save can still touch shippingHandlingAmount/
@@ -244,7 +247,9 @@ class CrmQuoteController extends Controller
             return $identity;
         }
 
-        if (! $this->ownRow($identity['sub_institute_id'], $id)) {
+        $existing = $this->ownRow($identity['sub_institute_id'], $id);
+
+        if (! $existing) {
             return response()->json(['status' => 0, 'message' => 'Quote not found.'], 404);
         }
 
@@ -253,7 +258,18 @@ class CrmQuoteController extends Controller
             'deleted_by' => $identity['user_id'],
         ]);
 
+        $this->recordCrmAudit(
+            'crm.quote.deleted', $identity['sub_institute_id'], $this->auditEntityType(), $id, $identity['user_id'],
+            (array) $existing,
+            array_merge((array) $existing, ['deleted_at' => now()->toDateTimeString(), 'deleted_by' => $identity['user_id']]),
+        );
+
         return response()->json(['status' => 1, 'message' => 'Quote moved to Recycle Bin.']);
+    }
+
+    protected function auditEntityType(): string
+    {
+        return 'crm_quotes';
     }
 
     public function bulkDelete(Request $request): JsonResponse
