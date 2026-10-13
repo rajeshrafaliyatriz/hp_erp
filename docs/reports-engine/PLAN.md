@@ -294,13 +294,12 @@ data field only, matches vtiger), VerticalBar/HorizontalBar/Line→
 
 **Phase 0 is fully done (backend + frontend). Next: Phase 1 — Task Management.**
 
-- [ ] **Phase 1 — Task Management (the proving ground).**
-  - [ ] Register `task_management.tasks` (table `task`).
-  - [ ] Register `task_management.events` (table `task_management_calendar_events`).
-  - [ ] Register `task_management.projects` (joined via pivot `task_management_project_tasks`).
-  - [ ] Seed 3 system folders: Task Reports, Events Report, Assigned Tasks Report.
-  - [ ] Replace `tm-reports.tsx`'s menu entry (`content-map-m6.ts`, access_link `/module/task-management/reports-and-analysis`) with the new shell.
-  - [ ] Live-verify: a real Task report (tabular), an Events summary grouped by status, an Assigned-Tasks chart grouped by assignee; confirm tenant scoping and CSV export.
+- [x] **Phase 1 — Task Management (the proving ground). DONE.** *(hp_erp `85f93a10`, g2gv0 `82d8596`)*
+  - [x] Registered `task_management.tasks` (table `task`), `task_management.events` (table `task_management_calendar_events`), `task_management.projects` (joined via pivot `task_management_project_tasks`) — schema verified directly against the real migrations, not assumed.
+  - [x] System folders (Task Reports, Events Report, Assigned Tasks Report) — built as LAZY per-tenant creation (`SystemReportFolders::ensure()`, called from the folder-list endpoint) instead of a migration backfill, so future tenants get them automatically too.
+  - [x] Replaced `tm-reports.tsx`'s menu entry (`content-map-m6.ts`, access_link `/module/task-management/reports-and-analysis`, menuId `215`) with `TmReportsShell` → the generic `ReportsShell`. Old screen/endpoints left in place, just unreferenced (grace period, not deleted).
+  - [x] **Real bug found and fixed via live testing, not assumed correct:** secondary-module joins used INNER JOIN, silently returning zero rows whenever the joined record didn't exist (e.g. adding a "Project" column to a Tasks report dropped every task with no linked project). Fixed to LEFT JOIN for all join kinds + the target's own soft-delete filter applied safely. Confirmed this matches the real vtiger reference's own behavior ("Contacts by Accounts" vs "Contacts WITHOUT Accounts" are different reports — the join itself must never filter).
+  - [x] Live-verified against tenant 7's real 1005 tasks: modules/fields/folders list correctly; tabular (with the Assignee column showing a real joined name, not a raw id), summary (grouped by assignee), pivot (status × priority matrix, totals correct), and chart (count by status) all return correct real data; the LEFT JOIN fix confirmed by re-running the same secondary-module test before/after.
 
 - [ ] **Phase 2 — `crm_activities` (new entity).**
   - [ ] Build the `crm_activities` table + indexes.
