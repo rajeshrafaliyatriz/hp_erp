@@ -134,19 +134,30 @@ class DeliveryController extends Controller
             ], 422);
         }
 
-        $id = DB::table('smtp_details')->insertGetId([
-            'label' => $data['label'],
-            'module_key' => $data['module_key'],
-            'gmail' => $data['from_address'],
-            'from_name' => $data['from_name'] ?? null,
-            'server_address' => $data['server'],
-            'port' => (string) $data['port'],
-            'password' => Crypt::encryptString($data['password']),
-            'sub_institute_id' => $tenantId,
-            'created_by' => $identity['user_id'],
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        try {
+            $id = DB::table('smtp_details')->insertGetId([
+                'label' => $data['label'],
+                'module_key' => $data['module_key'],
+                'gmail' => $data['from_address'],
+                'from_name' => $data['from_name'] ?? null,
+                'server_address' => $data['server'],
+                'port' => (string) $data['port'],
+                'password' => Crypt::encryptString($data['password']),
+                'sub_institute_id' => $tenantId,
+                'created_by' => $identity['user_id'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+            // The check above can still lose a genuine race (two submits at
+            // once) - the unique index is the real guarantee, this is just
+            // making sure its violation reaches the admin as a sentence
+            // rather than as a raw SQL error.
+            return response()->json([
+                'status' => 0,
+                'message' => 'This organisation already has a sender profile for that module. Edit the existing one instead.',
+            ], 422);
+        }
 
         $row = DB::table('smtp_details')->where('id', $id)->first(['id', 'label', 'module_key', 'gmail', 'from_name', 'server_address', 'port', 'password', 'updated_at']);
 
@@ -193,7 +204,14 @@ class DeliveryController extends Controller
             $payload['password'] = Crypt::encryptString($data['password']);
         }
 
-        DB::table('smtp_details')->where('id', $id)->update($payload);
+        try {
+            DB::table('smtp_details')->where('id', $id)->update($payload);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+            return response()->json([
+                'status' => 0,
+                'message' => 'This organisation already has a sender profile for that module. Edit the existing one instead.',
+            ], 422);
+        }
 
         $row = DB::table('smtp_details')->where('id', $id)->first(['id', 'label', 'module_key', 'gmail', 'from_name', 'server_address', 'port', 'password', 'updated_at']);
 
@@ -215,10 +233,21 @@ class DeliveryController extends Controller
             return response()->json(['status' => 0, 'message' => 'Sender profile not found.'], 404);
         }
 
-        DB::table('smtp_details')->where('id', $id)->update([
-            'deleted_at' => now(),
-            'deleted_by' => $identity['user_id'],
-        ]);
+        /*
+         * HARD DELETE, NOT SOFT - unlike the rest of this codebase's
+         * convention, and deliberately so.
+         *
+         * `unique(sub_institute_id, module_key)` has no idea what `deleted_at`
+         * means - it is a plain column, not a partial/filtered index (MySQL
+         * has no such thing). A soft-deleted row still occupies its slot, so
+         * deleting a profile and then trying to re-add one for the SAME
+         * module fails with a raw "Duplicate entry" the admin never typed -
+         * confirmed live: tenant 6 hit exactly this deleting and recreating
+         * a 'default' profile. There is no audit/compliance reason to keep a
+         * dead row of SMTP credentials around, so removing it for real is
+         * both simpler and correct here.
+         */
+        DB::table('smtp_details')->where('id', $id)->delete();
 
         return response()->json(['status' => 1, 'message' => 'Sender profile removed. Mail for that module now falls back to the organisation default.']);
     }
