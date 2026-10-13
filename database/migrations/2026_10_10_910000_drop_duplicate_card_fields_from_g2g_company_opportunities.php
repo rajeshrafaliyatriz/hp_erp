@@ -28,10 +28,19 @@ return new class extends Migration
 
     private const COLUMNS = ['what_to_sell', 'buying_trigger', 'outreach_angle', 'likely_buyer_role'];
 
+    /*
+     * NOT `SHOW COLUMNS ... LIKE ?` - a bound parameter on a SHOW statement
+     * fails on this MariaDB version ("Syntax error ... near '?'", confirmed
+     * live). information_schema.COLUMNS is a real table, so a bound SELECT
+     * against it works where a SHOW's placeholder does not.
+     */
     private function hasColumn(string $column): bool
     {
         if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
-            return ! empty(DB::select('SHOW COLUMNS FROM `' . self::TABLE . '` LIKE ?', [$column]));
+            return DB::selectOne(
+                'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+                [self::TABLE, $column]
+            ) !== null;
         }
 
         return Schema::hasColumn(self::TABLE, $column);

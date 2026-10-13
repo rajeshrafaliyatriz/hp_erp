@@ -23,11 +23,24 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
+    /*
+     * `SHOW COLUMNS ... LIKE ?` with a bound parameter, not a literal:
+     * confirmed failing on this MariaDB version with "Syntax error ...
+     * near '?'" - a `SHOW` statement does not take a placeholder the way a
+     * `SELECT` does on every driver/version this runs against.
+     * `information_schema.COLUMNS` is a real table, so a bound `SELECT`
+     * against it works everywhere - same fix this app already applies
+     * elsewhere (see the centralized-mail migration's own `columnType()`).
+     */
     private function hasOnUpdate(): bool
     {
-        $row = DB::select('SHOW COLUMNS FROM `g2g_company_opportunities` LIKE ?', ['first_discovered_at'])[0] ?? null;
+        $row = DB::selectOne(
+            'SELECT EXTRA AS extra FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+            ['g2g_company_opportunities', 'first_discovered_at']
+        );
 
-        return $row !== null && stripos((string) $row->Extra, 'on update') !== false;
+        return $row !== null && stripos((string) $row->extra, 'on update') !== false;
     }
 
     public function up(): void

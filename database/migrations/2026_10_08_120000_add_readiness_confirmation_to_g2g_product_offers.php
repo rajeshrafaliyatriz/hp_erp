@@ -14,11 +14,21 @@ use Illuminate\Support\Facades\Schema;
  */
 return new class extends Migration
 {
-    /** Schema::hasColumn() breaks on old MariaDB (no generation_expression), so use SHOW COLUMNS there. */
+    /*
+     * Schema::hasColumn() breaks on old MariaDB (no generation_expression),
+     * so this avoids it on mysql/mariadb - but NOT via `SHOW COLUMNS ...
+     * LIKE ?`: a bound parameter on a SHOW statement itself fails on this
+     * MariaDB version ("Syntax error ... near '?'", confirmed live).
+     * information_schema.COLUMNS is a real table, so a bound SELECT against
+     * it works everywhere a SHOW's placeholder does not.
+     */
     private function hasColumn(string $table, string $column): bool
     {
         if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
-            return ! empty(DB::select("SHOW COLUMNS FROM `{$table}` LIKE ?", [$column]));
+            return DB::selectOne(
+                'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+                [$table, $column]
+            ) !== null;
         }
 
         return Schema::hasColumn($table, $column);
