@@ -41,7 +41,10 @@ final class ReportModuleRegistry
 
         $definitions = [];
 
-        // Phase 1: foreach (\App\Domain\Reports\TaskManagement\TaskManagementReportModules::definitions() as $def) { $definitions[$def->key] = $def; }
+        foreach (\App\Domain\Reports\TaskManagement\TaskManagementReportModules::definitions() as $def) {
+            $definitions[$def->key] = $def;
+        }
+
         // Phase 3: foreach (\App\Domain\Reports\Crm\CrmReportModules::definitions() as $def) { $definitions[$def->key] = $def; }
 
         return self::$cache = $definitions;

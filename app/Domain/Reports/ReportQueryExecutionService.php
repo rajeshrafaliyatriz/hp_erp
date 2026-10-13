@@ -68,6 +68,15 @@ final class ReportQueryExecutionService
             $query->whereNull($primary->alias . '.' . $primary->softDeleteColumn);
         }
 
+        foreach ($primary->alwaysJoins as $join) {
+            $query->leftJoin(
+                $join['table'] . ' as ' . $join['alias'],
+                $primary->alias . '.' . $join['localColumn'],
+                '=',
+                $join['alias'] . '.' . $join['foreignColumn'],
+            );
+        }
+
         return $query;
     }
 
@@ -83,28 +92,51 @@ final class ReportQueryExecutionService
 
             $target = $this->registry->get($targetKey);
 
+            /*
+             * LEFT JOIN, never INNER — confirmed against a real failure:
+             * previewing tasks + their project (a secondary module most
+             * tasks have no link to at all) silently returned ZERO rows
+             * with an INNER join, because adding a column should never
+             * also act as an implicit filter. The real vtiger reference
+             * this engine is modeled on agrees - "Contacts by Accounts"
+             * and "Contacts WITHOUT Accounts" are two different reports,
+             * the second needing its own explicit "account is null"
+             * filter condition, which only makes sense if the join itself
+             * never excludes unmatched rows.
+             */
             match ($join->kind) {
-                'direct' => $query->join(
+                'direct' => $query->leftJoin(
                     $target->table . ' as ' . $target->alias,
                     $primary->alias . '.' . $join->localKey,
                     '=',
                     $target->alias . '.' . $join->foreignKey,
                 ),
                 'pivot' => $query
-                    ->join($join->viaPivot . ' as pv_' . $target->alias, function ($on) use ($primary, $target, $join) {
+                    ->leftJoin($join->viaPivot . ' as pv_' . $target->alias, function ($on) use ($primary, $target, $join) {
                         $on->on('pv_' . $target->alias . '.' . $join->pivotLocalKey, '=', $primary->alias . '.' . $primary->primaryKey);
                     })
-                    ->join($target->table . ' as ' . $target->alias, 'pv_' . $target->alias . '.' . $join->pivotForeignKey, '=', $target->alias . '.' . $target->primaryKey),
-                'polymorphicOut' => $query->join($target->table . ' as ' . $target->alias, function ($on) use ($primary, $target, $join) {
+                    ->leftJoin($target->table . ' as ' . $target->alias, 'pv_' . $target->alias . '.' . $join->pivotForeignKey, '=', $target->alias . '.' . $target->primaryKey),
+                'polymorphicOut' => $query->leftJoin($target->table . ' as ' . $target->alias, function ($on) use ($primary, $target, $join) {
                     $on->on($primary->alias . '.' . $join->polymorphicIdColumn, '=', $target->alias . '.' . $target->primaryKey)
                         ->where($primary->alias . '.' . $join->polymorphicTypeColumn, '=', $join->polymorphicTypeValue);
                 }),
-                'polymorphicIn' => $query->join($target->table . ' as ' . $target->alias, function ($on) use ($primary, $target, $join) {
+                'polymorphicIn' => $query->leftJoin($target->table . ' as ' . $target->alias, function ($on) use ($primary, $target, $join) {
                     $on->on($target->alias . '.' . $join->polymorphicIdColumn, '=', $primary->alias . '.' . $primary->primaryKey)
                         ->where($target->alias . '.' . $join->polymorphicTypeColumn, '=', $join->polymorphicTypeValue);
                 }),
                 default => throw new \InvalidArgumentException("Unknown join kind: {$join->kind}"),
             };
+
+            /*
+             * Safe under a LEFT JOIN: an unmatched row's target.deleted_at is
+             * NULL (nothing joined), which passes whereNull exactly like a
+             * genuinely not-deleted row does — so this excludes soft-deleted
+             * JOINED rows without also excluding primary rows that simply
+             * have no match at all.
+             */
+            if ($target->softDeleteColumn !== null) {
+                $query->whereNull($target->alias . '.' . $target->softDeleteColumn);
+            }
         }
     }
 

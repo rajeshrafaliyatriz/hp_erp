@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Reports;
 
+use App\Domain\Reports\SystemReportFolders;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -33,6 +34,8 @@ class ReportFolderController extends Controller
         if ($scope instanceof \Illuminate\Http\JsonResponse) {
             return $scope;
         }
+
+        SystemReportFolders::ensure((int) $identity['sub_institute_id'], $scope);
 
         $folders = DB::table('report_folders')
             ->where('sub_institute_id', $identity['sub_institute_id'])

@@ -13,7 +13,15 @@ final class ReportModuleDefinition
 {
     /**
      * @param ReportFieldDefinition[] $fields
-     * @param array<string, ReportJoinDefinition> $joins keyed by target module key
+     * @param array<string, ReportJoinDefinition> $joins keyed by target module key — OPTIONAL,
+     *        only applied when a report author picks that secondary module.
+     * @param array<array{table:string,alias:string,localColumn:string,foreignColumn:string}> $alwaysJoins
+     *        LEFT JOINs applied UNCONDITIONALLY to every report on this module, regardless of
+     *        what the author picked — for display joins a field's own `column` expression
+     *        depends on (e.g. CONCAT_WS(...) over a joined `tbluser` alias so "Assignee" shows
+     *        a name instead of a raw FK id). Kept deliberately separate from `$joins`: those are
+     *        a report AUTHOR's choice (bring in a whole secondary module's columns), these are
+     *        the module's OWN plumbing for its own fields to render correctly.
      */
     public function __construct(
         public readonly string $key,
@@ -25,6 +33,7 @@ final class ReportModuleDefinition
         public readonly string $primaryKey,
         public readonly array $fields,
         public readonly array $joins = [],
+        public readonly array $alwaysJoins = [],
     ) {
     }
 
