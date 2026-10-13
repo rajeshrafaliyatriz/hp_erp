@@ -1270,4 +1270,96 @@ class OpportunityIngestionTest extends TestCase
         $this->assertSame(0, CompanyOpportunity::count());
         $this->assertSame(0, IngestionFinding::count());
     }
+
+    // ── ingestion: leads from the document go through the same gate as web research ──
+
+    /** One answer for the findings call, another for the leads call (told apart by the system prompt). */
+    private function fakeDocumentAi(array $opportunities): void
+    {
+        $this->freshHttp();
+        Http::fake(function ($request) use ($opportunities) {
+            $isFindings = str_contains((string) $request->body(), 'extract signals relevant to the business');
+            $text = json_encode($isFindings ? ['summary' => 'A note.', 'entities' => [], 'findings' => []] : ['opportunities' => $opportunities]);
+
+            return Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => $text]]], 'finishReason' => 'STOP']],
+                'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1],
+            ], 200);
+        });
+    }
+
+    public function test_a_document_that_states_a_reason_becomes_a_gated_company_opportunity_linked_to_the_file(): void
+    {
+        $this->profile();
+        $this->fakeDocumentAi([$this->opportunity()]);
+
+        $this->upload('note.txt', self::SNIPPET, $this->h())->assertStatus(201);
+
+        $source = IngestionSource::sole();
+        $opp = CompanyOpportunity::sole();
+        $this->assertSame($source->id, (int) $opp->ingestion_source_id);
+        $this->assertSame('Acme Industries', Company::find($opp->company_id)->name);
+        $this->assertSame('page_text', $opp->fetch_level);
+        $this->assertStringContainsString('/api/signals/ingestion/sources/' . $source->id, (string) $opp->sources[0]['url']);
+        $this->assertNotNull($opp->feed_section);
+        // Not the old shortcut: no pseudo-company named after the file, no generic "Enterprise Solution" fit.
+        $this->assertNotSame('Enterprise Solution', $opp->product_name);
+    }
+
+    public function test_a_quote_the_document_does_not_contain_makes_no_lead(): void
+    {
+        $this->profile();
+        $this->fakeDocumentAi([$this->opportunity(['evidence_quote' => 'Acme Industries has approved a five million dollar payroll budget'])]);
+
+        $this->upload('note.txt', self::SNIPPET, $this->h())->assertStatus(201);
+
+        $this->assertSame(0, CompanyOpportunity::count());
+    }
+
+    public function test_a_list_of_names_with_no_event_makes_no_lead(): void
+    {
+        $this->profile();
+        $this->fakeDocumentAi([]);
+
+        $this->upload('names.csv', "name,city
+Acme Industries,Pune
+Beta Works,Surat
+", $this->h())->assertStatus(201);
+
+        $this->assertSame(0, CompanyOpportunity::count());
+        $this->assertSame(1, IngestionSource::count());
+    }
+
+    public function test_analysis_still_succeeds_when_the_lead_step_fails(): void
+    {
+        $this->profile();
+        $this->fakeDocumentAi([['company_name' => 12345]]);   // junk from the model
+
+        $this->upload('note.txt', self::SNIPPET, $this->h())->assertStatus(201);
+
+        $this->assertSame('success', IngestionAnalysis::sole()->status);
+        $this->assertSame(0, CompanyOpportunity::count());
+    }
+
+    public function test_a_lead_whose_headline_is_too_long_is_shortened_not_thrown_away(): void
+    {
+        $this->profile();
+        $long = 'Acme Industries is opening a brand new plant in Pune this year and urgently needs a payroll system that can handle two hundred new hires without errors.';
+        $this->freshHttp();
+        Http::fake(function ($request) use ($long) {
+            $body = (string) $request->body();
+            $text = match (true) {
+                str_contains($body, 'extract signals relevant to the business') => json_encode(['summary' => 'x', 'entities' => [], 'findings' => []]),
+                str_contains($body, 'You fix lead cards') => json_encode(['fixes' => [['index' => 0, 'headline' => 'Acme Industries needs a payroll system for its new Pune plant.']]]),
+                default => json_encode(['opportunities' => [$this->opportunity(['needs_statement' => $long])]]),
+            };
+
+            return Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]], 'finishReason' => 'STOP']], 'usageMetadata' => ['promptTokenCount' => 1, 'candidatesTokenCount' => 1]], 200);
+        });
+
+        $this->upload('note.txt', self::SNIPPET, $this->h())->assertStatus(201);
+
+        $opp = CompanyOpportunity::sole();
+        $this->assertSame('Acme Industries needs a payroll system for its new Pune plant.', $opp->title);
+    }
 }

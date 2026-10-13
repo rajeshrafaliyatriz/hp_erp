@@ -252,6 +252,93 @@ class OpportunityResearcher
 
     // ── custom search query generation ──────────────────────────────────────
 
+    /**
+     * Company opportunities from an INGESTED document. The file's own text is the evidence: its sections go through the same
+     * prompt, the same verbatim-quote check, the same qualification gate and the same importer as web research, so a lead
+     * from a file is held to exactly the standard of a lead from a search. Nothing is written here directly.
+     *
+     * A list of names (a CRM export) has no events in it and gives no lead; a report, a tender, a news cutting or a note
+     * that SAYS something happened at an organisation does. The model may only use what the document states.
+     *
+     * @return array{qualified: int, new: int, rejected: int, candidates: int}
+     */
+    public function leadsFromDocument(\App\Domain\Signals\Ingestion\IngestionSource $source, ?int $userId = null): array
+    {
+        $none = ['qualified' => 0, 'new' => 0, 'rejected' => 0, 'candidates' => 0];
+        $tenantId = (int) $source->sub_institute_id;
+        $profile = ProductProfile::where('sub_institute_id', $tenantId)->first();
+        if ($profile === null || ! $this->profiles->completeness($profile)['complete'] || ! $this->signals->aiConfigured($tenantId)) {
+            return $none;
+        }
+
+        // The document's sections become the "sources": one stable link back to the document, the text as read.
+        $url = (is_string($source->url) && preg_match('#^https?://#i', $source->url))
+            ? $source->url
+            : rtrim((string) config('app.url'), '/') . '/api/signals/ingestion/sources/' . $source->id;
+        $title = (string) ($source->page_title ?: $source->name ?: 'Ingested document');
+        $blocks = [];
+        $current = '';
+        foreach ((array) json_decode((string) $source->segments, true) as $seg) {
+            $text = trim((string) ($seg['text'] ?? ''));
+            if ($text === '') {
+                continue;
+            }
+            if ($current !== '' && mb_strlen($current) + mb_strlen($text) > 5000) {
+                $blocks[] = $current;
+                $current = '';
+            }
+            $current .= ($current === '' ? '' : "
+") . $text;
+        }
+        if ($current !== '') {
+            $blocks[] = $current;
+        }
+        $sources = [];
+        foreach (array_slice($blocks, 0, (int) config('signals.ingestion.lead_blocks', 20)) as $i => $text) {
+            $sources[] = [
+                'id' => 'S' . ($i + 1), 'url' => $url, 'title' => $title, 'published_at' => null,
+                'text' => mb_substr($text, 0, 6000), 'page_fetched' => true, 'retrieved_at' => now()->toIso8601String(),
+            ];
+        }
+        if ($sources === []) {
+            return $none;
+        }
+
+        $pack = IcpPack::forTenant($tenantId);
+        $offers = $this->offerCatalogue($tenantId);
+        $messages = $this->messages($profile, $sources, $offers, $pack);
+        $messages[0]['content'] .= "
+
+NOTE: the SOURCES here are sections of ONE document the user supplied, not search results. "
+            . 'Use only what the document states. A lead is a NAMED organisation (a school, or a school network or group) about which the document states a fact that shows a need our offers meet: '
+            . 'it runs many campuses or branches that need one system, it is expanding or opening, it states a plan, a tender, a hiring need or a system problem. '
+            . 'A bare list of names or contact rows with no such fact is NOT a lead: return an empty list for it. '
+            . 'When the need is your own reasoning from a stated fact (for example: many campuses, so it needs one system across them), say that plainly in inference_reasoning and set trigger_type to expansion or other; '
+            . 'never claim it intends to buy or has a budget. Use the network or group as the organisation when the fact is about the network. '
+            . 'Return EVERY organisation in the document that qualifies, up to 8, one lead each; do not stop at the first few, and do not repeat one organisation. '
+            . 'Cite the section ids exactly as given.';
+
+        $result = $this->ai->json($tenantId, $messages, (int) config('signals.max_output_tokens'));
+        [$candidates, $rejected] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $offers, $pack);
+        $candidates = $this->tightenCards($tenantId, $profile, $candidates, $offers);
+        if ($candidates === []) {
+            return ['qualified' => 0, 'new' => 0, 'rejected' => $rejected, 'candidates' => 0];
+        }
+
+        $import = $this->importer->import($tenantId, $candidates, [
+            'source_label' => 'ingestion:' . mb_substr((string) $source->name, 0, 60), 'origin' => 'ingestion', 'user_id' => $userId,
+            'ingestion_source_id' => $source->id,
+        ]);
+        if ($pack !== null) {
+            $this->linkAccounts($tenantId, $pack, $candidates, $import['results']);
+        }
+
+        return [
+            'qualified' => $import['accepted'] + $import['updated'] + $import['duplicate'], 'new' => $import['accepted'],
+            'rejected' => $rejected + $import['rejected'], 'candidates' => count($candidates),
+        ];
+    }
+
     public function buildCustomQueries(array $params): array
     {
         $topic = trim($params['topic'] ?? '');
@@ -500,7 +587,7 @@ soft_marketing_angle: "Approach the chosen vendors, and the foundation that runs
 
 {$icp}
 Reply with one JSON object only:
-{"opportunities":[{"company_name":"","website":"<only if stated in a source, else null>","industry":"<only if stated, else null>","location":"<only if stated, else null>","buyer_type":"<one of: {$buyers}, or null>","context":"competitor|market|null","trigger_type":"<one of: {$triggers}>","needs_statement":"<only when an ideal-customer block is given: one plain sentence, school name + what it needs + why now; else null>","closing_date":"<YYYY-MM-DD only if a source states it, else null>","what_happened":"<plain: fact with number, then context>","trigger_summary":"<one sentence: why now (detail for our team)>","likely_problem":"<plain: exactly two sentences, why they are a buyer + which product fits>","what_we_could_sell":"<concrete>","offer_id":"<catalogue id or null>","entry_point":"<one of: {$entries}>","entry_point_reason":"<required only for other, else null>","soft_marketing_angle":"<plain: next step and who to approach>","likely_stakeholder":"<role named in a source, else null>","scores":{"buying_signal":1,"problem_fit":1,"product_fit":1,"accessibility":1,"urgency":1,"potential_value":1,"evidence_quality":1,"reasoning":""},"inference_reasoning":"<only when reasoned, else null>","event_date":"<YYYY-MM-DD or null>","source_ids":["S1"],"evidence_quote":"<verbatim>"}]}
+{"opportunities":[{"company_name":"","website":"<only if stated in a source, else null>","industry":"<only if stated, else null>","location":"<only if stated, else null>","buyer_type":"<one of: {$buyers}, or null>","context":"competitor|market|null","trigger_type":"<one of: {$triggers}>","needs_statement":"<only when an ideal-customer block is given: ONE plain sentence of at most 16 words, school name + what it needs + why now; else null>","closing_date":"<YYYY-MM-DD only if a source states it, else null>","what_happened":"<plain: fact with number, then context>","trigger_summary":"<one sentence: why now (detail for our team)>","likely_problem":"<plain: exactly two sentences, why they are a buyer + which product fits>","what_we_could_sell":"<concrete>","offer_id":"<catalogue id or null>","entry_point":"<one of: {$entries}>","entry_point_reason":"<required only for other, else null>","soft_marketing_angle":"<plain: next step and who to approach>","likely_stakeholder":"<role named in a source, else null>","scores":{"buying_signal":1,"problem_fit":1,"product_fit":1,"accessibility":1,"urgency":1,"potential_value":1,"evidence_quality":1,"reasoning":""},"inference_reasoning":"<only when reasoned, else null>","event_date":"<YYYY-MM-DD or null>","source_ids":["S1"],"evidence_quote":"<verbatim>"}]}
 TXT;
 
         $payload = [
@@ -535,7 +622,7 @@ TXT;
      */
     private function tightenCards(int $tenantId, ProductProfile $profile, array $records, array $offers): array
     {
-        $fixable = ['what_we_could_sell', 'what_happened', 'likely_problem', 'soft_marketing_angle'];
+        $fixable = ['headline', 'what_we_could_sell', 'what_happened', 'likely_problem', 'soft_marketing_angle'];
         $broken = [];
         foreach ($records as $i => $r) {
             $problems = array_map(fn ($v) => $v['reason'], $this->gate->faceViolations($r));
@@ -544,7 +631,7 @@ TXT;
             }
             if ($problems !== []) {
                 $broken[$i] = ['index' => $i, 'organisation' => $r['buyer']['name'], 'problems' => $problems,
-                    'what_happened' => $r['what_happened'], 'likely_problem' => $r['likely_problem'], 'soft_marketing_angle' => $r['soft_marketing_angle'],
+                    'headline' => $r['headline'] ?? null, 'what_happened' => $r['what_happened'], 'likely_problem' => $r['likely_problem'], 'soft_marketing_angle' => $r['soft_marketing_angle'],
                     'what_we_could_sell' => $r['what_we_could_sell'], 'source_quote' => $r['source_excerpt']];
             }
         }
@@ -553,7 +640,7 @@ TXT;
         }
 
         try {
-            $system = 'You fix lead cards that broke the writing rules. Rewrite ONLY the fields named in each item\'s problems, using only the facts already given (the source_quote is the evidence); invent nothing. Rules: short sentences under 20 words, one idea each; plain words a colleague would say; never the words entry point, inference, hypothesis, qualification, signal, evidence level, pipeline, scoring, buying trigger; no offer ids (name products in words); numbers written the way people say them, e.g. ₹170 crore; likely_problem is exactly two sentences (why they are a buyer, then which product fits); what_we_could_sell is a concrete deliverable with scope and buyer unit, built from the offer catalogue. Reply with one JSON object only: {"fixes":[{"index":0,"what_happened":"","likely_problem":"","soft_marketing_angle":"","what_we_could_sell":""}]} and include only the fields you changed.';
+            $system = 'You fix lead cards that broke the writing rules. Rewrite ONLY the fields named in each item\'s problems, using only the facts already given (the source_quote is the evidence); invent nothing. Rules: short sentences under 20 words, one idea each; a headline is ONE sentence of at most 16 words: the organisation, what it needs, why now; plain words a colleague would say; never the words entry point, inference, hypothesis, qualification, signal, evidence level, pipeline, scoring, buying trigger; no offer ids (name products in words); numbers written the way people say them, e.g. ₹170 crore; likely_problem is exactly two sentences (why they are a buyer, then which product fits); what_we_could_sell is a concrete deliverable with scope and buyer unit, built from the offer catalogue. Reply with one JSON object only: {"fixes":[{"index":0,"headline":"","what_happened":"","likely_problem":"","soft_marketing_angle":"","what_we_could_sell":""}]} and include only the fields you changed.';
             $result = $this->ai->json($tenantId, [
                 ['role' => 'system', 'content' => $system],
                 ['role' => 'user', 'content' => json_encode(['offer_catalogue' => array_values($offers), 'product' => $profile->product_name, 'items' => array_values($broken)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)],
@@ -565,7 +652,7 @@ TXT;
                 }
                 foreach ($fixable as $field) {
                     if (is_string($fix[$field] ?? null) && trim($fix[$field]) !== '') {
-                        $records[$i][$field] = mb_substr(trim($fix[$field]), 0, $field === 'what_we_could_sell' ? 500 : 600);
+                        $records[$i][$field] = mb_substr(trim($fix[$field]), 0, $field === 'what_we_could_sell' ? 500 : ($field === 'headline' ? 191 : 600));
                     }
                 }
             }

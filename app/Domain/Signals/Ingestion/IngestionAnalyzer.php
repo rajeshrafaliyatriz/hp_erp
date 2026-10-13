@@ -165,70 +165,6 @@ class IngestionAnalyzer
                     ]);
                 }
 
-                // Promote / link qualified findings to main Signals feed (CompanyOpportunity)
-                $qualified = array_filter($findings, fn ($f) => in_array($f['kind'], ['opportunity', 'requirement', 'gap'], true) || ($f['priority'] ?? '') === 'High');
-                if (! empty($qualified) && Schema::hasTable('g2g_company_opportunities') && Schema::hasTable('g2g_companies')) {
-                    $companyName = mb_substr($searchTarget ?: ($source->page_title ?: $source->name), 0, 191);
-                    $norm = preg_replace('/[^a-z0-9]+/', '', strtolower($companyName)) ?: 'enterprise';
-                    $company = Company::firstOrCreate(
-                        ['sub_institute_id' => $tenantId, 'normalized_name' => $norm],
-                        [
-                            'name' => $companyName,
-                            'website' => $source->url,
-                            'industry' => 'Identified Source Ingestion',
-                            'location' => 'Identified from Source',
-                            'first_seen_at' => now(),
-                            'last_verified_at' => now(),
-                        ]
-                    );
-
-                    $matchedOffer = null;
-                    if (class_exists(ProductOffer::class) && Schema::hasTable('g2g_product_offers')) {
-                        $matchedOffer = ProductOffer::where('sub_institute_id', $tenantId)->first();
-                    }
-
-                    foreach ($qualified as $qf) {
-                        $quotes = array_column($qf['evidence'] ?? [], 'quote');
-                        $isHigh = ($qf['priority'] ?? '') === 'High';
-                        $fingerprint = hash('sha256', "ingest:{$tenantId}:{$company->id}:" . mb_strtolower(trim($qf['title'])));
-
-                        CompanyOpportunity::firstOrCreate(
-                            ['sub_institute_id' => $tenantId, 'fingerprint' => $fingerprint],
-                            [
-                                'company_id' => $company->id,
-                                'research_run_id' => 0,
-                                'ingestion_source_id' => $source->id,
-                                'title' => $qf['title'],
-                                'category' => $qf['kind'] === 'requirement' ? 'corporate_expansion' : 'technology_procurement',
-                                'signal_kind' => 'public_reporting',
-                                'observed_event' => $qf['detail'],
-                                'why_indicates_need' => $qf['business_impact'] ?? $qf['detail'],
-                                'product_fit' => $matchedOffer ? "Direct capability fit with {$matchedOffer->offer_name}" : 'Aligned with enterprise solutions',
-                                'product_name' => $matchedOffer ? $matchedOffer->offer_name : 'Enterprise Solution',
-                                'relevant_offer_id' => $matchedOffer?->offer_id,
-                                'relevant_offer_name' => $matchedOffer?->offer_name,
-                                'recommended_action' => $qf['suggested_action'] ?? 'Review evidence from ingested document and initiate stakeholder reach-out.',
-                                'priority' => $qf['priority'] ?? 'Medium',
-                                'qualification' => 'Relevant Requirement Found',
-                                'confidence' => $qf['confidence'] ?? 'High',
-                                'sources' => [[
-                                    'url' => $source->url ?: $source->name,
-                                    'title' => $source->page_title ?: $source->name,
-                                    'published_at' => $source->created_at?->toDateString(),
-                                    'quotes' => $quotes,
-                                ]],
-                                'confirmed_facts' => $quotes,
-                                'unverified_claims' => [],
-                                'urgency' => $isHigh ? 'Immediate (< 30 days)' : '30-60 days',
-                                'feed_section' => $isHigh ? 'immediate_action' : 'watchlist',
-                                'first_discovered_at' => now(),
-                                'last_verified_at' => now(),
-                                'review_status' => 'New',
-                            ]
-                        );
-                    }
-                }
-
                 $source->forceFill([
                     'extracted_summary' => $extractedSummary ?: $source->extracted_summary,
                     'identified_entities' => $identifiedEntities ?: $source->identified_entities,
@@ -236,6 +172,14 @@ class IngestionAnalyzer
                     'last_analyzed_at' => now(),
                 ])->save();
             });
+
+            // Leads from the document itself: through the SAME gate and importer as web research (never written here).
+            $leads = null;
+            try {
+                $leads = app(\App\Domain\Signals\Opportunities\OpportunityResearcher::class)->leadsFromDocument($source, $analysis->triggered_by);
+            } catch (\Throwable $e) {
+                Log::warning('signals.ingestion_leads_failed', ['tenant' => $tenantId, 'source' => $source->id, 'exception' => get_class($e)] + self::reason($e));
+            }
 
             $warnings = array_filter([
                 $chunkFailures > 0 ? "{$chunkFailures} of " . count($chunks) . ' sections could not be analysed.' : null,
