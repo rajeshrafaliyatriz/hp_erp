@@ -3535,6 +3535,24 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
 });
 
 /*
+ * ICP profiles: each organisation defines its own ideal customer profiles as data (templates, create, edit with
+ * versioning, validate, preview, activate). ADMINISTRATORS ONLY; the tenant always comes from the token.
+ */
+Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(function () {
+    $icp = \App\Http\Controllers\Api\Signals\IcpProfileController::class;
+
+    Route::get('/templates', [$icp, 'templates']);
+    Route::get('/profiles', [$icp, 'index']);
+    Route::post('/profiles', [$icp, 'store'])->middleware('throttle:20,1');
+    Route::post('/validate', [$icp, 'validateConfig'])->middleware('throttle:30,1');
+    Route::get('/profiles/{id}', [$icp, 'show'])->whereNumber('id');
+    Route::put('/profiles/{id}', [$icp, 'update'])->whereNumber('id')->middleware('throttle:30,1');
+    Route::get('/profiles/{id}/preview', [$icp, 'preview'])->whereNumber('id');
+    Route::patch('/profiles/{id}/status', [$icp, 'setStatus'])->whereNumber('id')->middleware('throttle:30,1');
+    Route::get('/profiles/{id}/accounts', [$icp, 'accounts'])->whereNumber('id');
+});
+
+/*
  * Product Portfolio & Partner Network API.
  * Foundation data for Phase 1: Business Opportunity Intelligence.
  */

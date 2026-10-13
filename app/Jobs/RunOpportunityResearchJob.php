@@ -27,7 +27,8 @@ class RunOpportunityResearchJob implements ShouldQueue
         public readonly int $tenantId,
         public readonly ?int $userId,
         public readonly ?array $customParams = null,
-        public readonly ?int $runId = null
+        public readonly ?int $runId = null,
+        public readonly ?int $icpProfileId = null
     ) {
         $this->onQueue((string) config('signals.queue', 'signals'));
     }
@@ -35,7 +36,7 @@ class RunOpportunityResearchJob implements ShouldQueue
     public function handle(OpportunityResearcher $researcher): void
     {
         try {
-            $researcher->run($this->tenantId, 'manual', $this->userId, $this->customParams, $this->runId);
+            $researcher->run($this->tenantId, 'manual', $this->userId, $this->customParams, $this->runId, $this->icpProfileId);
         } finally {
             Cache::forget("signals:research-pending:{$this->tenantId}");
         }

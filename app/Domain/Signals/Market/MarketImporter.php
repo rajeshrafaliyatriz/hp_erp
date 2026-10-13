@@ -123,6 +123,21 @@ class MarketImporter
 
         $base = ['suggestion' => $resolved['suggestion'], 'alias_conflicts' => $resolved['alias_conflicts']];
 
+        // Same fingerprint (for example a tender reference) but a source this opportunity does not have yet: corroboration.
+        if ($existing !== null && ! $legacy && ! $this->hasSource($existing, $r['source_url'])) {
+            return $this->corroborate($tenantId, $existing, $company, $r, $scanLogId, $base);
+        }
+
+        // One event reported on two sites is ONE opportunity. The fingerprint includes the source URL, so a second URL
+        // never matches it: look for the same event instead (same buyer, same trigger, dates within a week; or the
+        // same tender reference). A hit from a new URL corroborates the existing opportunity.
+        if ($existing === null) {
+            $sameEvent = $this->sameEvent($tenantId, $company->id, $r);
+            if ($sameEvent !== null) {
+                return $this->corroborate($tenantId, $sameEvent, $company, $r, $scanLogId, $base);
+            }
+        }
+
         if ($existing === null) {
             $opportunity = CompanyOpportunity::create($this->columns($tenantId, $company->id, $r, $fingerprint, $meta));
 
@@ -199,7 +214,7 @@ class MarketImporter
         $row = [
             'sub_institute_id' => $tenantId, 'company_id' => $companyId, 'research_run_id' => $meta['research_run_id'] ?? null,
             'ingestion_source_id' => $meta['ingestion_source_id'] ?? null,
-            'title' => mb_substr($r['trigger_summary'], 0, 191),
+            'title' => mb_substr($r['headline'] ?? $r['trigger_summary'], 0, 191),
             'category' => self::CATEGORY[$r['trigger_type']] ?? 'project', 'signal_kind' => 'opportunity',
             'observed_event' => $fact, 'why_indicates_need' => $r['likely_problem'] ?? $r['trigger_summary'],
             'product_fit' => $r['what_we_could_sell'] ?? '', 'recommended_action' => $r['what_we_could_sell'] ?? '',
@@ -211,15 +226,13 @@ class MarketImporter
             // else (inference, hypothesis, a snippet or a blocked page) is Watchlist. Expired items are
             // hidden by the feed unless the "Expired" filter is on.
             'feed_section' => $section,
-            'qualification' => $claim === 'confirmed'
-                ? (in_array($r['trigger_type'], ['tender', 'rfp', 'eoi', 'rfq'], true) ? 'Relevant Requirement Found' : 'New Opportunity')
-                : ($claim === 'inference' ? 'Needs Verification' : 'Monitoring'),
-            'confidence' => ['confirmed' => 'High', 'inference' => 'Medium', 'hypothesis' => 'Low'][$claim],
+            'qualification' => $this->qualificationFor($claim, $r['trigger_type']),
+            'confidence' => $this->confidenceFor($claim),
             'review_status' => 'New', 'pipeline_status' => 'NEW',
             'sources' => [['url' => $r['source_url'], 'title' => $r['source_title'], 'published_at' => $r['event_date'], 'excerpt' => $r['source_excerpt'] ?? null, 'retrieved_at' => now()->toDateTimeString(), 'content_hash' => $r['content_hash'] ?? null]],
             'confirmed_facts' => $claim === 'confirmed' && $r['what_happened'] ? [$r['what_happened']] : [],
             'unverified_claims' => $claim !== 'confirmed' ? [$fact] : [],
-            'source_published_at' => $r['event_date'], 'event_date' => $r['event_date'], 'fingerprint' => $fingerprint,
+            'source_published_at' => $r['source_published_at'] ?? $r['event_date'], 'event_date' => $r['event_date'], 'fingerprint' => $fingerprint,
             'first_discovered_at' => now(), 'last_verified_at' => now(),
             'trigger_type' => $r['trigger_type'], 'trigger_summary' => $r['trigger_summary'], 'reference_no' => $r['reference_no'],
             'source_url' => $r['source_url'], 'source_title' => $r['source_title'], 'observed_at' => $r['observed_at'], 'expires_at' => $expires,
@@ -276,6 +289,151 @@ class MarketImporter
         }
 
         return $count;
+    }
+
+    private const TENDER_TYPES = ['tender', 'rfp', 'eoi', 'rfq'];
+    private const SAME_EVENT_DAYS = 7;
+
+    private function qualificationFor(string $claim, string $triggerType): string
+    {
+        return $claim === 'confirmed'
+            ? (in_array($triggerType, self::TENDER_TYPES, true) ? 'Relevant Requirement Found' : 'New Opportunity')
+            : ($claim === 'inference' ? 'Needs Verification' : 'Monitoring');
+    }
+
+    private function confidenceFor(string $claim): string
+    {
+        return ['confirmed' => 'High', 'inference' => 'Medium', 'hypothesis' => 'Low'][$claim] ?? 'Low';
+    }
+
+    /** The date an event happened, or the date its source was published when the event has none. */
+    private function effectiveDate(?string $eventDate, ?string $publishedAt): ?\Illuminate\Support\Carbon
+    {
+        foreach ([$eventDate, $publishedAt] as $d) {
+            if ($d !== null && $d !== '') {
+                try {
+                    return \Illuminate\Support\Carbon::parse($d)->startOfDay();
+                } catch (\Throwable) {
+                    continue;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * An opportunity already stored for the SAME event: same tenant and buyer, and either the same tender reference
+     * (tender, RFP, EOI, RFQ) or the same trigger type with an event date within 7 days. Undated records never match
+     * (no basis to say it is the same event). Existing rows' fingerprints are never rewritten: this is a lookup.
+     *
+     * @param  array<string, mixed>  $r
+     */
+    private function sameEvent(int $tenantId, int $companyId, array $r): ?CompanyOpportunity
+    {
+        $base = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('company_id', $companyId);
+
+        if (in_array($r['trigger_type'], self::TENDER_TYPES, true) && ($r['reference_no'] ?? null) !== null) {
+            return $base->where('reference_no', $r['reference_no'])->whereIn('trigger_type', self::TENDER_TYPES)->orderBy('id')->first();
+        }
+
+        $date = $this->effectiveDate($r['event_date'] ?? null, $r['source_published_at'] ?? null);
+        if ($date === null) {
+            return null;
+        }
+        $from = $date->copy()->subDays(self::SAME_EVENT_DAYS)->toDateString();
+        $to = $date->copy()->addDays(self::SAME_EVENT_DAYS)->toDateString();
+
+        return $base->where('trigger_type', $r['trigger_type'])
+            ->where(fn ($q) => $q->whereBetween('event_date', [$from, $to])
+                ->orWhere(fn ($w) => $w->whereNull('event_date')->whereBetween('source_published_at', [$from, $to])))
+            ->orderBy('id')->first();
+    }
+
+    /**
+     * Add a new source to an opportunity that is already stored for the same event.
+     *
+     * The source is appended to `sources`, a "corroborated" event is recorded, and the evidence is graded again by
+     * EvidenceGrader with the number of independent domains now reporting it (a higher level is kept; a level is never
+     * lowered). review_status, pipeline_status and first_discovered_at are never touched. A source the opportunity
+     * already has is a duplicate.
+     *
+     * @param  array<string, mixed>  $r
+     * @param  array<string, mixed>  $base
+     * @return array{outcome: string, public: array<string, mixed>, suggestion: ?array, alias_conflicts: list<string>}
+     */
+    private function corroborate(int $tenantId, CompanyOpportunity $existing, \App\Domain\Signals\Opportunities\Company $company, array $r, int $scanLogId, array $base): array
+    {
+        $sources = array_values((array) $existing->sources);
+        $pathKey = fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
+        $key = $pathKey($r['source_url']);   // query string ignored: utm_source and friends do not make a new source
+        foreach ($sources as $s) {
+            if (is_array($s) && isset($s['url']) && $pathKey((string) $s['url']) === $key) {
+                return ['outcome' => 'duplicate', 'public' => ['outcome' => 'duplicate', 'id' => $existing->id, 'reason' => 'Unchanged: this source is already recorded.'], ...$base];
+            }
+        }
+
+        $hostOf = fn (string $u) => strtolower(preg_replace('/^www\./', '', (string) parse_url($u, PHP_URL_HOST)));
+        $domainsBefore = count(array_unique(array_filter(array_map(fn ($s) => $hostOf((string) ($s['url'] ?? '')), $sources))));
+        $sources[] = [
+            'url' => $r['source_url'], 'title' => $r['source_title'], 'published_at' => $r['source_published_at'] ?? $r['event_date'],
+            'excerpt' => $r['source_excerpt'] ?? null, 'retrieved_at' => now()->toDateTimeString(), 'content_hash' => $r['content_hash'] ?? null,
+        ];
+        $domains = count(array_unique(array_filter(array_map(fn ($s) => $hostOf((string) ($s['url'] ?? '')), $sources))));
+
+        // Grade again, with every independent domain counted. Never lower what is stored.
+        $rank = fn (?string $c) => QualificationGate::CLAIM_LEVELS[$c ?? ''] ?? 0;
+        $fetch = (QualificationGate::FETCH_LEVELS[$r['fetch_level']] ?? 0) > (QualificationGate::FETCH_LEVELS[$existing->fetch_level ?? ''] ?? -1) ? $r['fetch_level'] : $existing->fetch_level;
+        $claim = $existing->claim_level;
+        $note = $existing->evidence_note;
+        if (is_array($r['evidence_input'] ?? null)) {
+            $g = (new EvidenceGrader())->grade(array_merge($r['evidence_input'], ['corroborating_domains' => $domains]), $r['fetch_level'], $r['source_url'], ['name' => $r['buyer']['name'], 'website' => $company->website]);
+            $candidateClaim = $g['claim_level'];
+            $candidateNote = $g['note'];
+        } else {
+            $candidateClaim = $r['claim_level'];
+            $candidateNote = $r['evidence_note'];
+        }
+        $upgraded = $rank($candidateClaim) > $rank($claim);
+        if ($upgraded) {
+            $claim = $candidateClaim;
+            $note = $candidateNote;
+        }
+
+        $update = ['sources' => $sources, 'fetch_level' => $fetch, 'last_verified_at' => now()];
+        $changes = ['sources' => [count($sources) - 1, count($sources)], 'corroborating_domains' => [$domainsBefore, $domains], 'source_url' => $r['source_url']];
+        if ($upgraded) {
+            $update += ['claim_level' => $claim, 'evidence_note' => $note, 'confidence' => $this->confidenceFor($claim), 'qualification' => $this->qualificationFor($claim, $existing->trigger_type ?? $r['trigger_type'])];
+            // A context item (competitor / market) stays in its section; anything else is placed again on its stored score.
+            if (! in_array($existing->feed_section, [SectionAssigner::MARKET, SectionAssigner::COMPETITOR], true)) {
+                $daysLeft = $existing->expires_at === null ? null : (int) now()->startOfDay()->diffInDays($existing->expires_at->copy()->startOfDay(), false);
+                $update['feed_section'] = $this->sections->assign(['claim_level' => $claim, 'fetch_level' => $fetch, 'score_total' => $existing->score_total], $daysLeft) ?? SectionAssigner::WATCHING;
+            }
+            $changes['claim_level'] = [$existing->claim_level, $claim];
+        }
+
+        // Same pattern as an update: first_discovered_at is assigned to itself so the column can never reset.
+        $existing->forceFill($update);
+        CompanyOpportunity::where('id', $existing->id)->update(
+            $existing->getDirty() + ['first_discovered_at' => DB::raw(DB::getQueryGrammar()->wrap('first_discovered_at')), 'updated_at' => now()]
+        );
+        $this->event($tenantId, $existing->id, 'corroborated', $changes, $scanLogId);
+        $matches = $this->snapshotMatches($tenantId, $existing->refresh());
+
+        return ['outcome' => 'updated', 'public' => ['outcome' => 'updated', 'id' => $existing->id, 'reason' => 'corroborated', 'changes' => array_keys($changes), 'matches' => $matches], ...$base];
+    }
+
+    /** Does the opportunity already carry this source? Compared on host and path: tracking parameters do not make a new source. */
+    private function hasSource(CompanyOpportunity $opp, string $url): bool
+    {
+        $key = fn (string $u) => preg_replace('/^www\./', '', strtolower((string) parse_url($u, PHP_URL_HOST))) . rtrim((string) parse_url($u, PHP_URL_PATH), '/');
+        foreach ((array) $opp->sources as $s) {
+            if (is_array($s) && isset($s['url']) && $key((string) $s['url']) === $key($url)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function legacyMatch(int $tenantId, int $companyId, string $sourceUrl): ?CompanyOpportunity

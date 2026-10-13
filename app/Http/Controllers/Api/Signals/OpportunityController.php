@@ -180,6 +180,15 @@ class OpportunityController extends Controller
 
         $isCustom = ! empty($customParams['topic']) || ! empty($customParams['company']) || ! empty($customParams['industry']);
 
+        // Optional: run one specific ICP. It must be an ACTIVE ICP of this organisation, never another's, never a draft.
+        $icpProfileId = null;
+        if ($request->filled('icp_profile_id')) {
+            $icpProfileId = (int) $request->input('icp_profile_id');
+            if (! \App\Domain\Signals\Icp\IcpPack::forRun($tenantId, $icpProfileId)) {
+                return response()->json(['status' => 0, 'code' => 'icp_not_active', 'message' => 'That ICP is not active for this organisation.'], 422);
+            }
+        }
+
         $profile = ProductProfile::where('sub_institute_id', $tenantId)->first();
         $completeness = $this->profiles->completeness($profile);
         $search = SearchProviderFactory::make();
@@ -223,7 +232,7 @@ class OpportunityController extends Controller
             'search_provider' => $search->name(),
         ]);
 
-        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $customParams ?: null, $run->id);
+        RunOpportunityResearchJob::dispatch($tenantId, $identity['user_id'], $customParams ?: null, $run->id, $icpProfileId);
 
         $this->ensureQueueWorkerRunning();
 
@@ -507,12 +516,38 @@ class OpportunityController extends Controller
         $rows = collect($rows);
         $matches = $this->matchedOffers($tenantId, $rows->pluck('id')->map(fn ($i) => (int) $i)->all());
 
-        return $rows->map(function ($row) use ($matches) {
+        $accounts = $this->accountsFor($tenantId, $rows->pluck('company_id')->filter()->map(fn ($i) => (int) $i)->unique()->all());
+
+        return $rows->map(function ($row) use ($matches, $accounts) {
             $out = $this->presentOpportunity($row);
             $out['matched_offers'] = $matches[(int) $row->id] ?? [];
+            $out['account'] = $out['card']['account'] = $accounts[(int) $row->company_id] ?? null;
 
             return $out;
         })->all();
+    }
+
+    /**
+     * The target account (CRM school) behind each organisation, so the card can say where the contact is.
+     * Phone numbers and emails are not stored; `crm_ref` is the lead number to look up in the CRM.
+     *
+     * @param  list<int>  $companyIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function accountsFor(int $tenantId, array $companyIds): array
+    {
+        if ($companyIds === [] || ! \Illuminate\Support\Facades\Schema::hasTable('g2g_target_accounts')) {
+            return [];
+        }
+        $out = [];
+        foreach (DB::table('g2g_target_accounts')->where('sub_institute_id', $tenantId)->whereIn('company_id', $companyIds)->orderByDesc('watch_priority')->get() as $a) {
+            $out[(int) $a->company_id] = [
+                'crm_ref' => $a->crm_ref, 'crm_owner' => $a->crm_owner, 'contact_name' => $a->contact_name,
+                'city' => $a->city, 'icp_status' => $a->icp_status, 'icp_tier' => $a->icp_tier,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -615,6 +650,7 @@ class OpportunityController extends Controller
         $out['card'] = (new \App\Domain\Signals\Market\CardPresenter())->face([
             'company_name' => $out['company_name'], 'company_type' => $row->company_type ?? null, 'company_state' => $row->company_state ?? null,
             'location' => $out['location'], 'website' => $out['website'],
+            'title' => $row->title, 'trigger_summary' => $row->trigger_summary ?? null,
             'observed_event' => $row->observed_event, 'likely_problem' => $row->likely_problem ?? null, 'why_indicates_need' => $row->why_indicates_need,
             'soft_marketing_angle' => $row->soft_marketing_angle ?? null, 'recommended_action' => $row->recommended_action,
             'entry_point' => $row->entry_point ?? null, 'urgency' => $row->urgency ?? null, 'score_urgency' => isset($row->score_urgency) ? (int) $row->score_urgency : null,

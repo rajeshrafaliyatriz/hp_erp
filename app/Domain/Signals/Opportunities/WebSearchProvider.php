@@ -21,5 +21,10 @@ interface WebSearchProvider
      *
      * @throws \RuntimeException on provider failure (message is not shown to users)
      */
-    public function search(string $query, int $recencyDays, int $limit): array;
+    /**
+     * @param  array{topic?: string, include_domains?: list<string>}  $options  optional, provider-specific:
+     *         'topic' = 'news' (default) | 'general' (tender notices, job posts and organisation pages are not news);
+     *         'include_domains' restricts the search to those sites. Providers that cannot honour an option ignore it.
+     */
+    public function search(string $query, int $recencyDays, int $limit, array $options = []): array;
 }

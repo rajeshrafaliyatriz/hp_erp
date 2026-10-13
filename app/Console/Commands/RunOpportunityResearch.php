@@ -37,8 +37,18 @@ class RunOpportunityResearch extends Command
 
         foreach ($tenants as $tenantId) {
             // One organisation failing must not stop the others.
-            $run = $researcher->run($tenantId, $trigger);
-            $this->line(sprintf('tenant %d: %s (%d qualified, %d new)%s', $tenantId, $run->status, $run->opportunities_qualified, $run->opportunities_new, $run->error_code ? " [{$run->error_code}]" : ''));
+            // One research run per active ICP (an organisation may have several, one per product); none = the generic run.
+            $packs = \App\Domain\Signals\Icp\IcpPack::allActive($tenantId);
+            if ($packs === [] && \App\Domain\Signals\Icp\IcpPack::hasProfiles($tenantId)) {
+                // ICPs exist but none is active: nothing to research, and never a silent fallback to generic research.
+                $this->line("tenant {$tenantId}: skipped (it has ICPs but none is active)");
+
+                continue;
+            }
+            foreach ($packs === [] ? [null] : $packs as $pack) {
+                $run = $researcher->run($tenantId, $trigger, null, null, null, $pack?->profileId);
+                $this->line(sprintf('tenant %d%s: %s (%d qualified, %d new)%s', $tenantId, $pack ? " [{$pack->key}]" : '', $run->status, $run->opportunities_qualified, $run->opportunities_new, $run->error_code ? " [{$run->error_code}]" : ''));
+            }
         }
 
         return self::SUCCESS;
