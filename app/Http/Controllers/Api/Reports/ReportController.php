@@ -269,7 +269,7 @@ class ReportController extends Controller
             return response()->json(['status' => false, 'message' => 'This report could not be run.'], 422);
         }
 
-        [$header, $rows] = $this->flattenForCsv($report->report_type, $result);
+        [$header, $rows] = $this->flattenForCsv($report->report_type, $result, json_decode($report->definition, true));
 
         $csv = implode(',', array_map($this->csvCell(...), $header)) . "\r\n";
 
@@ -286,12 +286,32 @@ class ReportController extends Controller
     }
 
     /** @return array{0: array<int, string>, 1: array<int, array<int, mixed>>} */
-    private function flattenForCsv(string $reportType, array $result): array
+    private function flattenForCsv(string $reportType, array $result, array $definition = []): array
     {
+        // "task_management.tasks.task_title" means nothing to whoever opens
+        // this in Excel - the report's own column labels ("Task", "Status")
+        // are what the builder already showed them, so the export should
+        // read the same way.
+        $labelFor = function (string $qualifiedKey) use ($definition): string {
+            foreach ($definition['columns'] ?? [] as $col) {
+                if ($qualifiedKey === "{$col['module']}.{$col['field']}") {
+                    return $col['label'] ?? $qualifiedKey;
+                }
+            }
+
+            return $qualifiedKey;
+        };
+
         return match ($reportType) {
+            // __primary_id is internal plumbing (reserved for a future
+            // drill-down/open-record action), never something an exported
+            // CSV should show a viewer - confirmed live: it was leaking as
+            // a literal, confusing first column before this fix.
             'tabular' => [
-                $result['rows'] === [] ? [] : array_keys($result['rows'][0]),
-                array_map('array_values', $result['rows']),
+                $result['rows'] === []
+                    ? []
+                    : array_map($labelFor, array_values(array_diff(array_keys($result['rows'][0]), ['__primary_id']))),
+                array_map(fn ($row) => array_values(array_diff_key($row, ['__primary_id' => true])), $result['rows']),
             ],
             'summary' => [
                 $result['groups'] === [] ? ['label', 'count'] : array_keys($result['groups'][0]),

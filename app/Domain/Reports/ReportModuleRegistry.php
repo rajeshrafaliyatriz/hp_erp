@@ -45,7 +45,9 @@ final class ReportModuleRegistry
             $definitions[$def->key] = $def;
         }
 
-        // Phase 3: foreach (\App\Domain\Reports\Crm\CrmReportModules::definitions() as $def) { $definitions[$def->key] = $def; }
+        foreach (\App\Domain\Reports\Crm\CrmReportModules::definitions() as $def) {
+            $definitions[$def->key] = $def;
+        }
 
         return self::$cache = $definitions;
     }
