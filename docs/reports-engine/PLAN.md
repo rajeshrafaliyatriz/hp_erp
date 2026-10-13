@@ -267,7 +267,11 @@ components/domain/reports/
   tabular-view.tsx / summary-view.tsx / pivot-view.tsx / chart-view.tsx
 lib/
   export-csv.ts              # NEW shared util (toCsv/downloadCsv) — no shared one exists today; cm-audit.tsx inlines its own, extract it properly
-  report-chart-colors.ts     # NEW, sibling to lib/chart-colors.ts
+  # report-chart-colors.ts NOT built — lib/chart-colors.ts already has
+  # categoricalColors/categoricalColor, an accessibility-vetted palette for
+  # exactly this (colour by identity, CVD-tested, "never cycle" semantics
+  # past the 5th group). ChartView reuses it directly instead of a near-
+  # duplicate file.
 components/ui/
   confirm-dialog.tsx         # promote the ConfirmDialog already in components/settings/sections/section-primitives.tsx to a true shared primitive here, rather than building a second one
 ```
@@ -286,7 +290,9 @@ data field only, matches vtiger), VerticalBar/HorizontalBar/Line→
   - [x] Classes: `ReportModuleRegistry` (skeleton, empty `all()`), the 3 value objects, `ReportQueryExecutionService`, `ReportShareService`.
   - [x] Controllers/routes — prefix is `/api/report-builder/*`, NOT `/api/reports/*` (that's an unrelated pre-existing HR/Talent analytics namespace, found via `route:list`).
   - [x] Live-verified: empty-registry endpoints respond cleanly, unknown-module create returns a clean 422.
-  - [ ] **Phase 0 (frontend, g2gv0) — still to do:** full shell/builder/viewer skeleton, `export-csv.ts`, `report-chart-colors.ts`, promoted `confirm-dialog.tsx` — no module content registered yet.
+  - [x] **Phase 0 (frontend, g2gv0) — done.** *(commit `32a1c5f`, g2gv0)* `ReportsShell`, `ReportBuilderWizard` (flat AND/OR filter list only — nested-group UI deferred to Phase 4, see the file's own docblock), `ReportViewer` + 4 sub-views, `export-csv.ts`, promoted `confirm-dialog.tsx`. No `report-chart-colors.ts` built — reused the existing `categoricalColors`/`categoricalColor` in `lib/chart-colors.ts` instead. eslint + full project typecheck clean; dev server verified serving without error. No module content registered yet.
+
+**Phase 0 is fully done (backend + frontend). Next: Phase 1 — Task Management.**
 
 - [ ] **Phase 1 — Task Management (the proving ground).**
   - [ ] Register `task_management.tasks` (table `task`).
