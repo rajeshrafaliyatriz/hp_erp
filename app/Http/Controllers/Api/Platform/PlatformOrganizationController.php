@@ -90,7 +90,7 @@ class PlatformOrganizationController extends Controller
             ->leftJoin('org_details as o', 'o.sub_institute_id', '=', 's.id')
             ->whereNull('s.deleted_at')
             ->orderByDesc('s.id')
-            ->get(['s.id', 's.SchoolName', 's.ShortCode', 's.Email', 's.created_at', 's.expire_date', 'o.industry'])
+            ->get(['s.id', 's.SchoolName', 's.ShortCode', 's.Email', 's.created_at', 's.expire_date', 's.outbound_email_enabled', 'o.industry'])
             ->map(function ($row) {
                 return [
                     'id' => (int) $row->id,
@@ -100,6 +100,11 @@ class PlatformOrganizationController extends Controller
                     'industry' => $row->industry,
                     'created_at' => $row->created_at,
                     'expires_on' => $row->expire_date,
+                    // Whether App\Support\MailGate will let this organisation's
+                    // own mail leave (independent of the platform-wide
+                    // G2G_NOTIFY_EMAIL master switch, which this does not show -
+                    // that one is deploy-level, not something this roster edits).
+                    'outbound_email_enabled' => (bool) $row->outbound_email_enabled,
                     // Counted, so the roster says whether an organisation ever
                     // got off the ground rather than merely that it exists.
                     'people' => DB::table('tbluser')->where('sub_institute_id', $row->id)->count(),
@@ -111,6 +116,43 @@ class PlatformOrganizationController extends Controller
         return response()->json([
             'status' => true,
             'data' => ['organizations' => $organizations],
+        ]);
+    }
+
+    /**
+     * PATCH /api/platform/organizations/{id}/outbound-email
+     *
+     * Approving one more organisation to actually send mail used to mean
+     * editing `G2G_NOTIFY_EMAIL_TENANTS` on whichever server is running and
+     * clearing config cache - this is that same approval, as a toggle an
+     * operator can reach from here instead. See
+     * `App\Support\MailGate::allowedForTenant()`, which is the only thing
+     * that reads the column this writes.
+     */
+    public function setOutboundEmail(Request $request, int $id)
+    {
+        $identity = $this->resolveApiIdentity($request);
+
+        if (!is_array($identity)) {
+            return $identity;
+        }
+
+        $data = $request->validate(['enabled' => ['required', 'boolean']]);
+
+        $organization = DB::table('school_setup')->where('id', $id)->whereNull('deleted_at')->first(['id', 'SchoolName']);
+
+        if (!$organization) {
+            return response()->json(['status' => false, 'message' => 'Organisation not found.'], 404);
+        }
+
+        DB::table('school_setup')->where('id', $id)->update(['outbound_email_enabled' => $data['enabled']]);
+
+        return response()->json([
+            'status' => true,
+            'message' => $data['enabled']
+                ? "{$organization->SchoolName} can now send real outbound email."
+                : "{$organization->SchoolName} can no longer send real outbound email.",
+            'data' => ['id' => $id, 'outbound_email_enabled' => $data['enabled']],
         ]);
     }
 
