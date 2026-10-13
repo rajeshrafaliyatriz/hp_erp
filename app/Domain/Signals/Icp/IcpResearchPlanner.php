@@ -19,6 +19,8 @@ final class IcpResearchPlanner
         $cfg = $pack->config();
         $max = max(1, (int) config('signals.opportunities.max_queries', 6));
         $now ??= now(config('signals.timezone'));
+        // `signals:research --batches=N` moves each batch on by a day so it takes the next slice of the query catalogue.
+        $now = $now->copy()->addDays((int) config('signals.icp.batch_shift', 0));
 
         $specs = array_map(fn ($q) => array_filter([
             'q' => $q['q'], 'topic' => $q['topic'], 'days' => $q['days'], 'domains' => $q['domains'] ?? null, 'source' => $q['source'], 'id' => $q['id'],
