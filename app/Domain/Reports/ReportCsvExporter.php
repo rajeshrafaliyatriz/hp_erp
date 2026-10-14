@@ -41,15 +41,18 @@ final class ReportCsvExporter
         };
 
         return match ($reportType) {
-            // __primary_id is internal plumbing (reserved for a future
-            // drill-down/open-record action), never something an exported
-            // CSV should show a viewer - confirmed live: it was leaking as
-            // a literal, confusing first column before this fix.
+            // __primary_id and __row_color are internal plumbing (the
+            // latter: the admin-assigned per-employee color reused from
+            // Task Calendar, Docs/reports-engine/PLAN.md's Phase 4 follow-
+            // up), never something an exported CSV should show a viewer -
+            // __primary_id confirmed live as a real leak before an earlier
+            // fix; __row_color excluded here on the same principle before
+            // it ever shipped.
             'tabular' => [
                 $result['rows'] === []
                     ? []
-                    : array_map($labelFor, array_values(array_diff(array_keys($result['rows'][0]), ['__primary_id']))),
-                array_map(fn ($row) => array_values(array_diff_key($row, ['__primary_id' => true])), $result['rows']),
+                    : array_map($labelFor, array_values(array_diff(array_keys($result['rows'][0]), ['__primary_id', '__row_color']))),
+                array_map(fn ($row) => array_values(array_diff_key($row, ['__primary_id' => true, '__row_color' => true])), $result['rows']),
             ],
             'summary' => [
                 $result['groups'] === [] ? ['label', 'count'] : array_keys($result['groups'][0]),

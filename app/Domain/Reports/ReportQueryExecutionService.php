@@ -357,6 +357,10 @@ final class ReportQueryExecutionService
 
         $select = [$primary->alias . '.' . $primary->primaryKey . ' as __primary_id'];
 
+        if ($primary->colorByUserColumn !== null) {
+            $select[] = DB::raw($primary->colorByUserColumn . ' as __color_user_id');
+        }
+
         foreach ($realColumns as $col) {
             $field = $this->requireField($col['module'], $col['field'], $subInstituteId);
             $select[] = DB::raw($field->column . ' as `' . $col['module'] . '.' . $col['field'] . '`');
@@ -427,6 +431,37 @@ final class ReportQueryExecutionService
                 foreach ($customColumns as $custom) {
                     $row[$custom['key']] = $byRecordThenField[$row['__primary_id']][$custom['field']->customFieldId] ?? null;
                 }
+            }
+
+            unset($row);
+        }
+
+        if ($primary->colorByUserColumn !== null && $rows !== []) {
+            $userIds = array_values(array_unique(array_filter(array_column($rows, '__color_user_id'))));
+
+            // The exact color Task Calendar's admin-assignable per-employee
+            // color feature writes (App\Http\Controllers\HRMS\
+            // EmployeeDirectoryController::updateTaskCardColor(), via
+            // App\Services\Account\UserPreferences) — reused here, not
+            // re-invented. Deliberately NOT reproducing that feature's own
+            // auto-palette fallback for a person with no color set: the
+            // palette's index comes from that person's position in the
+            // calendar's own feed list, which has no equivalent in a report
+            // (no "feed list" exists here) — a row for someone with no
+            // admin-assigned color simply gets no fill, rather than a color
+            // that wouldn't actually match what their calendar card shows.
+            $colorsByUserId = $userIds === [] ? [] : DB::table('user_preferences')
+                ->where('sub_institute_id', $subInstituteId)
+                ->where('pref_key', 'task_card_color')
+                ->where('device_id', '')
+                ->whereIn('user_id', $userIds)
+                ->where('pref_value', '!=', '')
+                ->pluck('pref_value', 'user_id')
+                ->all();
+
+            foreach ($rows as &$row) {
+                $row['__row_color'] = $colorsByUserId[$row['__color_user_id']] ?? null;
+                unset($row['__color_user_id']);
             }
 
             unset($row);

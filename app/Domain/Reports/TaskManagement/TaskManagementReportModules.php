@@ -71,6 +71,7 @@ final class TaskManagementReportModules
                 ['table' => 'tbluser', 'alias' => 'u_assignee', 'localColumn' => 'task_allocated_to', 'foreignColumn' => 'id'],
                 ['table' => 'tbluser', 'alias' => 'u_allocator', 'localColumn' => 'task_allocated', 'foreignColumn' => 'id'],
             ],
+            colorByUserColumn: 't.task_allocated_to',
         );
     }
 
@@ -112,6 +113,7 @@ final class TaskManagementReportModules
             alwaysJoins: [
                 ['table' => 'tbluser', 'alias' => 'u_owner', 'localColumn' => 'owner_id', 'foreignColumn' => 'id'],
             ],
+            colorByUserColumn: 'e.owner_id',
         );
     }
 

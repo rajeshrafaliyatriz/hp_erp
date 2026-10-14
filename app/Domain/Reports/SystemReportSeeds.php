@@ -158,6 +158,20 @@ final class SystemReportSeeds
             ],
             [
                 'folder' => 'Assigned Tasks Report',
+                'report_type' => 'pivot',
+                'primary_module' => 'task_management.tasks',
+                'title' => 'Tasks by Assignee per Day',
+                'description' => 'Each assignee down the side, each day across the top — a new task assigned today shows up under today\'s column the moment it\'s created.',
+                'definition' => [
+                    'pivot' => [
+                        'rows' => [['module' => 'task_management.tasks', 'field' => 'task_allocated_to']],
+                        'columns' => [['module' => 'task_management.tasks', 'field' => 'task_date']],
+                        'values' => [['module' => 'task_management.tasks', 'field' => 'task_title', 'aggregate' => 'count', 'label' => 'Tasks']],
+                    ],
+                ],
+            ],
+            [
+                'folder' => 'Assigned Tasks Report',
                 'report_type' => 'chart',
                 'primary_module' => 'task_management.tasks',
                 'title' => 'Workload by Assignee',

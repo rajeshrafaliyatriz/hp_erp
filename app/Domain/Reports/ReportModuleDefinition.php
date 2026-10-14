@@ -22,6 +22,13 @@ final class ReportModuleDefinition
      *        a name instead of a raw FK id). Kept deliberately separate from `$joins`: those are
      *        a report AUTHOR's choice (bring in a whole secondary module's columns), these are
      *        the module's OWN plumbing for its own fields to render correctly.
+     * @param ?string $colorByUserColumn The module's own raw assignee/owner FK column (e.g.
+     *        `t.task_allocated_to`), NOT the joined display-name expression a userRef field
+     *        uses — when set, ReportQueryExecutionService::runTabular() resolves each row's
+     *        `__row_color` from that user's own `user_preferences.task_card_color` (the exact
+     *        color Task Calendar's admin-assignable per-employee color feature already writes,
+     *        reused rather than re-invented — Docs/reports-engine/PLAN.md's own Phase 4 follow-
+     *        up). Null for every module with no admin-assignable per-person color concept.
      */
     public function __construct(
         public readonly string $key,
@@ -34,6 +41,7 @@ final class ReportModuleDefinition
         public readonly array $fields,
         public readonly array $joins = [],
         public readonly array $alwaysJoins = [],
+        public readonly ?string $colorByUserColumn = null,
     ) {
     }
 
