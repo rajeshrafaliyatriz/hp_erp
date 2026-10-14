@@ -4136,4 +4136,10 @@ Route::prefix('report-builder')->group(function () {
     Route::get('{id}/shares', [$reportShare, 'index'])->whereNumber('id');
     Route::post('{id}/shares', [$reportShare, 'store'])->whereNumber('id');
     Route::delete('{id}/shares/{shareId}', [$reportShare, 'destroy'])->whereNumber('id')->whereNumber('shareId');
+
+    $reportSchedule = \App\Http\Controllers\Api\Reports\ReportScheduleController::class;
+    Route::get('{id}/schedules', [$reportSchedule, 'index'])->whereNumber('id');
+    Route::post('{id}/schedules', [$reportSchedule, 'store'])->whereNumber('id');
+    Route::put('{id}/schedules/{scheduleId}', [$reportSchedule, 'update'])->whereNumber('id')->whereNumber('scheduleId');
+    Route::delete('{id}/schedules/{scheduleId}', [$reportSchedule, 'destroy'])->whereNumber('id')->whereNumber('scheduleId');
 });

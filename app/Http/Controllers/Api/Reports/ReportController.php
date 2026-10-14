@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Reports;
 
+use App\Domain\Reports\ReportCsvExporter;
 use App\Domain\Reports\ReportModuleRegistry;
 use App\Domain\Reports\ReportQueryExecutionService;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
@@ -370,81 +371,13 @@ class ReportController extends Controller
             return response()->json(['status' => false, 'message' => 'This report could not be run.'], 422);
         }
 
-        [$header, $rows] = $this->flattenForCsv($report->report_type, $result, json_decode($report->definition, true));
-
-        $csv = implode(',', array_map($this->csvCell(...), $header)) . "\r\n";
-
-        foreach ($rows as $row) {
-            $csv .= implode(',', array_map($this->csvCell(...), $row)) . "\r\n";
-        }
-
+        $csv = ReportCsvExporter::toCsvString($report->report_type, $result, json_decode($report->definition, true));
         $filename = preg_replace('/[^A-Za-z0-9_-]+/', '-', $report->title) . '.csv';
 
         return response($csv, 200, [
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
-    }
-
-    /** @return array{0: array<int, string>, 1: array<int, array<int, mixed>>} */
-    private function flattenForCsv(string $reportType, array $result, array $definition = []): array
-    {
-        // "task_management.tasks.task_title" means nothing to whoever opens
-        // this in Excel - the report's own column labels ("Task", "Status")
-        // are what the builder already showed them, so the export should
-        // read the same way.
-        $labelFor = function (string $qualifiedKey) use ($definition): string {
-            foreach ($definition['columns'] ?? [] as $col) {
-                if ($qualifiedKey === "{$col['module']}.{$col['field']}") {
-                    return $col['label'] ?? $qualifiedKey;
-                }
-            }
-
-            return $qualifiedKey;
-        };
-
-        return match ($reportType) {
-            // __primary_id is internal plumbing (reserved for a future
-            // drill-down/open-record action), never something an exported
-            // CSV should show a viewer - confirmed live: it was leaking as
-            // a literal, confusing first column before this fix.
-            'tabular' => [
-                $result['rows'] === []
-                    ? []
-                    : array_map($labelFor, array_values(array_diff(array_keys($result['rows'][0]), ['__primary_id']))),
-                array_map(fn ($row) => array_values(array_diff_key($row, ['__primary_id' => true])), $result['rows']),
-            ],
-            'summary' => [
-                $result['groups'] === [] ? ['label', 'count'] : array_keys($result['groups'][0]),
-                array_map('array_values', $result['groups']),
-            ],
-            'pivot' => [
-                array_merge(['Row'], $result['column_labels'], ['Total']),
-                array_map(
-                    fn ($rowLabel, $i) => array_merge([$rowLabel], $result['matrix'][$i], [$result['row_totals'][$i]]),
-                    $result['row_labels'],
-                    array_keys($result['row_labels']),
-                ),
-            ],
-            'chart' => [
-                array_merge(['Label'], array_map(fn ($s) => $s['name'], $result['series'])),
-                array_map(
-                    fn ($label, $i) => array_merge([$label], array_map(fn ($s) => $s['data'][$i] ?? '', $result['series'])),
-                    $result['labels'],
-                    array_keys($result['labels']),
-                ),
-            ],
-            default => [[], []],
-        };
-    }
-
-    private function csvCell(mixed $value): string
-    {
-        $value = (string) ($value ?? '');
-
-        return str_contains($value, ',') || str_contains($value, '"') || str_contains($value, "\n")
-            ? '"' . str_replace('"', '""', $value) . '"'
-            : $value;
     }
 
     private function runAndRespond(string $reportType, string $primaryModule, array $definition, int $tenantId, array $extra = [], bool $forceFresh = false)

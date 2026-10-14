@@ -332,3 +332,22 @@ TaskRunLedger::track(
  * GTM WORKFLOW TRIGGERS: delivery of recorded gtm.* events to the workflow runner is done by the existing
  * `events:react` entry above (GtmWorkflowRunner is one of its reactors), so no second event loop exists.
  */
+
+/*
+ * REPORTS - SCHEDULED/EMAILED REPORT RUNS (Docs/reports-engine/PLAN.md, Phase 4).
+ *
+ * Every 15 minutes, same cadence as `signals:research`'s own per-tenant-scheduled-time pattern this
+ * mirrors: each active `report_schedules` row names its own frequency/day/time-of-day, and the command
+ * itself decides per-tick which ones are due "right now" (see ReportsSendScheduled::isDue()) rather than
+ * this schedule entry trying to express every tenant's distinct send time. `last_sent_at` is the
+ * idempotency guard - a schedule only ever fires once per calendar day regardless of how many ticks
+ * land inside its 15-minute due window.
+ */
+TaskRunLedger::track(
+    Schedule::command('reports:send-scheduled')
+        ->everyFifteenMinutes()
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'reports.send_scheduled'
+);

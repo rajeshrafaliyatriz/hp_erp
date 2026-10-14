@@ -26,6 +26,7 @@ final class MailSenderModules
         'gtm_outreach' => 'GTM — Sales Outreach',
         'hrit_management' => 'HR — Leave & People Notifications',
         'ai_reports' => 'AI — Emailed Reports',
+        'report_builder' => 'Reports — Scheduled Deliveries',
     ];
 
     public static function isValid(string $moduleKey): bool
