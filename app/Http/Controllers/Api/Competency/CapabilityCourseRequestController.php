@@ -162,6 +162,81 @@ class CapabilityCourseRequestController extends Controller
     }
 
     /**
+     * GET /competency/course-requests/filter-options - the FULL catalog the
+     * filter sidebar offers, not the narrow slice `distinct()`-able from
+     * whatever page of requests happens to be loaded.
+     *
+     * ── WHY THIS EXISTS, SEPARATELY FROM THE LIST RESPONSE ──────────────────
+     *
+     * The list only ever contains competencies that have ALREADY been
+     * flagged - so deriving filter options from it can only ever offer
+     * "departments/competencies with an open problem today", never "every
+     * department/competency HR might want to check". An HR user asking
+     * "any gaps in Design?" when Design currently has zero open requests
+     * could not even SELECT "Design" - the option did not exist. That is
+     * the bug this closes.
+     *
+     * Departments and competencies are the tenant's FULL catalog: either one
+     * could have a row tomorrow, so narrowing either to "what's flagged now"
+     * would reproduce the same defect for a different dimension. Job roles
+     * are narrower on purpose - scoped to roles that actually carry a
+     * competency requirement (`jobrole_competency_map`) - because a role
+     * with no requirement defined can structurally never raise a request;
+     * offering the tenant's other ~250 roles (this tenant has 270) would be
+     * exactly the "a value guaranteed to return nothing" trap
+     * `use-assignments.ts` already documents and this screen is built to
+     * avoid.
+     */
+    public function filterOptions(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        $sid = (int) $context['sub_institute_id'];
+
+        $departments = DB::table('hrms_departments')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->where('status', 1)
+            ->orderBy('department')
+            ->pluck('department')
+            ->filter(fn ($d) => trim((string) $d) !== '')
+            ->values();
+
+        $competencies = DB::table('competency')
+            ->where('sub_institute_id', $sid)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $jobroles = DB::table('jobrole_competency_map as m')
+            ->join('s_user_jobrole as r', 'r.id', '=', 'm.jobrole_id')
+            ->where('m.sub_institute_id', $sid)
+            ->whereNull('r.deleted_at')
+            ->select(['r.id', 'r.jobrole'])
+            ->distinct()
+            ->orderBy('r.jobrole')
+            ->get();
+
+        return response()->json([
+            'status' => 1,
+            'data'   => [
+                'departments'  => $departments,
+                'competencies' => $competencies->map(fn ($c) => [
+                    'id'   => (int) $c->id,
+                    'name' => $c->name,
+                ])->values(),
+                'jobroles'     => $jobroles->map(fn ($r) => [
+                    'id'   => (int) $r->id,
+                    'name' => $r->jobrole,
+                ])->values(),
+            ],
+        ]);
+    }
+
+    /**
      * GET /competency/course-requests/summary - the inbox's KPI strip.
      */
     public function summary(Request $request)
