@@ -4160,4 +4160,9 @@ Route::prefix('report-builder')->group(function () {
     Route::post('{id}/schedules', [$reportSchedule, 'store'])->whereNumber('id');
     Route::put('{id}/schedules/{scheduleId}', [$reportSchedule, 'update'])->whereNumber('id')->whereNumber('scheduleId');
     Route::delete('{id}/schedules/{scheduleId}', [$reportSchedule, 'destroy'])->whereNumber('id')->whereNumber('scheduleId');
+
+    // Ad hoc "send by email right now" - distinct from the {id}/schedules
+    // group above, which is only ever a recurring cadence.
+    $reportEmail = \App\Http\Controllers\Api\Reports\ReportEmailController::class;
+    Route::post('{id}/send-email', [$reportEmail, 'send'])->whereNumber('id');
 });
