@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Competency;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
 use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Http\Controllers\Controller;
+use App\Services\Competency\RatingWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -48,6 +49,10 @@ class MyRatingController extends Controller
 {
     use ResolvesCompetencyContext;
     use ResolvesEmployeeJobRole;
+
+    public function __construct(private readonly RatingWriter $ratings)
+    {
+    }
 
     /** The rating scale, matching KasbaRatingController so the two cannot drift. */
     private const MIN = 1;
@@ -126,15 +131,15 @@ class MyRatingController extends Controller
             ], 409);
         }
 
-        $rateable = DB::table('jobrole_competency_map as m')
+        $item = DB::table('jobrole_competency_map as m')
             ->join('competency_kasba_item as k', 'k.competency_id', '=', 'm.competency_id')
             ->where('m.sub_institute_id', $sid)
             ->whereIn('m.jobrole_id', $candidateRoles)
             ->where('k.sub_institute_id', $sid)
             ->where('k.id', $itemId)
-            ->exists();
+            ->first(['k.kasba_type', 'k.item_id', 'k.item_label', 'k.competency_id']);
 
-        if (!$rateable) {
+        if (!$item) {
             return response()->json([
                 'status'  => 0,
                 'message' => 'That capability item is not part of your job role, so you cannot rate yourself on it.',
@@ -164,25 +169,27 @@ class MyRatingController extends Controller
             ], 409);
         }
 
-        $values = [
-            'rating'      => $request->integer('rating'),
-            'assessor_id' => $me,
-            'source'      => 'self',
-            'note'        => $request->input('note'),
-            'rated_at'    => now(),
-            'updated_at'  => now(),
-        ];
-
-        if ($existing) {
-            DB::table('competency_kasba_rating')->where('id', $existing->id)->update($values);
-        } else {
-            DB::table('competency_kasba_rating')->insert($values + [
-                'sub_institute_id' => $sid,
-                'user_id'          => $me,
-                'kasba_item_id'    => $itemId,
-                'created_at'       => now(),
-            ]);
-        }
+        /*
+         * allow_lower: true - an employee must be able to revise their own
+         * self-rating downward (they may have over-claimed), and the existing
+         * check just above already stops this write from ever touching a row
+         * that belongs to an assessor rather than to the employee themselves,
+         * so `force` is not needed here the way it is for HR's paths.
+         */
+        $this->ratings->writeItemAndEmit([
+            'tenant'        => $sid,
+            'user_id'       => $me,
+            'kasba_item_id' => $itemId,
+            'kasba_type'    => $item->kasba_type,
+            'item_id'       => $item->item_id,
+            'item_label'    => $item->item_label,
+            'competency_id' => $item->competency_id,
+            'rating'        => $request->integer('rating'),
+            'assessor_id'   => $me,
+            'source'        => 'self',
+            'note'          => $request->input('note'),
+            'allow_lower'   => true,
+        ]);
 
         return response()->json([
             'status'  => 1,
@@ -221,14 +228,20 @@ class MyRatingController extends Controller
 
         $sid = (int) $context['sub_institute_id'];
         $me  = (int) $context['user_id'];
+        $itemId = $request->integer('kasba_item_id');
 
-        $removed = DB::table('competency_kasba_rating')
+        // Confirmed as this employee's OWN self-rating before clearing it -
+        // RatingWriter::clearItem() has no notion of "whose row this is", so
+        // the ownership check has to happen here, same as it always did.
+        $ownRow = DB::table('competency_kasba_rating')
             ->where('sub_institute_id', $sid)
             ->where('user_id', $me)
-            ->where('kasba_item_id', $request->integer('kasba_item_id'))
+            ->where('kasba_item_id', $itemId)
             ->where('source', 'self')
             ->where('assessor_id', $me)
-            ->delete();
+            ->exists();
+
+        $removed = $ownRow && $this->ratings->clearItem($sid, $me, $itemId, 'self', $me) === RatingWriter::CLEARED;
 
         return response()->json([
             'status'  => 1,

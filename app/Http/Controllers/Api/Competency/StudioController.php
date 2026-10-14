@@ -170,6 +170,104 @@ class StudioController extends Controller
     }
 
     /* ----------------------------------------------------------------- *
+     * Remediation (capability-gap -> auto-assignment) governance settings
+     * ----------------------------------------------------------------- */
+
+    /**
+     * GET /competency/studio/remediation-config
+     *
+     * Reads the same `s_competency_settings` scope (`remediation`) and the
+     * same defaults `App\Services\Competency\RemediationDueDate` resolves
+     * against for a tenant that has never saved them - the due-date tier a
+     * gap-driven assignment falls through to when neither the course nor the
+     * requirement has its own override. One row here, not a new table: this
+     * module's settings store already exists for exactly this shape of panel.
+     */
+    public function remediationConfig(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Remediation configuration fetched successfully',
+            'data'    => [
+                'settings' => $this->competencySettings(
+                    $context['sub_institute_id'],
+                    'remediation',
+                    \App\Services\Competency\RemediationDueDate::SETTINGS_DEFAULTS
+                ),
+            ],
+        ]);
+    }
+
+    /** PUT /competency/studio/remediation-config */
+    public function saveRemediationConfig(Request $request)
+    {
+        $context = $this->competencyContext($request);
+        if (!is_array($context)) {
+            return $context;
+        }
+        $sid = $context['sub_institute_id'];
+
+        $validator = Validator::make($request->all(), [
+            'due_days_mandatory'               => 'sometimes|required|integer|min:1|max:365',
+            'due_days_optional'                => 'sometimes|required|integer|min:1|max:365',
+            'auto_assign_enabled'               => 'sometimes|required|boolean',
+            'suggest_course_creation_enabled'   => 'sometimes|required|boolean',
+            'reflag_cooldown_days'              => 'sometimes|required|integer|min:1|max:365',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status'  => 0,
+                'message' => $validator->errors()->first(),
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $defaults = \App\Services\Competency\RemediationDueDate::SETTINGS_DEFAULTS;
+        $before = $this->competencySettings($sid, 'remediation', $defaults);
+
+        $settings = $this->saveCompetencySettings(
+            $sid,
+            'remediation',
+            $request->all(),
+            $defaults,
+            $context['user_id']
+        );
+
+        $labels = [
+            'due_days_mandatory'             => 'Mandatory Course Due Days',
+            'due_days_optional'              => 'Optional Course Due Days',
+            'auto_assign_enabled'            => 'Auto-Assign Enabled',
+            'suggest_course_creation_enabled' => 'Suggest Course Creation',
+            'reflag_cooldown_days'           => 'Re-Flag Cooldown Days',
+        ];
+
+        $changes = $this->diffChanges($before, $settings, $labels);
+
+        $this->logCompetencyActivity(
+            $sid,
+            $context['user_id'],
+            'updated_remediation_config',
+            'Updated the capability-gap remediation settings',
+            'competency_settings',
+            null,
+            'Remediation Configuration',
+            $changes
+        );
+
+        return response()->json([
+            'status'  => 1,
+            'message' => 'Remediation configuration saved successfully',
+            'data'    => ['settings' => $settings],
+        ]);
+    }
+
+    /* ----------------------------------------------------------------- *
      * Summary cards + mapping-coverage donut
      * ----------------------------------------------------------------- */
     public function summary(Request $request)

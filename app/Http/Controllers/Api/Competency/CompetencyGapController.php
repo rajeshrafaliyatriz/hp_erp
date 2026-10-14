@@ -162,7 +162,7 @@ class CompetencyGapController extends Controller
             'data'   => [
                 'user_id'      => $subject,
                 'jobrole_id'   => $jobroleId,
-                'competencies' => $gap['competencies'],
+                'competencies' => $this->attachRemediation((int) $sid, $subject, $gap['competencies']),
                 // The second number, separately.
                 'mandatory_below_required' => $gap['mandatory_below_required'],
                 // Feeds the capability-coverage gate. Reported, never inferred
@@ -170,6 +170,95 @@ class CompetencyGapController extends Controller
                 'coverage' => $gap['coverage'],
             ],
         ]);
+    }
+
+    /**
+     * X-16 — attach "what is being done about this gap" to every GAP row:
+     * the course CapabilityGapResponder already assigned, or, when it found
+     * none, the fact that HR has been told. This is the one thing the gap
+     * reactor's existence was supposed to make visible on this screen, and
+     * the only thing that was still missing after it shipped - the reactor,
+     * the auto-assignment, the HR inbox and the notifications all worked;
+     * this endpoint simply never learned about any of it.
+     *
+     * TWO QUERIES, NOT N+1: every competency_id on this page is batched into
+     * one `lms_assignments` lookup and one `capability_course_requests`
+     * lookup, keyed by competency_id since that is this employee's own gap
+     * report - one gap, at most one live assignment, at most one standing
+     * request per competency.
+     *
+     * A 'gap' row with NEITHER an assignment NOR an open request is not an
+     * error: the rating event that would trigger either is drained on a
+     * ~10-minute cycle (`events:react`), so a gap that just opened can
+     * legitimately be between "detected" and "resolved". Both fields are
+     * simply absent/false in that window - never fabricated.
+     *
+     * @param  list<array<string,mixed>>  $competencies
+     * @return list<array<string,mixed>>
+     */
+    private function attachRemediation(int $sid, int $userId, array $competencies): array
+    {
+        $gapCompetencyIds = array_values(array_unique(array_map(
+            fn ($row) => (int) $row['competency_id'],
+            array_filter($competencies, fn ($row) => $row['state'] === 'gap')
+        )));
+
+        if ($gapCompetencyIds === []) {
+            return $competencies;
+        }
+
+        $assignments = DB::table('lms_assignments as a')
+            ->join('sub_std_map as c', 'c.id', '=', 'a.course_id')
+            ->where('a.sub_institute_id', $sid)
+            ->where('a.user_id', $userId)
+            ->whereIn('a.competency_id', $gapCompetencyIds)
+            ->whereNull('a.deleted_at')
+            ->orderByDesc('a.id')
+            ->get([
+                'a.id as assignment_id', 'a.course_id', 'c.display_name as course_name',
+                'a.competency_id', 'a.assignment_type', 'a.due_date', 'a.due_date_basis',
+                'a.progress', 'a.status', 'a.source',
+            ])
+            // Newest assignment per competency wins - orderByDesc('a.id') above
+            // means the FIRST one keyBy sees for a competency_id is the latest.
+            ->keyBy('competency_id');
+
+        $openRequests = DB::table('capability_course_requests')
+            ->where('sub_institute_id', $sid)
+            ->where('status', 'open')
+            ->whereIn('competency_id', $gapCompetencyIds)
+            ->pluck('competency_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        foreach ($competencies as &$row) {
+            if ($row['state'] !== 'gap') {
+                continue;
+            }
+
+            $assignment = $assignments->get((int) $row['competency_id']);
+
+            if ($assignment) {
+                $row['assigned_course'] = [
+                    'assignment_id'  => (int) $assignment->assignment_id,
+                    'course_id'      => (int) $assignment->course_id,
+                    'course_name'    => $assignment->course_name,
+                    'assignment_type' => $assignment->assignment_type,
+                    'due_date'       => $assignment->due_date,
+                    'due_date_basis' => $assignment->due_date_basis,
+                    'progress'       => (int) $assignment->progress,
+                    'status'         => $assignment->status,
+                    'source'         => $assignment->source,
+                ];
+                $row['no_course_available'] = false;
+            } else {
+                $row['assigned_course'] = null;
+                $row['no_course_available'] = in_array((int) $row['competency_id'], $openRequests, true);
+            }
+        }
+        unset($row);
+
+        return $competencies;
     }
 
     /**

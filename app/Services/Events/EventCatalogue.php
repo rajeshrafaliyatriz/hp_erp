@@ -85,11 +85,91 @@ class EventCatalogue
         ],
         // X-06: NotificationDispatcher REMOVED from this event. RemediationRecommender
         // still consumes it, so the event survives the named-consumer test.
+        //
+        // NEVER EMITTED, STILL. See `competency.rating_changed` below for the
+        // chain that now actually does "a rating moved -> check the gap ->
+        // assign a course or flag HR" - built as its own event rather than by
+        // wiring an emitter onto this one, because RemediationRecommender's own
+        // header argues in writing that a FLAG must never AUTO-ASSIGN, and this
+        // feature's whole point is to assign one. Overloading this event would
+        // mean reversing that documented decision on a name that means
+        // something narrower. Left here, unemitted, rather than deleted, so a
+        // future `capability.flag_raised` consumer is not mistaken for dead.
         'capability.flag_raised' => [
             'RemediationRecommender'      => self::REACTOR,
         ],
         'capability.flag_resolved' => [
             'CapabilityEvidenceProjector' => self::PROJECTOR,
+        ],
+
+        /*
+         * Capability -> Learning. A capability rating changed (any of the 5
+         * write paths RatingWriter now covers - manual, self, kasba_library,
+         * assessment, quiz), once per (user, competency) per logical write.
+         *
+         * Deliberately NOT `competency.gap_detected` - see that entry in
+         * NOT_SHIPPED, DROPPED because a gap is derived and recomputing it is
+         * not a state change. This event names the thing that DID change (the
+         * rating) and lets its one consumer re-derive whether a gap opened or
+         * closed, fresh, via ResolvesCompetencyGap - never a guessed before/
+         * after level in the payload (EventCatalogue's own header explains why
+         * a guessed `from` is worse than no event).
+         */
+        'competency.rating_changed' => [
+            'CapabilityGapResponder'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * A course got mapped (or re-mapped) to one or more competencies.
+         * Closes the HR course-request loop: CapabilityGapResponder re-checks
+         * everyone still waiting on that competency and assigns the course to
+         * them, rather than the gap staying open until their next rating tick.
+         */
+        'competency.course_mapped' => [
+            'CapabilityGapResponder'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * CapabilityGapResponder assigned a course to close a detected gap.
+         * Tells the learner - the one notification `employee.role_assigned`
+         * never had (it is not in NOTIFIES either; this is the gap-driven
+         * path specifically, named separately because its recipient reason
+         * and copy are about a GAP, not a role change).
+         */
+        'learning.auto_assigned' => [
+            'NotificationDispatcher'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * CapabilityGapResponder found a gap with no mapped course. Tells
+         * admin/HR - see RecipientResolver::capabilityAdmins() for why that is
+         * the only viable recipient (no employee->manager edge exists).
+         */
+        'capability.course_gap_flagged' => [
+            'NotificationDispatcher'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * ScanLearningAssignmentsDue (daily sweep). Tells the learner their
+         * gap-driven (or any) course is due soon.
+         */
+        'learning.assignment_due_soon' => [
+            'NotificationDispatcher'      => self::REACTOR,
+            'AuditLogProjector'           => self::PROJECTOR,
+        ],
+
+        /*
+         * Same sweep, past the due date. PROJECTOR ONLY, deliberately - see
+         * ScanLearningAssignmentsDue's header: the overdue backlog has not
+         * been measured yet, and task.overdue's history is the warning for
+         * why that measurement has to come before this notifies anybody.
+         */
+        'learning.assignment_overdue' => [
+            'AuditLogProjector'           => self::PROJECTOR,
         ],
         'assessment.completed' => [
             'NotificationDispatcher'      => self::REACTOR,

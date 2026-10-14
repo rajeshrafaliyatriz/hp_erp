@@ -3,6 +3,7 @@
 namespace App\Services\Notifications;
 
 use App\Services\Leave\LeaveApprovalWorkflow;
+use App\Support\RoleKey;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -74,6 +75,17 @@ class RecipientResolver
             'leave.submitted'           => $this->approversOfOpenStep($event, $payload, $tenant),
             'leave.decided'             => $this->leaveApplicant($event, $payload, $tenant),
             'leave.escalated'           => $this->escalationTargets($event, $payload, $tenant),
+
+            // Capability -> Learning (X-16). The learner for both learning
+            // events - same shape as certification.issued, reading the
+            // user_id CapabilityGapResponder / ScanLearningAssignmentsDue
+            // wrote into the payload, which is our own record, not a
+            // caller's claim. capability.course_gap_flagged has no learner
+            // to tell - it is a thing that did NOT happen to anyone yet - so
+            // it goes to HR/admin instead.
+            'learning.auto_assigned'        => $this->subjectOfEvent($payload, 'auto_assigned_learner'),
+            'learning.assignment_due_soon'  => $this->subjectOfEvent($payload, 'assignment_due_soon'),
+            'capability.course_gap_flagged' => $this->capabilityAdmins($tenant),
 
             default                     => [],
         };
@@ -264,8 +276,21 @@ class RecipientResolver
      */
     private function holdersOfChainRole(string $chainRole, int $tenant, string $reason): array
     {
-        $roleKeys = LeaveApprovalWorkflow::roleKeysFor($chainRole);
+        return $this->holdersOfRoleKeys(LeaveApprovalWorkflow::roleKeysFor($chainRole), $tenant, $reason);
+    }
 
+    /**
+     * Everyone in this tenant who holds any of these role_keys.
+     *
+     * Extracted from holdersOfChainRole() so a caller with no leave chain
+     * role to go through - capabilityAdmins() below - can still resolve a
+     * role-based recipient the same bounded, repeatable way.
+     *
+     * Capped at MAX_ROLE_RECIPIENTS: "no course exists for competency Y" in a
+     * tenant with forty HR users must not become forty notifications.
+     */
+    private function holdersOfRoleKeys(array $roleKeys, int $tenant, string $reason): array
+    {
         if ($roleKeys === []) {
             return [];
         }
@@ -281,6 +306,26 @@ class RecipientResolver
             ->all();
 
         return array_map(fn ($id) => ['user_id' => (int) $id, 'reason' => $reason], $ids);
+    }
+
+    /**
+     * Admin/HR for this tenant - the recipient for a notification about
+     * something nobody owns yet (a capability gap with no course to close
+     * it), where "the employee's manager" is not viable (see this class's
+     * header measurement) and there is no case row to read a manager off.
+     *
+     * Role keys come from RoleKey::ALIASES rather than being hardcoded here,
+     * so this can never disagree with the `admin+hr` route gate the Capability
+     * Gap Inbox itself is protected by.
+     */
+    private function capabilityAdmins(int $tenant): array
+    {
+        $roleKeys = array_values(array_unique(array_merge(
+            RoleKey::ALIASES['admin'] ?? [],
+            RoleKey::ALIASES['hr'] ?? []
+        )));
+
+        return $this->holdersOfRoleKeys($roleKeys, $tenant, 'capability_admin');
     }
 
     // ── plumbing ────────────────────────────────────────────────────────────

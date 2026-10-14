@@ -689,6 +689,19 @@ Route::get('/competency/course-map', [\App\Http\Controllers\Api\Competency\Cours
 Route::post('/competency/course-map', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'store'])->middleware('profile:admin,hr');
 Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competency\CourseCompetencyMapController::class, 'destroy'])->whereNumber('id')->middleware('profile:admin,hr');
 
+/*
+ * Capability Gap Inbox - HR's queue for "a gap exists and no course closes
+ * it" (capability_course_requests). Gated admin+hr, unlike /competency/
+ * approvals: these rows name every employee's measured shortfall against
+ * their own role. Literal segments declared before {id}, {id} numeric-only -
+ * the convention jobroles/{id}/merge exists to protect.
+ */
+Route::get('/competency/course-requests/summary', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'summary'])->middleware('profile:admin,hr');
+Route::get('/competency/course-requests', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'index'])->middleware('profile:admin,hr');
+Route::get('/competency/course-requests/{id}', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'show'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/course-requests/{id}/dismiss', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'dismiss'])->whereNumber('id')->middleware('profile:admin,hr');
+Route::post('/competency/course-requests/{id}/reopen', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'reopen'])->whereNumber('id')->middleware('profile:admin,hr');
+
 // KASBA RATINGS - the write half of the last link before the gap.
 // competency_kasba_rating had 160 seeded rows and NO writer anywhere: both
 // existing rating routes are GET and ProficiencyService only LEFT JOINs it.
@@ -850,6 +863,9 @@ Route::put('/competency/studio/weights', [CompetencyStudioController::class, 'sa
 // Scoring rules behind the weights (s_competency_settings, scope='weighting').
 Route::get('/competency/studio/weighting-config', [CompetencyStudioController::class, 'weightingConfig']);
 Route::put('/competency/studio/weighting-config', [CompetencyStudioController::class, 'saveWeightingConfig']);
+// Capability-gap due-date governance (s_competency_settings, scope='remediation').
+Route::get('/competency/studio/remediation-config', [CompetencyStudioController::class, 'remediationConfig']);
+Route::put('/competency/studio/remediation-config', [CompetencyStudioController::class, 'saveRemediationConfig'])->middleware('profile:admin,hr');
 
 // Framework show / update / clone / items / weighting (list/create/delete are above).
 Route::get('/competency/frameworks/{id}', [CompetencyFrameworkController::class, 'show'])->whereNumber('id');
