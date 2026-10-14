@@ -244,7 +244,23 @@ class ReportController extends Controller
 
         DB::table('reports')->where('id', $id)->update(['last_run_at' => now()]);
 
-        return $this->runAndRespond($report->report_type, $report->primary_module, json_decode($report->definition, true), $tenantId);
+        $definition = json_decode($report->definition, true);
+
+        // Page/page-size are view-time concerns, not part of the saved
+        // definition's own identity — a viewer paging through a tabular
+        // report's rows (or changing how many show per page) does so
+        // without that preference being written back to the saved report.
+        if ($report->report_type === 'tabular') {
+            if ($request->filled('page')) {
+                $definition['page'] = (int) $request->input('page');
+            }
+
+            if ($request->filled('per_page')) {
+                $definition['per_page'] = (int) $request->input('per_page');
+            }
+        }
+
+        return $this->runAndRespond($report->report_type, $report->primary_module, $definition, $tenantId);
     }
 
     /**
