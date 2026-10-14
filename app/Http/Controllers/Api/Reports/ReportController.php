@@ -329,7 +329,7 @@ class ReportController extends Controller
             'per_page' => 100,
         ];
 
-        return $this->runAndRespond('tabular', $report->primary_module, $tabularDefinition, $tenantId);
+        return $this->runAndRespond('tabular', $report->primary_module, $tabularDefinition, $tenantId, ['columns' => $tabularDefinition['columns']]);
     }
 
     /** A reasonable default column set for a drill-down table — the primary module's own fields, custom fields excluded (display-only elsewhere, no reason to add that cost here), capped to keep the table readable. */
@@ -447,12 +447,12 @@ class ReportController extends Controller
             : $value;
     }
 
-    private function runAndRespond(string $reportType, string $primaryModule, array $definition, int $tenantId)
+    private function runAndRespond(string $reportType, string $primaryModule, array $definition, int $tenantId, array $extra = [])
     {
         try {
             $result = $this->executor->execute($reportType, $primaryModule, $definition, $tenantId);
 
-            return response()->json(['status' => true, 'data' => $result]);
+            return response()->json(['status' => true, 'data' => array_merge($result, $extra)]);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['status' => false, 'message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
