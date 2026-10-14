@@ -48,34 +48,44 @@ class CapabilityCourseRequestController extends Controller
 
         $sid = (int) $context['sub_institute_id'];
 
-        $query = DB::table('capability_course_requests')
-            ->where('sub_institute_id', $sid)
-            ->whereNull('deleted_at');
+        $query = DB::table('capability_course_requests as req')
+            ->leftJoin('s_user_jobrole as jr', function ($join) use ($sid) {
+                $join->on('jr.id', '=', 'req.jobrole_id')->where('jr.sub_institute_id', '=', $sid);
+            })
+            ->where('req.sub_institute_id', $sid)
+            ->whereNull('req.deleted_at');
 
         $status = (string) $request->input('status', '');
         if ($status !== '' && $status !== 'all') {
-            $query->where('status', $status);
+            $query->where('req.status', $status);
         }
 
         if ($request->filled('competency_id')) {
-            $query->where('competency_id', $request->integer('competency_id'));
+            $query->where('req.competency_id', $request->integer('competency_id'));
         }
 
         if ($request->filled('jobrole_id')) {
-            $query->where('jobrole_id', $request->integer('jobrole_id'));
+            $query->where('req.jobrole_id', $request->integer('jobrole_id'));
         }
 
         if ($request->boolean('mandatory_only')) {
-            $query->where('is_mandatory', 1);
+            $query->where('req.is_mandatory', 1);
         }
 
-        $rows = $query->orderByDesc('affected_count')->orderByDesc('last_seen_at')
+        $rows = $query->orderByDesc('req.affected_count')->orderByDesc('req.last_seen_at')
             ->get([
-                'id', 'competency_id', 'competency_name', 'jobrole_id',
-                'required_proficiency', 'is_mandatory', 'affected_count', 'status',
-                'created_course_id', 'dismissed_reason', 'dismissed_at',
-                'first_raised_at', 'last_seen_at', 'times_seen',
+                'req.id', 'req.competency_id', 'req.competency_name', 'req.jobrole_id',
+                'req.required_proficiency', 'req.is_mandatory', 'req.affected_count', 'req.status',
+                'req.created_course_id', 'req.dismissed_reason', 'req.dismissed_at',
+                'req.first_raised_at', 'req.last_seen_at', 'req.times_seen',
+                // `jobrole_id` on the request names whichever role's rating
+                // FIRST raised it (raiseOrUpdateRequest's origin role) -
+                // honest about that, not "the" role when several could
+                // require the same competency.
+                'jr.jobrole as jobrole_name',
             ]);
+
+        $departmentByRequest = $this->singleDepartmentPerRequest($sid, $rows->pluck('id')->all());
 
         return response()->json([
             'status' => 1,
@@ -84,6 +94,7 @@ class CapabilityCourseRequestController extends Controller
                 'competency_id'         => (int) $r->competency_id,
                 'competency_name'       => $r->competency_name,
                 'jobrole_id'            => $r->jobrole_id ? (int) $r->jobrole_id : null,
+                'jobrole_name'          => $r->jobrole_name,
                 'required_proficiency'  => $r->required_proficiency !== null ? (int) $r->required_proficiency : null,
                 'is_mandatory'          => (bool) $r->is_mandatory,
                 'affected_count'        => (int) $r->affected_count,
@@ -97,9 +108,57 @@ class CapabilityCourseRequestController extends Controller
                 'first_raised_at'       => $r->first_raised_at,
                 'last_seen_at'          => $r->last_seen_at,
                 'times_seen'            => (int) $r->times_seen,
+                // Null when the affected employees span more than one
+                // department - a competency-grained row has no single
+                // owning department to report, and guessing one would be
+                // worse than leaving the filter unable to bucket it.
+                'department'            => $departmentByRequest[(int) $r->id] ?? null,
             ])->values(),
             'empty_is_expected' => $rows->isEmpty(),
         ]);
+    }
+
+    /**
+     * One department name per request id, ONLY where every currently
+     * affected employee shares the same one - computed from
+     * `capability_course_request_subjects`, not from the request's own
+     * `jobrole_id` (which names a role, not a department, and only the
+     * role that happened to raise the request first).
+     *
+     * Batched in two queries for the whole page rather than one per row.
+     *
+     * @param  list<int>  $requestIds
+     * @return array<int, string>
+     */
+    private function singleDepartmentPerRequest(int $sid, array $requestIds): array
+    {
+        if ($requestIds === []) {
+            return [];
+        }
+
+        $rows = DB::table('capability_course_request_subjects as s')
+            ->join('tbluser as u', 'u.id', '=', 's.user_id')
+            ->leftJoin('hrms_departments as d', 'd.id', '=', 'u.department_id')
+            ->where('s.sub_institute_id', $sid)
+            ->whereIn('s.request_id', $requestIds)
+            ->whereNotNull('d.department')
+            ->select(['s.request_id', 'd.department'])
+            ->distinct()
+            ->get();
+
+        $byRequest = [];
+        foreach ($rows as $row) {
+            $byRequest[(int) $row->request_id][] = $row->department;
+        }
+
+        $result = [];
+        foreach ($byRequest as $requestId => $departments) {
+            if (count(array_unique($departments)) === 1) {
+                $result[$requestId] = $departments[0];
+            }
+        }
+
+        return $result;
     }
 
     /**
