@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
  * competency can finally be turned into a list of courses. Before that this class
  * would have recommended nothing, which is why it was scheduled rather than built.
  *
- * ⚠ CORRECTED 2026-08-12 - "UNBLOCKED" OVERSTATED IT. THE BRIDGE HAS NO WRITER.
+ * ⚠ CORRECTED 2026-08-12 - "UNBLOCKED" OVERSTATED IT. (SUPERSEDED - SEE BELOW.)
  *
  *   `course_competency_map` has exactly TWO references in the whole application:
  *   this class and LearningAssigner. BOTH ARE READS. No controller, route,
@@ -29,6 +29,16 @@ use Illuminate\Support\Facades\Log;
  *   Kept rather than rewritten, because the overstatement is the useful part:
  *   "56 rows arrived" was read as "the mechanism works now", and rows arriving
  *   by seed look identical to rows arriving by use until you ask who wrote them.
+ *
+ * ⚠ CORRECTED AGAIN, 2026-10-14 - THE WRITER NOW EXISTS. Do not re-grep and
+ *   land back on the 2026-08-12 conclusion above; it is stale, not evergreen.
+ *   `CourseCompetencyMapController::store()` (`POST /competency/course-map`,
+ *   `profile:admin,hr`) writes this table, the frontend calls it from
+ *   `CourseCompetencyInlinePanel` in Course Builder, and it now also emits
+ *   `competency.course_mapped` so `CapabilityGapResponder` (X-16) can assign
+ *   the newly-mapped course to everyone who was already waiting on it via
+ *   `capability_course_request_subjects`. "56 rows is the seed floor, not the
+ *   ceiling" is now literally true rather than aspirational.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * ONE OF ITS TWO ENTRY POINTS CANNOT FIRE, AND IT IS WIRED ANYWAY.

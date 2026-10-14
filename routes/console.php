@@ -158,6 +158,23 @@ TaskRunLedger::track(
 );
 
 /*
+ * Due-date reminders for lms_assignments (X-16) - the same gap this
+ * certification sweep above used to be the only example of. Nothing has ever
+ * read `due_date` against today's date before this; CapabilityGapResponder is
+ * the first writer to fill it with any regularity. Modelled on
+ * certifications:scan-expiry's own idempotency-key shape - see
+ * ScanLearningAssignmentsDue's header for why a daily re-sweep is free.
+ */
+TaskRunLedger::track(
+    Schedule::command('learning:scan-due-assignments')
+        ->dailyAt('07:30')
+        ->withoutOverlapping()
+        ->onOneServer()
+        ->runInBackground(),
+    'learning.scan_due_assignments'
+);
+
+/*
  * Walks every in-flight Department Process run forward past any `wait_delay`
  * step whose due_at has elapsed, and flags task/approval/milestone/decision
  * steps closing in on their own due_at. Every 15 minutes rather than daily

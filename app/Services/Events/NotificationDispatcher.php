@@ -79,6 +79,19 @@ class NotificationDispatcher
         'leave.submitted',
         'leave.decided',
         'leave.escalated',
+
+        /*
+         * Capability -> Learning (X-16). Recipients resolved below:
+         * `learning.auto_assigned` to the learner (subjectOfEvent, same as
+         * certification.issued), `capability.course_gap_flagged` to
+         * `capabilityAdmins()` since the only plausible named person - the
+         * employee's manager - does not exist in this data (see the class
+         * header's measurement on tbluser.reporting_manager_id), and
+         * `learning.assignment_due_soon` to the learner again.
+         */
+        'learning.auto_assigned',
+        'capability.course_gap_flagged',
+        'learning.assignment_due_soon',
     ];
 
     public function __construct(

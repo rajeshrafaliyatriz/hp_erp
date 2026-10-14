@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Competency;
 use App\Http\Controllers\Concerns\ResolvesEmployeeJobRole;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\Competency\Concerns\ResolvesCompetencyContext;
+use App\Services\Competency\RatingWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -40,6 +41,10 @@ class KasbaRatingController extends Controller
 {
     use ResolvesEmployeeJobRole;
     use ResolvesCompetencyContext;
+
+    public function __construct(private readonly RatingWriter $ratings)
+    {
+    }
 
     /** 1..5. Zero is deliberately not a rating - see the class docblock. */
     private const MIN = 1;
@@ -218,9 +223,15 @@ class KasbaRatingController extends Controller
         // The item must be the caller's own tenant's. Without this a rating could
         // be hung off another tenant's competency item - the same hole that made
         // item_id dangle before it was validated per dimension.
-        $itemOk = DB::table('competency_kasba_item')
-            ->where('id', $itemId)->where('sub_institute_id', $sid)->exists();
-        if (!$itemOk) {
+        //
+        // The dimension/label/competency columns are read here too, not just
+        // existence - RatingWriter denormalises them onto the history row, and
+        // a competency_id is what lets the gap-response chain know which
+        // requirement this rating might have just closed or opened.
+        $item = DB::table('competency_kasba_item')
+            ->where('id', $itemId)->where('sub_institute_id', $sid)
+            ->first(['kasba_type', 'item_id', 'item_label', 'competency_id']);
+        if (!$item) {
             return response()->json(['status' => 0, 'message' => 'Competency item not found.'], 404);
         }
 
@@ -233,17 +244,31 @@ class KasbaRatingController extends Controller
             return response()->json(['status' => 0, 'message' => 'Employee not found.'], 404);
         }
 
-        DB::table('competency_kasba_rating')->updateOrInsert(
-            ['sub_institute_id' => $sid, 'user_id' => $subject, 'kasba_item_id' => $itemId],
-            [
-                'rating'      => $request->integer('rating'),
-                'assessor_id' => $actor,
-                'source'      => 'manual',
-                'note'        => $request->input('note'),
-                'rated_at'    => now(),
-                'updated_at'  => now(),
-            ]
-        );
+        /*
+         * force: true - HR re-rating someone they already rated must not be
+         * blocked by the "never overwrite an assessor" guard; that guard exists
+         * to stop a DERIVED source overwriting a person's judgement, and this
+         * is the same kind of judgement rating over itself.
+         *
+         * allow_lower: true - HR must be able to correct a rating downward,
+         * which is half of "capability will upgrade or downgrade" working at
+         * all for the path HR actually uses day to day.
+         */
+        $this->ratings->writeItemAndEmit([
+            'tenant'        => $sid,
+            'user_id'       => $subject,
+            'kasba_item_id' => $itemId,
+            'kasba_type'    => $item->kasba_type,
+            'item_id'       => $item->item_id,
+            'item_label'    => $item->item_label,
+            'competency_id' => $item->competency_id,
+            'rating'        => $request->integer('rating'),
+            'assessor_id'   => $actor,
+            'source'        => 'manual',
+            'note'          => $request->input('note'),
+            'force'         => true,
+            'allow_lower'   => true,
+        ]);
 
         return response()->json([
             'status'  => 1,
@@ -337,47 +362,25 @@ class KasbaRatingController extends Controller
             ], 404);
         }
 
-        // Every competency this item belongs to. An item can sit in several, and
-        // one measurement of one thing is the same measurement in all of them.
-        $linkedItemIds = DB::table('competency_kasba_item')
-            ->where('sub_institute_id', $sid)
-            ->where('kasba_type', $type)
-            ->where('item_id', $itemId)
-            ->pluck('id');
-
-        $shared = [
+        /*
+         * force + allow_lower, for the same reason store() passes them: this
+         * is HR's own judgement re-rating an item, not a derived source trying
+         * to overwrite one. writeLibraryItem() does the dual write itself -
+         * the direct (kasba_type, item_id) row plus one row per competency
+         * link - and emits once per competency actually touched.
+         */
+        $result = $this->ratings->writeLibraryItem([
+            'tenant'      => $sid,
+            'user_id'     => $subject,
+            'kasba_type'  => $type,
+            'item_id'     => $itemId,
             'rating'      => $rating,
             'assessor_id' => $actor,
             'source'      => 'kasba_library',
             'note'        => $note,
-            'rated_at'    => now(),
-            'updated_at'  => now(),
-        ];
-
-        DB::transaction(function () use ($sid, $subject, $type, $itemId, $linkedItemIds, $shared) {
-            // The direct row - uq_ckr_direct makes this idempotent.
-            DB::table('competency_kasba_rating')->updateOrInsert(
-                [
-                    'sub_institute_id' => $sid,
-                    'user_id'          => $subject,
-                    'kasba_type'       => $type,
-                    'item_id'          => $itemId,
-                ],
-                $shared
-            );
-
-            // And one per competency link, so the existing roll-up is unaffected.
-            foreach ($linkedItemIds as $kasbaItemId) {
-                DB::table('competency_kasba_rating')->updateOrInsert(
-                    [
-                        'sub_institute_id' => $sid,
-                        'user_id'          => $subject,
-                        'kasba_item_id'    => (int) $kasbaItemId,
-                    ],
-                    $shared
-                );
-            }
-        });
+            'force'       => true,
+            'allow_lower' => true,
+        ]);
 
         return response()->json([
             'status'  => 1,
@@ -387,12 +390,12 @@ class KasbaRatingController extends Controller
                 'item_id'          => $itemId,
                 'user_id'          => $subject,
                 'title'            => $item->title,
-                'competencies_hit' => $linkedItemIds->count(),
+                'competencies_hit' => $result['competencies_hit'],
                 // Not an error, but the caller should be able to say so: a
                 // rating on an unlinked item is recorded and will not appear in
                 // any competency roll-up until somebody maps it.
-                'rolls_up'         => $linkedItemIds->isNotEmpty(),
-                'notice'           => $linkedItemIds->isEmpty()
+                'rolls_up'         => $result['competencies_hit'] > 0,
+                'notice'           => $result['competencies_hit'] === 0
                     ? 'Saved. This item is not part of any competency yet, so it will not affect competency scores until it is mapped in Competency Library.'
                     : null,
             ],
@@ -421,16 +424,20 @@ class KasbaRatingController extends Controller
             return response()->json(['status' => 0, 'message' => $validator->errors()->first()], 422);
         }
 
-        $deleted = DB::table('competency_kasba_rating')
-            ->where('sub_institute_id', (int) $context['sub_institute_id'])
-            ->where('user_id', $request->integer('user_id'))
-            ->where('kasba_item_id', $request->integer('kasba_item_id'))
-            ->delete();
+        $outcome = $this->ratings->clearItem(
+            (int) $context['sub_institute_id'],
+            $request->integer('user_id'),
+            $request->integer('kasba_item_id'),
+            'manual',
+            (int) $context['user_id']
+        );
+
+        $removed = $outcome === RatingWriter::CLEARED;
 
         return response()->json([
             'status'  => 1,
-            'message' => $deleted ? 'Rating removed; the item is unmeasured again.' : 'No rating to remove.',
-            'data'    => ['removed' => $deleted],
+            'message' => $removed ? 'Rating removed; the item is unmeasured again.' : 'No rating to remove.',
+            'data'    => ['removed' => $removed],
         ]);
     }
 
