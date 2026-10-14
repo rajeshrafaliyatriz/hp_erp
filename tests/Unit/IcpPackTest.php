@@ -133,7 +133,7 @@ class IcpPackTest extends TestCase
         $first = null;
         for ($d = 0; $d < 12; $d++) {
             $run = $pack->catalogueForRun(Carbon::create(2026, 10, 1)->addDays($d));
-            $this->assertCount(3, $run);
+            $this->assertCount(5, $run);
             $first ??= $run;
             foreach ($run as $q) {
                 $seen[$q['id']] = true;
@@ -164,7 +164,7 @@ class IcpPackTest extends TestCase
         $pack = new IcpPack('scholar_k12', $this->pack());
         $q = $pack->accountQuery('Podar "World" School', 'Vadodara');
 
-        $this->assertStringContainsString('"Podar World School" Vadodara', $q['q']);
+        $this->assertSame('Podar World School Vadodara', $q['q'], 'plain name and city: no quotes, no event words');
         $this->assertSame('general', $q['topic']);
     }
 
@@ -178,15 +178,11 @@ class IcpPackTest extends TestCase
         $this->assertSame(90, $pack->decayDays('something-new'));
     }
 
-    public function test_a_tenant_only_gets_the_pack_when_it_is_switched_on_for_it(): void
+    public function test_every_organisation_gets_the_scholarclone_pack_and_nothing_else(): void
     {
-        config(['signals.icp.scholar_k12_tenants' => []]);
-        $this->assertNull(IcpPack::forTenant(6));
-
-        config(['signals.icp.scholar_k12_tenants' => ['6', '131']]);
         $this->assertSame('scholar_k12', IcpPack::forTenant(6)?->key);
-        $this->assertSame('scholar_k12', IcpPack::forTenant(131)?->key);
-        $this->assertNull(IcpPack::forTenant(7));
+        $this->assertSame('scholar_k12', IcpPack::forTenant(7)?->key);
+        $this->assertSame(['scholar_k12'], array_map(fn ($p) => $p->key, IcpPack::allActive(7)));
     }
 
     public function test_the_prompt_block_carries_the_icp_the_roles_and_the_never_list(): void

@@ -11,6 +11,6 @@ class ResearchSource extends Model
 
     protected $guarded = ['id'];
 
-    protected $casts = ['published_at' => 'date', 'retrieved_at' => 'datetime', 'page_fetched' => 'boolean', 'cited' => 'boolean'];
+    protected $casts = ['published_at' => 'date', 'modified_at' => 'date', 'retrieved_at' => 'datetime', 'page_fetched' => 'boolean', 'cited' => 'boolean'];
 }
 

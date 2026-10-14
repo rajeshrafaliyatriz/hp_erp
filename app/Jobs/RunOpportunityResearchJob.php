@@ -26,9 +26,10 @@ class RunOpportunityResearchJob implements ShouldQueue
     public function __construct(
         public readonly int $tenantId,
         public readonly ?int $userId,
-        public readonly ?array $customParams = null,
+        public readonly ?string $company = null,
         public readonly ?int $runId = null,
-        public readonly ?int $icpProfileId = null
+        public readonly ?array $custom = null,
+        public readonly ?string $productKey = null
     ) {
         $this->onQueue((string) config('signals.queue', 'signals'));
     }
@@ -36,7 +37,7 @@ class RunOpportunityResearchJob implements ShouldQueue
     public function handle(OpportunityResearcher $researcher): void
     {
         try {
-            $researcher->run($this->tenantId, 'manual', $this->userId, $this->customParams, $this->runId, $this->icpProfileId);
+            $researcher->run($this->tenantId, 'manual', $this->userId, $this->company, $this->runId, $this->custom, $this->productKey);
         } finally {
             Cache::forget("signals:research-pending:{$this->tenantId}");
         }

@@ -11,10 +11,10 @@ namespace App\Domain\Signals\Icp;
  */
 final class IcpProfileValidator
 {
-    public const SOURCES = ['news', 'job', 'tender', 'leadership', 'regulation', 'other'];
+    public const SOURCES = ['news', 'job', 'tender', 'leadership', 'regulation', 'social', 'concept', 'other'];
     public const OPS = ['>=', '<=', '>', '<', 'between', 'in', 'not_in', '=', '!=', 'in_regions'];
     public const KEYS = [
-        'label', 'product_line', 'industry_label', 'guidance', 'watch_rules', 'vendor_phrases', 'vendor_news_phrases', 'priority_cities', 'evidence_rules', 'tiers', 'buyer_types', 'regions', 'parts', 'must_have', 'disqualifiers', 'manual_flags',
+        'label', 'pitch', 'competitors', 'product_line', 'industry_label', 'guidance', 'watch_rules', 'vendor_phrases', 'vendor_news_phrases', 'priority_cities', 'evidence_rules', 'tiers', 'buyer_types', 'regions', 'parts', 'must_have', 'disqualifiers', 'manual_flags',
         'watch_first_phrases', 'criteria', 'evidence_points', 'priority', 'min_known_share', 'triggers', 'queries', 'per_run',
         'account_query', 'account_days', 'account_recheck_days', 'decay_by_trigger_type', 'buying_window_months', 'buying_centre',
     ];

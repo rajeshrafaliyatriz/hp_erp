@@ -31,7 +31,7 @@ class AccountEvidenceTest extends TestCase
             '2026_09_30_150000_create_g2g_opportunity_and_ingestion_tables', '2026_09_30_180000_add_signal_fields_to_ingestion_findings',
             '2026_09_30_200000_add_research_sources_and_signal_kind', '2026_09_30_220000_create_g2g_portfolio_and_partners_tables',
             '2026_09_30_230000_add_claude_feed_and_linking_fields', '2026_10_01_130000_add_stage_to_g2g_research_runs',
-            '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_10_13_100000_create_g2g_target_accounts_table',
+            '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_10_13_100000_create_g2g_target_accounts_table',
         ] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
@@ -173,6 +173,9 @@ class AccountEvidenceTest extends TestCase
         $researcher = $this->app->make(OpportunityResearcher::class);
         $m = new \ReflectionMethod($researcher, 'linkAccounts');
         $m->setAccessible(true);
-        $m->invoke($researcher, self::T, $pack, [0 => ['buyer' => ['name' => $buyer]]], [['index' => 0, 'id' => $oppId, 'outcome' => 'created']]);
+        // linkAccounts attaches only on an exact identity match, which the researcher records in the candidate's assessment.
+        $account = TargetAccount::where('sub_institute_id', self::T)->where('name', $buyer)->firstOrFail();
+        $candidate = ['buyer' => ['name' => $buyer], 'assessment' => ['identity' => ['status' => 'target_exact', 'account_id' => (int) $account->id]]];
+        $m->invoke($researcher, self::T, $pack, [0 => $candidate], [['index' => 0, 'id' => $oppId, 'outcome' => 'created']]);
     }
 }

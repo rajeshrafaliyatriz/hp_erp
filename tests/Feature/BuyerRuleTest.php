@@ -28,11 +28,12 @@ class BuyerRuleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['signals.discovery.screen_off_topic' => false]);   // fixtures here use non-school pages to exercise the gate itself
         foreach ([
             '2026_09_30_150000_create_g2g_opportunity_and_ingestion_tables', '2026_09_30_180000_add_signal_fields_to_ingestion_findings',
             '2026_09_30_200000_add_research_sources_and_signal_kind', '2026_09_30_220000_create_g2g_portfolio_and_partners_tables',
             '2026_09_30_230000_add_claude_feed_and_linking_fields', '2026_10_01_130000_add_stage_to_g2g_research_runs',
-            '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_10_13_100000_create_g2g_target_accounts_table',
+            '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_10_13_100000_create_g2g_target_accounts_table',
         ] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
@@ -91,7 +92,7 @@ class BuyerRuleTest extends TestCase
             'needs_statement' => "{$s['company']} is growing and needs a school system running from day one.",
             'closing_date' => null, 'what_happened' => $s['fact'], 'trigger_summary' => 'Growth points to systems being set up now.',
             'likely_problem' => 'Growth needs admissions, fees and attendance working from the first day. Our school management system covers all three.',
-            'what_we_could_sell' => 'school management system for the new campus covering admissions, fees and attendance', 'offer_id' => null,
+            'what_we_could_sell' => 'school management system for the new campus covering admissions, fees and attendance', 'product_part' => 'school_erp', 'fit_reason' => 'A new campus needs admissions, fees and attendance set up from day one.', 'intent_indicators' => [],
             'entry_point' => 'discovery_meeting', 'entry_point_reason' => null,
             'soft_marketing_angle' => 'Ask for the principal or the trustee. Open with running every campus from one system.',
             'likely_stakeholder' => null,
@@ -146,12 +147,11 @@ class BuyerRuleTest extends TestCase
         $this->assertNotFalse($at = strpos($prompt, 'WHO IS A BUYER'));
         $this->assertLessThan(strpos($prompt, 'STRICT RULES'), $at, 'the buyer rule comes before the strict rules');
         foreach ([
-            'would USE our offer on its own students, staff or data',
-            'are NOT buyers',
+            'private K-12 school or school group',
+            'NEVER a buyer',
             '"competitor"', '"market"',
-            'own product launch, funding, award, event appearance or expansion abroad',
-            'a problem we solve', 'a reason to act now', 'a person who decides', 'trust', 'a route to buy',
-            'scores.reasoning', 'buying_signal is 4 or 5 only when BOTH',
+            'own product launch, funding, award or event',
+            'BUYING INTENT is judged from INDICATORS', 'SALES PULL', 'PRODUCT FIT', 'never use fear, shame, guilt, rivalry or social pressure',
             'Brahma AI raises USD 150 million', 'Vaia expands its AI platform into the US', 'NEC India signs a distribution deal', 'RSK Business Solutions demos AI',
         ] as $needle) {
             $this->assertStringContainsString($needle, $prompt, $needle);

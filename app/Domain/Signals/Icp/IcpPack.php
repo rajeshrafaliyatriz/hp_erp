@@ -3,18 +3,12 @@
 namespace App\Domain\Signals\Icp;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
 
 /**
- * One ICP in use for one organisation: the day's searches, the hard rules, how long a signal stays fresh, and the
- * block of text the research prompt is given. It wraps an ICP configuration that an organisation owns as DATA
- * (g2g_icp_profiles); nothing here knows what industry it is.
- *
- * Where a run gets its ICP, in order:
- *   1. an ACTIVE profile in the database (the one asked for, else the default, else the oldest);
- *   2. a template named in config('signals.icp.scholar_k12_tenants') (a stop-gap so nothing breaks before an
- *      organisation has saved its own profile);
- *   3. none: the generic product-profile research, unchanged.
+ * The ScholarClone definition in use: the day's searches, the hard rules, how long a signal stays fresh, and the block
+ * of text the research prompt is given. It reads config/signals_icp.php (`scholar_k12`), the single definition of who
+ * buys ScholarClone and what shows that they need it. There is one, for every organisation: nothing here is chosen,
+ * stored or edited per organisation any more.
  */
 final class IcpPack
 {
@@ -27,56 +21,21 @@ final class IcpPack
     ) {
     }
 
-    /** The ICP a run uses, or null for generic research. */
-    public static function forRun(int $tenantId, ?int $profileId = null): ?self
+    /** The pack a run uses: always ScholarClone. The arguments stay so older callers keep working. */
+    public static function forRun(int $tenantId = 0, ?int $profileId = null): ?self
     {
-        $profiles = self::activeProfiles($tenantId);
-        if ($profiles !== []) {
-            if ($profileId !== null) {
-                foreach ($profiles as $p) {
-                    if ($p->profileId === $profileId) {
-                        return $p;
-                    }
-                }
-
-                return null;   // asked for a profile that is not active here: never fall back to another one silently
-            }
-
-            return $profiles[0];   // already ordered: default first, then oldest
-        }
-
-        return self::legacyTemplate($tenantId);
+        return \App\Domain\Signals\Scholar\ScholarClone::pack();
     }
 
-    /** Backward-compatible name for the single ICP of an organisation. */
-    public static function forTenant(int $tenantId): ?self
+    public static function forTenant(int $tenantId = 0): ?self
     {
         return self::forRun($tenantId);
     }
 
-    /** Every ACTIVE ICP of an organisation, default first. Falls back to the stop-gap template. @return list<self> */
-    public static function allActive(int $tenantId): array
+    /** @return list<self> */
+    public static function allActive(int $tenantId = 0): array
     {
-        $profiles = self::activeProfiles($tenantId);
-        if ($profiles !== []) {
-            return $profiles;
-        }
-        $legacy = self::legacyTemplate($tenantId);
-
-        return $legacy === null ? [] : [$legacy];
-    }
-
-    /**
-     * Has the organisation defined any ICP at all, active or not? An organisation that has ICPs but none active must not
-     * fall back to generic research: it has said what it wants researched, and right now that is nothing.
-     */
-    public static function hasProfiles(int $tenantId): bool
-    {
-        try {
-            return Schema::hasTable('g2g_icp_profiles') && IcpProfile::where('sub_institute_id', $tenantId)->exists();
-        } catch (\Throwable) {
-            return false;
-        }
+        return [self::forRun($tenantId)];
     }
 
     /** A template (config/signals_icp.php) as an ICP, e.g. to preview it before an organisation copies it. */
@@ -85,30 +44,6 @@ final class IcpPack
         $cfg = config("signals_icp.{$templateKey}");
 
         return is_array($cfg) ? new self($templateKey, $cfg, null, (string) ($cfg['label'] ?? $templateKey)) : null;
-    }
-
-    /** @return list<self> */
-    private static function activeProfiles(int $tenantId): array
-    {
-        try {
-            if (! Schema::hasTable('g2g_icp_profiles')) {
-                return [];
-            }
-            $rows = IcpProfile::where('sub_institute_id', $tenantId)->where('status', 'active')->orderByDesc('is_default')->orderBy('id')->get();
-        } catch (\Throwable) {
-            return [];   // an older database without the table behaves exactly as before
-        }
-
-        return $rows->map(fn (IcpProfile $p) => new self((string) $p->key, (array) $p->config, (int) $p->id, (string) $p->name))->all();
-    }
-
-    private static function legacyTemplate(int $tenantId): ?self
-    {
-        if (in_array((string) $tenantId, array_map('strval', (array) config('signals.icp.scholar_k12_tenants', [])), true)) {
-            return self::fromTemplate('scholar_k12');
-        }
-
-        return null;
     }
 
     /** @return array<string, mixed> */
@@ -136,7 +71,9 @@ final class IcpPack
      */
     public function looksLikeVendor(string $name, ?string $sector, string $fact): bool
     {
-        return IcpPhrases::matches((array) ($this->config['vendor_phrases'] ?? []), trim($name . ' ' . (string) $sector))
+        // A named competitor (config `competitors`) is a seller by definition, whatever its name or the news says.
+        return IcpPhrases::matches((array) ($this->config['competitors'] ?? []), $name)
+            || IcpPhrases::matches((array) ($this->config['vendor_phrases'] ?? []), trim($name . ' ' . (string) $sector))
             || IcpPhrases::matches((array) ($this->config['vendor_news_phrases'] ?? []), $fact);
     }
 
@@ -221,7 +158,7 @@ final class IcpPack
                 ? 'These buyers are in their buying window right now: say so when it applies.'
                 : 'Outside these buyers\' usual buying window: do not claim a deadline that the source does not state.');
 
-        $out = "\n\nIDEAL CUSTOMER (this overrides the generic product profile)\n"
+        $out = "\n\nIDEAL CUSTOMER\n"
             . 'We sell ' . $clean($c['label'] ?? '') . ' to ' . $clean($c['industry_label'] ?? 'organisations') . ($regions !== '' ? " (regions: {$regions})" : '') . ".\n";
         if ($parts !== '') {
             $out .= "What we sell has these parts:\n{$parts}\n";
@@ -239,7 +176,7 @@ final class IcpPack
             $out .= $clean($c['guidance']) . "\n";
         }
         $out .= 'Set "needs_statement" to ONE plain sentence under 20 words that says what the organisation needs and why now, starting with its name, '
-            . 'for example: "Northfield Hospital is opening a new wing and needs more nurses and a way to roster them."' . "\n";
+            . 'for example: "Northfield is opening a second site and needs one system for both."' . "\n";
         if ($roles !== '') {
             $out .= "For soft_marketing_angle, suggest WHO to approach by role, choosing from the list below (never a named person unless a source names one), and the opening that matches that role:\n{$roles}\n";
         }

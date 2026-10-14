@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
  */
 final class QualificationGate
 {
-    public const TRIGGER_TYPES = ['tender', 'rfp', 'eoi', 'rfq', 'programme', 'regulation', 'expansion', 'funding', 'acquisition', 'leadership', 'hiring', 'partnership', 'other'];
+    public const TRIGGER_TYPES = ['tender', 'rfp', 'eoi', 'rfq', 'programme', 'regulation', 'expansion', 'funding', 'acquisition', 'leadership', 'hiring', 'partnership', 'vendor_search', 'pain_point', 'other'];
     public const BUYER_TYPES = ['government', 'institutional', 'sme', 'school', 'enterprise', 'other', 'school_group', 'college', 'university', 'public_sector', 'hospital', 'training_institute'];
     public const CLAIM_LEVELS = ['confirmed' => 3, 'inference' => 2, 'hypothesis' => 1];
     public const FETCH_LEVELS = ['full_document' => 3, 'page_text' => 2, 'search_snippet' => 1, 'blocked' => 0];
@@ -128,6 +128,22 @@ final class QualificationGate
             return $this->reject('invalid_scores', 'scores must contain all seven keys (' . implode(', ', self::SCORE_KEYS) . '), each an integer from 1 to 5.');
         }
 
+        // Expiry: explicit, else a tender's closing date, else none ("no expiry").
+        $expires = $this->date($r['expires_at'] ?? null)
+            ?? (in_array($trigger, self::TENDER_TYPES, true) ? $this->date($r['closing_date'] ?? ($r['deadline'] ?? null)) : null);
+
+        // A record that states its `intent` comes from the ScholarClone signal engine: how hot it is comes from
+        // SignalStrength (plain rules), not from seven scores the model gave itself.
+        $intent = $this->enum($r['intent'] ?? null, SignalStrength::INTENTS);
+        $strength = null;
+
+        // Buying intent (decided from verified indicators by BuyingIntent) must reach the configured floor to enter the feed at all.
+        $buyingIntent = $this->enum($r['buying_intent'] ?? null, array_keys(\App\Domain\Signals\Scholar\BuyingIntent::LEVELS));
+        $floor = (string) config('sales_pull.qualification.min_intent_for_feed', 'unconfirmed');
+        if ($buyingIntent !== null && $context === null && ! \App\Domain\Signals\Scholar\BuyingIntent::atLeast($buyingIntent, $floor)) {
+            return $this->reject('below_intent_floor', "Buying intent is '{$buyingIntent}', below the configured minimum '{$floor}'.");
+        }
+
         $notes = [];
         $evidenceNote = null;
 
@@ -156,7 +172,7 @@ final class QualificationGate
                     return $this->reject('incomplete_card', 'Every lead must carry the full card; missing: ' . implode(', ', $missing) . '.');
                 }
             }
-            if ($scores === null) {
+            if ($scores === null && $intent === null) {
                 return $this->reject('missing_scores', 'A researched lead must carry all seven 1-5 scores.');
             }
             // The face of the card must read as plain English (jargon_on_card, sentence_too_long, missing_so_what).
@@ -164,15 +180,20 @@ final class QualificationGate
             if ($plain !== []) {
                 return $this->reject($plain[0]['code'], $plain[0]['reason']);
             }
-            $bar = (new SectionAssigner())->assign(['claim_level' => $claim, 'fetch_level' => $fetch, 'score_total' => $scores['total'], 'context' => $context]);
-            if ($bar === null) {
-                return $this->reject('below_score_bar', "Scored {$scores['total']} with {$claim} evidence: below the bar for the feed.");
+            if ($intent !== null) {
+                $strength = (new SignalStrength())->assess([
+                    'trigger_type' => $trigger, 'intent' => $intent, 'buying_intent' => $buyingIntent, 'event_date' => $eventDate?->toDateString(),
+                    'source_published_at' => $this->date($r['source_published_at'] ?? null)?->toDateString(),
+                    'observed_at' => ($observedAt ?? $eventDate)?->toDateString(), 'expires_at' => $expires?->toDateString(),
+                    'quote_verified' => (bool) filter_var($evidence['quote_verified'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                ]);
+            } else {
+                $bar = (new SectionAssigner())->assign(['claim_level' => $claim, 'fetch_level' => $fetch, 'score_total' => $scores['total'], 'context' => $context]);
+                if ($bar === null) {
+                    return $this->reject('below_score_bar', "Scored {$scores['total']} with {$claim} evidence: below the bar for the feed.");
+                }
             }
         }
-
-        // Expiry: explicit, else a tender's closing date, else none ("no expiry").
-        $expires = $this->date($r['expires_at'] ?? null)
-            ?? (in_array($trigger, self::TENDER_TYPES, true) ? $this->date($r['closing_date'] ?? ($r['deadline'] ?? null)) : null);
 
         // Government track: central capacity-building bodies are reached through an SI partner.
         $state = $this->str($buyer['state'] ?? null);
@@ -221,6 +242,11 @@ final class QualificationGate
             'entry_point_reason' => $entryReason,
             'content_hash' => $this->str($r['content_hash'] ?? null),
             'source_excerpt' => ($e = $this->str($r['source_excerpt'] ?? null)) === null ? null : mb_substr($e, 0, 1000),
+            'intent' => $intent,
+            'buying_intent' => $buyingIntent,
+            'assessment' => is_array($r['assessment'] ?? null) ? $r['assessment'] + ['opportunity' => $strength ? ['strength' => $strength['strength'], 'reason' => $strength['reason'], 'age_days' => $strength['age_days']] : null] : null,
+            'strength' => $strength['strength'] ?? null,
+            'strength_reason' => $strength['reason'] ?? null,
             'evidence_derived' => $evidence !== null,
             'evidence_input' => $evidence,
         ];

@@ -28,6 +28,10 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SIGNALS_QUERY_CACHE_HOURS" value="0"/>
+        <env name="SIGNALS_FOLLOWUP_QUERIES" value="0"/>
+        <env name="SIGNALS_OFFICIAL_RECHECK_HOURS" value="0"/>
+        <env name="SIGNALS_OFFICIAL_DELAY_MS" value="0"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
     </php>

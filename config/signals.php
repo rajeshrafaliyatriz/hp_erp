@@ -47,6 +47,28 @@ return [
     // repeat and is not stored again (dismissed ones included).
     'dedupe_window_days' => (int) env('SIGNALS_DEDUPE_DAYS', 14),
 
+    // Two descriptions of the same buyer + trigger that share at least this share of their words are the same event.
+    'dedupe_similarity' => (float) env('SIGNALS_DEDUPE_SIMILARITY', 0.6),
+
+    // Search budget for discovery (config/signals_icp.php holds the searches themselves).
+    'discovery' => [
+        // The model may propose this many follow-up searches from what the first round found. One round, never recursive. 0 = off.
+        'followup_queries' => (int) env('SIGNALS_FOLLOWUP_QUERIES', 2),
+        // A search already run for this organisation within this many hours is not paid for again. 0 = off.
+        'query_cache_hours' => (int) env('SIGNALS_QUERY_CACHE_HOURS', 12),
+        // Pages that cannot be about an Indian school (no education word, or foreign and nothing Indian) are not sent to the model.
+        'screen_off_topic' => (bool) env('SIGNALS_SCREEN_OFF_TOPIC', true),
+    ],
+
+    // Direct reading of a target school's OWN verified website (OfficialSiteDiscovery). Bounded: never a crawl.
+    'official_site' => [
+        'max_pages' => (int) env('SIGNALS_OFFICIAL_MAX_PAGES', 6),           // home page + the best 5 internal pages
+        'max_schools_per_run' => (int) env('SIGNALS_OFFICIAL_MAX_SCHOOLS', 3),
+        'timeout' => (int) env('SIGNALS_OFFICIAL_TIMEOUT', 8),
+        'delay_ms' => (int) env('SIGNALS_OFFICIAL_DELAY_MS', 300),
+        'recheck_hours' => (int) env('SIGNALS_OFFICIAL_RECHECK_HOURS', 12),  // a page fetched within this many hours is not fetched again
+    ],
+
     // Minimum minutes between two manual runs for one organisation.
     'manual_cooldown_minutes' => (int) env('SIGNALS_MANUAL_COOLDOWN_MINUTES', 5),
 
@@ -90,7 +112,7 @@ return [
     'opportunities' => [
         // Default run time (HH:MM in `timezone`); a product profile may override it.
         'default_schedule_time' => env('SIGNALS_RESEARCH_TIME', '10:00'),
-        'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 6),
+        'max_queries' => (int) env('SIGNALS_RESEARCH_MAX_QUERIES', 8),
         'results_per_query' => (int) env('SIGNALS_RESEARCH_RESULTS_PER_QUERY', 6),
         'max_sources' => (int) env('SIGNALS_RESEARCH_MAX_SOURCES', 30),
         'fetch_pages' => (int) env('SIGNALS_RESEARCH_FETCH_PAGES', 8),
@@ -142,6 +164,12 @@ return [
     | `php artisan signals:import-market`. See docs/signals-market-import-schema.md.
     */
     // Offer matching for imported signals. Readiness never changes a score.
+    // Products the scheduled research runs for (keys from config/signals_products.php). Default: ScholarClone only.
+    'products' => array_values(array_filter(array_map('trim', explode(',', (string) env('SIGNALS_PRODUCTS', 'scholarclone'))))),
+
+    // true = skip product-offer matching for new company opportunities (default false: matching runs).
+    'scholar_only' => (bool) env('SIGNALS_SCHOLAR_ONLY', false),
+
     'matching' => [
         'code_boost' => (int) env('SIGNALS_MATCH_CODE_BOOST', 25),       // per matching need code
         'segment_bonus' => (int) env('SIGNALS_MATCH_SEGMENT_BONUS', 15), // once, if the buyer segment matches

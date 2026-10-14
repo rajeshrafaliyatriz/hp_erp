@@ -3460,40 +3460,12 @@ Route::middleware('auth:sanctum')->prefix('my-hr')->group(function () {
 });
 
 /*
- * AI Signals Engine (Department Management -> Signals tab).
+ * ScholarClone Signals: schools showing a reason to buy, found from tenders, LinkedIn, job boards, news and the
+ * documents / links a person adds. One feed, one engine. The tenant always comes from the token.
  *
- * Literal paths are declared BEFORE `/{id}` (same ORDER MATTERS rule as
- * departments-management), and `whereNumber` backs that up.
- *
- * Reads need a valid token. Generating spends AI budget, so it is gated on profile
- * AND throttled; reviewing/dismissing is gated on profile. The tenant always comes
- * from the token (see SignalController).
- */
-Route::prefix('signals')->middleware('api.token')->group(function () {
-    Route::get('/status', [\App\Http\Controllers\Api\Signals\SignalController::class, 'status']);
-    Route::get('/runs', [\App\Http\Controllers\Api\Signals\SignalController::class, 'runs']);
-    Route::post('/generate', [\App\Http\Controllers\Api\Signals\SignalController::class, 'generate'])
-        ->middleware(['profile:admin,hr', 'throttle:6,1']);
-
-    Route::get('/', [\App\Http\Controllers\Api\Signals\SignalController::class, 'index']);
-    Route::get('/{id}', [\App\Http\Controllers\Api\Signals\SignalController::class, 'show'])->whereNumber('id');
-
-    Route::middleware('profile:admin,hr,manager')->group(function () {
-        Route::patch('/{id}/review', [\App\Http\Controllers\Api\Signals\SignalController::class, 'review'])->whereNumber('id');
-        Route::patch('/{id}/dismiss', [\App\Http\Controllers\Api\Signals\SignalController::class, 'dismiss'])->whereNumber('id');
-    });
-});
-
-/*
- * Company Opportunity Intelligence + Manual Ingestion (Signals tab).
- *
- * All literal paths; none can collide with `/signals/{id}` (which is whereNumber).
- *
- *  - Product profile / research runs / opportunity review: admin, hr, manager can read
- *    and review; only admin, hr can change the profile or start research (it spends
- *    search and AI budget).
- *  - Ingestion handles private documents, so ALL of it is admin/hr only.
- * The tenant always comes from the token.
+ *  - Reading the feed and marking a signal: admin, hr, manager.
+ *  - Starting research and adding documents / links spend search and AI budget and handle private files: admin, hr.
+ * All literal paths; none can collide with `/signals/opportunities/{id}` (whereNumber).
  */
 Route::prefix('signals')->middleware('api.token')->group(function () {
     $opp = \App\Http\Controllers\Api\Signals\OpportunityController::class;
@@ -3537,9 +3509,17 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
 /*
  * ICP profiles: each organisation defines its own ideal customer profiles as data (templates, create, edit with
  * versioning, validate, preview, activate). ADMINISTRATORS ONLY; the tenant always comes from the token.
+ * A product's discovery (Company Opportunities / Ingestion Engine) reads the ACTIVE profile whose product_line is that product's.
  */
 Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(function () {
     $icp = \App\Http\Controllers\Api\Signals\IcpProfileController::class;
+
+    // A product's own ICP, addressed by product (scholarclone, enterprise_brain, g2g). The server stamps the product line.
+    $productIcp = \App\Http\Controllers\Api\Signals\ProductIcpController::class;
+    Route::get('/products/{product}', [$productIcp, 'show']);
+    Route::post('/products/{product}/validate', [$productIcp, 'validateConfig'])->middleware('throttle:60,1');
+    Route::put('/products/{product}', [$productIcp, 'save'])->middleware('throttle:30,1');
+    Route::patch('/products/{product}/status', [$productIcp, 'setStatus'])->middleware('throttle:30,1');
 
     Route::get('/templates', [$icp, 'templates']);
     Route::get('/profiles', [$icp, 'index']);
@@ -3559,6 +3539,10 @@ Route::prefix('signals/icp')->middleware(['api.token', 'profile:admin'])->group(
 Route::prefix('portfolio')->middleware('api.token')->group(function () {
     $port = \App\Http\Controllers\Api\Portfolio\PortfolioController::class;
     $part = \App\Http\Controllers\Api\Portfolio\PartnerController::class;
+
+    // The products (ScholarClone, Enterprise Brain, G2G) with what is stored for each and what is missing. Read-only.
+    Route::get('/products', [\App\Http\Controllers\Api\Portfolio\ProductController::class, 'index']);
+    Route::get('/products/{key}', [\App\Http\Controllers\Api\Portfolio\ProductController::class, 'show']);
 
     Route::get('/taxonomy', [$port, 'taxonomy']);
     Route::get('/stats', [$port, 'stats']);

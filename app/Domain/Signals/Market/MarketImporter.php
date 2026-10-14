@@ -29,6 +29,7 @@ class MarketImporter
         'tender' => 'project', 'rfp' => 'project', 'eoi' => 'project', 'rfq' => 'project', 'programme' => 'project',
         'regulation' => 'regulatory', 'expansion' => 'expansion', 'funding' => 'funding', 'acquisition' => 'funding',
         'leadership' => 'leadership_change', 'hiring' => 'hiring', 'partnership' => 'project', 'other' => 'project',
+        'vendor_search' => 'technology_change', 'pain_point' => 'pain_point',
     ];
 
     public function __construct(
@@ -110,7 +111,10 @@ class MarketImporter
         $resolved = $this->buyers->resolve($tenantId, $r['buyer']);
         $company = $resolved['company'];
 
-        $fingerprint = hash('sha256', implode('|', [$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url'])]));
+        // The same organisation, event and page can be a signal for two products: each product keeps its own record. (The school product's
+        // fingerprint formula is unchanged, so its existing records still match.)
+        $fit = ($r['business_fit'] ?? null) !== 'scholar' ? ($r['business_fit'] ?? null) : null;
+        $fingerprint = hash('sha256', implode('|', array_filter([$tenantId, $company->id, $r['trigger_type'], $r['reference_no'] ?? $this->urlKey($r['source_url']), $fit], fn ($v) => $v !== null)));
         $existing = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('fingerprint', $fingerprint)->first();
         $legacy = false;
         if ($existing === null) {
@@ -209,7 +213,12 @@ class MarketImporter
         $claim = $r['claim_level'];
         $fact = $r['what_happened'] ?? $r['trigger_summary'];
 
-        $section = $this->sections->assign(['claim_level' => $claim, 'fetch_level' => $r['fetch_level'], 'score_total' => $total, 'context' => $r['context'] ?? null], $daysLeft) ?? SectionAssigner::WATCHING;
+        // A ScholarClone signal carries its own strength (hot | warm | watch). Everything else keeps the score-based rule.
+        $strength = $r['strength'] ?? null;
+        $context = $r['context'] ?? null;
+        $section = $strength !== null && $context === null
+            ? SignalStrength::SECTION[$strength]
+            : ($this->sections->assign(['claim_level' => $claim, 'fetch_level' => $r['fetch_level'], 'score_total' => $total, 'context' => $context], $daysLeft) ?? SectionAssigner::WATCHING);
 
         $row = [
             'sub_institute_id' => $tenantId, 'company_id' => $companyId, 'research_run_id' => $meta['research_run_id'] ?? null,
@@ -218,9 +227,13 @@ class MarketImporter
             'category' => self::CATEGORY[$r['trigger_type']] ?? 'project', 'signal_kind' => 'opportunity',
             'observed_event' => $fact, 'why_indicates_need' => $r['likely_problem'] ?? $r['trigger_summary'],
             'product_fit' => $r['what_we_could_sell'] ?? '', 'recommended_action' => $r['what_we_could_sell'] ?? '',
-            'priority' => $total === null ? 'Low' : ($total >= 28 ? 'High' : ($total >= 20 ? 'Medium' : 'Low')),
+            'priority' => $strength !== null
+                ? ['hot' => 'High', 'warm' => 'Medium', 'watch' => 'Low'][$strength]
+                : ($total === null ? 'Low' : ($total >= 28 ? 'High' : ($total >= 20 ? 'Medium' : 'Low'))),
             // Stored as a band (act_this_week | act_this_month | nurture); the deadline itself is expires_at.
-            'urgency' => (new CardPresenter())->band($daysLeft, $scores['urgency'] ?? null, $section),
+            'urgency' => $strength !== null && $context === null
+                ? SignalStrength::BAND[$strength]
+                : (new CardPresenter())->band($daysLeft, $scores['urgency'] ?? null, $section),
             // Evidence decides the section, not urgency alone: only a confirmed claim read from the
             // document or page text, and not yet expired, is eligible for Immediate action. Everything
             // else (inference, hypothesis, a snippet or a blocked page) is Watchlist. Expired items are
@@ -241,9 +254,11 @@ class MarketImporter
             'likely_problem' => $r['likely_problem'], 'likely_stakeholder' => $r['likely_stakeholder'], 'what_we_could_sell' => $r['what_we_could_sell'],
             'entry_point' => $r['entry_point'], 'scale' => $r['scale'], 'estimated_value' => $r['estimated_value'],
             'is_government_track' => $r['is_government_track'], 'partner_route_note' => $r['partner_route_note'], 'soft_marketing_angle' => $r['soft_marketing_angle'],
-            'score_total' => $total, 'score_reasoning' => $r['score_reasoning'],
+            'score_total' => $total, 'score_reasoning' => $r['strength_reason'] ?? $r['score_reasoning'],
             'import_source' => isset($meta['source_label']) ? mb_substr((string) $meta['source_label'], 0, 100) : null,
             'is_sample' => $r['is_sample'],
+            'buying_intent' => $r['buying_intent'] ?? null,
+            'assessment' => $r['assessment'] ?? null,
         ];
 
         foreach (QualificationGate::SCORE_KEYS as $key) {
@@ -264,6 +279,11 @@ class MarketImporter
      */
     private function snapshotMatches(int $tenantId, CompanyOpportunity $opportunity): int
     {
+        // Off by default: set SIGNALS_SCHOLAR_ONLY=true to skip offer matching entirely.
+        if ((bool) config('signals.scholar_only', false)) {
+            return 0;
+        }
+
         $min = (int) config('signals.matching.store_min_score', 30);
         $count = 0;
 
@@ -331,7 +351,9 @@ class MarketImporter
      */
     private function sameEvent(int $tenantId, int $companyId, array $r): ?CompanyOpportunity
     {
-        $base = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('company_id', $companyId);
+        $base = CompanyOpportunity::where('sub_institute_id', $tenantId)->where('company_id', $companyId)
+            // Only the same product's records can be the same event: another product's signal about this organisation is its own.
+            ->when(($r['business_fit'] ?? null) !== null, fn ($q) => $q->where('business_fit', $r['business_fit']));
 
         if (in_array($r['trigger_type'], self::TENDER_TYPES, true) && ($r['reference_no'] ?? null) !== null) {
             return $base->where('reference_no', $r['reference_no'])->whereIn('trigger_type', self::TENDER_TYPES)->orderBy('id')->first();
@@ -339,15 +361,58 @@ class MarketImporter
 
         $date = $this->effectiveDate($r['event_date'] ?? null, $r['source_published_at'] ?? null);
         if ($date === null) {
-            return null;
+            return $this->similarRecent($base, $r);
         }
         $from = $date->copy()->subDays(self::SAME_EVENT_DAYS)->toDateString();
         $to = $date->copy()->addDays(self::SAME_EVENT_DAYS)->toDateString();
 
-        return $base->where('trigger_type', $r['trigger_type'])
+        $hit = (clone $base)->where('trigger_type', $r['trigger_type'])
             ->where(fn ($q) => $q->whereBetween('event_date', [$from, $to])
                 ->orWhere(fn ($w) => $w->whereNull('event_date')->whereBetween('source_published_at', [$from, $to])))
             ->orderBy('id')->first();
+
+        // Both dated and outside the window: different events, however alike the words. Only an UNDATED mention falls back to wording.
+        return $hit;
+    }
+
+    /**
+     * A near-duplicate: the same buyer and trigger, seen in the last 60 days, described in nearly the same words. This is how an
+     * undated mention, or the same story re-worded by a second site, joins the opportunity it is about instead of becoming a
+     * second one. A genuinely different event of the same kind (different words) stays separate.
+     *
+     * @param  array<string, mixed>  $r
+     */
+    private function similarRecent($base, array $r): ?CompanyOpportunity
+    {
+        $words = fn (?string $t) => array_values(array_unique(array_filter(preg_split('/[^a-z0-9]+/', mb_strtolower((string) $t)) ?: [], fn ($w) => strlen($w) > 3)));
+        $mine = $words($r['what_happened'] ?? $r['trigger_summary'] ?? '');
+        if (count($mine) < 4) {
+            return null;
+        }
+        // UNDATED evidence has no event identity: nothing says two pages describe different events. Same buyer, same trigger, both undated,
+        // seen on the same SITE within 60 days is one standing signal, so a new page of that site corroborates it instead of repeating it.
+        $host = strtolower(preg_replace('/^www\./', '', (string) parse_url((string) ($r['source_url'] ?? ''), PHP_URL_HOST)));
+        if ($host !== '' && ($r['event_date'] ?? null) === null && ($r['source_published_at'] ?? null) === null) {
+            foreach ((clone $base)->where('trigger_type', $r['trigger_type'])->whereNull('event_date')->whereNull('source_published_at')
+                ->where('first_discovered_at', '>=', now()->subDays(60))->orderByDesc('id')->limit(20)->get() as $row) {
+                $rowHost = strtolower(preg_replace('/^www\./', '', (string) parse_url((string) $row->source_url, PHP_URL_HOST)));
+                if ($rowHost === $host) {
+                    return $row;
+                }
+            }
+        }
+
+        $threshold = (float) config('signals.dedupe_similarity', 0.6);
+
+        foreach ((clone $base)->where('trigger_type', $r['trigger_type'])->where('first_discovered_at', '>=', now()->subDays(60))->orderByDesc('id')->limit(20)->get() as $row) {
+            $theirs = $words($row->observed_event ?: $row->trigger_summary);
+            $union = count(array_unique(array_merge($mine, $theirs)));
+            if ($union > 0 && count(array_intersect($mine, $theirs)) / $union >= $threshold) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     /**
