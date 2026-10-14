@@ -229,6 +229,7 @@ class MyTasksController extends Controller
             'time_end' => 'nullable|date_format:H:i|after:time_start',
             'status' => 'nullable|string|max:100',
             'priority' => 'nullable|string|max:100',
+            'remarks' => 'nullable|string|max:5000',
         ]);
 
         if ($validator->fails()) {
@@ -271,6 +272,7 @@ class MyTasksController extends Controller
             'task_type' => $priority,
             'status' => $status,
             'status_label' => $statusLabel,
+            'reply' => $request->input('remarks') ?: null,
             'task_allocated' => $context['user_id'],
             'task_allocated_to' => $context['user_id'],
             'sub_institute_id' => $context['sub_institute_id'],
