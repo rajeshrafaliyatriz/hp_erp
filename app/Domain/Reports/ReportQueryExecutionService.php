@@ -4,6 +4,7 @@ namespace App\Domain\Reports;
 
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -27,6 +28,29 @@ final class ReportQueryExecutionService
     private const MAX_TABULAR_ROWS = 2000;
     private const MAX_GROUPS = 500;
 
+    /**
+     * Summary/pivot/chart runs (Docs/reports-engine/PLAN.md, Phase 4:
+     * "caching expensive pivot/summary runs") are the types with real
+     * aggregation cost — GROUP BY over a potentially large filtered set,
+     * sometimes with joins. Tabular is excluded: it's already bounded by
+     * pagination, and its own per-page/page cache keys would multiply
+     * fast for little benefit. Drill-down never reaches here cached either
+     * — it builds a synthetic ad-hoc definition per click, vanishingly
+     * unlikely to repeat.
+     *
+     * The cache key is content-addressed (a hash of report type + primary
+     * module + the full definition + tenant) rather than keyed by report
+     * id, so editing a saved report's definition is automatically a cache
+     * miss — there is no separate invalidation path to forget to call.
+     * TTL is short (3 minutes): long enough to absorb a page's own
+     * StrictMode double-fetch and multiple viewers opening the same
+     * Public report in quick succession, short enough that nobody
+     * reasonably calls the data "stale" before they'd have refreshed
+     * anyway.
+     */
+    private const CACHEABLE_TYPES = ['summary', 'pivot', 'chart'];
+    private const CACHE_TTL_SECONDS = 180;
+
     /** @var array<string, string> */
     private const OPERATORS = [
         'equals' => '=',
@@ -41,7 +65,42 @@ final class ReportQueryExecutionService
     {
     }
 
-    public function execute(string $reportType, string $primaryModuleKey, array $definition, int $subInstituteId): array
+    /**
+     * $forceFresh bypasses the cache (an explicit "Generate now" click)
+     * without disabling it for everyone else reading the same report in
+     * the meantime — it only skips the READ, the fresh result still gets
+     * written back under the same key so the next uncached viewer benefits.
+     */
+    public function execute(string $reportType, string $primaryModuleKey, array $definition, int $subInstituteId, bool $forceFresh = false): array
+    {
+        if (!in_array($reportType, self::CACHEABLE_TYPES, true)) {
+            return $this->runUncached($reportType, $primaryModuleKey, $definition, $subInstituteId);
+        }
+
+        $key = $this->cacheKey($reportType, $primaryModuleKey, $definition, $subInstituteId);
+
+        if ($forceFresh) {
+            $fresh = $this->runUncached($reportType, $primaryModuleKey, $definition, $subInstituteId);
+            Cache::put($key, $fresh, self::CACHE_TTL_SECONDS);
+
+            return $fresh;
+        }
+
+        return Cache::remember($key, self::CACHE_TTL_SECONDS, fn () => $this->runUncached($reportType, $primaryModuleKey, $definition, $subInstituteId));
+    }
+
+    private function cacheKey(string $reportType, string $primaryModuleKey, array $definition, int $subInstituteId): string
+    {
+        return sprintf(
+            'report_builder:%d:%s:%s:%s',
+            $subInstituteId,
+            $reportType,
+            $primaryModuleKey,
+            md5(json_encode($definition)),
+        );
+    }
+
+    private function runUncached(string $reportType, string $primaryModuleKey, array $definition, int $subInstituteId): array
     {
         $primary = $this->registry->get($primaryModuleKey);
         $query = $this->buildBaseQuery($primary, $subInstituteId);
