@@ -260,7 +260,7 @@ class ReportController extends Controller
             }
         }
 
-        return $this->runAndRespond($report->report_type, $report->primary_module, $definition, $tenantId);
+        return $this->runAndRespond($report->report_type, $report->primary_module, $definition, $tenantId, forceFresh: $request->boolean('fresh'));
     }
 
     /**
@@ -447,10 +447,10 @@ class ReportController extends Controller
             : $value;
     }
 
-    private function runAndRespond(string $reportType, string $primaryModule, array $definition, int $tenantId, array $extra = [])
+    private function runAndRespond(string $reportType, string $primaryModule, array $definition, int $tenantId, array $extra = [], bool $forceFresh = false)
     {
         try {
-            $result = $this->executor->execute($reportType, $primaryModule, $definition, $tenantId);
+            $result = $this->executor->execute($reportType, $primaryModule, $definition, $tenantId, $forceFresh);
 
             return response()->json(['status' => true, 'data' => array_merge($result, $extra)]);
         } catch (\InvalidArgumentException $e) {
