@@ -697,6 +697,7 @@ Route::delete('/competency/course-map/{id}', [\App\Http\Controllers\Api\Competen
  * the convention jobroles/{id}/merge exists to protect.
  */
 Route::get('/competency/course-requests/summary', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'summary'])->middleware('profile:admin,hr');
+Route::get('/competency/course-requests/filter-options', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'filterOptions'])->middleware('profile:admin,hr');
 Route::get('/competency/course-requests', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'index'])->middleware('profile:admin,hr');
 Route::get('/competency/course-requests/{id}', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'show'])->whereNumber('id')->middleware('profile:admin,hr');
 Route::post('/competency/course-requests/{id}/dismiss', [\App\Http\Controllers\Api\Competency\CapabilityCourseRequestController::class, 'dismiss'])->whereNumber('id')->middleware('profile:admin,hr');
