@@ -69,7 +69,7 @@ class IcpProfileApiTest extends TestCase
             '2026_09_30_200000_add_research_sources_and_signal_kind', '2026_09_30_220000_create_g2g_portfolio_and_partners_tables',
             '2026_09_30_230000_add_claude_feed_and_linking_fields', '2026_10_01_130000_add_stage_to_g2g_research_runs',
             '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_10_13_100000_create_g2g_target_accounts_table',
-            '2026_10_14_100000_create_g2g_icp_profiles_tables',
+            '2026_10_14_100000_create_g2g_icp_profiles_tables', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources',
         ] as $m) {
             (require base_path("database/migrations/{$m}.php"))->up();
         }
@@ -311,53 +311,6 @@ class IcpProfileApiTest extends TestCase
 
     // ── research follows the organisation's own ICP ──────────────────────────
 
-    public function test_research_follows_the_organisations_own_active_icp_and_ignores_a_draft(): void
-    {
-        $this->productProfile();
-        $this->profile('hospitals', 'active');
-        $this->fakeWeb();
-
-        $this->artisan('signals:research', ['--tenant' => self::T1, '--trigger' => 'manual'])->assertExitCode(0);
-
-        $this->assertContains('hospital recruitment "staff nurse" Gujarat', $this->searched(), 'a hospital ICP drives a hospital search');
-        $this->assertEmpty(array_filter($this->searched(), fn ($q) => str_contains($q, 'school')), 'nothing about schools');
-
-        IcpProfile::query()->update(['status' => 'draft']);
-        $this->fakeWeb();
-        Cache::flush();
-        $this->artisan('signals:research', ['--tenant' => self::T1, '--trigger' => 'manual'])->assertExitCode(0);
-        $this->assertEmpty(array_filter($this->searched(), fn ($q) => str_contains($q, 'staff nurse')), 'a draft is never researched');
-    }
-
-    public function test_each_active_icp_gets_its_own_run_and_every_run_records_which_icp_it_was(): void
-    {
-        $this->productProfile();
-        $a = $this->profile('hospitals', 'active');
-        $b = $this->profile('clinics', 'active', self::T1, ['queries' => [['id' => 'c-job', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'clinic hiring "lab technician" Gujarat']]]);
-        $this->fakeWeb();
-
-        $this->artisan('signals:research', ['--tenant' => self::T1, '--trigger' => 'manual'])->assertExitCode(0);
-
-        $runs = ResearchRun::orderBy('id')->get();
-        $this->assertCount(2, $runs);
-        $this->assertEqualsCanonicalizing([$a->id, $b->id], $runs->pluck('icp_profile_id')->map(fn ($i) => (int) $i)->all());
-        $this->assertContains('hospital recruitment "staff nurse" Gujarat', $this->searched());
-        $this->assertContains('clinic hiring "lab technician" Gujarat', $this->searched());
-    }
-
-    public function test_a_manual_run_can_pick_one_icp_but_only_an_active_one_of_its_own_organisation(): void
-    {
-        $this->productProfile();
-        $draft = $this->profile('draft-one', 'draft');
-        $foreign = $this->profile('foreign', 'active', self::T2);
-        $this->fakeWeb();
-        $h = $this->h();
-
-        $this->postJson('/api/signals/research/run', ['icp_profile_id' => $draft->id], $h)->assertStatus(422)->assertJsonPath('code', 'icp_not_active');
-        $this->postJson('/api/signals/research/run', ['icp_profile_id' => $foreign->id], $h)->assertStatus(422)->assertJsonPath('code', 'icp_not_active');
-        $this->assertSame(0, ResearchRun::count(), 'a refused request starts nothing');
-    }
-
     // ── accounts for any organisation ────────────────────────────────────────
 
     public function test_any_csv_can_be_imported_for_any_icp_with_a_column_mapping_and_custom_facts(): void
@@ -415,11 +368,12 @@ class IcpProfileApiTest extends TestCase
         Http::fake();
 
         $seen = [];
-        foreach (range(0, 3) as $d) {
+        $days = (int) ceil(count(config('signals_icp.scholar_k12.queries')) / (int) config('signals_icp.scholar_k12.per_run.catalogue'));
+        foreach (range(0, $days - 1) as $d) {
             Carbon::setTestNow(Carbon::parse('2026-10-20 10:00:00')->addDays($d));
             $searches = $this->getJson("/api/signals/icp/profiles/{$id}/preview", $h)->assertOk()->json('data.todays_searches');
 
-            $this->assertCount(3, $searches, 'three catalogue searches a day (no accounts loaded)');
+            $this->assertCount((int) config('signals_icp.scholar_k12.per_run.catalogue'), $searches, 'the configured number of catalogue searches a day (no accounts loaded)');
             foreach ($searches as $s) {
                 $this->assertContains($s['topic'], ['news', 'general']);
                 $this->assertIsInt($s['recency_days']);
@@ -430,8 +384,8 @@ class IcpProfileApiTest extends TestCase
                     $this->assertSame(['gem.gov.in', 'eprocure.gov.in', 'nprocure.com', 'mahatenders.gov.in'], $s['sites']);
                 }
                 if ($s['source'] === 'job') {
-                    $this->assertSame(['general', 60], [$s['topic'], $s['recency_days']]);
-                    $this->assertArrayNotHasKey('sites', $s);
+                    $this->assertSame('general', $s['topic']);
+                    $this->assertContains($s['recency_days'], [45, 60]);
                 }
                 if ($s['source'] === 'news') {
                     $this->assertSame(['news', 30], [$s['topic'], $s['recency_days']]);
@@ -441,7 +395,7 @@ class IcpProfileApiTest extends TestCase
         }
 
         Http::assertNothingSent();
-        $this->assertCount(12, $seen, 'the whole set in four days');
+        $this->assertCount(count(config('signals_icp.scholar_k12.queries')), $seen, 'the whole set within the days the catalogue size implies');
     }
 
     public function test_the_table_backup_only_runs_on_mysql_or_mariadb_and_says_so(): void
@@ -450,38 +404,6 @@ class IcpProfileApiTest extends TestCase
     }
 
     // ── will research actually run? ──────────────────────────────────────────
-
-    public function test_an_inactive_icp_produces_no_scheduled_run_and_an_active_one_does(): void
-    {
-        $this->productProfile();
-        $icp = $this->profile('hospitals', 'draft');
-        $this->fakeWeb();
-
-        // The schedule is due (profile on, 15:30 IST is past 10:00) but the organisation's only ICP is a draft: nothing to run.
-        $this->artisan('signals:research')->expectsOutputToContain('skipped (it has ICPs but none is active)')->assertExitCode(0);
-        $this->assertSame(0, ResearchRun::count(), 'a draft ICP never starts a scheduled run, and there is no fallback to generic research');
-
-        $icp->update(['status' => 'archived']);
-        $this->artisan('signals:research')->assertExitCode(0);
-        $this->assertSame(0, ResearchRun::count(), 'archived is inactive too');
-
-        $icp->update(['status' => 'active']);
-        $this->artisan('signals:research')->assertExitCode(0);
-        $run = ResearchRun::sole();
-        $this->assertSame('scheduled', $run->trigger);
-        $this->assertSame($icp->id, (int) $run->icp_profile_id);
-    }
-
-    public function test_an_organisation_with_no_icp_at_all_still_gets_the_generic_scheduled_run(): void
-    {
-        $this->productProfile();
-        $this->fakeWeb();
-
-        $this->artisan('signals:research')->assertExitCode(0);
-
-        $this->assertSame(1, ResearchRun::count());
-        $this->assertNull(ResearchRun::first()->icp_profile_id);
-    }
 
     public function test_seeding_can_switch_the_daily_schedule_on_but_only_for_a_complete_product_profile(): void
     {

@@ -13,7 +13,7 @@ class RobotsPolicy
     {
     }
 
-    public function allows(string $url): bool
+    public function allows(string $url, bool $verifyTls = true): bool
     {
         $parts = parse_url($url);
         if (! isset($parts['scheme'], $parts['host'])) {
@@ -24,7 +24,8 @@ class RobotsPolicy
             $robots = $this->fetcher->fetch(
                 $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '') . '/robots.txt',
                 65536,
-                6
+                6,
+                $verifyTls
             );
         } catch (\Throwable) {
             return true;

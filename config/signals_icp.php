@@ -2,27 +2,21 @@
 
 /*
 |--------------------------------------------------------------------------
-| ICP TEMPLATES (starting points, not the live ICPs)
+| SCHOLARCLONE: who buys it, and what shows that they need it
 |--------------------------------------------------------------------------
-| Every organisation owns its ICPs as DATA in the database (g2g_icp_profiles), edited without a deploy.
-| This file only holds TEMPLATES an organisation can copy to start from (`signals:icp-seed`, or "create from
-| template" in the API). Nothing here is school-specific in the engine: the engine reads the same generic
-| shape for a school, a hospital or a manufacturer. See App\Domain\Signals\Icp\IcpProfileValidator for the
-| rules every ICP must satisfy.
+| The ONE definition the Signals engine works from (App\Domain\Signals\Scholar\ScholarClone reads it).
+| ScholarClone is the only product; there are no other ICPs, no per-organisation copies and no admin screen.
+| Change this file to change what the engine looks for; no code needs to change.
 |
-| One template per product line. This one is the FINAL ScholarClone K-12 Bundle ICP. It is a hypothesis built
-| from the bundle's design: every number is a starting guess to tune from real outcomes. Pricing is per student
-| per year and is agreed in discussion; the template carries no contract-value target.
-|
-| THE SHAPE
+|   pitch          one line on what ScholarClone is (shown to the model)
+|   parts          what we sell, in the words the buyer uses; a lead is built on one of these
 |   must_have      hard rules, each checked ONLY when its fact is known (unknown never rejects)
 |   disqualifiers  phrase lists matched against the organisation name (never raw regular expressions)
 |   watch_rules    keep on WATCH (not reject) while a fact holds, e.g. a new ERP signed in the last 12 months
-|   vendor_phrases who is a SELLER of what we sell, never a buyer (competitor or partner)
-|   criteria       facts about an account that earn points (stored on the account, max 30 here)
-|   evidence_points / evidence_rules   judgement and live-evidence points added at review time (70 here)
-|   triggers       what to look for, where, how long it stays fresh
-|   queries        searches written in the BUYER's situation and words (never the seller's product words)
+|   vendor_phrases who SELLS what we sell: a competitor or partner, never a buyer
+|   triggers       the events that show a school needs us, where they show up, how long they stay fresh
+|   queries        searches written in the BUYER's situation and words (never "AI solutions": those are our words)
+|                  `domains` restricts a search to those sites (LinkedIn, job boards, tender portals)
 */
 
 $tenderSites = ['gem.gov.in', 'eprocure.gov.in', 'nprocure.com', 'mahatenders.gov.in'];
@@ -30,6 +24,8 @@ $tenderSites = ['gem.gov.in', 'eprocure.gov.in', 'nprocure.com', 'mahatenders.go
 return [
     'scholar_k12' => [
         'label' => 'ScholarClone K-12 Bundle',
+        'pitch' => 'ScholarClone is one system for a school: admissions, fees, attendance and results; ready lessons and assessments; teacher development; and career guidance from Grade 6.',
+        'competitors' => ['Teachmint', 'Entab', 'Fedena', 'Edunext', 'Campus365', 'MyClassboard', 'Illumine', 'Schoolpad'],
         'product_line' => 'scholar',           // stored as business_fit when it is one of the known product lines
         'industry_label' => 'private K-12 schools and school groups',
         'buyer_types' => ['school', 'school_group'],
@@ -151,36 +147,69 @@ return [
             'staff_development' => ['source' => 'job', 'part' => 'teacher_competency', 'decay' => 60, 'pain' => 'they need to develop and measure their teachers', 'phrases' => ['head of professional development', 'bulk teacher hiring', 'teacher training programme']],
             'career' => ['source' => 'job', 'part' => 'career_intelligence', 'decay' => 60, 'pain' => 'parents ask what after Grade 12 and there is no career programme', 'phrases' => ['career counsellor', 'Grade 11 streams', 'career fair']],
             'tender' => ['source' => 'tender', 'part' => 'school_erp', 'decay' => null, 'pain' => 'a formal purchase is open now', 'phrases' => ['school management system', 'learning management system', 'digital classroom']],
+            'vendor_search' => ['source' => 'social', 'part' => 'school_erp', 'decay' => 60, 'pain' => 'they are asking for, or comparing, a school ERP or learning system', 'phrases' => ['looking for school ERP', 'which ERP', 'switching ERP', 'LMS recommendation']],
+            'pain_point' => ['source' => 'news', 'part' => 'school_erp', 'decay' => 60, 'pain' => 'parents and staff are running into problems with the current system', 'phrases' => ['fee portal down', 'result delay', 'parents complain app']],
         ],
 
         // Searches describe the BUYER's situation, in the words on the page where it is written down (never "AI solutions"
-        // or "enterprise AI": those are our words and find other sellers). 12 queries, 3 per run, so the whole set is covered
-        // in 4 days. News = topic news, 30 days. Job posts = general, 60 days, school career pages (job portals that forbid
-        // scraping are not targeted). Tenders = general, 90 days, official portals only. Affiliation = general, SARAS.
+        // or "enterprise AI": those are our words and find other sellers). Five kinds of place, so one day's run mixes kinds
+        // of evidence: LinkedIn (a school asking for a system, hiring for one, opening a campus, a new principal), job boards,
+        // tender portals, news, and affiliation / regulation pages. LinkedIn and the job boards are reached through the search
+        // API's own index of public pages (`domains`); nothing here logs in to, or scrapes, any site.
+        // 5 catalogue queries + 2 named schools per run (+ up to 2 follow-ups), so the whole set is covered in about a week.
         'queries' => [
-            ['id' => 'k12-news-campus-gj', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'school group "new campus" OR "new branch" admissions 2027 Gujarat'],
-            ['id' => 'k12-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'school hiring "ERP administrator" OR "ERP coordinator" Gujarat'],
+            // Tenders: the clearest signal there is. Official portals only.
             ['id' => 'k12-tender-sms', 'source' => 'tender', 'topic' => 'general', 'days' => 90, 'domains' => $tenderSites, 'q' => 'tender "school management system" OR "school ERP" OR "learning management system"'],
-            ['id' => 'k12-news-leader-gj', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed principal" OR "new principal" school Ahmedabad OR Surat OR Vadodara'],
-            ['id' => 'k12-news-campus-mh', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'school trust "new campus" OR "new CBSE school" Pune OR Nashik OR Mumbai 2027'],
-            ['id' => 'k12-job-migration', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'school "data migration" OR "school management software" job Gujarat OR Maharashtra'],
             ['id' => 'k12-tender-class', 'source' => 'tender', 'topic' => 'general', 'days' => 90, 'domains' => $tenderSites, 'q' => 'EOI OR tender "digital classroom" OR "smart class" OR "ICT lab" school Gujarat OR Maharashtra'],
-            ['id' => 'k12-news-leader-mh', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed director" OR "new CEO" school group Mumbai OR Pune'],
-            ['id' => 'k12-job-academic', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'school hiring "academic coordinator" OR "teacher trainer" Gujarat OR Maharashtra'],
+
+            // LinkedIn: a school asking for a system, comparing vendors, or unhappy with one.
+            ['id' => 'k12-li-ask-erp', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school principal OR director OR trustee "looking for" OR "recommend" OR "evaluating" OR "switching" "school ERP" OR "school management software" India'],
+            ['id' => 'k12-li-ask-lms', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school "learning management system" OR "LMS" OR "teacher training platform" implementing OR looking OR launching Gujarat OR Maharashtra'],
+            ['id' => 'k12-forum-ask', 'source' => 'social', 'topic' => 'general', 'days' => 60, 'domains' => ['quora.com', 'reddit.com'], 'q' => 'best school ERP OR "school management software" India principal recommend OR alternative OR switching "CBSE"'],
+
+            // Job posts: a school hiring to run, migrate or lead its systems.
+            ['id' => 'k12-li-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school hiring "ERP" OR "MIS" OR "school management software" OR "data migration" administrator OR coordinator OR executive Gujarat OR Maharashtra'],
+            ['id' => 'k12-board-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['naukri.com', 'indeed.com', 'shine.com', 'foundit.in'], 'q' => 'school "ERP" OR "MIS" coordinator OR administrator OR executive Gujarat OR Maharashtra'],
+            ['id' => 'k12-li-job-academic', 'source' => 'job', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school hiring "academic coordinator" OR "teacher trainer" OR "head of academics" OR "career counsellor" Gujarat OR Maharashtra'],
+            ['id' => 'k12-job-erp', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'school hiring "ERP administrator" OR "ERP coordinator" OR "school management software" Gujarat OR Maharashtra'],
+
+            // Expansion: a new campus needs systems from day one.
+            ['id' => 'k12-li-campus', 'source' => 'social', 'topic' => 'general', 'days' => 45, 'domains' => ['linkedin.com'], 'q' => 'school "new campus" OR "new branch" OR "now open" OR "admissions open" Gujarat OR Maharashtra 2027'],
+            ['id' => 'k12-news-campus-gj', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'school group "new campus" OR "new branch" admissions 2027 Gujarat'],
+            ['id' => 'k12-news-campus-mh', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'school trust "new campus" OR "new CBSE school" Pune OR Nashik OR Mumbai 2027'],
             ['id' => 'k12-affiliation', 'source' => 'other', 'topic' => 'general', 'days' => 90, 'domains' => ['saras.cbse.gov.in'], 'q' => 'CBSE affiliation new school Gujarat OR Maharashtra OR Daman'],
-            ['id' => 'k12-job-career', 'source' => 'job', 'topic' => 'general', 'days' => 60, 'q' => 'school "career counsellor" vacancy Pune OR Ahmedabad OR Mumbai'],
+
+            // Leadership: new leaders review systems and want early wins.
+            ['id' => 'k12-li-leader', 'source' => 'leadership', 'topic' => 'general', 'days' => 60, 'domains' => ['linkedin.com'], 'q' => '"joined as principal" OR "appointed principal" OR "new director" OR "excited to join" CBSE OR ICSE school Gujarat OR Maharashtra'],
+            ['id' => 'k12-news-leader-gj', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed principal" OR "new principal" school Ahmedabad OR Surat OR Vadodara'],
+            ['id' => 'k12-news-leader-mh', 'source' => 'leadership', 'topic' => 'news', 'days' => 30, 'q' => '"appointed director" OR "new CEO" CBSE OR ICSE school group Mumbai OR Pune'],
+
+            // CONCEPT searches: the need described without naming a purchase. A school that says these things may not use the word ERP.
+            ['id' => 'k12-sem-multicampus', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'India school group multiple campuses one fee collection OR "centralised" admissions OR "single dashboard" principals Gujarat OR Maharashtra'],
+            ['id' => 'k12-sem-excel', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'school moving from Excel OR Tally OR paper registers to software fees attendance results India'],
+            ['id' => 'k12-sem-parent-comm', 'source' => 'concept', 'topic' => 'news', 'days' => 45, 'q' => 'school launches parent app OR "parent portal" OR "digital report card" OR "online fee payment" Gujarat OR Maharashtra'],
+            ['id' => 'k12-sem-teacher-dev', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'school group teacher training programme OR "teacher upskilling" OR "teacher appraisal" CBSE Gujarat OR Maharashtra'],
+            ['id' => 'k12-sem-career', 'source' => 'concept', 'topic' => 'general', 'days' => 60, 'q' => 'India CBSE school launches career guidance OR "career counselling" programme OR "aptitude assessment" students Class 9 OR "Grade 9"'],
+            ['id' => 'k12-sem-expansion', 'source' => 'concept', 'topic' => 'news', 'days' => 45, 'q' => 'school trust OR group plans to open campuses OR "expansion" OR "franchise" CBSE OR ICSE Gujarat OR Maharashtra'],
+            ['id' => 'k12-sem-competitor', 'source' => 'concept', 'topic' => 'news', 'days' => 45, 'q' => 'school ERP OR "school management software" launches OR partners OR "signs" schools Gujarat OR Maharashtra Teachmint OR Entab OR Fedena'],
+
+            // Problems with the current system, said in public.
+            ['id' => 'k12-pain-system', 'source' => 'news', 'topic' => 'news', 'days' => 30, 'q' => 'parents complain school app OR "fee portal" OR "online fee" OR "result" glitch OR delay OR down Gujarat OR Maharashtra'],
             ['id' => 'k12-news-fee-rules', 'source' => 'regulation', 'topic' => 'news', 'days' => 30, 'q' => 'fee regulatory committee private schools Gujarat OR Maharashtra order 2026'],
         ],
 
         // How many catalogue queries and how many named-account searches one run uses (together within max_queries).
-        'per_run' => ['catalogue' => 3, 'accounts' => 3],
+        'per_run' => ['catalogue' => 5, 'accounts' => 2],
         // One search per watched account: its name in quotes, so the result is about THAT account.
-        'account_query' => '"{name}" {city} ("new campus" OR admissions OR hiring OR tender OR principal OR "career" OR ERP)',
-        'account_days' => 30,
+        // PLAIN name + city. Live testing showed that quoting the name and adding a list of event words returned one irrelevant page for
+        // a school with plenty of web presence, while the plain name found its own admissions, Facebook, YouTube and LinkedIn pages.
+        // What the school is doing is read from those pages by the model, not forced by the search words.
+        'account_query' => '{name} {city}',
+        'account_days' => 120,
         'account_recheck_days' => 7,
 
         // Days a lead stays worth acting on, by the trigger type the qualification gate stores; null = until the closing date.
-        'decay_by_trigger_type' => ['expansion' => 90, 'hiring' => 60, 'leadership' => 270, 'tender' => null, 'rfp' => null, 'eoi' => null, 'rfq' => null, 'default' => 90],
+        'decay_by_trigger_type' => ['expansion' => 90, 'hiring' => 60, 'leadership' => 270, 'vendor_search' => 60, 'pain_point' => 60, 'tender' => null, 'rfp' => null, 'eoi' => null, 'rfq' => null, 'default' => 90],
 
         'buying_window_months' => [12, 1, 2, 3],
 

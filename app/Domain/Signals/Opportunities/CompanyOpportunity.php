@@ -20,6 +20,7 @@ class CompanyOpportunity extends Model
         'expires_at' => 'date',
         'observed_at' => 'datetime',
         'candidate_need_codes' => 'array',
+        'assessment' => 'array',
         'is_government_track' => 'boolean',
         'is_sample' => 'boolean',
         'first_discovered_at' => 'datetime',

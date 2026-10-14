@@ -26,7 +26,7 @@ final class IcpResearchPlanner
             'q' => $q['q'], 'topic' => $q['topic'], 'days' => $q['days'], 'domains' => $q['domains'] ?? null, 'source' => $q['source'], 'id' => $q['id'],
         ]), $pack->catalogueForRun($now));
 
-        $accounts = TargetAccount::where('sub_institute_id', $tenantId)->where('pack', $pack->key)->where('watch_priority', '<', 9)
+        $accounts = ! \Illuminate\Support\Facades\Schema::hasTable('g2g_target_accounts') ? collect() : TargetAccount::where('sub_institute_id', $tenantId)->where('pack', $pack->key)->where('watch_priority', '<', 9)
             ->where(fn ($q) => $q->whereNull('last_checked_at')->orWhere('last_checked_at', '<', now()->subDays((int) ($cfg['account_recheck_days'] ?? 7))))
             ->orderBy('watch_priority')->orderByRaw('last_checked_at IS NOT NULL')->orderBy('last_checked_at')->orderBy('id')
             ->limit((int) ($cfg['per_run']['accounts'] ?? 3))->get();

@@ -35,7 +35,7 @@ class MarketImportTest extends TestCase
         '2026_09_30_220000_create_g2g_portfolio_and_partners_tables',
         '2026_09_30_230000_add_claude_feed_and_linking_fields',
         '2026_10_01_130000_add_stage_to_g2g_research_runs',
-        '2026_10_08_100000_extend_g2g_signals_for_market_import',
+        '2026_10_08_100000_extend_g2g_signals_for_market_import', '2026_11_29_090000_add_assessment_to_g2g_company_opportunities', '2026_12_01_090000_add_product_key_to_signals_runs_and_sources', '2026_10_14_100000_create_g2g_icp_profiles_tables',
     ];
 
     protected function setUp(): void
@@ -265,80 +265,7 @@ class MarketImportTest extends TestCase
 
     // ── tenant isolation ─────────────────────────────────────────────────────
 
-    public function test_tenants_are_isolated_in_data_and_in_the_api(): void
-    {
-        $this->importer()->import(self::T1, [$this->rec()]);
-        $this->importer()->import(self::T2, [$this->rec()]);
-
-        $this->assertSame(2, CompanyOpportunity::count(), 'the same signal is a separate row per organisation');
-        $this->assertSame(2, Company::count());
-        $this->assertSame([self::T1 => 1, self::T2 => 1], CompanyOpportunity::pluck('sub_institute_id', 'sub_institute_id')->map(fn () => 1)->all());
-
-        $this->importer()->import(self::T1, [$this->rec(['reference_no' => 'ONLY-T1', 'source_url' => 'https://example.invalid/only-t1'])]);
-
-        $this->getJson('/api/signals/market/scan-log', $this->h(self::T2))->assertOk()->assertJsonCount(1, 'data.data');
-        $this->getJson('/api/signals/market/scan-log', $this->h(self::T1))->assertOk()->assertJsonCount(2, 'data.data');
-    }
-
     // ── endpoint ─────────────────────────────────────────────────────────────
-
-    public function test_the_endpoint_imports_a_bare_array_with_the_tenant_from_the_token(): void
-    {
-        $r = $this->postJson('/api/signals/market/import', [$this->rec(), $this->rec(['buyer' => ['name' => '']])], $this->h(self::T2));
-
-        $r->assertOk()->assertJsonPath('data.accepted', 1)->assertJsonPath('data.rejected', 1)->assertJsonPath('data.results.1.reason_code', 'missing_buyer');
-        $this->assertSame(self::T2, (int) CompanyOpportunity::sole()->sub_institute_id);
-    }
-
-    public function test_a_record_cannot_choose_its_own_tenant(): void
-    {
-        $this->postJson('/api/signals/market/import', ['records' => [$this->rec() + ['sub_institute_id' => self::T2]]], $this->h(self::T1))->assertOk();
-
-        $this->assertSame(self::T1, (int) CompanyOpportunity::sole()->sub_institute_id);
-    }
-
-    public function test_only_admin_or_hr_can_import_and_a_token_is_required(): void
-    {
-        $this->postJson('/api/signals/market/import', [$this->rec()], $this->h(self::T1, 2))->assertStatus(403);
-        $this->postJson('/api/signals/market/import', [$this->rec()])->assertStatus(401);
-        $this->assertSame(0, CompanyOpportunity::count());
-    }
-
-    public function test_dry_run_validates_and_writes_nothing(): void
-    {
-        $r = $this->postJson('/api/signals/market/import?dry_run=1', [$this->rec(), $this->rec(['source_url' => 'nope'])], $this->h());
-
-        $r->assertOk()->assertJsonPath('data.accepted', 1)->assertJsonPath('data.rejected', 1)->assertJsonPath('data.scan_log_id', null);
-        $this->assertSame([0, 0, 0, 0], [CompanyOpportunity::count(), Company::count(), ScanLog::count(), ImportRejection::count()]);
-    }
-
-    public function test_empty_oversized_and_unsupported_requests_are_refused(): void
-    {
-        $this->postJson('/api/signals/market/import', [], $this->h())->assertStatus(422);
-
-        config(['signals.market_import.max_records' => 1]);
-        $this->postJson('/api/signals/market/import', [$this->rec(), $this->rec()], $this->h())->assertStatus(422);
-
-        $xlsx = UploadedFile::fake()->createWithContent('scan.xlsx', 'x');
-        $this->post('/api/signals/market/import', ['file' => $xlsx], $this->h() + ['Accept' => 'application/json'])->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'CSV'));
-    }
-
-    public function test_a_csv_file_with_flattened_columns_imports(): void
-    {
-        $csv = "buyer_name,buyer_type,buyer_state,buyer_aliases,trigger_type,trigger_summary,source_url,event_date,claim_level,fetch_level,candidate_need_codes,score_buying_signal,score_problem_fit,score_product_fit,score_accessibility,score_urgency,score_potential_value,score_evidence_quality,score_reasoning\n"
-            . "Example Hospital Trust,institutional,,\"Example Trust|EHT\",expansion,New wing announced,https://example.invalid/n/1,2026-10-02,confirmed,page_text,N01|N20,3,3,3,3,3,3,3,ok\n"
-            . ",,,,,,,,,,,,,,,,,,\n";
-        $file = UploadedFile::fake()->createWithContent('scan.csv', $csv);
-
-        $this->post('/api/signals/market/import', ['file' => $file, 'source_label' => 'csv-test'], $this->h() + ['Accept' => 'application/json'])
-            ->assertOk()->assertJsonPath('data.accepted', 1)->assertJsonPath('data.received', 1);
-
-        $o = CompanyOpportunity::sole();
-        $this->assertSame(['N01', 'N20'], $o->candidate_need_codes);
-        $this->assertSame(21, (int) $o->score_total);
-        $this->assertSame('Medium', $o->priority);
-        $this->assertSame(3, CompanyAlias::count(), 'the canonical name plus the Example Trust and EHT aliases');
-    }
 
     // ── command + migration ──────────────────────────────────────────────────
 

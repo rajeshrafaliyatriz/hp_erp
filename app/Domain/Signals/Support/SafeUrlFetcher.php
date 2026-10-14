@@ -39,7 +39,11 @@ class SafeUrlFetcher
      *
      * @throws UnsafeUrlException when the URL, a redirect target, or the content is not acceptable
      */
-    public function fetch(string $url, ?int $maxBytes = null, ?int $timeout = null): array
+    /**
+     * @param  bool  $verifyTls  false ONLY for a page being read to check who it is, after the site's identity was verified by other
+     *                           evidence; the caller must say the certificate was not verified. Every other protection still applies.
+     */
+    public function fetch(string $url, ?int $maxBytes = null, ?int $timeout = null, bool $verifyTls = true): array
     {
         $maxBytes ??= (int) config('signals.ingestion.url_max_bytes', 2097152);
         $timeout ??= (int) config('signals.ingestion.url_timeout', 12);
@@ -51,6 +55,7 @@ class SafeUrlFetcher
                 $response = Http::withOptions([
                     'allow_redirects' => false,
                     'stream' => true,
+                    'verify' => $verifyTls,
                     'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$ip}"]],
                 ])->timeout($timeout)->connectTimeout(min(8, $timeout))
                     ->withHeaders(['User-Agent' => (string) config('signals.ingestion.user_agent'), 'Accept' => 'text/html,text/plain;q=0.9'])
@@ -89,6 +94,7 @@ class SafeUrlFetcher
                 'content_type' => $type ?: 'text/html',
                 'body' => $truncated ? substr($body, 0, $maxBytes) : $body,
                 'truncated' => $truncated,
+                'last_modified' => trim((string) $response->header('Last-Modified')) ?: null,
             ];
         }
 
