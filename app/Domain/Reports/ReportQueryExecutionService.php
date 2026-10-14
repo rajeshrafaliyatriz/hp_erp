@@ -147,7 +147,7 @@ final class ReportQueryExecutionService
         }
 
         $field = $this->requireField($filter['module'] ?? $primary->key, $filter['field'], $subInstituteId);
-        [$from, $to] = $this->resolveDatePreset($filter['preset'] ?? 'custom', $filter['from'] ?? null, $filter['to'] ?? null);
+        [$from, $to] = $this->resolveDatePreset($filter['preset'] ?? 'custom', $filter);
 
         if ($from !== null && $to !== null) {
             $query->whereBetween(DB::raw($field->column), [$from, $to]);
@@ -158,19 +158,37 @@ final class ReportQueryExecutionService
         }
     }
 
-    /** @return array{0: ?string, 1: ?string} [from, to] as Y-m-d strings, or [null, null] */
-    private function resolveDatePreset(string $preset, ?string $customFrom, ?string $customTo): array
+    /**
+     * `$filter` carries `from`/`to` (for `custom`) and `n` (for `last_n_days`/
+     * `next_n_days` — the general "Last/Next + count" pattern most BI tools
+     * use, e.g. Power BI's relative-date filter; added specifically so "last
+     * 10 days" and anything like it doesn't need its own named preset).
+     * `last_7_days`/`last_30_days` are thin labeled wrappers over the same
+     * `last_n_days` math, not separate branches, so a new shortcut is just a
+     * new `n` value, never new logic.
+     *
+     * @return array{0: ?string, 1: ?string} [from, to] as Y-m-d strings, or [null, null]
+     */
+    private function resolveDatePreset(string $preset, array $filter): array
     {
         $now = Carbon::now();
+        $n = max(1, (int) ($filter['n'] ?? 10));
 
         return match ($preset) {
             'today' => [$now->copy()->startOfDay()->toDateString(), $now->copy()->endOfDay()->toDateString()],
+            'yesterday' => [$now->copy()->subDay()->startOfDay()->toDateString(), $now->copy()->subDay()->endOfDay()->toDateString()],
             'this_week' => [$now->copy()->startOfWeek()->toDateString(), $now->copy()->endOfWeek()->toDateString()],
+            'next_week' => [$now->copy()->addWeek()->startOfWeek()->toDateString(), $now->copy()->addWeek()->endOfWeek()->toDateString()],
             'this_month' => [$now->copy()->startOfMonth()->toDateString(), $now->copy()->endOfMonth()->toDateString()],
             'last_month' => [$now->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(), $now->copy()->subMonthNoOverflow()->endOfMonth()->toDateString()],
             'this_quarter' => [$now->copy()->startOfQuarter()->toDateString(), $now->copy()->endOfQuarter()->toDateString()],
             'this_year' => [$now->copy()->startOfYear()->toDateString(), $now->copy()->endOfYear()->toDateString()],
-            'custom' => [$customFrom, $customTo],
+            // Inclusive of today — "last 10 days" reads as today and the 9 days before it, matching the common consumer-dashboard convention (vs. Salesforce's own LAST_N_DAYS, which excludes today).
+            'last_7_days' => [$now->copy()->subDays(6)->startOfDay()->toDateString(), $now->copy()->endOfDay()->toDateString()],
+            'last_30_days' => [$now->copy()->subDays(29)->startOfDay()->toDateString(), $now->copy()->endOfDay()->toDateString()],
+            'last_n_days' => [$now->copy()->subDays($n - 1)->startOfDay()->toDateString(), $now->copy()->endOfDay()->toDateString()],
+            'next_n_days' => [$now->copy()->startOfDay()->toDateString(), $now->copy()->addDays($n - 1)->endOfDay()->toDateString()],
+            'custom' => [$filter['from'] ?? null, $filter['to'] ?? null],
             default => [null, null],
         };
     }
@@ -285,9 +303,38 @@ final class ReportQueryExecutionService
             $select[] = DB::raw($field->column . ' as `' . $col['module'] . '.' . $col['field'] . '`');
         }
 
-        foreach ($definition['sort_columns'] ?? [] as $sort) {
-            $field = $this->requireField($sort['module'], $sort['field'], $subInstituteId);
-            $query->orderBy(DB::raw($field->column), ($sort['direction'] ?? 'asc') === 'desc' ? 'desc' : 'asc');
+        $sortColumns = $definition['sort_columns'] ?? [];
+
+        if ($sortColumns === []) {
+            // No author-chosen sort — default to newest-first on the primary
+            // module's own id, rather than leaving row order to whatever the
+            // database happens to return. Addresses reports where the most
+            // recent records were effectively buried: without this, MySQL's
+            // own default order is unspecified for a query with no ORDER BY.
+            $query->orderBy($primary->alias . '.' . $primary->primaryKey, 'desc');
+        } else {
+            foreach ($sortColumns as $sort) {
+                $field = $this->requireField($sort['module'], $sort['field'], $subInstituteId);
+                $query->orderBy(DB::raw($field->column), ($sort['direction'] ?? 'asc') === 'desc' ? 'desc' : 'asc');
+            }
+        }
+
+        // The most recent value among this report's own date columns, over
+        // every FILTERED row (not just the current page) — surfaced so a
+        // stale dataset is visible up front instead of a "today"/"last 7
+        // days" filter just silently returning nothing. Confirmed a real
+        // problem live: this engine's own seeded test data's dates are
+        // months away from the server's current date, so every relative
+        // preset returned zero rows with no indication why.
+        $latestDate = null;
+
+        foreach ($realColumns as $col) {
+            $field = $this->registry->resolve($col['module'], $col['field'], $subInstituteId);
+
+            if ($field !== null && $field->type === 'date') {
+                $latestDate = (clone $query)->select(DB::raw('MAX(' . $field->column . ') as latest_value'))->value('latest_value');
+                break;
+            }
         }
 
         $total = (clone $query)->count();
@@ -331,6 +378,7 @@ final class ReportQueryExecutionService
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
+            'latest_date' => $latestDate,
         ];
     }
 
