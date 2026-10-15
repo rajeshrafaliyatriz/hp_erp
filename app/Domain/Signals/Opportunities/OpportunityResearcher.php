@@ -288,7 +288,7 @@ class OpportunityResearcher
 
                 return $this->finish($run, $started, ($queriesFailed > 0 || $officialFailed) ? 'partial' : 'success', [
                     'stage' => 'completed',
-                    'stage_message' => 'Search finished: nothing recent was found for these searches.' . $officialNote,
+                    'stage_message' => 'Search finished: nothing recent was found for these searches.' . $officialNote . $this->noAccountsNote($company),
                 ]);
             }
 
@@ -348,7 +348,7 @@ class OpportunityResearcher
                 'ai_provider' => $result['completion']->provider,
                 'ai_model' => $result['completion']->model,
                 'stage' => 'completed',
-                'stage_message' => trim($officialNote . ' ' . ($qualified > 0
+                'stage_message' => trim($officialNote . $this->noAccountsNote($company) . ' ' . ($qualified > 0
                     ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . count($sources) . ' pages' . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
                     : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . count($sources) . ' pages' . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.'))),
             ]);
@@ -951,6 +951,17 @@ TXT;
         }
 
         return in_array($buyerType, QualificationGate::BUYER_TYPES, true) ? $buyerType : 'other';
+    }
+
+    /**
+     * The most common reason a general run finds nothing: no target organisations are loaded for this product, so there is no named account whose own
+     * site and pages can be read (that is where most signals come from). Said plainly in the run's result so a zero is explained.
+     */
+    private function noAccountsNote(?string $company): string
+    {
+        return ($company === null && $this->targets === [])
+            ? ' No target ' . ($this->ctx->isScholar() ? 'schools are' : 'accounts are') . ' loaded for ' . $this->ctx->label . ', so only general web searches were made and no organisation\'s own site was read.'
+            : '';
     }
 
     /** The text of a school-product prompt, with the product and buyer words of the current product. */
