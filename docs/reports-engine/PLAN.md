@@ -384,6 +384,11 @@ data field only, matches vtiger), VerticalBar/HorizontalBar/Line→
   - [x] A brand-new report's Columns step (builder wizard) now pre-checks each field's own `is_default_column` instead of starting every field unchecked — only for `reportId === null` (a genuinely new report); an existing report's saved selection is never touched.
   - [x] Live-verified: dragging a header reorders the table and renders drag/drop-target visual feedback correctly; dragging a resize handle changes the column's actual rendered width; a drill-down's headers now read Assignee, Task, Description, Due Date, Status, Assigned By with real data (no query errors from the two new fields); a new Tasks report's Columns step shows exactly those 6 of 16 fields pre-checked.
 
+- [x] **Unplanned follow-up #9 — full-text wrapped cells (no more truncation) and a real fix for the horizontal-scroll overlap, which resurfaced worse after #8 above.** *(g2gv0 `a0511e2`)*
+  - [x] Task/Description cells no longer truncate with "…" — `whitespace-normal break-words` replaces the old `overflow-hidden`/`text-ellipsis`/`whitespace-nowrap` combo; neither `<tr>` nor `<td>` constrains height elsewhere, so a row simply grows to its tallest wrapped cell, same as any normal `<table>`.
+  - [x] The column-mixing scroll bug (follow-up #7) came back worse once resizable columns landed: rows went from a fixed single-line height to content-driven, and z-index/compositing order alone wasn't a strong enough guarantee under that. Added `isolate` (its own stacking context) and `[contain:paint]` (this cell's paint strictly clipped to its own box, nothing bleeds in or out) to the sticky column so the two cells' paint regions are mutually exclusive by construction, not by hoping ordering holds under load.
+  - [x] Live-verified: real row heights now vary 52-193px across actual data (content drives height, not truncation); a 20-tick mouse-wheel burst screenshotted with NO settle time (how the original bug was actually caught) shows zero overlap on both the drill-down dialog and the main report page.
+
 ### Reference: vtiger's real default folders + canned reports (for Phase 3 seeding)
 
 | Folder (our label) | Canned reports to reproduce |
