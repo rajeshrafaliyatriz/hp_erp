@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\ColumnExists;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -18,10 +19,10 @@ return new class extends Migration
             return;
         }
         Schema::table('g2g_company_opportunities', function (Blueprint $t) {
-            if (! Schema::hasColumn('g2g_company_opportunities', 'assessment')) {
+            if (! ColumnExists::has('g2g_company_opportunities', 'assessment')) {
                 $t->longText('assessment')->nullable();
             }
-            if (! Schema::hasColumn('g2g_company_opportunities', 'buying_intent')) {
+            if (! ColumnExists::has('g2g_company_opportunities', 'buying_intent')) {
                 $t->string('buying_intent', 20)->nullable()->index();
             }
         });
@@ -34,7 +35,7 @@ return new class extends Migration
         }
         Schema::table('g2g_company_opportunities', function (Blueprint $t) {
             foreach (['assessment', 'buying_intent'] as $col) {
-                if (Schema::hasColumn('g2g_company_opportunities', $col)) {
+                if (ColumnExists::has('g2g_company_opportunities', $col)) {
                     $t->dropColumn($col);
                 }
             }

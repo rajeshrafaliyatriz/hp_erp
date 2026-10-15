@@ -6,6 +6,7 @@ use App\Domain\Signals\Opportunities\ProductProfile;
 use App\Domain\Signals\Products\ProductCatalog;
 use App\Http\Controllers\Api\Concerns\ResolvesApiIdentity;
 use App\Http\Controllers\Controller;
+use App\Support\ColumnExists;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,7 +60,7 @@ class ProductController extends Controller
         $opps = Schema::hasTable('g2g_company_opportunities')
             ? DB::table('g2g_company_opportunities')->where('sub_institute_id', $tenantId)->where('business_fit', $p['business_fit'])->count()
             : 0;
-        $runs = Schema::hasTable('g2g_research_runs') && Schema::hasColumn('g2g_research_runs', 'product_key')
+        $runs = Schema::hasTable('g2g_research_runs') && ColumnExists::has('g2g_research_runs', 'product_key')
             ? DB::table('g2g_research_runs')->where('sub_institute_id', $tenantId)->where('product_key', $p['key'])->count()
             : 0;
 

@@ -15,6 +15,7 @@ use App\Domain\Signals\Market\QualificationGate;
 use App\Domain\Signals\Market\SectionAssigner;
 use App\Domain\Signals\Market\SignalStrength;
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Support\ColumnExists;
 use App\Domain\Signals\Products\ProductContext;
 use App\Domain\Signals\Products\ProductNotConfigured;
 use App\Domain\Signals\Scholar\BuyingIntent;
@@ -672,9 +673,9 @@ class OpportunityResearcher
                 'domain' => strtolower(preg_replace('/^www\./', '', (string) parse_url($src['url'], PHP_URL_HOST))) ?: null,
                 'snippet' => mb_substr((string) $src['text'], 0, 1000),
                 'published_at' => $src['published_at'], 'retrieved_at' => $src['retrieved_at'], 'page_fetched' => (bool) $src['page_fetched'],
-            ] + (\Illuminate\Support\Facades\Schema::hasColumn('g2g_research_sources', 'date_provenance')
+            ] + (ColumnExists::has('g2g_research_sources', 'date_provenance')
                 ? ['date_provenance' => $src['date_provenance'] ?? null, 'date_confidence' => $src['date_confidence'] ?? null] : [])
-              + (\Illuminate\Support\Facades\Schema::hasColumn('g2g_research_sources', 'modified_at')
+              + (ColumnExists::has('g2g_research_sources', 'modified_at')
                 ? ['modified_at' => $src['modified_at'] ?? null, 'modified_provenance' => $src['modified_provenance'] ?? null] : []));
         }
 

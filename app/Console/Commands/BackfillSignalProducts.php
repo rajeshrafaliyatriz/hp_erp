@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Domain\Signals\Products\ProductCatalog;
+use App\Support\ColumnExists;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -33,7 +34,7 @@ class BackfillSignalProducts extends Command
 
         $total = 0;
         foreach ([['g2g_research_runs', 'research_run_id'], ['g2g_ingestion_sources', 'ingestion_source_id']] as [$table, $link]) {
-            if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'product_key')) {
+            if (! Schema::hasTable($table) || ! ColumnExists::has($table, 'product_key')) {
                 $this->warn("{$table}: no product_key column yet (run the migration first).");
 
                 continue;
