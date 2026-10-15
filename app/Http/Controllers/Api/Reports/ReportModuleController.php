@@ -75,6 +75,7 @@ class ReportModuleController extends Controller
                     'groupable' => $f->groupable,
                     'aggregatable' => $f->aggregatable,
                     'is_custom_field' => $f->isCustomField,
+                    'is_default_column' => $f->defaultColumn,
                 ], $fields),
             ],
         ]);

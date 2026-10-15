@@ -44,20 +44,35 @@ final class TaskManagementReportModules
             tenantColumn: 'sub_institute_id',
             softDeleteColumn: 'deleted_at',
             primaryKey: 'id',
+            // Order here is the DEFAULT column order a new report (or a
+            // drill-down table) shows before anyone has dragged a column
+            // elsewhere — Assignee leads (so it's the sticky/pinned column
+            // by default too, since both the builder wizard and TabularView
+            // just render `columns` in array order), matching what was
+            // actually asked for live rather than the previous order, which
+            // buried Assignee 12th and cut it out of every drill-down table
+            // entirely (`defaultDrilldownColumns()`'s own first-8 slice).
             fields: [
-                ReportFieldDefinition::varchar('task_title', 'Task', 't.task_title', groupable: false),
-                ReportFieldDefinition::date('task_date', 'Due Date', 't.task_date'),
-                ReportFieldDefinition::date('planned_start_date', 'Planned Start', 't.planned_start_date'),
-                ReportFieldDefinition::varchar('status', 'Status', 't.status'),
+                ReportFieldDefinition::userRef('task_allocated_to', 'Assignee', "TRIM(CONCAT_WS(' ', u_assignee.first_name, u_assignee.middle_name, u_assignee.last_name))", defaultColumn: true),
+                ReportFieldDefinition::varchar('task_title', 'Task', 't.task_title', groupable: false, defaultColumn: true),
+                ReportFieldDefinition::varchar('task_description', 'Description', 't.task_description', groupable: false, defaultColumn: true),
+                ReportFieldDefinition::date('task_date', 'Due Date', 't.task_date', defaultColumn: true),
+                ReportFieldDefinition::varchar('status', 'Status', 't.status', defaultColumn: true),
+                ReportFieldDefinition::userRef('task_allocated', 'Assigned By', "TRIM(CONCAT_WS(' ', u_allocator.first_name, u_allocator.middle_name, u_allocator.last_name))", defaultColumn: true),
                 ReportFieldDefinition::varchar('task_type', 'Priority', 't.task_type'),
+                // Real `time` columns (confirmed: `SHOW COLUMNS FROM task`),
+                // not a separate start/end DATE — task_date is the one due
+                // date this module has. Offered, not default-checked, per
+                // the user's own "(optional)" on both.
+                ReportFieldDefinition::varchar('time_start', 'Start', 't.time_start', groupable: false),
+                ReportFieldDefinition::varchar('time_end', 'End', 't.time_end', groupable: false),
+                ReportFieldDefinition::date('planned_start_date', 'Planned Start', 't.planned_start_date'),
                 ReportFieldDefinition::varchar('kra', 'KRA', 't.kra'),
                 ReportFieldDefinition::varchar('kpa', 'KPA', 't.kpa'),
                 ReportFieldDefinition::numeric('estimated_hours', 'Estimated Hours', 't.estimated_hours'),
                 ReportFieldDefinition::numeric('actual_hours', 'Actual Hours', 't.actual_hours'),
                 ReportFieldDefinition::numeric('remaining_hours', 'Remaining Hours', 't.remaining_hours'),
                 ReportFieldDefinition::varchar('delay_category', 'Delay Category', 't.delay_category'),
-                ReportFieldDefinition::userRef('task_allocated_to', 'Assignee', "TRIM(CONCAT_WS(' ', u_assignee.first_name, u_assignee.middle_name, u_assignee.last_name))"),
-                ReportFieldDefinition::userRef('task_allocated', 'Assigned By', "TRIM(CONCAT_WS(' ', u_allocator.first_name, u_allocator.middle_name, u_allocator.last_name))"),
             ],
             joins: [
                 'task_management.projects' => ReportJoinDefinition::pivot(
