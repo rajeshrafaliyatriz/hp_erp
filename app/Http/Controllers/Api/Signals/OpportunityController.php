@@ -195,7 +195,7 @@ class OpportunityController extends Controller
 
         $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->where('product_key', $key)
             ->whereIn('status', self::SUCCESS_STATUSES)->whereNotNull('report_date')
-            ->orderByDesc('report_date')->orderByDesc('id')->limit(500)->get(['id', 'report_date', 'status', 'completed_at', 'opportunities_qualified']);
+            ->orderByDesc('report_date')->orderByDesc('id')->limit(500)->get(['id', 'report_date', 'status', 'completed_at', 'opportunities_qualified', 'queries_run', 'queries_failed', 'sources_found', 'companies_researched', 'opportunities_rejected', 'stage_message']);
 
         $dates = $runs->groupBy(fn ($r) => Carbon::parse($r->report_date)->toDateString())->map(fn ($day, $date) => [
             'date' => $date,
@@ -204,6 +204,12 @@ class OpportunityController extends Controller
             'status' => $day->every(fn ($r) => $r->status === 'success') ? 'success' : 'partial',
             'last_completed_at' => $day->max('completed_at')?->toIso8601String(),
             'qualified' => (int) $day->sum('opportunities_qualified'),
+            // What the day's runs did, so a day with no signals can say why (searches made, pages found, organisations looked at, checks failed).
+            'searches' => (int) $day->sum('queries_run'),
+            'sources' => (int) $day->sum('sources_found'),
+            'organisations' => (int) $day->sum('companies_researched'),
+            'rejected' => (int) $day->sum('opportunities_rejected'),
+            'note' => $day->first()->stage_message,
         ])->sortByDesc('date')->values();
 
         return response()->json(['status' => 1, 'data' => ['product' => $key, 'timezone' => config('signals.timezone'), 'dates' => $dates]]);
@@ -319,16 +325,9 @@ class OpportunityController extends Controller
             return;
         }
 
-        try {
-            $queueName = (string) config('signals.queue', 'signals');
-            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-                pclose(popen("start /B php artisan queue:work --queue={$queueName},default --stop-when-empty", "r"));
-            } else {
-                exec("php artisan queue:work --queue={$queueName},default --stop-when-empty > /dev/null 2>&1 &");
-            }
-        } catch (\Throwable) {
-            // Ignore background spawn errors; regular worker or scheduler picks it up
-        }
+        // Absolute paths and the CLI PHP binary: a bare `php artisan` depends on the web server's working directory and PATH (see QueueWorkerLauncher).
+        // When the host does not allow starting a process, a standing `queue:work --queue=signals,default` worker drains the queue instead.
+        \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
     }
 
     /** Every source a run retrieved (cited or not), for auditing a report. */

@@ -496,4 +496,63 @@ class ResearchDateHistoryTest extends TestCase
     {
         $this->artisan('schedule:list')->doesntExpectOutputToContain('signals:research')->assertExitCode(0);
     }
+
+    // ── a run that finds nothing says why; the school list moves between environments ──
+
+    public function test_a_general_run_with_no_target_schools_says_so_and_the_history_carries_what_it_did(): void
+    {
+        $this->seedPortfolio();
+        $this->fake([]);   // the model finds no lead
+
+        $this->runFor('scholarclone');
+
+        $run = ResearchRun::sole();
+        $this->assertSame('success', $run->status);
+        $this->assertStringContainsString('No target schools are loaded for ScholarClone', (string) $run->stage_message);
+        $day = $this->dates('scholarclone')->assertOk()->json('data.dates.0');
+        $this->assertSame(0, $day['qualified']);
+        $this->assertGreaterThan(0, $day['searches']);
+        $this->assertStringContainsString('No target schools', (string) $day['note']);
+
+        // With schools loaded the note is not shown.
+        $this->account('Podar World School', 'Vadodara', 1);
+        Cache::flush();
+        $this->travel(11)->minutes();
+        $this->fake([]);
+        $this->runFor('scholarclone');
+        $this->assertStringNotContainsString('No target schools', (string) ResearchRun::orderByDesc('id')->first()->stage_message);
+    }
+
+    public function test_target_accounts_export_and_load_into_another_organisation_without_touching_what_is_there(): void
+    {
+        $a = $this->account('Podar World School', 'Vadodara', 1, 'candidate', 'CRM-1');
+        $a->update(['contact_name' => 'The Principal', 'attributes' => ['website_verification' => ['url' => 'https://school.example.org', 'scope' => 'campus', 'status' => 'verified']]]);
+        $this->account('Nirma Vidya Vihar', 'Ahmedabad', 2);
+        $file = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'accounts_' . uniqid() . '.json';
+
+        $this->artisan('signals:export-accounts', ['--tenant' => self::T, '--pack' => 'scholar_k12', '--file' => $file])->assertExitCode(0);
+        $data = json_decode((string) file_get_contents($file), true);
+        $this->assertCount(2, $data['accounts']);
+        $this->assertArrayNotHasKey('id', $data['accounts'][0]);
+        $this->assertArrayNotHasKey('sub_institute_id', $data['accounts'][0]);
+
+        // dry run writes nothing
+        $this->artisan('signals:load-accounts', ['file' => $file, '--tenant' => self::T2])->expectsOutputToContain('2 to add')->assertExitCode(0);
+        $this->assertSame(0, TargetAccount::where('sub_institute_id', self::T2)->count());
+
+        $this->artisan('signals:load-accounts', ['file' => $file, '--tenant' => self::T2, '--apply' => true])->assertExitCode(0);
+        $loaded = TargetAccount::where('sub_institute_id', self::T2)->orderBy('id')->get();
+        $this->assertCount(2, $loaded);
+        $this->assertSame('scholar_k12', $loaded[0]->pack);
+        $this->assertSame('verified', $loaded[0]->attributes['website_verification']['status'], 'the verified website travels with the account');
+        $this->assertSame('The Principal', $loaded[0]->contact_name);
+
+        // an existing account is kept as it is; loading twice adds nothing
+        $loaded[0]->update(['city' => 'Changed locally']);
+        $this->artisan('signals:load-accounts', ['file' => $file, '--tenant' => self::T2, '--apply' => true])->expectsOutputToContain('0 to add')->assertExitCode(0);
+        $this->assertSame('Changed locally', $loaded[0]->refresh()->city);
+        $this->assertSame(2, TargetAccount::where('sub_institute_id', self::T2)->count());
+        $this->assertSame(2, TargetAccount::where('sub_institute_id', self::T)->count(), 'the source organisation is untouched');
+        @unlink($file);
+    }
 }

@@ -349,6 +349,11 @@ class IngestionController extends Controller
         // second click finds a running analysis instead of starting another.
         $analysis = IngestionAnalyzer::begin($source, $userId);
         AnalyzeIngestionSourceJob::dispatch($tenantId, $analysis->id, $userId);
+        // Like Generate Signals: without a standing worker the queued analysis would never run. A short-lived worker (stops when the queue is empty)
+        // is started with absolute paths; where the host forbids that, a standing `queue:work --queue=signals,default` worker is needed.
+        if (config('queue.default') !== 'sync') {
+            \App\Support\QueueWorkerLauncher::start((string) config('signals.queue', 'signals'));
+        }
 
         return [true, null, null];
     }

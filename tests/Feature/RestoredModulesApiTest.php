@@ -189,4 +189,152 @@ class RestoredModulesApiTest extends TestCase
         $this->getJson('/api/signals/opportunity-matches', $this->h())->assertOk();
         $this->postJson('/api/signals/matches/action', [], $this->h())->assertStatus(422);
     }
+
+    // ── Partner Network ──────────────────────────────────────────────────────
+
+    private function partner(string $id = 'PT-1', array $o = []): array
+    {
+        return $o + ['partner_id' => $id, 'partner_name' => 'Acme Integrators', 'partner_type' => 'Regional SI', 'partner_status' => 'Active'];
+    }
+
+    public function test_a_partner_is_saved_with_only_what_the_person_entered_and_nothing_is_invented(): void
+    {
+        // What the screen now sends for a new partner: blank optional fields, no made-up state, empanelment or margin.
+        $blank = $this->partner('PT-9', ['hq_state' => '', 'contact_email' => '', 'contact_phone' => '', 'sales_contact_name' => '', 'conflicts' => '',
+            'states_covered' => [], 'empanelments' => [], 'procurement_routes' => []]);
+
+        $this->postJson('/api/portfolio/partners', $blank, $this->h())->assertSuccessful();
+
+        $row = DB::table('g2g_partners')->where('partner_id', 'PT-9')->first();
+        $this->assertNotNull($row);
+        $this->assertTrue(in_array($row->hq_state, [null, ''], true), 'no state was invented');
+        $this->assertNull($row->referral_margin_pct, 'no margin was invented');
+        $this->assertSame([], (array) json_decode((string) $row->empanelments, true), 'no empanelment was invented');
+        $this->assertSame('Acme Integrators', $row->partner_name);
+    }
+
+    public function test_partner_validation_returns_field_messages_the_screen_can_show_and_saves_nothing(): void
+    {
+        $r = $this->postJson('/api/portfolio/partners', $this->partner('PT-2', ['contact_email' => 'not-an-email', 'referral_margin_pct' => 120]), $this->h())->assertStatus(422);
+        $this->assertArrayHasKey('contact_email', $r->json('errors'));
+        $this->assertArrayHasKey('referral_margin_pct', $r->json('errors'));
+        $this->postJson('/api/portfolio/partners', ['partner_id' => 'PT-3'], $this->h())->assertStatus(422);
+        $this->assertSame(0, DB::table('g2g_partners')->count());
+    }
+
+    public function test_partners_are_unique_searchable_editable_deletable_and_private_to_their_organisation(): void
+    {
+        $this->postJson('/api/portfolio/partners', $this->partner('PT-1'), $this->h())->assertSuccessful();
+        $this->postJson('/api/portfolio/partners', $this->partner('PT-1'), $this->h())->assertStatus(409);
+        $this->postJson('/api/portfolio/partners', $this->partner('PT-2', ['partner_name' => 'Zenith Systems', 'partner_type' => 'Distributor']), $this->h())->assertSuccessful();
+        $id = (int) DB::table('g2g_partners')->where('partner_id', 'PT-2')->value('id');
+
+        $names = fn (string $q, ?array $h = null) => collect($this->getJson('/api/portfolio/partners' . $q, $h ?? $this->h())->assertOk()->json('data.data'))->pluck('partner_name')->all();
+        $this->assertSame(['Zenith Systems'], $names('?search=Zenith'));
+        $this->assertSame(['Zenith Systems'], $names('?partner_type=Distributor'));
+        $this->assertCount(2, $names(''));
+        $this->assertSame([], $names('', $this->h(self::T2)), 'another organisation sees none of them');
+
+        $this->putJson("/api/portfolio/partners/{$id}", ['partner_name' => 'Zenith Systems Ltd'], $this->h())->assertOk();
+        $this->assertSame('Zenith Systems Ltd', DB::table('g2g_partners')->where('id', $id)->value('partner_name'));
+        $this->putJson("/api/portfolio/partners/{$id}", ['partner_name' => 'Hijack'], $this->h(self::T2))->assertStatus(404);
+        $this->deleteJson("/api/portfolio/partners/{$id}", [], $this->h(self::T2))->assertStatus(404);
+        $this->assertSame(2, DB::table('g2g_partners')->count());
+
+        $this->deleteJson("/api/portfolio/partners/{$id}", [], $this->h(self::T1, 2))->assertStatus(403);
+        $this->deleteJson("/api/portfolio/partners/{$id}", [], $this->h())->assertSuccessful();
+        $this->assertSame(1, DB::table('g2g_partners')->count());
+        $this->getJson('/api/portfolio/partners/stats', $this->h())->assertOk();
+    }
+
+    // ── who may do what, through the real HTTP kernel ────────────────────────
+
+    public function test_the_role_matrix_for_every_screen_endpoint_and_nobody_without_a_token_gets_in(): void
+    {
+        $admin = $this->h(self::T1, 1);
+        $employee = $this->h(self::T1, 2);
+        $manager = $this->h(self::T1, 3);
+
+        // [method, url, body, admin, employee, manager]: expected HTTP status per role (null = anything but 401/403, i.e. it was let through)
+        $matrix = [
+            ['GET', '/api/signals/opportunities', [], 200, 403, 200],
+            ['GET', '/api/signals/research/dates?product=scholarclone', [], 200, 403, 200],
+            ['GET', '/api/signals/research/status', [], 200, 403, 200],
+            ['POST', '/api/signals/research/run', ['product' => 'scholarclone'], null, 403, 403],
+            ['GET', '/api/signals/ingestion/sources', [], 200, 403, 403],
+            ['POST', '/api/signals/ingestion/url', ['url' => 'https://example.com', 'product' => 'scholarclone'], null, 403, 403],
+            ['GET', '/api/signals/icp/products/scholarclone', [], 200, 403, 403],
+            ['PUT', '/api/signals/icp/products/scholarclone', ['config' => []], null, 403, 403],
+            ['GET', '/api/portfolio/products', [], 200, 200, 200],
+            ['GET', '/api/portfolio/offers', [], 200, 200, 200],
+            ['GET', '/api/portfolio/partners', [], 200, 200, 200],
+            ['POST', '/api/portfolio/partners', ['partner_id' => 'PT-X', 'partner_name' => 'X', 'partner_type' => 'SI', 'partner_status' => 'Active'], 'created', 403, 403],
+            ['POST', '/api/portfolio/offers', ['offer_id' => 'X-1', 'name' => 'X', 'parent_product' => 'G2G', 'readiness_status' => 'Live'], 'created', 403, 403],
+        ];
+        foreach ($matrix as [$method, $url, $body, $a, $e, $m]) {
+            foreach ([['employee', $employee, $e], ['manager', $manager, $m]] as [$role, $headers, $expected]) {
+                $this->assertSame($expected, $this->json($method, $url, $body, $headers)->getStatusCode(), "{$role} {$method} {$url}");
+            }
+            $this->json($method, $url, $body)->assertStatus(401);
+            $status = $this->json($method, $url, $body, $admin)->getStatusCode();
+            if ($a === null) {
+                $this->assertNotContains($status, [401, 403], "admin {$method} {$url} should be let through, got {$status}");
+            } elseif ($a === 'created') {
+                $this->assertContains($status, [200, 201], "admin {$method} {$url}");
+            } else {
+                $this->assertSame($a, $status, "admin {$method} {$url}");
+            }
+        }
+        // Only the administrator's two creations exist: the employee's and manager's refused requests created nothing.
+        $this->assertSame(1, DB::table('g2g_partners')->count());
+        $this->assertSame(1, DB::table('g2g_product_offers')->count());
+    }
+
+    public function test_an_opportunity_review_needs_admin_hr_or_manager_and_another_organisation_cannot_change_it(): void
+    {
+        $company = \App\Domain\Signals\Opportunities\Company::create(['sub_institute_id' => self::T1, 'name' => 'S', 'normalized_name' => 's']);
+        $id = DB::table('g2g_company_opportunities')->insertGetId([
+            'sub_institute_id' => self::T1, 'company_id' => $company->id, 'business_fit' => 'scholar', 'title' => 't', 'category' => 'x', 'observed_event' => 'e',
+            'why_indicates_need' => 'w', 'product_fit' => 'p', 'recommended_action' => 'a', 'priority' => 'Low', 'qualification' => 'Monitoring', 'confidence' => 'Low',
+            'sources' => '[]', 'confirmed_facts' => '[]', 'unverified_claims' => '[]', 'fingerprint' => 'f1', 'review_status' => 'New', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->patchJson("/api/signals/opportunities/{$id}/review", [], $this->h(self::T1, 2))->assertStatus(403);
+        $this->patchJson("/api/signals/opportunities/{$id}/review", [], $this->h(self::T2, 1))->assertStatus(404);
+        $this->assertSame('New', DB::table('g2g_company_opportunities')->where('id', $id)->value('review_status'));
+        $this->patchJson("/api/signals/opportunities/{$id}/review", [], $this->h(self::T1, 3))->assertOk();
+        $this->assertSame('Reviewed', DB::table('g2g_company_opportunities')->where('id', $id)->value('review_status'));
+    }
+
+    public function test_the_worker_command_uses_absolute_paths_so_it_works_whatever_directory_the_web_server_runs_in(): void
+    {
+        $unix = \App\Support\QueueWorkerLauncher::command('signals', 'Linux', '/usr/bin/php', '/var/www/g2gb');
+        // (escapeshellarg quotes per host OS, so the expected text is built the same way)
+        $this->assertSame(sprintf('cd %s && %s artisan queue:work --queue=%s --stop-when-empty > /dev/null 2>&1 &', escapeshellarg('/var/www/g2gb'), escapeshellarg('/usr/bin/php'), escapeshellarg('signals,default')), $unix);
+        $win = \App\Support\QueueWorkerLauncher::command('signals', 'WINNT', 'C:\\php\\php.exe', 'C:\\app\\g2gb');
+        $this->assertSame('cd /d "C:\\app\\g2gb" && start /B "" "C:\\php\\php.exe" artisan queue:work --queue=signals,default --stop-when-empty', $win);
+        $this->assertStringNotContainsString(' php artisan', $unix, 'never a bare php');
+        $this->assertStringContainsString(base_path(), \App\Support\QueueWorkerLauncher::command('signals'));
+    }
+
+    public function test_the_preflight_reads_and_reports_without_calling_a_provider_writing_or_printing_a_secret(): void
+    {
+        \Illuminate\Support\Facades\Http::fake();
+        config(['signals.web_search.tavily_key' => 'tvly-SECRET-VALUE', 'ai.provider.gemini.api_key' => 'gem-SECRET-VALUE', 'cors.allowed_origins' => ['https://g2g.example.com']]);
+        $before = DB::table('g2g_partners')->count() . '/' . DB::table('tbluser')->count();
+
+        \Illuminate\Support\Facades\Artisan::call('signals:preflight', ['--origin' => 'https://g2g.example.com']);
+        $out = \Illuminate\Support\Facades\Artisan::output();
+        $this->assertStringContainsString('Nothing was written and no provider was called', $out);
+        $this->assertStringContainsString('CORS for https://g2g.example.com', $out);
+        $this->assertStringContainsString('allowed', $out);
+
+        \Illuminate\Support\Facades\Artisan::call('signals:preflight', ['--origin' => 'https://evil.example.net']);
+        $blocked = \Illuminate\Support\Facades\Artisan::output();
+        $this->assertStringContainsString('NOT in config/cors.php', $blocked);
+
+        \Illuminate\Support\Facades\Http::assertNothingSent();
+        $this->assertSame($before, DB::table('g2g_partners')->count() . '/' . DB::table('tbluser')->count());
+        $this->assertStringNotContainsString('SECRET-VALUE', $out . $blocked);
+    }
 }
