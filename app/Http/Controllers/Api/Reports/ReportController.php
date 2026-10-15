@@ -333,7 +333,17 @@ class ReportController extends Controller
         return $this->runAndRespond('tabular', $report->primary_module, $tabularDefinition, $tenantId, ['columns' => $tabularDefinition['columns']]);
     }
 
-    /** A reasonable default column set for a drill-down table — the primary module's own fields, custom fields excluded (display-only elsewhere, no reason to add that cost here), capped to keep the table readable. */
+    /**
+     * A reasonable default column set for a drill-down table — custom fields
+     * excluded (display-only elsewhere, no reason to add that cost here),
+     * capped to keep the table readable. Prefers each field's own
+     * hand-curated `defaultColumn` flag (ReportFieldDefinition's own
+     * docblock) so a module's actually-useful fields show up — not whichever
+     * 8 happen to be declared first in its registry array, which is how this
+     * previously cut Assignee out of every Tasks drill-down entirely (it was
+     * the 12th field). Falls back to the old first-8 behavior for a module
+     * that hasn't curated any defaults yet, so Events/Projects don't regress.
+     */
     private function defaultDrilldownColumns(string $primaryModule, int $tenantId): array
     {
         $fields = array_values(array_filter(
@@ -341,12 +351,15 @@ class ReportController extends Controller
             fn ($f) => !$f->isCustomField,
         ));
 
+        $defaults = array_values(array_filter($fields, fn ($f) => $f->defaultColumn));
+        $chosen = $defaults !== [] ? $defaults : array_slice($fields, 0, 8);
+
         return array_map(fn ($f) => [
             'module' => $primaryModule,
             'field' => $f->key,
             'label' => $f->label,
             'visible' => true,
-        ], array_slice($fields, 0, 8));
+        ], $chosen);
     }
 
     /** GET /api/reports/{id}/export?format=csv */
