@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\ColumnExists;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -16,7 +17,7 @@ return new class extends Migration
     public function up(): void
     {
         foreach (self::TABLES as $table) {
-            if (Schema::hasTable($table) && ! Schema::hasColumn($table, 'product_key')) {
+            if (Schema::hasTable($table) && ! ColumnExists::has($table, 'product_key')) {
                 Schema::table($table, function (Blueprint $t) {
                     $t->string('product_key', 40)->nullable()->index();
                 });
@@ -27,7 +28,7 @@ return new class extends Migration
     public function down(): void
     {
         foreach (self::TABLES as $table) {
-            if (Schema::hasTable($table) && Schema::hasColumn($table, 'product_key')) {
+            if (Schema::hasTable($table) && ColumnExists::has($table, 'product_key')) {
                 Schema::table($table, function (Blueprint $t) {
                     $t->dropColumn('product_key');
                 });

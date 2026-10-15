@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\ColumnExists;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -17,10 +18,10 @@ return new class extends Migration
             return;
         }
         Schema::table('g2g_research_sources', function (Blueprint $t) {
-            if (! Schema::hasColumn('g2g_research_sources', 'date_provenance')) {
+            if (! ColumnExists::has('g2g_research_sources', 'date_provenance')) {
                 $t->string('date_provenance', 30)->nullable();
             }
-            if (! Schema::hasColumn('g2g_research_sources', 'date_confidence')) {
+            if (! ColumnExists::has('g2g_research_sources', 'date_confidence')) {
                 $t->string('date_confidence', 10)->nullable();
             }
         });
@@ -33,7 +34,7 @@ return new class extends Migration
         }
         Schema::table('g2g_research_sources', function (Blueprint $t) {
             foreach (['date_provenance', 'date_confidence'] as $col) {
-                if (Schema::hasColumn('g2g_research_sources', $col)) {
+                if (ColumnExists::has('g2g_research_sources', $col)) {
                     $t->dropColumn($col);
                 }
             }
