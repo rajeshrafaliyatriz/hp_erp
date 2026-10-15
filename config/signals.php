@@ -164,6 +164,9 @@ return [
     | `php artisan signals:import-market`. See docs/signals-market-import-schema.md.
     */
     // Offer matching for imported signals. Readiness never changes a score.
+    // Automatic daily research. OFF by default: research runs only when a person presses Generate Signals.
+    'scheduled_research' => (bool) env('SIGNALS_SCHEDULED_RESEARCH', false),
+
     // Products the scheduled research runs for (keys from config/signals_products.php). Default: ScholarClone only.
     'products' => array_values(array_filter(array_map('trim', explode(',', (string) env('SIGNALS_PRODUCTS', 'scholarclone'))))),
 

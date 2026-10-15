@@ -363,7 +363,7 @@ class OpportunityResearcher
             ] + (
                 // An unclassified failure is the hardest to diagnose (the UI only says "generation failed"), so record
                 // what it was. Not for AI-provider errors: their text can echo the prompt and is never logged.
-                $failure['code'] === 'generation_failed' && ! $e instanceof \App\Domain\AI\Support\AiProviderHttpException
+                in_array($failure['code'], ['generation_failed', 'database_error'], true) && ! $e instanceof \App\Domain\AI\Support\AiProviderHttpException
                     ? ['message' => mb_substr($e->getMessage(), 0, 400), 'where' => basename($e->getFile()) . ':' . $e->getLine()]
                     : []
             ));

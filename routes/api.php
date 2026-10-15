@@ -3476,6 +3476,7 @@ Route::prefix('signals')->middleware('api.token')->group(function () {
         Route::get('/research/status', [$opp, 'status']);
         Route::get('/providers', [\App\Http\Controllers\Api\Signals\ProviderController::class, 'show']);
         Route::get('/research/runs', [$opp, 'runs']);
+        Route::get('/research/dates', [$opp, 'runDates']);
         Route::get('/research/runs/{id}', [$opp, 'showRun'])->whereNumber('id');
         Route::get('/research/runs/{id}/sources', [$opp, 'runSources'])->whereNumber('id');
         Route::get('/opportunities', [$opp, 'index']);

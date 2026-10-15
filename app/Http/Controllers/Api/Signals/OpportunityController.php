@@ -175,6 +175,40 @@ class OpportunityController extends Controller
         return response()->json(['status' => 1, 'data' => $runs->map(fn ($r) => $this->presentRun($r))->values()]);
     }
 
+    /**
+     * The dates a product has research to look back on: one entry per day (the application's timezone, `report_date`) on which at least one of
+     * the product's runs finished successfully. "Successful" is the backend's existing rule (`last_successful_run`, `report_dates`): status
+     * `success`, or `partial` (finished, with some searches or sources unavailable; its results are real and stored). Failed, skipped, timed-out
+     * and still-running runs never make a date. A run with zero qualified opportunities still counts: running well and finding something are
+     * separate. Runs made before products were recorded (no product) belong to no product and are not offered. Reads only; starts nothing.
+     */
+    public function runDates(Request $request): JsonResponse
+    {
+        $identity = $this->resolveApiIdentity($request);
+        if (! is_array($identity)) {
+            return $identity;
+        }
+        $key = ProductCatalog::normalise((string) $request->query('product', ''));
+        if ($key === null) {
+            return response()->json(['status' => 0, 'code' => 'unknown_product', 'message' => 'Choose a product.'], 422);
+        }
+
+        $runs = ResearchRun::where('sub_institute_id', $identity['sub_institute_id'])->where('product_key', $key)
+            ->whereIn('status', self::SUCCESS_STATUSES)->whereNotNull('report_date')
+            ->orderByDesc('report_date')->orderByDesc('id')->limit(500)->get(['id', 'report_date', 'status', 'completed_at', 'opportunities_qualified']);
+
+        $dates = $runs->groupBy(fn ($r) => Carbon::parse($r->report_date)->toDateString())->map(fn ($day, $date) => [
+            'date' => $date,
+            'runs' => $day->count(),
+            // The day's headline status: success only if every counted run was a clean success.
+            'status' => $day->every(fn ($r) => $r->status === 'success') ? 'success' : 'partial',
+            'last_completed_at' => $day->max('completed_at')?->toIso8601String(),
+            'qualified' => (int) $day->sum('opportunities_qualified'),
+        ])->sortByDesc('date')->values();
+
+        return response()->json(['status' => 1, 'data' => ['product' => $key, 'timezone' => config('signals.timezone'), 'dates' => $dates]]);
+    }
+
     public function run(Request $request): JsonResponse
     {
         $identity = $this->resolveApiIdentity($request);
@@ -350,6 +384,7 @@ class OpportunityController extends Controller
             'need_code' => ['nullable', 'regex:/^N(0[1-9]|1\d|20)$/'],
             'trigger_type' => 'nullable|string|max:30',
             'report_date' => 'nullable|date',
+            'run_date' => 'nullable|date_format:Y-m-d',
             'from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from',
             'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50',
         ]);
@@ -513,6 +548,10 @@ class OpportunityController extends Controller
         }
         if ($code = $request->query('need_code')) {
             $q->where('o.candidate_need_codes', 'like', '%"' . $code . '"%');
+        }
+        // A past day's saved results: the opportunities that came from a SUCCESSFUL research run on that day. Reads stored rows only.
+        if ($runDate = $request->query('run_date')) {
+            $q->whereDate('r.report_date', $runDate)->whereIn('r.status', self::SUCCESS_STATUSES);
         }
         if ($date = $request->query('report_date')) {
             $q->whereDate('r.report_date', Carbon::parse($date)->toDateString());
@@ -732,6 +771,9 @@ class OpportunityController extends Controller
 
     /** @return array<string, mixed> */
     /** The product key a stored `business_fit` value stands for (null for an unassigned or multi-product record). */
+    /** Run statuses that count as a successful run for the date history (see runDates). */
+    private const SUCCESS_STATUSES = ['success', 'partial'];
+
     private function productKeyOf(?string $fit): ?string
     {
         foreach (ProductCatalog::definitions() as $key => $d) {

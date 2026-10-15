@@ -32,7 +32,9 @@ final class ProductIcpService
         $profile = $this->target($tenantId, $def);
         $template = $def['icp_template'] ? config("signals_icp.{$def['icp_template']}") : null;
 
-        $config = $profile ? (array) $profile->config : (is_array($template) ? $template : []);
+        // A seeded copy of the built-in definition is shown as that definition (it is what runs); a person's saved ICP is shown as saved.
+        $seed = $profile !== null && is_array($template) && ProductCatalog::isSeedCopy($profile);
+        $config = $seed ? $template : ($profile ? (array) $profile->config : (is_array($template) ? $template : []));
 
         return [
             'product' => $catalog->describe($tenantId, $productKey),
@@ -40,9 +42,9 @@ final class ProductIcpService
                 'id' => (int) $profile->id, 'key' => $profile->key, 'name' => $profile->name, 'status' => $profile->status,
                 'version' => (int) $profile->version, 'updated_at' => $profile->updated_at?->toIso8601String(),
             ] : null,
-            'config_source' => $profile ? 'saved' : (is_array($template) ? 'template' : 'empty'),
+            'config_source' => $seed || ! $profile ? (is_array($template) ? 'template' : 'empty') : 'saved',
             'config' => $this->managedOnly($config),
-            'problems' => $profile ? $this->validator->validate((array) $profile->config) : [],
+            'problems' => $profile && ! $seed ? $this->validator->validate((array) $profile->config) : [],
             'profiles' => $this->profiles($tenantId, $def),
             'versions' => $profile ? IcpProfileVersion::where('icp_profile_id', $profile->id)->orderByDesc('version')->limit(10)
                 ->get(['version', 'changed_by', 'note', 'created_at'])
@@ -208,7 +210,8 @@ final class ProductIcpService
     private function merged(array $def, ?IcpProfile $profile, array $input): array
     {
         $template = $def['icp_template'] ? config("signals_icp.{$def['icp_template']}") : null;
-        $base = $profile ? (array) $profile->config : (is_array($template) ? $template : []);
+        $seed = $profile !== null && is_array($template) && ProductCatalog::isSeedCopy($profile);
+        $base = $seed ? $template : ($profile ? (array) $profile->config : (is_array($template) ? $template : []));
         foreach (self::MANAGED as $k) {
             if (array_key_exists($k, $input)) {
                 if ($input[$k] === null || $input[$k] === '' || $input[$k] === []) {
