@@ -41,6 +41,12 @@ final class ProductCatalog
         return null;
     }
 
+    /** An ICP row copied from a built-in definition by `signals:icp-seed` and never saved by a person (version 1, no author). */
+    public static function isSeedCopy(IcpProfile $row): bool
+    {
+        return (int) $row->version === 1 && $row->created_by === null && $row->updated_by === null;
+    }
+
     /** True when `$line` is the ICP product line of a configured product (so that ICP is that product's). */
     public static function isProductLine(?string $line): bool
     {
@@ -206,6 +212,12 @@ final class ProductCatalog
         if ($row === null) {
             return ['config' => $template, 'source' => $template ? 'template' : null, 'profile_id' => null,
                 'pack_key' => (string) ($def['icp_template'] ?? $def['icp_product_line']), 'errors' => []];
+        }
+
+        // A saved ICP that was only COPIED from the built-in definition (seeded, version 1, never saved by a person) is a frozen snapshot of an
+        // older definition: it must not replace the current one. The built-in definition applies until a person saves their own settings.
+        if ($template !== null && self::isSeedCopy($row)) {
+            return ['config' => $template, 'source' => 'template', 'profile_id' => (int) $row->id, 'pack_key' => (string) $row->key, 'errors' => []];
         }
 
         $stored = (array) $row->config;

@@ -276,12 +276,12 @@ class OpportunityIngestionTest extends TestCase
         $this->assertSame('2026-10-12 14:30', $svc->nextRun($profile->fresh(), $saturday)->format('Y-m-d H:i'));
     }
 
-    public function test_scheduler_registers_the_research_tick(): void
+    public function test_signal_research_is_not_on_the_schedule_unless_explicitly_switched_on(): void
     {
+        // Research is started by a person (Generate Signals). Registering the 15-minute tick needs SIGNALS_SCHEDULED_RESEARCH=true.
+        $this->assertFalse((bool) config('signals.scheduled_research'));
         $event = collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())->first(fn ($e) => str_contains($e->command, 'signals:research'));
-        $this->assertNotNull($event);
-        $this->assertSame('*/15 * * * *', $event->expression);
-        $this->assertTrue($event->withoutOverlapping);
+        $this->assertNull($event, 'a server running the scheduler must not start signal research by itself');
     }
 
     // ── opportunity feed ─────────────────────────────────────────────────────

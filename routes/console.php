@@ -252,14 +252,18 @@ TaskRunLedger::track(
  * Like every entry here it only fires while `php artisan schedule:work` (or a per-minute
  * cron / Windows Task Scheduler entry) is running.
  */
-TaskRunLedger::track(
-    Schedule::command('signals:research')
-        ->everyFifteenMinutes()
-        ->withoutOverlapping(120)
-        ->onOneServer()
-        ->runInBackground(),
-    'signals.research'
-);
+// OFF unless SIGNALS_SCHEDULED_RESEARCH=true: signal research is started by a person pressing Generate Signals, never by a timer. A server
+// that runs the scheduler therefore does not spend search or AI quota on its own.
+if ((bool) config('signals.scheduled_research', false)) {
+    TaskRunLedger::track(
+        Schedule::command('signals:research')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping(120)
+            ->onOneServer()
+            ->runInBackground(),
+        'signals.research'
+    );
+}
 
 /*
  * DOCUMENT TRASH — PURGED DAILY.
