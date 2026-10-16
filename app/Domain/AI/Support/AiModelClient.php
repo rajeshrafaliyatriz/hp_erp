@@ -400,7 +400,7 @@ final class AiModelClient
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
         $model = $config->model ?: 'gemini-3.6-flash';
 
-        $send = fn (array $body) => Http::timeout($this->timeout($config->provider))
+        $send = fn (array $body) => Http::timeout($this->timeout($config->provider, $options))
             ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->acceptJson()
             ->asJson()
@@ -477,7 +477,7 @@ final class AiModelClient
 
         $base = rtrim((string) $this->providers->baseUrl($config->provider), '/');
 
-        $response = Http::timeout($this->timeout($config->provider))
+        $response = Http::timeout($this->timeout($config->provider, $options))
             ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])
             ->withToken($config->apiKey)
             ->acceptJson()
@@ -561,8 +561,17 @@ final class AiModelClient
             $message,
         );
     }
-    private function timeout(string $provider): int
+    /**
+     * Seconds one request may take: the provider's setting, lowered (never raised) by a caller's own `timeout` option. Signals sets one so a slow
+     * provider cannot hold a research run for the provider's full ceiling.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    private function timeout(string $provider, array $options = []): int
     {
-        return ((int) config("ai.provider.{$provider}.timeout")) ?: 45;
+        $seconds = ((int) config("ai.provider.{$provider}.timeout")) ?: 45;
+        $cap = (int) ($options['timeout'] ?? 0);
+
+        return $cap > 0 ? min($seconds, $cap) : $seconds;
     }
 }

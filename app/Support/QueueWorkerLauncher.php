@@ -21,12 +21,14 @@ final class QueueWorkerLauncher
         $base ??= base_path();
         $php ??= (new PhpExecutableFinder())->find(false) ?: 'php';
         $queues = $queue . ',default';
+        // One try (a failed research must never repeat by itself and spend provider quota), the job's own 900 s limit, and the worker ends by itself.
+        $limits = '--tries=1 --timeout=900 --max-time=1500';
 
         if (strtoupper(substr($os, 0, 3)) === 'WIN') {
-            return sprintf('cd /d "%s" && start /B "" "%s" artisan queue:work --queue=%s --stop-when-empty', $base, $php, $queues);
+            return sprintf('cd /d "%s" && start /B "" "%s" artisan queue:work --queue=%s %s --stop-when-empty', $base, $php, $queues, $limits);
         }
 
-        return sprintf('cd %s && %s artisan queue:work --queue=%s --stop-when-empty > /dev/null 2>&1 &', escapeshellarg($base), escapeshellarg($php), escapeshellarg($queues));
+        return sprintf('cd %s && %s artisan queue:work --queue=%s %s --stop-when-empty > /dev/null 2>&1 &', escapeshellarg($base), escapeshellarg($php), escapeshellarg($queues), $limits);
     }
 
     /** Start it. Returns false when the host does not allow starting a process (the queue is then drained by a standing worker). */

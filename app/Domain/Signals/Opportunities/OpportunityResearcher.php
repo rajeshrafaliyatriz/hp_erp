@@ -150,6 +150,11 @@ class OpportunityResearcher
     /** The product the current run is for: its ICP, profile and parts. Set at the start of every run; never shared across products. */
     private ?ProductContext $ctx = null;
 
+    /** When this run began and the run being written (its progress is saved as it goes). A run is bounded in time: see overBudget(). */
+    private float $startedAt = 0.0;
+    private ?ResearchRun $progressRun = null;
+    private bool $timeLimited = false;
+
     public function __construct(
         private readonly StructuredAi $ai,
         private readonly SignalRunner $signals,
@@ -166,14 +171,34 @@ class OpportunityResearcher
      */
     public function run(int $tenantId, string $trigger, ?int $userId = null, ?string $company = null, ?int $existingRunId = null, ?array $custom = null, ?string $productKey = null): ResearchRun
     {
-        $lock = Cache::lock("signals:research:{$tenantId}", ((int) config('signals.stale_run_minutes', 15)) * 60 * 2);
+        // The lock outlives a dead holder only briefly: a killed worker never releases it, and a long TTL used to block the next run for 30 minutes.
+        $lock = Cache::lock("signals:research:{$tenantId}", max(60, (int) config('signals.run_lock_seconds', 1000)));
+        $existing = $existingRunId ? ResearchRun::where('sub_institute_id', $tenantId)->find($existingRunId) : null;
 
         if (! $lock->get()) {
-            return $this->record($tenantId, $trigger, $userId, 'skipped', 'already_running', 'A research run is already in progress.');
+            $msg = 'Another research run is already in progress for this organisation. Wait for it to finish, then press Generate Signals again.';
+
+            // The run the person is watching must end, not stay "running" while a different row records the refusal.
+            return $existing !== null && $existing->status === 'running'
+                ? $this->finish($existing, microtime(true), 'skipped', ['stage' => 'failed', 'stage_message' => $msg], 'already_running', $msg)
+                : $this->record($tenantId, $trigger, $userId, 'skipped', 'already_running', $msg);
+        }
+
+        // A run that was closed while it waited (no worker picked it up in time) is not resurrected when a worker finally reaches its job:
+        // nothing is researched and no provider is called for a run the person has already been told failed.
+        if ($existing !== null && $existing->status !== 'running') {
+            $lock->release();
+
+            return $existing;
         }
 
         $started = microtime(true);
-        $run = $existingRunId ? ResearchRun::where('sub_institute_id', $tenantId)->find($existingRunId) : null;
+        $this->startedAt = $started;
+        $this->timeLimited = false;
+        $run = $existing;
+        $this->progressRun = $run;
+        // The queued run has now been picked up by a worker: say so before anything slow happens.
+        $this->progress('preparing', 'A worker has started this run. Checking the product and its ICP…');
 
         try {
             $this->closeStaleRuns($tenantId);
@@ -240,6 +265,7 @@ class OpportunityResearcher
                 ['specs' => $queries, 'account_ids' => $watched] = (new IcpResearchPlanner())->plan($tenantId, $pack);
             }
 
+            $this->progressRun = $run;
             $run->fill([
                 'stage' => 'searching',
                 'stage_message' => 'Searching tenders, LinkedIn, job boards and news with ' . ucfirst($search->name()) . ' (' . count($queries) . ' searches)...',
@@ -248,7 +274,7 @@ class OpportunityResearcher
             [$sources, $queriesRun, $queriesFailed, $lastSearchError] = $this->gather($search, $queries, $recency, $tenantId);
 
             // ONE follow-up round: searches the model proposes from what was actually found. Never recursive.
-            if ($company === null && $sources !== [] && $this->ctx->isScholar()) {
+            if ($company === null && $sources !== [] && $this->ctx->isScholar() && ! $this->overBudget(0.45)) {
                 $follow = (new QueryExpander())->followUps($this->ai, $tenantId, $sources, array_map(fn ($q) => is_array($q) ? (string) $q['q'] : (string) $q, $queries));
                 if ($follow !== []) {
                     [$more, $ran2, $failed2, $err2] = $this->gather($search, $follow, $recency, $tenantId);
@@ -286,9 +312,9 @@ class OpportunityResearcher
             if ($sources === []) {
                 [$officialFailed, $officialNote] = $this->officialOutcome();
 
-                return $this->finish($run, $started, ($queriesFailed > 0 || $officialFailed) ? 'partial' : 'success', [
+                return $this->finish($run, $started, ($queriesFailed > 0 || $officialFailed || $this->timeLimited) ? 'partial' : 'success', [
                     'stage' => 'completed',
-                    'stage_message' => 'Search finished: nothing recent was found for these searches.' . $officialNote . $this->noAccountsNote($company),
+                    'stage_message' => 'Search finished: nothing recent was found for these searches.' . $officialNote . $this->noAccountsNote($company) . $this->timeLimitNote(),
                 ]);
             }
 
@@ -314,7 +340,11 @@ class OpportunityResearcher
             $result = $this->ai->json($tenantId, $this->messages($profile, $sources, $pack), (int) config('signals.max_output_tokens'));
             [$candidates, $rejected, $considered] = $this->validate((array) ($result['data']['opportunities'] ?? []), $sources, $profile, $pack);
             $this->recordRejections($tenantId, 'web-research', $userId);
-            $candidates = $this->tightenCards($tenantId, $candidates, $this->ctx->parts);
+            if ($this->overBudget(0.85)) {
+                $this->timeLimited = true;   // the optional wording-rewrite call is skipped; the gate still judges every candidate
+            } else {
+                $candidates = $this->tightenCards($tenantId, $candidates, $this->ctx->parts);
+            }
 
             $run->fill([
                 'stage' => 'saving',
@@ -338,7 +368,7 @@ class OpportunityResearcher
             // "partial" means a search query failed, or a school's verified website could not be read. A run is never "success" while a
             // source it relied on failed.
             [$officialFailed, $officialNote] = $this->officialOutcome();
-            $status = ($queriesFailed > 0 || $officialFailed) ? 'partial' : 'success';
+            $status = ($queriesFailed > 0 || $officialFailed || $this->timeLimited) ? 'partial' : 'success';
 
             return $this->finish($run, $started, $status, [
                 'companies_researched' => $considered,
@@ -348,7 +378,7 @@ class OpportunityResearcher
                 'ai_provider' => $result['completion']->provider,
                 'ai_model' => $result['completion']->model,
                 'stage' => 'completed',
-                'stage_message' => trim($officialNote . $this->noAccountsNote($company) . ' ' . ($qualified > 0
+                'stage_message' => trim($officialNote . $this->noAccountsNote($company) . $this->timeLimitNote() . ' ' . ($qualified > 0
                     ? "Done: {$new} new, {$import['updated']} updated, {$import['duplicate']} unchanged across " . count($sources) . ' pages' . ($rejected > 0 ? "; {$rejected} did not pass the checks." : '.')
                     : 'Done: no ' . ($this->ctx->isScholar() ? 'school' : 'organisation') . ' showed a clear reason to buy across ' . count($sources) . ' pages' . ($rejected > 0 ? " ({$rejected} did not pass the checks)." : '.'))),
             ]);
@@ -544,7 +574,12 @@ class OpportunityResearcher
         $gap = max(0, (int) config('signals.web_search.min_interval_ms', 300)) * 1000;
         $cacheHours = (int) config('signals.discovery.query_cache_hours', 12);
         $ran = 0;
+        $total = count($queries);
         foreach (array_values($queries) as $n => $spec) {
+            if ($n > 0 && $this->overBudget(0.35)) {
+                $this->timeLimited = true;
+                break;   // enough time has gone on searching: the rest are skipped, never waited for
+            }
             $query = is_array($spec) ? (string) $spec['q'] : (string) $spec;
             // The same search was paid for recently: its results are already in the feed. (Named-school checks have their own schedule.)
             $named = is_array($spec) && (str_starts_with((string) ($spec['source'] ?? ''), 'account') || str_starts_with((string) ($spec['id'] ?? ''), 'school-'));
@@ -552,6 +587,7 @@ class OpportunityResearcher
                 continue;
             }
             $ran++;
+            $this->progress('searching', 'Searching: ' . $ran . ' of ' . $total . ' searches' . ($failed > 0 ? ' (' . $failed . ' failed)' : '') . '…', ['queries_run' => $ran, 'queries_failed' => $failed]);
             $days = is_array($spec) ? (int) ($spec['days'] ?? $recency) : $recency;
             $options = is_array($spec) ? array_filter(['topic' => $spec['topic'] ?? null, 'include_domains' => $spec['domains'] ?? null]) : [];
             if ($n > 0 && $gap > 0) {
@@ -624,13 +660,20 @@ class OpportunityResearcher
         $robots = new RobotsPolicy($this->fetcher);
         $budget = (int) config('signals.opportunities.fetch_pages', 8);
 
+        $pagesTotal = min($budget, count($sources));
+        $pagesRead = 0;
         foreach ($sources as &$s) {
             if ($budget <= 0) {
                 break;
             }
+            if ($this->overBudget(0.6)) {
+                $this->timeLimited = true;
+                break;   // the remaining pages keep their search snippet
+            }
             if ($s['page_fetched'] ?? false) {
                 continue; // an official page, already read
             }
+            $this->progress('collecting', 'Reading pages: ' . $pagesRead . ' of up to ' . $pagesTotal . ' read…', ['sources_found' => count($sources)]);
             try {
                 if (! $robots->allows($s['url'])) {
                     continue;
@@ -655,6 +698,7 @@ class OpportunityResearcher
                     $s['modified_provenance'] = $mod['provenance'];
                 }
                 $budget--;
+                $pagesRead++;
             } catch (\Throwable) {
                 // keep the snippet
             }
@@ -751,10 +795,15 @@ class OpportunityResearcher
         $discovery = new OfficialSiteDiscovery($this->fetcher);
         $out = [];
         foreach (array_slice($accountIds, 0, max(1, (int) config('signals.official_site.max_schools_per_run', 3))) as $id) {
+            if ($this->overBudget(0.5)) {
+                $this->timeLimited = true;
+                break;
+            }
             $account = TargetAccount::where('sub_institute_id', $tenantId)->find($id);
             if ($account === null) {
                 continue;
             }
+            $this->progress('collecting', 'Reading the official website of ' . $account->name . '…');
             $r = $discovery->discover($tenantId, ['name' => $account->name, 'crm_ref' => $account->crm_ref, 'attributes' => $account->attributes], now());
             $this->officialReport[] = $r['report'];
             $out = array_merge($out, $r['sources']);
@@ -951,6 +1000,35 @@ TXT;
         }
 
         return in_array($buyerType, QualificationGate::BUYER_TYPES, true) ? $buyerType : 'other';
+    }
+
+    /**
+     * Has this run used `$fraction` of its time budget (signals.run_budget_seconds)? Optional work (more searches, more pages, follow-up and rewrite
+     * AI calls) checks this and stops, so the run finishes as partial instead of hanging on slow providers.
+     */
+    private function overBudget(float $fraction = 1.0): bool
+    {
+        $budget = (int) config('signals.run_budget_seconds', 600);
+
+        return $budget > 0 && (microtime(true) - $this->startedAt) > $budget * $fraction;
+    }
+
+    /** Persist the real step the run is in (and any counts). Its updated_at is the run's heartbeat. A failure to write progress never stops the run. */
+    private function progress(string $stage, string $message, array $attributes = []): void
+    {
+        if ($this->progressRun === null) {
+            return;
+        }
+        try {
+            $this->progressRun->fill(['stage' => $stage, 'stage_message' => mb_substr($message, 0, 240)] + $attributes)->save();
+        } catch (\Throwable) {
+            // progress is informational
+        }
+    }
+
+    private function timeLimitNote(): string
+    {
+        return $this->timeLimited ? ' Stopped early to stay within the ' . max(1, (int) round(((int) config('signals.run_budget_seconds', 600)) / 60)) . '-minute time limit: some searches or pages were skipped.' : '';
     }
 
     /**
@@ -1455,16 +1533,7 @@ TXT;
 
     private function closeStaleRuns(int $tenantId): void
     {
-        ResearchRun::where('sub_institute_id', $tenantId)->where('status', 'running')
-            ->where('started_at', '<', now()->subMinutes((int) config('signals.stale_run_minutes', 15)))
-            ->update([
-                'status' => 'failed',
-                'stage' => 'failed',
-                'error_code' => 'timed_out',
-                'error_message' => 'The run did not finish and was closed as stale.',
-                'stage_message' => 'The run did not finish and was closed as stale.',
-                'completed_at' => now(),
-            ]);
+        ResearchRunReaper::sweep($tenantId);
     }
 
     private function urlKey(string $url): string

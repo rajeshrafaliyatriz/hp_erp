@@ -134,3 +134,39 @@ All are in `.env.example`. After changing any, run `php artisan config:clear`.
 * Dates are stored as given by the server timezone; the daily scan schedule is `Asia/Kolkata` (`config/signals.php`).
 * `storage/` and `bootstrap/cache` must be writable by the web user (unchanged).
 * Case-sensitive paths: no new path is built from user input; new files use the existing casing.
+
+## Generate Signals: run lifecycle, time limits and the worker
+
+A click on Generate Signals only creates a `g2g_research_runs` row (status `running`, stage `queued`) and queues one job; it answers 202 at once and does no research
+inside the request. The screen follows the run by id and shows its real stage (queued, preparing, searching, collecting, analyzing, saving) beside the
+research-date dropdown. No migration is needed.
+
+A run cannot hang:
+
+| Limit | Setting (env) | Default |
+|---|---|---|
+| One AI request | `SIGNALS_AI_TIMEOUT` (a timeout is not retried) | 90 s |
+| Whole run: optional work stops and the run ends `partial` | `SIGNALS_RUN_BUDGET_SECONDS` | 600 s |
+| Queued but no worker started it: closed `worker_not_running` | `SIGNALS_QUEUE_PICKUP_SECONDS` | 180 s |
+| Running but silent (killed worker): closed `timed_out` | `SIGNALS_STALE_RUN_MINUTES` | 15 min |
+| Per-organisation run lock if its holder dies | `SIGNALS_RUN_LOCK_SECONDS` | 1000 s |
+
+Required on the server: a standing queue worker, for example under supervisor/systemd:
+`php artisan queue:work --queue=signals,default --tries=1 --timeout=900` (`--tries=1`: a failed research is never repeated by itself, so provider quota is never
+spent twice). PHP-FPM / the web server do not need a long timeout, because the request returns immediately. Run `php artisan signals:preflight` after deploying.
+Scheduled research stays off (`SIGNALS_SCHEDULED_RESEARCH=false`).
+
+To inspect a run that looks stuck (read-only): `select id, product_key, status, stage, stage_message, started_at, updated_at, error_code from g2g_research_runs where status = 'running';`
+and `select id, queue, attempts, reserved_at, available_at from jobs;` and `select id, failed_at from failed_jobs order by id desc limit 5;`.
+Opening the Company Opportunities screen (or `GET /api/signals/research/status`) closes a dead run with its reason; it never starts or retries research.
+
+## TEMPORARY: demonstration copy of the local 13 and 14 Oct 2026 signals
+
+`php artisan signals:demo-fixture {export|plan|import|rollback} --tenant=<id>` carries the exact stored signals of two local research days
+(`database/fixtures/demo_signals_2026-10-13_14.json`: 11 signals on 13 Oct, 5 on 14 Oct, ScholarClone) into another environment as ordinary rows, so the normal
+Research date dropdown and cards show them. Nothing is generated and no provider is called.
+
+- `plan` is a read-only dry run for the target tenant. It lists what would be created, collisions and what cannot be kept exactly.
+- `import` needs `SIGNALS_DEMO_FIXTURE_ENABLED=true`, `--tenant`, and `--confirm=IMPORT-DEMO-FIXTURE`. It never overwrites: a signal whose fingerprint exists is skipped,
+  existing organisations are reused by name. It writes `storage/app/demo-fixture-manifest-<tenant>.json` listing every id it created.
+- `rollback --confirm=ROLLBACK-DEMO-FIXTURE` deletes exactly those ids and nothing else. Set `SIGNALS_DEMO_FIXTURE_ENABLED=false` afterwards.

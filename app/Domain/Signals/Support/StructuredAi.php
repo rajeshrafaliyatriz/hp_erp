@@ -36,7 +36,8 @@ class StructuredAi
                 $completion = $this->client->complete(
                     app(SignalsAiModule::class)->key($tenantId),
                     $messages,
-                    ['json' => true, 'temperature' => (float) config('signals.temperature'), 'max_tokens' => $maxTokens ?? (int) config('signals.max_output_tokens'), 'thinking_budget' => config('signals.thinking_budget')],
+                    ['json' => true, 'temperature' => (float) config('signals.temperature'), 'max_tokens' => $maxTokens ?? (int) config('signals.max_output_tokens'), 'thinking_budget' => config('signals.thinking_budget'),
+                        'timeout' => (int) config('signals.ai_timeout', 90)],
                     $tenantId,
                 );
 
@@ -45,6 +46,11 @@ class StructuredAi
                 throw $e; // retrying cannot fix configuration, a quota, or a fully cooled-down pool
             } catch (\Throwable $e) {
                 $last = $e;
+                // A request that timed out is not tried again: it would only double the wait for the same likely result. (An answer that was not
+                // valid JSON, or a one-off provider error, still gets its second attempt.)
+                if ($this->isTimeout($e)) {
+                    throw $e;
+                }
                 if ($i < $attempts) {
                     usleep(1_500_000);
                 }
@@ -52,6 +58,13 @@ class StructuredAi
         }
 
         throw $last;
+    }
+
+    private function isTimeout(\Throwable $e): bool
+    {
+        return $e instanceof \Illuminate\Http\Client\ConnectionException
+            || str_contains(strtolower($e->getMessage()), 'timed out')
+            || str_contains(strtolower($e->getMessage()), 'curl error 28');
     }
 
     /** @return array<string, mixed> */
