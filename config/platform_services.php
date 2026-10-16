@@ -713,6 +713,21 @@ return [
                 ['key' => 'test_mobile_number', 'label' => 'Test mobile number (optional — sends a real test SMS)', 'type' => 'text', 'required' => false],
             ],
         ],
+        // The organisation's own WhatsApp Business (Cloud API) account - the same mechanism LMS K12
+        // uses (Meta Graph API + approved templates `parents_` / `p2` / `p3`). Credentials are
+        // per organisation and encrypted in the vault; "Test Connection" only reads the number's
+        // profile from Meta and never sends a message.
+        'whatsapp' => [
+            'label' => 'WhatsApp Business (Cloud API)',
+            'description' => 'Sends WhatsApp messages from this organisation\'s own WhatsApp Business number using approved templates.',
+            'module' => 'crm',
+            'kind' => 'credential',
+            'fields' => [
+                ['key' => 'access_token', 'label' => 'Permanent access token', 'type' => 'password', 'required' => true],
+                ['key' => 'phone_number_id', 'label' => 'Phone number ID', 'type' => 'text', 'required' => true],
+                ['key' => 'api_version', 'label' => 'Graph API version (default v25.0)', 'type' => 'text', 'required' => false],
+            ],
+        ],
     ],
 
 ];

@@ -26,6 +26,9 @@ class ReportDeliveryController extends AiController
             return $this->success('Recipients resolved.', [
                 'recipients' => $this->deliveries->recipients($this->scope($request), $data['q'] ?? null, (int) ($data['limit'] ?? 25)),
                 'max_recipients' => ReportDeliveryService::MAX_RECIPIENTS,
+                // Whether this organisation has its own SMS gateway, so the dialog can say so before sending.
+                'whatsapp_configured' => app(\App\Services\Whatsapp\TenantWhatsappCloud::class)->resolve((int) $this->scope($request)->selectedInstituteId) !== null,
+                'sms_configured' => app(\App\Services\Sms\TenantSmsGateway::class)->resolve((int) $this->scope($request)->selectedInstituteId) !== null,
             ]);
         } catch (Throwable $exception) {
             return $this->handle($exception);
@@ -55,15 +58,24 @@ class ReportDeliveryController extends AiController
                 'recipient_ids.*' => 'required|integer|min:1',
                 'note' => 'nullable|string|max:500',
                 'request_key' => 'nullable|string|max:80',
+                'channel' => 'nullable|string|in:email,sms,whatsapp',
+                'report_url' => 'nullable|url|max:300',
             ]);
 
-            $result = $this->deliveries->send(
-                $this->scope($request), $id, $data['recipient_ids'], $data['note'] ?? null, $data['request_key'] ?? null
-            );
+            $channel = $data['channel'] ?? 'email';
+            $result = $channel === 'email'
+                ? $this->deliveries->send(
+                    $this->scope($request), $id, $data['recipient_ids'], $data['note'] ?? null, $data['request_key'] ?? null
+                )
+                : $this->deliveries->sendToMobile(
+                    $this->scope($request), $id, $data['recipient_ids'], $channel, $data['note'] ?? null, $data['request_key'] ?? null, $data['report_url'] ?? null
+                );
 
-            $message = $result['failed'] > 0
+            $message = ($result['prepared'] ?? 0) > 0
+                ? sprintf('WhatsApp message prepared for %d recipient(s); open each link to send it.', $result['prepared'])
+                : ($result['failed'] > 0
                 ? sprintf('Sent to %d, failed for %d.', $result['sent'], $result['failed'])
-                : sprintf('Report sent to %d recipient(s).', $result['sent']);
+                : sprintf('Report sent to %d recipient(s).', $result['sent']));
 
             return $this->success($message, $result);
         } catch (NotFoundReport $exception) {

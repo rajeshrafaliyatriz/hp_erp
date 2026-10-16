@@ -314,20 +314,7 @@ class CrmSmsController extends Controller
      */
     private function dispatch(array $gateway, string $toNumber, string $message): array
     {
-        $url = $gateway['url'] . $gateway['pram'] . $gateway['mobileVar'] . $toNumber
-            . $gateway['textVar'] . urlencode($message) . urlencode($gateway['lastVar']);
-
-        try {
-            $response = Http::timeout(10)->withOptions(['verify' => false])->get($url);
-
-            if (! $response->successful()) {
-                return ['failed', 'Gateway returned HTTP ' . $response->status() . '.'];
-            }
-
-            return ['sent', null];
-        } catch (\Throwable $e) {
-            return ['failed', mb_substr($e->getMessage(), 0, 500)];
-        }
+        return app(\App\Services\Sms\TenantSmsGateway::class)->dispatch($gateway, $toNumber, $message);
     }
 
     /** @param array{user: object, user_id: int, sub_institute_id: int} $identity */
@@ -361,38 +348,7 @@ class CrmSmsController extends Controller
      */
     private function resolveGatewayConfig(int $tenantId): ?array
     {
-        $vaultRow = DB::table('g2g_integration_credentials')
-            ->where('sub_institute_id', $tenantId)
-            ->where('provider_key', 'sms')
-            ->first();
-
-        if ($vaultRow && $vaultRow->config) {
-            try {
-                $config = json_decode(Crypt::decryptString($vaultRow->config), true) ?: [];
-            } catch (\Throwable $e) {
-                $config = [];
-            }
-
-            if (! empty($config['url']) && ! empty($config['mobile_var']) && ! empty($config['text_var'])) {
-                return [
-                    'url' => $config['url'], 'pram' => $config['pram'] ?? '',
-                    'mobileVar' => $config['mobile_var'], 'textVar' => $config['text_var'],
-                    'lastVar' => $config['last_var'] ?? '',
-                ];
-            }
-        }
-
-        $legacy = DB::table('sms_api_details')->where('sub_institute_id', $tenantId)->first();
-
-        if ($legacy && ! empty($legacy->url)) {
-            return [
-                'url' => $legacy->url, 'pram' => $legacy->pram ?? '',
-                'mobileVar' => $legacy->mobile_var, 'textVar' => $legacy->text_var,
-                'lastVar' => $legacy->last_var ?? '',
-            ];
-        }
-
-        return null;
+        return app(\App\Services\Sms\TenantSmsGateway::class)->resolve($tenantId);
     }
 
     /** @param array{user: object, user_id: int, sub_institute_id: int} $identity */
